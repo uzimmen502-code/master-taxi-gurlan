@@ -1,0 +1,83 @@
+name: master_taxi_gurlan
+description: "Master Taxi Gurlan - 5 modulli mobil ilova"
+publish_to: 'none'
+version: 1.0.1+2
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.1.0
+  cloud_firestore: ^5.4.0
+  firebase_messaging: ^15.1.3
+  firebase_storage: ^12.3.2
+
+  # Storage
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.5
+  path: ^1.9.0
+  cached_network_image: ^3.3.1
+  flutter_cache_manager: ^3.3.1
+
+  # Location & Maps
+  geolocator: ^13.0.1
+  geocoding: ^3.0.0
+  google_maps_flutter: ^2.10.0
+  google_maps_flutter_android: ^2.12.0
+  google_maps_flutter_ios: ^2.12.0
+
+  # Network & Utils
+  http: ^1.2.0
+  url_launcher: ^6.3.1
+  connectivity_plus: ^6.0.3
+  image_picker: ^1.0.0
+  permission_handler: ^11.3.1
+  flutter_background_service: ^5.0.5
+  flutter_local_notifications: ^17.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.4.1
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/images/logo.png"
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/data/mfy_list.json
+    - assets/lang/uz_Latn.json
+    - assets/lang/uz_Cyrl.json
+    - assets/lang/ru.json
+    - assets/images/
+    - assets/bread_yupqa.png
+    - assets/bread_churak.png
+    - assets/bread_qovoq.png
+    - assets/bread_yongok.png
+    - assets/beard_zogora.png
+    - assets/beard_qora.png
+    - assets/beard_kunjut.png
+    - assets/beard_gosht.png
+    - assets/beard_toy.png
+    - assets/somsa.png
+    - assets/pizza.png
+    - assets/xachipuri.png

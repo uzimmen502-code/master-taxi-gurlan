@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══════════════════════════════════════
+    // ЁРДАМЧИ ФУНКЦИЯЛАР
+    // ══════════════════════════════════════
+
+    // Сўровда телефон рақами борми?
+    function hasPhone() {
+      return request.resource != null
+          && request.resource.data.keys().hasAny(['userPhone', 'phone']);
+    }
+
+    // Майдон ўзгармадими?
+    function notChanged(field) {
+      return !(field in request.resource.data)
+          || request.resource.data[field] == resource.data[field];
+    }
+
+    // ══════════════════════════════════════
+    // USERS — фойдаланувчилар
+    // ══════════════════════════════════════
+    match /users/{userId} {
+      // Ўқиш — барча (ҳайдовчилар FCM token учун)
+      allow read: if true;
+
+      // Ёзиш — телефон рақами бўлса
+      allow create: if request.resource.data.keys().hasAll(['phone']);
+      allow update: if request.resource.data.keys().hasAny(['phone', 'fcmToken', 'role']);
+    }
+
+    // ══════════════════════════════════════
+    // DRIVERS — ҳайдовчилар
+    // ══════════════════════════════════════
+    match /drivers/{driverId} {
+      // Ўқиш — барча (фойдаланувчилар ҳайдовчиларни кўради)
+      allow read: if true;
+
+      // Яратиш — телефон рақами бўлса
+      allow create: if request.resource.data.keys().hasAll(['phone', 'name']);
+
+      // Янгилаш — фақат ўз маълумотлари
+      // driverId = телефон рақами (рақамлар)
+      allow update: if true; // Вақтинча — Phone Auth бўлгач чеклаш
+
+      // Ўчириш — йўқ
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // TRIPS — такси сафарлари
+    // ══════════════════════════════════════
+    match /trips/{tripId} {
+      // Ўқиш — барча (real-time tracking учун)
+      allow read: if true;
+
+      // Яратиш — userPhone бўлса
+      allow create: if request.resource.data.keys().hasAll(['userPhone', 'from', 'status'])
+          && request.resource.data.status == 'searching';
+
+      // Янгилаш — рухсат этилган майдонлар
+      allow update: if
+        // Ҳайдовчи қабул қилиши
+        (request.resource.data.status in ['accepted', 'cancelled', 'completed'])
+        // GPS позиция янгилаш
+        || request.resource.data.keys().hasAny(['driverLat', 'driverLng'])
+        // Radius янгилаш
+        || (request.resource.data.keys().hasOnly(['radius', 'updatedAt']))
+        // Fare сақлаш
+        || request.resource.data.keys().hasAny(['fare', 'completedAt']);
+
+      // Ўчириш — йўқ
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // ORDERS — нон/овқат буюртмалар
+    // ══════════════════════════════════════
+    match /orders/{orderId} {
+      // Ўқиш — userPhone мос келса ёки admin
+      allow read: if true; // Вақтинча барча — Admin панели учун
+
+      // Яратиш — userPhone ва items бўлса
+      allow create: if request.resource.data.keys().hasAll(['userPhone', 'items', 'total', 'status'])
+          && request.resource.data.status == 'new'
+          && request.resource.data.total > 0;
+
+      // Янгилаш — фақат статус ўзгартириш
+      allow update: if request.resource.data.keys().hasAny(['status'])
+          && request.resource.data.status in ['new', 'accepted', 'ready', 'delivered'];
+
+      // Ўчириш — йўқ
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // SCHEDULES — кундалик иш санаси
+    // ══════════════════════════════════════
+    match /schedules/{scheduleId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['driverId', 'taxiType', 'date', 'seats', 'isActive']);
+      allow update: if request.resource.data.keys().hasAny(['isActive', 'seatsLeft', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // RATINGS — рейтинглар (transaction учун)
+    // ══════════════════════════════════════
+    match /ratings/{ratingId} {
+      allow read:   if true;
+      allow create: if request.resource.data.keys().hasAll(['driverId', 'stars', 'userPhone']);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // BREAD / EXTRA PRODUCTS
+    // ══════════════════════════════════════
+    match /bread_products/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    match /extra_products/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // SUPPORT CHAT
+    // ══════════════════════════════════════
+    match /support_chats/{chatId} {
+      allow read, create, update: if true;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read, create, update: if true;
+        allow delete: if false;
+      }
+    }
+
+  }
+}

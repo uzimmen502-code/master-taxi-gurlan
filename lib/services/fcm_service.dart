@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,17 +18,17 @@ class FCMService {
   final _db                = FirebaseFirestore.instance;
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
-  // Firestore listeners — Cloud Functions olmiga
-  StreamSubscription<QuerySnapshot>? _ordersSub;
-  StreamSubscription<QuerySnapshot>? _tripsSub;
+  // Firestore listeners (буюртма/сафар — Cloud Functions FCM + Админ чати)
   StreamSubscription<QuerySnapshot>? _notifSub;
 
   String _userPhone = '';
-  String _userRole  = '';
 
   // ── Инициализация ──
   Future<void> init() async {
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    // Вебда isolate background handler ишламайди; рўйхатлаш ba'zi muhitlarda xato beradi.
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    }
 
     final settings = await _messaging.requestPermission(
         alert: true, badge: true, sound: true);
@@ -46,42 +47,10 @@ class FCMService {
   Future<void> startListeners() async {
     final prefs = await SharedPreferences.getInstance();
     _userPhone  = prefs.getString('user_phone') ?? '';
-    _userRole   = prefs.getString('user_role')  ?? 'user';
 
     if (_userPhone.isEmpty) return;
-    final uid = _userPhone.replaceAll(RegExp(r'[^\d]'), '');
 
-    // 1. Буюртма статуси ўзгарганда → фойдаланувчига хабар
-    if (_userRole == 'user') {
-      _ordersSub = _db.collection('orders')
-          .where('userPhone', isEqualTo: _userPhone)
-          .snapshots()
-          .listen((snap) {
-        for (final change in snap.docChanges) {
-          if (change.type != DocumentChangeType.modified) continue;
-          final data   = change.doc.data() as Map<String, dynamic>;
-          final status = data['status'] as String? ?? '';
-          _handleOrderStatus(status, data);
-        }
-      });
-    }
-
-    // 2. Такси сафари ўзгарганда → фойдаланувчига хабар
-    if (_userRole == 'user') {
-      _tripsSub = _db.collection('trips')
-          .where('userPhone', isEqualTo: _userPhone)
-          .snapshots()
-          .listen((snap) {
-        for (final change in snap.docChanges) {
-          if (change.type != DocumentChangeType.modified) continue;
-          final data   = change.doc.data() as Map<String, dynamic>;
-          final status = data['status'] as String? ?? '';
-          _handleTripStatus(status, data);
-        }
-      });
-    }
-
-    // 3. Notifications коллекцияси — Firestore orqali push
+    // Notifications коллекцияси — Firestore orqали push
     _notifSub = _db.collection('notifications')
         .where('targetPhone', isEqualTo: _userPhone)
         .where('sent', isEqualTo: false)
@@ -99,57 +68,6 @@ class FCMService {
         } catch (_) {}
       }
     });
-  }
-
-  void _handleOrderStatus(String status, Map<String, dynamic> data) {
-    String title = '';
-    String body  = '';
-    switch (status) {
-      case 'accepted':
-        final time = data['deliveryTime'] as String? ?? 'Яқин орада';
-        title = '✅ Буюртмангиз қабул қилинди!';
-        body  = '🕐 Тахминий вақт: $time';
-        break;
-      case 'rejected':
-        final reason = data['rejectReason'] as String? ?? '';
-        title = '❌ Буюртмангиз рад этилди';
-        body  = reason.isNotEmpty ? reason : 'Афсуски бажариб бўлмайди';
-        break;
-      case 'ready':
-        title = '🟠 Буюртмангиз тайёр!';
-        body  = 'Олиб кетишингиз ёки жўнатишимизни кутинг';
-        break;
-      case 'delivered':
-        title = '🟢 Буюртма етказилди!';
-        body  = 'Яхши кун! Яна буюртма беришингиз мумкин';
-        break;
-      default: return;
-    }
-    _showNotification(title, body, 'order_channel');
-  }
-
-  void _handleTripStatus(String status, Map<String, dynamic> data) {
-    String title = '';
-    String body  = '';
-    switch (status) {
-      case 'accepted':
-        final driverName = data['acceptedDriverName'] as String? ?? 'Ҳайдовчи';
-        final driverCar  = data['acceptedDriverCar']  as String? ?? '';
-        title = '🚕 Ҳайдовчи топилди!';
-        body  = '$driverName • $driverCar';
-        break;
-      case 'completed':
-        final fare = data['fare'] as int? ?? 0;
-        title = '✅ Сафар якунланди!';
-        body  = fare > 0 ? 'Йўлкира: $fare сўм ⭐ Баҳо беринг' : 'Яхши сафар бўлди!';
-        break;
-      case 'cancelled':
-        title = '❌ Сафар бекор қилинди';
-        body  = 'Яна уринib ko\'ring';
-        break;
-      default: return;
-    }
-    _showNotification(title, body, 'taxi_channel');
   }
 
   // ── Local notifications ──
@@ -207,6 +125,7 @@ class FCMService {
     if (phone.isEmpty) return;
     final uid = phone.replaceAll(RegExp(r'[^\d]'), '');
     try {
+      await prefs.setString('fcm_token', t);
       await _db.collection('users').doc(uid).set({
         'phone': phone, 'role': role, 'fcmToken': t,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -229,8 +148,6 @@ class FCMService {
   Future<void> refreshToken() => _saveToken();
 
   void stopListeners() {
-    _ordersSub?.cancel();
-    _tripsSub?.cancel();
     _notifSub?.cancel();
   }
 }

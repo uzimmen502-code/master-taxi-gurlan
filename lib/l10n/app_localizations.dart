@@ -148,6 +148,7 @@ class AppLocalizations {
     'order_placed': 'Буюртма қабул қилинди',
     'min_order': 'Минимал буюртма',
     'free_delivery': 'Бепул етказиш',
+    'piece': 'дона',
 
     // Профил
     'profile_photo': 'Профил расми',

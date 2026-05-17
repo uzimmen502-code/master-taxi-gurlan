@@ -36,7 +36,7 @@ class DefaultFirebaseOptions {
     appId: '1:67136747215:ios:cd77c2c835a98b01e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
-    storageBucket: 'master-taxi-gurlan.appspot.com',
+    storageBucket: 'master-taxi-gurlan.firebasestorage.app',
     iosBundleId: 'com.example.masterTaxiGurlan',
   );
 
@@ -45,7 +45,7 @@ class DefaultFirebaseOptions {
     appId: '1:67136747215:ios:cd77c2c835a98b01e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
-    storageBucket: 'master-taxi-gurlan.appspot.com',
+    storageBucket: 'master-taxi-gurlan.firebasestorage.app',
     iosBundleId: 'com.example.masterTaxiGurlan',
   );
 
@@ -54,7 +54,7 @@ class DefaultFirebaseOptions {
     appId: '1:67136747215:web:06df7d7c3ab0d97ae7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
-    storageBucket: 'master-taxi-gurlan.appspot.com',
+    storageBucket: 'master-taxi-gurlan.firebasestorage.app',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
@@ -62,6 +62,6 @@ class DefaultFirebaseOptions {
     appId: '1:67136747215:web:ab67690cbf41e143e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
-    storageBucket: 'master-taxi-gurlan.appspot.com',
+    storageBucket: 'master-taxi-gurlan.firebasestorage.app',
   );
 }

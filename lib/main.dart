@@ -6,7 +6,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -40,16 +39,13 @@ import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'features/home/screens/home_screen.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
-  // Phone Auth: foydalanuvchi onboarding'da sign in bo'ladi.
-  final currentUser = FirebaseAuth.instance.currentUser;
-  debugPrint('Auth user: ${currentUser?.uid ?? "yo\'q"}');
 
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
@@ -92,9 +88,8 @@ void main() async {
   final reportService = DailyReportService(analyticsRepo);
   unawaited(reportService.ensureToday());
 
-  final prefs        = await SharedPreferences.getInstance();
-  final onboarding   = prefs.getBool('onboarding_done') ?? false;
-
+  final prefs = await SharedPreferences.getInstance();
+  final onboarding = prefs.getBool('onboarding_done') ?? false;
 
   final userId = prefs.getString('userId') ?? '';
   runApp(MyApp(
@@ -120,7 +115,7 @@ class MyApp extends StatelessWidget {
   final DailyReportService reportService;
 
   static final GlobalKey<NavigatorState> navigatorKey =
-  GlobalKey<NavigatorState>();
+      GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {

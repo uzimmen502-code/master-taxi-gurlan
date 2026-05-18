@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,7 +12,7 @@ import '../../../services/location_service.dart';
 
 /// Onboarding wizard uchun ChangeNotifier.
 ///
-/// 5 sahifa: ism → telefon (SMS OTP) → jins → tug'ilgan kun → **manzil**.
+/// 5 sahifa: ism → telefon (device lock) → jins → tug'ilgan kun → **manzil**.
 ///
 /// Manzil sahifasida foydalanuvchi GPS bilan koordinatasini oladi va shu yerda
 /// MFY/ko'cha/uy/tuman maydonlarini to'ldiradi — `finish()` ikkalasini ham
@@ -57,13 +56,10 @@ class OnboardingController extends ChangeNotifier {
   bool isGpsLoading = false;
   String? errorMessage;
 
-  // ─── Phone Auth OTP ─────────────────────────────────────────────────
-  /// SMS yuborildi — OTP maydoni ko'rsatiladi (`codeSent` callback nomi bilan chalkashmasin).
-  bool otpInputVisible = false;
-  bool isSendingCode = false;
-  bool isVerifyingCode = false;
-  String? _verificationId;
-  String? phoneAuthError;
+  // ─── Open access + device lock ──────────────────────────────────────
+  bool isCheckingDevice = false;
+  String? phoneStepError;
+  String _deviceLockedUid = '';
 
   bool get isLastPage => currentPage == totalPages - 1;
 
@@ -160,88 +156,59 @@ class OnboardingController extends ChangeNotifier {
   }
 
   void back() {
-    if (currentPage == 1) resetPhoneAuth();
+    if (currentPage == 1) resetPhoneStepError();
     if (currentPage > 0) {
       currentPage--;
       notifyListeners();
     }
   }
 
-  Future<void> sendOtp(String phone) async {
+  Future<bool> checkPhoneDeviceLock(String phone) async {
     final digits = phoneDigits(phone);
-    final formatted = digits.startsWith('998') ? '+$digits' : '+998$digits';
     if (digits.length < 12) {
-      phoneAuthError = 'Телефон рақамини тўлиқ киритинг';
-      notifyListeners();
-      return;
-    }
-    isSendingCode = true;
-    phoneAuthError = null;
-    notifyListeners();
-
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: formatted,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await FirebaseAuth.instance.signInWithCredential(credential);
-        otpInputVisible = false;
-        isSendingCode = false;
-        notifyListeners();
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        phoneAuthError = _mapPhoneAuthError(e);
-        isSendingCode = false;
-        notifyListeners();
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        _verificationId = verificationId;
-        otpInputVisible = true;
-        isSendingCode = false;
-        notifyListeners();
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        _verificationId = verificationId;
-      },
-    );
-  }
-
-  Future<bool> verifyOtp(String smsCode) async {
-    if (_verificationId == null) return false;
-    isVerifyingCode = true;
-    phoneAuthError = null;
-    notifyListeners();
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: smsCode,
-      );
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      isVerifyingCode = false;
-      notifyListeners();
-      return true;
-    } on FirebaseAuthException catch (e) {
-      phoneAuthError = e.code == 'invalid-verification-code'
-          ? 'Kod noto\'g\'ri. Qayta urinib ko\'ring.'
-          : _mapPhoneAuthError(e);
-      isVerifyingCode = false;
+      phoneStepError = 'Телефон рақамини тўлиқ киритинг';
       notifyListeners();
       return false;
     }
-  }
-
-  Future<void> resendOtp(String phone) async {
-    otpInputVisible = false;
-    _verificationId = null;
+    if (_deviceLockedUid == digits) {
+      phoneStepError = null;
+      notifyListeners();
+      return true;
+    }
+    isCheckingDevice = true;
+    phoneStepError = null;
     notifyListeners();
-    await sendOtp(phone);
+
+    try {
+      final device = await _deviceIdentity.getSnapshot();
+      await _userRepo.bindDeviceOrRequestChange(
+        deviceId: device.deviceId,
+        uid: digits,
+        phone: phone,
+        signalKey: device.signalKey,
+        signals: device.signals,
+      );
+      _deviceLockedUid = digits;
+      return true;
+    } on StateError catch (e) {
+      if (e.message == 'device_bound_to_other_phone') {
+        phoneStepError =
+            'Бу қурилма аввал бошқа телефон рақамга боғланган. Рақамни алмаштириш сўрови админга юборилди.';
+      } else {
+        phoneStepError = 'Хатолик: ${e.message}';
+      }
+      return false;
+    } catch (e) {
+      phoneStepError = 'Хатолик: $e';
+      return false;
+    } finally {
+      isCheckingDevice = false;
+      notifyListeners();
+    }
   }
 
-  void resetPhoneAuth() {
-    otpInputVisible = false;
-    isSendingCode = false;
-    isVerifyingCode = false;
-    _verificationId = null;
-    phoneAuthError = null;
+  void resetPhoneStepError() {
+    phoneStepError = null;
     notifyListeners();
   }
 
@@ -325,14 +292,17 @@ class OnboardingController extends ChangeNotifier {
     final formatted = structured.formatted;
 
     try {
-      final device = await _deviceIdentity.getSnapshot();
-      await _userRepo.bindDeviceOrRequestChange(
-        deviceId: device.deviceId,
-        uid: uid,
-        phone: phone,
-        signalKey: device.signalKey,
-        signals: device.signals,
-      );
+      if (_deviceLockedUid != uid) {
+        final device = await _deviceIdentity.getSnapshot();
+        await _userRepo.bindDeviceOrRequestChange(
+          deviceId: device.deviceId,
+          uid: uid,
+          phone: phone,
+          signalKey: device.signalKey,
+          signals: device.signals,
+        );
+        _deviceLockedUid = uid;
+      }
 
       await _userRepo.createOrMergeProfileWithAddress(
         uid: uid,
@@ -387,28 +357,4 @@ class OnboardingController extends ChangeNotifier {
     errorMessage = null;
     return m;
   }
-}
-
-String _mapPhoneAuthError(FirebaseAuthException e) {
-  final msg = (e.message ?? '').toLowerCase();
-  if (e.code == 'operation-not-allowed' ||
-      msg.contains('sign-in provider is disabled') ||
-      msg.contains('region enabled')) {
-    return 'Firebase sozlamasi: Authentication → Sign-in method da '
-        '"Phone" yoqing; Settings → SMS region policy da O\'zbekiston (UZ) '
-        'qoʻshing. Loyiha Blaze rejimida boʻlishi kerak.';
-  }
-  if (e.code == 'invalid-phone-number') {
-    return 'Telefon raqami notoʻgʻri. +998 bilan 9 ta raqam kiriting.';
-  }
-  if (e.code == 'too-many-requests' || e.code == 'quota-exceeded') {
-    return 'Juda koʻp urinish. Biroz kutib, qayta urinib koʻring.';
-  }
-  if (e.code == 'missing-client-identifier' ||
-      msg.contains('play_integrity') ||
-      msg.contains('recaptcha')) {
-    return 'Android sozlamasi: Firebase Console → loyiha sozlamalari → '
-        'SHA-1/SHA-256 fingerprint qoʻshilganini tekshiring (release APK uchun).';
-  }
-  return e.message ?? 'SMS yuborishda xatolik (${e.code})';
 }

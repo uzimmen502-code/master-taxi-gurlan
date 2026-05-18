@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -41,7 +40,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _pageController = PageController();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _otpCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
 
   // Manzil maydonlari — onboarding'ning 4-sahifasida shu yerda to'liq
@@ -85,7 +83,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _pageController.dispose();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _otpCtrl.dispose();
     _birthDateCtrl.dispose();
     _mfyCtrl.dispose();
     _streetCtrl.dispose();
@@ -107,39 +104,20 @@ class _OnboardingViewState extends State<_OnboardingView> {
   Future<void> _next() async {
     final c = context.read<OnboardingController>();
 
-    // Sahifa 2 — telefon + OTP
+    // Sahifa 2 — телефон + device lock. SMS login intentionally not required
+    // for open access users; risky identity changes go to admin approval.
     if (c.currentPage == 1) {
-      final authUser = FirebaseAuth.instance.currentUser;
-      if (authUser != null && !c.otpInputVisible) {
-        c.advance();
-        await _pageController.nextPage(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOut);
+      final d = phoneDigits(_phoneCtrl.text);
+      if (d.length < 12) {
+        _showError('Телефон рақамини тўлиқ киритинг');
         return;
       }
-      if (!c.otpInputVisible) {
-        final d = phoneDigits(_phoneCtrl.text);
-        if (d.length < 12) {
-          _showError('Телефон рақамини тўлиқ киритинг');
-          return;
-        }
-        await c.sendOtp(_phoneCtrl.text);
-        return;
-      } else {
-        final code = _otpCtrl.text.trim();
-        if (code.length < 6) {
-          _showError('6 raqamli kodni kiriting');
-          return;
-        }
-        final ok = await c.verifyOtp(code);
-        if (!ok || !mounted) return;
-        _otpCtrl.clear();
-        c.advance();
-        await _pageController.nextPage(
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOut);
-        return;
-      }
+      final ok = await c.checkPhoneDeviceLock(_phoneCtrl.text);
+      if (!ok || !mounted) return;
+      c.advance();
+      await _pageController.nextPage(
+          duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+      return;
     }
 
     final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
@@ -149,16 +127,14 @@ class _OnboardingViewState extends State<_OnboardingView> {
     }
     c.advance();
     await _pageController.nextPage(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOut);
+        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
   }
 
   void _prev() {
     final c = context.read<OnboardingController>();
     c.back();
     _pageController.previousPage(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOut);
+        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
   }
 
   Future<void> _fetchGps() async {
@@ -291,7 +267,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               decoration: BoxDecoration(
                 color: i <= currentPage
                     ? Colors.white
-                    : Colors.white.withOpacity(0.3),
+                    : Colors.white.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -313,7 +289,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               height: 50,
               margin: const EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -323,7 +299,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           child: SizedBox(
             height: 50,
             child: ElevatedButton(
-              onPressed: c.isSubmitting || c.isVerifyingCode || c.isSendingCode
+              onPressed: c.isSubmitting || c.isCheckingDevice
                   ? null
                   : (c.isLastPage ? _finish : _next),
               style: ElevatedButton.styleFrom(
@@ -371,7 +347,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
             const SizedBox(height: 6),
             Text(loc.translate('onboarding_name'),
                 style: TextStyle(
-                    fontSize: 14, color: Colors.white.withOpacity(0.8))),
+                    fontSize: 14, color: Colors.white.withValues(alpha: 0.8))),
             const SizedBox(height: 28),
             _field(
               controller: _nameCtrl,
@@ -395,84 +371,88 @@ class _OnboardingViewState extends State<_OnboardingView> {
           const Text('📱', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 12),
           Text(
-            c.otpInputVisible ? 'SMS kodni kiriting' : loc.translate('onboarding_phone'),
+            loc.translate('onboarding_phone'),
             style: const TextStyle(
                 fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           const SizedBox(height: 6),
           Text(
-            c.otpInputVisible
-                ? 'Telefoningizga SMS yuborildi. 6 raqamli kodni kiriting.'
-                : 'Raqamingizga SMS kod yuboriladi.',
-            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.8)),
+            'SMSсиз кириш: рақамингиз шу қурилмага боғланади. '
+            'Кейин бошқа рақамга ўтиш админ тасдиғини талаб қилади.',
+            style: TextStyle(
+                fontSize: 14, color: Colors.white.withValues(alpha: 0.8)),
           ),
           const SizedBox(height: 28),
-          if (!c.otpInputVisible) ...[
-            _field(
-              controller: _phoneCtrl,
-              hint: loc.translate('enter_phone'),
-              icon: Icons.phone_outlined,
-              inputType: TextInputType.phone,
-              formatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
-              ],
+          _field(
+            controller: _phoneCtrl,
+            hint: loc.translate('enter_phone'),
+            icon: Icons.phone_outlined,
+            inputType: TextInputType.phone,
+            formatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
             ),
-          ] else ...[
-            _field(
-              controller: _otpCtrl,
-              hint: '6 raqamli kod',
-              icon: Icons.lock_outline,
-              inputType: TextInputType.number,
-              formatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(6),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextButton.icon(
-                  onPressed: c.isSendingCode
-                      ? null
-                      : () => c.resendOtp(_phoneCtrl.text),
-                  icon: const Icon(Icons.refresh, size: 16, color: Colors.white70),
-                  label: const Text('Qayta yuborish',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    _otpCtrl.clear();
-                    c.resetPhoneAuth();
-                  },
-                  icon: const Icon(Icons.edit, size: 16, color: Colors.white70),
-                  label: const Text("Raqamni o'zgartirish",
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                Icon(Icons.verified_user_outlined,
+                    color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Бу рақам иловани очиш ва хизматлардан фойдаланиш учун ишлатилади. '
+                    'Ҳайдовчи, payout ёки шубҳали ҳолатларда қўшимча текширув сўралиши мумкин.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ],
-          if (c.phoneAuthError != null) ...[
+          ),
+          if (c.phoneStepError != null) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.red.shade900.withOpacity(0.7),
+                color: Colors.red.shade900.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(children: [
                 const Icon(Icons.error_outline, color: Colors.white, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(c.phoneAuthError!,
-                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  child: Text(c.phoneStepError!,
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 13)),
                 ),
               ]),
             ),
           ],
-          if (c.isSendingCode) ...[
+          if (c.isCheckingDevice) ...[
             const SizedBox(height: 16),
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 10),
+                  Text(
+                    'Қурилма текширилмоқда...',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
           ],
         ],
       ),
@@ -495,7 +475,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
             const SizedBox(height: 6),
             Text(loc.translate('onboarding_gender_sub'),
                 style: TextStyle(
-                    fontSize: 14, color: Colors.white.withOpacity(0.8))),
+                    fontSize: 14, color: Colors.white.withValues(alpha: 0.8))),
             const SizedBox(height: 28),
             Row(children: [
               Expanded(child: _genderCard(c, 'male', '👨', 'Эркак')),
@@ -585,8 +565,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
             gpsRequired
                 ? 'GPS ва қўлда тўлдириш — иккаласи мажбурий'
                 : 'Қўлда манзил тўлдириш мажбурий (GPS ихтиёрий)',
-            style:
-                TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
+            style: TextStyle(
+                fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
           ),
           const SizedBox(height: 14),
 
@@ -614,9 +594,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: hasGps
-              ? _green2.withOpacity(0.4)
-              : Colors.orange.shade300,
+          color:
+              hasGps ? _green2.withValues(alpha: 0.4) : Colors.orange.shade300,
           width: 1.2,
         ),
       ),
@@ -626,8 +605,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           const SizedBox(width: 6),
           const Expanded(
             child: Text('GPS координаталари (мажбурий)',
-                style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
           ),
           _gpsStatusBadge(c),
         ]),
@@ -698,8 +676,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
     final q = addr.gpsQuality;
     final (label, bg, fg) = switch (q) {
       GpsQuality.high => ('Аъло', Colors.green.shade50, _green2),
-      GpsQuality.medium =>
-        ('Ўрта', Colors.amber.shade50, const Color(0xFFE65100)),
+      GpsQuality.medium => (
+          'Ўрта',
+          Colors.amber.shade50,
+          const Color(0xFFE65100)
+        ),
       GpsQuality.low => ('Паст', Colors.red.shade50, Colors.red.shade700),
       GpsQuality.unknown => ('OK', Colors.blue.shade50, Colors.blue.shade700),
       GpsQuality.none => ('Йўқ', Colors.grey.shade100, Colors.grey),
@@ -709,11 +690,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: fg.withOpacity(0.4)),
+        border: Border.all(color: fg.withValues(alpha: 0.4)),
       ),
       child: Text(label,
-          style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.bold, color: fg)),
+          style:
+              TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: fg)),
     );
   }
 
@@ -827,7 +808,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 3)),
         ],
@@ -852,7 +833,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
   Widget _duaBox(String text) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(children: [
@@ -877,7 +858,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 20),
         decoration: BoxDecoration(
-          color: sel ? Colors.white : Colors.white.withOpacity(0.15),
+          color: sel ? Colors.white : Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: sel ? Colors.white : Colors.transparent, width: 2),

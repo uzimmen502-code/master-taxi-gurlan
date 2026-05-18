@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// `orders` collection — non/ovqat buyurtmasi.
 class OrderModel {
   final String id;
-  final String type;        // bread | food
+  final String type; // bread | food
   final int total;
-  final String status;      // new | accepted | ready | delivered | rejected
+  final String status; // new | accepted | ready | delivered | rejected
   final List<OrderItem> items;
   final String address;
   final String deliveryTime;
@@ -37,6 +37,12 @@ class OrderModel {
   bool get hasCoordinates => lat != null && lng != null;
   bool get isDelivered => status == 'delivered';
 
+  static DateTime? _parseDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
   factory OrderModel.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     final rawItems = (d['items'] as List?) ?? const [];
@@ -52,7 +58,7 @@ class OrderModel {
       address: d['address'] ?? '',
       deliveryTime: d['deliveryTime'] ?? '',
       rejectReason: d['rejectReason'] ?? '',
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      createdAt: _parseDate(d['createdAt']),
       userName: d['userName'] ?? '',
       userPhone: d['userPhone'] ?? '',
       lat: (d['lat'] as num?)?.toDouble(),

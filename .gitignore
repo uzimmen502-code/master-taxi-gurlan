@@ -45,3 +45,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 lib/config.dart
+
+# Local deploy/debug artifacts
+/.firebase/
+/chrome-profile-*/
+/root-live*.png
+/firebase
+/web/downloads/*.apk

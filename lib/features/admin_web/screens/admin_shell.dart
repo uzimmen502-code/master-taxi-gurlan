@@ -23,6 +23,7 @@ import 'driver_applications_screen.dart';
 import 'payout_management_screen.dart';
 import 'products_manager_screen.dart';
 import 'risk_review_screen.dart';
+import 'users_devices_screen.dart';
 
 /// Admin Web Panel — асосий навигaция (sidebar + контент).
 ///
@@ -58,6 +59,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Тасдиқлар',
       icon: Icons.verified_user_outlined,
       description: 'Рақам ва profile сўровлари',
+    ),
+    _AdminSection(
+      label: 'Фойдаланувчилар',
+      icon: Icons.people_alt_outlined,
+      description: 'Телефон, туғилган кун, қурилмалар',
     ),
     _AdminSection(
       label: 'Risk review',
@@ -199,6 +205,9 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Тасдиқлар') {
       return const IdentityApprovalsScreen();
     }
+    if (section.label == 'Фойдаланувчилар') {
+      return const UsersDevicesScreen();
+    }
     if (section.label == 'Risk review') {
       return const RiskReviewScreen();
     }
@@ -323,7 +332,7 @@ class _Sidebar extends StatelessWidget {
         padding: EdgeInsets.symmetric(
             horizontal: compact ? 0 : 14, vertical: compact ? 12 : 12),
         decoration: BoxDecoration(
-          color: selected ? Colors.white.withOpacity(0.12) : null,
+          color: selected ? Colors.white.withValues(alpha: 0.12) : null,
           borderRadius: BorderRadius.circular(10),
         ),
         child: compact
@@ -450,7 +459,7 @@ class _Sidebar extends StatelessWidget {
                     overflow: TextOverflow.clip,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
+                      color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                       height: 1.05,
@@ -459,7 +468,8 @@ class _Sidebar extends StatelessWidget {
                 ],
               )
             : Row(children: [
-                const Icon(Icons.home_outlined, color: Colors.white70, size: 20),
+                const Icon(Icons.home_outlined,
+                    color: Colors.white70, size: 20),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
@@ -477,8 +487,7 @@ class _Sidebar extends StatelessWidget {
     );
 
     return Tooltip(
-      message:
-          'Фойдаланувчи иловасига ўтиш (асосий саҳифа /)',
+      message: 'Фойдаланувчи иловасига ўтиш (асосий саҳифа /)',
       preferBelow: false,
       child: Semantics(
         button: true,
@@ -506,20 +515,18 @@ class _PlaceholderTab extends StatelessWidget {
               color: Colors.orange.shade50,
               shape: BoxShape.circle,
             ),
-            child: Icon(section.icon,
-                size: 48, color: Colors.orange.shade600),
+            child: Icon(section.icon, size: 48, color: Colors.orange.shade600),
           ),
           const SizedBox(height: 20),
           Text(section.label,
-              style: const TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text(section.description,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
           const SizedBox(height: 20),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.orange.shade100,
               borderRadius: BorderRadius.circular(20),

@@ -18,29 +18,85 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Master Taxi Gurlan — фойдаланувчи иловаси (такси, нон, бошқа хизматлар)">
 
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="master_taxi_gurlan">
+  <meta name="apple-mobile-web-app-title" content="Master Taxi Gurlan">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>master_taxi_gurlan</title>
+  <title>Master Taxi Gurlan</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Дастлабки юклаш экранидaги loading спиннер */
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #loader-wrap {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #E65100 0%, #FF8F00 100%);
+      color: white;
+      z-index: 9999;
+      transition: opacity 0.5s;
+    }
+    #loader-wrap.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loader-wrap h1 { font-size: 20px; margin: 16px 0 4px; font-weight: 700; }
+    #loader-wrap p  { font-size: 13px; opacity: 0.7; margin: 0; }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="loader-wrap">
+    <div class="spinner"></div>
+    <h1>🚖 Master Taxi Gurlan</h1>
+    <p>Илова юкланмоқда...</p>
+  </div>
+  <script>
+    function hideLoader() {
+      var el = document.getElementById('loader-wrap');
+      if (el) {
+        el.classList.add('hidden');
+        setTimeout(function () { el.remove(); }, 600);
+      }
+    }
+    window.addEventListener('flutter-first-frame', hideLoader);
+    // Some Flutter web builds/browsers may miss the event; do not keep the
+    // splash overlay above an already-mounted Flutter view forever.
+    window.addEventListener('load', function () {
+      setTimeout(hideLoader, 8000);
+    });
+  </script>
+  <script>
+    (function () {
+      var resetKey = 'mtg_sw_cache_reset_v2';
+      if (!('serviceWorker' in navigator) || sessionStorage.getItem(resetKey)) {
+        return;
+      }
+      sessionStorage.setItem(resetKey, '1');
+      Promise.all([
+        navigator.serviceWorker.getRegistrations()
+          .then(function (regs) { return Promise.all(regs.map(function (r) { return r.unregister(); })); })
+          .catch(function () {}),
+        window.caches
+          ? caches.keys().then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+          : Promise.resolve()
+      ]).then(function () {
+        // If an old Flutter service worker served the wrong bundle (admin on `/`),
+        // reload once so the page is fetched directly from Hosting.
+        window.location.reload();
+      });
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

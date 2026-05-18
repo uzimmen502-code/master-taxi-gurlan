@@ -1,0 +1,29 @@
+rules_version = '2';
+// Deploy: firebase deploy --only storage  |  Guide: docs/storage_cors_uz.md
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Bread catalog images (Flutter admin upload + user app read).
+    // TEMP: open read/write without auth — replace with request.auth after Admin Auth.
+    // Нон расмлари
+    match /bread_images/{name=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Таом расмлари
+    match /food_images/{name=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Қўшимча маҳсулот расмлари
+    match /extra_images/{name=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

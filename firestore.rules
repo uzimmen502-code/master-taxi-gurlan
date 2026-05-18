@@ -2,20 +2,111 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // MOBIL (Flutter) + WEB (master-taxi-web) bir xil Firestore loyihasida.
+    // Mobil: ko'pincha Firebase Phone Auth yo'q — `usersGuestProfilePatchOnly`
+    // va `marshrut_block` mehmon yozuvlari.
+    // Web foydalanuvchi: Anonymous Auth + `users/{998...}` (telefon `phone-normalize.js`).
+    // Web operator (admin.html): faqat PIN sessiyasi — Firestore `role` operator uchun emas.
+
     // ══════════════════════════════════════
     // ЁРДАМЧИ ФУНКЦИЯЛАР
     // ══════════════════════════════════════
-
-    // Сўровда телефон рақами борми?
-    function hasPhone() {
-      return request.resource != null
-          && request.resource.data.keys().hasAny(['userPhone', 'phone']);
-    }
 
     // Майдон ўзгармадими?
     function notChanged(field) {
       return !(field in request.resource.data)
           || request.resource.data[field] == resource.data[field];
+    }
+
+    // Клиент баланс майдонларини ўзгартира олмасин (фақат Cloud Functions)
+    function walletFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['bonusBalance', 'balanceUpdatedAt']);
+    }
+
+    // Firebase Phone Auth
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // userId = phoneDigits (масалан: 998901234567); token.phone_number = '+998901234567'
+    function isOwner(userId) {
+      return isAuth()
+          && request.auth.token.phone_number == '+' + userId;
+    }
+
+    function userDocIdFromPhoneToken() {
+      return request.auth.token.phone_number.replace('\\+', '');
+    }
+
+    function isAdmin() {
+      return isAuth()
+          && get(/databases/$(database)/documents/users/$(userDocIdFromPhoneToken())).data.role in ['admin', 'superadmin', 'dispatcher'];
+    }
+
+    // Yo'lovchi Flutter ilovasi hozircha Phone Auth ishlatmaydi (request.auth == null).
+    // Shuning uchun faqat quyidagi ustunlarga tegadigan yangilanishlarga ruxsat.
+    function usersGuestProfilePatchOnly() {
+      return !isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'name', 'phone', 'gender', 'address', 'legacyAddress',
+                'addressUpdatedAt', 'updatedAt', 'createdAt',
+                'birthDate', 'birthDateSetAt',
+                'fcmToken', 'role', 'cancelCount', 'blockedUntil', 'lastNewsReadAt'
+              ]);
+    }
+
+    // DIQQAT: statik web + anonim Auth — bu shart har kimga boshqa foydalanuvchini
+    // haydovchi qilib yozish imkonini beradi. Ishonchli muhitda Phone Auth yoki CF.
+    function usersWebLooseDriverPromotion() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['role', 'updatedAt'])
+          && request.resource.data.role == 'driver'
+          && (!('role' in resource.data)
+              || resource.data.role in ['user', '']);
+    }
+
+    // schedules → intercity_drivers sync (Phone Auth yo'q; driverId = telefon raqami)
+    function intercityDriverScheduleCreate() {
+      return request.resource.data.keys().hasAll(['name', 'phone', 'isActive']);
+    }
+
+    function intercityDriverScheduleSync() {
+      return request.resource.data.keys().hasAll(['name', 'phone', 'isActive'])
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'name', 'phone', 'plate', 'seats', 'price', 'hour', 'isActive',
+                'parcel', 'rating', 'from', 'to', 'updatedAt'
+              ]);
+    }
+
+    // createBooking transaction — faqat seats / vaqt maydonlari
+    function intercityDriverSeatBookingPatch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['seats', 'lastBookedAt', 'updatedAt']);
+    }
+
+    // Admin web hozir PIN session bilan ishlaydi. Birthday bonus Cloud Function'га
+    // ko'chirilguncha balans patch'ni faqat shu maydonlar bilan cheklaymiz.
+    function birthdayBonusBalancePatchOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['bonusBalance', 'birthdayBonusLastYear', 'updatedAt']);
+    }
+
+    // Marshrut dispatch ҳозир client transaction'лар билан queue'ни sync қилади.
+    // Phone Auth тўлиқ жорий қилинмагунча фақат dispatch/queue lifecycle
+    // майдонларини чекланган patch сифатида рухсат қиламиз.
+    function queueGuestDispatchPatchOnly() {
+      return !isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'seatsLeft', 'isActive', 'updatedAt',
+                'dispatchTimeoutStreak', 'dispatchTimeoutCount',
+                'dispatchRejectCount', 'lastTimeoutAt', 'lastRejectedAt',
+                'lastAcceptedAt', 'autoPausedReason', 'autoPausedAt',
+                'reactivatedAt'
+              ]);
     }
 
     // ══════════════════════════════════════
@@ -25,9 +116,83 @@ service cloud.firestore {
       // Ўқиш — барча (ҳайдовчилар FCM token учун)
       allow read: if true;
 
-      // Ёзиш — телефон рақами бўлса
-      allow create: if request.resource.data.keys().hasAll(['phone']);
-      allow update: if request.resource.data.keys().hasAny(['phone', 'fcmToken', 'role']);
+      // create — Phone Auth'siz web/mobil uchun.
+      // update — Phone Auth (`isOwner`) yoki mehmon profil patch (`usersGuestProfilePatchOnly`).
+      allow create: if request.resource.data.keys().hasAll(['phone'])
+          && !request.resource.data.keys().hasAny(['bonusBalance', 'balanceUpdatedAt'])
+          && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+
+      allow update: if (
+          walletFieldsUntouched()
+          && (
+            usersWebLooseDriverPromotion()
+            || (
+              (notChanged('role') || isAdmin())
+              && (isOwner(userId) || isAdmin() || usersGuestProfilePatchOnly())
+            )
+          )
+        ) || birthdayBonusBalancePatchOnly();
+
+      // Ҳисоб-китоб журнали — фақат ўқиш, ёзиш Cloud Functions
+      match /wallet_ledger/{txId} {
+        allow read: if true;
+        allow create: if request.resource.data.type == 'birthday_bonus';
+        allow update, delete: if false;
+      }
+
+      match /birthday_bonus_claims/{year} {
+        allow read: if true;
+        allow create: if request.resource.data.status == 'granted';
+        allow update, delete: if false;
+      }
+    }
+
+    // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)
+    match /users/{userId}/driverProfiles/{profileId} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    // Birth date ўзгартириш сўровлари. User create қилади; тасдиқлашни кейин
+    // admin/Cloud Function орқали қаттиқлаштирамиз.
+    match /birthdate_change_requests/{id} {
+      allow create: if true;
+      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
+      // `isAdmin()`ga qaytaramiz.
+      allow read, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Device binding: биринчи рақам қурилмага боғланади. Conflict бўлса
+    // client фақат request яратади, binding'ни admin тасдиқлайди.
+    match /device_bindings/{deviceId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /device_change_requests/{id} {
+      allow create: if true;
+      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
+      // `isAdmin()`ga qaytaramiz.
+      allow read, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /risk_events/{id} {
+      allow create: if true;
+      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
+      // `isAdmin()`ga qaytaramiz.
+      allow read, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Marshrut blok holati — faqat o'z telefon raqami yoki admin
+    match /users/{userId}/marshrut_block/{doc} {
+      allow read: if true;
+      allow write: if isOwner(userId) || isAdmin()
+          || (!isAuth()
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['cancelCount', 'blockedUntil', 'updatedAt']));
     }
 
     // ══════════════════════════════════════
@@ -40,35 +205,43 @@ service cloud.firestore {
       // Яратиш — телефон рақами бўлса
       allow create: if request.resource.data.keys().hasAll(['phone', 'name']);
 
-      // Янгилаш — фақат ўз маълумотлари
-      // driverId = телефон рақами (рақамлар)
-      allow update: if true; // Вақтинча — Phone Auth бўлгач чеклаш
+      // Ўз маълумотларини ёки admin ўзгартира олади
+      allow update: if isOwner(driverId) || isAdmin();
 
       // Ўчириш — йўқ
       allow delete: if false;
     }
 
-    // ══════════════════════════════════════
-    // TRIPS — такси сафарлари
-    // ══════════════════════════════════════
+    // TRIPS — taksi (Flutter + web mahalliy modul `taxiType: local` / marshrut).
+    // Yaratishda Phone Auth talab qilinmaydi; yangilanishlar alohida shartlar bilan.
     match /trips/{tripId} {
       // Ўқиш — барча (real-time tracking учун)
       allow read: if true;
 
-      // Яратиш — userPhone бўлса
-      allow create: if request.resource.data.keys().hasAll(['userPhone', 'from', 'status'])
-          && request.resource.data.status == 'searching';
+      // Яратиш — lokal/intercity taksi
+      allow create: if (
+          request.resource.data.keys().hasAll(['userPhone', 'fromAddr', 'status'])
+          && request.resource.data.status == 'searching'
+      )
+      // Marshrut taksi: pickupAddr + pending/searching
+      || (
+          request.resource.data.keys().hasAll(['userPhone', 'pickupAddr', 'status', 'taxiType'])
+          && request.resource.data.taxiType == 'marshrut'
+          && request.resource.data.status in ['pending', 'searching']
+      );
 
       // Янгилаш — рухсат этилган майдонлар
       allow update: if
-        // Ҳайдовчи қабул қилиши
-        (request.resource.data.status in ['accepted', 'cancelled', 'completed'])
+        // Статус ўзгариши
+        (request.resource.data.status in ['accepted', 'rejected', 'no_seats', 'cancelled', 'completed', 'expired'])
+        // Ҳайдовчига йўналтириш (yo'lovchi selectDriver() chaqiradi)
+        || request.resource.data.keys().hasAny(['targetDriverId', 'targetedAt'])
         // GPS позиция янгилаш
         || request.resource.data.keys().hasAny(['driverLat', 'driverLng'])
         // Radius янгилаш
         || (request.resource.data.keys().hasOnly(['radius', 'updatedAt']))
         // Fare сақлаш
-        || request.resource.data.keys().hasAny(['fare', 'completedAt']);
+        || request.resource.data.keys().hasAny(['fare', 'completedAt', 'cashPaid']);
 
       // Ўчириш — йўқ
       allow delete: if false;
@@ -86,9 +259,14 @@ service cloud.firestore {
           && request.resource.data.status == 'new'
           && request.resource.data.total > 0;
 
-      // Янгилаш — фақат статус ўзгартириш
-      allow update: if request.resource.data.keys().hasAny(['status'])
-          && request.resource.data.status in ['new', 'accepted', 'ready', 'delivered'];
+      // Янгилаш — статус ёки kuryer yetkazib berish maydonlari
+      allow update: if (
+          request.resource.data.keys().hasAny(['status'])
+          && request.resource.data.status in ['new', 'accepted', 'ready', 'delivered', 'rejected', 'cancelled']
+      ) || (
+          // Kuryer markDelivered — deliveredAt va courierId ham yoziladi
+          request.resource.data.keys().hasAny(['deliveredAt', 'courierId'])
+      );
 
       // Ўчириш — йўқ
       allow delete: if false;
@@ -115,14 +293,30 @@ service cloud.firestore {
     }
 
     // ══════════════════════════════════════
-    // BREAD / EXTRA PRODUCTS
+    // BREAD / EXTRA PRODUCTS / FOOD INVENTORY
     // ══════════════════════════════════════
     match /bread_products/{id} {
       allow read, create, update: if true;
-      allow delete: if false;
+      // Админ Firebase Console'дан ўчирa олиши учун.
+      allow delete: if true;
     }
 
     match /extra_products/{id} {
+      allow read, create, update: if true;
+      allow delete: if true;
+    }
+
+    // Овqat каталоги (`food_catalog`): admin web ҳозир PIN/session билан ишлайди,
+    // Firebase Auth эмас. Шунинг учун bread/extra каби вақтинча очиқ.
+    match /food_catalog/{id} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Овqат stock — `food_inventory/{slug}` (`totalStock`, `soldToday`).
+    // `InventoryRepository.createOrderAtomically` транзакцияда ёзади.
+    match /food_inventory/{id} {
       allow read, create, update: if true;
       allow delete: if false;
     }
@@ -135,9 +329,264 @@ service cloud.firestore {
       allow delete: if false;
 
       match /messages/{messageId} {
-        allow read, create, update: if true;
+        allow read: if true;
+        // Клиент fromAdmin: true ёза олмайди (faqat Admin SDK / CF).
+        // fromAdmin майдони йўқ ёки false — рухсат (веб admin.html ҳам шу форматда ёзади).
+        allow create: if request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() <= 4000
+            && (
+              !request.resource.data.keys().hasAny(['fromAdmin'])
+              || request.resource.data.fromAdmin == false
+            );
+        allow update: if true;
         allow delete: if false;
       }
+    }
+
+    // ══════════════════════════════════════
+    // ADMIN_NEWS — админ томонидан фойдаланувчиларга юбориладиган хабарлар
+    // ══════════════════════════════════════
+    //
+    // Hozircha Firebase Auth йоq (`request.auth` мавжуд эмас). Шунинг учун
+    // server-side admin role'ни Firestore рулaрида текшира олмаймиз.
+    // Client-side `AdminService` ҳимоя сифатида ишлайди.
+    //
+    // Қачон Phone Auth қо'шилса, шу qoidaни yangilash kerak:
+    //   allow create: if get(/databases/$(database)/documents/users/
+    //                     $(request.auth.uid)).data.role == 'admin' && ...
+    match /admin_news/{newsId} {
+      // Ўқиш — барча фойдаланувчилар (фильтр client-side).
+      allow read: if true;
+
+      // Яратиш — мажбурий майдонлар ва типлар тeкширилaди.
+      // category ва audience aniq qiymatlardан bo'lsin.
+      allow create: if request.resource.data.keys()
+              .hasAll(['title', 'body', 'category', 'audience', 'createdAt'])
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 2000
+          && request.resource.data.category in
+              ['info', 'update', 'promo', 'warning', 'emergency']
+          && request.resource.data.audience in
+              ['all', 'user', 'driver', 'courier'];
+
+      // Янгилаш — `createdAt` ўзгармасин, title/body размeри чегаралaнсин.
+      // (Hozircha admin Firebase Console orqали tahrirlaydi — client'дан
+      // yo'q. Phone Auth qo'шилгач — admin role check qo'shamiz.)
+      allow update: if notChanged('createdAt')
+          && (
+            !('title' in request.resource.data)
+            || request.resource.data.title.size() <= 120
+          )
+          && (
+            !('body' in request.resource.data)
+            || request.resource.data.body.size() <= 2000
+          );
+
+      // Ўчириш — вақтинча тақиқланди. Phone Auth + isAdmin() бўлгач очилади.
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // NOTIFICATIONS — FCM орқали хабар (илова listener + update sent)
+    // ══════════════════════════════════════
+    match /notifications/{notificationId} {
+      allow read: if true;
+      // Яратишда: барча майдонлар бўлсин + sent мажбурий false
+      allow create: if request.resource.data.keys().hasAll(['targetPhone', 'title', 'body', 'sent'])
+          && request.resource.data.sent == false;
+      // Янгилашда: фақат sent maydonini true qilish mumkin (FCMService tomonidan)
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sent'])
+          && request.resource.data.sent == true;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // SETTINGS — нархлар ва бошқа созламалар
+    // ══════════════════════════════════════
+    match /settings/{docId} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // DRIVER_REQUESTS / QUEUE — админ ва ҳайдовчи панели
+    // ══════════════════════════════════════
+    match /driver_requests/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    match /queue/{driverId} {
+      allow read: if true;
+      allow create: if isOwner(driverId) || isAdmin();
+      allow update: if isOwner(driverId) || isAdmin() || queueGuestDispatchPatchOnly();
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // INTERCITY / LOCAL TAXI / JOB
+    // ══════════════════════════════════════
+    match /intercity_drivers/{id} {
+      allow read: if true;
+      // Haydovchi profili — admin / Phone Auth owner; anonim: schedule sync yoki seat patch
+      allow create: if isAdmin() || isOwner(id) || intercityDriverScheduleCreate();
+      allow update: if isAdmin() || isOwner(id)
+          || intercityDriverScheduleSync()
+          || intercityDriverSeatBookingPatch();
+      allow delete: if false;
+
+      // Doimiy mijoz aggregation — bron transaction'ida (client SDK)
+      // Phone Auth bilan cheklash keyinroq; hozircha yozish ochiq.
+      match /clients/{phone} {
+        allow read: if isAdmin() || isOwner(id);
+        allow create, update: if true;
+        allow delete: if false;
+      }
+    }
+
+    // ══════════════════════════════════════
+    // INTERCITY BOOKINGS — шаҳарлараро ишончли бронлар
+    // ══════════════════════════════════════
+    match /intercity_bookings/{bookingId} {
+      // Ўқиш — барча (мижоз ва ҳайдовчи бронни кўриши учун)
+      allow read: if true;
+
+      // Яратиш — userPhone, driverId, status, totalAmount > 0 бўлиши шарт.
+      // Status фақат 'pending' ёки 'confirmed' (auto-confirm) бўла олади.
+      allow create: if request.resource.data.keys()
+              .hasAll(['userPhone', 'driverId', 'status', 'totalAmount'])
+          && request.resource.data.totalAmount is number
+          && request.resource.data.totalAmount > 0
+          && request.resource.data.status in ['pending', 'confirmed'];
+
+      // Янгилаш — статус ўзгариши ёки bekor qilish maydonlari
+      allow update: if (
+          request.resource.data.status in
+              ['pending', 'confirmed', 'completed', 'cancelled', 'expired']
+          && notChanged('userPhone')
+          && notChanged('driverId')
+      ) || (
+          // cancelBooking — cancelledAt, cancelReason ham yoziladi
+          request.resource.data.keys().hasAny(
+              ['cancelledAt', 'cancelledBy', 'reason', 'cancelReason'])
+          && notChanged('userPhone')
+          && notChanged('driverId')
+      );
+
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // INTERCITY TRIPS — veb moduli (hozircha intercity_drivers bilan parallel)
+    // Keyinroq intercity_drivers'ga to'liq ko'chiriladi, shu vaqtgacha ochiq.
+    // ══════════════════════════════════════
+    match /intercity_trips/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys()
+              .hasAll(['from', 'to', 'date', 'phone'])
+          && request.resource.data.keys().hasAny(['ownerUid', 'phone']);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /ride_requests/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    match /marshrut_dispatch_events/{id} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+
+    match /requests/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    match /ads/{id} {
+      allow read, create, update: if true;
+      allow delete: if false;
+    }
+
+    match /complaints/{id} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // WEB mahalliy taksi: docId = Firebase Anonymous UID; trips esa Flutter bilan umumiy.
+    // ══════════════════════════════════════
+    match /local_taxi_drivers/{driverDocId} {
+      allow read: if true;
+      allow create: if request.auth != null
+          && request.auth.uid == driverDocId
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.keys().hasAll(['phone', 'name', 'status', 'updatedAt']);
+      allow update: if request.auth != null
+          && request.auth.uid == driverDocId
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if false;
+    }
+
+    // Eski web — yozuv yo'q, faqat tarixiy o'qish
+    match /local_taxi_requests/{id} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // COURIER
+    // ══════════════════════════════════════
+    match /delivery_routes/{id} {
+      allow read: if true;
+      // Reys yaratish — admin / dispatcher
+      allow create: if isAdmin();
+      // Reys yangilash — admin yoki kuryer (status, index, vaqt, courierId)
+      allow update: if isAdmin()
+          // Kuryer startRoute / advanceIndex / completeRoute uchun
+          || request.resource.data.keys().hasAny(['status', 'currentIndex', 'startedAt', 'completedAt', 'courierId']);
+      allow delete: if false;
+    }
+
+    match /couriers/{id} {
+      allow read: if true;
+      // Kuryer birinchi marta upsertStatus
+      allow create: if true;
+      // Kuryer o'z holatini (GPS, isOnline) yangilaydi.
+      // Phone Auth to'liq bo'lgach: isOwner(id) || isAdmin()
+      allow update: if true;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // PAYOUT REQUESTS — мижоз нақд чиқариш (ёзувлар асосан Functions)
+    // ══════════════════════════════════════
+    match /payout_requests/{id} {
+      allow read: if true;
+      allow create: if false;
+      // Web admin tasdiqlash (anonim Auth); to'liq ishonch uchun CF tavsiya etiladi.
+      allow update: if true;
+      allow delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // DAILY_REPORTS — кунлик ҳисоботлар (Analytics Center + Cloud Functions)
+    // ══════════════════════════════════════
+    //
+    // Document ID — sana (`YYYY-MM-DD`).
+    // Client-side admin'lar `regenerateTodayReport()` орqали қайта-ясaши учун.
+    // Кейин Phone Auth + admin tekshiruvига ўрнатилaди.
+    match /daily_reports/{dateKey} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
 
   }

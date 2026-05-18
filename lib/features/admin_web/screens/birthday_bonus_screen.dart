@@ -40,17 +40,23 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
             if (snap.hasError) {
               return Center(child: Text('Хатолик: ${snap.error}'));
             }
-            final now = DateTime.now();
-            final users = (snap.data ?? const <UserModel>[])
-                .where((u) => _isBirthdayToday(u.birthDate, now))
-                .toList();
-            if (users.isEmpty) {
+            final users = snap.data ?? const <UserModel>[];
+            final columns = _birthdayColumns(DateTime.now(), users);
+            if (columns.every((c) => c.users.isEmpty)) {
               return const _EmptyBirthdayState();
             }
-            return ListView.builder(
+            return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-              itemCount: users.length,
-              itemBuilder: (_, i) => _BirthdayUserCard(user: users[i]),
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final column in columns) ...[
+                    _BirthdayColumnView(column: column),
+                    const SizedBox(width: 12),
+                  ],
+                ],
+              ),
             );
           },
         ),
@@ -171,10 +177,103 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
   }
 }
 
+class _BirthdayColumnView extends StatelessWidget {
+  const _BirthdayColumnView({required this.column});
+
+  final _BirthdayColumn column;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 310,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: column.canGrant
+                        ? const Color(0xFFFFF3E0)
+                        : Colors.blue.shade50,
+                    child: Icon(
+                      column.canGrant
+                          ? Icons.cake_outlined
+                          : Icons.event_available_outlined,
+                      color: column.canGrant
+                          ? const Color(0xFFE65100)
+                          : Colors.blue.shade700,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          column.title,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          column.dateLabel,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Chip(
+                    label: Text('${column.users.length}'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (column.users.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    'User йўқ',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                )
+              else
+                for (final user in column.users)
+                  _BirthdayUserCard(
+                    user: user,
+                    canGrant: column.canGrant,
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BirthdayUserCard extends StatefulWidget {
-  const _BirthdayUserCard({required this.user});
+  const _BirthdayUserCard({
+    required this.user,
+    required this.canGrant,
+  });
 
   final UserModel user;
+  final bool canGrant;
 
   @override
   State<_BirthdayUserCard> createState() => _BirthdayUserCardState();
@@ -221,8 +320,15 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
             stream: repo.watchBirthdayBonusAmount(),
             builder: (context, amountSnap) {
               final amount = amountSnap.data ?? 10000;
+              if (!widget.canGrant) {
+                return const Chip(
+                  avatar: Icon(Icons.schedule, size: 16),
+                  label: Text('Кутилаяпти'),
+                );
+              }
               return FutureBuilder<bool>(
-                future: repo.hasBirthdayBonusClaim(uid: widget.user.id, year: year),
+                future:
+                    repo.hasBirthdayBonusClaim(uid: widget.user.id, year: year),
                 builder: (context, claimSnap) {
                   final claimed = claimSnap.data == true;
                   if (claimed) {
@@ -305,10 +411,56 @@ class _EmptyBirthdayState extends StatelessWidget {
   }
 }
 
-bool _isBirthdayToday(String birthDate, DateTime now) {
+bool _isBirthdayOnDate(String birthDate, DateTime date) {
   final parts = birthDate.split('-');
   if (parts.length != 3) return false;
   final month = int.tryParse(parts[1]);
   final day = int.tryParse(parts[2]);
-  return month == now.month && day == now.day;
+  return month == date.month && day == date.day;
+}
+
+List<_BirthdayColumn> _birthdayColumns(DateTime now, List<UserModel> users) {
+  const specs = [
+    (0, 'Бугун'),
+    (1, 'Эртага'),
+    (2, 'Индинга'),
+    (3, '3 кундан кейин'),
+    (5, '5 кундан кейин'),
+    (7, '7 кундан кейин'),
+  ];
+  return [
+    for (final spec in specs)
+      _BirthdayColumn(
+        title: spec.$2,
+        date: now.add(Duration(days: spec.$1)),
+        canGrant: spec.$1 == 0,
+        users: users
+            .where((u) => _isBirthdayOnDate(
+                  u.birthDate,
+                  now.add(Duration(days: spec.$1)),
+                ))
+            .toList()
+          ..sort((a, b) => (a.name.isEmpty ? a.id : a.name)
+              .compareTo(b.name.isEmpty ? b.id : b.name)),
+      ),
+  ];
+}
+
+class _BirthdayColumn {
+  const _BirthdayColumn({
+    required this.title,
+    required this.date,
+    required this.canGrant,
+    required this.users,
+  });
+
+  final String title;
+  final DateTime date;
+  final bool canGrant;
+  final List<UserModel> users;
+
+  String get dateLabel {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(date.day)}.${two(date.month)}';
+  }
 }

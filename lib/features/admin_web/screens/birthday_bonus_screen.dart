@@ -42,9 +42,6 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
             }
             final users = snap.data ?? const <UserModel>[];
             final columns = _birthdayColumns(DateTime.now(), users);
-            if (columns.every((c) => c.users.isEmpty)) {
-              return const _EmptyBirthdayState();
-            }
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
               scrollDirection: Axis.horizontal,
@@ -393,21 +390,6 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-}
-
-class _EmptyBirthdayState extends StatelessWidget {
-  const _EmptyBirthdayState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.event_available, size: 54, color: Colors.green.shade400),
-        const SizedBox(height: 10),
-        const Text('Бугун туғилган куни бўлган user топилмади'),
-      ]),
-    );
   }
 }
 

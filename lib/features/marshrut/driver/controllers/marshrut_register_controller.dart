@@ -1,23 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/car/car_info_record.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/route_points_validator.dart';
 import '../../../../models/marshrut_driver_profile.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 
 /// Marshrut haydovchi ro'yxatdan o'tish/yangilash formasi state mashinasi.
-///
-/// Mas'uliyat:
-/// - profil va profil tarixini yuklash (`SharedPreferences` + Firestore)
-/// - mashina maydonlari, ўрин сони (Damas → 6, аks 4), маршрут нуқталари
-/// - валидация ва батч-yozish (`MarshrutDriverRepository.register()`)
 class MarshrutRegisterController extends ChangeNotifier {
   MarshrutRegisterController({required MarshrutDriverRepository repo})
       : _repo = repo;
 
   final MarshrutDriverRepository _repo;
 
-  // ─── State ──────────────────────────────────────────────────────────
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isRegistered = false;
@@ -27,9 +23,7 @@ class MarshrutRegisterController extends ChangeNotifier {
   String _userName = '';
   String _userPhone = '';
 
-  String _carModel = '';
-  String _plate = '';
-  int _seats = 4;
+  TimeOfDayValue _startTime = const TimeOfDayValue(hour: 7, minute: 0);
 
   String _fromMfy = '';
   List<String> _midStops = [];
@@ -38,7 +32,6 @@ class MarshrutRegisterController extends ChangeNotifier {
   MarshrutDriverProfile? _savedProfile;
   String? _errorMessage;
 
-  // ─── Getters ────────────────────────────────────────────────────────
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   bool get isRegistered => _isRegistered;
@@ -46,19 +39,21 @@ class MarshrutRegisterController extends ChangeNotifier {
   String get userId => _userId;
   String get userName => _userName;
   String get userPhone => _userPhone;
-  String get carModel => _carModel;
-  String get plate => _plate;
-  int get seats => _seats;
+  TimeOfDayValue get startTime => _startTime;
+  String get startTimeLabel => _startTime.label;
   String get fromMfy => _fromMfy;
   List<String> get midStops => List.unmodifiable(_midStops);
   String get toMfy => _toMfy;
   MarshrutDriverProfile? get savedProfile => _savedProfile;
   String? get errorMessage => _errorMessage;
 
-  int get maxSeats {
-    final m = _carModel.toLowerCase();
-    return m.contains('damas') || m.contains('дамас') ? 6 : 4;
-  }
+  bool get canSaveRoute =>
+      RoutePointsValidator.validateRoute(
+        from: _fromMfy,
+        to: _toMfy,
+        midStops: _midStops,
+      ) ==
+      null;
 
   List<String> get allStops => [
         if (_fromMfy.isNotEmpty) _fromMfy,
@@ -72,8 +67,6 @@ class MarshrutRegisterController extends ChangeNotifier {
         '${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')}';
   }
-
-  // ─── Lifecycle ──────────────────────────────────────────────────────
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -92,67 +85,103 @@ class MarshrutRegisterController extends ChangeNotifier {
 
     try {
       final existing = await _repo.getProfile(_userId);
-      if (existing != null) {
+      if (existing != null && existing.stops.length >= 2) {
         _isRegistered = true;
-        _carModel = existing.carModel;
-        _plate = existing.plate;
-        _seats = existing.seats;
-        if (existing.stops.isNotEmpty) {
-          _fromMfy = existing.stops.first;
-          if (existing.stops.length > 1) {
-            _toMfy = existing.stops.last;
-            if (existing.stops.length > 2) {
-              _midStops = existing.stops.sublist(1, existing.stops.length - 1);
-            }
-          }
-        }
+        _applyProfile(existing);
+      } else {
+        await _applyRoutePrefill();
       }
     } catch (_) {
-      // Tarix yuklashda xato — bo'sh forma ko'rsatamiz
+      await _applyRoutePrefill();
     }
+
     _isLoading = false;
     notifyListeners();
   }
 
-  // ─── Form setters ───────────────────────────────────────────────────
-
-  void setCarModel(String v) {
-    _carModel = v;
-    if (_seats > maxSeats) _seats = maxSeats;
-    notifyListeners();
-  }
-
-  void setPlate(String v) {
-    _plate = v;
-    notifyListeners();
-  }
-
-  void setSeats(int n) {
-    if (n < 1 || n > maxSeats) return;
-    _seats = n;
-    notifyListeners();
-  }
-
-  void setFromMfy(String v) {
-    _fromMfy = v;
-    notifyListeners();
-  }
-
-  void setToMfy(String v) {
-    _toMfy = v;
-    notifyListeners();
-  }
-
-  /// Oraliq nuqta qo'shish. Allaqachon bor bo'lsa yoki from/to bilan bir xil
-  /// bo'lsa — `false` qaytaradi (screen snack ko'rsatadi).
-  bool addMidStop(String v) {
-    if (v.isEmpty) return false;
-    if (_midStops.contains(v) || v == _fromMfy || v == _toMfy) {
-      return false;
+  void _applyProfile(MarshrutDriverProfile profile) {
+    _startTime = TimeOfDayValue.tryParse(profile.startTime) ??
+        const TimeOfDayValue(hour: 7, minute: 0);
+    if (profile.stops.isNotEmpty) {
+      _fromMfy = profile.stops.first;
+      if (profile.stops.length > 1) {
+        _toMfy = profile.stops.last;
+        if (profile.stops.length > 2) {
+          _midStops = profile.stops.sublist(1, profile.stops.length - 1);
+        }
+      }
     }
-    _midStops = [..._midStops, v];
+  }
+
+  Future<void> _applyRoutePrefill() async {
+    final route = await _repo.resolveRoutePrefill(_userId);
+    if (route.from.isNotEmpty) _fromMfy = route.from;
+    if (route.to.isNotEmpty) _toMfy = route.to;
+    if (route.mid.isNotEmpty) _midStops = List<String>.from(route.mid);
+  }
+
+  void setStartTime(int hour, int minute) {
+    _startTime = TimeOfDayValue(hour: hour, minute: minute);
     notifyListeners();
-    return true;
+  }
+
+  String? trySetFromMfy(String v) {
+    if (v.trim().isEmpty) {
+      _fromMfy = '';
+      notifyListeners();
+      return null;
+    }
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: '',
+      to: _toMfy,
+      midStops: _midStops,
+      role: 'from',
+    );
+    if (err != null) return err;
+    _fromMfy = v.trim();
+    _midStops = _midStops
+        .where((m) => !RoutePointsValidator.samePoint(m, _fromMfy))
+        .toList();
+    notifyListeners();
+    return null;
+  }
+
+  String? trySetToMfy(String v) {
+    if (v.trim().isEmpty) {
+      _toMfy = '';
+      notifyListeners();
+      return null;
+    }
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: _fromMfy,
+      to: '',
+      midStops: _midStops,
+      role: 'to',
+    );
+    if (err != null) return err;
+    _toMfy = v.trim();
+    _midStops = _midStops
+        .where((m) => !RoutePointsValidator.samePoint(m, _toMfy))
+        .toList();
+    notifyListeners();
+    return null;
+  }
+
+  String? tryAddMidStop(String v) {
+    if (v.trim().isEmpty) return null;
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: _fromMfy,
+      to: _toMfy,
+      midStops: _midStops,
+      role: 'mid',
+    );
+    if (err != null) return err;
+    _midStops = [..._midStops, v.trim()];
+    notifyListeners();
+    return null;
   }
 
   void removeMidStop(int i) {
@@ -167,14 +196,17 @@ class MarshrutRegisterController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── Save ───────────────────────────────────────────────────────────
-
-  /// Validatsiya + atomic batch yozish. Muvaffaqiyatli bo'lsa
-  /// [savedProfile] ga tayinlanadi va `true` qaytaradi.
   Future<bool> save() async {
     final err = _validate();
     if (err != null) {
       _errorMessage = err;
+      notifyListeners();
+      return false;
+    }
+
+    final car = await CarInfoRecord.load(canonicalPhoneId(_userId));
+    if (car == null || !car.isComplete) {
+      _errorMessage = 'car_info_required';
       notifyListeners();
       return false;
     }
@@ -186,19 +218,28 @@ class MarshrutRegisterController extends ChangeNotifier {
       uid: _userId,
       driverName: _userName,
       driverPhone: _userPhone,
-      carModel: _carModel.trim(),
-      plate: _plate.trim().toUpperCase(),
-      seats: _seats,
+      carModel: car.model,
+      plate: car.plate.toUpperCase(),
+      seats: car.seats,
       stops: allStops,
+      startTime: _startTime.label,
     );
 
     try {
       final now = DateTime.now();
       final midnight = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final plannedStartAt = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
       await _repo.register(
         profile: profile,
         date: _todayDateStr,
         expiresAt: midnight,
+        plannedStartAt: plannedStartAt,
       );
       _savedProfile = profile;
       _isSaving = false;
@@ -213,13 +254,33 @@ class MarshrutRegisterController extends ChangeNotifier {
   }
 
   String? _validate() {
-    if (_carModel.trim().isEmpty) return 'Машина маркасини киритинг';
-    if (_plate.trim().isEmpty) return 'Давлат рақамини киритинг';
-    if (_fromMfy.isEmpty) return 'Бошлангич нуқтани танланг';
-    if (_toMfy.isEmpty) return 'Охирги нуқтани танланг';
-    if (_fromMfy == _toMfy) {
-      return 'Бошлангич ва охирги нуқта бир хил бўлмасин';
-    }
-    return null;
+    return RoutePointsValidator.validateRoute(
+      from: _fromMfy,
+      to: _toMfy,
+      midStops: _midStops,
+    );
+  }
+}
+
+class TimeOfDayValue {
+  const TimeOfDayValue({
+    required this.hour,
+    required this.minute,
+  });
+
+  final int hour;
+  final int minute;
+
+  String get label =>
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+  static TimeOfDayValue? tryParse(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return TimeOfDayValue(hour: h, minute: m);
   }
 }

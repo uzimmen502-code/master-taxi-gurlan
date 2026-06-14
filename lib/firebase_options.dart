@@ -32,7 +32,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDl6AwtVg1DNoev0zTNKBcaEYFfj93q_FE',
+    apiKey: 'AIzaSyBsAw9sHk_1RQOCbd2u0TJVwp95feSgVvQ',
     appId: '1:67136747215:ios:cd77c2c835a98b01e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
@@ -41,7 +41,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDl6AwtVg1DNoev0zTNKBcaEYFfj93q_FE',
+    apiKey: 'AIzaSyBsAw9sHk_1RQOCbd2u0TJVwp95feSgVvQ',
     appId: '1:67136747215:ios:cd77c2c835a98b01e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',
@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDl6AwtVg1DNoev0zTNKBcaEYFfj93q_FE',
+    apiKey: 'AIzaSyBsAw9sHk_1RQOCbd2u0TJVwp95feSgVvQ',
     appId: '1:67136747215:web:ab67690cbf41e143e7e9ba',
     messagingSenderId: '67136747215',
     projectId: 'master-taxi-gurlan',

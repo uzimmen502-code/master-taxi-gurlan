@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -16,14 +17,18 @@ import 'l10n/app_localizations.dart';
 import 'repositories/analytics_repository.dart';
 import 'repositories/bread_repository.dart';
 import 'repositories/chat_repository.dart';
+import 'repositories/collection_tasks_repository.dart';
 import 'repositories/couriers_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
+import 'repositories/entertainment_repository.dart';
 import 'repositories/intercity_bookings_repository.dart';
 import 'repositories/intercity_rides_repository.dart';
 import 'repositories/inventory_repository.dart';
 import 'repositories/jobs_repository.dart';
+import 'repositories/home_ticker_repository.dart';
 import 'repositories/news_repository.dart';
+import 'repositories/sell_offers_repository.dart';
 import 'repositories/marshrut_driver_repository.dart';
 import 'repositories/orders_repository.dart';
 import 'repositories/queue_repository.dart';
@@ -32,13 +37,24 @@ import 'repositories/schedules_repository.dart';
 import 'repositories/trips_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/admin_service.dart';
+import 'services/user_role_sync.dart';
 import 'services/daily_report_service.dart';
 import 'services/fcm_service.dart';
 import 'services/background_gps_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
+import 'core/theme/app_theme.dart';
+import 'core/widgets/app_launch_splash.dart';
 import 'features/home/screens/home_screen.dart';
+import 'core/utils/formatters.dart';
+import 'features/onboarding/screens/phone_reverify_screen.dart';
+import 'features/onboarding/screens/language_select_screen.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
+import 'features/ads/repositories/ads_repository.dart';
+import 'features/ads/services/ads_storage_service.dart';
+import 'core/l10n/locale_notifier.dart';
+import 'core/passenger_cancel_rules_holder.dart';
+import 'utils/locale_utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +67,8 @@ void main() async {
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
+
+  await PassengerCancelRulesHolder.load();
 
   // Web'da notification permission / messaging init ayrim браузерларда
   // birinchi frame'dan oldin osilib qolishi мумкин. UI аввал чиқсин.
@@ -89,27 +107,52 @@ void main() async {
   unawaited(reportService.ensureToday());
 
   final prefs = await SharedPreferences.getInstance();
+  final languageSelected = prefs.containsKey('saved_language');
   final onboarding = prefs.getBool('onboarding_done') ?? false;
+  final firebaseUser = FirebaseAuth.instance.currentUser;
+  final hasFirebaseAuth = firebaseUser != null;
+  final storedPhone = phoneDigits(prefs.getString('user_phone') ?? '');
+  final isReturningUser = onboarding || storedPhone.length >= 12;
+
+  // Sessiya yo'qolsa (APK yangilash) — kod bilan qayta tasdiqlash kerak.
+  if (isReturningUser && !hasFirebaseAuth) {
+    await prefs.setBool('phone_reverified', false);
+  }
+
+  // APK yangilanganda ham: admin faqat Firestore'dagi role bo'lsa qoladi.
+  if (onboarding) {
+    try {
+      await UserRoleSync().syncToPreferences();
+    } catch (e, st) {
+      debugPrint('UserRoleSync: $e\n$st');
+    }
+  }
 
   final userId = prefs.getString('userId') ?? '';
   runApp(MyApp(
-    onboardingDone: onboarding,
+    isReturningUser: isReturningUser,
+    languageSelected: languageSelected,
+    hasFirebaseAuth: hasFirebaseAuth,
     userId: userId,
     analyticsRepo: analyticsRepo,
     reportService: reportService,
   ));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({
     super.key,
-    required this.onboardingDone,
+    required this.isReturningUser,
+    required this.languageSelected,
+    required this.hasFirebaseAuth,
     required this.userId,
     required this.analyticsRepo,
     required this.reportService,
   });
 
-  final bool onboardingDone;
+  final bool isReturningUser;
+  final bool languageSelected;
+  final bool hasFirebaseAuth;
   final String userId;
   final AnalyticsRepository analyticsRepo;
   final DailyReportService reportService;
@@ -118,13 +161,23 @@ class MyApp extends StatelessWidget {
       GlobalKey<NavigatorState>();
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(
+          create: (_) => LocaleNotifier()..init(),
+        ),
         Provider<UserRepository>(create: (_) => UserRepository()),
         Provider<OrdersRepository>(create: (_) => OrdersRepository()),
         Provider<InventoryRepository>(create: (_) => InventoryRepository()),
         Provider<NewsRepository>(create: (_) => NewsRepository()),
+        Provider<HomeTickerRepository>(create: (_) => HomeTickerRepository()),
+        Provider<SellOffersRepository>(create: (_) => SellOffersRepository()),
         Provider<BreadRepository>(create: (_) => BreadRepository()),
         Provider<JobsRepository>(create: (_) => JobsRepository()),
         Provider<TripsRepository>(create: (_) => TripsRepository()),
@@ -139,30 +192,47 @@ class MyApp extends StatelessWidget {
             create: (_) => IntercityRidesRepository()),
         Provider<IntercityBookingsRepository>(
             create: (_) => IntercityBookingsRepository()),
+        Provider<EntertainmentRepository>(
+            create: (_) => EntertainmentRepository()),
         Provider<DeliveryRoutesRepository>(
             create: (_) => DeliveryRoutesRepository()),
+        Provider<CollectionTasksRepository>(
+            create: (_) => CollectionTasksRepository()),
         Provider<CouriersRepository>(create: (_) => CouriersRepository()),
-        Provider<AnalyticsRepository>.value(value: analyticsRepo),
-        Provider<DailyReportService>.value(value: reportService),
+        Provider<AdsStorageService>(create: (_) => AdsStorageService()),
+        Provider<AdsRepository>(create: (_) => AdsRepository()),
+        Provider<AnalyticsRepository>.value(value: widget.analyticsRepo),
+        Provider<DailyReportService>.value(value: widget.reportService),
         Provider<LocationService>(create: (_) => const LocationService()),
         Provider<AdminService>(create: (_) => AdminService()),
       ],
-      child: MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('en'),
-          Locale('ru'),
-          Locale('uz'),
-        ],
-        navigatorKey: MyApp.navigatorKey,
-        debugShowCheckedModeBanner: false,
-        title: 'Master Taxi',
-        home: onboardingDone ? const HomeScreen() : const OnboardingScreen(),
+      child: Consumer<LocaleNotifier>(
+        builder: (context, localeNotifier, _) {
+          return AppLaunchSplash(
+            child: MaterialApp(
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            locale: localeNotifier.locale,
+            supportedLocales: LocaleUtils.supportedAppLocales,
+            localeResolutionCallback: LocaleUtils.localeResolutionCallback,
+            navigatorKey: MyApp.navigatorKey,
+            debugShowCheckedModeBanner: false,
+            title: 'Master Taxi',
+            theme: AppTheme.light,
+            home: !widget.languageSelected
+                ? const LanguageSelectScreen()
+                : !widget.isReturningUser
+                    ? const OnboardingScreen()
+                    : widget.hasFirebaseAuth
+                        ? const HomeScreen()
+                        : const PhoneReverifyScreen(),
+            ),
+          );
+        },
       ),
     );
   }

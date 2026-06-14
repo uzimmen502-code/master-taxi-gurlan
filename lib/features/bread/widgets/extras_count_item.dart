@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Саватда қўшимча маҳсулот учун `[-] count [+]` қатори (қадам: дона 1, кг/л 0.5).
 class ExtrasCountItem extends StatelessWidget {
@@ -27,7 +27,7 @@ class ExtrasCountItem extends StatelessWidget {
   final VoidCallback onIncrement;
   final String Function(num count) formatStepperCount;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   bool get _canMinus => count > 1e-9;
 
@@ -40,7 +40,7 @@ class ExtrasCountItem extends StatelessWidget {
       duration: const Duration(milliseconds: 150),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFFFFF3E0) : Colors.grey.shade50,
+        color: selected ? AppColors.scaffold : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: selected ? _green : Colors.grey.shade200,

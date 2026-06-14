@@ -1,42 +1,57 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/user_address.dart';
+import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
-import '../../../services/device_identity_service.dart';
+import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
 import '../../../services/location_service.dart';
 
 /// Onboarding wizard uchun ChangeNotifier.
-///
-/// 5 sahifa: ism → telefon (device lock) → jins → tug'ilgan kun → **manzil**.
-///
-/// Manzil sahifasida foydalanuvchi GPS bilan koordinatasini oladi va shu yerda
-/// MFY/ko'cha/uy/tuman maydonlarini to'ldiradi — `finish()` ikkalasini ham
-/// `UserModel`ga yozadi. Shu sababli onboarding bajarilgan zahoti foydalanuvchi
-/// to'liq manzilga ega (legacy `address` string + structured `UserAddress`).
-/// Profil ekranida "kelajakda to'ldiring" warning'i chiqmaydi.
 class OnboardingController extends ChangeNotifier {
   OnboardingController({
     required UserRepository userRepo,
     required LocationService locationService,
+    DeviceFingerprintService? fingerprintService,
+    DeviceBindingRepository? deviceBindingRepo,
   })  : _userRepo = userRepo,
-        _locationService = locationService;
+        _locationService = locationService,
+        _fingerprintService = fingerprintService ?? DeviceFingerprintService(),
+        _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository();
 
   final UserRepository _userRepo;
   final LocationService _locationService;
-  final DeviceIdentityService _deviceIdentity = DeviceIdentityService();
+  final DeviceFingerprintService _fingerprintService;
+  final DeviceBindingRepository _deviceBindingRepo;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static const totalPages = 5;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _pendingCodeSubscription;
+  bool isVerifyingOtp = false;
+  bool isSendingOtp = false;
+  String? otpError;
+  bool otpVerified = false;
+  bool isAdminCodeReady = false;
+  String? generatedAdminCode;
+
+  DeviceFingerprintSnapshot? _fingerprintSnapshot;
+  bool _bindingRegistered = false;
+  String _deviceLockedUid = '';
+
+  static const totalPages = 6;
 
   int currentPage = 0;
   String gender = 'male';
   String birthDate = '';
 
-  // ─── Manzil holati (sahifa 5) ─────────────────────────────────────
   String mfy = '';
   String street = '';
   String house = '';
@@ -47,38 +62,36 @@ class OnboardingController extends ChangeNotifier {
   double? lng;
   double? accuracy;
   DateTime? geoUpdatedAt;
+  bool gpsFromLastKnown = false;
 
-  /// GPSdan reverse geocoding orqali olingan inson o'qiy oladigan manzil.
-  /// Faqat `street` bo'sh bo'lganda avto-prefill uchun ishlatamiz.
-  String _geoSuggestedStreet = '';
+  String? geoHint;
+  bool isGeoHintLoading = false;
 
   bool isSubmitting = false;
   bool isGpsLoading = false;
   String? errorMessage;
 
-  // ─── Open access + device lock ──────────────────────────────────────
   bool isCheckingDevice = false;
   String? phoneStepError;
-  String _deviceLockedUid = '';
 
   bool get isLastPage => currentPage == totalPages - 1;
+  bool get skipSmsVerification => otpVerified && _bindingRegistered;
 
-  /// 3 ta majburiy qo'lda maydon to'ldirilganmi?
   bool get hasManualParts =>
       mfy.trim().isNotEmpty &&
       street.trim().isNotEmpty &&
       house.trim().isNotEmpty;
 
-  /// GPS olinganmi?
   bool get hasGps => lat != null && lng != null;
 
-  /// 4-sahifa to'la mukammalmi — `finish()` faqat shunda ishlaydi.
   bool get hasCompleteAddress => hasManualParts && hasGps;
 
-  bool isGpsRequiredForPhone(String phone) {
-    if (!kIsWeb) return true;
-    return phoneDigits(phone) != '998912778777';
+  bool get hasLowAccuracyGps {
+    if (accuracy == null) return false;
+    return accuracy! > 100;
   }
+
+  bool isGpsRequiredForPhone(String phone) => true;
 
   void setGender(String v) {
     gender = v;
@@ -90,7 +103,6 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── Manzil maydonlari ─────────────────────────────────────────────
   void setMfy(String v) {
     mfy = v;
     notifyListeners();
@@ -116,8 +128,6 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Joriy sahifani validatsiya qiladi.
-  /// Xatolik bo'lsa — string qaytaradi (snackbar uchun), aks holda `null`.
   String? validate({
     required String name,
     required String phone,
@@ -130,7 +140,10 @@ class OnboardingController extends ChangeNotifier {
         final d = phoneDigits(phone);
         if (d.length < 12) return 'Телефон рақамини тўлиқ киритинг';
         break;
-      case 4:
+      case 2:
+        if (!otpVerified) return 'Телефон рақамини тасдиқланг';
+        break;
+      case 5:
         final gpsRequired = isGpsRequiredForPhone(phone);
         if (gpsRequired && !hasGps) {
           return 'GPS манзилни олинг — "Жорий GPS манзилни олиш" тугмасини босинг';
@@ -156,6 +169,13 @@ class OnboardingController extends ChangeNotifier {
   }
 
   void back() {
+    if (currentPage == 2) {
+      cancelPendingCodeWatch();
+      otpVerified = false;
+      otpError = null;
+      isAdminCodeReady = false;
+      generatedAdminCode = null;
+    }
     if (currentPage == 1) resetPhoneStepError();
     if (currentPage > 0) {
       currentPage--;
@@ -163,6 +183,24 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
+  Future<DeviceFingerprintSnapshot> _ensureFingerprint() async {
+    _fingerprintSnapshot ??= await _fingerprintService.collect();
+    return _fingerprintSnapshot!;
+  }
+
+  /// Faqat SHA-256 fingerprintHash (64 hex) — eski `device_bindings` ID lar ishlatilmaydi.
+  Future<bool> _requireValidFingerprintHash() async {
+    final snapshot = await _ensureFingerprint();
+    if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
+      phoneStepError =
+          'Qurilma identifikatori noto\'g\'ri. Ilovani qayta oching yoki qayta o\'rnating.';
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
+  /// Telefon + composite fingerprint bo'yicha qurilma bog'lanishini tekshiradi.
   Future<bool> checkPhoneDeviceLock(String phone) async {
     final digits = phoneDigits(phone);
     if (digits.length < 12) {
@@ -170,36 +208,70 @@ class OnboardingController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    if (_deviceLockedUid == digits) {
+    if (_deviceLockedUid == digits && otpVerified) {
       phoneStepError = null;
       notifyListeners();
       return true;
     }
+
     isCheckingDevice = true;
     phoneStepError = null;
     notifyListeners();
 
     try {
-      final device = await _deviceIdentity.getSnapshot();
-      await _userRepo.bindDeviceOrRequestChange(
-        deviceId: device.deviceId,
-        uid: digits,
-        phone: phone,
-        signalKey: device.signalKey,
-        signals: device.signals,
-      );
-      _deviceLockedUid = digits;
-      return true;
-    } on StateError catch (e) {
-      if (e.message == 'device_bound_to_other_phone') {
-        phoneStepError =
-            'Бу қурилма аввал бошқа телефон рақамга боғланган. Рақамни алмаштириш сўрови админга юборилди.';
-      } else {
-        phoneStepError = 'Хатолик: ${e.message}';
+      if (!await _requireValidFingerprintHash()) {
+        return false;
       }
+      final snapshot = _fingerprintSnapshot!;
+      final result = await _deviceBindingRepo.checkDeviceBinding(
+        phone: phone,
+        snapshot: snapshot,
+      );
+
+      switch (result.status) {
+        case DeviceBindingStatus.trustedDevice:
+          final token = result.customToken;
+          if (token != null && token.isNotEmpty) {
+            await _auth.signInWithCustomToken(token);
+          }
+          otpVerified = true;
+          _bindingRegistered = true;
+          _deviceLockedUid = digits;
+          phoneStepError = null;
+          return true;
+
+        case DeviceBindingStatus.needsVerification:
+          _deviceLockedUid = digits;
+          phoneStepError = null;
+          return true;
+
+        case DeviceBindingStatus.deviceBoundOtherPhone:
+          phoneStepError =
+              result.message ??
+              'Бу қурилма boshqa raqamga bog\'liq. Adminga murojaat qiling.';
+          return false;
+
+        case DeviceBindingStatus.phoneBoundOtherDevice:
+          phoneStepError =
+              result.message ??
+              'Bu raqam boshqa qurilmaga bog\'liq. Adminga murojaat qiling.';
+          return false;
+
+        case DeviceBindingStatus.blocked:
+          phoneStepError =
+              result.message ??
+              'Qurilma vaqtincha bloklangan. Adminga murojaat qiling.';
+          return false;
+
+        case DeviceBindingStatus.unknown:
+          phoneStepError = result.message ?? 'Noma\'lum xatolik. Qayta urinib ko\'ring.';
+          return false;
+      }
+    } on FirebaseFunctionsException catch (e) {
+      phoneStepError = e.message ?? e.code;
       return false;
     } catch (e) {
-      phoneStepError = 'Хатолик: $e';
+      phoneStepError = 'Xatolik: $e';
       return false;
     } finally {
       isCheckingDevice = false;
@@ -207,68 +279,226 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
+  String _pendingDocId(String rawPhone) => phoneDigits(rawPhone);
+
+  void cancelPendingCodeWatch() {
+    _pendingCodeSubscription?.cancel();
+    _pendingCodeSubscription = null;
+  }
+
+  /// Admin panel orqali kod (real SMS yo'q).
+  Future<bool> requestAdminCode(String rawPhone) async {
+    final digits = _pendingDocId(rawPhone);
+    if (digits.length < 12) {
+      otpError = 'Telefon raqamini to\'liq kiriting';
+      notifyListeners();
+      return false;
+    }
+
+    isSendingOtp = true;
+    otpError = null;
+    isAdminCodeReady = false;
+    generatedAdminCode = null;
+    _deviceLockedUid = digits;
+    notifyListeners();
+
+    try {
+      if (!await _requireValidFingerprintHash()) {
+        return false;
+      }
+      final snapshot = _fingerprintSnapshot!;
+      final docRef = _firestore.collection('pending_codes').doc(digits);
+      final expiresAt = DateTime.now().add(const Duration(minutes: 5));
+
+      await docRef.set({
+        'phone': '+$digits',
+        'status': 'pending',
+        'code': FieldValue.delete(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(expiresAt),
+        'deviceFingerprintHash': snapshot.hash,
+      }, SetOptions(merge: true));
+
+      cancelPendingCodeWatch();
+      _pendingCodeSubscription = docRef.snapshots().listen((doc) {
+        if (!doc.exists) return;
+        final data = doc.data();
+        if (data == null) return;
+        final status = (data['status'] ?? '').toString();
+        final code = (data['code'] as String?)?.trim();
+
+        if (status == 'expired') {
+          otpError = 'Код муддати ўтган. Қайта урининг.';
+          isAdminCodeReady = false;
+          generatedAdminCode = null;
+          notifyListeners();
+          return;
+        }
+
+        if (status == 'approved' && code != null && code.length == 6) {
+          generatedAdminCode = code;
+          isAdminCodeReady = true;
+          otpError = null;
+          notifyListeners();
+        }
+      });
+
+      return true;
+    } catch (e) {
+      otpError = 'Xatolik: $e';
+      return false;
+    } finally {
+      isSendingOtp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Eski nomlar — onboarding UI bilan mos.
+  Future<bool> sendOtp(String rawPhone) => requestAdminCode(rawPhone);
+
+  Future<bool> verifyAdminCode(String rawPhone, String enteredCode) async {
+    final digits = _pendingDocId(rawPhone);
+    final code = enteredCode.trim();
+    if (digits.length < 12) {
+      otpError = 'Telefon raqamini to\'liq kiriting';
+      notifyListeners();
+      return false;
+    }
+    if (code.length != 6) {
+      otpError = '6 рақамли кодни киритинг';
+      notifyListeners();
+      return false;
+    }
+
+    isVerifyingOtp = true;
+    otpError = null;
+    notifyListeners();
+
+    try {
+      if (!await _requireValidFingerprintHash()) {
+        return false;
+      }
+      final snapshot = _fingerprintSnapshot!;
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('verifyPendingCodeAndRegister');
+      final result = await callable.call<Map<String, dynamic>>({
+        'phone': digits,
+        'code': code,
+        'deviceFingerprintHash': snapshot.hash,
+        'fingerprint': Map<String, String>.from(snapshot.components),
+      });
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final token = data['customToken'] as String?;
+      if (token != null && token.isNotEmpty) {
+        await _auth.signInWithCustomToken(token);
+      }
+      otpVerified = true;
+      _bindingRegistered = true;
+      _deviceLockedUid = digits;
+      cancelPendingCodeWatch();
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      otpError = _callableErrorMessage(e);
+      return false;
+    } catch (e) {
+      otpError = 'Xatolik: $e';
+      return false;
+    } finally {
+      isVerifyingOtp = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> verifyOtp(String code) =>
+      verifyAdminCode(_deviceLockedUid, code);
+
   void resetPhoneStepError() {
     phoneStepError = null;
     notifyListeners();
   }
 
-  /// GPS koordinatalarini oladi va, agar `street` hali bo'sh bo'lsa, reverse
-  /// geocoding'dan ko'cha nomini qo'shimcha hint sifatida saqlaydi.
-  ///
-  /// Qaytariladi `true` muvaffaqiyat bo'lsa, `false` — ruxsat yo'q yoki xato.
+  String _callableErrorMessage(FirebaseFunctionsException e) {
+    final detail = e.message?.trim();
+    if (detail != null && detail.isNotEmpty && detail != 'INTERNAL') {
+      return detail;
+    }
+    return switch (e.code) {
+      'not-found' => 'Код сўрови топилмади',
+      'permission-denied' => 'Код нотўғри',
+      'deadline-exceeded' => 'Код муддати ўтган',
+      'failed-precondition' => 'Қурилма ёки рақам мос эмас',
+      'invalid-argument' => 'Нотўғри маълумот',
+      _ => 'Хатолик: ${e.code}',
+    };
+  }
+
   Future<bool> fetchGps() async {
     isGpsLoading = true;
     errorMessage = null;
+    geoHint = null;
     notifyListeners();
     try {
-      final coords = await _locationService.getCurrentCoords(
-        timeout: const Duration(seconds: 10),
-      );
+      final coords = await _locationService.getCurrentCoords();
       lat = coords.lat;
       lng = coords.lng;
       accuracy = coords.accuracy;
       geoUpdatedAt = DateTime.now();
+      gpsFromLastKnown = coords.fromLastKnown;
 
-      // Reverse geocoding — alohida try/catch, GPS muvaffaqiyatli bo'lsa
-      // ko'cha topilmaslik onboardingni to'xtatmasin.
-      try {
-        _geoSuggestedStreet =
-            await _locationService.addressFromCoords(coords.lat, coords.lng);
-      } catch (_) {
-        _geoSuggestedStreet = '';
-      }
-      // Agar foydalanuvchi `street`'ni hali yozmagan bo'lsa — auto-prefill.
-      if (street.trim().isEmpty && _geoSuggestedStreet.isNotEmpty) {
-        street = _geoSuggestedStreet;
-      }
+      isGpsLoading = false;
+      notifyListeners();
+
+      unawaited(_loadGeoHintInBackground(coords.lat, coords.lng));
       return true;
     } on LocationException catch (e) {
-      errorMessage = e.kind == LocationErrorKind.permissionDenied
-          ? 'GPS рухсати йўқ. Илтимос, телефон созламаларидан рухсат беринг.'
-          : 'GPS аниқланмади. Очиқ жойга чиқиб қайта уриниб кўринг.';
+      errorMessage = LocationException.userMessage(e.kind);
       return false;
     } finally {
-      isGpsLoading = false;
+      if (isGpsLoading) {
+        isGpsLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _loadGeoHintInBackground(double lat, double lng) async {
+    isGeoHintLoading = true;
+    notifyListeners();
+    try {
+      final hint = await _locationService.addressFromCoords(
+        lat,
+        lng,
+        timeout: const Duration(seconds: 5),
+        fallbackToCoords: false,
+      );
+      geoHint = hint?.trim().isNotEmpty == true ? hint!.trim() : null;
+    } catch (_) {
+      geoHint = null;
+    } finally {
+      isGeoHintLoading = false;
       notifyListeners();
     }
   }
 
-  /// Onboarding tugаgach: Firestore'ga foydalanuvchi yaratiladi —
-  /// **legacy `address` string + structured `UserAddress`** ikkalasi ham
-  /// yoziladi. SharedPreferences'ga yozish ham shu yerda.
   Future<bool> finish({
     required String name,
     required String phone,
   }) async {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      debugPrint('finish() blocked: no Firebase session');
+      return false;
+    }
+
     final gpsRequired = isGpsRequiredForPhone(phone);
     if (gpsRequired && !hasGps) {
       errorMessage =
-          'GPS манзилни олинг — "Жорий GPS манзилни олиш" тугмасини босинг';
+          'GPS manzilni oling — "Joriy GPS manzilni olish" tugmasini bosing';
       notifyListeners();
       return false;
     }
     if (!hasManualParts) {
-      errorMessage = 'МФЙ, кўча ва уй рақамини тўлдиринг';
+      errorMessage = 'MFY, ko\'cha va uy raqamini to\'ldiring';
       notifyListeners();
       return false;
     }
@@ -281,7 +511,7 @@ class OnboardingController extends ChangeNotifier {
       mfy: mfy.trim(),
       street: street.trim(),
       house: house.trim(),
-      district: district.trim().isEmpty ? 'Гурлан' : district.trim(),
+      district: district.trim().isEmpty ? 'Gurlan' : district.trim(),
       note: note.trim(),
       lat: lat,
       lng: lng,
@@ -292,18 +522,6 @@ class OnboardingController extends ChangeNotifier {
     final formatted = structured.formatted;
 
     try {
-      if (_deviceLockedUid != uid) {
-        final device = await _deviceIdentity.getSnapshot();
-        await _userRepo.bindDeviceOrRequestChange(
-          deviceId: device.deviceId,
-          uid: uid,
-          phone: phone,
-          signalKey: device.signalKey,
-          signals: device.signals,
-        );
-        _deviceLockedUid = uid;
-      }
-
       await _userRepo.createOrMergeProfileWithAddress(
         uid: uid,
         phone: phone,
@@ -314,19 +532,18 @@ class OnboardingController extends ChangeNotifier {
         address: structured,
       );
 
-      // 2) SharedPreferences — eski va yangi key'lar ikkalasi (boshqa
-      //    joylarda ishlatilgan).
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userId', uid);
       await prefs.setString('userName', name.trim());
       await prefs.setString('user_name', name.trim());
-      await prefs.setString('user_phone', phone.trim());
+      await prefs.setString('user_phone', canonicalPhoneId(phone.trim()));
       await prefs.setString('user_gender', gender);
       if (birthDate.isNotEmpty) {
         await prefs.setString('user_birth_date', birthDate);
       }
       await prefs.setString('user_address', formatted);
       await prefs.setBool('onboarding_done', true);
+      await prefs.setBool('phone_reverified', true);
 
       try {
         await FCMService().refreshToken();
@@ -334,17 +551,10 @@ class OnboardingController extends ChangeNotifier {
         await FCMService().startListeners();
       } catch (_) {}
 
+      _deviceLockedUid = uid;
       return true;
-    } on StateError catch (e) {
-      if (e.message == 'device_bound_to_other_phone') {
-        errorMessage =
-            'Бу қурилма аввал бошқа телефон рақамга боғланган. Рақамни алмаштириш сўрови админга юборилди.';
-      } else {
-        errorMessage = 'Хатолик: ${e.message}';
-      }
-      return false;
     } catch (e) {
-      errorMessage = 'Хатолик: $e';
+      errorMessage = 'Xatolik: $e';
       return false;
     } finally {
       isSubmitting = false;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Kuryer paneli AppBar tugmasi — online/offline holatini almashtiradi.
 class CourierOnlineToggle extends StatelessWidget {
@@ -20,7 +21,7 @@ class CourierOnlineToggle extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isOnline ? Colors.green.shade400 : Colors.grey.shade400,
+            color: isOnline ? AppColors.primaryMid : Colors.grey.shade400,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(

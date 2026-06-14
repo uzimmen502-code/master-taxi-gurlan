@@ -1,9 +1,12 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
+import '../../../services/balance_service.dart';
 import '../services/admin_auth_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 class BirthdayBonusScreen extends StatefulWidget {
   const BirthdayBonusScreen({super.key});
@@ -13,7 +16,7 @@ class BirthdayBonusScreen extends StatefulWidget {
 }
 
 class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
-  static const _blue = Color(0xFF0D47A1);
+  static const _blue = AppColors.primary;
   final _amountCtrl = TextEditingController();
   bool _amountPrimed = false;
   bool _savingAmount = false;
@@ -146,7 +149,7 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
                         messenger.showSnackBar(
                           const SnackBar(
                             content: Text('Бонус суммаси сақланди'),
-                            backgroundColor: Colors.green,
+                            backgroundColor: AppColors.button,
                           ),
                         );
                       } finally {
@@ -206,7 +209,7 @@ class _BirthdayColumnView extends StatelessWidget {
                           ? Icons.cake_outlined
                           : Icons.event_available_outlined,
                       color: column.canGrant
-                          ? const Color(0xFFE65100)
+                          ? AppColors.primary
                           : Colors.blue.shade700,
                       size: 20,
                     ),
@@ -295,7 +298,7 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
         child: Row(children: [
           const CircleAvatar(
             backgroundColor: Color(0xFFFFF3E0),
-            child: Icon(Icons.cake_outlined, color: Color(0xFFE65100)),
+            child: Icon(Icons.cake_outlined, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -362,11 +365,10 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
     required int year,
   }) async {
     setState(() => _busy = true);
-    final repo = context.read<UserRepository>();
     final auth = context.read<AdminAuthService>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await repo.grantBirthdayBonus(
+      await BalanceService.grantBirthdayBonus(
         uid: widget.user.id,
         year: year,
         amount: amount,
@@ -374,13 +376,15 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
       );
       messenger.showSnackBar(const SnackBar(
         content: Text('Birthday bonus берилди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
-    } on StateError catch (e) {
+    } on FirebaseFunctionsException catch (e) {
+      final already = e.code == 'already-exists' ||
+          (e.message ?? '').contains('birthday_bonus_already_claimed');
       messenger.showSnackBar(SnackBar(
-        content: Text(e.message == 'birthday_bonus_already_claimed'
+        content: Text(already
             ? 'Бу user бу йил birthday bonus олган'
-            : 'Хатолик: ${e.message}'),
+            : 'Хатолик: ${e.message ?? e.code}'),
         backgroundColor: Colors.orange,
       ));
     } catch (e) {

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../models/active_trip.dart';
-import '../../../../utils/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Driver panelidagi pending buyurtma karta'i — qisqacha ma'lumot va "КЎРИШ" tugmasi.
 class RideRequestCard extends StatelessWidget {
@@ -9,7 +10,7 @@ class RideRequestCard extends StatelessWidget {
     super.key,
     required this.ride,
     required this.onView,
-    this.color = const Color(0xFF00695C),
+    this.color = AppColors.primaryDark,
   });
 
   final ActiveTrip ride;
@@ -52,8 +53,8 @@ class RideRequestCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
                 color: color, borderRadius: BorderRadius.circular(10)),
-            child: const Text('КЎРИШ',
-                style: TextStyle(
+            child: Text(context.tr('marshrut_view_request'),
+                style: const TextStyle(
                     fontSize: AppText.labelSmall,
                     color: Colors.white,
                     fontWeight: FontWeight.bold)),

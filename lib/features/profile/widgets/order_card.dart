@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
@@ -13,7 +14,7 @@ class OrderCard extends StatelessWidget {
     final isFood = order.type == 'food';
     final emoji = isFood ? '🍽️' : '🫓';
     final title = isFood ? 'Овқат буюртма' : 'Нон буюртма';
-    final color = isFood ? Colors.green : const Color(0xFFE65100);
+    final color = isFood ? AppColors.primary : AppColors.primary;
 
     final dt = order.createdAt;
     final dateStr =
@@ -59,7 +60,7 @@ class OrderCard extends StatelessWidget {
         if (order.deliveryTime.isNotEmpty)
           _BadgeBox(
             text: '🕐 Тахминий вақт: ${order.deliveryTime}',
-            color: const Color(0xFF2E7D32),
+            color: AppColors.primary,
           ),
         if (order.rejectReason.isNotEmpty)
           _BadgeBox(
@@ -82,11 +83,11 @@ class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.status});
   final String status;
 
-  static const _map = <String, ({String label, MaterialColor color})>{
-    'new': (label: '🔵 Янги', color: Colors.blue),
-    'accepted': (label: '🟡 Қабул', color: Colors.orange),
-    'ready': (label: '🟠 Тайёр', color: Colors.deepOrange),
-    'delivered': (label: '🟢 Етказилди', color: Colors.green),
+  static const _map = <String, ({String label, Color color})>{
+    'new': (label: '🔵 Янги', color: AppColors.primary),
+    'accepted': (label: '🟡 Қабул', color: AppColors.primaryMid),
+    'ready': (label: '🟠 Тайёр', color: AppColors.warning),
+    'delivered': (label: '🟢 Етказилди', color: AppColors.primary),
   };
 
   @override
@@ -105,7 +106,7 @@ class _StatusChip extends StatelessWidget {
           style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: color is MaterialColor ? color.shade700 : color)),
+              color: color)),
     );
   }
 }

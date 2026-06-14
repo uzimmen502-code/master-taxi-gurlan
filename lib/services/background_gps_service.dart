@@ -44,7 +44,6 @@ class BackgroundGpsService {
     if (running) _service.invoke('stop');
   }
 
-  static bool _isRunning = false;
   static Future<bool> isRunning() => _service.isRunning();
 }
 

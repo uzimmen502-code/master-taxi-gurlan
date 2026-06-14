@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
 import '../models/identity_change_request.dart';
@@ -19,10 +20,6 @@ class UserRepository {
   CollectionReference<Map<String, dynamic>> get _col => _db.collection('users');
   CollectionReference<Map<String, dynamic>> get _birthDateRequests =>
       _db.collection('birthdate_change_requests');
-  CollectionReference<Map<String, dynamic>> get _deviceChangeRequests =>
-      _db.collection('device_change_requests');
-  CollectionReference<Map<String, dynamic>> get _deviceBindings =>
-      _db.collection('device_bindings');
   CollectionReference<Map<String, dynamic>> get _riskEvents =>
       _db.collection('risk_events');
   DocumentReference<Map<String, dynamic>> get _appSettings =>
@@ -39,10 +36,13 @@ class UserRepository {
     return UserModel.fromDoc(snap);
   }
 
-  /// Ghost protection — agar foydalanuvchi vaqtinchalik bloklangan bo'lsa
-  /// `blockedUntil` qaytaradi (kelajakdagi vaqt), aks holda `null`.
+  /// **Legacy:** `users/{uid}.blockedUntil` (eski local taxi 3 bekor → 30 daq).
+  ///
+  /// Yangi local taxi blok: [LocalTaxiBlockRepository] → `local_taxi_block/state`.
+  /// Marshrut: [MarshrutBlockRepository] → `marshrut_block/state`.
   ///
   /// Hech qachon throw qilmaydi — read xatoligi `null` bo'lib qaytadi.
+  @Deprecated('LocalTaxiBlockRepository yoki MarshrutBlockRepository ishlating')
   Future<DateTime?> getBlockedUntil(String uid) async {
     if (uid.isEmpty) return null;
     try {
@@ -75,6 +75,25 @@ class UserRepository {
           .limit(limit)
           .snapshots()
           .map((q) => q.docs.map(WalletLedgerEntry.fromDoc).toList());
+
+  /// Berilgan sanadan boshlab ledger (real-time).
+  Stream<List<WalletLedgerEntry>> watchWalletLedgerSince(
+    String uid, {
+    required DateTime since,
+    int limit = 200,
+  }) {
+    if (uid.isEmpty) {
+      return Stream.value(const []);
+    }
+    return _col
+        .doc(uid)
+        .collection('wallet_ledger')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((q) => q.docs.map(WalletLedgerEntry.fromDoc).toList());
+  }
 
   Stream<int> watchBirthdayBonusAmount() {
     return _appSettings.snapshots().map((snap) {
@@ -158,61 +177,13 @@ class UserRepository {
     });
   }
 
-  /// Birthday bonus — бир user учун бир календар йилда фақат 1 марта.
-  Future<void> grantBirthdayBonus({
-    required String uid,
-    required int year,
-    required int amount,
-    String operatorPhone = '',
-  }) async {
-    if (uid.isEmpty || amount <= 0) return;
-    final userRef = _col.doc(uid);
-    final claimRef =
-        userRef.collection('birthday_bonus_claims').doc(year.toString());
-    final ledgerRef = userRef.collection('wallet_ledger').doc('birthday_$year');
-    await _db.runTransaction((tx) async {
-      final claimSnap = await tx.get(claimRef);
-      if (claimSnap.exists) {
-        throw StateError('birthday_bonus_already_claimed');
-      }
-      final userSnap = await tx.get(userRef);
-      final currentBalance =
-          (userSnap.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
-      tx.set(claimRef, {
-        'year': year,
-        'amount': amount,
-        'status': 'granted',
-        'operatorPhone': operatorPhone.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      tx.set(ledgerRef, {
-        'type': 'birthday_bonus',
-        'amount': amount,
-        'module': 'loyalty',
-        'refType': 'birthday_bonus',
-        'refId': year.toString(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'meta': {
-          'year': year,
-          'operatorPhone': operatorPhone.trim(),
-          'note': 'Birthday bonus',
-        },
-      });
-      tx.set(userRef, {
-        'bonusBalance': currentBalance + amount,
-        'birthdayBonusLastYear': year,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    });
-  }
-
   /// Onboarding tugaganda yangi foydalanuvchi hujjati yaratiladi.
   /// `uid` — telefon raqamининг faқat raqamlari.
   ///
   /// **Muhim:** `merge: true` ishlatamiz — agar hujjat allaqachon mavjud bo'lsa
   /// (FCMService token'ni avval yozgan, Cloud Function welcome-bonus qo'shgan,
   /// foydalanuvchi ilovani qayta o'rnatgan va h.k.), `bonusBalance`,
-  /// `fcmToken`, `blockedUntil` kabi maydonlar **saqlanib qoladi**. `merge`
+  /// `fcmToken`, legacy `blockedUntil` kabi maydonlar **saqlanib qoladi**. `merge`
   /// bo'lmaganda `set()` butun hujjatni almashtiradi va `walletFieldsUntouched()`
   /// firestore qoidasi `permission-denied` qaytaradi.
   Future<void> create({
@@ -244,6 +215,10 @@ class UserRepository {
     required UserAddress address,
   }) async {
     if (uid.isEmpty) return;
+    final validation = address.validationError;
+    if (validation != null) {
+      throw ArgumentError(validation);
+    }
     final ref = _col.doc(uid);
     final snap = await ref.get();
     final data = <String, Object?>{
@@ -318,143 +293,6 @@ class UserRepository {
     );
   }
 
-  /// Device binding: биринчи киритилган телефон шу app install'га боғланади.
-  ///
-  /// Агар device бошқа рақамга боғланган бўлса, change request яратилади ва
-  /// `StateError('device_bound_to_other_phone')` қайтарилади.
-  Future<void> bindDeviceOrRequestChange({
-    required String deviceId,
-    required String uid,
-    required String phone,
-    String signalKey = '',
-    Map<String, String> signals = const <String, String>{},
-  }) async {
-    if (deviceId.trim().isEmpty || uid.trim().isEmpty) return;
-    final ref = _deviceBindings.doc(deviceId.trim());
-    var similarBindingUserId = '';
-    if (signalKey.trim().isNotEmpty) {
-      final similar = await _deviceBindings
-          .where('signalKey', isEqualTo: signalKey.trim())
-          .limit(5)
-          .get();
-      for (final doc in similar.docs) {
-        if (doc.id == deviceId.trim()) continue;
-        final otherUid = (doc.data()['userId'] ?? '') as String;
-        if (otherUid.isNotEmpty && otherUid != uid.trim()) {
-          similarBindingUserId = otherUid;
-          break;
-        }
-      }
-    }
-    final allowed = await _db.runTransaction<bool>((tx) async {
-      final snap = await tx.get(ref);
-      final currentUid = (snap.data()?['userId'] ?? '') as String;
-      if (snap.exists && currentUid.isNotEmpty && currentUid != uid.trim()) {
-        final requestRef = _deviceChangeRequests.doc();
-        tx.set(requestRef, {
-          'deviceId': deviceId.trim(),
-          'currentUserId': currentUid,
-          'requestedUserId': uid.trim(),
-          'requestedPhone': phone.trim(),
-          'signalKey': signalKey.trim(),
-          'signals': signals,
-          'status': 'pending',
-          'reason': 'same_device_new_phone',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return false;
-      }
-
-      tx.set(
-        ref,
-        {
-          'deviceId': deviceId.trim(),
-          'userId': uid.trim(),
-          'phone': phone.trim(),
-          'signalKey': signalKey.trim(),
-          'signals': signals,
-          'status': 'active',
-          if (!snap.exists) 'createdAt': FieldValue.serverTimestamp(),
-          'lastSeenAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-      return true;
-    });
-    if (!allowed) {
-      await _addRiskEvent(
-        userId: uid,
-        type: 'same_device_new_phone',
-        severity: 'high',
-        deviceId: deviceId,
-        message: 'Бир қурилмадан бошқа телефон рақам билан кириш уриниши',
-        meta: {
-          'requestedPhone': phone.trim(),
-          'signalKey': signalKey.trim(),
-          'signals': signals,
-        },
-      );
-      throw StateError('device_bound_to_other_phone');
-    }
-    if (similarBindingUserId.isNotEmpty) {
-      await _addRiskEvent(
-        userId: uid,
-        type: 'similar_device_signal_new_install',
-        severity: 'medium',
-        deviceId: deviceId,
-        message:
-            'Янги install, лекин device signal аввал бошқа user билан ўхшаш',
-        meta: {
-          'similarUserId': similarBindingUserId,
-          'requestedPhone': phone.trim(),
-          'signalKey': signalKey.trim(),
-          'signals': signals,
-        },
-      );
-    }
-  }
-
-  /// Профилдан телефон рақамини алмаштириш тўғридан-тўғри эмас, admin approval.
-  Future<void> requestPhoneChange({
-    required String deviceId,
-    required String currentUserId,
-    required String currentPhone,
-    required String requestedPhone,
-    String signalKey = '',
-    Map<String, String> signals = const <String, String>{},
-  }) async {
-    if (currentUserId.trim().isEmpty || requestedPhone.trim().isEmpty) return;
-    await _deviceChangeRequests.add({
-      'deviceId': deviceId.trim(),
-      'currentUserId': currentUserId.trim(),
-      'currentPhone': currentPhone.trim(),
-      'requestedUserId': phoneDigits(requestedPhone),
-      'requestedPhone': requestedPhone.trim(),
-      'signalKey': signalKey.trim(),
-      'signals': signals,
-      'status': 'pending',
-      'reason': 'profile_phone_change',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    await _addRiskEvent(
-      userId: currentUserId,
-      type: 'profile_phone_change_request',
-      severity: 'medium',
-      deviceId: deviceId,
-      message: 'User профилдан телефон рақамни алмаштириш сўрови юборди',
-      meta: {
-        'currentPhone': currentPhone.trim(),
-        'requestedPhone': requestedPhone.trim(),
-        'requestedUserId': phoneDigits(requestedPhone),
-        'signalKey': signalKey.trim(),
-        'signals': signals,
-      },
-    );
-  }
-
   Stream<List<BirthDateChangeRequest>> watchPendingBirthDateChangeRequests() {
     return _birthDateRequests
         .where('status', isEqualTo: 'pending')
@@ -462,22 +300,6 @@ class UserRepository {
         .snapshots()
         .map((q) {
       final items = q.docs.map(BirthDateChangeRequest.fromDoc).toList();
-      items.sort((a, b) {
-        final ad = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bd = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bd.compareTo(ad);
-      });
-      return items;
-    });
-  }
-
-  Stream<List<DeviceChangeRequest>> watchPendingDeviceChangeRequests() {
-    return _deviceChangeRequests
-        .where('status', isEqualTo: 'pending')
-        .limit(100)
-        .snapshots()
-        .map((q) {
-      final items = q.docs.map(DeviceChangeRequest.fromDoc).toList();
       items.sort((a, b) {
         final ad = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bd = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -514,47 +336,6 @@ class UserRepository {
     }, SetOptions(merge: true));
   }
 
-  Future<void> approveDeviceChange(DeviceChangeRequest request) async {
-    final requestRef = _deviceChangeRequests.doc(request.id);
-    final bindingRef = _deviceBindings.doc(request.deviceId);
-    final requestedUserRef = _col.doc(request.requestedUserId);
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(requestRef);
-      if ((snap.data()?['status'] ?? '') != 'pending') return;
-      tx.set(bindingRef, {
-        'deviceId': request.deviceId,
-        'userId': request.requestedUserId,
-        'phone': request.requestedPhone,
-        'previousUserId': request.currentUserId,
-        'signalKey': request.signalKey,
-        'signals': request.signals,
-        'status': 'active',
-        'approvedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastSeenAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      if (request.requestedUserId.isNotEmpty) {
-        tx.set(requestedUserRef, {
-          'phone': request.requestedPhone,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-      tx.update(requestRef, {
-        'status': 'approved',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-  }
-
-  Future<void> rejectDeviceChange(String requestId) async {
-    await _deviceChangeRequests.doc(requestId).set({
-      'status': 'rejected',
-      'reviewedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
   /// Профил маълумотларини бирваракай янгилаш.
   Future<void> updateProfile({
     required String uid,
@@ -582,6 +363,10 @@ class UserRepository {
     String? legacyFromString,
   }) async {
     if (uid.isEmpty) return;
+    final validation = address.validationError;
+    if (validation != null) {
+      throw ArgumentError(validation);
+    }
     final patch = <String, Object?>{
       'address': address.toMap(),
       'addressUpdatedAt': FieldValue.serverTimestamp(),
@@ -592,11 +377,95 @@ class UserRepository {
     await _col.doc(uid).set(patch, SetOptions(merge: true));
   }
 
-  /// `lastNewsReadAt`ни янгилаш — Унread badge'ни тозалаш.
+  /// Умумий янгиликлар ўқилди.
   Future<void> markNewsRead(String uid) async {
     if (uid.isEmpty) return;
-    await _col.doc(uid).set(
+    await _col.doc(canonicalPhoneId(uid)).set(
         {'lastNewsReadAt': FieldValue.serverTimestamp()},
         SetOptions(merge: true));
+  }
+
+  /// Буюртма хабарлари ўқилди.
+  Future<void> markOrderNewsRead(String uid) async {
+    if (uid.isEmpty) return;
+    await _col.doc(canonicalPhoneId(uid)).set(
+        {'lastOrderNewsReadAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true));
+  }
+
+  /// «Хабарлар» таби (мурожаатлар) ўқилди.
+  Future<void> markMessagesRead(String uid) async {
+    if (uid.isEmpty) return;
+    final patch = {'lastMessagesReadAt': FieldValue.serverTimestamp()};
+    final canon = canonicalPhoneId(uid);
+    final raw = phoneDigits(uid);
+    final ids = <String>{canon, raw};
+    if (raw.length >= 12 && raw.startsWith('998')) {
+      ids.add(raw.substring(3));
+    }
+    for (final id in ids.where((x) => x.length >= 9)) {
+      await _col.doc(id).set(patch, SetOptions(merge: true));
+    }
+  }
+
+  Future<void> saveCarInfo({
+    required String uid,
+    required String carModel,
+    required String carColor,
+    required String carPlate,
+    required int carSeats,
+  }) async {
+    if (uid.isEmpty) return;
+    await _col.doc(canonicalPhoneId(uid)).update({
+      'carModel': carModel.trim(),
+      'carColor': carColor.trim(),
+      'carPlate': carPlate.trim().toUpperCase(),
+      'carSeats': carSeats,
+      'carUpdatedAt': FieldValue.serverTimestamp(),
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('car_model', carModel.trim());
+    await prefs.setString('car_color', carColor.trim());
+    await prefs.setString('car_plate', carPlate.trim().toUpperCase());
+    await prefs.setInt('car_seats', carSeats);
+  }
+
+  /// `users/{uid}` ва SharedPreferences'dan avtomobil ma'lumotlarini tozalash.
+  Future<void> clearCarInfo(String uid) async {
+    if (uid.isEmpty) return;
+    await _col.doc(canonicalPhoneId(uid)).update({
+      'carModel': '',
+      'carColor': '',
+      'carPlate': '',
+      'carSeats': 0,
+      'carUpdatedAt': FieldValue.serverTimestamp(),
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('car_model');
+    await prefs.remove('car_color');
+    await prefs.remove('car_plate');
+    await prefs.remove('car_seats');
+  }
+
+  Future<Map<String, String>?> getCarInfo(String uid) async {
+    if (uid.isEmpty) return null;
+    try {
+      final snap = await _col.doc(canonicalPhoneId(uid)).get();
+      if (!snap.exists) return null;
+      final d = snap.data()!;
+      final model = d['carModel'] as String? ?? '';
+      final color = d['carColor'] as String? ?? '';
+      final plate = d['carPlate'] as String? ?? '';
+      final seats = (d['carSeats'] as num?)?.toInt() ?? 0;
+      if (model.isEmpty && plate.isEmpty && seats == 0) return null;
+      return {
+        'carModel': model,
+        'carColor': color,
+        'carPlate': plate,
+        'carSeats': seats > 0 ? '$seats' : '',
+      };
+    } catch (_) {
+      return null;
+    }
   }
 }

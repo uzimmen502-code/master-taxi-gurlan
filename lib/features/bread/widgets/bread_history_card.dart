@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
 
@@ -12,11 +14,13 @@ class BreadHistoryCard extends StatelessWidget {
   Color _statusColor(String s) {
     switch (s) {
       case 'accepted':
-        return const Color(0xFFFF8F00);
+        return AppColors.primary;
       case 'ready':
         return Colors.deepOrange;
+      case 'in_delivery':
+        return Colors.indigo;
       case 'delivered':
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
       case 'rejected':
         return Colors.red;
       default:
@@ -24,18 +28,21 @@ class BreadHistoryCard extends StatelessWidget {
     }
   }
 
-  String _statusLabel(String s) {
+  String _statusLabel(BuildContext context, String s) {
+    final loc = AppLocalizations.of(context)!;
     switch (s) {
       case 'new':
-        return '🔵 Янги';
+        return loc.translate('bread_status_new');
       case 'accepted':
-        return '🟡 Қабул';
+        return loc.translate('bread_status_accepted');
       case 'ready':
-        return '🟠 Тайёр';
+        return loc.translate('bread_status_ready');
+      case 'in_delivery':
+        return loc.translate('bread_status_in_delivery');
       case 'delivered':
-        return '🟢 Етказилди';
+        return loc.translate('bread_status_delivered');
       case 'rejected':
-        return '🔴 Рад';
+        return loc.translate('bread_status_rejected');
       default:
         return s;
     }
@@ -77,7 +84,7 @@ class BreadHistoryCard extends StatelessWidget {
               color: _statusColor(order.status).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(_statusLabel(order.status),
+            child: Text(_statusLabel(context, order.status),
                 style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -103,7 +110,7 @@ class BreadHistoryCard extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFFE65100)),
+                color: AppColors.primary),
           ),
         ]),
         const SizedBox(height: 4),

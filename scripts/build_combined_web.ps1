@@ -57,8 +57,17 @@ self.addEventListener('activate', function (event) {
 Set-Content -Path (Join-Path $Hosting "flutter_service_worker.js") -Value $KillServiceWorker -Encoding UTF8
 Set-Content -Path (Join-Path $AdminDir "flutter_service_worker.js") -Value $KillServiceWorker -Encoding UTF8
 
+$DownloadsSrc = Join-Path $Root "web/downloads"
+$DownloadsDst = Join-Path $Hosting "downloads"
+if (Test-Path $DownloadsSrc) {
+  Write-Host "==> Downloads (APK + QR page)..." -ForegroundColor Cyan
+  New-Item -ItemType Directory -Path $DownloadsDst -Force | Out-Null
+  Copy-Item -Path (Join-Path $DownloadsSrc "*") -Destination $DownloadsDst -Recurse -Force
+}
+
 Write-Host ""
 Write-Host "OK: $Hosting" -ForegroundColor Green
 Write-Host "  User:  /" -ForegroundColor Green
 Write-Host "  Admin: /admin/" -ForegroundColor Green
+Write-Host "  APK QR:  /downloads/  (index.html + master-taxi-gurlan-driver.apk)" -ForegroundColor Green
 Write-Host "Deploy: firebase deploy --only hosting" -ForegroundColor Yellow

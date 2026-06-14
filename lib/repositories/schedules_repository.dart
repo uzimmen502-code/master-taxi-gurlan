@@ -1,6 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/formatters.dart';
+import 'intercity_bookings_repository.dart';
 import '../models/schedule.dart';
+import '../utils/intercity_places.dart';
+
+class DriverScheduleApprovalException implements Exception {
+  const DriverScheduleApprovalException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 /// `schedules` collection — marshrut taksi haydovchilarining kunlik reyslari.
 class SchedulesRepository {
@@ -17,6 +29,15 @@ class SchedulesRepository {
     final snap = await _col.doc(id).get();
     if (!snap.exists) return null;
     return Schedule.fromDoc(snap);
+  }
+
+  /// Real-time `seatsLeft` — haydovchi paneli учун единствен манба.
+  Stream<Schedule?> watchById(String id) {
+    if (id.isEmpty) return Stream.value(null);
+    return _col.doc(id).snapshots().map((snap) {
+      if (!snap.exists) return null;
+      return Schedule.fromDoc(snap);
+    });
   }
 
   /// Bugungi sanaga belgilangan, aktiv marshrut reyslarini qaytaradi.
@@ -88,10 +109,11 @@ class SchedulesRepository {
   /// ёпилган бўлса `true` қайтаради.
   Future<bool> closeExpiredForDriver(String driverId) async {
     if (driverId.isEmpty) return false;
+    final canonId = canonicalPhoneId(driverId);
     try {
       final now = Timestamp.now();
       final snap = await _col
-          .where('driverId', isEqualTo: driverId)
+          .where('driverId', isEqualTo: canonId)
           .where('isActive', isEqualTo: true)
           .get();
       final batch = _db.batch();
@@ -108,7 +130,7 @@ class SchedulesRepository {
         }
       }
       if (deactivateIntercity) {
-        batch.update(_db.collection('intercity_drivers').doc(driverId), {
+        batch.update(_db.collection('intercity_drivers').doc(canonId), {
           'isActive': false,
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -126,9 +148,10 @@ class SchedulesRepository {
     required String date,
   }) async {
     if (driverId.isEmpty) return;
+    final canonId = canonicalPhoneId(driverId);
     try {
       final snap = await _col
-          .where('driverId', isEqualTo: driverId)
+          .where('driverId', isEqualTo: canonId)
           .where('date', isEqualTo: date)
           .where('isActive', isEqualTo: true)
           .get();
@@ -141,7 +164,7 @@ class SchedulesRepository {
         }
       }
       if (hadIntercity) {
-        batch.update(_db.collection('intercity_drivers').doc(driverId), {
+        batch.update(_db.collection('intercity_drivers').doc(canonId), {
           'isActive': false,
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -218,8 +241,42 @@ class SchedulesRepository {
     String? endTime,
     int? price,
   }) async {
+    if (taxiType == 'marshrut') {
+      throw UnsupportedError(
+        'Marshrut uchun MarshrutDriverRepository.register ishlating',
+      );
+    }
+    final canonId = canonicalPhoneId(driverId);
+    final driverRef = _db.collection('drivers').doc(canonId);
+    final driverSnap = await driverRef.get();
+    final driverData = driverSnap.data() ?? const <String, dynamic>{};
+    // #13 — admin `drivers.car` манбаи
+    final resolvedCar = driverCar.trim().isNotEmpty
+        ? driverCar.trim()
+        : ((driverData['car'] ?? '') as String).trim();
+    final resolvedPlate = driverPlate.trim().isNotEmpty
+        ? driverPlate.trim()
+        : ((driverData['plate'] ?? '') as String).trim();
+    if (!_isApprovedForTaxi(driverData, taxiType)) {
+      throw const DriverScheduleApprovalException(
+        'Ҳайдовчи сифатида ишга чиқиш учун Admin тасдиғи керак',
+      );
+    }
+
+    final fromNormalized = taxiType == 'intercity'
+        ? IntercityPlaces.normalizeLocation(fromText.trim())
+        : fromText.trim();
+    final toNormalized = taxiType == 'intercity'
+        ? IntercityPlaces.normalizeLocation(toText.trim())
+        : toText.trim();
+    final stopsNormalized = taxiType == 'intercity'
+        ? stops
+            .map((s) => IntercityPlaces.normalizeLocation(s))
+            .toList(growable: false)
+        : stops;
+
     final oldSnap = await _col
-        .where('driverId', isEqualTo: driverId)
+        .where('driverId', isEqualTo: canonId)
         .where('taxiType', isEqualTo: taxiType)
         .where('date', isEqualTo: date)
         .where('isActive', isEqualTo: true)
@@ -232,16 +289,16 @@ class SchedulesRepository {
 
     final schedRef = _col.doc();
     final scheduleData = <String, dynamic>{
-      'driverId': driverId,
+      'driverId': canonId,
       'driverName': driverName,
       'driverPhone': driverPhone,
-      'car': driverCar,
-      'plate': driverPlate,
+      'car': resolvedCar,
+      'plate': resolvedPlate,
       'taxiType': taxiType,
       'date': date,
-      'from': fromText,
-      'to': toText,
-      'stops': stops,
+      'from': fromNormalized,
+      'to': toNormalized,
+      'stops': stopsNormalized,
       'direction': direction,
       'seats': seats,
       'seatsLeft': seats,
@@ -254,17 +311,17 @@ class SchedulesRepository {
     if (price != null) scheduleData['price'] = price;
     batch.set(schedRef, scheduleData);
 
-    final queueRef = _db.collection('queue').doc(driverId);
+    final queueRef = _db.collection('queue').doc(canonId);
     batch.set(queueRef, {
-      'driverId': driverId,
+      'driverId': canonId,
       'driverName': driverName,
       'driverPhone': driverPhone,
-      'car': driverCar,
-      'plate': driverPlate,
+      'car': resolvedCar,
+      'plate': resolvedPlate,
       'taxiType': taxiType,
-      'from': fromText,
-      'to': toText,
-      'stops': stops,
+      'from': fromNormalized,
+      'to': toNormalized,
+      'stops': stopsNormalized,
       'scheduleId': schedRef.id,
       'seats': seats,
       'seatsLeft': seats,
@@ -274,40 +331,91 @@ class SchedulesRepository {
       'expiresAt': Timestamp.fromDate(expiresAt),
     });
 
-    final driverRef = _db.collection('drivers').doc(driverId);
-    batch.update(driverRef, {
-      'isAvailable': true,
-      'todayFrom': fromText,
-      'todayTo': toText,
-      'seatsLeft': seats,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    batch.set(
+        driverRef,
+        {
+          'isAvailable': true,
+          'todayFrom': fromNormalized,
+          'todayTo': toNormalized,
+          'seatsLeft': seats,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true));
 
     // intercity haydovchilar uchun intercity_drivers kolleksiyasiga sync
     if (taxiType == 'intercity') {
-      final intercityRef = _db.collection('intercity_drivers').doc(driverId);
+      // Avvalgi reysdan qolgan pending/confirmed bronlar — yangi reysga o'tmasin.
+      await IntercityBookingsRepository(db: _db).cancelActiveBookingsForDriver(
+        canonId,
+        reason: 'Ҳайдовчи янги рейс очди — аввалги бронлар бекор',
+      );
+
+      final intercityRef = _db.collection('intercity_drivers').doc(canonId);
+      final phoneKey = canonicalPhoneId(driverPhone);
+
+      // #11 — бир телефонда бир нечта актив рейс бўлмасин
+      if (phoneKey.length >= 9) {
+        final dupActive = await _db
+            .collection('intercity_drivers')
+            .where('phoneDigits', isEqualTo: phoneKey)
+            .where('isActive', isEqualTo: true)
+            .get();
+        for (final d in dupActive.docs) {
+          batch.update(d.reference, {
+            'isActive': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
       int hour = 8;
       if (startTime != null && startTime.contains(':')) {
         hour = int.tryParse(startTime.split(':')[0]) ?? 8;
       }
-      batch.set(intercityRef, {
-        'name': driverName,
-        'phone': driverPhone,
-        'plate': driverPlate,
-        'seats': seats,
-        'price': price ?? 0,
-        'hour': hour,
-        'isActive': true,
-        'parcel': false,
-        'rating': 4.5,
-        'from': fromText,
-        'to': toText,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      batch.set(
+          intercityRef,
+          {
+            'name': driverName,
+            'phone': driverPhone,
+            'phoneDigits': phoneKey,
+            'car': resolvedCar,
+            'plate': resolvedPlate,
+            'seatCapacity': seats,
+            'seats': seats,
+            'price': price ?? 0,
+            'hour': hour,
+            'scheduleDate': date,
+            'isActive': true,
+            'isOnPanel': true,
+            'rating': 4.5,
+            'from': fromNormalized,
+            'to': toNormalized,
+            'stops': stopsNormalized,
+            'routeLabel': stopsNormalized.isNotEmpty
+                ? stopsNormalized.join(' → ')
+                : '$fromNormalized → $toNormalized',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
     }
 
     await batch.commit();
     return schedRef.id;
   }
-}
 
+  bool _isApprovedForTaxi(Map<String, dynamic> data, String taxiType) {
+    final approved = data['approved'] == true ||
+        (data['approvalStatus'] as String?) == 'approved';
+    if (!approved) return false;
+
+    final rawTaxiTypes = data['taxiTypes'];
+    if (rawTaxiTypes is List && rawTaxiTypes.contains(taxiType)) return true;
+
+    final primaryTaxiType = (data['taxiType'] ?? '') as String;
+    if (primaryTaxiType == taxiType || primaryTaxiType == 'both') return true;
+    if (taxiType == 'alone' && primaryTaxiType == 'local') return true;
+    if (taxiType == 'local' && primaryTaxiType == 'alone') return true;
+    if (taxiType == 'intercity' && primaryTaxiType == 'intercity') return true;
+    return false;
+  }
+}

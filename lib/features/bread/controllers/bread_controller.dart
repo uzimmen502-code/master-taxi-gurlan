@@ -13,8 +13,7 @@ import '../../../models/order_model.dart';
 import '../../../repositories/bread_repository.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/orders_repository.dart';
-import '../../../services/balance_service.dart';
-import '../../../utils/wallet_payment.dart';
+import '../../../services/order_payment_service.dart';
 
 /// Нон каталоги, сават, тарих ва оффлайн-навбатни бирлаштирган
 /// universal controller. Cart sheet ҳам шу controllerга боғлиқ —
@@ -424,39 +423,15 @@ class BreadController extends ChangeNotifier {
     required String name,
     required String phone,
     required String address,
-    required int cashPaid,
+    double? deliveryLat,
+    double? deliveryLng,
   }) async {
-    final applied =
-        WalletPayment.maxDebitFromWallet(walletBalance, grandTotal);
-    final cashDue = (grandTotal - applied).clamp(0, 999999999);
-
-    if (!WalletPayment.orderPayableWithAutoWallet(
-      walletBalance: walletBalance,
-      orderTotal: grandTotal,
-      cashPaid: cashPaid,
-    )) {
-      return (
-        success: false,
-        isOffline: false,
-        error:
-            'Тўлов етишмади. Нақд + кошелёк жами буюртма суммасидан кам.',
-      );
-    }
-    if (!hasInternet && applied > 0) {
-      return (
-        success: false,
-        isOffline: false,
-        error: 'Интернетсиз кошелёк ишлатиб бўлмайди',
-      );
-    }
-
-    final orderData = _buildOrderPayload(
+    final orderData = await _buildOrderPayload(
       name: name,
       phone: phone,
       address: address,
-      balanceApplied: applied,
-      cashDue: cashDue,
-      cashPaid: cashPaid,
+      deliveryLat: deliveryLat,
+      deliveryLng: deliveryLng,
     );
 
     if (!hasInternet) {
@@ -489,17 +464,17 @@ class BreadController extends ChangeNotifier {
             'label': e.label,
           },
       ];
-      await BalanceService.placeOrderWithWallet(
+      await OrderPaymentService.placeOrderPostPaid(
         userPhone: phone,
         idempotencyKey:
-            BalanceService.idempotencyKey('bread_place_${phone}_$grandTotal'),
+            'bread_${phone}_${DateTime.now().microsecondsSinceEpoch}',
         orderBase: payload,
         decrements: decMaps,
       );
       return (success: true, isOffline: false, error: null);
     } on FirebaseFunctionsException catch (e) {
-      final m = e.message ?? e.code;
-      if (e.code == 'failed-precondition' && m.contains('insufficient_cash')) {
+      if (e.code == 'failed-precondition' &&
+          (e.message ?? '').contains('insufficient_cash')) {
         return (
           success: false,
           isOffline: false,
@@ -507,12 +482,27 @@ class BreadController extends ChangeNotifier {
               'Тўлов етишмади. Кошелёк ва нақд миқдорини текширинг (сервер талаби).',
         );
       }
-      if (e.code == 'failed-precondition') {
-        return (success: false, isOffline: false, error: '⚠️ $m');
-      }
-      return (success: false, isOffline: false, error: 'Хатолик: $m');
+      final msg = _mapFunctionError(e.code, e.message);
+      return (success: false, isOffline: false, error: msg);
     } catch (e) {
       return (success: false, isOffline: false, error: 'Хатолик: $e');
+    }
+  }
+
+  String _mapFunctionError(String code, String? message) {
+    switch (code) {
+      case 'unauthenticated':
+        return 'Буюртма учун тизимга кириш талаб этилади';
+      case 'permission-denied':
+        return 'Телефон рақамингиз тасдиқланмаган';
+      case 'not-found':
+        return 'Фойдаланувчи топилмади. Профилингизни текширинг';
+      case 'invalid-argument':
+        return 'Буюртма маълумотлари нотўғри';
+      case 'failed-precondition':
+        return message ?? 'Буюртма юборилмади. Қайта уриниб кўринг';
+      default:
+        return 'Хатолик: ${message ?? code}';
     }
   }
 
@@ -551,26 +541,37 @@ class BreadController extends ChangeNotifier {
     return list;
   }
 
-  Map<String, dynamic> _buildOrderPayload({
+  Future<Map<String, dynamic>> _buildOrderPayload({
     required String name,
     required String phone,
     required String address,
-    required int balanceApplied,
-    required int cashDue,
-    required int cashPaid,
-  }) {
+    double? deliveryLat,
+    double? deliveryLng,
+  }) async {
     final items = <Map<String, dynamic>>[];
     cart.forEach((id, count) {
       final p = _findProduct(id);
       if (p == null) return;
       final choice = flourMilkChoice[id] ?? 'ours';
+      final unit = productPrice(p);
+      final baseLineTotal = unit * count;
+      final fmCost = (p.isYopish || p.isToy) && choice == 'ours'
+          ? flourMilkCost(p, count)
+          : 0;
+      final lineTotal = (p.isYopish || p.isToy) && choice == 'ours'
+          ? baseLineTotal + fmCost
+          : baseLineTotal;
       items.add({
         'id': id,
+        if (p.emoji.trim().isNotEmpty) 'emoji': p.emoji.trim(),
         'name': p.name,
         'count': count,
         'type': p.type,
         'flourMilk': (p.isYopish || p.isToy) ? choice : 'none',
-        'price': productPrice(p),
+        'price': unit,
+        'baseLineTotal': baseLineTotal,
+        if (fmCost > 0) 'flourMilkCost': fmCost,
+        'lineTotal': lineTotal,
       });
     });
 
@@ -585,12 +586,31 @@ class BreadController extends ChangeNotifier {
           'name': p.name,
           'count': qty,
           'unit': p.unitCode,
+          'qtyLabel': p.qtyCaptionNum(qty),
           if (discount > 0) 'bonusDiscount': discount,
           if (discount > 0) 'bonusPercent': p.bonusPercent,
           if (p.firestoreId.isNotEmpty) 'firestoreId': p.firestoreId,
           'total': p.lineTotal(qty),
         });
       }
+    }
+
+    double? orderLat;
+    double? orderLng;
+    final uid = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (deliveryLat != null && deliveryLng != null) {
+      orderLat = deliveryLat;
+      orderLng = deliveryLng;
+    } else if (uid.length >= 9) {
+      try {
+        final doc =
+            await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final addr = doc.data()?['address'];
+        if (addr is Map) {
+          orderLat = (addr['lat'] as num?)?.toDouble();
+          orderLng = (addr['lng'] as num?)?.toDouble();
+        }
+      } catch (_) {}
     }
 
     return {
@@ -601,11 +621,18 @@ class BreadController extends ChangeNotifier {
       'phone': phone,
       'items': items,
       'extras': extras,
+      if (saltYeastCost > 0) 'saltYeastCost': saltYeastCost,
+      if (saltYeastCost > 0) 'cartHadYopishBread': cartHasYopishBread,
       'total': grandTotal,
-      'balanceApplied': balanceApplied,
-      'cashDue': cashDue,
-      'cashPaid': cashPaid,
+      'balanceApplied': 0,
+      'cashDue': grandTotal,
+      'cashPaid': 0,
       'status': 'new',
+      'fulfillmentStatus': 'pending',
+      'paymentStatus': 'unpaid',
+      'fulfillmentMode': 'delivery',
+      if (orderLat != null) 'lat': orderLat,
+      if (orderLng != null) 'lng': orderLng,
     };
   }
 }

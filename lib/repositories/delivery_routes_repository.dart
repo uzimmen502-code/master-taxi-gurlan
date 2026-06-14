@@ -26,8 +26,7 @@ class DeliveryRoutesRepository {
 
   /// Hech kim olmagan navbatdagi `ready` reys (preview uchun).
   Future<DeliveryRoute?> getNextReady() async {
-    final snap =
-        await _col.where('status', isEqualTo: 'ready').limit(1).get();
+    final snap = await _col.where('status', isEqualTo: 'ready').limit(1).get();
     if (snap.docs.isEmpty) return null;
     return DeliveryRoute.fromDoc(snap.docs.first);
   }
@@ -75,25 +74,6 @@ class DeliveryRoutesRepository {
     });
   }
 
-  /// Admin yangi reys yaratadi: tanlangan buyurtmalar → `delivery_routes` hujjat.
-  Future<String> createRoute({
-    required List<String> orderIds,
-    String courierId = '',
-  }) async {
-    if (orderIds.isEmpty) {
-      throw ArgumentError('orderIds bo\'sh bo\'lmasligi kerak');
-    }
-    final ref = _col.doc();
-    await ref.set({
-      'orders': orderIds,
-      'courierId': courierId,
-      'status': 'ready',
-      'currentIndex': 0,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    return ref.id;
-  }
-
   /// Barcha aktiv va tayyor reyslar real-time stream.
   Stream<List<DeliveryRoute>> watchActiveRoutes() {
     return _col
@@ -112,8 +92,8 @@ class DeliveryRoutesRepository {
         .limit(1)
         .snapshots()
         .map((snap) {
-      if (snap.docs.isEmpty) return null;
-      return DeliveryRoute.fromDoc(snap.docs.first);
-    });
+          if (snap.docs.isEmpty) return null;
+          return DeliveryRoute.fromDoc(snap.docs.first);
+        });
   }
 }

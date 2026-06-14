@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
+
 /// Driver app ўрнатилмаган бўлсa чиқадиган диалог.
 ///
 /// Қайтариш қиймати:
@@ -10,15 +13,15 @@ Future<bool?> showInstallDriverAppDialog(BuildContext context) {
   return showDialog<bool>(
     context: context,
     barrierColor: Colors.black54,
-    builder: (_) => const _InstallDriverAppDialog(),
+    builder: (ctx) => const _InstallDriverAppDialog(),
   );
 }
 
 class _InstallDriverAppDialog extends StatelessWidget {
   const _InstallDriverAppDialog();
 
-  static const Color _blue = Color(0xFF1565C0);
-  static const Color _orange = Color(0xFFF57F17);
+  static const Color _blue = AppColors.primary;
+  static const Color _orange = AppColors.primaryMid;
 
   @override
   Widget build(BuildContext context) {
@@ -57,13 +60,13 @@ class _InstallDriverAppDialog extends StatelessWidget {
                   color: Colors.white, size: 36),
             ),
             const SizedBox(height: 14),
-            const Text('Маҳаллий ҳайдовчи иловаси',
+            Text(context.tr('local_driver_app_title'),
                 textAlign: TextAlign.center,
                 style:
                     TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text(
-              'Ҳайдовчи режимини бошлаш учун **Master Taxi Driver** иловаси телефонингизга ўрнатилиши керак.',
+              context.tr('install_driver_app_body'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
             ),
@@ -72,23 +75,22 @@ class _InstallDriverAppDialog extends StatelessWidget {
             _step(
               num: '1',
               icon: Icons.download_outlined,
-              title: 'APK файлни юклaб олинг',
-              subtitle: 'Браузерда юклаш бошланади',
+              title: context.tr('install_driver_step1_title'),
+              subtitle: context.tr('install_driver_step1_sub'),
             ),
             const SizedBox(height: 8),
             _step(
               num: '2',
               icon: Icons.install_mobile,
-              title: 'Иловани ўрнатинг',
-              subtitle: '"Номаълум манбалардан" ўрнатишга рухсат беринг',
+              title: context.tr('install_driver_step2_title'),
+              subtitle: context.tr('install_driver_step2_sub'),
             ),
             const SizedBox(height: 8),
             _step(
               num: '3',
               icon: Icons.touch_app,
-              title: 'Қайтиб "Ҳайдовчи" тугмасини босинг',
-              subtitle:
-                  'Илова автоматик очилиб, маълумотлар тўлдирилади',
+              title: context.tr('install_driver_step3_title'),
+              subtitle: context.tr('install_driver_step3_sub'),
             ),
             const SizedBox(height: 18),
             // CTA
@@ -98,7 +100,7 @@ class _InstallDriverAppDialog extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(true),
                 icon: const Icon(Icons.cloud_download, size: 18),
-                label: const Text('APK юклaб олиш',
+                label: Text(context.tr('download_apk'),
                     style:
                         TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
@@ -115,7 +117,7 @@ class _InstallDriverAppDialog extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: Colors.grey.shade700,
               ),
-              child: const Text('Бекор қилиш'),
+              child: Text(context.tr('cancel')),
             ),
           ]),
         ),

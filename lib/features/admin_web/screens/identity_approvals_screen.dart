@@ -3,39 +3,19 @@ import 'package:provider/provider.dart';
 
 import '../../../models/identity_change_request.dart';
 import '../../../repositories/user_repository.dart';
+import '../../../core/theme/app_theme.dart';
 
 class IdentityApprovalsScreen extends StatelessWidget {
   const IdentityApprovalsScreen({super.key});
 
-  static const _blue = Color(0xFF0D47A1);
+  static const _blue = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(children: [
-        _header(),
-        const Material(
-          color: Colors.white,
-          child: TabBar(
-            labelColor: _blue,
-            unselectedLabelColor: Colors.black54,
-            tabs: [
-              Tab(icon: Icon(Icons.cake_outlined), text: 'Туғилган кун'),
-              Tab(icon: Icon(Icons.phonelink_lock), text: 'Қурилма/рақам'),
-            ],
-          ),
-        ),
-        const Expanded(
-          child: TabBarView(
-            children: [
-              _BirthDateRequestsTab(),
-              _DeviceRequestsTab(),
-            ],
-          ),
-        ),
-      ]),
-    );
+    return Column(children: [
+      _header(),
+      const Expanded(child: _BirthDateRequestsTab()),
+    ]);
   }
 
   Widget _header() {
@@ -63,7 +43,7 @@ class IdentityApprovalsScreen extends StatelessWidget {
               ),
               SizedBox(height: 3),
               Text(
-                'Туғилган кун, телефон рақам ва қурилма ўзгаришларини назорат қилиш',
+                'Туғилган кун ўзгаришларини назорат қилиш',
                 style: TextStyle(color: Colors.black54),
               ),
             ],
@@ -139,7 +119,7 @@ class _BirthDateRequestCard extends StatelessWidget {
       await repo.approveBirthDateChange(request);
       messenger.showSnackBar(const SnackBar(
         content: Text('Туғилган кун ўзгариши тасдиқланди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -153,105 +133,6 @@ class _BirthDateRequestCard extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await repo.rejectBirthDateChange(request.id);
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Сўров рад этилди'),
-        backgroundColor: Colors.orange,
-      ));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
-}
-
-class _DeviceRequestsTab extends StatelessWidget {
-  const _DeviceRequestsTab();
-
-  @override
-  Widget build(BuildContext context) {
-    final repo = context.read<UserRepository>();
-    return StreamBuilder<List<DeviceChangeRequest>>(
-      stream: repo.watchPendingDeviceChangeRequests(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(child: Text('Хатолик: ${snap.error}'));
-        }
-        final requests = snap.data ?? const <DeviceChangeRequest>[];
-        if (requests.isEmpty) {
-          return const _EmptyState(text: 'Кутилаётган қурилма/рақам сўрови йўқ');
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(18),
-          itemCount: requests.length,
-          itemBuilder: (_, i) => _DeviceRequestCard(request: requests[i]),
-        );
-      },
-    );
-  }
-}
-
-class _DeviceRequestCard extends StatelessWidget {
-  const _DeviceRequestCard({required this.request});
-
-  final DeviceChangeRequest request;
-
-  @override
-  Widget build(BuildContext context) {
-    final current = request.currentPhone.isNotEmpty
-        ? request.currentPhone
-        : request.currentUserId;
-    final requested = request.requestedPhone.isNotEmpty
-        ? request.requestedPhone
-        : request.requestedUserId;
-    return _RequestCard(
-      icon: Icons.phonelink_lock,
-      title: 'Қурилма: ${request.deviceId}',
-      subtitle:
-          'Ҳозирги рақам: ${_dash(current)} → Янги рақам: ${_dash(requested)}'
-          '\nСабаб: ${_reasonLabel(request.reason)}'
-          '\nDevice signal: ${_deviceSignalSummary(request.signals)}',
-      createdAt: request.createdAt,
-      actions: [
-        OutlinedButton.icon(
-          onPressed: () => _reject(context),
-          icon: const Icon(Icons.close, size: 16),
-          label: const Text('Рад этиш'),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: () => _approve(context),
-          icon: const Icon(Icons.check, size: 16),
-          label: const Text('Тасдиқлаш'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _approve(BuildContext context) async {
-    final repo = context.read<UserRepository>();
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await repo.approveDeviceChange(request);
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Қурилма/рақам ўзгариши тасдиқланди'),
-        backgroundColor: Colors.green,
-      ));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  Future<void> _reject(BuildContext context) async {
-    final repo = context.read<UserRepository>();
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await repo.rejectDeviceChange(request.id);
       messenger.showSnackBar(const SnackBar(
         content: Text('Сўров рад этилди'),
         backgroundColor: Colors.orange,
@@ -293,7 +174,7 @@ class _RequestCard extends StatelessWidget {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           CircleAvatar(
             backgroundColor: const Color(0xFFE3F2FD),
-            child: Icon(icon, color: const Color(0xFF0D47A1)),
+            child: Icon(icon, color: AppColors.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -332,7 +213,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.check_circle_outline, size: 52, color: Colors.green.shade400),
+        Icon(Icons.check_circle_outline, size: 52, color: AppColors.primaryMid),
         const SizedBox(height: 10),
         Text(text, style: const TextStyle(fontSize: 16)),
       ]),
@@ -341,31 +222,6 @@ class _EmptyState extends StatelessWidget {
 }
 
 String _dash(String value) => value.trim().isEmpty ? '—' : value.trim();
-
-String _reasonLabel(String reason) {
-  switch (reason) {
-    case 'profile_phone_change':
-      return 'Профилдан телефон рақамни алмаштириш';
-    case 'same_device_new_phone':
-      return 'Шу қурилмадан бошқа рақам билан кириш';
-    default:
-      return reason.isEmpty ? '—' : reason;
-  }
-}
-
-String _deviceSignalSummary(Map<String, dynamic> signals) {
-  if (signals.isEmpty) return '—';
-  final platform = signals['platform']?.toString() ?? '';
-  final model = signals['model']?.toString() ??
-      signals['productName']?.toString() ??
-      signals['browserName']?.toString() ??
-      '';
-  final os = signals['osVersion']?.toString() ??
-      signals['systemVersion']?.toString() ??
-      signals['displayVersion']?.toString() ??
-      '';
-  return [platform, model, os].where((v) => v.trim().isNotEmpty).join(' • ');
-}
 
 String _formatDateTime(DateTime value) {
   String two(int n) => n.toString().padLeft(2, '0');

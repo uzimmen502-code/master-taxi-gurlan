@@ -8,8 +8,9 @@ import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../shared/widgets/mfy_field.dart';
 import '../../../shared/widgets/seat_selector.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../utils/gurlan_places.dart';
+import '../../../utils/intercity_places.dart';
 import '../controllers/driver_schedule_controller.dart';
 
 class DriverScheduleScreen extends StatelessWidget {
@@ -20,6 +21,8 @@ class DriverScheduleScreen extends StatelessWidget {
     required this.driverPhone,
     required this.driverCar,
     required this.driverPlate,
+    this.initialRouteStops,
+    this.initialRouteReversed = false,
   });
 
   final String taxiType;
@@ -27,6 +30,9 @@ class DriverScheduleScreen extends StatelessWidget {
   final String driverPhone;
   final String driverCar;
   final String driverPlate;
+  /// Панельдан «қайтиш рейси» — маршрут олдиндан тўлдирилади.
+  final List<String>? initialRouteStops;
+  final bool initialRouteReversed;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +46,8 @@ class DriverScheduleScreen extends StatelessWidget {
           driverPlate: driverPlate,
           schedulesRepo: ctx.read<SchedulesRepository>(),
           marshrutDriverRepo: ctx.read<MarshrutDriverRepository>(),
+          initialRouteStops: initialRouteStops,
+          initialRouteReversed: initialRouteReversed,
         );
         c.init();
         return c;
@@ -57,8 +65,8 @@ class _DriverScheduleView extends StatefulWidget {
 }
 
 class _DriverScheduleViewState extends State<_DriverScheduleView> {
-  static const _green = AppColors.success;
-  static const _blue = AppColors.marshrut;
+  static const _green = AppColors.button;
+  static const _blue = AppColors.primary;
 
   final _fromSearchCtrl = TextEditingController();
   final _midSearchCtrl = TextEditingController();
@@ -94,8 +102,21 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     } else {
       if (c.fromAddr.isNotEmpty) _fromAddrCtrl.text = c.fromAddr;
       if (c.toAddr.isNotEmpty) _toAddrCtrl.text = c.toAddr;
+      if (c.isIntercity && c.priceText.isNotEmpty) {
+        _priceCtrl.text = c.priceText;
+      }
     }
     _hydrated = true;
+  }
+
+  void _syncAddressFieldsFromController(DriverScheduleController c) {
+    if (c.isMarshrut) {
+      if (c.fromMfy.isNotEmpty) _fromSearchCtrl.text = c.fromMfy;
+      if (c.toMfy.isNotEmpty) _toSearchCtrl.text = c.toMfy;
+    } else {
+      _fromAddrCtrl.text = c.fromAddr;
+      _toAddrCtrl.text = c.toAddr;
+    }
   }
 
   @override
@@ -118,6 +139,19 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
+  }
+
+  Future<void> _pickDeparture(DriverScheduleController c) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: c.departureTime,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.light(primary: _blue)),
+        child: child!,
+      ),
+    );
+    if (picked != null) c.setDepartureTime(picked);
   }
 
   Future<void> _pickTime({required bool isStart}) async {
@@ -144,7 +178,10 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
-      setState(() => _fromAddrSug = GurlanPlaces.search(q));
+      final c = context.read<DriverScheduleController>();
+      setState(() => _fromAddrSug = c.isIntercity
+          ? IntercityPlaces.search(q)
+          : GurlanPlaces.search(q));
     });
   }
 
@@ -153,7 +190,10 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
       if (!mounted) return;
-      setState(() => _toAddrSug = GurlanPlaces.search(q));
+      final c = context.read<DriverScheduleController>();
+      setState(() => _toAddrSug = c.isIntercity
+          ? IntercityPlaces.search(q)
+          : GurlanPlaces.search(q));
     });
   }
 
@@ -174,10 +214,10 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     final c = context.watch<DriverScheduleController>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: const Text('Ишга чиқиш'),
-        backgroundColor: _blue,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -193,32 +233,75 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           });
         },
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _HeaderCard(controller: c),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
               Row(children: [
-                const Icon(Icons.route, color: AppColors.marshrut, size: 20),
+                const Icon(Icons.route, color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
                 const Text('ЙЎНАЛИШ',
                     style: TextStyle(
                         fontSize: AppText.titleSmall,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.marshrut,
+                        color: AppColors.primary,
                         letterSpacing: 1.2)),
               ]),
               const SizedBox(height: 12),
               if (c.isMarshrut) ...[
                 _buildMarshrutStops(c),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+              ] else if (c.isIntercity) ...[
+                _buildIntercityStops(c),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                    child: _dayChip(
+                      label: 'БУГУН',
+                      selected: !c.departureIsTomorrow,
+                      onTap: () => c.setDepartureIsTomorrow(false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _dayChip(
+                      label: 'ЭРТАГА',
+                      selected: c.departureIsTomorrow,
+                      onTap: () => c.setDepartureIsTomorrow(true),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                    child: _compactTimeCard(
+                      'Жўнаш',
+                      _fmt(c.departureTime),
+                      () => _pickDeparture(c),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: _textField(
+                      ctrl: _priceCtrl,
+                      hint: 'Нарх (сўм)',
+                      icon: Icons.payments_outlined,
+                      inputType: TextInputType.number,
+                      formatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: c.setPriceText,
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 10),
               ] else ...[
                 _addressField(
                   ctrl: _fromAddrCtrl,
-                  hint: 'ҚАЕРДАН — МФЙ, бозор, маҳалла...',
+                  hint: 'Қаердан',
                   icon: Icons.circle_outlined,
-                  iconColor: Colors.green,
+                  iconColor: AppColors.primary,
                   onChanged: _onFromAddrChanged,
                 ),
                 if (_fromAddrSug.isNotEmpty)
@@ -227,32 +310,22 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                   }, () {
                     setState(() => _fromAddrSug = const []);
                   }),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Center(
-                  child: GestureDetector(
-                    onTap: () {
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
                       final tmp = _fromAddrCtrl.text;
                       _fromAddrCtrl.text = _toAddrCtrl.text;
                       _toAddrCtrl.text = tmp;
                       context.read<DriverScheduleController>().swapAddrs();
                     },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.marshrut.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: AppColors.marshrut.withOpacity(0.3)),
-                      ),
-                      child: const Icon(Icons.swap_vert,
-                          color: AppColors.marshrut, size: 22),
-                    ),
+                    icon: const Icon(Icons.swap_vert, color: AppColors.primary),
                   ),
                 ),
-                const SizedBox(height: 8),
                 _addressField(
                   ctrl: _toAddrCtrl,
-                  hint: 'ҚАЕРГА — МФЙ, бозор, маҳалла...',
+                  hint: 'Қаерга',
                   icon: Icons.location_on,
                   iconColor: Colors.red,
                   onChanged: _onToAddrChanged,
@@ -263,20 +336,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                   }, () {
                     setState(() => _toAddrSug = const []);
                   }),
-                const SizedBox(height: 20),
-              ],
-              if (c.isIntercity) ...[
-                _sectionTitle('💰 Йўлкира нархи (сўм)'),
-                const SizedBox(height: 8),
-                _textField(
-                  ctrl: _priceCtrl,
-                  hint: 'Масалан: 150000',
-                  icon: Icons.monetization_on_outlined,
-                  inputType: TextInputType.number,
-                  formatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: c.setPriceText,
-                ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
               ],
               if (c.isAlone) ...[
                 _sectionTitle('🕐 Иш вақти'),
@@ -293,9 +353,9 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 const SizedBox(height: 20),
               ],
               _SeatsCard(controller: c),
-              const SizedBox(height: 24),
+              const SizedBox(height: 14),
               SizedBox(
-                height: 54,
+                height: 48,
                 child: ElevatedButton.icon(
                   onPressed: c.isSaving ? null : _onConfirm,
                   icon: c.isSaving
@@ -330,6 +390,150 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     );
   }
 
+  Widget _buildIntercityStops(DriverScheduleController c) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: c.canReverseRoute
+              ? () {
+                  c.reverseRoute();
+                  _syncAddressFieldsFromController(c);
+                  setState(() {});
+                }
+              : null,
+          icon: const Icon(Icons.swap_horiz, size: 20),
+          label: const Text('Йўналишни орқага қайтариш'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.primary),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      _stopLabel('📍 Қаердан', required: true),
+      const SizedBox(height: 4),
+      _addressField(
+        ctrl: _fromAddrCtrl,
+        hint: 'Шаҳар ёки туман',
+        icon: Icons.trip_origin,
+        iconColor: AppColors.primary,
+        onChanged: _onFromAddrChanged,
+      ),
+      if (_fromAddrSug.isNotEmpty)
+        _suggestList(_fromAddrSug, _fromAddrCtrl, (v) {
+          c.setFromAddr(v);
+        }, () => setState(() => _fromAddrSug = const [])),
+      const SizedBox(height: 8),
+      Row(children: [
+        _stopLabel('🔵 Оралиқ тўхташ', required: false),
+        const Spacer(),
+        Text('ихтиёрий',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+      ]),
+      const SizedBox(height: 4),
+      ...c.midStops.asMap().entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              Icon(Icons.more_horiz, size: 14, color: Colors.grey.shade400),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: Text(e.value,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w500))),
+              GestureDetector(
+                  onTap: () => c.removeMidStop(e.key),
+                  child: Icon(Icons.close, size: 16, color: Colors.grey.shade400)),
+            ]),
+          )),
+      _addressField(
+        ctrl: _midSearchCtrl,
+        hint: '+ Оралиқ шаҳар қўшиш',
+        icon: Icons.add_location_alt_outlined,
+        iconColor: Colors.blueGrey,
+        onChanged: (q) {
+          setState(() {
+            _midQuery = q;
+            _showMidSug = q.length >= 2;
+          });
+        },
+      ),
+      if (_showMidSug && _midQuery.length >= 2)
+        _suggestList(
+          IntercityPlaces.search(_midQuery),
+          _midSearchCtrl,
+          (v) {
+            final ok = c.addMidStop(v);
+            if (!ok && c.errorMessage != null) {
+              _showError(c.errorMessage!);
+              c.clearError();
+              return;
+            }
+            _midSearchCtrl.clear();
+            setState(() {
+              _midQuery = '';
+              _showMidSug = false;
+            });
+          },
+          () => setState(() => _showMidSug = false),
+        ),
+      const SizedBox(height: 8),
+      _stopLabel('🏁 Қаерга', required: true),
+      const SizedBox(height: 4),
+      _addressField(
+        ctrl: _toAddrCtrl,
+        hint: 'Шаҳар ёки туман',
+        icon: Icons.flag,
+        iconColor: Colors.red,
+        onChanged: _onToAddrChanged,
+      ),
+      if (_toAddrSug.isNotEmpty)
+        _suggestList(_toAddrSug, _toAddrCtrl, (v) {
+          c.setToAddr(v);
+        }, () => setState(() => _toAddrSug = const [])),
+      if (c.allStops.length >= 2) ...[
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _blue.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _blue.withOpacity(0.15)),
+          ),
+          child: Text(
+            IntercityPlaces.shortRouteLabelFromStops(c.allStops),
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary),
+          ),
+        ),
+      ],
+    ]);
+  }
+
+  Widget _compactTimeCard(String label, String time, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+          Text(time,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.bold, color: _blue)),
+        ]),
+      ),
+    );
+  }
+
   Widget _buildMarshrutStops(DriverScheduleController c) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _stopLabel('📍 Бошлангич нуқта', required: true),
@@ -337,7 +541,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       MfyField(
         ctrl: _fromSearchCtrl,
         hint: 'МФЙ танланг...',
-        iconColor: Colors.green,
+        iconColor: AppColors.primary,
         showSug: _showFromSug,
         query: _fromQuery,
         onChanged: (q) => setState(() {
@@ -345,7 +549,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           _showFromSug = q.length >= 2;
         }),
         onSelected: (v) {
-          c.setFromMfy(v);
+          final err = c.trySetFromMfy(v);
+          if (err != null) {
+            _showError(err);
+            return;
+          }
           _fromSearchCtrl.text = v;
           setState(() => _showFromSug = false);
         },
@@ -445,7 +653,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           _showToSug = q.length >= 2;
         }),
         onSelected: (v) {
-          c.setToMfy(v);
+          final err = c.trySetToMfy(v);
+          if (err != null) {
+            _showError(err);
+            return;
+          }
           _toSearchCtrl.text = v;
           setState(() => _showToSug = false);
         },
@@ -465,13 +677,13 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             border: Border.all(color: _blue.withOpacity(0.15)),
           ),
           child: Row(children: [
-            const Icon(Icons.route, color: AppColors.marshrut, size: 16),
+            const Icon(Icons.route, color: AppColors.primary, size: 16),
             const SizedBox(width: 8),
             Expanded(
                 child: Text(c.allStops.join(' → '),
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
-                        color: AppColors.marshrut,
+                        color: AppColors.primary,
                         fontWeight: FontWeight.w600))),
           ]),
         ),
@@ -524,7 +736,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                  color: AppColors.marshrut, width: 1.5)),
+                  color: AppColors.primary, width: 1.5)),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           filled: true,
@@ -567,7 +779,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                             horizontal: 14, vertical: 10),
                         child: Row(children: [
                           const Icon(Icons.location_on,
-                              size: 14, color: AppColors.marshrut),
+                              size: 14, color: AppColors.primary),
                           const SizedBox(width: 8),
                           Text(p, style: const TextStyle(fontSize: 13)),
                         ])),
@@ -589,7 +801,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
               BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
             ]),
         child: Row(children: [
-          const Icon(Icons.access_time, color: AppColors.marshrut, size: 18),
+          const Icon(Icons.access_time, color: AppColors.primary, size: 18),
           const SizedBox(width: 8),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
@@ -598,7 +810,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.marshrut)),
+                    color: AppColors.primary)),
           ]),
           const Spacer(),
           Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 18),
@@ -640,7 +852,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide:
-                  const BorderSide(color: AppColors.marshrut, width: 1.5)),
+                  const BorderSide(color: AppColors.primary, width: 1.5)),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           filled: true,
@@ -652,6 +864,40 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
 
   Widget _sectionTitle(String t) => Text(t,
       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700));
+
+  Widget _dayChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected ? AppColors.primary.withOpacity(0.12) : Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.primary : Colors.grey.shade300,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: selected ? AppColors.primary : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   String _fmt(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -688,9 +934,9 @@ class _HeaderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.marshrut.withOpacity(0.08),
+        color: AppColors.primary.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.marshrut.withOpacity(0.2)),
+        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
       ),
       child: Row(children: [
         Text(_emoji(), style: const TextStyle(fontSize: 22)),
@@ -700,7 +946,7 @@ class _HeaderCard extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.marshrut)),
+                  color: AppColors.primary)),
           Text('${controller.driverCar} · ${controller.driverPlate}',
               style:
                   TextStyle(fontSize: 11, color: Colors.grey.shade500)),
@@ -714,7 +960,7 @@ class _SeatsCard extends StatelessWidget {
   const _SeatsCard({required this.controller});
   final DriverScheduleController controller;
 
-  static const _blue = AppColors.marshrut;
+  static const _blue = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
@@ -761,7 +1007,7 @@ class _SeatsCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.marshrut)),
+                    color: AppColors.primary)),
             Text('ўрин',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ]),

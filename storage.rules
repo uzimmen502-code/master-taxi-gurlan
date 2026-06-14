@@ -10,16 +10,28 @@ service firebase.storage {
       allow write: if true;
     }
 
-    // Таом расмлари
-    match /food_images/{name=**} {
-      allow read: if true;
-      allow write: if true;
-    }
-
     // Қўшимча маҳсулот расмлари
     match /extra_images/{name=**} {
       allow read: if true;
       allow write: if true;
+    }
+
+    // Shaharlararo safar kinosi (MP4) — o'qish hammaga; yozish faqat .mp4, ≤400MB.
+    match /entertainment/{fileName} {
+      allow read: if true;
+      allow create: if fileName.matches('.*\\.mp4')
+          && request.resource.size < 400 * 1024 * 1024
+          && request.resource.contentType.matches('video/.*');
+      allow update, delete: if false;
+    }
+
+    // Арзон маҳсулотлар расмлари (ownerId = phoneDigits).
+    match /ads/{ownerId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+          && request.auth.token.phone_number.replace('\\+', '') == ownerId;
+      allow delete: if request.auth != null
+          && request.auth.token.phone_number.replace('\\+', '') == ownerId;
     }
 
     match /{allPaths=**} {

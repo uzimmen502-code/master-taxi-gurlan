@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/marshrut_driver_option.dart';
 import '../models/queue_entry.dart';
+import '../utils/gurlan_places.dart';
 
 /// `queue` collection — ҳайдовчи навбати.
 ///
@@ -28,13 +29,7 @@ class QueueRepository {
         .snapshots()
         .map((snap) {
       final list = snap.docs.map(QueueEntry.fromDoc).toList();
-      list.sort((a, b) {
-        final at = a.onlineAt;
-        final bt = b.onlineAt;
-        if (at == null) return 1;
-        if (bt == null) return -1;
-        return at.compareTo(bt);
-      });
+      list.sort(_compareFairQueue);
       return list;
     });
   }
@@ -89,7 +84,7 @@ class QueueRepository {
     }
   }
 
-  /// Marshrut dispatch учун 1-навбат → 2-навбат → 3-навбат тартиби.
+  /// Marshrut dispatch учун 1-навбат → … → 7-навбат тартиби.
   ///
   /// Queue `onlineAt` бўйича тартибланади; йўналиш, ўрин, active ва expiry
   /// client томонда қайта фильтрланади. Натижа waiting flow'га мос
@@ -97,26 +92,39 @@ class QueueRepository {
   Future<List<MarshrutDriverOption>> findNextEligibleMarshrutDrivers({
     required String pickupMfy,
     required String dropoffMfy,
-    int limit = 3,
+    int limit = 7,
+    Set<String> excludeDriverIds = const {},
   }) async {
     final snap = await _col
         .where('taxiType', isEqualTo: 'marshrut')
         .where('isActive', isEqualTo: true)
         .get();
-    final queue = snap.docs.map(QueueEntry.fromDoc).where((q) {
-      if (q.seatsLeft <= 0) return false;
+    final candidates = snap.docs.map(QueueEntry.fromDoc).where((q) {
+      if (excludeDriverIds.contains(q.driverId)) return false;
       if (q.hasExpired) return false;
+      if (!q.isTimeEligible) return false;
       if (q.scheduleId.isEmpty) return false;
-      if (!q.routeAllows(pickupMfy, dropoffMfy)) return false;
+      if (!q.routeAllows(
+        GurlanPlaces.normalizeMfyName(pickupMfy),
+        GurlanPlaces.normalizeMfyName(dropoffMfy),
+      )) {
+        return false;
+      }
       return true;
-    }).toList()
-      ..sort((a, b) {
-        final at = a.onlineAt;
-        final bt = b.onlineAt;
-        if (at == null) return 1;
-        if (bt == null) return -1;
-        return at.compareTo(bt);
-      });
+    }).toList();
+
+    final scheduleSnaps = await Future.wait(
+      candidates.map((q) => _schedules.doc(q.scheduleId).get()),
+    );
+
+    final queue = <QueueEntry>[];
+    for (var i = 0; i < candidates.length; i++) {
+      final seats =
+          (scheduleSnaps[i].data()?['seatsLeft'] as num?)?.toInt() ?? 0;
+      if (seats <= 0) continue;
+      queue.add(candidates[i]);
+    }
+    queue.sort(_compareFairQueue);
     return queue
         .take(limit)
         .map(MarshrutDriverOption.fromQueueEntry)
@@ -154,6 +162,12 @@ class QueueRepository {
         .get();
     if (sched.docs.isEmpty) return;
     final data = sched.docs.first.data();
+    final plannedStartAt = data['plannedStartAt'] as Timestamp?;
+    final actualOnlineAt = Timestamp.now();
+    final queueEligibleAt = plannedStartAt != null &&
+            plannedStartAt.toDate().isAfter(DateTime.now())
+        ? plannedStartAt
+        : actualOnlineAt;
 
     final prefs = await SharedPreferences.getInstance();
     final lastPos = prefs.getInt('last_queue_pos_$driverId') ?? 0;
@@ -195,6 +209,12 @@ class QueueRepository {
       'seatsLeft': data['seatsLeft'] ?? 4,
       'date': date,
       'onlineAt': onlineAt,
+      if (plannedStartAt != null) 'plannedStartAt': plannedStartAt,
+      'actualOnlineAt': actualOnlineAt,
+      'queueEligibleAt': queueEligibleAt,
+      'todayTrips': data['todayTrips'] ?? 0,
+      'todayRejects': data['todayRejects'] ?? 0,
+      'todayTimeouts': data['todayTimeouts'] ?? 0,
       'isActive': true,
       'lat': lat,
       'lng': lng,
@@ -220,5 +240,30 @@ class QueueRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('last_queue_pos_$driverId', 0);
     await prefs.setString('last_queue_date_$driverId', '');
+  }
+
+  int _compareFairQueue(QueueEntry a, QueueEntry b) {
+    final byEligible =
+        _compareNullableDate(a.queueEligibleAt, b.queueEligibleAt);
+    if (byEligible != 0) return byEligible;
+
+    final byTrips = a.todayTrips.compareTo(b.todayTrips);
+    if (byTrips != 0) return byTrips;
+
+    final byMisses = a.todayMisses.compareTo(b.todayMisses);
+    if (byMisses != 0) return byMisses;
+
+    final byActualOnline =
+        _compareNullableDate(a.actualOnlineAt, b.actualOnlineAt);
+    if (byActualOnline != 0) return byActualOnline;
+
+    return _compareNullableDate(a.onlineAt, b.onlineAt);
+  }
+
+  int _compareNullableDate(DateTime? a, DateTime? b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return a.compareTo(b);
   }
 }

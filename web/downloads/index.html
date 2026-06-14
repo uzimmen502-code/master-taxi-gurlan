@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Master Taxi Gurlan — илова ўрнатиш</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+      padding: 24px 16px 40px;
+      background: #f0f4f8;
+      color: #1a1a1a;
+      line-height: 1.5;
+    }
+    .card {
+      max-width: 420px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 20px;
+      padding: 28px 22px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.08);
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; color: #0d47a1; }
+    .sub { color: #555; font-size: 0.95rem; margin-bottom: 20px; }
+    .qr {
+      display: block;
+      margin: 0 auto 16px;
+      border-radius: 12px;
+      border: 4px solid #e3f2fd;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      background: #1b5e20;
+      color: #fff;
+      font-weight: 700;
+      padding: 14px 18px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-size: 1.05rem;
+      margin-bottom: 16px;
+    }
+    .btn:hover { background: #2e7d32; }
+    ol { padding-left: 1.2rem; margin: 0; font-size: 0.9rem; color: #444; }
+    li { margin-bottom: 8px; }
+    .note { font-size: 0.8rem; color: #888; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Master Taxi Gurlan</h1>
+    <p class="sub">Йўловчи ва ҳайдовчи — <strong>битта илова</strong> (Android). QR сканерланг → APK юкланади.</p>
+    <img
+      class="qr"
+      width="260"
+      height="260"
+      alt="APK ўрнатиш QR"
+      src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&amp;data=https%3A%2F%2Fmaster-taxi-gurlan.web.app%2Fdownloads%2Fmaster-taxi-gurlan-driver.apk"
+    />
+    <a class="btn" href="https://master-taxi-gurlan.web.app/downloads/master-taxi-gurlan-driver.apk">APK юклаб олиш</a>
+    <ol>
+      <li>QR ни сканерланг ёки тугмани босинг</li>
+      <li>Файл юклангандан кейин «Ўрнатиш»</li>
+      <li>Керак бўлса: Созламалар → Номаълум манбалардан ўрнатиш</li>
+      <li>Иловани очинг — профилда телефон рақамингизни киритинг</li>
+    </ol>
+    <p class="note">Faqat Android. iPhone (iOS) uchun App Store версiyasi yoʻq.</p>
+  </div>
+</body>
+</html>

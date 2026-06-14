@@ -11,6 +11,7 @@ class MarshrutDriverProfile {
     this.plate = '',
     this.seats = 4,
     this.stops = const [],
+    this.startTime = '07:00',
   });
 
   final String uid;
@@ -20,6 +21,7 @@ class MarshrutDriverProfile {
   final String plate;
   final int seats;
   final List<String> stops;
+  final String startTime;
 
   factory MarshrutDriverProfile.fromDoc(
     String uid,
@@ -34,6 +36,7 @@ class MarshrutDriverProfile {
       plate: (d['plate'] ?? '') as String,
       seats: (d['seats'] as num?)?.toInt() ?? 4,
       stops: List<String>.from(d['stops'] ?? const []),
+      startTime: (d['startTime'] ?? '07:00') as String,
     );
   }
 
@@ -43,6 +46,7 @@ class MarshrutDriverProfile {
         'plate': plate,
         'seats': seats,
         'stops': stops,
+        'startTime': startTime,
         'driverName': driverName,
         'driverPhone': driverPhone,
       };

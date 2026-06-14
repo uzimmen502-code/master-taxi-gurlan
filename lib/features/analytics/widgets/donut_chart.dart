@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 import '../../../models/analytics/segment.dart';
 
@@ -44,7 +45,7 @@ class DonutChart extends StatelessWidget {
                     .where((s) => s.value > 0)
                     .map((s) => PieChartSectionData(
                           value: s.value.toDouble(),
-                          color: s.color ?? const Color(0xFF1565C0),
+                          color: s.color ?? AppColors.primary,
                           radius: size * 0.28,
                           title: '',
                           showTitle: false,
@@ -82,7 +83,7 @@ class DonutChart extends StatelessWidget {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                        color: s.color ?? const Color(0xFF1565C0),
+                        color: s.color ?? AppColors.primary,
                         borderRadius: BorderRadius.circular(3)),
                   ),
                   const SizedBox(width: 6),

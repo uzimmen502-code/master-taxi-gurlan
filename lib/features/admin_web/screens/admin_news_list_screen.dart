@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
+import '../services/admin_news_read_service.dart';
 import '../../analytics/screens/admin_news_compose_screen.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Админ web панели — News list screen.
 ///
@@ -19,6 +21,15 @@ class AdminNewsListScreen extends StatefulWidget {
 
 class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
   String _filter = 'all'; // 'all' | 'user' | 'driver' | 'courier'
+  final Set<String> _resendingPushIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AdminNewsReadService>().markGeneralSeen();
+    });
+  }
 
   Future<void> _openCompose() async {
     await Navigator.push(
@@ -53,7 +64,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.button,
           content: Text('🗑 "${item.title}" ўчирилди'),
           duration: const Duration(seconds: 2),
         ),
@@ -69,6 +80,74 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     }
   }
 
+  Future<void> _resendPush(NewsItem item) async {
+    if (!item.expectsPushFromAdmin || _resendingPushIds.contains(item.id)) {
+      return;
+    }
+
+    const audienceResendLabels = <String, String>{
+      'all': 'barcha foydalanuvchilarga',
+      'user': 'foydalanuvchilarga',
+      'driver': 'haydovchilarga',
+      'courier': 'kuryerlarga',
+    };
+
+    final audienceLabel =
+        audienceResendLabels[item.audience] ?? item.audience;
+    final targetHint = item.isPersonal
+        ? 'битта фойдалanuvchiga (${item.targetUserId})'
+        : audienceLabel;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Push qayta yuborish?'),
+        content: Text(
+          '"${item.title}" хabari uchun push $targetHint '
+          'qayta yuboriladi.\n\n'
+          'Bu amalni istalgan vaqtda qayta bajarish mumkin.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Bekor'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.notifications_active, size: 18),
+            label: const Text('Yuborish'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _resendingPushIds.add(item.id));
+    try {
+      await context.read<NewsRepository>().requestPushResend(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text('📲 "${item.title}" uchun push yuborildi'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Push xatolik: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _resendingPushIds.remove(item.id));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final newsRepo = context.read<NewsRepository>();
@@ -78,7 +157,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       const Divider(height: 1),
       Expanded(
         child: StreamBuilder<List<NewsItem>>(
-          stream: newsRepo.watchAll(audiences: const ['all'], limit: 200),
+          stream: newsRepo.watchForAdmin(orderOnly: false, limit: 200),
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -104,7 +183,12 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
                     'тугмaсини бoсинг.',
               );
             }
-            return _ResponsiveGrid(items: filtered, onDelete: _delete);
+            return _ResponsiveGrid(
+              items: filtered,
+              onDelete: _delete,
+              onResendPush: _resendPush,
+              resendingPushIds: _resendingPushIds,
+            );
           },
         ),
       ),
@@ -132,7 +216,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
           icon: const Icon(Icons.add),
           label: const Text('Янги хабaр'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0D47A1),
+            backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -164,10 +248,10 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
             ]),
             selected: _filter == f.$1,
             onSelected: (_) => setState(() => _filter = f.$1),
-            selectedColor: const Color(0xFF0D47A1).withOpacity(0.15),
+            selectedColor: AppColors.primary.withOpacity(0.15),
             labelStyle: TextStyle(
               color: _filter == f.$1
-                  ? const Color(0xFF0D47A1)
+                  ? AppColors.primary
                   : Colors.grey.shade700,
               fontWeight:
                   _filter == f.$1 ? FontWeight.bold : FontWeight.normal,
@@ -212,9 +296,16 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
 }
 
 class _ResponsiveGrid extends StatelessWidget {
-  const _ResponsiveGrid({required this.items, required this.onDelete});
+  const _ResponsiveGrid({
+    required this.items,
+    required this.onDelete,
+    required this.onResendPush,
+    required this.resendingPushIds,
+  });
   final List<NewsItem> items;
   final ValueChanged<NewsItem> onDelete;
+  final ValueChanged<NewsItem> onResendPush;
+  final Set<String> resendingPushIds;
 
   @override
   Widget build(BuildContext context) {
@@ -228,25 +319,36 @@ class _ResponsiveGrid extends StatelessWidget {
           crossAxisCount: cols,
           mainAxisSpacing: 14,
           crossAxisSpacing: 14,
-          mainAxisExtent: 220,
+          mainAxisExtent: 288,
         ),
         itemCount: items.length,
-        itemBuilder: (_, i) =>
-            _NewsCard(item: items[i], onDelete: () => onDelete(items[i])),
+        itemBuilder: (_, i) => _NewsCard(
+          item: items[i],
+          onDelete: () => onDelete(items[i]),
+          onResendPush: () => onResendPush(items[i]),
+          resendingPush: resendingPushIds.contains(items[i].id),
+        ),
       );
     });
   }
 }
 
 class _NewsCard extends StatelessWidget {
-  const _NewsCard({required this.item, required this.onDelete});
+  const _NewsCard({
+    required this.item,
+    required this.onDelete,
+    required this.onResendPush,
+    required this.resendingPush,
+  });
   final NewsItem item;
   final VoidCallback onDelete;
+  final VoidCallback onResendPush;
+  final bool resendingPush;
 
   static const _categoryColors = <String, Color>{
-    'info': Color(0xFF1565C0),
-    'update': Color(0xFF6A1B9A),
-    'promo': Color(0xFFE65100),
+    'info': AppColors.primary,
+    'update': AppColors.primary,
+    'promo': AppColors.primary,
     'warning': Color(0xFFFFA000),
     'emergency': Color(0xFFD32F2F),
   };
@@ -362,6 +464,11 @@ class _NewsCard extends StatelessWidget {
                         ),
                       ]),
                     ),
+                  if (item.hasPushStats || item.pushPending)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: _PushStatusChip(item: item),
+                    ),
                 ]),
           ),
         ),
@@ -379,6 +486,37 @@ class _NewsCard extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 11, color: Colors.grey.shade600)),
             const Spacer(),
+            if (item.expectsPushFromAdmin)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: resendingPush
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.blue.shade700,
+                        ),
+                      )
+                    : TextButton.icon(
+                        onPressed: onResendPush,
+                        icon: const Icon(Icons.notifications_active, size: 14),
+                        label: const Text('Push qayta'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+              ),
             if (item.priority > 0)
               Container(
                 margin: const EdgeInsets.only(right: 4),
@@ -408,5 +546,100 @@ class _NewsCard extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+/// Push статистикаси — CF `pushSentCount` / `pushBroadcastAt` майдонлари.
+class _PushStatusChip extends StatelessWidget {
+  const _PushStatusChip({required this.item});
+  final NewsItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.hasPushStats) {
+      final count = item.pushSentCount ?? 0;
+      final at = item.pushBroadcastAt;
+      final timeStr =
+          at != null ? DateFormat('HH:mm').format(at) : '';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: count > 0 ? AppColors.scaffold : Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: count > 0 ? AppColors.primary.withValues(alpha: 0.25) : Colors.orange.shade200,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.notifications_active,
+              size: 14,
+              color: count > 0 ? AppColors.primaryDark : Colors.orange.shade800,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                count > 0
+                    ? 'Push: $count ta yuborildi'
+                    : 'Push: 0 ta (token yo‘q)',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: count > 0
+                      ? AppColors.primaryDark
+                      : Colors.orange.shade900,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (timeStr.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(
+                timeStr,
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    if (item.pushPending) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.blue.shade100),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.blue.shade700,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Push yuborilmoqda…',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.blue.shade800,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }

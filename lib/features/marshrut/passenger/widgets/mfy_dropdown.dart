@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../../../utils/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../utils/gurlan_places.dart';
 
 /// MFY tanlash uchun matn maydoni + suggestions dropdown.
 ///
 /// `value` — joriy tanlangan MFY (placeholder o'rniga ko'rsatiladi).
 /// `show` — dropdown ko'rinishini boshqaradigan bayroq.
+/// [recentPlaces] — SharedPreferences dan oxirgi MFY lar (tavsiya).
 class MfyDropdown extends StatelessWidget {
   const MfyDropdown({
     super.key,
@@ -18,6 +19,8 @@ class MfyDropdown extends StatelessWidget {
     required this.iconColor,
     required this.onQueryChanged,
     required this.onSelected,
+    this.recentPlaces = const [],
+    this.onTap,
   });
 
   final TextEditingController ctrl;
@@ -28,12 +31,37 @@ class MfyDropdown extends StatelessWidget {
   final Color iconColor;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<String> onSelected;
+  final List<String> recentPlaces;
+  final VoidCallback? onTap;
 
-  static const Color _blue = Color(0xFF0288D1);
+  static const Color _blue = AppColors.primary;
+
+  List<String> _suggestions() {
+    final q = ctrl.text.trim();
+    final recent = recentPlaces
+        .where(
+          (p) => q.isEmpty || p.toLowerCase().contains(q.toLowerCase()),
+        )
+        .toList();
+    if (q.length >= 2) {
+      final places = GurlanPlaces.search(ctrl.text);
+      final seen = <String>{};
+      final merged = <String>[];
+      for (final p in recent) {
+        if (seen.add(p)) merged.add(p);
+      }
+      for (final p in places) {
+        if (seen.add(p)) merged.add(p);
+      }
+      return merged;
+    }
+    return recent;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final suggestions = GurlanPlaces.search(ctrl.text);
+    final suggestions = _suggestions();
+    final recentSet = recentPlaces.toSet();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(
         decoration: BoxDecoration(
@@ -41,6 +69,7 @@ class MfyDropdown extends StatelessWidget {
         child: TextField(
           controller: ctrl,
           onChanged: onQueryChanged,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: value.isNotEmpty ? value : hint,
             hintStyle: TextStyle(
@@ -60,7 +89,7 @@ class MfyDropdown extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             filled: true,
             fillColor: Colors.white,
           ),
@@ -83,12 +112,21 @@ class MfyDropdown extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         child: Row(children: [
-                          const Icon(Icons.location_on,
-                              size: 13, color: _blue),
+                          Icon(
+                            recentSet.contains(p)
+                                ? Icons.history
+                                : Icons.location_on,
+                            size: 13,
+                            color: recentSet.contains(p)
+                                ? Colors.grey.shade600
+                                : _blue,
+                          ),
                           const SizedBox(width: 8),
-                          Text(p,
-                              style: const TextStyle(
-                                  fontSize: AppText.bodyMedium)),
+                          Expanded(
+                            child: Text(p,
+                                style: const TextStyle(
+                                    fontSize: AppText.bodyMedium)),
+                          ),
                         ]),
                       ),
                     ))

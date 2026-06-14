@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Эълонга шикоят сабабини танлаш bottom sheet'и.
 Future<String?> showComplaintSheet(BuildContext context) {

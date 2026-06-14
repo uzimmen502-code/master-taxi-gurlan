@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/driver_session.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Юқори: салом + исм + автомобиль маълумотлари + профил тугмаси.
 class DriverHeroCard extends StatelessWidget {
@@ -14,7 +14,7 @@ class DriverHeroCard extends StatelessWidget {
   final DriverSession session;
   final VoidCallback onProfileTap;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +22,7 @@ class DriverHeroCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+            colors: [AppColors.primaryDark, AppColors.primary],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(20),

@@ -2,46 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/job_ad.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 
 /// Эълонлар (mini-OLX) рўйхатидаги бир карта.
-///
-/// UX қарорлар (Phase 5):
-///   - "X кун қолди" badge **олиб ташланди** — фойдаланувчига муҳим эмас.
-///   - Сарлавҳа + матн ажратилди (агар title бўш бўлса — матн title бўлади).
-///   - **Қўнғироқ тугмаси катта** ва ўнг ёнда — энг муҳим CTA.
-///   - Шошилинч badge фақат `work` учун, кичикроқ.
-///   - Манзил аниқ кўринади (location icon + matn).
-///   - Тип ранги — кенг maydoni emas, фақат top-left small badge.
 class AdCard extends StatelessWidget {
   const AdCard({
     super.key,
     required this.ad,
-    required this.canEdit,
-    required this.onEdit,
-    required this.onComplain,
   });
 
   final JobAd ad;
-  final bool canEdit;
-  final VoidCallback onEdit;
-  final VoidCallback onComplain;
 
   Color get _kindColor {
     switch (ad.kind) {
       case AdKind.work:
-        return const Color(0xFFD84315); // тўқ-қизғиш
+        return const Color(0xFFD84315);
       case AdKind.service:
-        return const Color(0xFF6A1B9A); // бинафша
+        return AppColors.primary;
       case AdKind.ad:
-        return const Color(0xFF0277BD); // кўк
+        return AppColors.primary;
+      case AdKind.sell:
+        return AppColors.primary;
     }
   }
 
   Future<void> _call(BuildContext context) async {
-    if (ad.authorPhone.isEmpty) return;
-    final cleaned = ad.authorPhone.replaceAll(RegExp(r'[^\d+]'), '');
-    final url = Uri(scheme: 'tel', path: cleaned);
+    if (ad.authorPhone.isEmpty || phoneDigits(ad.authorPhone).length < 9) return;
+    final url = Uri.parse('tel:${phoneForCall(ad.authorPhone)}');
     final messenger = ScaffoldMessenger.of(context);
     try {
       await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -57,14 +45,16 @@ class AdCard extends StatelessWidget {
     }
   }
 
+  String get _body => ad.isSell ? ad.displayText : ad.text;
+
   String get _headline {
     if (ad.title.trim().isNotEmpty) return ad.title;
-    return ad.text;
+    return _body;
   }
 
   String get _subline {
     if (ad.title.trim().isEmpty) return '';
-    return ad.text;
+    return _body;
   }
 
   @override
@@ -86,9 +76,6 @@ class AdCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Top row: urgent (work uchun) + time + edit/complain.
-          // Kind label badge olib tashlandi — tab allaqachon kindni ko'rsatib turibdi,
-          // ortiqcha "Иш бор / Хизмат / Эълон" matnini takrorlash shart emas.
           Row(children: [
             if (ad.isUrgent) ...[
               Container(
@@ -105,32 +92,17 @@ class AdCard extends StatelessWidget {
               ),
             ],
             const Spacer(),
-            Text(ad.timeAgo,
+            if (ad.postedDateLabel.isNotEmpty)
+              Text(
+                ad.postedDateLabel,
                 style: TextStyle(
-                    fontSize: AppText.labelTiny, color: Colors.grey.shade500)),
-            if (canEdit) ...[
-              const SizedBox(width: 6),
-              InkWell(
-                onTap: onEdit,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.edit, size: 16, color: color),
+                  fontSize: AppText.labelTiny,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
                 ),
               ),
-            ],
-            InkWell(
-              onTap: onComplain,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(Icons.more_vert,
-                    size: 16, color: Colors.grey.shade400),
-              ),
-            ),
           ]),
           const SizedBox(height: 6),
-          // Headline (title yoki matn).
           Text(
             _headline,
             style: const TextStyle(
@@ -166,13 +138,12 @@ class AdCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF2E7D32),
+                  color: AppColors.primary,
                 ),
               ),
             ),
           ],
           const SizedBox(height: 10),
-          // Bottom row: address (left, takes space) + Call button (right).
           Row(children: [
             Expanded(
               child: Row(children: [
@@ -199,20 +170,19 @@ class AdCard extends StatelessWidget {
             const SizedBox(width: 8),
             Material(
               color: color,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => _call(context),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 child: const Padding(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.call, color: Colors.white, size: 16),
-                    SizedBox(width: 6),
+                    Icon(Icons.call, color: Colors.white, size: 8),
+                    SizedBox(width: 3),
                     Text(
                       'Қўнғироқ',
                       style: TextStyle(
-                          fontSize: AppText.bodySmall,
+                          fontSize: AppText.labelTiny,
                           fontWeight: FontWeight.bold,
                           color: Colors.white),
                     ),

@@ -1,144 +1,280 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../../core/utils/formatters.dart' as fmt;
 
-/// Web админ панели учун аутентификaция сервиси.
-///
-/// 2 қадaмли логин:
-///   1. **Phone** — Firestore'дa `users/{uid}` ҳужжати мaвжуд бўлсин ва
-///      `role == 'admin'` бўлсин.
-///   2. **PIN** — Мобил иловaдaги бирхил PIN (`user_info_screen.dart`'дa
-///      `_adminPinCode`).
-///
-/// **Хавфсизлик**: Phone Auth ишлaтилмaгaни сабaб, шу йўл client-side қулф —
-/// Кейинги Phase'дa Firebase Auth Custom Token билaн ўрнини алмaштирaмиз.
-///
-/// Sессия SharedPreferences'дa (web'дa cookie/localStorage'да автомaтик
-/// сaқлaнaди).
+/// Admin web auth: [trustedAdminPhoneDigits] — SMSsiz (CF custom token).
+/// Boshqa raqamlar — Firebase Phone OTP.
 class AdminAuthService extends ChangeNotifier {
-  AdminAuthService({
-    FirebaseFirestore? db,
-    required String adminPinCode,
-  })  : _db = db ?? FirebaseFirestore.instance,
-        _adminPinCode = adminPinCode;
+  AdminAuthService({FirebaseFirestore? db})
+      : _db = db ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
-  final String _adminPinCode;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   static const _kPhoneKey = 'admin_web_phone';
-  static const _kSessionKey = 'admin_web_session';
-  static const _sessionTtl = Duration(hours: 12);
+
+  /// Yagona SMSsiz admin web operator raqami.
+  static const String trustedAdminPhoneDigits = '998912778777';
 
   String? _phone;
   String? _phoneDigits;
   String? _displayName;
-  DateTime? _sessionStart;
 
-  bool get isLoggedIn => _phoneDigits != null && _sessionStart != null;
+  String _verificationId = '';
+  int? _resendToken;
+  bool isSendingOtp = false;
+  bool isVerifyingOtp = false;
+  String? otpError;
+  bool otpSent = false;
+
+  bool get isLoggedIn => _phoneDigits != null && _phoneDigits!.isNotEmpty;
+
+  static bool isTrustedAdminPhone(String rawPhone) =>
+      fmt.phoneDigits(rawPhone) == trustedAdminPhoneDigits;
+
   String? get phone => _phone;
   String? get phoneDigits => _phoneDigits;
   String? get displayName => _displayName;
 
-  /// App startup'да чaқирилaди — кэшлaнгaн сессияни qайтарaди.
-  Future<void> restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cachedPhone = prefs.getString(_kPhoneKey);
-    final sessionStartMs = prefs.getInt(_kSessionKey);
-    if (cachedPhone == null || sessionStartMs == null) return;
-    final started = DateTime.fromMillisecondsSinceEpoch(sessionStartMs);
-    if (DateTime.now().difference(started) > _sessionTtl) {
-      await logout();
-      return;
+  static bool _isAdminRole(String? role) {
+    final r = (role ?? '').trim().toLowerCase();
+    return r == 'admin' || r == 'superadmin' || r == 'dispatcher';
+  }
+
+  static List<String> _userDocIdCandidates(String rawPhone) =>
+      fmt.userDocIdCandidates(rawPhone);
+
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _findUserDoc(
+      String rawPhone) async {
+    for (final id in _userDocIdCandidates(rawPhone)) {
+      final snap = await _db.collection('users').doc(id).get();
+      if (snap.exists) return snap;
     }
-    final digits = fmt.phoneDigits(cachedPhone);
-    if (digits.length < 9) return;
-    // Firestore'да role'ни tekshirish — admin emas bo'lsa session bekor.
-    try {
-      final snap = await _db.collection('users').doc(digits).get();
-      final role = snap.data()?['role'] as String? ?? '';
-      if (role != 'admin' && role != 'superadmin') {
-        await logout();
-        return;
+    return null;
+  }
+
+  Future<String?> _savedPhoneRaw() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kPhoneKey);
+  }
+
+  /// Brauzer sessiyasi + saqlangan telefon — SMSsiz qayta kirish.
+  Future<void> restoreSession() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        await user.getIdToken(true);
+        var rawPhone = user.phoneNumber ?? '';
+        if (rawPhone.isEmpty) {
+          final claims = await user.getIdTokenResult();
+          rawPhone = (claims.claims?['phone_number'] as String?) ?? '';
+        }
+        if (rawPhone.isNotEmpty) {
+          final snap = await _findUserDoc(rawPhone);
+          if (snap != null && _isAdminRole(snap.data()?['role'] as String?)) {
+            await _applyAdminSession(rawPhone: rawPhone, snap: snap);
+            return;
+          }
+        }
+      } catch (_) {
+        await _auth.signOut();
       }
-      _phone = cachedPhone;
-      _phoneDigits = digits;
-      _displayName = (snap.data()?['name'] as String?) ?? '';
-      _sessionStart = started;
-      // Web restart'дaн кейин SharedPrefs прaйминг.
-      await prefs.setString('user_phone', cachedPhone);
-      await prefs.setString('user_role', 'admin');
-      await prefs.setString('user_name', _displayName ?? '');
-      notifyListeners();
-    } catch (_) {
-      await logout();
+    }
+
+    final saved = await _savedPhoneRaw();
+    if (saved != null && saved.isNotEmpty && isTrustedAdminPhone(saved)) {
+      final err = await signInWithTrustedPhone(saved);
+      if (err == null) return;
     }
   }
 
-  /// Phone + PIN бўйича логин.
-  ///
-  /// Қайтараётганлар:
-  ///   - `null` — мувaффaқиятли
-  ///   - `String` — xато xабaри
-  Future<String?> signIn({
-    required String rawPhone,
-    required String pin,
-  }) async {
+  /// Trusted raqam: SMSsiz — `adminWebSignIn` → custom token → Firestore role.
+  Future<String?> signInWithTrustedPhone(String rawPhone) async {
+    if (!isTrustedAdminPhone(rawPhone)) {
+      return 'Bu panel uchun faqat ishonchli operator raqami';
+    }
     final digits = fmt.phoneDigits(rawPhone);
     if (digits.length < 9) {
-      return 'Телефон рaқaми ноtўғри (минимум 9 рaқaм).';
+      return 'Telefon raqamini to\'liq kiriting';
     }
-    if (pin != _adminPinCode) {
-      return 'PIN-код xато.';
-    }
+    isVerifyingOtp = true;
+    otpError = null;
+    notifyListeners();
     try {
-      final snap = await _db.collection('users').doc(digits).get();
-      if (!snap.exists) {
-        return 'Бу телефон Firestore\'дa қайд эtилмaгaн. Аввал илoвaдa '
-            'рўйхaтдан ўтинг.';
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('adminWebSignIn');
+      final result = await callable.call<Map<String, dynamic>>({
+        'phone': digits,
+      });
+      final data = result.data;
+      final token = data['token'] as String?;
+      if (token == null || token.isEmpty) {
+        return 'Kirish tokeni olinmadi';
+      }
+      await _auth.signInWithCustomToken(token);
+      final snap = await _findUserDoc(rawPhone);
+      if (snap == null) {
+        await _auth.signOut();
+        return 'Bu telefon Firestore\'da topilmadi.';
       }
       final role = snap.data()?['role'] as String? ?? '';
-      if (role != 'admin' && role != 'superadmin') {
-        return 'Сиз Админ эмaсcиз. Mobil ilovada: Profil → '
-            '«🔒 Админ ролини faollashtirish» (PIN 2024) yoki Firebase Console\'da '
-            'users/$digits → role = admin.';
+      if (!_isAdminRole(role)) {
+        await _auth.signOut();
+        return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
       }
-      _phone = rawPhone;
-      _phoneDigits = digits;
-      _displayName = (snap.data()?['name'] as String?) ?? '';
-      _sessionStart = DateTime.now();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kPhoneKey, rawPhone);
-      await prefs.setInt(_kSessionKey, _sessionStart!.millisecondsSinceEpoch);
-
-      // ⚠️ МУҲИМ: Дounstream компонентлaр (`AdminService`,
-      // `MonitoringCenterScreen`, `AnalyticsController`...) SharedPreferences'дaги
-      // `user_phone` ва `user_role`-ни текширaди. Web'дa они сaқлaмaсaк, барча
-      // admin checks rad etilади. Шу сaбaб бу ердa ҳaм set qилaмиз.
-      await prefs.setString('user_phone', rawPhone);
-      await prefs.setString('user_role', 'admin');
-      await prefs.setString('user_name', _displayName ?? '');
-      notifyListeners();
+      await _applyAdminSession(rawPhone: rawPhone, snap: snap);
       return null;
+    } on FirebaseFunctionsException catch (e) {
+      return e.message ?? e.code;
+    } on FirebaseAuthException catch (e) {
+      return e.message ?? e.code;
     } catch (e) {
-      return 'Firestore xатoси: $e';
+      return 'Xatolik: $e';
+    } finally {
+      isVerifyingOtp = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _applyAdminSession({
+    required String rawPhone,
+    required DocumentSnapshot<Map<String, dynamic>> snap,
+  }) async {
+    final digits = fmt.phoneDigits(rawPhone);
+    _phone = digits.startsWith('+') ? digits : '+$digits';
+    _phoneDigits = snap.id;
+    _displayName = (snap.data()?['name'] as String?) ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPhoneKey, _phone!);
+    await prefs.setString('user_phone', _phone!);
+    await prefs.setString('user_role', 'admin');
+    await prefs.setString('user_name', _displayName ?? '');
+    notifyListeners();
+  }
+
+  /// Telefon: trusted → SMSsiz; boshqa → OTP.
+  Future<bool> sendOtp(String rawPhone) async {
+    final digits = fmt.phoneDigits(rawPhone);
+    if (digits.length < 9) {
+      otpError = 'Telefon raqamini to\'liq kiriting';
+      notifyListeners();
+      return false;
+    }
+    if (isTrustedAdminPhone(rawPhone)) {
+      isSendingOtp = true;
+      otpError = null;
+      notifyListeners();
+      final err = await signInWithTrustedPhone(rawPhone);
+      isSendingOtp = false;
+      if (err != null) {
+        otpError = err;
+        notifyListeners();
+        return false;
+      }
+      notifyListeners();
+      return true;
+    }
+
+    isSendingOtp = true;
+    otpError = null;
+    otpSent = false;
+    notifyListeners();
+    final completer = Completer<bool>();
+    await _auth.verifyPhoneNumber(
+      phoneNumber: '+$digits',
+      forceResendingToken: _resendToken,
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await _auth.signInWithCredential(credential);
+        isSendingOtp = false;
+        otpSent = true;
+        notifyListeners();
+        if (!completer.isCompleted) completer.complete(true);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        otpError = _otpErrorMsg(e.code);
+        isSendingOtp = false;
+        notifyListeners();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        _verificationId = verificationId;
+        _resendToken = resendToken;
+        isSendingOtp = false;
+        otpSent = true;
+        notifyListeners();
+        if (!completer.isCompleted) completer.complete(true);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _verificationId = verificationId;
+      },
+      timeout: const Duration(seconds: 60),
+    );
+    return completer.future;
+  }
+
+  Future<String?> verifyOtpAndSignIn(String rawPhone, String smsCode) async {
+    if (_verificationId.isEmpty) {
+      return 'Avval SMS yuboring';
+    }
+    isVerifyingOtp = true;
+    otpError = null;
+    notifyListeners();
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId,
+        smsCode: smsCode.trim(),
+      );
+      await _auth.signInWithCredential(credential);
+      final snap = await _findUserDoc(rawPhone);
+      if (snap == null) {
+        await _auth.signOut();
+        return 'Bu telefon Firestore\'da topilmadi.';
+      }
+      final role = snap.data()?['role'] as String? ?? '';
+      if (!_isAdminRole(role)) {
+        await _auth.signOut();
+        return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
+      }
+      await _applyAdminSession(rawPhone: rawPhone, snap: snap);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _otpErrorMsg(e.code);
+    } catch (e) {
+      return 'Xatolik: $e';
+    } finally {
+      isVerifyingOtp = false;
+      notifyListeners();
     }
   }
 
   Future<void> logout() async {
+    if (_auth.currentUser != null) {
+      await _auth.signOut();
+    }
     _phone = null;
     _phoneDigits = null;
     _displayName = null;
-    _sessionStart = null;
+    _verificationId = '';
+    otpSent = false;
+    otpError = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kPhoneKey);
-    await prefs.remove(_kSessionKey);
-    // Downstream admin checks учун qўйилгaн кaлитлaрни ҳaм тoзaлaймиз.
     await prefs.remove('user_phone');
     await prefs.remove('user_role');
     await prefs.remove('user_name');
     notifyListeners();
   }
+
+  String _otpErrorMsg(String code) => switch (code) {
+        'invalid-verification-code' => 'SMS kod noto\'g\'ri.',
+        'session-expired' => 'Muddat tugadi. Qayta yuboring.',
+        'invalid-phone-number' => 'Telefon raqami noto\'g\'ri.',
+        'too-many-requests' => 'Ko\'p urinish. Keyinroq.',
+        _ => 'Xatolik: $code',
+      };
 }

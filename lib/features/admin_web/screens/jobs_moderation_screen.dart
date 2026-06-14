@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import 'jobs_complaints_tab.dart';
+import '../../../core/theme/app_theme.dart';
+
+enum _JobsTypeFilter { all, work, service, ad, sell, urgent }
 
 class JobsModerationScreen extends StatefulWidget {
   const JobsModerationScreen({super.key});
@@ -11,25 +15,67 @@ class JobsModerationScreen extends StatefulWidget {
   State<JobsModerationScreen> createState() => _JobsModerationScreenState();
 }
 
-class _JobsModerationScreenState extends State<JobsModerationScreen> {
+class _JobsModerationScreenState extends State<JobsModerationScreen>
+    with SingleTickerProviderStateMixin {
   final _searchCtrl = TextEditingController();
   String _statusFilter = 'all';
-  AdKind? _kindFilter;
+  _JobsTypeFilter _typeFilter = _JobsTypeFilter.all;
   String _query = '';
+  late final TabController _tabCtrl;
 
-  static const _blue = Color(0xFF0D47A1);
+  static const _blue = AppColors.primary;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
+  }
 
   @override
   void dispose() {
+    _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _deleteAd(JobAd ad) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Эълонни ўчириш'),
+        content: Text('«${ad.titleOrText}» ноқайд ўчирилади.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<JobsRepository>().deleteAdAdmin(ad.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Эълон ўчирилди')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
+      );
+    }
   }
 
   List<JobAd> _filter(List<JobAd> ads) {
     final q = _query.trim().toLowerCase();
     return ads.where((ad) {
       if (_statusFilter != 'all' && ad.status != _statusFilter) return false;
-      if (_kindFilter != null && ad.kind != _kindFilter) return false;
+      if (!_matchesTypeFilter(ad)) return false;
       if (q.isEmpty) return true;
       return ad.title.toLowerCase().contains(q) ||
           ad.text.toLowerCase().contains(q) ||
@@ -69,8 +115,32 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
   Widget build(BuildContext context) {
     return Column(children: [
       _header(),
+      Container(
+        color: Colors.white,
+        child: TabBar(
+          controller: _tabCtrl,
+          labelColor: _blue,
+          indicatorColor: _blue,
+          tabs: const [
+            Tab(text: '📋 Эълонлар'),
+            Tab(text: '⚠️ Шикоятлар'),
+          ],
+        ),
+      ),
       Expanded(
-        child: StreamBuilder<List<JobAd>>(
+        child: TabBarView(
+          controller: _tabCtrl,
+          children: [
+            _adsTab(),
+            const JobsComplaintsTab(),
+          ],
+        ),
+      ),
+    ]);
+  }
+
+  Widget _adsTab() {
+    return StreamBuilder<List<JobAd>>(
           stream: context.read<JobsRepository>().watchAllForAdmin(),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
@@ -97,9 +167,7 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
               ),
             ]);
           },
-        ),
-      ),
-    ]);
+        );
   }
 
   Widget _header() {
@@ -206,11 +274,9 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(child: _statusChips()),
-          const SizedBox(width: 12),
-          Expanded(child: _kindChips()),
-        ]),
+        _statusChips(),
+        const SizedBox(height: 10),
+        _kindChips(),
       ]),
     );
   }
@@ -236,20 +302,44 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
     );
   }
 
+  bool _matchesTypeFilter(JobAd ad) {
+    switch (_typeFilter) {
+      case _JobsTypeFilter.all:
+        return true;
+      case _JobsTypeFilter.work:
+        return ad.kind == AdKind.work;
+      case _JobsTypeFilter.service:
+        return ad.kind == AdKind.service;
+      case _JobsTypeFilter.ad:
+        return ad.kind == AdKind.ad;
+      case _JobsTypeFilter.sell:
+        return ad.kind == AdKind.sell;
+      case _JobsTypeFilter.urgent:
+        return ad.supportsUrgent && ad.isUrgent;
+    }
+  }
+
   Widget _kindChips() {
+    const items = <(_JobsTypeFilter, String)>[
+      (_JobsTypeFilter.all, 'Ҳамма тур'),
+      (_JobsTypeFilter.work, '🔨 Иш бор'),
+      (_JobsTypeFilter.service, '🛠️ Хизмат'),
+      (_JobsTypeFilter.ad, '📢 Эълон'),
+      (_JobsTypeFilter.sell, '🛒 Сотаман'),
+      (_JobsTypeFilter.urgent, '🚨 Шошилинч'),
+    ];
     return Wrap(
       spacing: 8,
+      runSpacing: 8,
       children: [
-        ChoiceChip(
-          label: const Text('Ҳамма тур'),
-          selected: _kindFilter == null,
-          onSelected: (_) => setState(() => _kindFilter = null),
-        ),
-        for (final kind in AdKind.values)
+        for (final item in items)
           ChoiceChip(
-            label: Text('${kind.emoji} ${kind.label}'),
-            selected: _kindFilter == kind,
-            onSelected: (_) => setState(() => _kindFilter = kind),
+            label: Text(item.$2),
+            selected: _typeFilter == item.$1,
+            selectedColor: item.$1 == _JobsTypeFilter.urgent
+                ? Colors.red.shade100
+                : null,
+            onSelected: (_) => setState(() => _typeFilter = item.$1),
           ),
       ],
     );
@@ -305,12 +395,23 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             ElevatedButton.icon(
-              onPressed: () => _setStatus(ad, 'active'),
-              icon: const Icon(Icons.check_circle, size: 18),
-              label: const Text('Тасдиқлаш'),
+              onPressed: ad.status == 'pending'
+                  ? () => _setStatus(ad, 'active')
+                  : null,
+              icon: Icon(
+                ad.status == 'active'
+                    ? Icons.check_circle
+                    : Icons.check_circle_outline,
+                size: 18,
+              ),
+              label: Text(
+                ad.status == 'active' ? 'Тасдиқланган' : 'Тасдиқлаш',
+              ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppColors.button,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.tickerShell,
+                disabledForegroundColor: AppColors.primaryDark,
               ),
             ),
             OutlinedButton.icon(
@@ -335,6 +436,12 @@ class _JobsModerationScreenState extends State<JobsModerationScreen> {
                 icon: const Icon(Icons.pending_actions, size: 18),
                 label: const Text('Кутилмоқдага қайтариш'),
               ),
+            OutlinedButton.icon(
+              onPressed: () => _deleteAd(ad),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Ўчириш'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            ),
           ]),
         ]),
       ),
@@ -430,7 +537,7 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.button,
           content: Text('Эълон янгиланди'),
         ),
       );
@@ -463,7 +570,11 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
                   ),
               ],
               onChanged: (v) {
-                if (v != null) setState(() => _kind = v);
+                if (v == null) return;
+                setState(() {
+                  _kind = v;
+                  if (!v.supportsUrgent) _urgent = false;
+                });
               },
             ),
             const SizedBox(height: 10),
@@ -510,10 +621,11 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
                 if (v != null) setState(() => _status = v);
               },
             ),
-            if (_kind == AdKind.work)
+            if (_kind.supportsUrgent)
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Шошилинч'),
+                subtitle: const Text('Алоҳида «Шошилинч» табида кўринади'),
                 value: _urgent,
                 onChanged: (v) => setState(() => _urgent = v),
               ),
@@ -541,18 +653,16 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
   }
 }
 
-extension _JobAdAdminText on JobAd {
-  String get titleOrText => title.trim().isEmpty ? text : title;
-}
-
 Color _kindColor(AdKind kind) {
   switch (kind) {
     case AdKind.work:
       return const Color(0xFFD84315);
     case AdKind.service:
-      return const Color(0xFF6A1B9A);
+      return AppColors.primary;
     case AdKind.ad:
-      return const Color(0xFF0277BD);
+      return AppColors.primary;
+    case AdKind.sell:
+      return AppColors.primary;
   }
 }
 
@@ -561,7 +671,7 @@ Color _statusColor(String status) {
     case 'pending':
       return Colors.orange;
     case 'active':
-      return Colors.green;
+      return AppColors.primary;
     case 'completed':
       return Colors.blue;
     case 'blocked':

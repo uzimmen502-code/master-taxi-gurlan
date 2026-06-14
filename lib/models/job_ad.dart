@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Эълон тури — иш, хизмат, оддий эълон.
-enum AdKind { work, service, ad }
+/// Эълон тури — иш, хизмат, оддий эълон, сотаман (P2P).
+enum AdKind { work, service, ad, sell }
 
 extension AdKindX on AdKind {
   String get key {
@@ -12,6 +12,8 @@ extension AdKindX on AdKind {
         return 'service';
       case AdKind.ad:
         return 'ad';
+      case AdKind.sell:
+        return 'sell';
     }
   }
 
@@ -23,6 +25,8 @@ extension AdKindX on AdKind {
         return '🛠️';
       case AdKind.ad:
         return '📢';
+      case AdKind.sell:
+        return '🛒';
     }
   }
 
@@ -34,8 +38,13 @@ extension AdKindX on AdKind {
         return 'Хизмат';
       case AdKind.ad:
         return 'Эълон';
+      case AdKind.sell:
+        return 'Сотаман';
     }
   }
+
+  /// Шошилинч эълонлар учун кўриниш муддати (кун).
+  static const int urgentExpiryDays = 2;
 
   /// Кўриниш муддати — кунда.
   int get expiresInDays {
@@ -46,8 +55,23 @@ extension AdKindX on AdKind {
         return 30;
       case AdKind.ad:
         return 14;
+      case AdKind.sell:
+        return 14;
     }
   }
+
+  /// Фойдаланувчи панелида яратish mumkin bo'lgan turlar (Иш йўқ).
+  static const List<AdKind> userPanelKinds = [
+    AdKind.ad,
+    AdKind.service,
+    AdKind.sell,
+  ];
+
+  /// Шошилинч белгиси қўйиш мумкин бўлган турлар (эski «Иш» эълонлари учун ham).
+  bool get supportsUrgent => this == AdKind.work || this == AdKind.ad;
+
+  /// Янги эълон формасида шошилинч — фақат «Эълон» учун.
+  bool get userCanMarkUrgent => this == AdKind.ad;
 
   static AdKind parse(String? key) {
     switch (key) {
@@ -56,6 +80,8 @@ extension AdKindX on AdKind {
       case 'ad':
       case 'announcement':
         return AdKind.ad;
+      case 'sell':
+        return AdKind.sell;
       default:
         return AdKind.work;
     }
@@ -99,7 +125,7 @@ class JobAd {
   final String address;
   final bool isUrgent;
 
-  /// `active` | `completed` | `blocked`.
+  /// `pending` | `active` | `completed` | `blocked`.
   final String status;
   final DateTime? expiresAt;
   final DateTime? createdAt;
@@ -110,11 +136,37 @@ class JobAd {
   bool get isWork => kind == AdKind.work;
   bool get isService => kind == AdKind.service;
   bool get isAnnouncement => kind == AdKind.ad;
+  bool get isSell => kind == AdKind.sell;
+
+  bool get supportsUrgent => kind.supportsUrgent;
 
   bool get isExpired {
     final exp = expiresAt;
     if (exp == null) return false;
     return exp.isBefore(DateTime.now());
+  }
+
+  String get titleOrText =>
+      title.trim().isEmpty ? text : title.trim();
+
+  /// Эълон joylangan sana — `кун/ой/йил`.
+  String get postedDateLabel {
+    final ts = createdAt;
+    if (ts == null) return '';
+    final d = ts.day.toString().padLeft(2, '0');
+    final m = ts.month.toString().padLeft(2, '0');
+    return '$d/$m/${ts.year}';
+  }
+
+  /// «Сотаман» рўйхати учун: префикс ва (Бир марта|Доимий) олиб ташланган матн.
+  String get displayText {
+    if (!isSell) return text;
+    var t = text.trim();
+    const prefix = '🛒 Сотиш таклифи:';
+    if (t.startsWith(prefix)) {
+      t = t.substring(prefix.length).trim();
+    }
+    return t.replaceAll(RegExp(r'\s*\((Бир марта|Доимий)\)'), '');
   }
 
   /// "5 дақ. олдин" / "2 соат олдин" / "3 кун олдин".

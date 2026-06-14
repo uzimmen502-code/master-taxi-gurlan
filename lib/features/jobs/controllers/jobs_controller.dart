@@ -1,15 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 
-/// ИШ ТОП экранининг controller'и — фойдаланувчи маълумотлари,
-/// админ текшируви, қидирув матни, эълонларни фильтрлаш/сортлаш.
+/// ИШ ТОП экранининг controller'и.
 class JobsController extends ChangeNotifier {
   JobsController({required JobsRepository repo}) : _repo = repo {
     _init();
   }
+
+  static const int dailyAdLimit = 10;
 
   final JobsRepository _repo;
 
@@ -22,11 +24,8 @@ class JobsController extends ChangeNotifier {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     userName = prefs.getString('user_name') ?? '';
-    userPhone = prefs.getString('user_phone') ?? '';
+    userPhone = phoneDigits(prefs.getString('user_phone') ?? '');
     userAddress = prefs.getString('user_address') ?? '';
-    // Admin tekshiruvi — `user_role == 'admin'` ёрдамида.
-    // (Esкi `admin_phone` мехaнизми hech qаerда set qилинмасди — alindirib
-    // tashladik). Server-side ҳаqиqий тaсдиq `AdminService` orqali.
     final role = prefs.getString('user_role') ?? 'user';
     isAdmin = role == 'admin';
     notifyListeners();
@@ -43,13 +42,10 @@ class JobsController extends ChangeNotifier {
   }
 
   bool isOwner(JobAd ad) =>
-      userPhone.isNotEmpty && ad.authorPhone == userPhone;
+      userPhone.isNotEmpty && phonesMatch(ad.authorPhone, userPhone);
 
-  /// Муддати ўтганларни чиқариш, **янги тепада** (latest first),
-  /// `searchQuery` бўйича фильтр. Urgent — алоҳида чизиқ-белги, лекин
-  /// энди мажбурий тепага суриб юбормайди — UX содда: вақт асосий.
-  List<JobAd> filterAndSort(List<JobAd> source) {
-    final list = source.where((a) => !a.isExpired).toList();
+  List<JobAd> _filterExpiredAndSearch(List<JobAd> source) {
+    var list = source.where((a) => !a.isExpired).toList();
     list.sort((a, b) {
       final at = a.createdAt;
       final bt = b.createdAt;
@@ -66,8 +62,44 @@ class JobsController extends ChangeNotifier {
         .toList(growable: false);
   }
 
-  /// Янги эълон қўшиш: кунлик лимит текширилади.
-  /// Қайтариш: `(success, error)`.
+  /// Шошилинч алоҳида бўлим; қолганлар вақт бўйича.
+  ({List<JobAd> urgent, List<JobAd> regular}) partitionFeed(List<JobAd> source) {
+    final list = _filterExpiredAndSearch(source);
+    final urgent = <JobAd>[];
+    final regular = <JobAd>[];
+    for (final a in list) {
+      if (a.supportsUrgent && a.isUrgent) {
+        urgent.add(a);
+      } else {
+        regular.add(a);
+      }
+    }
+    return (urgent: urgent, regular: regular);
+  }
+
+  /// Эски API — фақат бир рўйхат (керак бўлса).
+  List<JobAd> filterAndSort(List<JobAd> source) {
+    final p = partitionFeed(source);
+    return [...p.urgent, ...p.regular];
+  }
+
+  /// Таб бўйича рўйхат: шошилинч алоҳида таб; «Иш» таби йўқ.
+  List<JobAd> feedForTab(
+    List<JobAd> source, {
+    AdKind? kind,
+    bool urgentOnly = false,
+  }) {
+    Iterable<JobAd> list = source;
+    if (urgentOnly) {
+      list = list.where((a) => a.supportsUrgent && a.isUrgent);
+    } else if (kind != null) {
+      list = list.where(
+        (a) => a.kind == kind && !(a.supportsUrgent && a.isUrgent),
+      );
+    }
+    return _filterExpiredAndSearch(list.toList(growable: false));
+  }
+
   Future<({bool success, String? error})> submitAd({
     required String type,
     required String text,
@@ -78,12 +110,20 @@ class JobsController extends ChangeNotifier {
     if (text.trim().isEmpty) {
       return (success: false, error: 'Матнни киритинг');
     }
-    final dailyCount = await _repo.dailyCountByAuthor(userPhone);
-    if (dailyCount >= 5) {
-      return (success: false, error: '⚠️ Кунига максимум 5 та эълон!');
+    if (userPhone.length < 9) {
+      return (success: false, error: 'Профилда телефон рақамини киритинг');
     }
     try {
-      final days = AdKindX.parse(type).expiresInDays;
+      final dailyCount = await _repo.dailyCountByAuthor(userPhone);
+      if (dailyCount >= dailyAdLimit) {
+        return (
+          success: false,
+          error: '⚠️ Кунига максимум $dailyAdLimit та эълон!'
+        );
+      }
+      final days = isUrgent
+          ? AdKindX.urgentExpiryDays
+          : AdKindX.parse(type).expiresInDays;
       final expiresAt = DateTime.now().add(Duration(days: days));
       await _repo.addAd(
         type: type,
@@ -115,15 +155,40 @@ class JobsController extends ChangeNotifier {
       return (success: false, error: 'Матнни киритинг');
     }
     try {
-      await _repo.updateAd(
-        adId: adId,
-        text: text.trim(),
-        isUrgent: isUrgent,
-        type: type,
-        status: isAdmin ? status : null,
-        title: title,
-        priceText: priceText,
-      );
+      if (isAdmin) {
+        await _repo.updateAd(
+          adId: adId,
+          text: text.trim(),
+          isUrgent: isUrgent,
+          type: type,
+          status: status,
+          title: title,
+          priceText: priceText,
+        );
+      } else {
+        await _repo.updateAdByOwner(
+          adId: adId,
+          callerPhone: userPhone,
+          text: text.trim(),
+          isUrgent: isUrgent,
+          type: type,
+          title: title,
+          priceText: priceText,
+        );
+      }
+      return (success: true, error: null);
+    } catch (e) {
+      return (success: false, error: 'Хатолик: $e');
+    }
+  }
+
+  Future<({bool success, String? error})> deleteAd(String adId) async {
+    try {
+      if (isAdmin) {
+        await _repo.deleteAdAdmin(adId);
+      } else {
+        await _repo.deleteAdByOwner(adId: adId, callerPhone: userPhone);
+      }
       return (success: true, error: null);
     } catch (e) {
       return (success: false, error: 'Хатолик: $e');
@@ -134,12 +199,16 @@ class JobsController extends ChangeNotifier {
     required String adId,
     required String reason,
   }) async {
-    await _repo.addComplaint(adId: adId, reason: reason);
+    await _repo.addComplaint(
+      adId: adId,
+      reason: reason,
+      reporterPhone: userPhone,
+    );
   }
 
-  /// Eski API'га mos.
   Stream<List<JobAd>> watch(String type) => _repo.watchActiveByType(type);
 
-  /// Барча 3 тур бирваракай (mini-OLX feed).
   Stream<List<JobAd>> watchAll() => _repo.watchAllActive();
+
+  Stream<List<JobAd>> watchMyAds() => _repo.watchAdsByAuthor(userPhone);
 }

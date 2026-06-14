@@ -22,6 +22,18 @@ class NotificationService {
       const InitializationSettings(android: androidSettings),
       onDidReceiveNotificationResponse: (_) => _onTapped?.call(),
     );
+    const incomingRideChannel = AndroidNotificationChannel(
+      'incoming_ride',
+      'Янги буюртма',
+      description: 'Маршрут ҳайдовчисига келган янги сўровлар',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(incomingRideChannel);
     _initialized = true;
   }
 

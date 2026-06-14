@@ -7,6 +7,9 @@ import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
 import '../controllers/searching_controller.dart';
+import 'local_taxi_active_trip_screen.dart';
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class SearchingScreen extends StatelessWidget {
   const SearchingScreen({
@@ -14,11 +17,15 @@ class SearchingScreen extends StatelessWidget {
     required this.from,
     required this.to,
     required this.taxiType,
+    this.tripId,
   });
 
   final String from;
   final String to;
   final String taxiType;
+
+  /// Mavjud `trips/{id}` ni tiklash (qayta yaratmaslik).
+  final String? tripId;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +37,7 @@ class SearchingScreen extends StatelessWidget {
         from: from,
         to: to,
         taxiType: taxiType,
+        existingTripId: tripId,
       )..start(),
       child: const _SearchingView(),
     );
@@ -44,8 +52,7 @@ class _SearchingView extends StatefulWidget {
 }
 
 class _SearchingViewState extends State<_SearchingView> {
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
+  static const _blue = AppColors.primary;
 
   bool _acceptedDialogShown = false;
 
@@ -57,13 +64,13 @@ class _SearchingViewState extends State<_SearchingView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final err = c.consumeError();
-      if (err != null) _snack(err);
+      if (err != null) _snack(context.trMsg(err));
 
       if (!_acceptedDialogShown) {
         final accepted = c.consumeAcceptedTrip();
         if (accepted != null) {
           _acceptedDialogShown = true;
-          _showAcceptedDialog(accepted);
+          _openActiveTrip(accepted);
         }
       }
     });
@@ -76,10 +83,10 @@ class _SearchingViewState extends State<_SearchingView> {
         if (mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF0F4FF),
+        backgroundColor: AppColors.scaffold,
         appBar: AppBar(
-          title: const Text('Ҳайдовчи қидирилмоқда'),
-          backgroundColor: _blue,
+          title: Text(context.tr('searching_driver_title')),
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
           leading: IconButton(
@@ -94,7 +101,7 @@ class _SearchingViewState extends State<_SearchingView> {
           _statusBanner(c),
           _addressRow(
             icon: Icons.circle,
-            color: Colors.green,
+            color: AppColors.primary,
             text: c.from,
           ),
           if (c.to.isNotEmpty)
@@ -123,28 +130,34 @@ class _SearchingViewState extends State<_SearchingView> {
               color: Colors.white, strokeWidth: 3),
           const SizedBox(height: 12),
           Text(
-            'Radius: ${c.currentRadiusKm.toInt()} км · ${c.seconds} сония',
+            _fmt('radius_timer', {
+              'km': c.currentRadiusKm.toInt().toString(),
+              'sec': c.seconds.toString(),
+            }),
             style: const TextStyle(color: Colors.white, fontSize: 14),
           ),
           const SizedBox(height: 4),
           Text(
-            'Цикл ${c.cycle + 1} / 3',
+            _fmt('cycle_progress', {
+              'current': '${c.cycle + 1}',
+              'total': '3',
+            }),
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ] else ...[
           const Icon(Icons.sentiment_dissatisfied,
               color: Colors.white70, size: 48),
           const SizedBox(height: 8),
-          const Text(
-            'Ҳозир бўш ҳайдовчи топилмади',
+          Text(
+            context.tr('no_free_driver_now'),
             style: TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Бироздан кейин қайта уриниб кўринг',
+          Text(
+            context.tr('retry_later'),
             style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -152,7 +165,7 @@ class _SearchingViewState extends State<_SearchingView> {
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white, foregroundColor: _blue),
-            child: const Text('Орқага'),
+            child: Text(context.tr('back_short')),
           ),
         ],
       ]),
@@ -185,8 +198,8 @@ class _SearchingViewState extends State<_SearchingView> {
       return Center(
         child: Text(
           c.isSearching
-              ? 'Ҳайдовчилар қидирилмоқда...'
-              : 'Ҳайдовчилар топилмади',
+              ? context.tr('drivers_searching')
+              : context.tr('drivers_not_found'),
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
       );
@@ -201,7 +214,7 @@ class _SearchingViewState extends State<_SearchingView> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Бирор ҳайдовчини танланг — заказ юборилади',
+                context.tr('select_driver_to_send'),
                 style: TextStyle(
                     fontSize: 12, color: Colors.amber.shade900),
               ),
@@ -243,40 +256,21 @@ class _SearchingViewState extends State<_SearchingView> {
     ));
   }
 
-  void _showAcceptedDialog(ActiveTrip trip) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('🚕 Ҳайдовчи топилди!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('👤 ${trip.driverName}',
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('🚗 ${trip.driverCar}  ${trip.driverPlate}',
-                style: TextStyle(color: Colors.grey.shade600)),
-            const SizedBox(height: 8),
-            Text('📍 Яқинлашмоқда...',
-                style: TextStyle(color: Colors.grey.shade600)),
-          ],
+  String _fmt(String key, Map<String, String> vars) {
+    var text = context.tr(key);
+    vars.forEach((k, v) {
+      text = text.replaceAll('{$k}', v);
+    });
+    return text;
+  }
+
+  void _openActiveTrip(ActiveTrip trip) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => LocalTaxiActiveTripScreen(
+          tripId: trip.id,
+          initialTrip: trip,
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _green, foregroundColor: Colors.white),
-            child: const Text('ТУШУНДИМ'),
-          ),
-        ],
       ),
     );
   }
@@ -305,7 +299,7 @@ class _DriverTile extends StatelessWidget {
     Color border = Colors.transparent;
     if (isPending) {
       bg = const Color(0xFFE3F2FD); // light blue — yuborildi
-      border = const Color(0xFF1565C0);
+      border = AppColors.primary;
     } else if (isRejected) {
       bg = Colors.grey.shade200;
     }
@@ -341,16 +335,16 @@ class _DriverTile extends StatelessWidget {
                       fontSize: 11, color: Colors.grey.shade600),
                 ),
                 if (isPending)
-                  const Text(
-                    'Юборилди — жавоб кутилмоқда',
+                  Text(
+                    context.tr('sent_waiting_response'),
                     style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF1565C0),
+                        color: AppColors.primary,
                         fontWeight: FontWeight.w600),
                   )
                 else if (isRejected)
-                  const Text(
-                    'Рад этилди',
+                  Text(
+                    context.tr('rejected_short'),
                     style: TextStyle(fontSize: 11, color: Colors.red),
                   ),
               ],
@@ -362,21 +356,21 @@ class _DriverTile extends StatelessWidget {
               Text(
                 driver.distanceKm > 0
                     ? '${driver.distanceKm.toStringAsFixed(1)} км'
-                    : '📍 GPS йўқ',
+                    : context.tr('no_gps_short'),
                 style:
                     TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 4),
               if (!disabled && !isPending && !isRejected)
                 const Icon(Icons.send,
-                    color: Color(0xFF1565C0), size: 18),
+                    color: AppColors.primary, size: 18),
               if (isPending)
                 const SizedBox(
                   width: 14,
                   height: 14,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFF1565C0),
+                    color: AppColors.primary,
                   ),
                 ),
             ],

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.google.gms.google-services")
     id("com.android.application")
@@ -9,6 +11,19 @@ android {
     namespace = "com.example.master_taxi_gurlan"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+
+    val keyPropsFile = rootProject.file("../../key.properties")
+    val keyProps = Properties()
+    if (keyPropsFile.exists()) keyProps.load(keyPropsFile.inputStream())
+
+    signingConfigs {
+        create("release") {
+            storeFile     = file(keyProps["storeFile"] as String)
+            storePassword = keyProps["storePassword"] as String
+            keyAlias      = keyProps["keyAlias"] as String
+            keyPassword   = keyProps["keyPassword"] as String
+        }
+    }
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -30,7 +45,9 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/constants/app_install.dart';
+
 /// `master_taxi_driver` иловаси билан интеграция учун сервис.
 ///
 /// Иккита асосий вазифа:
@@ -21,9 +23,8 @@ class DriverAppLauncher {
   static const String _host = 'onboard';
 
   /// Driver app APK файли — Firebase Hosting'да жойлашган.
-  /// Production'да `web/downloads/master-taxi-gurlan-driver.apk`'га жўнатaди.
-  static const String apkUrl =
-      'https://master-taxi-gurlan.web.app/downloads/master-taxi-gurlan-driver.apk';
+  /// Variant A: bitta QR / havola — to'g'ridan APK.
+  static String get apkUrl => AppInstall.publicApkUrl;
 
   /// Driver app телефонда ўрнатилганми текширади.
   /// Android'да `<queries>` манифестда керак (Android 11+ учун).
@@ -87,7 +88,7 @@ class DriverAppLauncher {
       // continue to clipboard fallback
     }
     try {
-      await Clipboard.setData(const ClipboardData(text: apkUrl));
+      await Clipboard.setData(ClipboardData(text: apkUrl));
     } catch (_) {
       // ignore
     }

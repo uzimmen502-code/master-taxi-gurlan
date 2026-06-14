@@ -1,9 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
 import '../models/active_trip.dart';
 import '../models/marshrut_driver_option.dart';
 import '../models/marshrut_dispatch_event.dart';
+
+/// Marshrut qabul natijasi — UI xabarlari uchun.
+class MarshrutAcceptOutcome {
+  const MarshrutAcceptOutcome._(this.ok, this.code);
+
+  final bool ok;
+  final String? code;
+
+  static const success = MarshrutAcceptOutcome._(true, null);
+  static const expired = MarshrutAcceptOutcome._(false, 'expired');
+  static const noSeats = MarshrutAcceptOutcome._(false, 'no_seats');
+  static const taken = MarshrutAcceptOutcome._(false, 'taken');
+}
 
 /// `trips` collection bilan ishlash — qidiruv, status kuzatish, bekor qilish.
 ///
@@ -24,6 +38,8 @@ class RidesRepository {
       _db.collection('marshrut_dispatch_events');
   CollectionReference<Map<String, dynamic>> get _queue =>
       _db.collection('queue');
+  CollectionReference<Map<String, dynamic>> get _drivers =>
+      _db.collection('drivers');
   DocumentReference<Map<String, dynamic>> get _appSettings =>
       _db.collection('settings').doc('app');
 
@@ -170,44 +186,67 @@ class RidesRepository {
     });
   }
 
-  /// Qidiruvni bekor qiladi va foydalanuvchi `cancelCount`'ini transaksion
-  /// tarzda ko'taradi. 3 marta ketma-ket bekor qilinsa — 30 minutga bloklanadi.
+  // ─── Local taxi (qidiruv bekor) ─────────────────────────────────────
+  //
+  // Faqat `taxiType != 'marshrut'` qidiruvlari. Trip `cancelled` bo'lganda CF
+  // `onTripUpdate` → `local_taxi_block/state` (5 bekor / 10 daq oyna → 10 daq blok,
+  // `config/passenger_cancel_block` yoki default). Marshrut blokiga tegishli emas.
+  // Client `users.blockedUntil` yoki `cancelCount` yozmaydi (eski 3→30 daq yo'li).
+
+  /// Qidiruvni bekor qiladi (`status: cancelled`, `cancelReason: search_cancelled`).
   Future<void> cancelSearch({
     required String tripId,
-    required String userPhone,
   }) async {
     if (tripId.isEmpty) return;
-    final phone = phoneDigits(userPhone);
+    await _trips.doc(tripId).update({
+      'status': 'cancelled',
+      'cancelledBy': 'passenger',
+      'cancelReason': 'search_cancelled',
+      'cancelledAt': FieldValue.serverTimestamp(),
+    });
+  }
 
-    await _db.runTransaction((tx) async {
-      final userRef = _users.doc(phone);
-      final userDoc = await tx.get(userRef);
-      final cancelCount =
-          ((userDoc.data()?['cancelCount'] as num?)?.toInt() ?? 0) + 1;
+  /// Qabul qilingan mahalliy safarni yo'lovchi bekor qiladi.
+  Future<void> cancelLocalTripByPassenger(String tripId) async {
+    await _db.runTransaction((t) async {
+      final ref = _trips.doc(tripId);
+      final snap = await t.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data()!;
+      final status = data['status'] as String? ?? '';
 
-      tx.update(_trips.doc(tripId), {
+      if (status != 'accepted') return;
+
+      final driverId = data['driverId'] as String? ?? '';
+
+      t.update(ref, {
         'status': 'cancelled',
+        'cancelledBy': 'passenger',
+        'cancelReason': 'passenger_cancel_during_trip',
         'cancelledAt': FieldValue.serverTimestamp(),
       });
 
-      if (cancelCount >= 3) {
-        tx.set(
-            userRef,
-            {
-              'cancelCount': 0,
-              'blockedUntil': Timestamp.fromDate(
-                  DateTime.now().add(const Duration(minutes: 30))),
-            },
-            SetOptions(merge: true));
-      } else {
-        tx.set(userRef, {'cancelCount': cancelCount}, SetOptions(merge: true));
+      if (driverId.isNotEmpty) {
+        t.update(
+          _db.collection('drivers').doc(driverId),
+          {
+            'isBusy': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+        );
       }
     });
   }
 
   // ─── Marshrut (route taxi) ─────────────────────────────────────────
 
-  /// Marshrut so'rovi yaratiladi va haydovchiga yo'naltirilган tripID qaytariladi.
+  static String normalizeMarshrutPhone(String phone) =>
+      phoneDigits(phone.trim());
+
+  DocumentReference<Map<String, dynamic>> _marshrutActiveRef(String phone) =>
+      _users.doc(phone).collection('marshrut_state').doc('active');
+
+  /// Marshrut so'rovi yaratiladi va haydovchiga yo'naltirilgan tripID qaytariladi.
   Future<String> createMarshrutRequest({
     required String userPhone,
     required String pickupMfy,
@@ -223,44 +262,69 @@ class RidesRepository {
     Duration ttl = const Duration(seconds: 18),
     int offerTimeoutSeconds = 0,
   }) async {
+    final phone = normalizeMarshrutPhone(userPhone);
     await _assertNoActiveMarshrutRequest(
-      userPhone: userPhone,
+      userPhone: phone,
       currentSessionId: dispatchSessionId,
     );
-    final ref = await _trips.add({
-      'userPhone': userPhone,
-      'pickupMfy': pickupMfy,
-      'pickupAddr': pickupAddr,
-      'dropoffMfy': dropoffMfy,
-      'taxiType': 'marshrut',
-      'status': 'pending',
-      'targetDriverId': driver.driverId,
-      'driverName': driver.driverName,
-      'driverPhone': driver.driverPhone,
-      'driverCar': driver.car,
-      'driverPlate': driver.plate,
-      'scheduleId': driver.scheduleId,
-      'fare': driver.price,
-      'userLat': userLat,
-      'userLng': userLng,
-      'driverLat': driver.lat,
-      'driverLng': driver.lng,
-      'dispatchMode': dispatchMode,
-      'dispatchSessionId': dispatchSessionId,
-      'dispatchAttempt': dispatchAttempt,
-      'dispatchTotal': dispatchTotal,
-      'offerTimeoutSeconds': offerTimeoutSeconds,
-      'createdAt': FieldValue.serverTimestamp(),
-      'expiresAt': Timestamp.fromDate(DateTime.now().add(ttl)),
+    final tripId = await _db.runTransaction<String>((tx) async {
+      await _assertNoActiveMarshrutRequestTx(
+        tx,
+        userPhone: phone,
+        currentSessionId: dispatchSessionId,
+      );
+
+      final tripRef = _trips.doc();
+      tx.set(tripRef, {
+        'userPhone': phone,
+        'pickupMfy': pickupMfy,
+        'pickupAddr': pickupAddr,
+        'dropoffMfy': dropoffMfy,
+        'taxiType': 'marshrut',
+        'status': 'pending',
+        'targetDriverId': driver.driverId,
+        'driverName': driver.driverName,
+        'driverPhone': driver.driverPhone,
+        'driverCar': driver.car,
+        'driverPlate': driver.plate,
+        'scheduleId': driver.scheduleId,
+        'fare': driver.price,
+        'userLat': userLat,
+        'userLng': userLng,
+        'driverLat': driver.lat,
+        'driverLng': driver.lng,
+        'dispatchMode': dispatchMode,
+        'dispatchSessionId': dispatchSessionId,
+        'dispatchAttempt': dispatchAttempt,
+        'dispatchTotal': dispatchTotal,
+        'offerTimeoutSeconds': offerTimeoutSeconds,
+        'createdAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(DateTime.now().add(ttl)),
+      });
+
+      if (phone.isNotEmpty) {
+        tx.set(
+          _marshrutActiveRef(phone),
+          {
+            'tripId': tripRef.id,
+            'sessionId': dispatchSessionId,
+            'status': 'pending',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      return tripRef.id;
     });
+
     await _dispatchEvents.add({
-      'tripId': ref.id,
+      'tripId': tripId,
       'type': 'offered',
       'dispatchMode': dispatchMode,
       'dispatchSessionId': dispatchSessionId,
       'dispatchAttempt': dispatchAttempt,
       'dispatchTotal': dispatchTotal,
-      'userPhone': userPhone,
+      'userPhone': phone,
       'pickupMfy': pickupMfy,
       'dropoffMfy': dropoffMfy,
       'driverId': driver.driverId,
@@ -270,16 +334,103 @@ class RidesRepository {
       'offerTimeoutSeconds': offerTimeoutSeconds,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    return ref.id;
+    return tripId;
+  }
+
+  /// Pending marshrut taklifini yopish (navbatda keyingi haydovchiga o'tish / dispose).
+  Future<void> closeMarshrutOfferIfPending(String tripId) async {
+    if (tripId.isEmpty) return;
+    final snap = await _trips.doc(tripId).get();
+    if (!snap.exists) return;
+    if ((snap.data()?['status'] ?? '') == 'pending') {
+      await markExpired(tripId);
+    }
+  }
+
+  Future<void> _assertNoActiveMarshrutRequestTx(
+    Transaction tx, {
+    required String userPhone,
+    required String currentSessionId,
+  }) async {
+    final phone = normalizeMarshrutPhone(userPhone);
+    if (phone.isEmpty) return;
+
+    final activeRef = _marshrutActiveRef(phone);
+    final activeSnap = await tx.get(activeRef);
+    if (!activeSnap.exists) return;
+
+    final active = activeSnap.data() ?? const <String, dynamic>{};
+    final existingTripId = (active['tripId'] ?? '') as String;
+    final sessionId = (active['sessionId'] ?? '') as String;
+    if (existingTripId.isEmpty) return;
+
+    if (sessionId.isNotEmpty &&
+        sessionId == currentSessionId &&
+        currentSessionId.isNotEmpty) {
+      return;
+    }
+
+    final tripSnap = await tx.get(_trips.doc(existingTripId));
+    if (!tripSnap.exists) return;
+
+    final d = tripSnap.data() ?? const <String, dynamic>{};
+    final status = (d['status'] ?? '') as String;
+    if (status == 'pending' && _isExpiredTripData(d)) {
+      tx.set(
+        tripSnap.reference,
+        {
+          'status': 'expired',
+          'expiredAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      tx.set(
+        activeRef,
+        {
+          'status': 'expired',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      return;
+    }
+    if (status == 'pending' || status == 'accepted') {
+      throw StateError('active_marshrut_request_exists');
+    }
+  }
+
+  Future<void> _clearMarshrutActiveIfMatches({
+    required String userPhone,
+    required String tripId,
+    String status = 'cleared',
+  }) async {
+    final phone = normalizeMarshrutPhone(userPhone);
+    if (phone.isEmpty || tripId.isEmpty) return;
+    final ref = _marshrutActiveRef(phone);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final activeTripId = (snap.data()?['tripId'] ?? '') as String;
+      if (activeTripId != tripId) return;
+      tx.set(
+        ref,
+        {
+          'status': status,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    });
   }
 
   Future<void> _assertNoActiveMarshrutRequest({
     required String userPhone,
     required String currentSessionId,
   }) async {
-    if (userPhone.trim().isEmpty) return;
+    final phone = normalizeMarshrutPhone(userPhone);
+    if (phone.isEmpty) return;
     final snap = await _trips
-        .where('userPhone', isEqualTo: userPhone.trim())
+        .where('userPhone', isEqualTo: phone)
         .where('taxiType', isEqualTo: 'marshrut')
         .where('status', whereIn: ['pending', 'accepted']).get();
     for (final doc in snap.docs) {
@@ -317,6 +468,11 @@ class RidesRepository {
       type: 'timeout',
       data: data,
     );
+    await _clearMarshrutActiveIfMatches(
+      userPhone: (data['userPhone'] ?? '') as String,
+      tripId: tripId,
+      status: 'expired',
+    );
   }
 
   Future<Map<String, dynamic>?> _expirePendingTripInTransaction(
@@ -340,8 +496,8 @@ class RidesRepository {
     });
   }
 
-  /// Trip'ni oddiy bekor qilish (transaksiyasiz).
-  /// Marshrut tarafida cancel hisoblagichi local SharedPreferences'da.
+  /// Marshrut pending taklifini bekor qilish (navbat / timeout / dispose).
+  /// Yo'lovchi blok hisobi CF `onTripUpdate` → `marshrut_block/state`.
   Future<void> markCancelled(String tripId) async {
     if (tripId.isEmpty) return;
     final data = await _cancelMarshrutTripInTransaction(tripId: tripId);
@@ -352,6 +508,166 @@ class RidesRepository {
     await _logDispatchEventFromTrip(
       tripId: tripId,
       type: 'cancelled',
+      data: data,
+    );
+    await _clearMarshrutActiveIfMatches(
+      userPhone: (data['userPhone'] ?? '') as String,
+      tripId: tripId,
+      status: 'cancelled',
+    );
+  }
+
+  /// Yo'lovchi qabul qilingan marshrut safarini bekor qiladi.
+  Future<void> cancelMarshrutByPassenger({
+    required String tripId,
+    required String reason,
+  }) async {
+    if (tripId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final phone = normalizeMarshrutPhone(prefs.getString('user_phone') ?? '');
+
+    await _db.runTransaction((t) async {
+      final tripRef = _trips.doc(tripId);
+      final tripSnap = await t.get(tripRef);
+      if (!tripSnap.exists) return;
+
+      final data = tripSnap.data() ?? const <String, dynamic>{};
+      final scheduleId = (data['scheduleId'] ?? '') as String;
+      final driverId = (data['acceptedDriverId'] ?? '') as String;
+
+      t.update(tripRef, {
+        'status': 'cancelled',
+        'cancelledBy': 'passenger',
+        'cancelReason': reason,
+        'cancelledAt': FieldValue.serverTimestamp(),
+        'notifyPassengerReroute': false,
+      });
+
+      if (scheduleId.isNotEmpty) {
+        final schedRef = _db.collection('schedules').doc(scheduleId);
+        final schedSnap = await t.get(schedRef);
+        if (schedSnap.exists) {
+          final schedData = schedSnap.data() ?? const <String, dynamic>{};
+          final seats = (schedData['seats'] as num?)?.toInt() ?? 1;
+          final seatsLeft =
+              ((schedData['seatsLeft'] as num?)?.toInt() ?? 0) + 1;
+          final clamped = seatsLeft.clamp(0, seats);
+          t.update(schedRef, {
+            'seatsLeft': clamped,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+
+      if (driverId.isNotEmpty) {
+        final queueRef = _queue.doc(driverId);
+        final queueSnap = await t.get(queueRef);
+        if (queueSnap.exists) {
+          final queueData = queueSnap.data() ?? const <String, dynamic>{};
+          final seats = (queueData['seats'] as num?)?.toInt() ?? 1;
+          final seatsLeft =
+              ((queueData['seatsLeft'] as num?)?.toInt() ?? 0) + 1;
+          final clamped = seatsLeft.clamp(0, seats);
+          t.update(queueRef, {
+            'seatsLeft': clamped,
+            'isActive': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        final driverRef = _drivers.doc(driverId);
+        t.set(
+          driverRef,
+          {
+            'isBusy': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
+      if (phone.isNotEmpty) {
+        t.set(
+          _marshrutActiveRef(phone),
+          {
+            'status': 'cancelled',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+    });
+
+    try {
+      final snap = await _trips.doc(tripId).get();
+      final tripData = snap.data();
+      await _db.collection('marshrut_dispatch_events').add({
+        'tripId': tripId,
+        'type': 'passenger_cancel_after_accept',
+        'cancelledBy': 'passenger',
+        'cancelReason': reason,
+        'driverId': tripData?['acceptedDriverId'],
+        'userPhone': tripData?['userPhone'],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+  }
+
+  /// Bitta trip hujjatini o'qish (push navigatsiya va accepted ekran).
+  Future<ActiveTrip?> getTrip(String tripId) async {
+    if (tripId.isEmpty) return null;
+    final snap = await _trips.doc(tripId).get();
+    if (!snap.exists) return null;
+    return ActiveTrip.fromDoc(snap);
+  }
+
+  /// Haydovchi majburiy chiqqanda faol safarni bekor qilish.
+  Future<void> cancelMarshrutByDriver({
+    required String tripId,
+    required String reason,
+  }) async {
+    if (tripId.isEmpty) return;
+    final data = await _cancelMarshrutTripInTransaction(
+      tripId: tripId,
+      cancelledBy: 'driver',
+      cancelReason: reason,
+      requireAccepted: true,
+    );
+    if (data == null) return;
+    try {
+      await _trips.doc(tripId).update({'cancelledByMode': 'force_leave'});
+    } catch (_) {}
+    await _resetDriverDispatchStats(
+      (data['acceptedDriverId'] ?? data['targetDriverId']) as String?,
+    );
+    await _logDispatchEventFromTrip(
+      tripId: tripId,
+      type: 'driver_force_leave_cancel',
+      data: data,
+    );
+  }
+
+  /// Ҳайдовчи accepted tripni бекор қилади (машина тўлиқ / жой йўқ).
+  /// Йўловчига қайта dispatch: [notifyPassengerReroute] + [cancelReason].
+  Future<void> cancelMarshrutAcceptedByDriver({
+    required String tripId,
+    required String driverId,
+    bool noRoom = true,
+  }) async {
+    if (tripId.isEmpty || driverId.isEmpty) return;
+    final data = await _cancelMarshrutTripInTransaction(
+      tripId: tripId,
+      cancelledBy: 'driver',
+      cancelledByPhone: driverId,
+      cancelReason: noRoom ? 'no_room' : 'driver_other',
+      notifyPassengerReroute: noRoom,
+      requireAccepted: true,
+      requireDriverId: driverId,
+    );
+    if (data == null) return;
+    await _resetDriverDispatchStats(driverId);
+    await _logDispatchEventFromTrip(
+      tripId: tripId,
+      type: noRoom ? 'driver_cancelled_no_room' : 'driver_cancelled',
       data: data,
     );
   }
@@ -381,6 +697,10 @@ class RidesRepository {
     required String tripId,
     String cancelledBy = 'user',
     String cancelledByPhone = '',
+    String cancelReason = '',
+    bool notifyPassengerReroute = false,
+    bool requireAccepted = false,
+    String requireDriverId = '',
   }) async {
     return _db.runTransaction<Map<String, dynamic>?>((tx) async {
       final tripRef = _trips.doc(tripId);
@@ -389,37 +709,37 @@ class RidesRepository {
       final data = tripDoc.data() ?? const <String, dynamic>{};
       final status = (data['status'] ?? '') as String;
       if (status == 'cancelled' || status == 'completed') return null;
+      if (requireAccepted && status != 'accepted') return null;
+      if (requireDriverId.isNotEmpty) {
+        final acceptedId = (data['acceptedDriverId'] ?? '') as String;
+        if (acceptedId != requireDriverId) return null;
+      }
 
       final patch = <String, Object?>{
         'status': 'cancelled',
         'cancelledBy': cancelledBy,
         if (cancelledByPhone.isNotEmpty) 'cancelledByPhone': cancelledByPhone,
+        if (cancelReason.isNotEmpty) 'cancelReason': cancelReason,
+        if (notifyPassengerReroute) 'notifyPassengerReroute': true,
         'cancelledAt': FieldValue.serverTimestamp(),
       };
       tx.set(tripRef, patch, SetOptions(merge: true));
 
       if (status == 'accepted') {
         final scheduleId = (data['scheduleId'] ?? '') as String;
-        if (scheduleId.isNotEmpty) {
-          tx.set(
-            _db.collection('schedules').doc(scheduleId),
-            {
-              'seatsLeft': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-        }
-
         final driverId = (data['acceptedDriverId'] ??
             data['targetDriverId'] ??
             '') as String;
+        await _releaseMarshrutSeatInTransaction(
+          tx,
+          scheduleId: scheduleId,
+          driverId: driverId,
+        );
         if (driverId.isNotEmpty) {
           tx.set(
-            _queue.doc(driverId),
+            _drivers.doc(driverId),
             {
-              'seatsLeft': FieldValue.increment(1),
-              'isActive': true,
+              'isBusy': false,
               'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
@@ -465,31 +785,106 @@ class RidesRepository {
     required String eventType,
   }) async {
     if (tripId.isEmpty) return;
-    final ref = _trips.doc(tripId);
-    final snap = await ref.get();
-    if (!snap.exists) return;
-    final data = snap.data();
-    if ((data?['status'] ?? '') != 'accepted') return;
-    final acceptedDriverId =
-        (data?['acceptedDriverId'] ?? data?['targetDriverId'] ?? '') as String;
-    if (driverId.isNotEmpty &&
-        acceptedDriverId.isNotEmpty &&
-        acceptedDriverId != driverId) {
-      return;
-    }
+    Map<String, dynamic>? tripData;
+    await _db.runTransaction((tx) async {
+      final tripRef = _trips.doc(tripId);
+      final tripDoc = await tx.get(tripRef);
+      if (!tripDoc.exists) return;
+      tripData = tripDoc.data() ?? const <String, dynamic>{};
+      if ((tripData!['status'] ?? '') != 'accepted') return;
+      final acceptedDriverId = (tripData!['acceptedDriverId'] ??
+          tripData!['targetDriverId'] ??
+          '') as String;
+      if (driverId.isNotEmpty &&
+          acceptedDriverId.isNotEmpty &&
+          acceptedDriverId != driverId) {
+        tripData = null;
+        return;
+      }
 
-    await ref.set({
-      'status': 'completed',
-      'completedBy': completedBy,
-      if (completedByPhone.isNotEmpty) 'completedByPhone': completedByPhone,
-      'completedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      tx.set(
+        tripRef,
+        {
+          'status': 'completed',
+          'completedBy': completedBy,
+          if (completedByPhone.isNotEmpty)
+            'completedByPhone': completedByPhone,
+          'completedAt': FieldValue.serverTimestamp(),
+          'fare': (tripData!['fare'] as num?)?.toInt() ?? 0,
+          'cashPaid': (tripData!['fare'] as num?)?.toInt() ?? 0,
+        },
+        SetOptions(merge: true),
+      );
+
+      final scheduleId = (tripData!['scheduleId'] ?? '') as String;
+      final seatDriverId = acceptedDriverId.isNotEmpty
+          ? acceptedDriverId
+          : (tripData!['targetDriverId'] ?? '') as String;
+      await _releaseMarshrutSeatInTransaction(
+        tx,
+        scheduleId: scheduleId,
+        driverId: seatDriverId,
+      );
+      if (seatDriverId.isNotEmpty) {
+        tx.set(
+          _drivers.doc(seatDriverId),
+          {
+            'isBusy': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+    });
+
+    if (tripData == null) return;
     await _logDispatchEventFromTrip(
       tripId: tripId,
       type: eventType,
-      data: data,
+      data: tripData,
       driverIdOverride: driverId.isNotEmpty ? driverId : null,
     );
+    await _clearMarshrutActiveIfMatches(
+      userPhone: (tripData!['userPhone'] ?? '') as String,
+      tripId: tripId,
+      status: 'completed',
+    );
+  }
+
+  /// `schedules.seatsLeft` — единствен манба; queue faqat `isActive` (+ mirror seatsLeft).
+  Future<void> _releaseMarshrutSeatInTransaction(
+    Transaction tx, {
+    required String scheduleId,
+    required String driverId,
+  }) async {
+    if (scheduleId.isEmpty) return;
+    final schedRef = _db.collection('schedules').doc(scheduleId);
+    final schedDoc = await tx.get(schedRef);
+    if (!schedDoc.exists) return;
+    final data = schedDoc.data() ?? const <String, dynamic>{};
+    final seats = (data['seatsLeft'] as num?)?.toInt() ?? 0;
+    final total = (data['seats'] as num?)?.toInt() ?? 0;
+    final cap = total > 0 ? total : seats + 1;
+    final next = (seats + 1).clamp(0, cap);
+    tx.set(
+      schedRef,
+      {
+        'seatsLeft': next,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    if (driverId.isNotEmpty) {
+      tx.set(
+        _queue.doc(driverId),
+        {
+          'seatsLeft': next,
+          'isActive': next > 0,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
   }
 
   // ─── Marshrut driver — pending requests ────────────────────────────
@@ -567,10 +962,8 @@ class RidesRepository {
 
   /// Marshrut haydovchi safarni qabul qiladi.
   ///
-  /// Atomic ravishda: trip status `pending` tekshiruvi → schedule `seatsLeft`
-  /// tekshiruvi (bo'lsa) → ikkalasini birga yangilanadi. Agar trip status
-  /// o'zgargan yoki joy qolmagan bo'lsa, `false` qaytaradi.
-  Future<bool> acceptMarshrutRide({
+  /// `schedules.seatsLeft` — единствен манба; queue faqat mirror + isActive.
+  Future<MarshrutAcceptOutcome> acceptMarshrutRide({
     required String tripId,
     String? scheduleId,
     required String driverId,
@@ -579,14 +972,21 @@ class RidesRepository {
     required String driverCar,
     required String driverPlate,
   }) async {
-    if (tripId.isEmpty) return false;
+    if (tripId.isEmpty) return MarshrutAcceptOutcome.taken;
     Map<String, dynamic>? expiredTripData;
+    String? failCode;
     final accepted = await _db.runTransaction<bool>((tx) async {
       final tripRef = _trips.doc(tripId);
       final tripDoc = await tx.get(tripRef);
-      if (!tripDoc.exists) return false;
+      if (!tripDoc.exists) {
+        failCode = 'taken';
+        return false;
+      }
       final tripData = tripDoc.data() ?? const <String, dynamic>{};
-      if ((tripData['status'] ?? '') != 'pending') return false;
+      if ((tripData['status'] ?? '') != 'pending') {
+        failCode = 'taken';
+        return false;
+      }
       if (_isExpiredTripData(tripData)) {
         expiredTripData = tripData;
         tx.set(
@@ -613,35 +1013,51 @@ class RidesRepository {
           'scheduleId': scheduleId ?? tripData['scheduleId'] ?? '',
           'createdAt': FieldValue.serverTimestamp(),
         });
+        failCode = 'expired';
         return false;
       }
 
-      if (scheduleId != null && scheduleId.isNotEmpty) {
-        final schedRef = _db.collection('schedules').doc(scheduleId);
+      final schedId = scheduleId ?? (tripData['scheduleId'] ?? '') as String;
+      var seatsAfter = 0;
+      if (schedId.isNotEmpty) {
+        final schedRef = _db.collection('schedules').doc(schedId);
         final schedDoc = await tx.get(schedRef);
         final seats = (schedDoc.data()?['seatsLeft'] as num?)?.toInt() ?? 0;
         if (seats <= 0) {
           tx.update(tripRef, {'status': 'no_seats'});
+          failCode = 'no_seats';
           return false;
         }
-        tx.update(schedRef, {'seatsLeft': seats - 1});
+        seatsAfter = seats - 1;
+        tx.update(schedRef, {
+          'seatsLeft': seatsAfter,
+          'todayTrips': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       }
 
       if (driverId.isNotEmpty) {
-        final queueRef = _db.collection('queue').doc(driverId);
-        final queueDoc = await tx.get(queueRef);
-        if (queueDoc.exists) {
-          final queueSeats =
-              (queueDoc.data()?['seatsLeft'] as num?)?.toInt() ?? 0;
-          final nextSeats = queueSeats > 0 ? queueSeats - 1 : 0;
+        final driverRef = _db.collection('drivers').doc(driverId);
+        tx.set(
+          driverRef,
+          {
+            'todayTrips': FieldValue.increment(1),
+            'isBusy': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+        if (schedId.isNotEmpty) {
           tx.set(
-              queueRef,
-              {
-                'seatsLeft': nextSeats,
-                if (nextSeats <= 0) 'isActive': false,
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true));
+            _queue.doc(driverId),
+            {
+              'seatsLeft': seatsAfter,
+              'isActive': seatsAfter > 0,
+              'todayTrips': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
         }
       }
 
@@ -689,8 +1105,32 @@ class RidesRepository {
         data: expiredTripData,
         driverIdOverride: driverId,
       );
+      return MarshrutAcceptOutcome.expired;
     }
-    return accepted;
+    if (accepted) {
+      final tripSnap = await _trips.doc(tripId).get();
+      final userPhone =
+          normalizeMarshrutPhone((tripSnap.data()?['userPhone'] ?? '') as String);
+      if (userPhone.isNotEmpty) {
+        try {
+          await _marshrutActiveRef(userPhone).set(
+            {
+              'tripId': tripId,
+              'sessionId': tripSnap.data()?['dispatchSessionId'] ?? '',
+              'status': 'accepted',
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        } catch (_) {
+          // Qoidalar yangilanmaguncha qabul muvaffaqiyatli qolsin.
+        }
+      }
+      return MarshrutAcceptOutcome.success;
+    }
+    if (failCode == 'no_seats') return MarshrutAcceptOutcome.noSeats;
+    if (failCode == 'expired') return MarshrutAcceptOutcome.expired;
+    return MarshrutAcceptOutcome.taken;
   }
 
   Future<void> rejectRide({
@@ -726,6 +1166,14 @@ class RidesRepository {
       data: data,
       driverIdOverride: driverId,
     );
+    final passengerPhone = (data['userPhone'] ?? '') as String;
+    if (passengerPhone.isNotEmpty) {
+      await _clearMarshrutActiveIfMatches(
+        userPhone: passengerPhone,
+        tripId: tripId,
+        status: 'rejected',
+      );
+    }
   }
 
   Future<void> _logDispatchEventFromTrip({
@@ -767,7 +1215,19 @@ class RidesRepository {
     if (type == 'rejected') {
       await queueRef.set({
         'dispatchRejectCount': FieldValue.increment(1),
+        'todayRejects': FieldValue.increment(1),
         'lastRejectedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      final scheduleId = (d['scheduleId'] ?? '') as String;
+      if (scheduleId.isNotEmpty) {
+        await _db.collection('schedules').doc(scheduleId).set({
+          'todayRejects': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      await _db.collection('drivers').doc(driverId).set({
+        'todayRejects': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       return;
@@ -786,6 +1246,7 @@ class RidesRepository {
         final patch = <String, Object?>{
           'dispatchTimeoutStreak': streakAfter,
           'dispatchTimeoutCount': FieldValue.increment(1),
+          'todayTimeouts': FieldValue.increment(1),
           'lastTimeoutAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         };
@@ -797,6 +1258,18 @@ class RidesRepository {
         }
         tx.set(queueRef, patch, SetOptions(merge: true));
       });
+
+      final scheduleId = (d['scheduleId'] ?? '') as String;
+      if (scheduleId.isNotEmpty) {
+        await _db.collection('schedules').doc(scheduleId).set({
+          'todayTimeouts': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+      await _db.collection('drivers').doc(driverId).set({
+        'todayTimeouts': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       if (disabled) {
         await _dispatchEvents.add({

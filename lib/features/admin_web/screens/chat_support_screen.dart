@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/constants/admin_pin.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 import '../../../repositories/chat_repository.dart';
 import '../services/admin_auth_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Чат-қўллaб-қуввaтлaш — Admin web.
 ///
@@ -83,7 +83,7 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
 
   Widget _emptyChatHint() {
     return Container(
-      color: const Color(0xFFF5F7FA),
+      color: AppColors.scaffold,
       child: Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -203,14 +203,14 @@ class _ChatTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: selected ? const Color(0xFF0D47A1).withOpacity(0.05) : null,
+        color: selected ? AppColors.primary.withOpacity(0.05) : null,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: const Color(0xFF0D47A1).withOpacity(0.15),
+            backgroundColor: AppColors.primary.withOpacity(0.15),
             child: const Icon(Icons.person,
-                color: Color(0xFF0D47A1), size: 22),
+                color: AppColors.primary, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -288,13 +288,14 @@ class _ChatViewState extends State<_ChatView> {
     setState(() => _sending = true);
     try {
       // Client Firestore rules билан чақириқлар йирик ҳолларда рад этилади —
-      // Admin SDK callable орқали ёзамиз (PIN хўжайин билан бир хил).
+      // Admin SDK callable орқали ёзамиз (admin role серверда текширилади).
+      final auth = context.read<AdminAuthService>();
       final fn =
           FirebaseFunctions.instance.httpsCallable('sendSupportChatReply');
       await fn.call(<String, dynamic>{
         'chatId': widget.chatId,
         'text': text,
-        'pin': kAdminPanelPin,
+        'adminPhone': auth.phone ?? '',
       });
       _msgCtrl.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -320,7 +321,7 @@ class _ChatViewState extends State<_ChatView> {
       _topBar(),
       Expanded(
         child: Container(
-          color: const Color(0xFFF5F7FA),
+          color: AppColors.scaffold,
           child: StreamBuilder<List<ChatMessage>>(
             stream: repo.watchMessages(widget.chatId),
             builder: (ctx, snap) {
@@ -379,9 +380,9 @@ class _ChatViewState extends State<_ChatView> {
           ),
         CircleAvatar(
           radius: 18,
-          backgroundColor: const Color(0xFF0D47A1).withOpacity(0.15),
+          backgroundColor: AppColors.primary.withOpacity(0.15),
           child:
-              const Icon(Icons.person, color: Color(0xFF0D47A1), size: 18),
+              const Icon(Icons.person, color: AppColors.primary, size: 18),
         ),
         const SizedBox(width: 10),
         Column(
@@ -436,7 +437,7 @@ class _ChatViewState extends State<_ChatView> {
                       strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.send),
           style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFF0D47A1),
+            backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
           ),
         ),
@@ -471,7 +472,7 @@ class _MessageBubble extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isOutgoing ? const Color(0xFF0D47A1) : Colors.white,
+                color: isOutgoing ? AppColors.primary : Colors.white,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(14),
                   topRight: const Radius.circular(14),

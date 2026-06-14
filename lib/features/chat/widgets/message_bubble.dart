@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 
@@ -17,7 +18,7 @@ class MessageBubble extends StatelessWidget {
   /// Admin uchun `fromAdmin == true` bo'lganlar "men yozdim".
   final bool isMine;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   @override
   Widget build(BuildContext context) {

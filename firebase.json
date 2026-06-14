@@ -7,6 +7,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "site": "master-taxi-gurlan",
     "public": "build/hosting",
     "ignore": [
       "firebase.json",
@@ -38,11 +39,29 @@
         ]
       },
       {
+        "source": "**/*.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "**/*.@(css|woff2)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(png|jpg|jpeg|webp|gif|ico)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
           }
         ]
       },

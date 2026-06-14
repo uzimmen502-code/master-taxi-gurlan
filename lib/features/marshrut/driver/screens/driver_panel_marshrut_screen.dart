@@ -1,14 +1,22 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../driver_schedule/screens/driver_schedule_screen.dart';
-import '../../../../utils/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../controllers/marshrut_driver_panel_controller.dart';
+import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
 import '../widgets/online_toggle_tile.dart';
 import '../widgets/ride_request_card.dart';
 import '../widgets/route_card.dart';
@@ -65,19 +73,48 @@ class _DriverPanelMarshrutView extends StatefulWidget {
 
 class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     with WidgetsBindingObserver {
-  static const Color _color = Color(0xFF00695C);
-  static const Color _orange = Color(0xFFE65100);
+  static const Color _color = AppColors.button;
+  static const Color _orange = AppColors.primary;
 
   String? _lastSnackShown;
+  String? _openRequestDialogTripId;
+  String? _lastPassengerCancelSnackTripId;
+  VoidCallback? _closeRequestDialog;
+  final FlutterRingtonePlayer _ringtonePlayer = FlutterRingtonePlayer();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final ctrl = context.read<MarshrutDriverPanelController>();
+    ctrl.onStopRingtone = _stopRingtone;
+    ctrl.onPassengerOrderCancelled = _onPassengerOrderCancelled;
+    ctrl.onEndStopApproaching = () {
+      if (mounted) _showEndStopDialog();
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingTripFromPush();
+    });
+  }
+
+  Future<void> _checkPendingTripFromPush() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tripId = prefs.getString('pending_marshrut_trip_id');
+    if (tripId == null || tripId.isEmpty) return;
+    await prefs.remove('pending_marshrut_trip_id');
+    if (!mounted) return;
+    await context.read<MarshrutDriverPanelController>().setPendingDialogTripId(
+          tripId,
+        );
   }
 
   @override
   void dispose() {
+    final ctrl = context.read<MarshrutDriverPanelController>();
+    ctrl.onStopRingtone = null;
+    ctrl.onPassengerOrderCancelled = null;
+    ctrl.onEndStopApproaching = null;
+    _stopRingtone();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -89,32 +126,91 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     }
   }
 
+  void _startRingtone() {
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      _ringtonePlayer.playRingtone(
+        looping: true,
+        volume: 1.0,
+        asAlarm: false,
+      );
+    }
+  }
+
+  void _stopRingtone() {
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      _ringtonePlayer.stop();
+    }
+  }
+
+  Future<void> _showEndStopDialog() async {
+    _startRingtone();
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(context.tr('end_stop_approaching')),
+        content: Text(context.tr('return_trip_question')),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('no')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.button),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.tr('yes')),
+          ),
+        ],
+      ),
+    );
+    _stopRingtone();
+
+    if (!mounted) return;
+    final ctrl = context.read<MarshrutDriverPanelController>();
+    ctrl.markEndStopDialogClosed();
+    if (ok == true) {
+      await ctrl.forceEndAndSwitch();
+    } else {
+      await ctrl.forceEndAndGoOffline();
+    }
+  }
+
   void _react(MarshrutDriverPanelController c) {
     final msg = c.errorMessage ?? c.info;
     if (msg != null && msg != _lastSnackShown) {
       _lastSnackShown = msg;
-      final isError = c.errorMessage != null;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _snack(
-            msg,
-            isError
-                ? Colors.red
-                : (c.info!.contains('📵')
-                    ? Colors.orange
-                    : c.info!.contains('❗')
-                        ? _orange
-                        : _color));
+      if (msg == 'no_schedule_today') {
         c.clearTransient();
         _lastSnackShown = null;
-      });
+      } else {
+        final isError = c.errorMessage != null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final infoKey = c.info;
+          _snack(
+              context.trMsg(msg),
+              isError
+                  ? Colors.red
+                  : (infoKey == 'internet_disconnected_offline'
+                      ? Colors.orange
+                      : infoKey == 'finish_accepted_trip_first' ||
+                              infoKey == 'resolve_orders_first'
+                          ? _orange
+                          : _color));
+          c.clearTransient();
+          _lastSnackShown = null;
+        });
+      }
     }
 
-    if (c.pendingDialogTripId != null) {
+    if (c.pendingDialogTripId != null && !c.isDialogOpen) {
       final ride = c.rideById(c.pendingDialogTripId!);
       if (ride != null) {
         final id = ride.id;
-        c.dialogShown();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           _showRequestDialog(ride, controller: c, tripId: id);
@@ -134,70 +230,115 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   }
 
   Future<void> _callUser(String phone) async {
-    if (phone.isEmpty) return;
-    final url = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(url)) await launchUrl(url);
+    if (phone.isEmpty || phoneDigits(phone).length < 9) return;
+    final url = Uri.parse('tel:${phoneForCall(phone)}');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
-  void _showRequestDialog(
+  void _onPassengerOrderCancelled(String tripId) {
+    _handlePassengerCancelledOrder(tripId);
+  }
+
+  void _handlePassengerCancelledOrder(String tripId) {
+    _stopRingtone();
+    if (_openRequestDialogTripId == tripId) {
+      _closeRequestDialog?.call();
+    }
+    if (!mounted) return;
+    if (_lastPassengerCancelSnackTripId == tripId) return;
+    _lastPassengerCancelSnackTripId = tripId;
+    _snack(context.tr('marshrut_passenger_cancelled_order'), Colors.orange);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (_lastPassengerCancelSnackTripId == tripId) {
+        _lastPassengerCancelSnackTripId = null;
+      }
+    });
+  }
+
+  Future<void> _showRequestDialog(
     ActiveTrip ride, {
     required MarshrutDriverPanelController controller,
     required String tripId,
-  }) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.person_pin, color: _color, size: 26),
-          SizedBox(width: 8),
-          Text('Янги буюртма!',
-              style: TextStyle(fontSize: AppText.titleMedium)),
-        ]),
-        content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _infoRow('📍 МФЙ:', ride.pickupMfy),
-              if (ride.fromAddr.isNotEmpty)
-                _infoRow('🏠 Манзил:', ride.fromAddr),
-              _infoRow('🏁 Қаерга:', ride.dropoffMfy),
-              _infoRow('📞 Телефон:', ride.userPhone),
-            ]),
-        actions: [
-          IconButton(
-            onPressed: () => _callUser(ride.userPhone),
-            icon: const Icon(Icons.call, color: Colors.green, size: 28),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              controller.rejectRide(tripId);
-            },
-            child: const Text('РАД',
-                style:
-                    TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final ok = await controller.acceptRide(tripId);
-              if (!mounted) return;
-              if (ok && ride.userPhone.isNotEmpty) {
-                await _callUser(ride.userPhone);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _color,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10))),
-            child: const Text('ҚАБУЛ'),
-          ),
-        ],
-      ),
-    );
+  }) async {
+    controller.isDialogOpen = true;
+    _startRingtone();
+    _openRequestDialogTripId = tripId;
+    StreamSubscription<ActiveTrip>? tripSub;
+    tripSub = context.read<RidesRepository>().watch(tripId).listen((trip) {
+      if (!trip.isPassengerCancelled) return;
+      tripSub?.cancel();
+      _handlePassengerCancelledOrder(tripId);
+    });
+    try {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) {
+          _closeRequestDialog = () {
+            if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+          };
+          return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(children: [
+            const Icon(Icons.person_pin, color: _color, size: 26),
+            const SizedBox(width: 8),
+            Text(context.tr('new_order_alert'),
+                style: const TextStyle(fontSize: AppText.titleMedium)),
+          ]),
+          content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _infoRow(context.tr('label_mfy'), ride.pickupMfy),
+                if (ride.fromAddr.isNotEmpty)
+                  _infoRow(context.tr('label_address'), ride.fromAddr),
+                _infoRow(context.tr('label_destination'), ride.dropoffMfy),
+                _infoRow(context.tr('label_phone'), ride.userPhone),
+              ]),
+          actions: [
+            IconButton(
+              onPressed: () => _callUser(ride.userPhone),
+              icon: const Icon(Icons.call, color: AppColors.primary, size: 28),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                controller.rejectRide(tripId);
+              },
+              child: Text(context.tr('reject'),
+                  style: const TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                final ok = await controller.acceptRide(tripId);
+                if (!mounted) return;
+                if (ok && ride.userPhone.isNotEmpty) {
+                  await _callUser(ride.userPhone);
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10))),
+              child: Text(context.tr('accept')),
+            ),
+          ],
+        );
+        },
+      );
+    } finally {
+      await tripSub?.cancel();
+      _closeRequestDialog = null;
+      _openRequestDialogTripId = null;
+      _stopRingtone();
+    }
+    controller.isDialogOpen = false;
+    controller.dialogShown();
   }
 
   Widget _infoRow(String label, String value) => Padding(
@@ -221,19 +362,27 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     _react(c);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE0F2F1),
+      backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
-        title: const Text('🚐 Маршрут панели'),
-        backgroundColor: _color,
+        title: Text(context.tr('marshrut_panel_title')),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.stop_circle_outlined,
+                color: Colors.redAccent),
+            tooltip: context.tr('end_shift'),
+            onPressed: () => _showEndShiftDialog(context),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            onSelected: (val) {
+            onSelected: (val) async {
               if (val == 'edit') {
+                if (!await ensureCarInfoViaProfile(context)) return;
+                if (!context.mounted) return;
                 Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -242,13 +391,13 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
                     .then((_) => c.checkTodaySchedule());
               }
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'edit',
                 child: Row(children: [
-                  Icon(Icons.edit, size: 18, color: Colors.black87),
-                  SizedBox(width: 10),
-                  Text('Маълумотларни таҳрирлаш'),
+                  const Icon(Icons.edit, size: 18, color: Colors.black87),
+                  const SizedBox(width: 10),
+                  Text(ctx.tr('edit_driver_data')),
                 ]),
               ),
             ],
@@ -281,7 +430,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
               stops: c.stops,
               direction: c.direction,
               seatsLeft: c.seatsLeft,
-              onSwitchDirection: c.finishTrip,
+              onSwitchDirection: c.switchDirection,
             ),
             const SizedBox(height: 16),
             if (c.isAutoPaused) ...[
@@ -306,6 +455,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
                 _AcceptedTripCard(
                   ride: r,
                   onCall: () => _callUser(r.userPhone),
+                  onCancelNoRoom: () => _confirmCancelNoRoom(c, r),
                   onComplete: () => _confirmCompleteRide(c, r),
                 ),
               const SizedBox(height: 16),
@@ -327,6 +477,63 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     );
   }
 
+  Future<void> _showEndShiftDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Text(context.tr('end_shift_confirm_title')),
+        content: Text(context.tr('end_shift_confirm_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('end_shift')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final ctrl = context.read<MarshrutDriverPanelController>();
+    await ctrl.goOffline();
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _confirmCancelNoRoom(
+    MarshrutDriverPanelController controller,
+    ActiveTrip ride,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('no_seat_title')),
+        content: Text(ctx.tr('no_room_dialog_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(ctx.tr('no')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(ctx.tr('cancel_booking')),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await controller.cancelAcceptedNoRoom(ride.id);
+  }
+
   Future<void> _confirmCompleteRide(
     MarshrutDriverPanelController controller,
     ActiveTrip ride,
@@ -334,14 +541,14 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Сафарни якунлаш'),
+        title: Text(ctx.tr('complete_trip_title')),
         content: Text(
-          '${ride.pickupMfy} → ${ride.dropoffMfy} сафарини completed қилишни тасдиқлайсизми?',
+          ctx.tr('complete_trip_confirm').replaceAll('{from}', ride.pickupMfy).replaceAll('{to}', ride.dropoffMfy),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('no')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -349,7 +556,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
               backgroundColor: _color,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Ҳа, якунлаш'),
+            child: Text(ctx.tr('complete_trip_confirm_btn')),
           ),
         ],
       ),
@@ -365,13 +572,13 @@ class _AcceptedTripsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(children: [
-      Icon(Icons.check_circle_outline, color: Color(0xFF00695C), size: 20),
-      SizedBox(width: 8),
+    return Row(children: [
+      const Icon(Icons.check_circle_outline, color: AppColors.primaryDark, size: 20),
+      const SizedBox(width: 8),
       Text(
-        'Қабул қилинган сафарлар',
-        style:
-            TextStyle(fontSize: AppText.bodyLarge, fontWeight: FontWeight.bold),
+        context.tr('accepted_trips_title'),
+        style: const TextStyle(
+            fontSize: AppText.bodyLarge, fontWeight: FontWeight.bold),
       ),
     ]);
   }
@@ -381,14 +588,16 @@ class _AcceptedTripCard extends StatelessWidget {
   const _AcceptedTripCard({
     required this.ride,
     required this.onCall,
+    required this.onCancelNoRoom,
     required this.onComplete,
   });
 
   final ActiveTrip ride;
   final VoidCallback onCall;
+  final VoidCallback onCancelNoRoom;
   final VoidCallback onComplete;
 
-  static const Color _color = Color(0xFF00695C);
+  static const Color _color = AppColors.button;
 
   @override
   Widget build(BuildContext context) {
@@ -420,23 +629,32 @@ class _AcceptedTripCard extends StatelessWidget {
               fontSize: AppText.labelSmall, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 10),
-        Row(children: [
-          OutlinedButton.icon(
-            onPressed: onCall,
-            icon: const Icon(Icons.call, size: 16),
-            label: const Text('Қўнғироқ'),
-          ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: onComplete,
-            icon: const Icon(Icons.done_all, size: 16),
-            label: const Text('Якунлаш'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _color,
-              foregroundColor: Colors.white,
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: onCall,
+              icon: const Icon(Icons.call, size: 16),
+              label: Text(context.tr('call')),
             ),
-          ),
-        ]),
+            OutlinedButton.icon(
+              onPressed: onCancelNoRoom,
+              icon: const Icon(Icons.event_busy, size: 16),
+              label: Text(context.tr('no_room_short')),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.orange.shade800),
+            ),
+            ElevatedButton.icon(
+              onPressed: onComplete,
+              icon: const Icon(Icons.done_all, size: 16),
+              label: Text(context.tr('complete_short')),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _color,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ]),
     );
   }
@@ -465,18 +683,19 @@ class _AutoPausedBanner extends StatelessWidget {
         Row(children: [
           Icon(Icons.pause_circle_outline, color: Colors.deepPurple.shade700),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Навбатдан вақтинча чиқарилдингиз',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              context.tr('auto_paused_banner_title'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ]),
         const SizedBox(height: 8),
         Text(
           reason == 'dispatch_timeout_streak'
-              ? 'Сиз 3 марта кетма-кет буюртмага жавоб бермадингиз. Навбатни тўсиб қўймаслик учун тизим сизни вақтинча тўхтатди.'
-              : 'Тизим сизни вақтинча тўхтатди: $reason',
+              ? context.tr('auto_paused_timeout_body')
+              : context.tr('auto_paused_generic_body')
+                  .replaceAll('{reason}', reason),
           style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
         ),
         const SizedBox(height: 10),
@@ -485,7 +704,7 @@ class _AutoPausedBanner extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: onReactivate,
             icon: const Icon(Icons.play_arrow, size: 16),
-            label: const Text('Навбатга қайтиш'),
+            label: Text(context.tr('return_to_queue_btn')),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
@@ -510,7 +729,7 @@ class _DriverInfoCard extends StatelessWidget {
   final String plate;
   final int seats;
 
-  static const Color _color = Color(0xFF00695C);
+  static const Color _color = AppColors.button;
 
   @override
   Widget build(BuildContext context) {
@@ -518,7 +737,7 @@ class _DriverInfoCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF00695C), Color(0xFF00897B)],
+          colors: [AppColors.primaryDark, AppColors.primaryMid],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -576,7 +795,7 @@ class _StartScheduleTile extends StatelessWidget {
   final String driverPlate;
   final Future<void> Function() onReturned;
 
-  static const Color _color = Color(0xFF00695C);
+  static const Color _color = AppColors.button;
 
   @override
   Widget build(BuildContext context) {
@@ -609,17 +828,17 @@ class _StartScheduleTile extends StatelessWidget {
             child: const Icon(Icons.play_circle_fill, color: _color, size: 28),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text('ИШНИ БОШЛАШ',
-                    style: TextStyle(
+                Text(context.tr('start_work_title'),
+                    style: const TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold,
                         color: _color)),
-                Text('Тўхташ нуқталарини киритинг',
-                    style: TextStyle(
+                Text(context.tr('start_work_subtitle'),
+                    style: const TextStyle(
                         fontSize: AppText.labelSmall, color: Colors.grey)),
               ])),
           const Icon(Icons.chevron_right, color: Colors.grey),
@@ -634,13 +853,13 @@ class _RequestsHeader extends StatelessWidget {
 
   final int count;
 
-  static const Color _color = Color(0xFF00695C);
+  static const Color _color = AppColors.button;
 
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      const Text('📥 Буюртмалар',
-          style: TextStyle(
+      Text(context.tr('orders_incoming'),
+          style: const TextStyle(
               fontSize: AppText.bodyLarge, fontWeight: FontWeight.bold)),
       const SizedBox(width: 8),
       Container(

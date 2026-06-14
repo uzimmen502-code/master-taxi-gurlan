@@ -68,12 +68,26 @@ class UserAddress {
       street.trim().isNotEmpty &&
       house.trim().isNotEmpty;
 
-  /// GPS координаталари мавжудми?
-  bool get hasGps => lat != null && lng != null;
+  /// GPS координаталари мавжудми? (0,0 ҳам йўқ деб ҳисобланади)
+  bool get hasGps {
+    if (lat == null || lng == null) return false;
+    if (lat!.abs() < 1e-6 && lng!.abs() < 1e-6) return false;
+    return lat! >= -90 && lat! <= 90 && lng! >= -180 && lng! <= 180;
+  }
 
-  /// **Тўлиқ манзил** — қўлда + GPS, иккаласи ҳам сақланган.
-  /// Профил `AddressGate` ва `hasCompleteAddress` шу мезон бўйича текширади.
-  bool get isComplete => hasManualAddress && hasGps;
+  /// Сақлаш/буюртма учун валидация хабари (null = тўлиқ).
+  String? get validationError {
+    if (!hasManualAddress) {
+      return 'МФЙ, кўча ва уй рақами мажбурий';
+    }
+    if (!hasGps) {
+      return 'GPS координаталари мажбурий — «Жорий GPS манзилни олиш»';
+    }
+    return null;
+  }
+
+  /// **Тўлиқ манзил** — қўлда + GPS, иккаласи ҳам Firestore профилида сақланган.
+  bool get isComplete => validationError == null;
 
   /// GPS аниқлиги категорияси (UI badge учун).
   /// `null` — GPS йўқ, `high` — <20m, `medium` — 20–100m, `low` — >100m.

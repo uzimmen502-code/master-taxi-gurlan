@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'features/admin_web/screens/admin_login_screen.dart';
 import 'features/admin_web/screens/admin_shell.dart';
 import 'features/admin_web/services/admin_auth_service.dart';
+import 'features/admin_web/services/admin_news_read_service.dart';
 import 'firebase_options.dart';
 import 'repositories/analytics_repository.dart';
 import 'repositories/bread_repository.dart';
@@ -34,14 +35,18 @@ import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
 import 'repositories/inventory_repository.dart';
 import 'repositories/jobs_repository.dart';
+import 'repositories/home_ticker_repository.dart';
 import 'repositories/news_repository.dart';
+import 'repositories/sell_offers_repository.dart';
 import 'repositories/orders_repository.dart';
 import 'repositories/queue_repository.dart';
 import 'repositories/rides_repository.dart';
 import 'repositories/user_repository.dart';
-import 'core/constants/admin_pin.dart';
+import 'core/passenger_cancel_rules_holder.dart';
+import 'core/theme/app_theme.dart';
 import 'services/admin_service.dart';
 import 'services/daily_report_service.dart';
+import 'services/procurement_prices_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,28 +54,28 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Web'дa Firestore offline persistence — IndexedDB орqали.
-  try {
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
-  } catch (_) {
-    // Settings: 2-чи марта чaқирилмaйди.
-  }
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: false,
+  );
+
+  await PassengerCancelRulesHolder.load();
 
   // Аналитика репозиторий — daily report сервиси билaн боғлик.
   final analyticsRepo = AnalyticsRepository();
   final reportService = DailyReportService(analyticsRepo);
 
   // Auth — кэшлaнгaн сессияни тиклaйди.
-  final auth = AdminAuthService(adminPinCode: kAdminPanelPin);
+  final auth = AdminAuthService();
   await auth.restoreSession();
+
+  final adminNewsRead = AdminNewsReadService();
+  await adminNewsRead.init();
 
   runApp(AdminWebApp(
     auth: auth,
     analyticsRepo: analyticsRepo,
     reportService: reportService,
+    adminNewsRead: adminNewsRead,
   ));
 }
 
@@ -80,20 +85,26 @@ class AdminWebApp extends StatelessWidget {
     required this.auth,
     required this.analyticsRepo,
     required this.reportService,
+    required this.adminNewsRead,
   });
 
   final AdminAuthService auth;
   final AnalyticsRepository analyticsRepo;
   final DailyReportService reportService;
+  final AdminNewsReadService adminNewsRead;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AdminAuthService>.value(value: auth),
+        ChangeNotifierProvider<AdminNewsReadService>.value(
+            value: adminNewsRead),
         Provider<AnalyticsRepository>.value(value: analyticsRepo),
         Provider<DailyReportService>.value(value: reportService),
         Provider<NewsRepository>(create: (_) => NewsRepository()),
+        Provider<HomeTickerRepository>(create: (_) => HomeTickerRepository()),
+        Provider<SellOffersRepository>(create: (_) => SellOffersRepository()),
         Provider<UserRepository>(create: (_) => UserRepository()),
         Provider<BreadRepository>(create: (_) => BreadRepository()),
         Provider<InventoryRepository>(create: (_) => InventoryRepository()),
@@ -106,18 +117,14 @@ class AdminWebApp extends StatelessWidget {
             create: (_) => DeliveryRoutesRepository()),
         Provider<ChatRepository>(create: (_) => ChatRepository()),
         Provider<AdminService>(create: (_) => AdminService()),
+        Provider<ProcurementPricesService>(
+          create: (_) => ProcurementPricesService(),
+        ),
       ],
       child: MaterialApp(
         title: 'Master Taxi Gurlan — Admin',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF0D47A1),
-            brightness: Brightness.light,
-          ),
-          useMaterial3: true,
-          fontFamily: 'Roboto',
-        ),
+        theme: AppTheme.adminWeb,
         home: const _AuthGate(),
       ),
     );

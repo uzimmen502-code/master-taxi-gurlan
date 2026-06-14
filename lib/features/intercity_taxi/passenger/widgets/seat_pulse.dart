@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
+
 /// Reys kartochkasida bo'sh o'rinlar sonini кўрсатадиган мерцайдиган badge.
 /// 1 та qolsa — tez мерцайди, 2-3 — ўртача, 4+ — секин.
 class SeatPulse extends StatefulWidget {
@@ -57,10 +60,12 @@ class _SeatPulseState extends State<SeatPulse>
                 size: 15, color: widget.color),
             const SizedBox(width: 4),
             Text(
-              '${widget.seats} бўш ўрин',
+              context
+                  .tr('intercity_seats_left')
+                  .replaceAll('{n}', '${widget.seats}'),
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
+                fontSize: AppText.labelLarge,
+                fontWeight: FontWeight.w800,
                 color: widget.color,
               ),
             ),

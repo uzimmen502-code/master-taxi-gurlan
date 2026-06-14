@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 
 import '../../../../models/driver_client_stats.dart';
 
@@ -20,7 +22,7 @@ class LoyalClientBadge extends StatelessWidget {
     final s = stats;
     if (s == null || s.bookingCount == 0) return const SizedBox.shrink();
 
-    final label = s.loyaltyLabel;
+    final label = _loyaltyLabel(context, s);
     if (label.isEmpty) return const SizedBox.shrink();
 
     final palette = s.isVip
@@ -69,13 +71,24 @@ class LoyalClientBadge extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: palette.fg)),
             Text(
-                '${s.bookingCount} та бронь · ${_formatPrice(s.totalSpent)} сўм',
+                '${context.tr('booking_count_label').replaceAll('{n}', '${s.bookingCount}')} · ${_formatPrice(s.totalSpent)} ${context.tr('sum')}',
                 style: TextStyle(
                     fontSize: 10, color: palette.fg.withOpacity(0.8))),
           ],
         ),
       ]),
     );
+  }
+
+  static String _loyaltyLabel(BuildContext context, DriverClientStats s) {
+    if (s.isVip) return context.tr('vip_client');
+    if (s.isLoyal) return context.tr('loyal_client');
+    if (s.bookingCount > 1) {
+      return context
+          .tr('trip_count_label')
+          .replaceAll('{n}', '${s.bookingCount}');
+    }
+    return '';
   }
 
   static String _formatPrice(int p) {
@@ -107,7 +120,7 @@ class _LoyaltyPalette {
     bg: Color(0xFFF3E5F5),
     bgAlt: Color(0xFFE1BEE7),
     border: Color(0xFF9C27B0),
-    fg: Color(0xFF6A1B9A),
+    fg: AppColors.primary,
     icon: Icons.repeat,
   );
 
@@ -115,15 +128,15 @@ class _LoyaltyPalette {
     bg: Color(0xFFFFF8E1),
     bgAlt: Color(0xFFFFE0B2),
     border: Color(0xFFFFB300),
-    fg: Color(0xFFE65100),
+    fg: AppColors.primary,
     icon: Icons.workspace_premium,
   );
 
   static const vip = _LoyaltyPalette(
     bg: Color(0xFFE8F5E9),
     bgAlt: Color(0xFFC8E6C9),
-    border: Color(0xFF43A047),
-    fg: Color(0xFF1B5E20),
+    border: AppColors.primaryMid,
+    fg: AppColors.primaryDark,
     icon: Icons.diamond,
   );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../utils/app_theme.dart';
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Bugungi marshrut karta'i — qaerdan-qayerga, to'xtash chiplari, o'rinlar
 /// ko'rsatkichi ва йўналишни ўзгартириш тугмаси.
@@ -11,7 +12,7 @@ class RouteCard extends StatelessWidget {
     required this.direction,
     required this.seatsLeft,
     required this.onSwitchDirection,
-    this.color = const Color(0xFF00695C),
+    this.color = AppColors.primaryDark,
     this.errorColor = const Color(0xFFB71C1C),
   });
 
@@ -74,13 +75,13 @@ class RouteCard extends StatelessWidget {
               decoration: BoxDecoration(
                   color: Colors.amber,
                   borderRadius: BorderRadius.circular(10)),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.swap_horiz, size: 16, color: Colors.black),
-                  SizedBox(width: 6),
-                  Text('ЙЎНАЛИШНИ ЎЗГАРТИРИШ',
-                      style: TextStyle(
+                  const Icon(Icons.swap_horiz, size: 16, color: Colors.black),
+                  const SizedBox(width: 6),
+                  Text(context.tr('switch_direction'),
+                      style: const TextStyle(
                           fontSize: AppText.labelSmall,
                           color: Colors.black,
                           fontWeight: FontWeight.bold)),

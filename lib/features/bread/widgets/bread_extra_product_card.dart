@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/bread_extra_product.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// `extra_products` — қўшимча масаллиқлар / маҳсулотлар рўйхатидаги картаси.
 class BreadExtraProductCard extends StatelessWidget {
@@ -19,10 +20,11 @@ class BreadExtraProductCard extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onOpenCart;
 
-  static const _orange = Color(0xFFFF8F00);
+  static const _orange = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final isSoldOut = product.isSoldOut;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -51,14 +53,21 @@ class BreadExtraProductCard extends StatelessWidget {
             if (product.totalStock > 0)
               Text(
                 product.remaining > 3
-                    ? '📦 ${product.remaining} та қолди'
+                    ? loc
+                        .translate('bread_extra_stock_left')
+                        .replaceAll(
+                            '{n}', product.qtyCaptionNum(product.remaining))
                     : product.remaining > 0
-                        ? '⚠️ Охирги ${product.remaining} та!'
-                        : '🔴 ТУГАДИ',
+                        ? loc
+                            .translate('bread_extra_stock_last')
+                            .replaceAll(
+                                '{n}',
+                                product.qtyCaptionNum(product.remaining))
+                        : loc.translate('bread_extra_sold_out'),
                 style: TextStyle(
                   fontSize: AppText.labelTiny,
                   color: product.remaining > 3
-                      ? Colors.green
+                      ? AppColors.primary
                       : product.remaining > 0
                           ? Colors.orange
                           : Colors.red,
@@ -76,18 +85,18 @@ class BreadExtraProductCard extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF2E7D32).withOpacity(0.1),
+                color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFF2E7D32).withOpacity(0.3)),
+                    color: AppColors.primary.withOpacity(0.3)),
               ),
-              child: const Row(children: [
-                Icon(Icons.check, size: 16, color: Color(0xFF2E7D32)),
-                SizedBox(width: 4),
-                Text('Қўшилди',
-                    style: TextStyle(
+              child: Row(children: [
+                const Icon(Icons.check, size: 16, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text(loc.translate('bread_added'),
+                    style: const TextStyle(
                         fontSize: AppText.labelSmall,
-                        color: Color(0xFF2E7D32),
+                        color: AppColors.primary,
                         fontWeight: FontWeight.bold)),
               ]),
             ),
@@ -98,8 +107,8 @@ class BreadExtraProductCard extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add, size: 14),
-              label: const Text('Қўшиш',
-                  style: TextStyle(fontSize: AppText.labelSmall)),
+              label: Text(loc.translate('bread_add'),
+                  style: const TextStyle(fontSize: AppText.labelSmall)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _orange,
                 foregroundColor: Colors.white,

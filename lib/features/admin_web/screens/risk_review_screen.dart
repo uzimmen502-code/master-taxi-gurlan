@@ -4,11 +4,12 @@ import 'package:provider/provider.dart';
 import '../../../models/risk_event.dart';
 import '../../../repositories/user_repository.dart';
 import '../services/admin_auth_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 class RiskReviewScreen extends StatelessWidget {
   const RiskReviewScreen({super.key});
 
-  static const _blue = Color(0xFF0D47A1);
+  static const _blue = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +171,7 @@ class _RiskEventCardState extends State<_RiskEventCard> {
       );
       messenger.showSnackBar(const SnackBar(
         content: Text('Risk event ёпилди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -205,7 +206,7 @@ class _EmptyRiskState extends StatelessWidget {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.verified_user_outlined,
-            size: 54, color: Colors.green.shade400),
+            size: 54, color: AppColors.primaryMid),
         const SizedBox(height: 10),
         const Text('Очиқ risk event йўқ'),
       ]),

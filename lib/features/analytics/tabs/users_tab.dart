@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
@@ -62,7 +63,7 @@ class _UsersTabState extends State<UsersTab>
             icon: '👥',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: const Color(0xFF1565C0),
+              accent: AppColors.primary,
               kpis: [
                 KpiValue(
                     label: 'Жами',
@@ -125,7 +126,7 @@ class _UsersTabState extends State<UsersTab>
                 'Жами ${u.newUserRegistrationTrend.total} · ўртача ${u.newUserRegistrationTrend.average.toStringAsFixed(1)}/кун',
             child: TrendChart(
               series: u.newUserRegistrationTrend,
-              color: const Color(0xFF1565C0),
+              color: AppColors.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -135,7 +136,7 @@ class _UsersTabState extends State<UsersTab>
             subtitle: 'lastActiveAt бўйича',
             child: HourlyBarChart(
               series: u.activityHeatmap,
-              color: const Color(0xFF6A1B9A),
+              color: AppColors.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -179,7 +180,7 @@ class _UsersTabState extends State<UsersTab>
                   unit: 'фойдаланувчи',
                   points: u.cohortRetention,
                 ),
-                color: const Color(0xFFE65100),
+                color: AppColors.primary,
               ),
             ),
           if (u.cohortRetention.isNotEmpty) const SizedBox(height: 12),
@@ -191,7 +192,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '🔁',
                   label: 'Такрорий буюртма даражаси',
                   value: '${u.repeatRate.toStringAsFixed(1)}%',
-                  valueColor: const Color(0xFF2E7D32)),
+                  valueColor: AppColors.primary),
               MetricRow(
                   icon: '📊',
                   label: 'Ўртача буюртма / фойдаланувчи',
@@ -208,7 +209,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '🏆',
                   child: TopList(
                     items: u.topUsersByOrders,
-                    color: const Color(0xFF1565C0),
+                    color: AppColors.primary,
                     maxItems: 5,
                   ),
                 ),
@@ -220,7 +221,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '💎',
                   child: TopList(
                     items: u.topUsersByRevenue,
-                    color: const Color(0xFF2E7D32),
+                    color: AppColors.primary,
                     maxItems: 5,
                   ),
                 ),

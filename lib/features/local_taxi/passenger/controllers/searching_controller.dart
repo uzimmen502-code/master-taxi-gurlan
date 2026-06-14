@@ -24,9 +24,13 @@ class SearchingController extends ChangeNotifier {
     required this.from,
     required this.to,
     required this.taxiType,
+    this.existingTripId,
   })  : _ridesRepo = ridesRepo,
         _driverRepo = driverRepo,
         _locationService = locationService;
+
+  /// Mavjud qidiruv tripini tiklash (yangi trip yaratilmaydi).
+  final String? existingTripId;
 
   final RidesRepository _ridesRepo;
   final DriverRepository _driverRepo;
@@ -86,18 +90,28 @@ class SearchingController extends ChangeNotifier {
     }
 
     try {
-      tripId = await _ridesRepo.createSearchRequest(
-        userPhone: _userPhone,
-        fromAddr: from,
-        toAddr: to,
-        fromLat: _fromLat,
-        fromLng: _fromLng,
-        taxiType: taxiType,
-        initialRadiusKm: _radiusForCycle(0),
-      );
+      final resumeId = existingTripId?.trim() ?? '';
+      if (resumeId.isNotEmpty) {
+        tripId = resumeId;
+        final existing = await _ridesRepo.getTrip(resumeId);
+        if (existing != null) {
+          _fromLat = existing.fromLat;
+          _fromLng = existing.fromLng;
+        }
+      } else {
+        tripId = await _ridesRepo.createSearchRequest(
+          userPhone: _userPhone,
+          fromAddr: from,
+          toAddr: to,
+          fromLat: _fromLat,
+          fromLng: _fromLng,
+          taxiType: taxiType,
+          initialRadiusKm: _radiusForCycle(0),
+        );
+      }
       _tripSub = _ridesRepo.watch(tripId!).listen(_onTripUpdate);
     } catch (e) {
-      errorMessage = 'Хатолик: $e';
+      errorMessage = 'error_generic|$e';
       notifyListeners();
       return;
     }
@@ -200,7 +214,7 @@ class SearchingController extends ChangeNotifier {
     if (trip.isRejected && pendingDriverId.isNotEmpty) {
       rejectedByIds.add(pendingDriverId);
       pendingDriverId = '';
-      errorMessage = 'Ҳайдовчи рад этди. Бошқасини танланг.';
+      errorMessage = 'driver_rejected_pick_another';
       notifyListeners();
       return;
     }
@@ -209,7 +223,7 @@ class SearchingController extends ChangeNotifier {
     if (pendingDriverId.isNotEmpty && trip.targetDriverId.isEmpty) {
       rejectedByIds.add(pendingDriverId);
       pendingDriverId = '';
-      errorMessage = 'Ҳайдовчи рад этди. Бошқасини танланг.';
+      errorMessage = 'driver_rejected_pick_another';
       notifyListeners();
     }
   }
@@ -230,7 +244,7 @@ class SearchingController extends ChangeNotifier {
       );
     } catch (e) {
       pendingDriverId = '';
-      errorMessage = 'Ҳайдовчига юбориш муваффақиятсиз тугади';
+      errorMessage = 'send_to_driver_failed';
       notifyListeners();
     }
   }
@@ -264,8 +278,7 @@ class SearchingController extends ChangeNotifier {
     _tripSub?.cancel();
     if (tripId != null) {
       try {
-        await _ridesRepo.cancelSearch(
-            tripId: tripId!, userPhone: _userPhone);
+        await _ridesRepo.cancelSearch(tripId: tripId!);
       } catch (_) {}
     }
   }
@@ -274,9 +287,7 @@ class SearchingController extends ChangeNotifier {
   void _cancelTripSilently() {
     if (_isCancelled || tripId == null) return;
     _isCancelled = true;
-    _ridesRepo
-        .cancelSearch(tripId: tripId!, userPhone: _userPhone)
-        .catchError((_) {});
+    _ridesRepo.cancelSearch(tripId: tripId!).catchError((_) {});
   }
 
   @override

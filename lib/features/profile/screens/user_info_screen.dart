@@ -5,8 +5,9 @@ import 'package:provider/provider.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/user_address.dart';
 import '../controllers/profile_controller.dart';
-import '../widgets/admin_pin_promote_card.dart';
+import '../widgets/language_settings_tile.dart';
 import 'address_edit_screen.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Фойдаланувчи маълумотлари — исм/жинс/роль/манзил.
 ///
@@ -20,7 +21,7 @@ class UserInfoScreen extends StatefulWidget {
 }
 
 class _UserInfoScreenState extends State<UserInfoScreen> {
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -70,6 +71,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   }
 
   Future<void> _pickBirthDate(ProfileController c) async {
+    final loc = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final initial = _parseBirthDate(c.birthDate) ?? DateTime(now.year - 25);
     final picked = await showDatePicker(
@@ -77,9 +79,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       initialDate: initial,
       firstDate: DateTime(1920),
       lastDate: now,
-      helpText: 'Туғилган кунингизни танланг',
-      cancelText: 'Бекор',
-      confirmText: 'Танлаш',
+      helpText: loc.translate('profile_birth_date_picker_help'),
+      cancelText: loc.translate('cancel'),
+      confirmText: loc.translate('profile_birth_date_picker_confirm'),
     );
     if (picked == null || !mounted) return;
 
@@ -99,7 +101,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final msg = c.consumeSuccess();
     if (msg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.green),
+        SnackBar(content: Text(msg), backgroundColor: AppColors.button),
       );
     }
   }
@@ -120,9 +122,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     });
     if (ok) {
       _phoneCtrl.text = c.phone;
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Сақланди'),
-        backgroundColor: Colors.green,
+      final loc = AppLocalizations.of(context)!;
+      messenger.showSnackBar(SnackBar(
+        content: Text(loc.translate('saved')),
+        backgroundColor: AppColors.button,
       ));
     }
   }
@@ -134,15 +137,15 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     _prime(c);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text(
-          'Фойдаланувчи маълумотлари',
+        title: Text(
+          loc.translate('profile_user_info_title'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         titleSpacing: 0,
-        backgroundColor: _green,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           if (!_editing)
@@ -240,12 +243,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             const Divider(height: 24),
             _row(
               icon: Icons.cake_outlined,
-              label: 'Туғилган кун',
+              label: loc.translate('profile_birth_date_label'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    c.birthDate.isEmpty ? 'Киритилмаган' : c.birthDate,
+                    c.birthDate.isEmpty
+                        ? loc.translate('profile_not_entered')
+                        : c.birthDate,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -256,8 +261,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Туғилган кунингизда бонус ва махсус табрик олиш учун санани тўғри киритинг. '
-                    'Бу маълумот кейинчалик ўзгартириш учун админ тасдиғини талаб қилиши мумкин.',
+                    loc.translate('profile_birth_date_hint'),
                     style: TextStyle(
                       fontSize: 11,
                       height: 1.35,
@@ -270,29 +274,27 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     icon: const Icon(Icons.calendar_month, size: 16),
                     label: Text(
                       c.birthDate.isEmpty
-                          ? 'Туғилган кун киритиш'
-                          : 'Ўзгартириш сўрови',
+                          ? loc.translate('profile_birth_date_add')
+                          : loc.translate('profile_birth_date_change_request'),
                     ),
                   ),
                 ],
               ),
             ),
             const Divider(height: 24),
+            const LanguageSettingsTile(),
+            const Divider(height: 24),
             _row(
               icon: Icons.badge_outlined,
               label: loc.translate('role'),
-              child: Text(_roleLabel(c.role, loc),
+              child: Text(_roleLabel(context, c.role, loc),
                   style: const TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w500)),
             ),
-            if (AdminPinPromoteCard.shouldShow(c.role)) ...[
-              const SizedBox(height: 16),
-              const AdminPinPromoteCard(embedded: true),
-            ],
             const Divider(height: 24),
             _row(
               icon: Icons.location_on_outlined,
-              label: '📍 Яшаш манзили',
+              label: loc.translate('profile_home_address_label'),
               child: InkWell(
                 onTap: () async {
                   final result = await Navigator.push<UserAddress>(
@@ -314,7 +316,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   Expanded(
                     child: Text(
                       c.addressDisplay.isEmpty
-                          ? 'Манзил киритилмаган — тегиб тўлдиринг'
+                          ? loc.translate('profile_address_tap_to_fill')
                           : c.addressDisplay,
                       style: TextStyle(
                         fontSize: 14,
@@ -418,24 +420,24 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     );
   }
 
-  String _roleLabel(String role, AppLocalizations loc) {
+  String _roleLabel(BuildContext context, String role, AppLocalizations loc) {
     switch (role) {
       case 'superadmin':
-        return '👑 Superadmin';
+        return AppLocalizations.tr(context, 'role_superadmin');
       case 'dispatcher':
-        return '🗂 Dispatcher';
+        return AppLocalizations.tr(context, 'role_dispatcher');
       case 'support':
-        return '🎧 Support';
+        return AppLocalizations.tr(context, 'role_support');
       case 'accountant':
-        return '💰 Accountant';
+        return AppLocalizations.tr(context, 'role_accountant');
       case 'moderator':
-        return '🛡 Moderator';
+        return AppLocalizations.tr(context, 'role_moderator');
       case 'admin':
-        return '🔧 Админ';
+        return AppLocalizations.tr(context, 'admin_role');
       case 'driver':
         return loc.translate('driver_role');
       case 'courier':
-        return '🛵 Курьер';
+        return AppLocalizations.tr(context, 'courier_role');
       default:
         return loc.translate('user_role');
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../utils/app_theme.dart';
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Marshrut driver panelidagi katta online toggle — switch + navbat o'rni.
 class OnlineToggleTile extends StatelessWidget {
@@ -9,7 +10,7 @@ class OnlineToggleTile extends StatelessWidget {
     required this.isOnline,
     required this.queuePosition,
     required this.onTap,
-    this.color = const Color(0xFF00695C),
+    this.color = AppColors.primaryDark,
   });
 
   final bool isOnline;
@@ -46,7 +47,10 @@ class OnlineToggleTile extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
+            Text(
+                isOnline
+                    ? context.tr('driver_online_status')
+                    : context.tr('driver_offline_status'),
                 style: TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold,

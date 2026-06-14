@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../utils/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 
 /// "Интернет йўқ" banner — қайта ишлатилувчи.
 class NoInternetBanner extends StatelessWidget {

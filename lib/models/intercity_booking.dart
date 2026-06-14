@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+
+import '../utils/intercity_places.dart';
 
 /// Бронь ҳолатлари. Иккита терминал ҳолат — `completed` ва `cancelled`/`expired`.
 class IntercityBookingStatus {
   IntercityBookingStatus._();
 
   /// Бронь яратилди, ҳайдовчи ҳали тасдиқламаган.
-  /// (Hozircha intercity haydovchi-paneli yo'q — booking auto-confirm bo'ladi.)
   static const String pending = 'pending';
 
   /// Ҳайдовчи бронни тасдиқлади / auto-confirmed.
@@ -50,10 +52,20 @@ class IntercityBooking {
     required this.createdAt,
     required this.expiresAt,
     required this.departureTime,
+    this.userGender = '',
+    this.userBirthDate = '',
     this.confirmedAt,
     this.completedAt,
     this.cancelledAt,
     this.cancelReason,
+    this.pickupAddress = '',
+    this.pickupLat,
+    this.pickupLng,
+    this.dropoffNote = '',
+    this.archivedByDriver = false,
+    this.pickedUp = false,
+    this.passengerRating,
+    this.driverRouteLabel = '',
   });
 
   final String id;
@@ -73,22 +85,44 @@ class IntercityBooking {
   final DateTime createdAt;
   final DateTime expiresAt;
   final DateTime departureTime;
+  /// Брон яратilganda профил snapshot (boshqa yo'lovchilar o'qishi uchun).
+  final String userGender;
+  final String userBirthDate;
   final DateTime? confirmedAt;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
   final String? cancelReason;
+  final String pickupAddress;
+  final double? pickupLat;
+  final double? pickupLng;
+  final String dropoffNote;
+  final bool archivedByDriver;
+  final bool pickedUp;
+  final int? passengerRating;
+  /// Haydovchi to'liq marshruti (Firestore `routeLabel` snapshot).
+  final String driverRouteLabel;
 
   bool get isActive => IntercityBookingStatus.active.contains(status);
+  bool get hasPickupAddress => pickupAddress.trim().isNotEmpty;
+  bool get hasPickupGps => pickupLat != null && pickupLng != null;
   bool get isCancellable => isActive;
 
   /// `bookingId` нинг охирги 6 та белгиси — мижозга кўрсатиш учун қисқа реф.
   String get shortRef =>
       id.length > 6 ? id.substring(id.length - 6).toUpperCase() : id.toUpperCase();
 
-  /// Маршрут қисқача: "Хоразм → Тошкент".
+  /// Маршрут қисқача: "Хоразм → Тoshкент" (ichki / fallback).
   String get routeShort {
     final to = district.isNotEmpty ? '$toCity • $district' : toCity;
     return '$fromCity → $to';
+  }
+
+  /// UI: haydovchi to'liq marshruti qisqa ko'rinishda.
+  String routeDisplayLabel(Locale locale) {
+    if (driverRouteLabel.trim().isNotEmpty) {
+      return IntercityPlaces.shortRouteLabel(driverRouteLabel, locale: locale);
+    }
+    return IntercityPlaces.shortRouteLabel(routeShort, locale: locale);
   }
 
   factory IntercityBooking.fromDoc(
@@ -125,10 +159,20 @@ class IntercityBooking {
       expiresAt: ts('expiresAt',
           fallback: DateTime.now().add(const Duration(minutes: 30))),
       departureTime: ts('departureTime'),
+      userGender: (d['userGender'] ?? '') as String,
+      userBirthDate: (d['userBirthDate'] ?? '') as String,
       confirmedAt: tsOpt('confirmedAt'),
       completedAt: tsOpt('completedAt'),
       cancelledAt: tsOpt('cancelledAt'),
       cancelReason: d['cancelReason'] as String?,
+      pickupAddress: (d['pickupAddress'] ?? '') as String,
+      pickupLat: (d['pickupLat'] as num?)?.toDouble(),
+      pickupLng: (d['pickupLng'] as num?)?.toDouble(),
+      dropoffNote: (d['dropoffNote'] ?? '') as String,
+      archivedByDriver: (d['archivedByDriver'] ?? false) as bool,
+      pickedUp: (d['pickedUp'] as bool?) ?? false,
+      passengerRating: (d['passengerRating'] as num?)?.toInt(),
+      driverRouteLabel: (d['driverRouteLabel'] ?? '') as String,
     );
   }
 }

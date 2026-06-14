@@ -18,8 +18,14 @@ class UserModel {
 
   final int bonusBalance;
 
-  /// Янгилик/хабарларни охирги марта ўқиган вақт (unread badge учун).
+  /// Умумий янгиликларни охирги марта ўқиган вақт.
   final DateTime? lastNewsReadAt;
+
+  /// Буюртма хабарларини охирги марта ўқиган вақт.
+  final DateTime? lastOrderNewsReadAt;
+
+  /// «Хабарлар» таби (мурожаат + чат) охирги марта ўқилган вақт.
+  final DateTime? lastMessagesReadAt;
 
   const UserModel({
     required this.id,
@@ -32,6 +38,8 @@ class UserModel {
     this.addressLegacy = '',
     this.bonusBalance = 0,
     this.lastNewsReadAt,
+    this.lastOrderNewsReadAt,
+    this.lastMessagesReadAt,
   });
 
   /// Манзил тўлдирилганми? (4 та мажбурий майдон).
@@ -60,6 +68,8 @@ class UserModel {
           : (d['legacyAddress'] ?? '') as String,
       bonusBalance: (d['bonusBalance'] as num?)?.toInt() ?? 0,
       lastNewsReadAt: (d['lastNewsReadAt'] as Timestamp?)?.toDate(),
+      lastOrderNewsReadAt: (d['lastOrderNewsReadAt'] as Timestamp?)?.toDate(),
+      lastMessagesReadAt: (d['lastMessagesReadAt'] as Timestamp?)?.toDate(),
     );
   }
 }

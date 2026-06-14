@@ -1,3 +1,5 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +9,7 @@ import '../../../models/user_address.dart';
 import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Фойдаланувчи яшаш манзилини таҳрирлаш экрани.
 ///
@@ -25,7 +28,7 @@ class AddressEditScreen extends StatefulWidget {
 }
 
 class _AddressEditScreenState extends State<AddressEditScreen> {
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
@@ -96,43 +99,59 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     });
     try {
       final coords = await svc.getCurrentCoords();
-      // GPS allaqachon olingan — reverse geocoding'da QAYTA GPS ўқимаймиз.
-      String? geoAddr;
-      try {
-        geoAddr = await svc.addressFromCoords(coords.lat, coords.lng);
-      } catch (_) {
-        geoAddr = null;
-      }
+      if (!mounted) return;
       setState(() {
         _lat = coords.lat;
         _lng = coords.lng;
         _accuracy = coords.accuracy;
         _geoUpdatedAt = DateTime.now();
-        if (geoAddr != null && _streetCtrl.text.isEmpty) {
-          _streetCtrl.text = geoAddr;
-        }
+        _gpsLoading = false;
       });
-      if (mounted) {
-        final acc = coords.accuracy;
-        final accText = acc != null ? ' (±${acc.toStringAsFixed(0)}m)' : '';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: _green,
-          content: Text(
-              '📍 GPS олинди: ${coords.lat.toStringAsFixed(5)}, ${coords.lng.toStringAsFixed(5)}$accText'),
-        ));
+      final acc = coords.accuracy;
+      final accText = acc != null ? ' (±${acc.toStringAsFixed(0)}m)' : '';
+      final lowAcc = coords.isLowAccuracy;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: _green,
+        content: Text(
+          lowAcc
+              ? '📍 GPS олинди (паст аниқлик ±${acc!.toStringAsFixed(0)} м). Очиқ жойда қайта урининг.'
+              : '📍 GPS олинди: ${coords.lat.toStringAsFixed(5)}, ${coords.lng.toStringAsFixed(5)}$accText',
+        ),
+      ));
+      if (_streetCtrl.text.trim().isEmpty) {
+        unawaited(_fillStreetFromGeocode(svc, coords.lat, coords.lng));
       }
     } on LocationException catch (e) {
-      setState(() {
-        _err = e.kind == LocationErrorKind.permissionDenied
-            ? 'GPS рухсати йўқ. Илтимос, телефон созламаларидан рухсат беринг.'
-            : 'GPS аниқланмади. Очиқ жойга чиқиб қайта уриниб кўринг.';
-      });
-    } finally {
       if (mounted) {
         setState(() {
+          _err = LocationException.userMessage(e.kind);
           _gpsLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _fillStreetFromGeocode(
+    LocationService svc,
+    double lat,
+    double lng,
+  ) async {
+    try {
+      final geoAddr = await svc.addressFromCoords(
+        lat,
+        lng,
+        timeout: const Duration(seconds: 5),
+        fallbackToCoords: false,
+      );
+      if (!mounted) return;
+      if (geoAddr != null &&
+          geoAddr.trim().isNotEmpty &&
+          _streetCtrl.text.trim().isEmpty) {
+        setState(() => _streetCtrl.text = geoAddr.trim());
+      }
+    } catch (_) {
+      // Geocoding ixtiyoriy.
     }
   }
 
@@ -143,13 +162,6 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     if (mfy.isEmpty || street.isEmpty || house.isEmpty) {
       setState(() => _err =
           'МФЙ, кўча ва уй рақами — мажбурий майдонлар. Илтимос, тўлдиринг.');
-      return;
-    }
-
-    // GPS ҳам мажбурий — иккала манба ҳам сақланиши керак.
-    if (_lat == null || _lng == null) {
-      setState(() => _err =
-          'GPS манзилни ҳам олинг — "Жорий GPS манзилни олиш" тугмасини босинг.');
       return;
     }
 
@@ -174,6 +186,11 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       geoUpdatedAt: _geoUpdatedAt,
       manualUpdatedAt: DateTime.now(),
     );
+    final validation = address.validationError;
+    if (validation != null) {
+      setState(() => _err = validation);
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -196,10 +213,10 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: const Text('Яшаш манзили'),
-        backgroundColor: _green,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
@@ -209,12 +226,13 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: AppColors.tickerShell,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
+              border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.25)),
             ),
             child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.info_outline, color: Color(0xFF1565C0)),
+              Icon(Icons.info_outline, color: AppColors.primary),
               SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -225,13 +243,13 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                       style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1565C0)),
+                          color: AppColors.primary),
                     ),
                     SizedBox(height: 4),
                     Text(
                       '📍  GPS — карта ва ҳайдовчи учун аниқ нуқта\n✍️  Қўлда (МФЙ, кўча, уй, туман) — курьер мўлжал қилади',
                       style: TextStyle(
-                          fontSize: 12, color: Color(0xFF1565C0)),
+                          fontSize: 12, color: AppColors.primary),
                     ),
                   ],
                 ),
@@ -284,7 +302,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                     '⚠️ GPS ҳали олинмаган. Қуйидаги тугмани босинг.',
                     style: TextStyle(
                         fontSize: 13,
-                        color: Color(0xFFE65100),
+                        color: AppColors.primary,
                         fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -448,17 +466,17 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFFE65100))),
+                color: AppColors.primary)),
       );
     }
 
     final addr = UserAddress(lat: _lat, lng: _lng, accuracy: _accuracy);
     final quality = addr.gpsQuality;
     final (label, bg, fg) = switch (quality) {
-      GpsQuality.high => ('Аъло', Colors.green.shade50, _green),
-      GpsQuality.medium => ('Ўрта', Colors.amber.shade50, const Color(0xFFE65100)),
+      GpsQuality.high => ('Аъло', AppColors.tickerShell, _green),
+      GpsQuality.medium => ('Ўрта', AppColors.scaffold, AppColors.primary),
       GpsQuality.low => ('Паст', Colors.red.shade50, Colors.red.shade700),
-      GpsQuality.unknown => ('OK', Colors.blue.shade50, Colors.blue.shade700),
+      GpsQuality.unknown => ('OK', AppColors.tickerShell, AppColors.primaryDark),
       GpsQuality.none => ('Йўқ', Colors.grey.shade100, Colors.grey),
     };
 

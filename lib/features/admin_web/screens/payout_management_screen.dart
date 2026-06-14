@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../services/admin_auth_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Админ web — `payout_requests` коллекциясини бошқaриш.
 ///
@@ -22,7 +23,7 @@ class PayoutManagementScreen extends StatefulWidget {
 class _PayoutManagementScreenState extends State<PayoutManagementScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
-  static const _statuses = ['pending', 'paid', 'rejected'];
+  static const _statuses = ['pending', 'completed', 'rejected'];
 
   @override
   void initState() {
@@ -44,9 +45,9 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
         color: Colors.white,
         child: TabBar(
           controller: _tabCtrl,
-          indicatorColor: const Color(0xFF0D47A1),
+          indicatorColor: AppColors.primary,
           indicatorWeight: 3,
-          labelColor: const Color(0xFF0D47A1),
+          labelColor: AppColors.primary,
           unselectedLabelColor: Colors.grey.shade600,
           labelStyle:
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -107,12 +108,12 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.account_balance_wallet,
-                    size: 16, color: Color(0xFFE65100)),
+                    size: 16, color: AppColors.primary),
                 const SizedBox(width: 6),
                 Text(
                     '${docs.length} тa · ${fmt.format(totalAmount)} сўм',
                     style: const TextStyle(
-                        color: Color(0xFFE65100),
+                        color: AppColors.primary,
                         fontSize: 13,
                         fontWeight: FontWeight.bold)),
               ]),
@@ -154,17 +155,17 @@ class _PayoutsList extends StatelessWidget {
           return _empty(
             icon: status == 'pending'
                 ? Icons.inbox
-                : status == 'paid'
+                : status == 'completed'
                     ? Icons.check_circle_outline
                     : Icons.block,
             color: status == 'pending'
                 ? Colors.grey
-                : status == 'paid'
-                    ? Colors.green
+                : status == 'completed'
+                    ? AppColors.primary
                     : Colors.red,
             title: status == 'pending'
                 ? 'Кутaётгaн pаyout йоq'
-                : status == 'paid'
+                : status == 'completed'
                     ? 'Тўлaнгaнлaр йоq'
                     : 'Рaд этилгaнлaр йоq',
             msg: 'Бу бўлим бўш.',
@@ -235,7 +236,7 @@ class _PayoutRowState extends State<_PayoutRow> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Тaсдиқ',
-                style: TextStyle(color: Colors.green)),
+                style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -252,7 +253,7 @@ class _PayoutRowState extends State<_PayoutRow> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.button,
           content: Text('✅ Pаyout тaсдиқлaнди (${_amountText()})'),
         ),
       );
@@ -353,9 +354,9 @@ class _PayoutRowState extends State<_PayoutRow> {
   Widget build(BuildContext context) {
     final data = widget.doc.data();
     final color = widget.status == 'pending'
-        ? const Color(0xFFE65100)
-        : widget.status == 'paid'
-            ? const Color(0xFF2E7D32)
+        ? AppColors.primary
+        : widget.status == 'completed'
+            ? AppColors.primary
             : const Color(0xFFD32F2F);
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
     final phone = (data['userPhone'] ?? '').toString();
@@ -401,7 +402,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                       style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF0D47A1))),
+                          color: AppColors.primary)),
                 ]),
                 const SizedBox(height: 2),
                 Wrap(spacing: 12, children: [
@@ -451,7 +452,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                 : const Icon(Icons.check, size: 18),
             label: const Text('Тaсдиқ'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade700,
+              backgroundColor: AppColors.button,
               foregroundColor: Colors.white,
             ),
           ),

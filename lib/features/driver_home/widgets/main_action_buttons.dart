@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// "ИШНИ БОШЛАШ" ва "ИШНИ ТУГАТИШ" тугмалари.
 class MainActionButtons extends StatelessWidget {
@@ -15,7 +15,7 @@ class MainActionButtons extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onEnd;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
   static const _red = Color(0xFFB71C1C);
 
   @override
@@ -27,7 +27,7 @@ class MainActionButtons extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)]),
+                colors: [AppColors.primaryDark, AppColors.primary]),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(

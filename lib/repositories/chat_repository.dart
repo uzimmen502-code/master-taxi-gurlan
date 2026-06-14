@@ -12,6 +12,23 @@ class ChatRepository {
   DocumentReference<Map<String, dynamic>> _chatRef(String chatId) =>
       _db.collection('support_chats').doc(chatId);
 
+  /// Админдан ўқилмаган хабар борми (`support_chats.lastFromAdmin`).
+  Stream<bool> watchUnreadFromAdmin(String chatId) => _chatRef(chatId)
+      .snapshots()
+      .map((s) {
+        if (!s.exists) return false;
+        return (s.data()?['lastFromAdmin'] ?? false) == true;
+      });
+
+  /// Мижоз чатни очганда — badge тушириш.
+  Future<void> markUserRead(String chatId) async {
+    if (chatId.isEmpty) return;
+    await _chatRef(chatId).set(
+      {'lastFromAdmin': false},
+      SetOptions(merge: true),
+    );
+  }
+
   /// Bitta chatdagi barcha xabarlar (real-time, vaqt bo'yicha tartiblangan).
   Stream<List<ChatMessage>> watchMessages(String chatId) => _chatRef(chatId)
       .collection('messages')

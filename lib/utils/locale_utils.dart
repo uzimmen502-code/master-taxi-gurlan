@@ -1,94 +1,125 @@
-import 'dart:io';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Qurilma va saqlangan til — Lotin/Kirill o‘zbek, rus.
 class LocaleUtils {
   static const String _savedLanguageKey = 'saved_language';
   static const String _savedScriptKey = 'saved_script';
 
-  // Телефон тили ва алифбосини аниқлаш
-  static Future<Locale> getSystemLocale() async {
-    String systemLanguage = Platform.localeName;
+  static const Locale uzCyrl =
+      Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl');
+  static const Locale uzLatn =
+      Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Latn');
+  static const Locale ru = Locale('ru');
 
-    debugPrint("Система тили: $systemLanguage");
+  static List<Locale> get supportedAppLocales => [uzCyrl, uzLatn, ru];
 
-    // Ўзбек тилини текшириш (лотин ёки кирилл)
-    if (systemLanguage.toLowerCase().contains('uz')) {
-      // Кирилл алифбосини аниқлаш
-      if (systemLanguage.toLowerCase().contains('cyrillic') ||
-          systemLanguage.toLowerCase().contains('cyrl') ||
-          systemLanguage.toLowerCase().contains('uz_uz@cyrillic')) {
-        return const Locale('uz', 'Cyrl');  // Ўзбек (Кирилл)
-      } else {
-        return const Locale('uz', 'Latn');  // Ўзбек (Лотин)
+  /// Flutter `platformDispatcher` yoki `Platform.localeName` dan locale.
+  static Locale resolveFromDevice([Locale? device]) {
+    final d = device ?? WidgetsBinding.instance.platformDispatcher.locale;
+    final lc = d.languageCode.toLowerCase();
+    final sc = d.scriptCode?.toLowerCase();
+
+    if (lc == 'ru') return ru;
+
+    if (lc == 'uz') {
+      if (sc == 'latn') return uzLatn;
+      if (sc == 'cyrl') return uzCyrl;
+      final country = (d.countryCode ?? '').toUpperCase();
+      if (country == 'UZ') return uzCyrl;
+      return uzLatn;
+    }
+
+    if (!kIsWeb) {
+      final name = Platform.localeName.toLowerCase();
+      if (name.contains('ru')) return ru;
+      if (name.contains('uz')) {
+        if (name.contains('cyrillic') ||
+            name.contains('cyrl') ||
+            name.contains('@cyrillic')) {
+          return uzCyrl;
+        }
+        return uzLatn;
       }
     }
 
-    // Рус тили (кирилл)
-    if (systemLanguage.toLowerCase().contains('ru')) {
-      return const Locale('ru', 'RU');
-    }
-
-    // Инглиз тили (лотин)
-    if (systemLanguage.toLowerCase().contains('en')) {
-      return const Locale('en', 'US');
-    }
-
-    // Стандарт (Ўзбек Лотин)
-    return const Locale('uz', 'Latn');
+    return uzCyrl;
   }
 
-  // Сақланган тилни ўқиш
+  static Future<Locale> getSystemLocale() async =>
+      resolveFromDevice();
+
   static Future<Locale?> getSavedLocale() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? languageCode = prefs.getString(_savedLanguageKey);
-    final String? scriptCode = prefs.getString(_savedScriptKey);
+    final languageCode = prefs.getString(_savedLanguageKey);
+    final scriptCode = prefs.getString(_savedScriptKey);
 
-    if (languageCode != null) {
-      if (scriptCode != null) {
-        return Locale(languageCode, scriptCode);
-      }
-      return Locale(languageCode);
+    if (languageCode == null) return null;
+    if (languageCode == 'ru') return ru;
+    if (languageCode == 'uz') {
+      if (scriptCode == 'Latn') return uzLatn;
+      return uzCyrl;
     }
-    return null;
+    return Locale(languageCode, scriptCode);
   }
 
-  // Тилни сақлаш
   static Future<void> saveLocale(Locale locale) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_savedLanguageKey, locale.languageCode);
-    if (locale.scriptCode != null) {
+    if (locale.languageCode == 'uz' && locale.scriptCode != null) {
       await prefs.setString(_savedScriptKey, locale.scriptCode!);
+    } else {
+      await prefs.remove(_savedScriptKey);
     }
   }
 
-  // Фойдаланувчи танлаган тилни олиш (ёки систем автоматик)
   static Future<Locale> getInitialLocale() async {
-    Locale? savedLocale = await getSavedLocale();
-    if (savedLocale != null) {
-      debugPrint("Сақланган тил: ${savedLocale.languageCode}_${savedLocale.scriptCode}");
-      return savedLocale;
+    final saved = await getSavedLocale();
+    if (saved != null) return _normalize(saved);
+    final system = await getSystemLocale();
+    await saveLocale(system);
+    return system;
+  }
+
+  static Locale _normalize(Locale locale) {
+    if (locale.languageCode == 'ru') return ru;
+    if (locale.languageCode == 'uz') {
+      if (locale.scriptCode == 'Latn') return uzLatn;
+      return uzCyrl;
     }
-
-    Locale systemLocale = await getSystemLocale();
-    debugPrint("Телефон тилидан аниқланди: ${systemLocale.languageCode}_${systemLocale.scriptCode}");
-    return systemLocale;
+    return resolveFromDevice(locale);
   }
 
-  // Алифбосни текшириш (лотин ёки кирилл)
-  static bool isCyrillic(Locale locale) {
-    return locale.scriptCode == 'Cyrl' || locale.languageCode == 'ru';
-  }
-
-  static bool isLatin(Locale locale) {
-    return locale.scriptCode == 'Latn' || locale.languageCode == 'en';
-  }
-
-  // Текстни алифбога мослаш (агар керак бўлса)
-  static String translateText(String latinText, String cyrillicText, Locale locale) {
-    if (isCyrillic(locale)) {
-      return cyrillicText;
+  static Locale? localeResolutionCallback(
+    Locale? locale,
+    Iterable<Locale> supportedLocales,
+  ) {
+    final resolved = _normalize(locale ?? resolveFromDevice());
+    for (final s in supportedLocales) {
+      if (s.languageCode == resolved.languageCode &&
+          (s.scriptCode == null ||
+              s.scriptCode == resolved.scriptCode ||
+              resolved.scriptCode == null)) {
+        return s;
+      }
     }
+    return uzCyrl;
+  }
+
+  static bool isCyrillic(Locale locale) =>
+      locale.scriptCode == 'Cyrl' || locale.languageCode == 'ru';
+
+  static bool isLatin(Locale locale) => locale.scriptCode == 'Latn';
+
+  static String translateText(
+    String latinText,
+    String cyrillicText,
+    Locale locale,
+  ) {
+    if (isCyrillic(locale)) return cyrillicText;
     return latinText;
   }
 }

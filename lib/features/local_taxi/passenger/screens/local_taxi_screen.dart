@@ -1,23 +1,27 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/saved_place.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/location_service.dart';
-import '../../../../utils/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../utils/gurlan_places.dart';
 import '../../../map_picker/screens/map_picker_screen.dart';
 import '../controllers/local_taxi_controller.dart';
 import '../services/driver_app_launcher.dart';
-import '../widgets/driver_app_promo_dialog.dart';
+import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
 import '../widgets/install_driver_app_dialog.dart';
+import '../../../../shared/widgets/driver_application_feedback.dart';
+import 'local_taxi_active_trip_screen.dart';
 import 'searching_screen.dart';
 
 class LocalTaxiScreen extends StatelessWidget {
@@ -29,7 +33,6 @@ class LocalTaxiScreen extends StatelessWidget {
       create: (ctx) {
         final c = LocalTaxiController(
           locationService: ctx.read<LocationService>(),
-          userRepo: ctx.read<UserRepository>(),
         );
         c.init();
         return c;
@@ -47,9 +50,9 @@ class _LocalTaxiView extends StatefulWidget {
 }
 
 class _LocalTaxiViewState extends State<_LocalTaxiView> {
-  static const _heroStart = Color(0xFFF57F17);
-  static const _heroEnd = Color(0xFFFF8F00);
-  static const _green = Color(0xFF2E7D32);
+  static const _heroStart = AppColors.primaryMid;
+  static const _heroEnd = AppColors.primary;
+  static const _green = AppColors.primaryDark;
 
   final TextEditingController _fromCtrl = TextEditingController();
   final TextEditingController _toCtrl = TextEditingController();
@@ -61,6 +64,9 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   Timer? _debounce;
 
   bool _bootstrapped = false;
+  bool _isSearching = false;
+  bool _isSubmitting = false;
+  String? _estimatedPriceText;
   LocalTaxiController? _controllerRef;
 
   @override
@@ -72,7 +78,11 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     _toFocus.addListener(() {
       if (!_toFocus.hasFocus) setState(() => _toSug = const []);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onGpsTap());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onGpsTap();
+      _tryResumeActiveTrip();
+      _loadEstimatedPrice();
+    });
   }
 
   @override
@@ -90,10 +100,10 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     final info = c.infoMessage;
     final err = c.errorMessage;
     if (info != null) {
-      _snack(info);
+      _snack(context.trMsg(info));
       c.clearMessages();
     } else if (err != null) {
-      _snack(err);
+      _snack(context.trMsg(err));
       c.clearMessages();
     }
   }
@@ -109,13 +119,40 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     super.dispose();
   }
 
-  void _snack(String msg) {
+  void _snack(String msg, [Color? backgroundColor]) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
+      backgroundColor: backgroundColor,
       duration: const Duration(seconds: 2),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
+  }
+
+  String _formatPrice(int price) {
+    return price.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]} ',
+        );
+  }
+
+  Future<void> _loadEstimatedPrice() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('prices')
+          .get();
+      final base =
+          (snap.data()?['local_base'] as num?)?.toInt() ?? 5000;
+      final perKm =
+          (snap.data()?['local_per_km'] as num?)?.toInt() ?? 1500;
+      final est = base + (perKm * 3);
+      if (mounted) {
+        setState(() {
+          _estimatedPriceText = '${_formatPrice(est)}+ сўм';
+        });
+      }
+    } catch (_) {}
   }
 
   // ─── Autocomplete ─────────────────────────────────────────────────
@@ -151,7 +188,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-          builder: (_) => const MapPickerScreen(title: 'Манзил танлаш')),
+          builder: (_) => MapPickerScreen(title: context.tr('pick_location'))),
     );
     if (result == null || !mounted) return;
     setState(() {
@@ -163,30 +200,136 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     });
   }
 
-  Future<void> _onSearch() async {
-    if (_fromCtrl.text.trim().isEmpty) {
-      _showGpsDialog();
-      return;
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _latestActiveLocalTrip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('user_phone') ?? '';
+    if (phone.isEmpty) return null;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('trips')
+          .where('userPhone', isEqualTo: phone)
+          .where('taxiType', isEqualTo: 'local')
+          .where('status', whereIn: ['searching', 'accepted'])
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final docs = snap.docs.toList();
+      docs.sort((a, b) {
+        final ta = a.data()['createdAt'] as Timestamp?;
+        final tb = b.data()['createdAt'] as Timestamp?;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+      return docs.first;
+    } catch (_) {
+      return null;
     }
-    final blocked = await context.read<LocalTaxiController>().checkGhostBlock();
-    if (!mounted) return;
-    if (blocked != null) {
-      _snack(blocked);
-      return;
+  }
+
+  Future<bool> _hasActiveTripSearch() async =>
+      (await _latestActiveLocalTrip()) != null;
+
+  Future<void> _tryResumeActiveTrip() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resumeId = prefs.getString('resume_local_trip_id') ?? '';
+    if (resumeId.isNotEmpty) {
+      await prefs.remove('resume_local_trip_id');
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('trips')
+            .doc(resumeId)
+            .get();
+        if (doc.exists && mounted) {
+          final data = doc.data() ?? {};
+          final status = data['status'] as String? ?? '';
+          if (status == 'accepted') {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => LocalTaxiActiveTripScreen(tripId: doc.id),
+              ),
+            );
+            return;
+          }
+          if (status == 'searching') {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SearchingScreen(
+                  from: (data['fromAddr'] ?? '') as String,
+                  to: (data['toAddr'] ?? '') as String,
+                  taxiType: 'local',
+                  tripId: doc.id,
+                ),
+              ),
+            );
+            return;
+          }
+        }
+      } catch (_) {}
     }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SearchingScreen(
-          from: _fromCtrl.text.trim(),
-          to: _toCtrl.text.trim(),
-          // Канонизaция: маҳaллий такси трип/драйвер ҳужжатидa `taxiType='local'`.
-          // Driver app тинглaши учун муҳим эмас (targetDriverId фильтрлaнaди),
-          // лекин админ ва аналитикa бўйичa мaшинни ажрaтиш зaрур.
-          taxiType: 'local',
+
+    final trip = await _latestActiveLocalTrip();
+    if (trip == null || !mounted) return;
+    final data = trip.data();
+    final status = data['status'] as String? ?? '';
+    if (status == 'accepted') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LocalTaxiActiveTripScreen(tripId: trip.id),
         ),
-      ),
-    );
+      );
+    } else if (status == 'searching') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SearchingScreen(
+            from: (data['fromAddr'] ?? '') as String,
+            to: (data['toAddr'] ?? '') as String,
+            taxiType: 'local',
+            tripId: trip.id,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _onSearch() async {
+    if (_isSearching) return;
+    setState(() => _isSearching = true);
+    try {
+      if (_fromCtrl.text.trim().isEmpty) {
+        _showGpsDialog();
+        return;
+      }
+      if (await _hasActiveTripSearch()) {
+        if (!mounted) return;
+        _snack(context.tr('local_trip_already_active'));
+        return;
+      }
+      final blocked =
+          await context.read<LocalTaxiController>().checkGhostBlock();
+      if (!mounted) return;
+      if (blocked != null) {
+        _snack(context.trMsg(blocked));
+        return;
+      }
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SearchingScreen(
+            from: _fromCtrl.text.trim(),
+            to: _toCtrl.text.trim(),
+            taxiType: 'local',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSearching = false);
+    }
   }
 
   void _showGpsDialog() {
@@ -194,13 +337,12 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('📍 Жойлашувни аниқланг'),
-        content: const Text(
-            '"Қаердан" майдони бўш.\nGPS орқали жойлашувингизни аниқланг.'),
+        title: Text(context.tr('location_detect_title')),
+        content: Text(context.tr('location_detect_body')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Орқага')),
+              child: Text(context.tr('back_short'))),
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
@@ -224,7 +366,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     final addr = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-          builder: (_) => const MapPickerScreen(title: 'Янги манзил')),
+          builder: (_) => MapPickerScreen(title: context.tr('new_location_title'))),
     );
     if (addr == null || !mounted) return;
     final nameCtrl = TextEditingController();
@@ -232,16 +374,17 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Манзил номи'),
+        title: Text(context.tr('location_name_title')),
         content: TextField(
             controller: nameCtrl,
             autofocus: true,
-            decoration: const InputDecoration(
-                hintText: 'Уй, Иш, Дўкон...', border: OutlineInputBorder())),
+            decoration: InputDecoration(
+                hintText: context.tr('location_name_hint'),
+                border: const OutlineInputBorder())),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Бекор')),
+              child: Text(context.tr('cancel'))),
           ElevatedButton(
             onPressed: () {
               final t = nameCtrl.text.trim();
@@ -250,7 +393,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: _green, foregroundColor: Colors.white),
-            child: const Text('Сақлаш'),
+            child: Text(context.tr('save')),
           ),
         ],
       ),
@@ -266,17 +409,17 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('"$name" ўчириш'),
-        content: const Text('Ушбу манзилни ўчиришни истайсизми?'),
+        title: Text(context.tr('delete_location_title').replaceAll('{name}', name)),
+        content: Text(context.tr('delete_location_confirm')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Йўқ')),
+              child: Text(context.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Ҳа'),
+            child: Text(context.tr('yes')),
           ),
         ],
       ),
@@ -305,6 +448,9 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   //          Юклaш тугмасини боссa — Firebase Hosting'даги APK URL очилaди.
   //   5. "Бекор қилиш" → ҳеч нима бўлмaйди.
   Future<void> _onDriverTap() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+    try {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('user_phone') ?? '';
     final uid = phoneDigits(phone);
@@ -315,101 +461,50 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         backgroundColor: Colors.orange.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: const Text(
-            'Аввал профилда телефон рақамингизни тўлдиринг'),
+        content: Text(context.tr('fill_phone_in_profile')),
       ));
       return;
     }
 
-    var carModel = prefs.getString('car_model') ?? '';
-    var carColor = prefs.getString('car_color') ?? '';
-    var carPlate = prefs.getString('car_plate') ?? '';
-
-    // Авто маълумотлари тўлиқ эмас бўлса — диалог.
-    final hasCarInfo = carModel.isNotEmpty && carPlate.isNotEmpty;
-    if (!hasCarInfo) {
-      final result = await showDriverAppPromoDialog(
-        context,
-        initialModel: carModel,
-        initialColor: carColor,
-        initialPlate: carPlate,
-      );
-      if (result == null) return; // Бекор қилинди
-      carModel = result.model;
-      carColor = result.color;
-      carPlate = result.plate;
-
-      // Локал кэш — кейинги сафар диалог чиқмаслиги учун.
-      await prefs.setString('car_model', carModel);
-      await prefs.setString('car_color', carColor);
-      await prefs.setString('car_plate', carPlate);
-      // Firestore'га ёзиш — driverApprovalMode'га қараб auto ёки manual.
-      final name = prefs.getString('user_name') ?? '';
-      try {
-        if (!mounted) return;
-        final driverRepo = context.read<DriverRepository>();
-        final car = '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
-        final mode = await driverRepo.getDriverApprovalMode();
-        if (!mounted) return;
-        if (mode == 'manual') {
-          await driverRepo.submitDriverRequest(
-            uid: uid,
-            name: name,
-            phone: phone,
-            car: car,
-            plate: carPlate,
-            taxiType: 'local',
-          );
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            backgroundColor: Colors.orange.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            content: const Text(
-              'Ҳайдовчи аризангиз админ тасдиғига юборилди.',
-            ),
-          ));
-          return;
-        }
-
-        await prefs.setString('user_role', 'driver');
-        await driverRepo.approveDriverAutomatically(
-          uid: uid,
-          name: name,
-          phone: phone,
-          car: car,
-          plate: carPlate,
-          taxiType: 'local',
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: const Text(
-            'Табриклаймиз, ҳайдовчи режими фаоллашди.',
-          ),
-        ));
-      } catch (_) {
-        // Интернет йўқлиги — driver app keyinroq Firestore'дан ўқийди ёки
-        // ўз register screen'идан тўлдирилaди. Оқим узилмaйди.
-      }
+    if (uid.length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Colors.orange.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: Text(context.tr('fill_phone_in_profile')),
+      ));
+      return;
     }
 
-    // Авто маълумотлари аввалдан бор, лекин user_role ҳали driver бўлмаса
-    // approval mode'ни шу ерда ҳам текширамиз.
+    if (!await ensureCarInfoViaProfile(context)) return;
+    if (!mounted) return;
+
+    final carUid = canonicalPhoneId(uid);
+    final carFromProfile = await UserRepository().getCarInfo(carUid);
+    if (carFromProfile == null || !mounted) return;
+    final carModel = carFromProfile['carModel'] ?? '';
+    final carColor = carFromProfile['carColor'] ?? '';
+    final carPlate = carFromProfile['carPlate'] ?? '';
+    await prefs.setString('car_model', carModel);
+    await prefs.setString('car_color', carColor);
+    await prefs.setString('car_plate', carPlate);
+    final carSeats = int.tryParse(carFromProfile['carSeats'] ?? '') ?? 0;
+    if (carSeats > 0) await prefs.setInt('car_seats', carSeats);
+
+    final driverRepo = context.read<DriverRepository>();
+    final approved = await driverRepo.isApprovedForTaxi(
+      uid: uid,
+      taxiType: 'local',
+    );
+    if (!mounted) return;
+
     if ((prefs.getString('user_role') ?? '') != 'driver') {
       final name = prefs.getString('user_name') ?? '';
       final car = '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
       try {
         if (!mounted) return;
-        final driverRepo = context.read<DriverRepository>();
-        final mode = await driverRepo.getDriverApprovalMode();
-        if (!mounted) return;
-        if (mode == 'manual') {
-          await driverRepo.submitDriverRequest(
+        if (!approved) {
+          final submitResult = await driverRepo.submitDriverApplication(
             uid: uid,
             name: name,
             phone: phone,
@@ -418,15 +513,24 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             taxiType: 'local',
           );
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            backgroundColor: Colors.orange.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            content: const Text(
-              'Ҳайдовчи аризангиз админ тасдиғига юборилди.',
-            ),
-          ));
+          if (submitResult.autoApproved) {
+            await prefs.setString('user_role', 'driver');
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              backgroundColor: AppColors.button,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              content: Text(
+                context.tr('driver_mode_activated'),
+              ),
+            ));
+          } else {
+            await showDriverApplicationPendingFeedback(
+              context,
+              result: submitResult,
+              snackColor: Colors.orange.shade700,
+            );
+          }
           return;
         }
 
@@ -441,24 +545,16 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.green.shade700,
+          backgroundColor: AppColors.button,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: const Text(
-            'Табриклаймиз, ҳайдовчи режими фаоллашди.',
+          content: Text(
+            context.tr('driver_mode_activated'),
           ),
         ));
       } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: Text('Ҳайдовчи режимига ўтишда хатолик: $e'),
-        ));
-        return;
+        rethrow;
       }
     }
 
@@ -470,8 +566,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         backgroundColor: Colors.blue.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: const Text(
-            '🚗 Ҳайдовчи режими фақат мобил иловада. Телефонга юклаб олинг.'),
+        content: Text(
+          context.tr('driver_mobile_only')),
       ));
       return;
     }
@@ -496,8 +592,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: const Text(
-              'Ҳайдовчи иловасини очиб бўлмади. Қайтa уриниб кўринг.'),
+          content: Text(
+              context.tr('driver_app_open_error')),
         ));
       }
       return;
@@ -513,9 +609,18 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         backgroundColor: Colors.blue.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: const Text(
-            'Браузер очилмади — ҳавола нусхаланди, ёпиб қўлда очинг'),
+        content: Text(
+            context.tr('browser_open_fail')),
       ));
+    }
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().contains('invalid_phone_format')
+          ? context.tr('invalid_phone_format')
+          : context.tr('driver_mode_error');
+      _snack(msg, Colors.red);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -527,10 +632,10 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     final c = context.watch<LocalTaxiController>();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
         title: Text(loc.translate('local_taxi')),
-        backgroundColor: _heroStart,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -538,7 +643,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          _DriverButton(onTap: _onDriverTap),
+          _DriverButton(onTap: _isSubmitting ? null : _onDriverTap),
         ],
       ),
       body: Column(
@@ -590,6 +695,19 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                       onLongPress: _onDeletePlace,
                     ),
                     const SizedBox(height: 24),
+                    if (_estimatedPriceText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '${context.tr('estimated_price')}: '
+                          '$_estimatedPriceText',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     SizedBox(
                       height: 54,
                       width: double.infinity,
@@ -641,8 +759,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 // ─────────────────────────────────────────────────────────────────────
 
 class _DriverButton extends StatelessWidget {
-  const _DriverButton({required this.onTap});
-  final VoidCallback onTap;
+  const _DriverButton({this.onTap});
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -657,11 +775,11 @@ class _DriverButton extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Text('Ҳайдовчи',
-              style: TextStyle(
+          child: Text(context.tr('become_driver'),
+              style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFFF57F17))),
+                  color: AppColors.primaryMid)),
         ),
       ),
     );
@@ -712,7 +830,7 @@ class _HeroCard extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFFF57F17), Color(0xFFFF8F00), Color(0xFFFF8F00)],
+          colors: [AppColors.primaryMid, AppColors.primary, AppColors.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -725,7 +843,7 @@ class _HeroCard extends StatelessWidget {
           focus: fromFocus,
           hint: fromHint,
           icon: Icons.circle,
-          iconColor: Colors.greenAccent,
+          iconColor: AppColors.primaryMid,
           onChange: onFromChanged,
           trailing: isGpsLoading
               ? const SizedBox(
@@ -735,7 +853,7 @@ class _HeroCard extends StatelessWidget {
                       color: Colors.white, strokeWidth: 2))
               : IconButton(
                   icon: const Icon(Icons.gps_fixed,
-                      color: Colors.greenAccent, size: 20),
+                      color: AppColors.primaryMid, size: 20),
                   onPressed: onGpsTap,
                   tooltip: 'GPS',
                 ),
@@ -754,8 +872,7 @@ class _HeroCard extends StatelessWidget {
               decoration: BoxDecoration(
                   color: Colors.white24,
                   borderRadius: BorderRadius.circular(8)),
-              child:
-                  const Icon(Icons.swap_vert, color: Colors.white, size: 18),
+              child: const Icon(Icons.swap_vert, color: Colors.white, size: 18),
             ),
           ),
         ]),
@@ -768,8 +885,8 @@ class _HeroCard extends StatelessWidget {
           iconColor: Colors.redAccent,
           onChange: onToChanged,
           trailing: IconButton(
-            icon: const Icon(Icons.map_outlined,
-                color: Colors.white70, size: 20),
+            icon:
+                const Icon(Icons.map_outlined, color: Colors.white70, size: 20),
             onPressed: onMapTap,
             tooltip: mapTooltip,
           ),
@@ -867,7 +984,7 @@ class _SavedPlacesSection extends StatelessWidget {
   final ValueChanged<SavedPlace> onPick;
   final ValueChanged<String> onLongPress;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   IconData _iconFor(String name) {
     final l = name.toLowerCase();
@@ -913,12 +1030,12 @@ class _SavedPlacesSection extends StatelessWidget {
               border: Border.all(color: _green.withOpacity(0.3)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.add, size: 12, color: Color(0xFF2E7D32)),
+              const Icon(Icons.add, size: 12, color: AppColors.primary),
               const SizedBox(width: 2),
               Text(addLabel,
                   style: const TextStyle(
                       fontSize: AppText.labelSmall,
-                      color: Color(0xFF2E7D32),
+                      color: AppColors.primary,
                       fontWeight: FontWeight.w600)),
             ]),
           ),
@@ -962,8 +1079,7 @@ class _SavedPlacesSection extends StatelessWidget {
                               blurRadius: 4)
                         ],
                       ),
-                      child:
-                          Row(mainAxisSize: MainAxisSize.min, children: [
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(_iconFor(p.name),
                             size: 13, color: _colorFor(p.name)),
                         const SizedBox(width: 4),

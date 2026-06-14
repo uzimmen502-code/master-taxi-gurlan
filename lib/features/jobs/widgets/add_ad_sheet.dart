@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
 import 'urgent_toggle.dart';
 
@@ -39,11 +39,10 @@ class _AddAdView extends StatefulWidget {
 }
 
 class _AddAdViewState extends State<_AddAdView> {
-  final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
 
-  late AdKind _kind = widget.presetKind ?? AdKind.work;
+  late AdKind _kind = widget.presetKind ?? AdKind.ad;
   bool _isUrgent = false;
   bool _submitting = false;
 
@@ -52,9 +51,11 @@ class _AddAdViewState extends State<_AddAdView> {
       case AdKind.work:
         return const Color(0xFFD84315);
       case AdKind.service:
-        return const Color(0xFF6A1B9A);
+        return AppColors.primary;
       case AdKind.ad:
-        return const Color(0xFF0277BD);
+        return AppColors.primary;
+      case AdKind.sell:
+        return AppColors.primary;
     }
   }
 
@@ -66,23 +67,20 @@ class _AddAdViewState extends State<_AddAdView> {
         return 'Масалан: Электрикман, бригадам бор';
       case AdKind.ad:
         return 'Масалан: Сотилади: Damas 2018, ҳолати яхши';
+      case AdKind.sell:
+        return 'Масалан: Сут сотаман — 5 кг/кун, Гурлан';
     }
   }
 
-  String get _titleHint {
-    switch (_kind) {
-      case AdKind.work:
-        return 'Иш номи (ихтиёрий)';
-      case AdKind.service:
-        return 'Хизмат номи (ихтиёрий)';
-      case AdKind.ad:
-        return 'Эълон сарлавҳаси (ихтиёрий)';
+  int get _visibleDays {
+    if (_isUrgent && _kind.userCanMarkUrgent) {
+      return AdKindX.urgentExpiryDays;
     }
+    return _kind.expiresInDays;
   }
 
   @override
   void dispose() {
-    _titleCtrl.dispose();
     _textCtrl.dispose();
     _priceCtrl.dispose();
     super.dispose();
@@ -96,9 +94,8 @@ class _AddAdViewState extends State<_AddAdView> {
     final result = await c.submitAd(
       type: _kind.key,
       text: _textCtrl.text,
-      title: _titleCtrl.text,
       priceText: _priceCtrl.text,
-      isUrgent: _isUrgent && _kind == AdKind.work,
+      isUrgent: _isUrgent && _kind.userCanMarkUrgent,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -125,7 +122,6 @@ class _AddAdViewState extends State<_AddAdView> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.watch<JobsController>();
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -146,71 +142,79 @@ class _AddAdViewState extends State<_AddAdView> {
             ),
             const SizedBox(height: 14),
 
-            // Kind chooser.
-            const Text('Тур:',
-                style: TextStyle(
-                    fontSize: AppText.labelSmall, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Row(children: AdKind.values.map((k) {
-              final sel = k == _kind;
-              final col = _kindColor(k);
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _kind = k),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: sel ? col : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: sel ? col : Colors.grey.shade200),
+            if (widget.presetKind == null) ...[
+              const Text('Тур:',
+                  style: TextStyle(
+                      fontSize: AppText.labelSmall,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: AdKindX.userPanelKinds.map((k) {
+                    final sel = k == _kind;
+                    final col = _kindColor(k);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _kind = k;
+                          if (!k.userCanMarkUrgent) _isUrgent = false;
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: sel ? col : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: sel ? col : Colors.grey.shade200,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(k.emoji,
+                                  style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 6),
+                              Text(k.label,
+                                  style: TextStyle(
+                                    fontSize: AppText.labelTiny,
+                                    fontWeight: FontWeight.bold,
+                                    color: sel
+                                        ? Colors.white
+                                        : Colors.grey.shade700,
+                                  )),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: Column(children: [
-                        Text(k.emoji,
-                            style: const TextStyle(fontSize: 18)),
-                        const SizedBox(height: 2),
-                        Text(k.label,
-                            style: TextStyle(
-                                fontSize: AppText.labelTiny,
-                                fontWeight: FontWeight.bold,
-                                color: sel
-                                    ? Colors.white
-                                    : Colors.grey.shade700)),
-                      ]),
-                    ),
-                  ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }).toList()),
-            const SizedBox(height: 14),
-
-            // Title (ихтиёрий).
-            TextField(
-              controller: _titleCtrl,
-              maxLength: 80,
-              decoration: InputDecoration(
-                hintText: _titleHint,
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400, fontSize: AppText.bodyMedium),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: _color, width: 1.5)),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                counterText: '',
               ),
-            ),
-            const SizedBox(height: 8),
+              const SizedBox(height: 14),
+            ] else
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    Text(_kind.emoji, style: const TextStyle(fontSize: 22)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _kind.label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: AppText.bodyLarge,
+                        color: _color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-            // Body text.
             TextField(
               controller: _textCtrl,
               maxLines: 4,
@@ -230,63 +234,34 @@ class _AddAdViewState extends State<_AddAdView> {
               ),
             ),
 
-            // Price (ихтиёрий — ad учун муҳим).
-            if (_kind != AdKind.work) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: _priceCtrl,
-                maxLength: 40,
-                decoration: InputDecoration(
-                  hintText: _kind == AdKind.ad
-                      ? '💰 Нарх (масалан: 200 000 сўм)'
-                      : '💰 Нарх / шартнома',
-                  hintStyle: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: AppText.bodyMedium),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300)),
-                  focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: _color, width: 1.5)),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                  counterText: '',
-                ),
-              ),
-            ],
-
+            // Price (ихтиёрий).
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _color.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _color.withOpacity(0.2)),
+            TextField(
+              controller: _priceCtrl,
+              maxLength: 40,
+              decoration: InputDecoration(
+                hintText: _kind == AdKind.ad
+                    ? '💰 Нарх (масалан: 200 000 сўм)'
+                    : '💰 Нарх / шартнома',
+                hintStyle: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: AppText.bodyMedium),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: _color, width: 1.5)),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                counterText: '',
               ),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('📌 Профилдан автоматик:',
-                        style: TextStyle(
-                            fontSize: AppText.labelSmall,
-                            fontWeight: FontWeight.w600,
-                            color: _color)),
-                    const SizedBox(height: 4),
-                    Text('📞 ${c.userPhone}',
-                        style:
-                            const TextStyle(fontSize: AppText.bodySmall)),
-                    if (c.userAddress.isNotEmpty)
-                      Text('📍 ${c.userAddress}',
-                          style:
-                              const TextStyle(fontSize: AppText.bodySmall)),
-                  ]),
             ),
 
-            if (_kind == AdKind.work) ...[
+            if (_kind.userCanMarkUrgent) ...[
               const SizedBox(height: 10),
               UrgentToggle(
                 isUrgent: _isUrgent,
@@ -320,7 +295,7 @@ class _AddAdViewState extends State<_AddAdView> {
             const SizedBox(height: 6),
             Center(
               child: Text(
-                '${_kind.expiresInDays} кун давомида кўринади • Кунига 5 та эълон',
+                '$_visibleDays кун давомида кўринади • Кунига ${JobsController.dailyAdLimit} та эълон',
                 style: TextStyle(
                     fontSize: AppText.labelTiny, color: Colors.grey.shade400),
               ),
@@ -334,9 +309,11 @@ class _AddAdViewState extends State<_AddAdView> {
       case AdKind.work:
         return const Color(0xFFD84315);
       case AdKind.service:
-        return const Color(0xFF6A1B9A);
+        return AppColors.primary;
       case AdKind.ad:
-        return const Color(0xFF0277BD);
+        return AppColors.primary;
+      case AdKind.sell:
+        return AppColors.primary;
     }
   }
 }

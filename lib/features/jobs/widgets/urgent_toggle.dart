@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
-/// "Шошилинч" чекбокс — иш эълонлари учун.
+/// "Шошилинч" чекбокс — «Эълон» учун.
 class UrgentToggle extends StatelessWidget {
   const UrgentToggle({
     super.key,
@@ -39,7 +39,7 @@ class UrgentToggle extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: isUrgent ? Colors.red : Colors.grey.shade600)),
             if (showHint)
-              Text('Рўйхат бошига чиқади',
+              Text('Алоҳида «Шошилинч» бўлимида кўринади',
                   style: TextStyle(
                       fontSize: AppText.labelTiny,
                       color: Colors.grey.shade500)),

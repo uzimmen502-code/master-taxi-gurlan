@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/analytics/top_entity.dart';
@@ -8,7 +9,7 @@ class TopList extends StatelessWidget {
   const TopList({
     super.key,
     required this.items,
-    this.color = const Color(0xFF1565C0),
+    this.color = AppColors.primary,
     this.maxItems = 10,
     this.formatValue,
   });

@@ -13,6 +13,7 @@ import '../tabs/users_tab.dart';
 import 'admin_news_compose_screen.dart';
 import 'admin_orders_screen.dart';
 import 'daily_report_screen.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Monitoring & Analytics Center — эски `AdminScreen` ўрнига.
 ///
@@ -69,6 +70,17 @@ class _MonitoringViewState extends State<_MonitoringView>
   /// Birinchisi false bo'lsa — Firestore'ga ham bormaydi (tezda chiqaradi).
   /// Ikkilamchisi xatolik bersa — false (xavfsiz default).
   Future<void> _checkAdmin() async {
+    // Web admin shell: PIN login allaqachon — Firestore role qayta tekshirish
+    // Monitoring Center'ni bo'sh qoldiradi (AdminService Phone Auth talab qiladi).
+    if (widget.embedded) {
+      if (!mounted) return;
+      setState(() {
+        _isAdmin = true;
+        _adminChecked = true;
+      });
+      return;
+    }
+
     bool isAdmin = false;
     try {
       isAdmin = await context.read<AdminService>().isCurrentUserAdmin();
@@ -153,9 +165,9 @@ class _MonitoringViewState extends State<_MonitoringView>
     final tabBar = TabBar(
       controller: _tabCtrl,
       isScrollable: true,
-      indicatorColor: widget.embedded ? const Color(0xFF0D47A1) : Colors.white,
+      indicatorColor: widget.embedded ? AppColors.primary : Colors.white,
       indicatorWeight: 3,
-      labelColor: widget.embedded ? const Color(0xFF0D47A1) : Colors.white,
+      labelColor: widget.embedded ? AppColors.primary : Colors.white,
       unselectedLabelColor:
           widget.embedded ? Colors.grey.shade600 : Colors.white70,
       labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -217,9 +229,9 @@ class _MonitoringViewState extends State<_MonitoringView>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D47A1),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text('📊 Monitoring Center',

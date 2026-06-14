@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/chat_message.dart';
 import '../../../repositories/chat_repository.dart';
@@ -36,10 +37,22 @@ class _ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<_ChatView> {
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctrl = context.read<ChatController>();
+      if (!ctrl.isAdmin) {
+        context.read<ChatRepository>().markUserRead(ctrl.chatId);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -71,7 +84,7 @@ class _ChatViewState extends State<_ChatView> {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: _green,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: Column(

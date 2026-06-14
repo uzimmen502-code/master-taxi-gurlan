@@ -4,13 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../models/saved_place.dart';
-import '../../../../repositories/user_repository.dart';
+import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../services/location_service.dart';
 
 /// Mahalliy taksi yo'lovchi entry-экранининг ҳолатини бошқаради:
 ///   - GPS орқали жорий манзилни аниқлаш
 ///   - SharedPreferences'da сақланган манзилларни (`SavedPlace`) бошқариш
-///   - Ghost protection (`users.blockedUntil`) текшируви
+///   - Qidiruv bekor blok (`local_taxi_block/state`, CF, 5/10/10)
 ///
 /// `from`/`to` text fieldlarini ушбу controller кузатмайди — View ўз
 /// `TextEditingController`лари бўйича иш олиб боради ва қидирув тугмаси
@@ -18,12 +18,12 @@ import '../../../../services/location_service.dart';
 class LocalTaxiController extends ChangeNotifier {
   LocalTaxiController({
     required LocationService locationService,
-    required UserRepository userRepo,
+    LocalTaxiBlockRepository? blockRepo,
   })  : _locationService = locationService,
-        _userRepo = userRepo;
+        _blockRepo = blockRepo ?? LocalTaxiBlockRepository();
 
   final LocationService _locationService;
-  final UserRepository _userRepo;
+  final LocalTaxiBlockRepository _blockRepo;
 
   static const _savedPlacesKey = 'saved_places';
   static const _maxSavedPlaces = 6;
@@ -46,17 +46,22 @@ class LocalTaxiController extends ChangeNotifier {
     notifyListeners();
     try {
       final addr = await _locationService.getCurrentAddress(
-        timeout: const Duration(seconds: 15),
+        gpsMediumTimeout: const Duration(seconds: 5),
+        gpsHighTimeout: const Duration(seconds: 12),
+        geocodeTimeout: const Duration(seconds: 5),
       );
-      infoMessage = '📍 Жойлашув аниқланди';
+      infoMessage = 'gps_detected';
       return addr;
     } on LocationException catch (e) {
-      errorMessage = e.kind == LocationErrorKind.permissionDenied
-          ? 'GPS рухсати берилмади'
-          : 'GPS аниқланмади';
+      errorMessage = switch (e.kind) {
+        LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
+        LocationErrorKind.serviceDisabled => 'gps_service_disabled_msg',
+        LocationErrorKind.timeout => 'gps_timeout_msg',
+        LocationErrorKind.lookupFailed => 'gps_lookup_failed_msg',
+      };
       return null;
     } catch (_) {
-      errorMessage = 'GPS аниқланмади';
+      errorMessage = 'gps_error';
       return null;
     } finally {
       isGpsLoading = false;
@@ -94,13 +99,13 @@ class LocalTaxiController extends ChangeNotifier {
   /// Янги манзил қўшиш. Лимит ошса `false` ва `errorMessage` сақланади.
   Future<bool> addSavedPlace(SavedPlace place) async {
     if (savedPlaces.length >= _maxSavedPlaces) {
-      errorMessage = 'Максимум $_maxSavedPlaces та манзил';
+      errorMessage = 'max_saved_places|$_maxSavedPlaces';
       notifyListeners();
       return false;
     }
     savedPlaces = [...savedPlaces, place];
     await _persist();
-    infoMessage = '${place.name} сақланди';
+    infoMessage = 'place_saved|${place.name}';
     notifyListeners();
     return true;
   }
@@ -110,11 +115,11 @@ class LocalTaxiController extends ChangeNotifier {
     if (next.length == savedPlaces.length) return;
     savedPlaces = next;
     await _persist();
-    infoMessage = '$name ўчирилди';
+    infoMessage = 'place_deleted|$name';
     notifyListeners();
   }
 
-  // ─── Ghost protection ──────────────────────────────────────────────
+  // ─── Local taxi qidiruv bloki ─────────────────────────────────────
 
   /// Агар фойдаланувчи hозирча бloкlangan bo'lsa, "qancha minutdan keyin"
   /// xabari qaytadi; aks holda `null`.
@@ -123,10 +128,10 @@ class LocalTaxiController extends ChangeNotifier {
     final phone = (prefs.getString('user_phone') ?? '')
         .replaceAll(RegExp(r'[^\d]'), '');
     if (phone.isEmpty) return null;
-    final blockedUntil = await _userRepo.getBlockedUntil(phone);
+    final blockedUntil = await _blockRepo.getBlockedUntil(phone);
     if (blockedUntil == null) return null;
     final remaining = blockedUntil.difference(DateTime.now());
-    return '⛔ ${remaining.inMinutes} дақиқадан кейин қайта уриниб кўринг';
+    return 'ghost_blocked|${remaining.inMinutes}';
   }
 
   void clearMessages() {

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
+import 'user_role_sync.dart';
 
 /// Админ rolени **бир жойдан** тeкшириш сервиси.
 ///
@@ -30,17 +31,27 @@ class AdminService {
     final uid = phoneDigits(phone);
     if (uid.length < 9) return false;
 
-    // Tezkor pre-check — local prefs'da admin emas bo'lsa, Firestore'ga
-    // bormaymiz (UX uchun).
-    final localRole = prefs.getString('user_role') ?? 'user';
-    if (localRole != 'admin' && localRole != 'superadmin') return false;
-
     try {
-      final snap = await _db.collection('users').doc(uid).get();
-      final fsRole = snap.data()?['role'] as String? ?? '';
-      return fsRole == 'admin' || fsRole == 'superadmin';
+      DocumentSnapshot<Map<String, dynamic>>? snap;
+      for (final id in userDocIdCandidates(phone)) {
+        final s = await _db.collection('users').doc(id).get();
+        if (s.exists) {
+          snap = s;
+          break;
+        }
+      }
+      final fsRole = snap?.data()?['role'] as String? ?? '';
+      final isAdmin = fsRole == 'admin' || fsRole == 'superadmin';
+      final localRole = prefs.getString('user_role') ?? 'user';
+      final resolved = UserRoleSync.reconcile(
+        localRole: localRole,
+        firestoreRole: fsRole,
+      );
+      if (resolved != localRole) {
+        await prefs.setString('user_role', resolved);
+      }
+      return isAdmin;
     } catch (_) {
-      // Internet yo'q yoki rules denied — xavfsiz default.
       return false;
     }
   }
@@ -51,8 +62,7 @@ class AdminService {
   /// экранидaги "АДМИН ПАНЕЛИ" тугмaсини кўрсaтиш). Asl ruxsat `isCurrentUserAdmin()`
   /// орқали server-side tasdiqlанади.
   Future<bool> isLocallyMarkedAdmin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('user_role') ?? 'user';
+    final role = await UserRoleSync().syncToPreferences();
     return role == 'admin' || role == 'superadmin';
   }
 }

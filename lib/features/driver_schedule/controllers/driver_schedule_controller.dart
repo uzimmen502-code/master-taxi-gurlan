@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/driver_car_prefill.dart';
+import '../../../core/utils/route_points_validator.dart';
+import '../../../models/marshrut_driver_profile.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 
@@ -23,10 +26,22 @@ class DriverScheduleController extends ChangeNotifier {
     required this.driverPlate,
     required SchedulesRepository schedulesRepo,
     required MarshrutDriverRepository marshrutDriverRepo,
+    List<String>? initialRouteStops,
+    this.initialRouteReversed = false,
   })  : _schedulesRepo = schedulesRepo,
-        _marshrutDriverRepo = marshrutDriverRepo {
+        _marshrutDriverRepo = marshrutDriverRepo,
+        initialRouteStops = initialRouteStops == null
+            ? null
+            : List<String>.unmodifiable(initialRouteStops) {
     seats = maxSeats;
+    if (this.initialRouteStops != null && this.initialRouteStops!.length >= 2) {
+      applyRouteStops(this.initialRouteStops!, reversed: initialRouteReversed);
+    }
   }
+
+  /// Панельдан «қайтиш рейси» — маршрут олдиндан тўлдирилади.
+  final List<String>? initialRouteStops;
+  final bool initialRouteReversed;
 
   final String taxiType;
   final String driverName;
@@ -41,10 +56,7 @@ class DriverScheduleController extends ChangeNotifier {
   bool get isAlone => taxiType == 'alone';
   bool get isIntercity => taxiType == 'intercity';
 
-  int get maxSeats {
-    final c = driverCar.toLowerCase();
-    return (c.contains('damas') || c.contains('дамас')) ? 6 : 4;
-  }
+  int get maxSeats => DriverCarPrefill.maxSeatsForModel(driverCar);
 
   // ─── Marshrut state ────────────────────────────────────────────────
   String fromMfy = '';
@@ -62,6 +74,9 @@ class DriverScheduleController extends ChangeNotifier {
 
   // ─── Intercity-only ────────────────────────────────────────────────
   String priceText = '';
+  TimeOfDay departureTime = const TimeOfDay(hour: 8, minute: 0);
+  /// `false` — бүгун, `true` — эртага (йўловчи «Эртага» қидируви билан mos).
+  bool departureIsTomorrow = false;
 
   // ─── Common state ─────────────────────────────────────────────────
   int seats = 4;
@@ -69,13 +84,28 @@ class DriverScheduleController extends ChangeNotifier {
   String? errorMessage;
 
   String get dateStr {
-    final d = DateTime.now();
+    final d = scheduleDay;
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Intercity: бүгун ёки эртага; бошқа турлар — ҳамеша бүгун.
+  DateTime get scheduleDay {
+    final now = DateTime.now();
+    if (isIntercity && departureIsTomorrow) {
+      return DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    }
+    return DateTime(now.year, now.month, now.day);
   }
 
   /// Marshrut уchun профилdan stops, alone/intercity uchun SharedPreferences'dan
   /// сақланган манзилlar.
   Future<void> init() async {
+    if (initialRouteStops != null && initialRouteStops!.length >= 2) {
+      if (isIntercity) await _loadIntercityPrefs();
+      notifyListeners();
+      return;
+    }
+
     if (isMarshrut) {
       final uid = await _loadUid();
       if (uid.isEmpty) return;
@@ -95,7 +125,31 @@ class DriverScheduleController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     fromAddr = prefs.getString('route_from_$taxiType') ?? '';
     toAddr = prefs.getString('route_to_$taxiType') ?? '';
-    if (fromAddr.isNotEmpty || toAddr.isNotEmpty) notifyListeners();
+    final midRaw = prefs.getString('route_mid_$taxiType') ?? '';
+    if (midRaw.isNotEmpty) {
+      midStops = midRaw.split('|').where((s) => s.trim().isNotEmpty).toList();
+    }
+    if (isIntercity) await _loadIntercityPrefs();
+    if (fromAddr.isNotEmpty || toAddr.isNotEmpty || midStops.isNotEmpty) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadIntercityPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dep = prefs.getString('intercity_departure_hour');
+    if (dep != null && dep.contains(':')) {
+      final p = dep.split(':');
+      departureTime = TimeOfDay(
+        hour: int.tryParse(p[0]) ?? 8,
+        minute: int.tryParse(p[1]) ?? 0,
+      );
+    }
+    departureIsTomorrow = prefs.getBool('intercity_departure_tomorrow') ?? false;
+    final savedPrice = prefs.getString('intercity_price_$taxiType');
+    if (savedPrice != null && savedPrice.trim().isNotEmpty) {
+      priceText = savedPrice;
+    }
   }
 
   Future<String> _loadUid() async {
@@ -105,25 +159,78 @@ class DriverScheduleController extends ChangeNotifier {
   }
 
   // ─── Marshrut setters ──────────────────────────────────────────────
-  void setFromMfy(String v) {
-    fromMfy = v;
+  String? trySetFromMfy(String v) {
+    if (v.trim().isEmpty) {
+      fromMfy = '';
+      notifyListeners();
+      return null;
+    }
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: '',
+      to: toMfy,
+      midStops: midStops,
+      role: 'from',
+    );
+    if (err != null) {
+      errorMessage = err;
+      notifyListeners();
+      return err;
+    }
+    fromMfy = v.trim();
+    midStops = midStops
+        .where((m) => !RoutePointsValidator.samePoint(m, fromMfy))
+        .toList();
     notifyListeners();
+    return null;
   }
 
-  void setToMfy(String v) {
-    toMfy = v;
+  String? trySetToMfy(String v) {
+    if (v.trim().isEmpty) {
+      toMfy = '';
+      notifyListeners();
+      return null;
+    }
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: fromMfy,
+      to: '',
+      midStops: midStops,
+      role: 'to',
+    );
+    if (err != null) {
+      errorMessage = err;
+      notifyListeners();
+      return err;
+    }
+    toMfy = v.trim();
+    midStops = midStops
+        .where((m) => !RoutePointsValidator.samePoint(m, toMfy))
+        .toList();
     notifyListeners();
+    return null;
   }
 
-  /// Қайтариш қиймати — қўшилди ёки йўq (дубликат бўлса false).
+  void setFromMfy(String v) => trySetFromMfy(v);
+
+  void setToMfy(String v) => trySetToMfy(v);
+
+  /// Qo'shildi yoki dublikat (false).
   bool addMidStop(String v) {
-    if (v.isEmpty) return false;
-    if (midStops.contains(v) || v == fromMfy || v == toMfy) {
-      errorMessage = 'Бу нуқта аллақачон қўшилган';
+    if (v.trim().isEmpty) return false;
+    final err = RoutePointsValidator.duplicateMessage(
+      candidate: v,
+      from: isMarshrut ? fromMfy : fromAddr.trim(),
+      to: isMarshrut ? toMfy : toAddr.trim(),
+      midStops: midStops,
+      role: 'mid',
+    );
+    if (err != null) {
+      errorMessage = err;
       notifyListeners();
       return false;
     }
-    midStops = [...midStops, v];
+    midStops = [...midStops, v.trim()];
     notifyListeners();
     return true;
   }
@@ -153,6 +260,44 @@ class DriverScheduleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Тўлиқ маршрутни тескари қилиш (from ↔ to, оралиқлар ҳам reversed).
+  void applyRouteStops(List<String> stops, {bool reversed = false}) {
+    var list = stops.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (list.length < 2) return;
+    if (reversed) list = list.reversed.toList();
+
+    if (isMarshrut) {
+      fromMfy = list.first;
+      toMfy = list.last;
+      midStops = list.length > 2
+          ? List<String>.from(list.sublist(1, list.length - 1))
+          : const [];
+    } else {
+      fromAddr = list.first;
+      toAddr = list.last;
+      midStops = list.length > 2
+          ? List<String>.from(list.sublist(1, list.length - 1))
+          : const [];
+    }
+  }
+
+  /// Йўналишни орқага қайтариш (intercity/marshrut — барча нуқталар).
+  void reverseRoute() {
+    final stops = allStops;
+    if (stops.length >= 2) {
+      applyRouteStops(stops, reversed: true);
+    } else if (isMarshrut) {
+      final tmp = fromMfy;
+      fromMfy = toMfy;
+      toMfy = tmp;
+    } else {
+      swapAddrs();
+    }
+    notifyListeners();
+  }
+
+  bool get canReverseRoute => allStops.length >= 2;
+
   // ─── Alone-only ────────────────────────────────────────────────────
   void setStartTime(TimeOfDay t) {
     startTime = t;
@@ -167,8 +312,17 @@ class DriverScheduleController extends ChangeNotifier {
   // ─── Intercity-only ────────────────────────────────────────────────
   void setPriceText(String v) {
     priceText = v;
-    // Текстfield ўз ҳолатини бошқаради — фойдаланувчи фақат submit'да валидация
-    // кўрсин, ҳар инпут учун `notifyListeners()` чақирмаймиз.
+  }
+
+  void setDepartureTime(TimeOfDay t) {
+    departureTime = t;
+    notifyListeners();
+  }
+
+  void setDepartureIsTomorrow(bool v) {
+    if (departureIsTomorrow == v) return;
+    departureIsTomorrow = v;
+    notifyListeners();
   }
 
   // ─── Common setters ────────────────────────────────────────────────
@@ -188,9 +342,11 @@ class DriverScheduleController extends ChangeNotifier {
 
   String? _validate() {
     if (isMarshrut) {
-      if (fromMfy.isEmpty) return 'Бошлангич нуқтани танланг';
-      if (toMfy.isEmpty) return 'Охирги нуқтани танланг';
-      if (fromMfy == toMfy) return 'Бошлангич ва охирги нуқта бир хил бўлмасин';
+      return RoutePointsValidator.validateRoute(
+        from: fromMfy,
+        to: toMfy,
+        midStops: midStops,
+      );
     } else {
       if (fromAddr.trim().isEmpty) return 'Қаердан манзилини киритинг';
       if (!isAlone && toAddr.trim().isEmpty) return 'Қаерга манзилини киритинг';
@@ -208,11 +364,23 @@ class DriverScheduleController extends ChangeNotifier {
     return null;
   }
 
-  List<String> get allStops => [
+  List<String> get allStops {
+    if (isMarshrut) {
+      return [
         if (fromMfy.isNotEmpty) fromMfy,
         ...midStops,
         if (toMfy.isNotEmpty) toMfy,
       ];
+    }
+    if (isIntercity) {
+      return [
+        if (fromAddr.trim().isNotEmpty) fromAddr.trim(),
+        ...midStops,
+        if (toAddr.trim().isNotEmpty) toAddr.trim(),
+      ];
+    }
+    return const [];
+  }
 
   /// Saqlash flow. Муваффақиятли бўлса `true` — экранни pop қилиш мумкин.
   Future<bool> confirm() async {
@@ -233,46 +401,101 @@ class DriverScheduleController extends ChangeNotifier {
     isSaving = true;
     notifyListeners();
     try {
-      final today = DateTime.now();
-      final midnight = DateTime(today.year, today.month, today.day, 23, 59, 59);
+      final day = scheduleDay;
+      final midnight = DateTime(day.year, day.month, day.day, 23, 59, 59);
 
       final fromText = isMarshrut ? fromMfy : fromAddr.trim();
       final toText = isMarshrut ? toMfy : toAddr.trim();
-      final stops = isMarshrut ? allStops : const <String>[];
+      final stops = (isMarshrut || isIntercity) ? allStops : const <String>[];
       final dir = isMarshrut ? direction : '';
 
       if (!isMarshrut) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('route_from_$taxiType', fromText);
         await prefs.setString('route_to_$taxiType', toText);
+        if (isIntercity) {
+          await prefs.setString('route_mid_$taxiType', midStops.join('|'));
+          await prefs.setString(
+              'intercity_departure_hour', _fmt(departureTime));
+          await prefs.setBool(
+              'intercity_departure_tomorrow', departureIsTomorrow);
+          await prefs.setString('intercity_price_$taxiType', priceText.trim());
+        }
       }
 
-      await _schedulesRepo.registerDriverSchedule(
-        driverId: uid,
-        taxiType: taxiType,
-        driverName: driverName,
-        driverPhone: driverPhone,
-        driverCar: driverCar,
-        driverPlate: driverPlate,
-        date: dateStr,
-        expiresAt: midnight,
-        seats: seats,
-        fromText: fromText,
-        toText: toText,
-        stops: stops,
-        direction: dir,
-        startTime: isAlone ? _fmt(startTime) : null,
-        endTime: isAlone ? _fmt(endTime) : null,
-        price: isIntercity
-            ? int.tryParse(priceText.trim().replaceAll(' ', '')) ?? 0
-            : null,
-      );
+      if (isMarshrut) {
+        final profile = await _marshrutDriverRepo.getProfile(uid);
+        final startLabel = profile?.startTime ?? '07:00';
+        final startParts = startLabel.split(':');
+        final startHour = int.tryParse(startParts.first) ?? 7;
+        final startMinute =
+            startParts.length > 1 ? (int.tryParse(startParts[1]) ?? 0) : 0;
+        final plannedStartAt = DateTime(
+          day.year,
+          day.month,
+          day.day,
+          startHour,
+          startMinute,
+        );
+        await _marshrutDriverRepo.register(
+          profile: MarshrutDriverProfile(
+            uid: uid,
+            driverName: driverName,
+            driverPhone: driverPhone,
+            carModel: driverCar,
+            plate: driverPlate,
+            seats: seats,
+            stops: stops,
+            startTime: startLabel,
+          ),
+          date: dateStr,
+          expiresAt: midnight,
+          plannedStartAt: plannedStartAt,
+        );
+      } else {
+        await _schedulesRepo.registerDriverSchedule(
+          driverId: uid,
+          taxiType: taxiType,
+          driverName: driverName,
+          driverPhone: driverPhone,
+          driverCar: driverCar,
+          driverPlate: driverPlate,
+          date: dateStr,
+          expiresAt: midnight,
+          seats: seats,
+          fromText: fromText,
+          toText: toText,
+          stops: stops,
+          direction: dir,
+          startTime: isAlone
+              ? _fmt(startTime)
+              : (isIntercity ? _fmt(departureTime) : null),
+          endTime: isAlone ? _fmt(endTime) : null,
+          price: isIntercity
+              ? int.tryParse(priceText.trim().replaceAll(' ', '')) ?? 0
+              : null,
+        );
+      }
       isSaving = false;
       notifyListeners();
       return true;
+    } on DriverScheduleApprovalException catch (e) {
+      isSaving = false;
+      errorMessage = e.message;
+      notifyListeners();
+      return false;
     } catch (e) {
       isSaving = false;
-      errorMessage = 'Хатолик: $e';
+      final msg = e.toString();
+      if (msg.contains('permission-denied')) {
+        errorMessage =
+            'Firestore рухсати йўқ. Admin тасдиғини ва интернетни текширинг.';
+      } else if (msg.contains('failed-precondition')) {
+        errorMessage =
+            'Индекс кутилмоқда. Бир неча дақиқа сабр қилинг ёки админга мурожаат қилинг.';
+      } else {
+        errorMessage = 'Хатолик: $e';
+      }
       notifyListeners();
       return false;
     }

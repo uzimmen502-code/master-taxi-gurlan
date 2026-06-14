@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
+
 import '../../../../models/schedule_search_result.dart';
-import '../../../../utils/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Qidiruv natijasidagi bitta marshrut haydovchisi kartochkasi.
 ///
@@ -16,15 +18,20 @@ class ScheduleCard extends StatelessWidget {
   final ScheduleSearchResult result;
   final VoidCallback onCall;
 
-  static const Color _blue = Color(0xFF0288D1);
+  static const Color _blue = AppColors.primary;
   static const Color _green = Color(0xFF039BE5);
 
   @override
   Widget build(BuildContext context) {
     final s = result.schedule;
-    final eta = result.etaMin ?? 3;
-    final etaColor =
-        eta <= 3 ? _green : eta <= 7 ? Colors.orange : Colors.grey;
+    final eta = result.etaMin;
+    final etaColor = eta == null
+        ? Colors.grey
+        : eta <= 3
+            ? _green
+            : eta <= 7
+                ? Colors.orange
+                : Colors.grey;
     final firstChar =
         s.driverName.isNotEmpty ? s.driverName.substring(0, 1) : '?';
 
@@ -64,24 +71,25 @@ class ScheduleCard extends StatelessWidget {
                     fontSize: AppText.bodySmall,
                     color: Colors.grey.shade500)),
           ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: etaColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: etaColor.withOpacity(0.3)),
+          if (eta != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: etaColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: etaColor.withOpacity(0.3)),
+              ),
+              child: Text(
+                context.tr('marshrut_eta_arrival').replaceAll('{n}', '$eta'),
+                style: TextStyle(
+                  fontSize: AppText.bodySmall,
+                  fontWeight: FontWeight.bold,
+                  color: etaColor,
+                ),
+                maxLines: 2,
+                textAlign: TextAlign.center,
+              ),
             ),
-            child: Column(children: [
-              Text('$eta дақ',
-                  style: TextStyle(
-                      fontSize: AppText.bodyLarge,
-                      fontWeight: FontWeight.bold,
-                      color: etaColor)),
-              Text('ETA',
-                  style: TextStyle(
-                      fontSize: AppText.labelTiny, color: etaColor)),
-            ]),
-          ),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -97,53 +105,75 @@ class ScheduleCard extends StatelessWidget {
           )),
         ]),
         const SizedBox(height: 8),
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-                color: s.seatsLeft > 0
-                    ? _green.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8)),
-            child: Text('💺 ${s.seatsLeft} ўрин',
-                style: TextStyle(
-                    fontSize: AppText.labelSmall,
-                    fontWeight: FontWeight.w600,
-                    color: s.seatsLeft > 0 ? _green : Colors.red)),
-          ),
-          const SizedBox(width: 8),
-          if (s.price > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8)),
-              child: Text('💰 ${s.price} сўм',
-                  style: const TextStyle(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                    color: s.seatsLeft > 0
+                        ? _green.withOpacity(0.1)
+                        : Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  context
+                      .tr('marshrut_seats_available')
+                      .replaceAll('{n}', '${s.seatsLeft}'),
+                  style: TextStyle(
                       fontSize: AppText.labelSmall,
                       fontWeight: FontWeight.w600,
-                      color: Colors.orange)),
-            ),
-          const Spacer(),
-          GestureDetector(
-            onTap: onCall,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                  color: _green, borderRadius: BorderRadius.circular(10)),
-              child: const Row(children: [
-                Icon(Icons.notifications_active,
-                    color: Colors.white, size: 16),
-                SizedBox(width: 6),
-                Text('ЧАҚИРИШ',
-                    style: TextStyle(
-                        fontSize: AppText.bodySmall,
+                      color: s.seatsLeft > 0 ? _green : Colors.red),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (s.price > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Text(
+                      '💰 ${context.tr('price_sum_short').replaceAll('{price}', '${s.price}')}',
+                      style: const TextStyle(
+                          fontSize: AppText.labelSmall,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange)),
+                ),
+              const Spacer(),
+            ]),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: onCall,
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.button,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.notifications_active,
+                        color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      context.tr('marshrut_call_system'),
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white)),
-              ]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ]),
     );
   }

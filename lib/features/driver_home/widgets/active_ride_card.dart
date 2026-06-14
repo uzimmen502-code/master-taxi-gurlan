@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/trip_request.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Қабул қилинган фаол сафар картаси — "Якунлаш" тугмаси билан.
 class ActiveRideCard extends StatelessWidget {
@@ -14,7 +14,7 @@ class ActiveRideCard extends StatelessWidget {
   final TripRequest ride;
   final VoidCallback onComplete;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   @override
   Widget build(BuildContext context) {

@@ -45,6 +45,11 @@ class AppLocalizations {
     return _localizedStrings[key] ?? _defaultStrings[key] ?? key;
   }
 
+  /// `context.tr('key')` uchun qisqa yo‘l.
+  static String tr(BuildContext context, String key) {
+    return of(context)?.translate(key) ?? key;
+  }
+
   // ===== DEFAULT МАТНЛАР (файл бўлмаса ишлатилади) =====
   static const Map<String, String> _defaultStrings = {
     // Асосий
@@ -178,7 +183,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) {
-    return ['uz', 'ru'].contains(locale.languageCode);
+    return locale.languageCode == 'ru' || locale.languageCode == 'uz';
   }
 
   @override
@@ -189,5 +194,5 @@ class _AppLocalizationsDelegate
   }
 
   @override
-  bool shouldReload(_AppLocalizationsDelegate old) => false;
+  bool shouldReload(_AppLocalizationsDelegate old) => true;
 }

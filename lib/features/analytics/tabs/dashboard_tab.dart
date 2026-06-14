@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../controllers/analytics_controller.dart';
 import '../widgets/kpi_grid.dart';
 import '../widgets/section_card.dart';
@@ -77,7 +77,7 @@ class _DashboardTabState extends State<DashboardTab>
             icon: '👥',
             child: KpiGrid(
               aspectRatio: 1.55,
-              accent: const Color(0xFF1565C0),
+              accent: AppColors.primary,
               kpis: [
                 kpi.usersKpi,
                 kpi.activeUsersKpi,
@@ -100,7 +100,7 @@ class _DashboardTabState extends State<DashboardTab>
             icon: '🚖',
             child: KpiGrid(
               aspectRatio: 1.55,
-              accent: const Color(0xFF00695C),
+              accent: AppColors.primaryDark,
               kpis: [
                 kpi.driversKpi,
                 kpi.onlineDriversKpi,
@@ -119,7 +119,7 @@ class _DashboardTabState extends State<DashboardTab>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)]),
+            colors: [AppColors.primaryDark, AppColors.primary]),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(children: [
@@ -136,7 +136,7 @@ class _DashboardTabState extends State<DashboardTab>
         Expanded(
           child: Wrap(spacing: 16, runSpacing: 4, children: [
             _live('Онлайн ҳайдовчи', kpi.onlineDrivers, '🟢'),
-            _live('Фаол сафарлар', kpi.activeTrips, '🚗'),
+            _live('Фаол сафарлар (hozir)', kpi.activeTrips, '🚗'),
             _live('Кутаётган буюртма', kpi.pendingOrders, '📦'),
           ]),
         ),
@@ -171,16 +171,16 @@ class _DashboardTabState extends State<DashboardTab>
       subtitle: 'Сўнгги 24 соат',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _pulseLine(
-            '📦 Бугунги тушум', '$revToday сўм', const Color(0xFF2E7D32)),
+            '📦 Бугунги тушум', '$revToday сўм', AppColors.primary),
         _pulseLine(
             '🛒 Бугунги буюртмалар',
             '${kpi.todayOrders} та',
-            const Color(0xFFE65100)),
+            AppColors.primary),
         _pulseLine('🛣 Бугунги сафарлар', '${kpi.todayTrips} та',
-            const Color(0xFF1565C0)),
+            AppColors.primary),
         _pulseLine(
             '🆕 Янги фойдаланувчи', '${kpi.newUsersToday} та',
-            const Color(0xFF6A1B9A)),
+            AppColors.primary),
       ]),
     );
   }

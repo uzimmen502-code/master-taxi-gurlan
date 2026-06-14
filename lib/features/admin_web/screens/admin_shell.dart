@@ -2,27 +2,39 @@
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/same_origin_nav.dart';
 import '../../analytics/screens/admin_orders_screen.dart';
 import '../../analytics/screens/monitoring_center_screen.dart';
 import '../services/admin_auth_service.dart';
+import '../services/admin_news_read_service.dart';
+import '../../../repositories/news_repository.dart';
+import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
+import 'admin_order_news_list_screen.dart';
 import 'birthday_bonus_screen.dart';
 import 'identity_approvals_screen.dart';
+import 'pending_codes_screen.dart';
 import 'intercity_admin_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
 import 'courier_admin_screen.dart';
+import 'courier_management_screen.dart';
 import 'driver_applications_screen.dart';
 import 'payout_management_screen.dart';
 import 'products_manager_screen.dart';
+import 'procurement_prices_screen.dart';
+import 'warehouse_stock_screen.dart';
+import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
+import 'anomaly_settings_screen.dart';
 import 'users_devices_screen.dart';
 
 /// Admin Web Panel — асосий навигaция (sidebar + контент).
@@ -38,6 +50,21 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
+  late final List<Widget?> _pageCache;
+  final PendingCodeAutoListener _pendingCodeAuto = PendingCodeAutoListener();
+
+  @override
+  void initState() {
+    super.initState();
+    _pageCache = List<Widget?>.filled(_sections.length, null);
+    _pendingCodeAuto.start();
+  }
+
+  @override
+  void dispose() {
+    _pendingCodeAuto.dispose();
+    super.dispose();
+  }
 
   static const _sections = [
     _AdminSection(
@@ -46,9 +73,59 @@ class _AdminShellState extends State<AdminShell> {
       description: 'KPI ва кенг таҳлил',
     ),
     _AdminSection(
+      label: 'Буюртмалар',
+      icon: Icons.receipt_long,
+      description: 'Нон ва овқат буюртмалари',
+    ),
+    _AdminSection(
+      label: 'Курьер',
+      icon: Icons.delivery_dining,
+      description: 'Reyslar va kuryer boshqaruvi',
+    ),
+    _AdminSection(
+      label: 'Курьерлар',
+      icon: Icons.people_alt_outlined,
+      description: 'Курьерларни бошқариш',
+    ),
+    _AdminSection(
+      label: 'Иш топ',
+      icon: Icons.work_history,
+      description: 'Эълонларни тасдиқлаш',
+    ),
+    _AdminSection(
+      label: 'Хабарлaр',
+      icon: Icons.campaign,
+      description: 'Promo va yangilik yuborish',
+    ),
+    _AdminSection(
+      label: 'Бегущая строка',
+      icon: Icons.view_stream_outlined,
+      description: 'Bosh ekran yuguruvchi matn',
+    ),
+    _AdminSection(
+      label: 'Буюртма хабар',
+      icon: Icons.sms_outlined,
+      description: 'Mijozga ketgan status xabarlari',
+    ),
+    _AdminSection(
+      label: 'Сотиш таклифлари',
+      icon: Icons.sell_outlined,
+      description: 'Фойдаланувчи маҳсулот таклифи',
+    ),
+    _AdminSection(
       label: 'Маҳсулoтлaр',
       icon: Icons.inventory_2,
       description: 'Нон, овқaт, нархлaр',
+    ),
+    _AdminSection(
+      label: 'Харид нархлари',
+      icon: Icons.price_change_outlined,
+      description: 'Йиғиб олиш ва тўлов нархлари',
+    ),
+    _AdminSection(
+      label: 'Омбор',
+      icon: Icons.warehouse_outlined,
+      description: 'Йиғилган маҳсулот қолдиқлари',
     ),
     _AdminSection(
       label: 'Ҳaйдовчи aризалари',
@@ -56,9 +133,24 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Янги aризалaр',
     ),
     _AdminSection(
-      label: 'Тасдиқлар',
-      icon: Icons.verified_user_outlined,
-      description: 'Рақам ва profile сўровлари',
+      label: 'Туғилган кун',
+      icon: Icons.cake_outlined,
+      description: 'Туғилган кун бонуси ва сўровлар',
+    ),
+    _AdminSection(
+      label: 'Код сўровлари',
+      icon: Icons.pin_outlined,
+      description: 'Admin kod (fake SMS)',
+    ),
+    _AdminSection(
+      label: 'Маршрут',
+      icon: Icons.directions_bus,
+      description: 'Ҳайдовчилар ва сафарлар',
+    ),
+    _AdminSection(
+      label: 'Shaharlararo',
+      icon: Icons.connecting_airports,
+      description: 'Intercity haydovchilar va bronlar',
     ),
     _AdminSection(
       label: 'Фойдаланувчилар',
@@ -71,6 +163,11 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Хавфли сигналлар',
     ),
     _AdminSection(
+      label: 'Аномалия созламалари',
+      icon: Icons.settings,
+      description: 'Чеги ва чиқим лимитлари',
+    ),
+    _AdminSection(
       label: 'Молия',
       icon: Icons.account_balance_wallet,
       description: 'Payout ва тушум',
@@ -81,39 +178,9 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Йиллик туғилган кун бонуси',
     ),
     _AdminSection(
-      label: 'Хабарлaр',
-      icon: Icons.campaign,
-      description: 'Фойдaлaнувчилaргa юбoриш',
-    ),
-    _AdminSection(
-      label: 'Иш топ',
-      icon: Icons.work_history,
-      description: 'Эълонларни тасдиқлаш',
-    ),
-    _AdminSection(
-      label: 'Маршрут',
-      icon: Icons.directions_bus,
-      description: 'Ҳайдовчилар ва сафарлар',
-    ),
-    _AdminSection(
       label: 'Dispatch history',
       icon: Icons.timeline,
       description: 'Маршрут навбат тарихи',
-    ),
-    _AdminSection(
-      label: 'Shaharlararo',
-      icon: Icons.connecting_airports,
-      description: 'Intercity haydovchilar va bronlar',
-    ),
-    _AdminSection(
-      label: 'Курьер',
-      icon: Icons.delivery_dining,
-      description: 'Reyslar va kuryer boshqaruvi',
-    ),
-    _AdminSection(
-      label: 'Буюртмалар',
-      icon: Icons.receipt_long,
-      description: 'Нон ва овқат буюртмалари',
     ),
     _AdminSection(
       label: 'Чат қўллaб-қуввaтлaш',
@@ -160,7 +227,7 @@ class _AdminShellState extends State<AdminShell> {
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.scaffold,
       drawer: isMedium ? null : Drawer(child: sidebar),
       body: Row(children: [
         // Tor panel: icon + қисқа ном бор — 76px етарсиз.
@@ -172,7 +239,7 @@ class _AdminShellState extends State<AdminShell> {
       appBar: isMedium
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF0D47A1),
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               title: Text(_sections[_selectedIndex].label),
               actions: [
@@ -189,21 +256,41 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Widget _body() {
-    final section = _sections[_selectedIndex];
+    final cached = _pageCache[_selectedIndex];
+    if (cached != null) return cached;
+    final built = _buildSection(_selectedIndex);
+    _pageCache[_selectedIndex] = built;
+    return built;
+  }
+
+  Widget _buildSection(int index) {
+    final section = _sections[index];
     if (section.label == 'Monitoring Center') {
       return const MonitoringCenterScreen(embedded: true);
     }
     if (section.label == 'Хабарлaр') {
       return const AdminNewsListScreen();
     }
+    if (section.label == 'Бегущая строка') {
+      return const AdminHomeTickerScreen();
+    }
+    if (section.label == 'Буюртма хабар') {
+      return const AdminOrderNewsListScreen();
+    }
     if (section.label == 'Иш топ') {
       return const JobsModerationScreen();
+    }
+    if (section.label == 'Сотиш таклифлари') {
+      return const SellSubmissionsAdminScreen();
     }
     if (section.label == 'Ҳaйдовчи aризалари') {
       return const DriverApplicationsScreen();
     }
-    if (section.label == 'Тасдиқлар') {
+    if (section.label == 'Туғилган кун') {
       return const IdentityApprovalsScreen();
+    }
+    if (section.label == 'Код сўровлари') {
+      return const PendingCodesScreen();
     }
     if (section.label == 'Фойдаланувчилар') {
       return const UsersDevicesScreen();
@@ -211,8 +298,17 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Risk review') {
       return const RiskReviewScreen();
     }
+    if (section.label == 'Аномалия созламалари') {
+      return const AnomalySettingsScreen();
+    }
     if (section.label == 'Маҳсулoтлaр') {
       return const ProductsManagerScreen();
+    }
+    if (section.label == 'Харид нархлари') {
+      return const ProcurementPricesScreen();
+    }
+    if (section.label == 'Омбор') {
+      return const WarehouseStockScreen();
     }
     if (section.label == 'Молия') {
       return const PayoutManagementScreen();
@@ -232,8 +328,11 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Курьер') {
       return const CourierAdminScreen();
     }
+    if (section.label == 'Курьерлар') {
+      return const CourierManagementScreen();
+    }
     if (section.label == 'Буюртмалар') {
-      return const AdminOrdersScreen();
+      return const AdminOrdersScreen(embedded: true);
     }
     if (section.label == 'Чат қўллaб-қуввaтлaш') {
       return const ChatSupportScreen();
@@ -273,7 +372,7 @@ class _Sidebar extends StatelessWidget {
     final auth = context.watch<AdminAuthService>();
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFF0D47A1),
+        color: AppColors.primary,
         boxShadow: [
           BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(2, 0)),
         ],
@@ -287,10 +386,22 @@ class _Sidebar extends StatelessWidget {
             children: List.generate(sections.length, (i) {
               final s = sections[i];
               final selected = i == selectedIndex;
-              return _sidebarItem(s, selected, () => onSelect(i));
+              return _sidebarItem(context, s, selected, () => onSelect(i));
             }),
           ),
         ),
+        if (!compact && sections[selectedIndex].label == 'Код сўровлари')
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const PendingCodeAutoModeSwitch(compact: true),
+            ),
+          ),
         const Divider(color: Colors.white24, height: 1),
         if (kIsWeb) _publicAppLinkTile(context, compact),
         _userTile(auth),
@@ -324,7 +435,13 @@ class _Sidebar extends StatelessWidget {
     );
   }
 
-  Widget _sidebarItem(_AdminSection s, bool selected, VoidCallback onTap) {
+  Widget _sidebarItem(
+    BuildContext context,
+    _AdminSection s,
+    bool selected,
+    VoidCallback onTap,
+  ) {
+    final badgeStream = _badgeCountStream(context, s.label);
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -336,9 +453,20 @@ class _Sidebar extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: compact
-            ? Center(
-                child: Icon(s.icon,
-                    color: selected ? Colors.white : Colors.white70, size: 22),
+            ? Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Center(
+                    child: Icon(s.icon,
+                        color: selected ? Colors.white : Colors.white70, size: 22),
+                  ),
+                  if (badgeStream != null)
+                    Positioned(
+                      right: 8,
+                      top: -4,
+                      child: _sidebarBadge(stream: badgeStream),
+                    ),
+                ],
               )
             : Row(children: [
                 Icon(s.icon,
@@ -366,8 +494,169 @@ class _Sidebar extends StatelessWidget {
                                 color: Colors.white54, fontSize: 10)),
                       ]),
                 ),
+                if (badgeStream != null) ...[
+                  const SizedBox(width: 8),
+                  _sidebarBadge(stream: badgeStream),
+                ],
               ]),
       ),
+    );
+  }
+
+  Stream<int>? _badgeCountStream(BuildContext context, String label) {
+    final db = FirebaseFirestore.instance;
+    switch (label) {
+      case 'Буюртмалар':
+        return db
+            .collection('orders')
+            .where('status', isEqualTo: 'new')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Курьер':
+        return db
+            .collection('courier_orders')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Иш топ':
+        return db
+            .collection('ads')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Хабарлaр':
+        return context.read<NewsRepository>().watchAdminUnreadCount(
+              orderOnly: false,
+              readListenable: context.read<AdminNewsReadService>(),
+              lastSeenAt: () =>
+                  context.read<AdminNewsReadService>().lastGeneralSeen,
+            );
+      case 'Буюртма хабар':
+        return context.read<NewsRepository>().watchAdminUnreadCount(
+              orderOnly: true,
+              readListenable: context.read<AdminNewsReadService>(),
+              lastSeenAt: () =>
+                  context.read<AdminNewsReadService>().lastOrderSeen,
+            );
+      case 'Сотиш таклифлари':
+        return db
+            .collection('sell_submissions')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Ҳaйдовчи aризалари':
+        return db
+            .collection('driver_requests')
+            .where('status', isEqualTo: 'pending')
+            .limit(500)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Туғилган кун':
+        return db
+            .collection('birthdate_change_requests')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Код сўровлари':
+        return db
+            .collection('pending_codes')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Маршрут':
+        return db
+            .collection('trips')
+            .where('taxiType', isEqualTo: 'marshrut')
+            .where('status', isEqualTo: 'pending')
+            .limit(200)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Shaharlararo':
+        return db
+            .collection('intercity_orders')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Фойдаланувчилар':
+        return db
+            .collection('risk_events')
+            .where('reviewed', isEqualTo: false)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Risk review':
+        return db
+            .collection('risk_events')
+            .where('reviewed', isEqualTo: false)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Молия':
+        return db
+            .collection('payout_requests')
+            .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Dispatch history':
+        return db
+            .collection('trips')
+            .where('taxiType', isEqualTo: 'marshrut')
+            .where('status', whereIn: ['pending', 'accepted'])
+            .limit(200)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Чат қўллaб-қуввaтлaш':
+        return db
+            .collection('support_chats')
+            .where('lastFromAdmin', isEqualTo: false)
+            .snapshots()
+            .map((s) => s.docs.length);
+      default:
+        return null;
+    }
+  }
+
+  Stream<int> _sumStreams(Stream<int> a, Stream<int> b) {
+    return Stream.multi((controller) {
+      var av = 0;
+      var bv = 0;
+      final sa = a.listen((v) {
+        av = v;
+        controller.add(av + bv);
+      }, onError: controller.addError);
+      final sb = b.listen((v) {
+        bv = v;
+        controller.add(av + bv);
+      }, onError: controller.addError);
+      controller.onCancel = () async {
+        await sa.cancel();
+        await sb.cancel();
+      };
+    });
+  }
+
+  Widget _sidebarBadge({required Stream<int> stream}) {
+    return StreamBuilder<int>(
+      stream: stream,
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        if (count <= 0) return const SizedBox.shrink();
+        final text = count > 99 ? '99+' : '$count';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.red.shade600,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -534,7 +823,7 @@ class _PlaceholderTab extends StatelessWidget {
             child: const Text(
               '🚧 Кейинги Phase\'дa ясaймиз',
               style: TextStyle(
-                  color: Color(0xFFE65100), fontWeight: FontWeight.bold),
+                  color: AppColors.primary, fontWeight: FontWeight.bold),
             ),
           ),
         ],

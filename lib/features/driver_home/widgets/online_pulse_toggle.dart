@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Онлайн toggle — пульсация анимацияли.
 class OnlinePulseToggle extends StatefulWidget {
@@ -19,7 +19,7 @@ class OnlinePulseToggle extends StatefulWidget {
 
 class _OnlinePulseToggleState extends State<OnlinePulseToggle>
     with SingleTickerProviderStateMixin {
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;

@@ -1,6 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../../../core/utils/formatters.dart';
+import '../../../repositories/entertainment_repository.dart';
+import 'entertainment_catalog_tab.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Admin web — shaharlararo taksi: haydovchilar, bronlar, statistika.
 class IntercityAdminScreen extends StatelessWidget {
@@ -8,12 +14,14 @@ class IntercityAdminScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
+    return Provider(
+      create: (_) => EntertainmentRepository(),
+      child: DefaultTabController(
+      length: 4,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FA),
+        backgroundColor: AppColors.scaffold,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF1A237E),
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           title: const Text('Shaharlararo taksi'),
           bottom: const TabBar(
@@ -23,18 +31,21 @@ class IntercityAdminScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Haydovchilar'),
               Tab(text: 'Bronlar'),
+              Tab(text: 'Kino'),
               Tab(text: 'Statistika'),
             ],
           ),
         ),
-        body: const TabBarView(
+        body: TabBarView(
           children: [
-            _DriversTab(),
-            _BookingsTab(),
-            _StatsTab(),
+            const _DriversTab(),
+            const _BookingsTab(),
+            const EntertainmentCatalogTab(),
+            const _StatsTab(),
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -50,12 +61,101 @@ class _DriversTab extends StatefulWidget {
 class _DriversTabState extends State<_DriversTab> {
   static final _db = FirebaseFirestore.instance;
   static final _money = NumberFormat.decimalPattern('en');
+  bool _showAllDays = false;
 
-  Future<void> _toggleActive(String id, bool current) async {
-    await _db.collection('intercity_drivers').doc(id).update({
-      'isActive': !current,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+  static String _dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterDriverDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final todayKey = _dateKey(DateTime.now());
+  final filtered = _showAllDays
+      ? docs
+      : docs.where((doc) {
+          final d = doc.data();
+          final scheduleDate = (d['scheduleDate'] as String?)?.trim() ?? '';
+          if (scheduleDate.isEmpty) {
+            return d['isActive'] == true;
+          }
+          return scheduleDate == todayKey;
+        }).toList(growable: false);
+
+    final byPhone = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    for (final doc in filtered) {
+      final phone = phoneDigits((doc.data()['phone'] ?? doc.id).toString());
+      if (phone.length < 9) continue;
+      final existing = byPhone[phone];
+      if (existing == null) {
+        byPhone[phone] = doc;
+        continue;
+      }
+      final existingActive = existing.data()['isActive'] == true;
+      final currentActive = doc.data()['isActive'] == true;
+      if (currentActive && !existingActive) {
+        byPhone[phone] = doc;
+      }
+    }
+    final unique = byPhone.values.toList()
+      ..sort((a, b) {
+        final aa = a.data()['isActive'] == true;
+        final bb = b.data()['isActive'] == true;
+        if (aa != bb) return aa ? -1 : 1;
+        return a.id.compareTo(b.id);
+      });
+    return unique;
+  }
+
+  /// Қолган / жами ўринлар (масalan `2/4`).
+  static String _seatsLabel(Map<String, dynamic> d) {
+    final left = (d['seats'] as num?)?.toInt() ?? 0;
+    var cap = (d['seatCapacity'] as num?)?.toInt() ?? 0;
+    if (cap < left) cap = left;
+    if (cap <= 0) return '$left';
+    return '$left/$cap';
+  }
+
+  /// Admin toggle — `intercity_drivers` + `schedules` + `queue` синхрон.
+  Future<void> _toggleActive(
+    String id,
+    bool current,
+    Map<String, dynamic> data,
+  ) async {
+    final next = !current;
+    final batch = _db.batch();
+    batch.set(
+      _db.collection('intercity_drivers').doc(id),
+      {
+        'isActive': next,
+        if (!next) 'isOnPanel': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    if (!next) {
+      final scheduleDate =
+          (data['scheduleDate'] as String?)?.trim() ?? _dateKey(DateTime.now());
+      final sched = await _db
+          .collection('schedules')
+          .where('driverId', isEqualTo: id)
+          .where('taxiType', isEqualTo: 'intercity')
+          .where('date', isEqualTo: scheduleDate)
+          .where('isActive', isEqualTo: true)
+          .get();
+      for (final doc in sched.docs) {
+        batch.update(doc.reference, {'isActive': false});
+      }
+      batch.set(
+        _db.collection('queue').doc(id),
+        {
+          'isActive': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit();
   }
 
   Future<void> _addDriver(BuildContext context) async {
@@ -142,16 +242,22 @@ class _DriversTabState extends State<_DriversTab> {
                 if (name.text.isEmpty || phone.text.isEmpty) return;
                 final uid = phone.text.replaceAll(RegExp(r'[^\d]'), '');
                 if (uid.isEmpty) return;
+                final today = _dateKey(DateTime.now());
                 await _db.collection('intercity_drivers').doc(uid).set({
                   'name': name.text,
                   'phone': phone.text,
+                  'phoneDigits': uid,
                   'plate': plate.text,
                   'from': from.text,
                   'to': to.text,
+                  'routeLabel': '${from.text} → ${to.text}',
                   'price': int.tryParse(price.text) ?? 0,
+                  'seatCapacity': seats,
                   'seats': seats,
                   'hour': hour,
+                  'scheduleDate': today,
                   'isActive': true,
+                  'isOnPanel': false,
                   'rating': 4.5,
                   'parcel': false,
                   'createdAt': FieldValue.serverTimestamp(),
@@ -174,8 +280,18 @@ class _DriversTabState extends State<_DriversTab> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              FilterChip(
+                label: Text(_showAllDays ? 'Barcha kunlar' : 'Faqat bugun'),
+                selected: !_showAllDays,
+                onSelected: (_) => setState(() => _showAllDays = !_showAllDays),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Yangilash',
+                onPressed: () => setState(() {}),
+                icon: const Icon(Icons.refresh),
+              ),
               FilledButton.icon(
                 onPressed: () => _addDriver(context),
                 icon: const Icon(Icons.add, size: 18),
@@ -197,12 +313,14 @@ class _DriversTabState extends State<_DriversTab> {
               if (!snap.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final docs = snap.data!.docs;
+              final docs = _filterDriverDocs(snap.data!.docs);
               if (docs.isEmpty) {
-                return const Center(
+                return Center(
                   child: Text(
-                    "Haydovchi yo'q",
-                    style: TextStyle(color: Colors.grey),
+                    _showAllDays
+                        ? "Haydovchi yo'q"
+                        : "Bugun faol haydovchi yo'q",
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 );
               }
@@ -212,16 +330,19 @@ class _DriversTabState extends State<_DriversTab> {
                 itemBuilder: (_, i) {
                   final d = docs[i].data();
                   final active = d['isActive'] == true;
+                  final scheduleDate = (d['scheduleDate'] as String?)?.trim() ?? '';
+                  final kino = d['entertainmentAllowed'] == true;
+                  final id = docs[i].id;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundColor: active
-                            ? Colors.green.shade100
+                            ? AppColors.tickerShell
                             : Colors.grey.shade200,
                         child: Icon(
                           Icons.directions_car,
-                          color: active ? Colors.green : Colors.grey,
+                          color: active ? AppColors.primary : Colors.grey,
                         ),
                       ),
                       title: Text(
@@ -232,13 +353,47 @@ class _DriversTabState extends State<_DriversTab> {
                         '${d['phone'] ?? ''}\n'
                         '${d['from'] ?? '?'} -> ${d['to'] ?? '?'}  '
                         '${d['hour'] ?? '?'}:00  '
-                        '${d['seats'] ?? 0} joy  '
-                        "${_money.format(d['price'] ?? 0)} so'm",
+                        '${_seatsLabel(d)} joy  '
+                        "${_money.format(d['price'] ?? 0)} so'm\n"
+                        '${scheduleDate.isNotEmpty ? 'Sana: $scheduleDate  ' : ''}'
+                        '${kino ? '🎬 Kino ruxsati: yoqilgan' : '🎬 Kino: o‘chiq'}',
                       ),
-                      trailing: Switch(
-                        value: active,
-                        activeTrackColor: Colors.green,
-                        onChanged: (_) => _toggleActive(docs[i].id, active),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('Kino',
+                                  style: TextStyle(fontSize: 9)),
+                              Switch(
+                                value: kino,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (v) async {
+                                  try {
+                                    await context
+                                        .read<EntertainmentRepository>()
+                                        .setDriverEntertainmentAllowed(id, v);
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Kino: $e'),
+                                        backgroundColor: Colors.red.shade700,
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                          Switch(
+                            value: active,
+                            activeTrackColor: AppColors.primary,
+                            onChanged: (_) => _toggleActive(id, active, d),
+                          ),
+                        ],
                       ),
                       isThreeLine: true,
                     ),
@@ -264,7 +419,7 @@ class _BookingsTab extends StatelessWidget {
   Color _color(String s) {
     switch (s) {
       case 'confirmed':
-        return Colors.green;
+        return AppColors.primary;
       case 'pending':
         return Colors.orange;
       case 'completed':

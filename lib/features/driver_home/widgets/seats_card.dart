@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Бўш ўрин миқдори картаси — +/- тугмалари билан.
 class SeatsCard extends StatelessWidget {
@@ -17,9 +17,8 @@ class SeatsCard extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onRemove;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
   static const _red = Color(0xFFB71C1C);
-  static const _orange = Color(0xFFE65100);
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +80,7 @@ class SeatsCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                    colors: [Color(0xFF2E7D32), Color(0xFF43A047)]),
+                    colors: [AppColors.primary, AppColors.primaryMid]),
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../core/theme/app_theme.dart';
 
 import '../models/analytics/daily_report.dart';
 import '../models/analytics/driver_analytics.dart';
@@ -86,13 +87,20 @@ class AnalyticsRepository {
           .where('status', isEqualTo: 'completed')
           .get(), // 10
       _orders.where('status', whereIn: ['new', 'accepted']).count().get(), // 11
-      _trips.where('status', whereIn: ['searching', 'accepted', 'pending']).count().get(), // 12
+      countActiveTrips(), // 12 — haqiqiy faol safarlar
       _users.where('blockedUntil', isGreaterThan: Timestamp.fromDate(now)).count().get(), // 13
       _payoutRequests.where('status', isEqualTo: 'pending').count().get(), // 14
     ]);
 
     int aggCount(int i) =>
         (results[i] as AggregateQuerySnapshot).count ?? 0;
+
+    int activeTripsCount = 0;
+    if (results[12] is int) {
+      activeTripsCount = results[12] as int;
+    } else {
+      activeTripsCount = aggCount(12);
+    }
 
     final todaySnap = results[7] as QuerySnapshot<Map<String, dynamic>>;
     final yestSnap = results[8] as QuerySnapshot<Map<String, dynamic>>;
@@ -119,7 +127,7 @@ class AnalyticsRepository {
       todayRevenue: todayOrderRevenue + todayTripsRevenue,
       previousTodayRevenue: yestOrderRevenue + yestTripsRevenue,
       pendingOrders: aggCount(11),
-      activeTrips: aggCount(12),
+      activeTrips: activeTripsCount,
       blockedUsers: aggCount(13),
       pendingPayouts: aggCount(14),
     );
@@ -142,6 +150,33 @@ class AnalyticsRepository {
       total += ((d.data()['fare'] as num?)?.toInt() ?? 0);
     }
     return total;
+  }
+
+  /// Haqiqiy faol safarlar — muddati o'tgan yoki eski accepted hisoblanmaydi.
+  Future<int> countActiveTrips({Duration acceptedMaxAge = const Duration(hours: 24)}) async {
+    final now = DateTime.now();
+    final acceptedCutoff = now.subtract(acceptedMaxAge);
+
+    final snaps = await Future.wait([
+      _trips.where('status', whereIn: ['searching', 'pending']).get(),
+      _trips.where('status', isEqualTo: 'accepted').get(),
+    ]);
+
+    var count = 0;
+    for (final doc in snaps[0].docs) {
+      final exp = (doc.data()['expiresAt'] as Timestamp?)?.toDate();
+      if (exp != null && !exp.isAfter(now)) continue;
+      count++;
+    }
+    for (final doc in snaps[1].docs) {
+      final data = doc.data();
+      final ref = (data['acceptedAt'] as Timestamp?)?.toDate() ??
+          (data['updatedAt'] as Timestamp?)?.toDate() ??
+          (data['createdAt'] as Timestamp?)?.toDate();
+      if (ref != null && ref.isBefore(acceptedCutoff)) continue;
+      count++;
+    }
+    return count;
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -185,7 +220,9 @@ class AnalyticsRepository {
       final gender = (d['gender'] ?? 'male') as String;
       final role = (d['role'] ?? 'user') as String;
       final city = (d['mfy'] ?? d['city'] ?? '—') as String;
-      final balance = (d['walletBalance'] as num?)?.toInt() ?? 0;
+      final balance = (d['bonusBalance'] as num?)?.toInt() ??
+          (d['walletBalance'] as num?)?.toInt() ??
+          0;
 
       genderCounts[gender] = (genderCounts[gender] ?? 0) + 1;
       roleCounts[role] = (roleCounts[role] ?? 0) + 1;
@@ -223,7 +260,7 @@ class AnalyticsRepository {
           Segment(
             label: 'Эркак',
             value: genderCounts['male']!,
-            color: const Color(0xFF1565C0),
+            color: AppColors.primary,
             icon: '👨',
           ),
         if (genderCounts['female'] != null)
@@ -645,10 +682,7 @@ class AnalyticsRepository {
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(today0))
           .get(), // 1
       _orders.where('status', whereIn: ['new', 'accepted']).count().get(), // 2
-      _trips
-          .where('status', whereIn: ['searching', 'accepted', 'pending'])
-          .count()
-          .get(), // 3
+      countActiveTrips(), // 3
       _orders
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(month0))
           .get(), // 4
@@ -660,7 +694,9 @@ class AnalyticsRepository {
     final todayOrdersSnap = results[0] as QuerySnapshot<Map<String, dynamic>>;
     final todayTripsSnap = results[1] as QuerySnapshot<Map<String, dynamic>>;
     final activeOrders = (results[2] as AggregateQuerySnapshot).count ?? 0;
-    final activeTrips = (results[3] as AggregateQuerySnapshot).count ?? 0;
+    final activeTrips = results[3] is int
+        ? results[3] as int
+        : ((results[3] as AggregateQuerySnapshot).count ?? 0);
     final monthOrdersSnap = results[4] as QuerySnapshot<Map<String, dynamic>>;
     final monthTripsSnap = results[5] as QuerySnapshot<Map<String, dynamic>>;
 
@@ -1009,7 +1045,10 @@ class AnalyticsRepository {
 
     // Wallet balanslar
     for (final u in usersSnap.docs) {
-      final balance = (u.data()['walletBalance'] as num?)?.toInt() ?? 0;
+      final ud = u.data();
+      final balance = (ud['bonusBalance'] as num?)?.toInt() ??
+          (ud['walletBalance'] as num?)?.toInt() ??
+          0;
       if (balance > 0) totalWalletBalance += balance;
     }
 
@@ -1037,8 +1076,8 @@ class AnalyticsRepository {
                 label: e.key == 'cash' ? 'Нақд' : 'Кошелёк',
                 value: e.value,
                 color: e.key == 'cash'
-                    ? const Color(0xFF2E7D32)
-                    : const Color(0xFF1565C0),
+                    ? AppColors.primary
+                    : AppColors.primary,
                 icon: e.key == 'cash' ? '💵' : '💳',
               ))
           .toList(),
@@ -1251,11 +1290,11 @@ class AnalyticsRepository {
       case 'admin':
         return const Color(0xFFB71C1C);
       case 'driver':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       case 'courier':
-        return const Color(0xFF6A1B9A);
+        return AppColors.primary;
       default:
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
     }
   }
 
@@ -1275,11 +1314,11 @@ class AnalyticsRepository {
   static Color _taxiTypeColor(String t) {
     switch (t) {
       case 'marshrut':
-        return const Color(0xFF00695C);
+        return AppColors.primaryDark;
       case 'intercity':
-        return const Color(0xFF6A1B9A);
+        return AppColors.primary;
       case 'alone':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       default:
         return Colors.grey;
     }
@@ -1307,11 +1346,11 @@ class AnalyticsRepository {
   static Color _orderStatusColor(String s) {
     switch (s) {
       case 'new':
-        return const Color(0xFFE65100);
+        return AppColors.primary;
       case 'accepted':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       case 'ready':
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
       case 'delivered':
         return const Color(0xFF388E3C);
       case 'rejected':
@@ -1349,11 +1388,11 @@ class AnalyticsRepository {
     switch (s) {
       case 'searching':
       case 'pending':
-        return const Color(0xFFE65100);
+        return AppColors.primary;
       case 'accepted':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       case 'completed':
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
       case 'cancelled':
       case 'rejected':
       case 'expired':
@@ -1394,15 +1433,15 @@ class AnalyticsRepository {
   static Color _moduleColor(String k) {
     switch (k) {
       case 'bread':
-        return const Color(0xFFE65100);
+        return AppColors.primary;
       case 'food':
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
       case 'taxi_alone':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       case 'taxi_marshrut':
-        return const Color(0xFF00695C);
+        return AppColors.primaryDark;
       case 'taxi_intercity':
-        return const Color(0xFF6A1B9A);
+        return AppColors.primary;
       default:
         return Colors.grey;
     }
@@ -1411,11 +1450,11 @@ class AnalyticsRepository {
   static Color _ratingColor(String bucket) {
     switch (bucket) {
       case '4-5':
-        return const Color(0xFF2E7D32);
+        return AppColors.primary;
       case '3-4':
-        return const Color(0xFF1565C0);
+        return AppColors.primary;
       case '2-3':
-        return const Color(0xFFE65100);
+        return AppColors.primary;
       case '1-2':
         return const Color(0xFFB71C1C);
       default:
@@ -1426,13 +1465,13 @@ class AnalyticsRepository {
   /// Стрингдан барқарор ранг — палитра ишлатилади.
   static Color _autoColor(String s) {
     const palette = [
-      Color(0xFF1565C0),
-      Color(0xFF2E7D32),
-      Color(0xFFE65100),
-      Color(0xFF6A1B9A),
-      Color(0xFF00695C),
+      AppColors.primary,
+      AppColors.primary,
+      AppColors.primary,
+      AppColors.primary,
+      AppColors.primaryDark,
       Color(0xFFB71C1C),
-      Color(0xFF5D4037),
+      AppColors.primaryDark,
       Color(0xFF455A64),
     ];
     final i = s.hashCode.abs() % palette.length;

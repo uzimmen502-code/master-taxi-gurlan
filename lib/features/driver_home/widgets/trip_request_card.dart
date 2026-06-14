@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/trip_request.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// "Янги буюртмалар" рўйхатидаги битта карта — таймер билан.
 class TripRequestCard extends StatelessWidget {
@@ -14,9 +14,9 @@ class TripRequestCard extends StatelessWidget {
   final TripRequest ride;
   final VoidCallback onTap;
 
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
-  static const _orange = Color(0xFFE65100);
+  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryDark;
+  static const _orange = AppColors.primary;
   static const _red = Color(0xFFB71C1C);
 
   @override

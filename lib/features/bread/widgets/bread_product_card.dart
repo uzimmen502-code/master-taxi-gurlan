@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/bread_product.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Нон каталогидаги бирор маҳсулот картаси (Ёпиш/Тайёр/Той).
 class BreadProductCard extends StatefulWidget {
@@ -31,8 +32,8 @@ class BreadProductCard extends StatefulWidget {
 class _BreadProductCardState extends State<BreadProductCard> {
   bool _imageZoomed = false;
 
-  static const _primary = Color(0xFFE65100);
-  static const _orange = Color(0xFFFF8F00);
+  static const _primary = AppColors.primary;
+  static const _orange = AppColors.primary;
 
   BreadProduct get product => widget.product;
 
@@ -41,14 +42,15 @@ class _BreadProductCardState extends State<BreadProductCard> {
     setState(() => _imageZoomed = !_imageZoomed);
   }
 
-  String _toySizeLabel() {
+  String _toySizeLabel(AppLocalizations loc) {
     final c = product.category.trim();
     if (c.isNotEmpty) return c;
-    return 'Тўй нони';
+    return loc.translate('bread_category_wedding');
   }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final accentColor = product.isYopish ? _orange : _primary;
     return Card(
       elevation: 2,
@@ -88,7 +90,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                     color: Colors.purple.shade600,
                     borderRadius: BorderRadius.circular(6)),
                 child: Text(
-                  _toySizeLabel(),
+                  _toySizeLabel(loc),
                   style: const TextStyle(
                     fontSize: AppText.labelTiny,
                     color: Colors.white,
@@ -114,8 +116,10 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 ),
                 child: Text(
                   product.isSoldOut
-                      ? 'Тугади'
-                      : 'қолди ${product.remaining}',
+                      ? loc.translate('bread_sold_out')
+                      : loc
+                          .translate('bread_stock_remaining')
+                          .replaceAll('{n}', product.remaining.toString()),
                   style: const TextStyle(
                     fontSize: AppText.labelTiny,
                     color: Colors.white,
@@ -167,7 +171,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 const SizedBox(height: 6),
                 widget.count > 0
                     ? _counterRow(accentColor)
-                    : _addButton(accentColor, disabled: product.isSoldOut),
+                    : _addButton(loc, accentColor, disabled: product.isSoldOut),
               ]),
         ),
       ]),
@@ -283,14 +287,18 @@ class _BreadProductCardState extends State<BreadProductCard> {
     ]);
   }
 
-  Widget _addButton(Color accent, {bool disabled = false}) {
+  Widget _addButton(AppLocalizations loc, Color accent,
+      {bool disabled = false}) {
     return SizedBox(
       width: double.infinity,
       height: 30,
       child: ElevatedButton.icon(
         onPressed: disabled ? null : widget.onAdd,
         icon: Icon(disabled ? Icons.block : Icons.add, size: 14),
-        label: Text(disabled ? 'Тугади' : 'Қўшиш',
+        label: Text(
+            disabled
+                ? loc.translate('bread_sold_out')
+                : loc.translate('bread_add'),
             style: const TextStyle(fontSize: AppText.labelSmall)),
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,

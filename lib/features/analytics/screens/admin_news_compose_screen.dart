@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
 import '../../../services/admin_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Админ учун — янги хабар яратиш (admin_news collection).
 ///
@@ -18,7 +19,7 @@ class AdminNewsComposeScreen extends StatefulWidget {
 }
 
 class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
-  static const _blue = Color(0xFF1565C0);
+  static const _blue = AppColors.primary;
 
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
@@ -162,7 +163,7 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(
         content: Text('✅ Хабар юборилди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
       Navigator.pop(context);
     } catch (e) {
@@ -180,7 +181,7 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: const Text('Янги хабар'),
         backgroundColor: _blue,
@@ -361,7 +362,7 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
                   : const Icon(Icons.send, size: 18),
               label: const Text('Хабарни юбориш'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _blue,
+                backgroundColor: AppColors.button,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),

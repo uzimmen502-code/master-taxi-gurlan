@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
 
 /// Йўлкира ҳисоблаш диалоги — масофа, кутиш, коэффициентлар.
@@ -23,9 +23,9 @@ class _FareCalculatorDialog extends StatefulWidget {
 }
 
 class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
-  static const _orange = Color(0xFFE65100);
+  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryDark;
+  static const _orange = AppColors.primary;
 
   double _distanceKm = 3.0;
   int _waitMins = 0;

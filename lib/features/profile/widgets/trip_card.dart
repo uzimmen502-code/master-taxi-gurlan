@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 import '../../../core/utils/formatters.dart';
 import '../../../models/trip_model.dart';
 
@@ -13,8 +15,8 @@ class TripCard extends StatelessWidget {
   final TripModel trip;
   final bool isDriver;
 
-  static const _green = Color(0xFF2E7D32);
-  static const _blue = Color(0xFF1565C0);
+  static const _green = AppColors.primaryDark;
+  static const _blue = AppColors.primary;
 
   String _emojiFor(String taxiType) {
     switch (taxiType) {

@@ -47,8 +47,7 @@ class InventoryRepository {
     return r < 0 ? 0 : r;
   }
 
-  /// **Онлайн буюртма (илова):** `BalanceService.placeOrderWithWallet` — бир CFда
-  /// order + омбор + кошелёк. Бу метод — оффлайн навбат / тест / махсус сценарийлар учун.
+  /// order + омбор (client transaction). Бу метод — оффлайн навбат / тест / махсус сценарийлар учун.
   ///
   /// Агар бирор маҳсулот етишмаса — `InsufficientStockException` отилади
   /// (барча декрементлар rollback қилинади).

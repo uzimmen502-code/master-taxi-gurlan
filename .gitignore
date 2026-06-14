@@ -1,3 +1,6 @@
+# OpenAI kalit (mahfiy)
+openai_key.local.txt
+
 # Miscellaneous
 *.class
 *.log
@@ -52,3 +55,16 @@ lib/config.dart
 /root-live*.png
 /firebase
 /web/downloads/*.apk
+
+key.properties
+*.keystore
+*.jks
+*.credentials.local.txt
+
+# Firebase Admin / local secrets (never commit)
+functions/service-account.json
+**/service-account.json
+
+# Local archives
+*.rar
+functions/firebase

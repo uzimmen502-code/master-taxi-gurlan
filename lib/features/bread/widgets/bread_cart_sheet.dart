@@ -1,12 +1,16 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../l10n/app_localizations.dart';
+import '../../../models/user_model.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/bread_extra_product.dart';
 import '../../../models/bread_product.dart';
-import '../../../utils/app_theme.dart';
-import '../../../utils/wallet_payment.dart';
-import '../../../widgets/wallet_cash_split_panel.dart';
+import '../../../repositories/user_repository.dart';
+import '../../profile/screens/address_edit_screen.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../controllers/bread_controller.dart';
 import 'extras_count_item.dart';
 
@@ -30,14 +34,17 @@ class BreadCartSheet extends StatefulWidget {
 }
 
 class _BreadCartSheetState extends State<BreadCartSheet> {
-  static const _green = Color(0xFF2E7D32);
-  static const _primary = Color(0xFFE65100);
+  static const _green = AppColors.primaryDark;
+  static const _primary = AppColors.primary;
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addrCtrl = TextEditingController();
-  final _cashPaidCtrl = TextEditingController();
   bool _isSending = false;
+
+  double? _deliveryLat;
+  double? _deliveryLng;
+  String? _deliveryAddress;
 
   @override
   void initState() {
@@ -67,10 +74,31 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
       _nameCtrl.text = profile.name;
       _phoneCtrl.text = profile.phone;
       _addrCtrl.text = profile.address;
-      final eff = WalletPayment.maxDebitFromWallet(c.walletBalance, c.grandTotal);
-      final due = (c.grandTotal - eff).clamp(0, 999999999);
-      _cashPaidCtrl.text = '$due';
     });
+
+    final uid = phoneDigits(profile.phone);
+    if (uid.length < 9) return;
+    final user = await context.read<UserRepository>().getById(uid);
+    if (!mounted || user == null || !user.address.isComplete) return;
+    _resolveDeliveryLocation(user);
+    if (!mounted) return;
+    if (_deliveryAddress != null) {
+      setState(() => _addrCtrl.text = _deliveryAddress!);
+    }
+  }
+
+  void _resolveDeliveryLocation(UserModel profile) {
+    final homeLat = profile.address.lat;
+    final homeLng = profile.address.lng;
+    if (homeLat == null || homeLng == null) {
+      _deliveryLat = null;
+      _deliveryLng = null;
+      _deliveryAddress = null;
+      return;
+    }
+    _deliveryLat = homeLat;
+    _deliveryLng = homeLng;
+    _deliveryAddress = profile.address.formatted;
   }
 
   @override
@@ -78,73 +106,121 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _addrCtrl.dispose();
-    _cashPaidCtrl.dispose();
     super.dispose();
-  }
-
-  int _parseCashPaid() {
-    final raw = _cashPaidCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
-    return int.tryParse(raw) ?? 0;
   }
 
   void _showError(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: Colors.red,
-      behavior: SnackBarBehavior.floating,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    ScaffoldMessenger.of(
+      Navigator.of(context, rootNavigator: true).context,
+    ).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   Future<void> _sendOrder() async {
-    final c = context.read<BreadController>();
-    final name = _nameCtrl.text.trim();
-    final phone = _phoneCtrl.text.trim();
-    final addr = _addrCtrl.text.trim();
+    final loc = AppLocalizations.of(context)!;
 
-    if (name.isEmpty) return _showError('Исмингизни киритинг');
-    if (phone.isEmpty || phone.length < 9) {
-      return _showError('Телефон рақамини тўғри киритинг');
-    }
-    if (addr.isEmpty) return _showError('Манзилни киритинг');
-
-    final cashPaid = _parseCashPaid();
-
-    setState(() => _isSending = true);
-
-    final result = await c.sendOrder(
-      name: name,
-      phone: phone,
-      address: addr,
-      cashPaid: cashPaid,
-    );
-
-    if (!mounted) return;
-    setState(() => _isSending = false);
-
-    if (!result.success) {
-      _showError(result.error ?? 'Хатолик');
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _showError(loc.translate('auth_required_to_order'));
       return;
     }
 
-    final isOffline = result.isOffline;
-    c.clearCart();
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(isOffline
-          ? '📵 Интернет йўқ. Буюртма сақланди — интернет келганда автоматик юборилади.'
-          : '✅ Буюртма юборилди! Тасдиқланса хабар берамиз.'),
-      backgroundColor: isOffline ? Colors.orange : _primary,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    final c = context.read<BreadController>();
+    final name = _nameCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+
+    if (name.isEmpty) {
+      return _showError(loc.translate('bread_error_name_required'));
+    }
+    if (phone.isEmpty || phone.length < 9) {
+      return _showError(loc.translate('bread_error_phone_invalid'));
+    }
+
+    final uid = phoneDigits(phone);
+    final userRepo = context.read<UserRepository>();
+    var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
+    if (profile == null || !profile.address.isComplete) {
+      if (!mounted) return;
+      final filled = await AddressGate.ensureFilled(context, user: profile);
+      if (filled == null) return;
+      profile = await userRepo.getById(uid);
+      if (!mounted) return;
+      final filledProfile = profile;
+      if (filledProfile == null || !filledProfile.address.isComplete) {
+        return _showError(loc.translate('bread_error_address_required'));
+      }
+      profile = filledProfile;
+      setState(() => _addrCtrl.text = filledProfile.address.formatted);
+      _resolveDeliveryLocation(filledProfile);
+      if (!mounted) return;
+      if (_deliveryAddress != null) {
+        setState(() => _addrCtrl.text = _deliveryAddress!);
+      }
+    }
+
+    final user = profile;
+    if (!user.address.isComplete) {
+      return _showError(loc.translate('bread_error_address_required'));
+    }
+
+    _resolveDeliveryLocation(user);
+    final deliveryText = user.address.formatted;
+
+    setState(() => _isSending = true);
+    try {
+      final result = await c.sendOrder(
+        name: name,
+        phone: phone,
+        address: deliveryText,
+        deliveryLat: _deliveryLat,
+        deliveryLng: _deliveryLng,
+      );
+
+      if (!mounted) return;
+      if (!result.success) {
+        _showError(result.error ?? loc.translate('bread_error_fallback'));
+        return;
+      }
+
+      final isOffline = result.isOffline;
+      c.clearCart();
+      final rootMessenger = ScaffoldMessenger.of(
+        Navigator.of(context, rootNavigator: true).context,
+      );
+      Navigator.of(context).pop();
+      rootMessenger.showSnackBar(
+        SnackBar(
+          content: Text(isOffline
+              ? loc.translate('bread_snack_order_saved_offline')
+              : loc.translate('bread_snack_order_sent')),
+          backgroundColor: isOffline ? Colors.orange : _primary,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showError(loc.translate('bread_error_fallback'));
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final c = context.watch<BreadController>();
     return Container(
       height: MediaQuery.of(context).size.height * 0.92,
@@ -163,13 +239,16 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
-            const Text('🛒 Сават',
-                style: TextStyle(
+            Text(loc.translate('bread_cart_title'),
+                style: const TextStyle(
                     fontSize: AppText.titleLarge,
                     fontWeight: FontWeight.bold)),
             const Spacer(),
             GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () {
+                  context.read<BreadController>().clearCart();
+                  Navigator.of(context).pop();
+                },
                 child: const Icon(Icons.close, color: Colors.grey)),
           ]),
         ),
@@ -180,8 +259,8 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('📦 Буюртма',
-                    style: TextStyle(
+                Text(loc.translate('bread_cart_order_section'),
+                    style: const TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -198,10 +277,10 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                 if (c.extraProducts.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Row(children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        '🌿 Қўшимча махсулотлар',
-                        style: TextStyle(
+                        loc.translate('bread_section_extras'),
+                        style: const TextStyle(
                             fontSize: AppText.bodyLarge,
                             fontWeight: FontWeight.bold),
                       ),
@@ -212,9 +291,9 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                       decoration: BoxDecoration(
                           color: _green,
                           borderRadius: BorderRadius.circular(10)),
-                      child: const Text(
-                        'ИХТИЁРИЙ',
-                        style: TextStyle(
+                      child: Text(
+                        loc.translate('bread_optional_badge'),
+                        style: const TextStyle(
                             fontSize: AppText.labelTiny,
                             color: Colors.white,
                             fontWeight: FontWeight.bold),
@@ -228,8 +307,13 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 4),
                           child: Text(
-                            '🎁 ${p.bonusThreshold} дан бошлаб бонус: '
-                            '${p.bonusQty} тага ${p.bonusPercent}% чегирма',
+                            loc
+                                .translate('bread_bonus_hint')
+                                .replaceAll(
+                                    '{threshold}', '${p.bonusThreshold}')
+                                .replaceAll('{qty}', '${p.bonusQty}')
+                                .replaceAll(
+                                    '{percent}', '${p.bonusPercent}'),
                             style: TextStyle(
                                 fontSize: AppText.labelTiny,
                                 color: Colors.orange.shade700),
@@ -251,33 +335,26 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                   ],
                 ],
                 const SizedBox(height: 16),
-                _PriceSummary(
-                  cashPaidCtrl: _cashPaidCtrl,
-                ),
+                const _PriceSummary(),
                 const SizedBox(height: 16),
-                const Text('👤 Маълумотлар',
-                    style: TextStyle(
+                Text(loc.translate('bread_cart_contact_section'),
+                    style: const TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                _inputField(_nameCtrl, '👤 Исм', TextInputType.name),
+                _inputField(
+                    _nameCtrl, loc.translate('bread_hint_name'), TextInputType.name),
+                const SizedBox(height: 8),
+                _inputField(_addrCtrl, loc.translate('bread_hint_address'),
+                    TextInputType.streetAddress),
                 const SizedBox(height: 8),
                 _inputField(
-                    _addrCtrl, '📍 Манзил', TextInputType.streetAddress),
-                const SizedBox(height: 8),
-                _inputField(_phoneCtrl, '📞 Телефон', TextInputType.phone),
+                    _phoneCtrl, loc.translate('bread_hint_phone'), TextInputType.phone),
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 52,
                   child: ElevatedButton.icon(
-                    onPressed: _isSending ||
-                            !WalletPayment.orderPayableWithAutoWallet(
-                              walletBalance: c.walletBalance,
-                              orderTotal: c.grandTotal,
-                              cashPaid: _parseCashPaid(),
-                            )
-                        ? null
-                        : _sendOrder,
+                    onPressed: _isSending ? null : _sendOrder,
                     icon: _isSending
                         ? const SizedBox(
                             width: 18,
@@ -285,7 +362,10 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.send, size: 18),
-                    label: Text(_isSending ? 'Юборилмоқда...' : 'ТАСДИҚЛАЙМАН',
+                    label: Text(
+                        _isSending
+                            ? loc.translate('bread_sending')
+                            : loc.translate('bread_confirm_order'),
                         style: const TextStyle(
                             fontSize: AppText.titleSmall,
                             fontWeight: FontWeight.bold)),
@@ -300,7 +380,7 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    'Буюртма юборилгандан кейин тасдиқланса хабар берамиз',
+                    loc.translate('bread_order_confirm_note'),
                     style: TextStyle(
                         fontSize: AppText.labelSmall,
                         color: Colors.grey.shade400),
@@ -354,11 +434,12 @@ class _CartItemTile extends StatelessWidget {
   final int count;
   final bool needsFlourMilk;
 
-  static const _green = Color(0xFF2E7D32);
-  static const _orange = Color(0xFFE65100);
+  static const _green = AppColors.primaryDark;
+  static const _orange = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final c = context.watch<BreadController>();
     final choice = c.flourMilkChoice[product.id] ?? 'ours';
     final color = product.isYopish ? _orange : _green;
@@ -388,17 +469,19 @@ class _CartItemTile extends StatelessWidget {
         ]),
         if (needsFlourMilk) ...[
           const SizedBox(height: 8),
-          const Text('Ун ва сут:',
-              style: TextStyle(
+          Text(loc.translate('bread_flour_milk_label'),
+              style: const TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey)),
           const SizedBox(height: 4),
           Row(children: [
             Expanded(
-                child: _choiceBtn('🏠 Биз қўшамиз', choice == 'ours',
+                child: _choiceBtn(loc.translate('bread_flour_milk_ours'),
+                    choice == 'ours',
                     () => c.setFlourMilkChoice(product.id, 'ours'))),
             const SizedBox(width: 8),
             Expanded(
-                child: _choiceBtn('🧑 Ўзингиз олиб келасиз', choice == 'yours',
+                child: _choiceBtn(loc.translate('bread_flour_milk_yours'),
+                    choice == 'yours',
                     () => c.setFlourMilkChoice(product.id, 'yours'))),
           ]),
           if (choice == 'ours') ...[
@@ -438,15 +521,18 @@ class _FlourMilkInfo extends StatelessWidget {
   final BreadProduct product;
   final int count;
 
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final c = context.watch<BreadController>();
     final flourG = product.flourG ?? 300;
     final milkMl = product.milkMl ??
         ((product.milkRatio ?? 0.575) * flourG).round();
     final cost = c.flourMilkCost(product, count);
+    final totalG = flourG * count;
+    final totalMl = milkMl * count;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -455,12 +541,18 @@ class _FlourMilkInfo extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: Text(
-            '🌾 Ун: ${flourG * count}г  🥛 Сут: ${milkMl * count}мл',
+            loc
+                .translate('bread_flour_milk_amounts')
+                .replaceAll('{g}', totalG.toString())
+                .replaceAll('{ml}', totalMl.toString()),
             style: const TextStyle(
                 fontSize: AppText.labelSmall, color: Colors.grey),
           ),
         ),
-        Text('+${formatPrice(cost)} сўм',
+        Text(
+            loc
+                .translate('bread_flour_milk_cost')
+                .replaceAll('{cost}', formatPrice(cost)),
             style: const TextStyle(
                 fontSize: AppText.labelSmall,
                 fontWeight: FontWeight.bold,
@@ -472,13 +564,9 @@ class _FlourMilkInfo extends StatelessWidget {
 
 // ─── Нархлар хулосаси + кошелёк ──────────────────────────────────────
 class _PriceSummary extends StatelessWidget {
-  const _PriceSummary({
-    required this.cashPaidCtrl,
-  });
+  const _PriceSummary();
 
-  final TextEditingController cashPaidCtrl;
-
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
 
   Widget _summaryRow(String label, String val, {Color? color}) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
@@ -498,6 +586,7 @@ class _PriceSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final c = context.watch<BreadController>();
     return Container(
       padding: const EdgeInsets.all(12),
@@ -521,7 +610,10 @@ class _PriceSummary extends StatelessWidget {
           if (p.id == 0) return const SizedBox.shrink();
           final choice = c.flourMilkChoice[entry.key] ?? 'ours';
           if ((p.isYopish || p.isToy) && choice == 'ours') {
-            return _summaryRow('  🌾 Ун+Сут (${p.name})',
+            return _summaryRow(
+                loc
+                    .translate('bread_summary_flour_milk')
+                    .replaceAll('{name}', p.name),
                 formatPrice(c.flourMilkCost(p, entry.value)),
                 color: _green);
           }
@@ -536,7 +628,7 @@ class _PriceSummary extends StatelessWidget {
             ),
             if (p.discountFor(c.extraProductsCart[p.id] ?? 0) > 0)
               _summaryRow(
-                '  🎁 Бонус',
+                loc.translate('bread_summary_bonus'),
                 '-${formatPrice(p.discountFor(c.extraProductsCart[p.id] ?? 0))}',
                 color: Colors.orange.shade700,
               ),
@@ -546,16 +638,16 @@ class _PriceSummary extends StatelessWidget {
           const Divider(height: 12),
           _summaryRow(
             c.cartHasYopishBread
-                ? '🧂 Туз · хамиртуруш · дрожа'
-                : '🧂 Туз ва дрожа',
+                ? loc.translate('bread_summary_salt_yeast_full')
+                : loc.translate('bread_summary_salt_yeast'),
             formatPrice(c.saltYeastCost),
             color: Colors.orange.shade700,
           ),
         ],
         const Divider(height: 12),
         Row(children: [
-          const Text('💰 Жами:',
-              style: TextStyle(
+          Text(loc.translate('bread_total_label'),
+              style: const TextStyle(
                   fontSize: AppText.titleSmall, fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
           Expanded(
@@ -569,10 +661,10 @@ class _PriceSummary extends StatelessWidget {
                     color: _green)),
           ),
         ]),
-        WalletCashSplitPanel(
+        const SizedBox(height: 10),
+        OrderCheckoutWalletBanner(
           orderTotal: c.grandTotal,
           walletBalance: c.walletBalance,
-          cashPaidCtrl: cashPaidCtrl,
         ),
       ]),
     );

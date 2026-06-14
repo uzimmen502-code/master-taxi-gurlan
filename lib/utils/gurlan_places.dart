@@ -18,8 +18,7 @@ class GurlanPlaces {
     'Совунчи МФЙ', 'Пахтакор МФЙ', 'Деҳқон МФЙ', 'Беш уй МФЙ',
     'Боғистон МФЙ', 'Оққум МФЙ', 'Нуробод МФЙ', 'Дўстлик боғи МФЙ',
     // Шаҳарлар ва бозорлар
-    'Гурлан бозори', 'Марказий бозор', 'Саноат бозори',
-    'Гурлан туман ҳокимияти', 'Гурлан марказий шифохонаси',
+    'Гурлан бозори', 'Гурлан туман ҳокимияти', 'Гурлан марказий шифохонаси',
     'Гурлан автовокзали', 'Урганч', 'Хива', 'Хонқа', 'Питнак',
     'Янгибозор', 'Тошкент', 'Самарқанд', 'Бухоро', 'Нукус',
   ];
@@ -39,8 +38,7 @@ class GurlanPlaces {
     'Sovunchi MFY', 'Paxtakor MFY', 'Dehqon MFY', 'Besh uy MFY',
     'Bog\'iston MFY', 'Oqqum MFY', 'Nurobod MFY', 'Do\'stlik bog\'i MFY',
     // Shaharlar va bozorlar
-    'Gurlan bozori', 'Markaziy bozor', 'Sanoat bozori',
-    'Gurlan tuman hokimiyati', 'Gurlan markaziy shifoxonasi',
+    'Gurlan bozori', 'Gurlan tuman hokimiyati', 'Gurlan markaziy shifoxonasi',
     'Gurlan avtovokzali', 'Urganch', 'Xiva', 'Xonqa', 'Pitnak',
     'Yangibozor', 'Toshkent', 'Samarqand', 'Buxoro', 'Nukus',
   ];
@@ -119,4 +117,51 @@ class GurlanPlaces {
   // ── Тўлиқ рўйхат ──
   static List<String> get allCyrl => _cyrl;
   static List<String> get allLatn => _latn;
+
+  /// MFY nomini kanonik kirill ko'rinishga keltiradi.
+  static String normalizeMfyName(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+
+    final lower = trimmed.toLowerCase();
+    for (var i = 0; i < _cyrl.length; i++) {
+      final cy = _cyrl[i].toLowerCase();
+      final la = _latn[i].toLowerCase();
+      if (lower == cy || lower == la) return _cyrl[i];
+      if (lower.contains(cy.replaceAll(' мфй', '')) ||
+          lower.contains(la.replaceAll(' mfy', ''))) {
+        return _cyrl[i];
+      }
+    }
+
+    if (trimmed.toLowerCase().contains('мфй') ||
+        trimmed.toLowerCase().contains('mfy')) {
+      return trimmed.endsWith('МФЙ') || trimmed.endsWith('MFY')
+          ? trimmed
+          : '$trimmed МФЙ';
+    }
+    return trimmed;
+  }
+
+  /// Manzil matnidan MFY topish.
+  static String findMfyInText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return '';
+
+    final lower = trimmed.toLowerCase();
+    for (var i = 0; i < _cyrl.length; i++) {
+      final cy = _cyrl[i].toLowerCase();
+      final la = _latn[i].toLowerCase();
+      if (lower.contains(cy) || lower.contains(la)) {
+        return _cyrl[i];
+      }
+      final shortCy = cy.replaceAll(' мфй', '');
+      final shortLa = la.replaceAll(' mfy', '');
+      if (shortCy.length >= 4 &&
+          (lower.contains(shortCy) || lower.contains(shortLa))) {
+        return _cyrl[i];
+      }
+    }
+    return '';
+  }
 }

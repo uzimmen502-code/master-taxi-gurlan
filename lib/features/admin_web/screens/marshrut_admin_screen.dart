@@ -4,8 +4,13 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/queue_entry.dart';
+import '../../../core/passenger_cancel_block_rules.dart';
+import '../../../repositories/local_taxi_block_repository.dart';
+import '../../../repositories/marshrut_block_repository.dart';
+import '../../../repositories/marshrut_tariff_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Admin web — marshrut taksi monitoring paneli.
 /// Faol haydovchilar, navbat, bugungi sayohatlar statistikasi.
@@ -18,21 +23,23 @@ class MarshrutAdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF5F7FA),
+        backgroundColor: AppColors.scaffold,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0D47A1),
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           title: const Text('🚌 Маршрут мониторинги'),
           bottom: const TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             indicatorColor: Colors.white,
+            isScrollable: true,
             tabs: [
               Tab(text: 'Фаол ҳайдовчилар'),
               Tab(text: 'Policy'),
               Tab(text: 'Auto-paused'),
+              Tab(text: 'Bloklar'),
               Tab(text: 'Бугунги сафарлар'),
             ],
           ),
@@ -42,6 +49,7 @@ class MarshrutAdminScreen extends StatelessWidget {
             _OnlineDriversTab(db: _db, time: _time),
             const _DispatchPolicyTab(),
             const _PausedDriversTab(),
+            const _PassengerBlocksTab(),
             _TodayTripsTab(db: _db, time: _time),
           ],
         ),
@@ -61,67 +69,116 @@ class _OnlineDriversTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: db
-          .collection('drivers')
-          .where('isOnline', isEqualTo: true)
+          .collection('trips')
           .where('taxiType', isEqualTo: 'marshrut')
+          .where('status', isEqualTo: 'accepted')
           .snapshots(),
-      builder: (ctx, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
+      builder: (ctx, tripsSnap) {
+        final activeTripByDriver = <String, Map<String, dynamic>>{};
+        for (final doc in tripsSnap.data?.docs ?? const []) {
+          final data = doc.data();
+          final driverId = (data['acceptedDriverId'] ?? '') as String;
+          if (driverId.isNotEmpty) activeTripByDriver[driverId] = data;
         }
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(
-            child: Text(
-              'Ҳозир онлайн маршрут ҳайдовчилари йўқ',
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
-          itemBuilder: (_, i) {
-            final d = docs[i].data();
-            final updatedAt = d['updatedAt'] as Timestamp?;
-            final seatsLeft = d['seatsLeft'] ?? 0;
-            final stops = (d['stops'] as List?)?.join(' → ') ?? '—';
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.green.shade100,
-                  child: const Icon(Icons.directions_bus, color: Colors.green),
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: db
+              .collection('drivers')
+              .where('isOnline', isEqualTo: true)
+              .where('taxiType', isEqualTo: 'marshrut')
+              .snapshots(),
+          builder: (ctx, snap) {
+            if (!snap.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final docs = snap.data!.docs;
+            if (docs.isEmpty) {
+              return const Center(
+                child: Text(
+                  'Ҳозир онлайн маршрут ҳайдовчилари йўқ',
+                  style: TextStyle(color: Colors.grey),
                 ),
-                title: Text(
-                  '${d['name'] ?? '—'}  •  ${d['car'] ?? ''} ${d['plate'] ?? ''}',
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('📍 $stops'),
-                    Text(
-                      '🪑 Бўш жой: $seatsLeft  •  Йўналиш: ${d['direction'] == 'backward' ? '↩ Тескари' : '→ Олдинга'}',
-                    ),
-                    if (updatedAt != null)
-                      Text(
-                        'Heartbeat: ${time.format(updatedAt.toDate())}',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+              );
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: docs.length,
+              itemBuilder: (_, i) {
+                final d = docs[i].data();
+                final driverId = docs[i].id;
+                final updatedAt = d['updatedAt'] as Timestamp?;
+                final plannedStartAt = d['plannedStartAt'] as Timestamp?;
+                final actualOnlineAt = d['actualOnlineAt'] as Timestamp?;
+                final queueEligibleAt = d['queueEligibleAt'] as Timestamp?;
+                final seatsLeft = d['seatsLeft'] ?? 0;
+                final isBusy = d['isBusy'] as bool? ?? false;
+                final todayTrips = (d['todayTrips'] as num?)?.toInt() ?? 0;
+                final todayRejects = (d['todayRejects'] as num?)?.toInt() ?? 0;
+                final todayTimeouts = (d['todayTimeouts'] as num?)?.toInt() ?? 0;
+                final stops = (d['stops'] as List?)?.join(' → ') ?? '—';
+                final activeTrip = activeTripByDriver[driverId];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isBusy
+                          ? Colors.orange.shade100
+                          : AppColors.tickerShell,
+                      child: Icon(
+                        isBusy ? Icons.person_pin : Icons.directions_bus,
+                        color: isBusy ? Colors.orange : AppColors.primary,
                       ),
-                  ],
-                ),
-                trailing: Text(
-                  d['phone']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                isThreeLine: true,
-              ),
+                    ),
+                    title: Text(
+                      '${d['name'] ?? '—'}  •  ${d['car'] ?? ''} ${d['plate'] ?? ''}',
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('📍 $stops'),
+                        Text(
+                          '🪑 Бўш: $seatsLeft  •  ${isBusy ? '🔴 Band' : '🟢 Bo\'sh'}  •  Йўналиш: ${d['direction'] == 'backward' ? '↩ Тескари' : '→ Олдинга'}',
+                        ),
+                        if (activeTrip != null)
+                          Text(
+                            '🚕 Faol safar: ${activeTrip['pickupMfy'] ?? '?'} → ${activeTrip['dropoffMfy'] ?? '?'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        Text(
+                          '⏰ Режа: ${_fmtTs(plannedStartAt)}  •  Онлайн: ${_fmtTs(actualOnlineAt)}  •  Навбат: ${_fmtTs(queueEligibleAt)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        Text(
+                          '📊 Бугун: $todayTrips сафар  •  Рад: $todayRejects  •  Timeout: $todayTimeouts',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        if (updatedAt != null)
+                          Text(
+                            'Heartbeat: ${time.format(updatedAt.toDate())}',
+                            style:
+                                const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                    trailing: Text(
+                      d['phone']?.toString() ?? driverId,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    isThreeLine: true,
+                  ),
+                );
+              },
             );
           },
         );
       },
     );
   }
+
+  String _fmtTs(Timestamp? ts) => ts == null ? '—' : time.format(ts.toDate());
 }
 
 // ─── Dispatch policy созламалари ───────────────────────────────────────────
@@ -150,6 +207,10 @@ class _DispatchPolicyTab extends StatelessWidget {
                 _OfferTimeoutPolicyCard(currentValue: offerSnap.data ?? 15),
                 const SizedBox(height: 12),
                 _TimeoutPolicyCard(currentValue: snap.data ?? 3),
+                const SizedBox(height: 12),
+                const _PassengerCancelBlockPolicyCard(),
+                const SizedBox(height: 12),
+                const _MarshrutTariffPolicyCard(),
                 const SizedBox(height: 12),
                 Card(
                   elevation: 0,
@@ -285,7 +346,7 @@ class _OfferTimeoutPolicyCardState extends State<_OfferTimeoutPolicyCard> {
           );
       messenger.showSnackBar(const SnackBar(
         content: Text('Offer timeout сақланди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -401,7 +462,7 @@ class _TimeoutPolicyCardState extends State<_TimeoutPolicyCard> {
           );
       messenger.showSnackBar(const SnackBar(
         content: Text('Dispatch policy сақланди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -465,8 +526,8 @@ class _PausedDriverCardState extends State<_PausedDriverCard> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Colors.deepPurple.shade50,
-          child: const Icon(Icons.pause_circle_outline,
-              color: Colors.deepPurple),
+          child:
+              const Icon(Icons.pause_circle_outline, color: Colors.deepPurple),
         ),
         title: Text(
           '${widget.driver.driverName}  •  ${widget.driver.car} ${widget.driver.plate}',
@@ -506,7 +567,7 @@ class _PausedDriverCardState extends State<_PausedDriverCard> {
       await repo.reactivateAutoPausedDriver(widget.driver.driverId);
       messenger.showSnackBar(const SnackBar(
         content: Text('Ҳайдовчи қайта навбатга қўйилди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -515,6 +576,381 @@ class _PausedDriverCardState extends State<_PausedDriverCard> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+}
+
+// ─── Yo'lovchi bloklari ────────────────────────────────────────────────────
+
+class _PassengerBlocksTab extends StatefulWidget {
+  const _PassengerBlocksTab();
+
+  @override
+  State<_PassengerBlocksTab> createState() => _PassengerBlocksTabState();
+}
+
+enum _PassengerBlockKind { marshrut, localTaxi }
+
+class _PassengerBlocksTabState extends State<_PassengerBlocksTab> {
+  final _phoneCtrl = TextEditingController();
+  final _marshrutRepo = MarshrutBlockRepository();
+  final _localRepo = LocalTaxiBlockRepository();
+  _PassengerBlockKind _kind = _PassengerBlockKind.marshrut;
+  bool _clearing = false;
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _clearByPhone() async {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.isEmpty) return;
+    setState(() => _clearing = true);
+    try {
+      if (_kind == _PassengerBlockKind.marshrut) {
+        await _marshrutRepo.clearBlock(phone);
+      } else {
+        await _localRepo.clearBlock(phone);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Blok bekor qilindi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _phoneCtrl.clear();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: SegmentedButton<_PassengerBlockKind>(
+            segments: const [
+              ButtonSegment(
+                value: _PassengerBlockKind.marshrut,
+                label: Text('Marshrut'),
+              ),
+              ButtonSegment(
+                value: _PassengerBlockKind.localTaxi,
+                label: Text('Local taxi'),
+              ),
+            ],
+            selected: {_kind},
+            onSelectionChanged: (s) {
+              setState(() => _kind = s.first);
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _phoneCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Telefon (blokni bekor qilish)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _clearing ? null : _clearByPhone,
+                child: _clearing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Tozalash'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _kind == _PassengerBlockKind.marshrut
+              ? StreamBuilder<List<MarshrutBlockedUserEntry>>(
+                  stream: _marshrutRepo.watchActiveBlocks(),
+                  builder: (ctx, snap) =>
+                      _buildBlockList<MarshrutBlockedUserEntry>(
+                    snap: snap,
+                    label: 'marshrut',
+                    userId: (e) => e.userId,
+                    blockedUntil: (e) => e.blockedUntil,
+                    cancelCount: (e) => e.cancelCount,
+                    onClear: (id) =>
+                        _marshrutRepo.clearBlock(id).catchError((_) {}),
+                  ),
+                )
+              : StreamBuilder<List<LocalTaxiBlockedUserEntry>>(
+                  stream: _localRepo.watchActiveBlocks(),
+                  builder: (ctx, snap) =>
+                      _buildBlockList<LocalTaxiBlockedUserEntry>(
+                    snap: snap,
+                    label: 'local taxi',
+                    userId: (e) => e.userId,
+                    blockedUntil: (e) => e.blockedUntil,
+                    cancelCount: (e) => e.cancelCount,
+                    onClear: (id) =>
+                        _localRepo.clearBlock(id).catchError((_) {}),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBlockList<T>({
+    required AsyncSnapshot<List<T>> snap,
+    required String label,
+    required String Function(T) userId,
+    required DateTime Function(T) blockedUntil,
+    required int Function(T) cancelCount,
+    required void Function(String) onClear,
+  }) {
+    if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final list = snap.data ?? const [];
+    if (list.isEmpty) {
+      return Center(
+        child: Text(
+          'Faol $label bloklari yo\'q',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: list.length,
+      itemBuilder: (_, i) {
+        final e = list[i];
+        final left =
+            blockedUntil(e).difference(DateTime.now()).inMinutes + 1;
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.block, color: Colors.red),
+            title: Text(userId(e)),
+            subtitle: Text(
+              'Qolgan: ~$left daq  •  Bekor soni: ${cancelCount(e)}',
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Blokni bekor qilish',
+              onPressed: () => onClear(userId(e)),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PassengerCancelBlockPolicyCard extends StatelessWidget {
+  const _PassengerCancelBlockPolicyCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Yo\'lovchi bekor qilish bloki',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Marshrut: faqat qabul qilingan safardan keyin bekor (kutish bekor — blok yo\'q). '
+              'Local taxi: qidiruv paytida bekor. '
+              'Ikkalasi ham: ${PassengerCancelBlockRules.cancelLimit} bekor / '
+              '${PassengerCancelBlockRules.windowMinutes} daq oyna → '
+              '${PassengerCancelBlockRules.blockMinutes} daq blok. '
+              'Hisob CF da (`marshrut_block` / `local_taxi_block`).',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarshrutTariffPolicyCard extends StatefulWidget {
+  const _MarshrutTariffPolicyCard();
+
+  @override
+  State<_MarshrutTariffPolicyCard> createState() =>
+      _MarshrutTariffPolicyCardState();
+}
+
+class _MarshrutTariffPolicyCardState extends State<_MarshrutTariffPolicyCard> {
+  final _defaultCtrl = TextEditingController();
+  final _fromCtrl = TextEditingController();
+  final _toCtrl = TextEditingController();
+  final _routePriceCtrl = TextEditingController();
+  final _repo = MarshrutTariffRepository();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _defaultCtrl.dispose();
+    _fromCtrl.dispose();
+    _toCtrl.dispose();
+    _routePriceCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveDefault() async {
+    final v = int.tryParse(_defaultCtrl.text.trim());
+    if (v == null) return;
+    setState(() => _busy = true);
+    try {
+      await _repo.setDefaultPricePerSeat(v);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Default narx saqlandi')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveRoute() async {
+    final price = int.tryParse(_routePriceCtrl.text.trim());
+    if (price == null ||
+        _fromCtrl.text.trim().isEmpty ||
+        _toCtrl.text.trim().isEmpty) {
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _repo.setRoutePrice(
+        fromMfy: _fromCtrl.text.trim(),
+        toMfy: _toCtrl.text.trim(),
+        pricePerSeat: price,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yo\'nalish narxi saqlandi')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<MarshrutTariffConfig>(
+      stream: _repo.watchConfig(),
+      builder: (ctx, snap) {
+        final cfg = snap.data ?? const MarshrutTariffConfig();
+        if (_defaultCtrl.text.isEmpty && cfg.defaultPricePerSeat > 0) {
+          _defaultCtrl.text = '${cfg.defaultPricePerSeat}';
+        }
+        return Card(
+          elevation: 0,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Marshrut tariflari',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _defaultCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Default narx / o\'rin (so\'m)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _busy ? null : _saveDefault,
+                    child: const Text('Default saqlash'),
+                  ),
+                ),
+                const Divider(height: 24),
+                TextField(
+                  controller: _fromCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Qayerdan (MFY)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _toCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Qayerga (MFY)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _routePriceCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Narx / o\'rin (so\'m)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _busy ? null : _saveRoute,
+                    child: const Text('Yo\'nalish narxini saqlash'),
+                  ),
+                ),
+                if (cfg.routePrices.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Saqlangan yo\'nalishlar:',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  ...cfg.routePrices.entries.map(
+                    (e) => Text('• ${e.key}: ${e.value} so\'m',
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -531,7 +967,7 @@ class _TodayTripsTab extends StatelessWidget {
   Color _statusColor(String s) {
     switch (s) {
       case 'accepted':
-        return Colors.green;
+        return AppColors.primary;
       case 'pending':
         return Colors.orange;
       case 'rejected':
@@ -558,7 +994,16 @@ class _TodayTripsTab extends StatelessWidget {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final docs = snap.data!.docs;
+        final todayStart = DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+        );
+        final docs = snap.data!.docs.where((d) {
+          final ts = d.data()['createdAt'];
+          if (ts is! Timestamp) return false;
+          return !ts.toDate().isBefore(todayStart);
+        }).toList();
         if (docs.isEmpty) {
           return const Center(
             child: Text(
@@ -569,7 +1014,8 @@ class _TodayTripsTab extends StatelessWidget {
         }
         final accepted =
             docs.where((d) => d.data()['status'] == 'accepted').length;
-        final pending = docs.where((d) => d.data()['status'] == 'pending').length;
+        final pending =
+            docs.where((d) => d.data()['status'] == 'pending').length;
         final rejected =
             docs.where((d) => d.data()['status'] == 'rejected').length;
 

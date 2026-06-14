@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../utils/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../../utils/gurlan_places.dart';
 
 /// Гурлан МФЙ танлаш учун универсал input. Driver register, driver schedule

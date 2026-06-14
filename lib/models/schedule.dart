@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/gurlan_places.dart';
+
 /// `schedules/{id}` hujjati — marshrut taksi haydovchisining kunlik reysi.
 ///
 /// `stops` — ketma-ket o'tadigan MFY nomlari (yo'nalishga qarab).
@@ -19,6 +21,12 @@ class Schedule {
     this.seatsLeft = 0,
     this.price = 0,
     this.startTime = '',
+    this.plannedStartAt,
+    this.actualOnlineAt,
+    this.queueEligibleAt,
+    this.todayTrips = 0,
+    this.todayRejects = 0,
+    this.todayTimeouts = 0,
     this.from = '',
     this.to = '',
     this.direction = 'forward',
@@ -44,6 +52,12 @@ class Schedule {
   final int seatsLeft;
   final int price;
   final String startTime;
+  final Timestamp? plannedStartAt;
+  final Timestamp? actualOnlineAt;
+  final Timestamp? queueEligibleAt;
+  final int todayTrips;
+  final int todayRejects;
+  final int todayTimeouts;
   final String from;
   final String to;
   final String direction;
@@ -62,18 +76,25 @@ class Schedule {
   /// `from` MFY'dan `to` MFY ga yo'l reysning ketma-ketligida tushadiganligi.
   /// Stoplar bo'sh bo'lsa, eski free-text `from/to` maydonlarini tekshiradi.
   bool routeAllows(String fromMfy, String toMfy) {
+    final normalize = GurlanPlaces.normalizeMfyName;
+    final normFromMfy = normalize(fromMfy);
+    final normToMfy = normalize(toMfy);
+
     if (stops.isEmpty) {
-      if (fromMfy.isEmpty || toMfy.isEmpty) return true;
-      final f = from.toLowerCase();
-      final t = to.toLowerCase();
-      return f.contains(fromMfy.toLowerCase()) ||
-          t.contains(toMfy.toLowerCase());
+      if (normFromMfy.isEmpty || normToMfy.isEmpty) return true;
+      final f = normalize(from).toLowerCase();
+      final t = normalize(to).toLowerCase();
+      return f.contains(normFromMfy.toLowerCase()) ||
+          t.contains(normToMfy.toLowerCase());
     }
-    if (fromMfy.isNotEmpty && !stops.contains(fromMfy)) return false;
-    if (toMfy.isEmpty) return true;
-    if (!stops.contains(toMfy)) return false;
-    final fromIdx = stops.indexOf(fromMfy);
-    final toIdx = stops.indexOf(toMfy);
+    final normalizedStops = stops.map(normalize).toList();
+    if (normFromMfy.isNotEmpty && !normalizedStops.contains(normFromMfy)) {
+      return false;
+    }
+    if (normToMfy.isEmpty) return true;
+    if (!normalizedStops.contains(normToMfy)) return false;
+    final fromIdx = normalizedStops.indexOf(normFromMfy);
+    final toIdx = normalizedStops.indexOf(normToMfy);
     if (fromIdx == -1 || toIdx == -1) return false;
     return direction == 'forward' ? fromIdx < toIdx : fromIdx > toIdx;
   }
@@ -96,6 +117,12 @@ class Schedule {
       seatsLeft: (d['seatsLeft'] as num?)?.toInt() ?? 0,
       price: (d['price'] as num?)?.toInt() ?? 0,
       startTime: (d['startTime'] ?? '') as String,
+      plannedStartAt: d['plannedStartAt'] as Timestamp?,
+      actualOnlineAt: d['actualOnlineAt'] as Timestamp?,
+      queueEligibleAt: d['queueEligibleAt'] as Timestamp?,
+      todayTrips: (d['todayTrips'] as num?)?.toInt() ?? 0,
+      todayRejects: (d['todayRejects'] as num?)?.toInt() ?? 0,
+      todayTimeouts: (d['todayTimeouts'] as num?)?.toInt() ?? 0,
       from: (d['from'] ?? '') as String,
       to: (d['to'] ?? '') as String,
       direction: (d['direction'] ?? 'forward') as String,

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/trip_request.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 
 /// Янги буюртма келганда чиқадиган диалог.
 ///
@@ -23,9 +24,9 @@ class _TripRequestDialog extends StatelessWidget {
 
   final TripRequest ride;
 
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
-  static const _orange = Color(0xFFE65100);
+  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryDark;
+  static const _orange = AppColors.primary;
   static const _red = Color(0xFFB71C1C);
 
   Widget _infoRow(String label, String value) => Padding(
@@ -90,7 +91,7 @@ class _TripRequestDialog extends StatelessWidget {
         IconButton(
           onPressed: () async {
             if (ride.userPhone.isEmpty) return;
-            final url = Uri(scheme: 'tel', path: ride.userPhone);
+            final url = Uri.parse('tel:${phoneForCall(ride.userPhone)}');
             if (await canLaunchUrl(url)) await launchUrl(url);
           },
           icon: const Icon(Icons.call, color: _green, size: 28),

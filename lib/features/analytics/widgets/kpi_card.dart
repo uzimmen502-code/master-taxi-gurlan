@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
@@ -20,7 +21,7 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clr = accent ?? const Color(0xFF1565C0);
+    final clr = accent ?? AppColors.primary;
     final delta = kpi.deltaPercent;
     final isUp = kpi.isPositive;
     final hasDelta = delta != null && delta.isFinite;
@@ -81,7 +82,7 @@ class KpiCard extends StatelessWidget {
                           : Icons.trending_down),
                   size: 14,
                   color: isUp
-                      ? const Color(0xFF2E7D32)
+                      ? AppColors.primary
                       : (delta == 0
                           ? Colors.grey
                           : const Color(0xFFB71C1C))),
@@ -92,7 +93,7 @@ class KpiCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: isUp
-                      ? const Color(0xFF2E7D32)
+                      ? AppColors.primary
                       : (delta == 0
                           ? Colors.grey
                           : const Color(0xFFB71C1C)),

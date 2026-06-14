@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
 import 'urgent_toggle.dart';
 
-/// Мавжуд эълонни таҳрирлаш bottom sheet'и.
 Future<void> showEditAdSheet({
   required BuildContext context,
   required JobAd ad,
@@ -37,10 +36,12 @@ class _EditAdView extends StatefulWidget {
 }
 
 class _EditAdViewState extends State<_EditAdView> {
-  static const _blue = Color(0xFF5D4037);
+  static const _blue = AppColors.primaryDark;
   static const _green = Color(0xFF795548);
 
+  late TextEditingController _titleCtrl;
   late TextEditingController _textCtrl;
+  late TextEditingController _priceCtrl;
   late bool _isUrgent;
   late String _status;
   bool _isSaving = false;
@@ -48,14 +49,18 @@ class _EditAdViewState extends State<_EditAdView> {
   @override
   void initState() {
     super.initState();
+    _titleCtrl = TextEditingController(text: widget.ad.title);
     _textCtrl = TextEditingController(text: widget.ad.text);
+    _priceCtrl = TextEditingController(text: widget.ad.priceText);
     _isUrgent = widget.ad.isUrgent;
     _status = widget.ad.status;
   }
 
   @override
   void dispose() {
+    _titleCtrl.dispose();
     _textCtrl.dispose();
+    _priceCtrl.dispose();
     super.dispose();
   }
 
@@ -67,7 +72,9 @@ class _EditAdViewState extends State<_EditAdView> {
       text: _textCtrl.text,
       isUrgent: _isUrgent,
       type: widget.ad.type,
-      status: _status,
+      status: c.isAdmin ? _status : null,
+      title: _titleCtrl.text.trim(),
+      priceText: _priceCtrl.text.trim(),
     );
     if (!mounted) return;
     setState(() => _isSaving = false);
@@ -84,6 +91,44 @@ class _EditAdViewState extends State<_EditAdView> {
       backgroundColor: _green,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Эълонни ўчириш'),
+        content: const Text('Бу эълон ноқайд ўчирилади. Давом этасизми?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final c = context.read<JobsController>();
+    setState(() => _isSaving = true);
+    final result = await c.deleteAd(widget.ad.id);
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.error ?? 'Хатолик'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Эълон ўчирилди'),
+      backgroundColor: Colors.orange,
     ));
   }
 
@@ -110,6 +155,7 @@ class _EditAdViewState extends State<_EditAdView> {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<JobsController>();
+    final canDelete = c.isOwner(widget.ad) || c.isAdmin;
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -129,7 +175,7 @@ class _EditAdViewState extends State<_EditAdView> {
                     borderRadius: BorderRadius.circular(2))),
           ),
           const SizedBox(height: 16),
-          Row(children: const [
+          const Row(children: [
             Icon(Icons.edit, color: _blue, size: 24),
             SizedBox(width: 8),
             Text('Эълонни таҳрирлаш',
@@ -139,28 +185,38 @@ class _EditAdViewState extends State<_EditAdView> {
           ]),
           const SizedBox(height: 16),
           TextField(
+            controller: _titleCtrl,
+            maxLength: 80,
+            decoration: InputDecoration(
+              labelText: 'Сарлавҳа',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
             controller: _textCtrl,
             maxLines: 4,
             maxLength: 300,
             decoration: InputDecoration(
-              hintText: 'Эълон матни...',
-              hintStyle: TextStyle(
-                  color: Colors.grey.shade400, fontSize: AppText.bodyMedium),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: _blue, width: 1.5)),
-              filled: true,
-              fillColor: Colors.grey.shade50,
+              labelText: 'Матн',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _priceCtrl,
+            maxLength: 40,
+            decoration: InputDecoration(
+              labelText: 'Нарх (ихтиёрий)',
+              hintText: '200 000 сўм',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 12),
-          if (widget.ad.isWork) ...[
+          if (widget.ad.supportsUrgent) ...[
             UrgentToggle(
               isUrgent: _isUrgent,
               onTap: () => setState(() => _isUrgent = !_isUrgent),
-              showHint: false,
             ),
             const SizedBox(height: 16),
           ],
@@ -168,20 +224,24 @@ class _EditAdViewState extends State<_EditAdView> {
             const Text('Статус:',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(children: [
+            Wrap(spacing: 8, runSpacing: 8, children: [
               _statusBtn('active', '✅ Фаол'),
-              const SizedBox(width: 8),
+              _statusBtn('pending', '⏳ Кутилмоқда'),
               _statusBtn('completed', '✔️ Ёпилган'),
-              const SizedBox(width: 8),
               _statusBtn('blocked', '🚫 Блок'),
             ]),
             const SizedBox(height: 16),
           ],
           Row(children: [
+            if (canDelete)
+              IconButton(
+                onPressed: _isSaving ? null : _delete,
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: 'Ўчириш',
+              ),
             Expanded(
               child: OutlinedButton(
-                onPressed:
-                    _isSaving ? null : () => Navigator.of(context).pop(),
+                onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
                 child: const Text('Бекор қилиш'),
               ),
             ),

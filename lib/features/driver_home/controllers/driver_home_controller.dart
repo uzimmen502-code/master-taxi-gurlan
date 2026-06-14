@@ -276,12 +276,10 @@ class DriverHomeController extends ChangeNotifier {
     _tripsSub = _ridesRepo.watchPendingTrips().listen((trips) {
       final now = DateTime.now();
       final filtered = trips.where((t) {
+        if (t.taxiType == 'marshrut') return false;
         if (t.createdAt != null) {
           final age = now.difference(t.createdAt!);
           if (age.inMinutes >= 3) return false;
-        }
-        if (t.taxiType == 'marshrut' && t.targetDriverId.isNotEmpty) {
-          if (t.targetDriverId != session.driverId) return false;
         }
         return _matchesTaxiType(t.taxiType);
       }).toList();
@@ -395,10 +393,12 @@ class DriverHomeController extends ChangeNotifier {
           refType: 'trip',
           refId: ride.id,
           module: session.taxiType,
-          idempotencyKey: 'change_trip_${ride.id}_$cashPaid',
+          idempotencyKey: 'change_trip_${ride.id}',
           operatorPhone: session.phone,
         );
-      } catch (_) {}
+      } catch (e, st) {
+        debugPrint('creditChange: $e\n$st');
+      }
     }
 
     session = session.copyWith(

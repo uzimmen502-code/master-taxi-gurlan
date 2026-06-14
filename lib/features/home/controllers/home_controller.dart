@@ -5,14 +5,19 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/formatters.dart';
+import '../../../services/user_role_sync.dart';
+
 /// Бош экран controller'и — фойдаланувчи, интернет, бир марталик agro promo.
 class HomeController extends ChangeNotifier {
   HomeController() {
     _init();
   }
 
+  // TODO: pass loc from UI layer for default display name
   String name = 'Фойдаланувчи';
   String gender = 'male';
+  String phone = '';
   /// SharedPreferences `user_role` — UI учун (асл рuxсат Firestore / rules).
   String role = 'user';
   bool hasInternet = true;
@@ -22,8 +27,11 @@ class HomeController extends ChangeNotifier {
 
   /// Биринчи 3 кун ичида (биринчи ўрнатиш кунидан) бир марталик
   /// агро-промо диалогини кўрсатиш сигнали. UI подпиёса бўлади.
-  final _agroPromoController = StreamController<String>.broadcast();
-  Stream<String> get onAgroPromo => _agroPromoController.stream;
+  final _agroPromoController = StreamController<void>.broadcast();
+  Stream<void> get onAgroPromo => _agroPromoController.stream;
+
+  String agroPromoBodyKey = 'agro_promo_body';
+  String agroPromoExtraKey = '';
 
   Future<void> _init() async {
     await _loadUser();
@@ -33,9 +41,10 @@ class HomeController extends ChangeNotifier {
 
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
-    name = prefs.getString('user_name') ?? 'Фойдаланувчи';
+    role = await UserRoleSync().syncToPreferences();
+    name = prefs.getString('user_name') ?? 'Фойдаланувчи'; // TODO: user_default_name via UI
     gender = prefs.getString('user_gender') ?? 'male';
-    role = prefs.getString('user_role') ?? 'user';
+    phone = phoneDigits(prefs.getString('user_phone') ?? '');
     if (!_disposed) notifyListeners();
   }
 
@@ -74,12 +83,10 @@ class HomeController extends ChangeNotifier {
     if (sentKey == key) return;
     await prefs.setString('promo_daily_key', key);
 
-    final extra = Random().nextDouble() < 0.55
-        ? '\n\n🎯 Таклиф: гўшт ўрнига сут, гуруч, тухум ва бошқа қишлоқ хўжалик маҳсулотлари билан ҳисоб-китоб қилиш имкони бор.'
-        : '';
-    final message =
-        'Бизда Сут, Қатиқ, Тухум, Гуруч ва бошқа маҳсулотлар билан ҳам ҳисоб-китоб қилиш мумкин.$extra';
-    _agroPromoController.add(message);
+    agroPromoBodyKey = 'agro_promo_body';
+    agroPromoExtraKey =
+        Random().nextDouble() < 0.55 ? 'agro_promo_offer_extra' : '';
+    _agroPromoController.add(null);
   }
 
   /// Соатга қараб салом.

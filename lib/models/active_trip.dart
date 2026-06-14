@@ -21,6 +21,11 @@ class ActiveTrip {
   final String pickupMfy;
   final String dropoffMfy;
 
+  final double? userLat;
+  final double? userLng;
+  final double? driverLat;
+  final double? driverLng;
+
   // ─── Haydovchi ──────────────────────────────────────────────────────
   final String driverId;
   final String driverName;
@@ -38,6 +43,8 @@ class ActiveTrip {
   final DateTime? createdAt;
   final DateTime? expiresAt;
   final int offerTimeoutSeconds;
+  final String cancelledBy;
+  final String cancelReason;
 
   const ActiveTrip({
     required this.id,
@@ -51,6 +58,10 @@ class ActiveTrip {
     this.radiusKm = 3,
     this.pickupMfy = '',
     this.dropoffMfy = '',
+    this.userLat,
+    this.userLng,
+    this.driverLat,
+    this.driverLng,
     this.driverId = '',
     this.driverName = '',
     this.driverPhone = '',
@@ -62,9 +73,17 @@ class ActiveTrip {
     this.createdAt,
     this.expiresAt,
     this.offerTimeoutSeconds = 0,
+    this.cancelledBy = '',
+    this.cancelReason = '',
   });
 
   bool get isAccepted => status == 'accepted';
+  bool get isCancelled => status == 'cancelled';
+  bool get isPassengerCancelled =>
+      isCancelled &&
+      (cancelledBy == 'passenger' || cancelledBy == 'user');
+  bool get isDriverNoRoomCancel =>
+      isCancelled && cancelledBy == 'driver' && cancelReason == 'no_room';
   bool get isSearching => status == 'searching';
   bool get isRejected => status == 'rejected';
   bool get isNoSeats => status == 'no_seats';
@@ -85,6 +104,10 @@ class ActiveTrip {
       radiusKm: (d['radiusKm'] as num?)?.toDouble() ?? 3,
       pickupMfy: d['pickupMfy'] ?? '',
       dropoffMfy: d['dropoffMfy'] ?? '',
+      userLat: (d['userLat'] as num?)?.toDouble(),
+      userLng: (d['userLng'] as num?)?.toDouble(),
+      driverLat: (d['driverLat'] as num?)?.toDouble(),
+      driverLng: (d['driverLng'] as num?)?.toDouble(),
       driverId: d['driverId'] ?? d['acceptedDriverId'] ?? '',
       driverName: d['driverName'] ?? d['acceptedDriverName'] ?? '',
       driverPhone: d['driverPhone'] ?? '',
@@ -96,6 +119,8 @@ class ActiveTrip {
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
       offerTimeoutSeconds: (d['offerTimeoutSeconds'] as num?)?.toInt() ?? 0,
+      cancelledBy: (d['cancelledBy'] ?? '') as String,
+      cancelReason: (d['cancelReason'] ?? '') as String,
     );
   }
 }

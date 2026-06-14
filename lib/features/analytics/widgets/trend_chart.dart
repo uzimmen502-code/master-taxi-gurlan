@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/analytics/time_series.dart';
@@ -9,7 +10,7 @@ class TrendChart extends StatelessWidget {
   const TrendChart({
     super.key,
     required this.series,
-    this.color = const Color(0xFF1565C0),
+    this.color = AppColors.primary,
     this.height = 180,
     this.useWeekday = false,
     this.formatValue,

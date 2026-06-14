@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/queue_entry.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Навбат рўйхати — позиция + кейинги маршрут.
 class QueueCard extends StatelessWidget {
@@ -16,9 +16,9 @@ class QueueCard extends StatelessWidget {
   final int myPosition;
   final String myDriverId;
 
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
-  static const _orange = Color(0xFFE65100);
+  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryDark;
+  static const _orange = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {

@@ -3,34 +3,32 @@ import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
+import '../jobs_tabs.dart';
 import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/add_ad_sheet.dart';
-import '../widgets/complaint_sheet.dart';
-import '../widgets/edit_ad_sheet.dart';
 
-/// 📰 ИШ ТОП экрани — mini-OLX classifieds.
-///
-/// 4 та таб:
-///   • 🆕 Барчаси  — барча эълонлар (latest first)
-///   • 🔨 Иш      — иш топувчилар учун
-///   • 🛠️ Хизмат   — хизмат таклифлари
-///   • 📢 Эълон    — оддий эълонлар (сотиш / шарт)
+/// 📰 ИШ ТОП — 2 таб: Иш бор, Хизмат таклифи.
 class JobsScreen extends StatelessWidget {
-  const JobsScreen({super.key});
+  const JobsScreen({super.key, this.initialTabIndex = JobsTabs.ad});
+
+  /// [JobsTabs.ad], [JobsTabs.service].
+  final int initialTabIndex;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) => JobsController(repo: ctx.read<JobsRepository>()),
-      child: const _JobsView(),
+      child: _JobsView(initialTabIndex: initialTabIndex),
     );
   }
 }
 
 class _JobsView extends StatefulWidget {
-  const _JobsView();
+  const _JobsView({required this.initialTabIndex});
+
+  final int initialTabIndex;
 
   @override
   State<_JobsView> createState() => _JobsViewState();
@@ -38,7 +36,7 @@ class _JobsView extends StatefulWidget {
 
 class _JobsViewState extends State<_JobsView>
     with SingleTickerProviderStateMixin {
-  static const _brand = Color(0xFF0277BD);
+  static const _brand = AppColors.primary;
 
   late TabController _tabCtrl;
   final _searchCtrl = TextEditingController();
@@ -46,7 +44,8 @@ class _JobsViewState extends State<_JobsView>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    final start = JobsTabs.clampIndex(widget.initialTabIndex);
+    _tabCtrl = TabController(length: JobsTabs.count, vsync: this, initialIndex: start);
     _tabCtrl.addListener(() {
       if (mounted) setState(() {});
     });
@@ -63,39 +62,13 @@ class _JobsViewState extends State<_JobsView>
     context.read<JobsController>().setSearch(v);
   }
 
-  Future<void> _onComplaintTap(JobAd ad) async {
-    final c = context.read<JobsController>();
-    final reason = await showComplaintSheet(context);
-    if (reason == null || !mounted) return;
-    await c.submitComplaint(adId: ad.id, reason: reason);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: const Text('Шикоят юборилди'),
-      backgroundColor: _brand,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
-  }
-
-  AdKind? _kindForCurrentTab() {
-    switch (_tabCtrl.index) {
-      case 1:
-        return AdKind.work;
-      case 2:
-        return AdKind.service;
-      case 3:
-        return AdKind.ad;
-      default:
-        return null; // barchasi
-    }
-  }
+  AdKind? _kindForCurrentTab() => JobsTabs.kindForIndex(_tabCtrl.index);
 
   void _openAddAdSheet() {
-    final preset = _kindForCurrentTab();
     showAddAdSheet(
       context: context,
       controller: context.read<JobsController>(),
-      presetKind: preset,
+      presetKind: _kindForCurrentTab(),
     );
   }
 
@@ -103,7 +76,7 @@ class _JobsViewState extends State<_JobsView>
   Widget build(BuildContext context) {
     final c = context.watch<JobsController>();
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FF),
+      backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: const Text('📰 ИШ ТОП',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -127,7 +100,7 @@ class _JobsViewState extends State<_JobsView>
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF013F67),
+                    backgroundColor: AppColors.button,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -149,25 +122,20 @@ class _JobsViewState extends State<_JobsView>
             color: _brand,
             child: TabBar(
               controller: _tabCtrl,
-              isScrollable: false,
-              tabAlignment: TabAlignment.fill,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 10),
               indicatorColor: Colors.white,
               indicatorWeight: 3,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white70,
               labelStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: AppText.bodyLarge),
+                  fontWeight: FontWeight.bold, fontSize: AppText.bodyLarge),
               unselectedLabelStyle: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: AppText.bodyLarge),
-              tabs: const [
-                Tab(text: 'Барчаси'),
-                Tab(text: 'Иш'),
-                Tab(text: 'Хизмат'),
-                Tab(text: 'Эълон'),
-              ],
+                  fontWeight: FontWeight.w600, fontSize: AppText.bodyLarge),
+              tabs: JobsTabs.labels
+                  .map((label) => Tab(text: label))
+                  .toList(growable: false),
             ),
           ),
         ),
@@ -212,41 +180,32 @@ class _JobsViewState extends State<_JobsView>
           child: TabBarView(
             controller: _tabCtrl,
             children: const [
-              _Feed(kindFilter: null),
-              _Feed(kindFilter: AdKind.work),
-              _Feed(kindFilter: AdKind.service),
               _Feed(kindFilter: AdKind.ad),
+              _Feed(kindFilter: AdKind.service),
             ],
           ),
         ),
       ]),
     );
   }
-
-  void _onAdTapEdit(JobAd ad) {
-    showEditAdSheet(
-        context: context, ad: ad, controller: context.read<JobsController>());
-  }
 }
 
-/// Битта таб контенти — стрим + filterAndSort + UI.
+/// Битта таб контенти.
 class _Feed extends StatelessWidget {
-  const _Feed({required this.kindFilter});
+  const _Feed({this.kindFilter});
 
-  /// `null` бўлса барча 3 турни кўрсатади.
   final AdKind? kindFilter;
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<JobsController>();
-    final state = context.findAncestorStateOfType<_JobsViewState>();
     return StreamBuilder<List<JobAd>>(
       stream: c.watchAll(),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting &&
             !snap.hasData) {
           return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF0277BD)));
+              child: CircularProgressIndicator(color: AppColors.primary));
         }
         if (snap.hasError) {
           return Center(
@@ -258,12 +217,8 @@ class _Feed extends StatelessWidget {
           );
         }
         final all = snap.data ?? const <JobAd>[];
-        // Фильтрни client тарафда қилaмиз — server'да 3 та whereIn энг яхши.
-        final filtered = kindFilter == null
-            ? all
-            : all.where((a) => a.kind == kindFilter).toList(growable: false);
-        final ads = c.filterAndSort(filtered);
-        if (ads.isEmpty) {
+        final list = c.feedForTab(all, kind: kindFilter);
+        if (list.isEmpty) {
           return _EmptyState(
             kind: kindFilter,
             isSearching: c.searchQuery.isNotEmpty,
@@ -271,19 +226,8 @@ class _Feed extends StatelessWidget {
         }
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 90),
-          itemCount: ads.length,
-          itemBuilder: (_, i) {
-            final ad = ads[i];
-            final canEdit = c.isOwner(ad) || c.isAdmin;
-            return AdCard(
-              ad: ad,
-              canEdit: canEdit,
-              onEdit: () =>
-                  state == null ? null : state._onAdTapEdit(ad),
-              onComplain: () =>
-                  state == null ? null : state._onComplaintTap(ad),
-            );
-          },
+          itemCount: list.length,
+          itemBuilder: (_, i) => AdCard(ad: list[i]),
         );
       },
     );
@@ -291,7 +235,10 @@ class _Feed extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.kind, required this.isSearching});
+  const _EmptyState({
+    required this.kind,
+    required this.isSearching,
+  });
 
   final AdKind? kind;
   final bool isSearching;

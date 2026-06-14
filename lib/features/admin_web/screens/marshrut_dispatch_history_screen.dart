@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,11 +6,12 @@ import '../../../models/active_trip.dart';
 import '../../../models/marshrut_dispatch_event.dart';
 import '../../../repositories/rides_repository.dart';
 import '../services/admin_auth_service.dart';
+import '../../../core/theme/app_theme.dart';
 
 class MarshrutDispatchHistoryScreen extends StatelessWidget {
   const MarshrutDispatchHistoryScreen({super.key});
 
-  static const _blue = Color(0xFF0D47A1);
+  static const _blue = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {
@@ -31,10 +33,12 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
         Expanded(
           child: TabBarView(children: [
             const _ActiveMarshrutTripsTab(),
-            StreamBuilder<List<MarshrutDispatchEvent>>(
-              stream: context
-                  .read<RidesRepository>()
-                  .watchRecentMarshrutDispatchEvents(),
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('marshrut_dispatch_events')
+                  .orderBy('createdAt', descending: true)
+                  .limit(200)
+                  .snapshots(),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting &&
                     !snap.hasData) {
@@ -43,14 +47,21 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
                 if (snap.hasError) {
                   return Center(child: Text('Хатолик: ${snap.error}'));
                 }
-                final events = snap.data ?? const <MarshrutDispatchEvent>[];
-                if (events.isEmpty) {
+                final docs = snap.data?.docs ?? const [];
+                if (docs.isEmpty) {
                   return const Center(child: Text('Dispatch history ҳали йўқ'));
                 }
                 return ListView.builder(
                   padding: const EdgeInsets.all(18),
-                  itemCount: events.length,
-                  itemBuilder: (_, i) => _DispatchEventCard(event: events[i]),
+                  itemCount: docs.length,
+                  itemBuilder: (_, i) {
+                    final doc = docs[i];
+                    final data = doc.data();
+                    return _DispatchEventCard(
+                      event: MarshrutDispatchEvent.fromDoc(doc),
+                      cancelledBy: data['cancelledBy'] as String?,
+                    );
+                  },
                 );
               },
             ),
@@ -85,7 +96,7 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
               ),
               SizedBox(height: 3),
               Text(
-                '1-навбат → 2-навбат → 3-навбат таклифлари ва натижалари',
+                '1-навбат → … → 7-навбат таклифлари ва натижалари',
                 style: TextStyle(color: Colors.black54),
               ),
             ],
@@ -97,9 +108,13 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
 }
 
 class _DispatchEventCard extends StatelessWidget {
-  const _DispatchEventCard({required this.event});
+  const _DispatchEventCard({
+    required this.event,
+    this.cancelledBy,
+  });
 
   final MarshrutDispatchEvent event;
+  final String? cancelledBy;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +139,7 @@ class _DispatchEventCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Wrap(spacing: 8, runSpacing: 6, children: [
-                  _chip(_typeLabel(event.type), color),
+                  _chip(_typeLabel(event.type, cancelledBy: cancelledBy), color),
                   _chip(
                     '${event.dispatchAttempt}/${event.dispatchTotal}-навбат',
                     Colors.blueGrey,
@@ -229,7 +244,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
   @override
   Widget build(BuildContext context) {
     final color =
-        widget.trip.status == 'accepted' ? Colors.green : Colors.orange;
+        widget.trip.status == 'accepted' ? AppColors.primary : Colors.orange;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
@@ -291,7 +306,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
                   icon: const Icon(Icons.done_all, size: 16),
                   label: const Text('Completed'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.button,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -348,7 +363,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
       );
       messenger.showSnackBar(const SnackBar(
         content: Text('Request cancelled қилинди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -393,7 +408,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
       );
       messenger.showSnackBar(const SnackBar(
         content: Text('Trip completed қилинди'),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.button,
       ));
     } catch (e) {
       messenger.showSnackBar(
@@ -423,7 +438,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
 Color _typeColor(String type) {
   switch (type) {
     case 'accepted':
-      return Colors.green;
+      return AppColors.primary;
     case 'rejected':
       return Colors.orange;
     case 'timeout':
@@ -432,7 +447,7 @@ Color _typeColor(String type) {
       return Colors.blueGrey;
     case 'completed':
     case 'admin_completed':
-      return Colors.green;
+      return AppColors.primary;
     case 'driver_auto_paused':
       return Colors.deepPurple;
     default:
@@ -460,7 +475,7 @@ IconData _typeIcon(String type) {
   }
 }
 
-String _typeLabel(String type) {
+String _typeLabel(String type, {String? cancelledBy}) {
   switch (type) {
     case 'offered':
       return 'Таклиф юборилди';
@@ -471,7 +486,12 @@ String _typeLabel(String type) {
     case 'timeout':
       return 'Жавоб бермади';
     case 'cancelled':
-      return 'User бекор қилди';
+      final by = cancelledBy ?? 'user';
+      if (by == 'admin') return '🔧 Admin бекор қилди';
+      if (by == 'driver') return '🚌 Ҳайдовчи бекор қилди';
+      return '👤 Йўловчи бекор қилди';
+    case 'passenger_cancel_after_accept':
+      return '👤 Йўловчи қабулдан кейин бекор қилди';
     case 'admin_cancelled':
       return 'Admin бекор қилди';
     case 'completed':

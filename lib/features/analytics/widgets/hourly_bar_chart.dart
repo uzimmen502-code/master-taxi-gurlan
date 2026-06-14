@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/analytics/time_series.dart';
@@ -10,8 +11,8 @@ class HourlyBarChart extends StatelessWidget {
     super.key,
     required this.series,
     this.height = 160,
-    this.color = const Color(0xFF2E7D32),
-    this.peakColor = const Color(0xFFE65100),
+    this.color = AppColors.primary,
+    this.peakColor = AppColors.primary,
   });
 
   final TimeSeries series;

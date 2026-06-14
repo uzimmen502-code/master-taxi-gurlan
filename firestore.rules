@@ -3,8 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // MOBIL (Flutter) + WEB (master-taxi-web) bir xil Firestore loyihasida.
-    // Mobil: ko'pincha Firebase Phone Auth yo'q — `usersGuestProfilePatchOnly`
-    // va `marshrut_block` mehmon yozuvlari.
+    // Mobil: Phone Auth enabled — Firebase verifyPhoneNumber.
+    // `usersGuestProfilePatchOnly` va `marshrut_block` auth bilan.
     // Web foydalanuvchi: Anonymous Auth + `users/{998...}` (telefon `phone-normalize.js`).
     // Web operator (admin.html): faqat PIN sessiyasi — Firestore `role` operator uchun emas.
 
@@ -32,39 +32,71 @@ service cloud.firestore {
     // userId = phoneDigits (масалан: 998901234567); token.phone_number = '+998901234567'
     function isOwner(userId) {
       return isAuth()
-          && request.auth.token.phone_number == '+' + userId;
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               userId
+             );
+    }
+
+    function phoneFromToken() {
+      return isAuth()
+          && request.auth.token.phone_number is string
+          ? request.auth.token.phone_number.replace('\\+', '')
+          : '';
     }
 
     function userDocIdFromPhoneToken() {
-      return request.auth.token.phone_number.replace('\\+', '');
+      return phoneFromToken();
     }
 
     function isAdmin() {
-      return isAuth()
-          && get(/databases/$(database)/documents/users/$(userDocIdFromPhoneToken())).data.role in ['admin', 'superadmin', 'dispatcher'];
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/users/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data.role
+              in ['admin', 'superadmin', 'dispatcher'];
     }
 
-    // Yo'lovchi Flutter ilovasi hozircha Phone Auth ishlatmaydi (request.auth == null).
-    // Shuning uchun faqat quyidagi ustunlarga tegadigan yangilanishlarga ruxsat.
+    // Phone Auth enabled — Firebase verifyPhoneNumber.
+    // Faqat quyidagi ustunlarga tegadigan profil patchlariga ruxsat.
     function usersGuestProfilePatchOnly() {
-      return !isAuth()
+      // Phone Auth joriy qilingandan keyin auth talab qilinadi.
+      // FCM token, lastNewsReadAt kabi texnik maydonlar ham Auth bilan yangilanadi.
+      return isAuth()
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly([
                 'name', 'phone', 'gender', 'address', 'legacyAddress',
                 'addressUpdatedAt', 'updatedAt', 'createdAt',
                 'birthDate', 'birthDateSetAt',
-                'fcmToken', 'role', 'cancelCount', 'blockedUntil', 'lastNewsReadAt'
+                'fcmToken', 'cancelCount', 'blockedUntil',
+                'lastNewsReadAt', 'lastOrderNewsReadAt'
               ]);
     }
 
-    // DIQQAT: statik web + anonim Auth — bu shart har kimga boshqa foydalanuvchini
-    // haydovchi qilib yozish imkonini beradi. Ishonchli muhitda Phone Auth yoki CF.
+    // ⚠️ Still weak — proper fix requires Phone Auth on mobile client.
+    // Until then: only allow if request comes with auth (anonymous or phone).
     function usersWebLooseDriverPromotion() {
-      return request.resource.data.diff(resource.data).affectedKeys()
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['role', 'updatedAt'])
           && request.resource.data.role == 'driver'
           && (!('role' in resource.data)
               || resource.data.role in ['user', '']);
+    }
+
+  // Haydovchi o'zi yo'lovchi rejimiga qaytishi (admin tasdiqlashsiz).
+    function usersLeaveDriverDemotion() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['role', 'updatedAt'])
+          && request.resource.data.role == 'user'
+          && resource.data.role == 'driver';
+    }
+
+    function usersCarInfoPatch() {
+      return request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['carModel', 'carColor', 'carPlate',
+                    'carUpdatedAt']);
     }
 
     // schedules → intercity_drivers sync (Phone Auth yo'q; driverId = telefon raqami)
@@ -76,9 +108,156 @@ service cloud.firestore {
       return request.resource.data.keys().hasAll(['name', 'phone', 'isActive'])
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly([
-                'name', 'phone', 'plate', 'seats', 'price', 'hour', 'isActive',
-                'parcel', 'rating', 'from', 'to', 'updatedAt'
+                'name', 'phone', 'phoneDigits', 'plate', 'car',
+                'seatCapacity', 'seats', 'price', 'hour', 'scheduleDate',
+                'isActive', 'isOnPanel',
+                'parcel', 'rating', 'from', 'to', 'stops', 'routeLabel',
+                'updatedAt'
               ]);
+    }
+
+    function intercityDriverPanelPatch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isOnPanel', 'updatedAt']);
+    }
+
+    function intercityDriverAutoAcceptPatch() {
+      return resource.exists
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['autoAcceptBookings', 'updatedAt'])
+          && request.resource.data.autoAcceptBookings is bool;
+    }
+
+    function intercityDriverEntertainmentKeysOnly() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['entertainmentIds', 'updatedAt'])
+          || changed.hasOnly(['entertainmentIds']);
+    }
+
+    // Admin web (PIN) — haydovchiga kino ruxsati (Phone Auth admin bo'lgach isAdmin ham ishlaydi).
+    function intercityDriverEntertainmentAllowedPatch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['entertainmentAllowed', 'updatedAt'])
+          && request.resource.data.entertainmentAllowed is bool;
+    }
+
+    // Haydovchi film tanlash — faqat entertainmentAllowed=true; Phone Auth shart emas
+    // (intercity schedule sync kabi; driverId = telefon raqami).
+    function intercityDriverEntertainmentPatch() {
+      return resource.exists
+          && resource.data.get('entertainmentAllowed', false) == true
+          && intercityDriverEntertainmentKeysOnly()
+          && request.resource.data.entertainmentIds is list
+          && request.resource.data.entertainmentIds.size() <= 5;
+    }
+
+    // Admin PIN: haydovchi hujjati yo'q bo'lsa ham faqat kino ruxsatini yozish.
+    function intercityDriverEntertainmentAllowedCreate() {
+      return !resource.exists
+          && request.resource.data.keys()
+              .hasOnly(['entertainmentAllowed', 'updatedAt'])
+          && request.resource.data.entertainmentAllowed is bool;
+    }
+
+    // Admin web PIN — katalog (Phone Auth isAdmin bilan parallel).
+    function entertainmentCatalogCreate() {
+      return request.resource.data.keys().hasAll([
+            'title', 'storagePath', 'downloadUrl', 'active'])
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.storagePath is string
+          && request.resource.data.storagePath.matches('entertainment/[a-zA-Z0-9_-]+\\.mp4')
+          && request.resource.data.downloadUrl is string
+          && request.resource.data.downloadUrl.size() > 10
+          && request.resource.data.active is bool;
+    }
+
+    function entertainmentCatalogActivePatch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['active', 'updatedAt'])
+          && request.resource.data.active is bool;
+    }
+
+    function intercityDriverListingEnd() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['isActive', 'isOnPanel', 'updatedAt'])
+          && request.resource.data.isActive == false;
+    }
+
+    function intercityTripStartPatch(driverId) {
+      return phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), driverId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['tripStartedAt', 'tripStatus', 'updatedAt']);
+    }
+
+  function intercityClientStatsPatch() {
+      // create: resource == null; update: diff(resource.data)
+      return resource == null
+          ? request.resource.data.keys()
+              .hasAll(['userName', 'userPhoneRaw', 'bookingCount'])
+          : request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'userName', 'userPhoneRaw', 'bookingCount', 'totalSpent',
+                'lastBookingAt', 'lastBookingId', 'firstBookingAt', 'completedCount'
+              ]);
+    }
+
+    function intercityBookingDriverConfirm() {
+      return phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), resource.data.driverId)
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'confirmed'
+          && notChanged('userPhone')
+          && notChanged('driverId')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'confirmedAt', 'updatedAt']);
+    }
+
+    function intercityBookingPassengerCancelPatch() {
+      return resource.data.status in ['pending', 'confirmed']
+          && request.resource.data.status == 'cancelled'
+          && notChanged('userPhone')
+          && notChanged('driverId')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'cancelReason', 'cancelledAt']);
+    }
+
+    function intercityBookingPickupPatch() {
+      return resource.data.status in ['pending', 'confirmed']
+          && notChanged('userPhone')
+          && notChanged('driverId')
+          && notChanged('status')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['pickupAddress', 'pickupLat', 'pickupLng', 'updatedAt']);
+    }
+
+    function intercityBookingPickedUpPatch() {
+      return phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), resource.data.driverId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['pickedUp', 'pickedUpAt', 'updatedAt']);
+    }
+
+    function intercityBookingCompletePatch() {
+      return phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), resource.data.driverId)
+          && resource.data.status == 'confirmed'
+          && request.resource.data.status == 'completed'
+          && notChanged('userPhone')
+          && notChanged('driverId')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'completedAt']);
+    }
+
+    function intercityBookingDriverArchivePatch() {
+      return phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), resource.data.driverId)
+          && notChanged('userPhone')
+          && notChanged('driverId')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['archivedByDriver']);
     }
 
     // createBooking transaction — faqat seats / vaqt maydonlari
@@ -87,11 +266,163 @@ service cloud.firestore {
           .hasOnly(['seats', 'lastBookedAt', 'updatedAt']);
     }
 
-    // Admin web hozir PIN session bilan ishlaydi. Birthday bonus Cloud Function'га
-    // ko'chirilguncha balans patch'ni faqat shu maydonlar bilan cheklaymiz.
-    function birthdayBonusBalancePatchOnly() {
+    function approvedDriverForTaxi(driverId, taxiType) {
+      return exists(/databases/$(database)/documents/drivers/$(driverId))
+          && (
+            get(/databases/$(database)/documents/drivers/$(driverId)).data.approved == true
+            || get(/databases/$(database)/documents/drivers/$(driverId)).data.approvalStatus == 'approved'
+          )
+          && (
+            (
+              'taxiTypes' in get(/databases/$(database)/documents/drivers/$(driverId)).data
+              && taxiType in get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiTypes
+            )
+            || get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == taxiType
+            || get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'both'
+            || (
+              taxiType == 'alone'
+              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'local'
+            )
+            || (
+              taxiType == 'local'
+              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'alone'
+            )
+            || (
+              taxiType == 'local'
+              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'local'
+            )
+            || (
+              taxiType == 'intercity'
+              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'intercity'
+            )
+          );
+    }
+
+    function driverWorkPatchOnly(driverId) {
+      return approvedDriverForTaxi(driverId, resource.data.taxiType)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'isAvailable', 'todayFrom', 'todayTo', 'seatsLeft', 'seats',
+                'stops', 'startTime', 'taxiType',
+                'updatedAt', 'isOnline', 'isBusy', 'lat', 'lng',
+                'actualOnlineAt', 'queueEligibleAt', 'plannedStartAt',
+                'todayTrips', 'todayRejects', 'todayTimeouts'
+              ]);
+    }
+
+    // Marshrut haydovchi ro'yxatdan o'tish (Phone Auth yo'q; driverId = telefon).
+    function marshrutDriverRegisterPatch(driverId) {
+      return approvedDriverForTaxi(driverId, 'marshrut')
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'name', 'phone', 'car', 'plate', 'taxiType',
+                'seats', 'stops', 'isOnline', 'isAvailable', 'seatsLeft',
+                'startTime', 'plannedStartAt', 'todayTrips', 'todayRejects',
+                'todayTimeouts', 'todayFrom', 'todayTo', 'updatedAt'
+              ]);
+    }
+
+    function marshrutDriverProfileGuestWriteOk(userId, profileId) {
+      let allowedKeys = [
+        'carModel', 'plate', 'seats', 'stops', 'startTime',
+        'driverName', 'driverPhone', 'updatedAt',
+        'isActive', 'approvedFromApplication'
+      ];
+      return profileId == 'marshrut'
+          && approvedDriverForTaxi(userId, 'marshrut')
+          && (
+            !resource.exists
+              ? request.resource.data.keys().hasAll(['carModel', 'plate', 'seats', 'stops'])
+                  && request.resource.data.keys().hasOnly(allowedKeys)
+              : request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(allowedKeys)
+          );
+    }
+
+    // Admin web PIN/session билан ишлаётгани учун request.auth йўқ.
+    // Ҳайдовчи аризасини тасдиқлашда drivers/{phone} ҳужжатига фақат
+    // approval/profile майдонларини ёзишга рухсат берамиз.
+    function driverApprovalPatchOnly() {
       return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['bonusBalance', 'birthdayBonusLastYear', 'updatedAt']);
+              .hasOnly([
+                'name', 'phone', 'car', 'plate',
+                'taxiType', 'taxiTypes',
+                'approved', 'approvalStatus', 'approvedAt', 'approvedBy',
+                'updatedAt'
+              ])
+          && request.resource.data.approved == true
+          && request.resource.data.approvalStatus == 'approved';
+    }
+
+    function scheduleLifecyclePatchOnly() {
+      return approvedDriverForTaxi(resource.data.driverId, resource.data.taxiType)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly([
+                'isActive', 'seatsLeft', 'updatedAt', 'direction',
+                'lat', 'lng', 'actualOnlineAt', 'queueEligibleAt',
+                'plannedStartAt', 'todayTrips', 'todayRejects', 'todayTimeouts'
+              ]);
+    }
+
+    function marshrutDispatchEventCreateOk() {
+      return request.resource.data.keys().hasAll(['type', 'tripId', 'createdAt'])
+          && request.resource.data.type is string
+          && request.resource.data.tripId is string;
+    }
+
+    function marshrutStatePatchOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['tripId', 'sessionId', 'status', 'updatedAt']);
+    }
+
+    function marshrutStateCreateOk() {
+      return request.resource.data.keys()
+          .hasOnly(['tripId', 'sessionId', 'status', 'updatedAt'])
+          && request.resource.data.tripId is string
+          && request.resource.data.status is string;
+    }
+
+    function phoneDocIdsMatch(a, b) {
+      return a == b
+          || (b.size() == 9 && a == ('998' + b))
+          || (a.size() == 9 && b == ('998' + a));
+    }
+
+    function passengerDocIdMatches(userId, tripPhone) {
+      return userId == tripPhone
+          || (tripPhone.size() == 9 && userId == ('998' + tripPhone))
+          || (userId.size() == 9 && tripPhone == ('998' + userId));
+    }
+
+    function isTripMarshrutDriver(trip, caller) {
+      let accepted = trip.acceptedDriverId;
+      let targeted = trip.targetDriverId;
+      return phoneDocIdsMatch(caller, accepted)
+          || phoneDocIdsMatch(caller, targeted);
+    }
+
+    function marshrutActiveTripId() {
+      return (request.resource.data.tripId is string
+              && request.resource.data.tripId.size() > 0)
+          ? request.resource.data.tripId
+          : resource.data.tripId;
+    }
+
+    // Haydovchi qabul/rad/yakun — yo'lovchi `marshrut_state/active` sync.
+    function marshrutStateDriverSyncOk(userId) {
+      let tripId = marshrutActiveTripId();
+      let trip = get(/databases/$(database)/documents/trips/$(tripId)).data;
+      let caller = userDocIdFromPhoneToken();
+      return tripId is string
+          && tripId.size() > 0
+          && isAuth()
+          && trip.taxiType == 'marshrut'
+          && passengerDocIdMatches(userId, trip.userPhone)
+          && isTripMarshrutDriver(trip, caller)
+          && (
+            (!resource.exists && marshrutStateCreateOk())
+            || (resource.exists && marshrutStatePatchOnly())
+          );
     }
 
     // Marshrut dispatch ҳозир client transaction'лар билан queue'ни sync қилади.
@@ -102,6 +433,8 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly([
                 'seatsLeft', 'isActive', 'updatedAt',
+                'lat', 'lng', 'plannedStartAt', 'actualOnlineAt', 'queueEligibleAt',
+                'todayTrips', 'todayRejects', 'todayTimeouts',
                 'dispatchTimeoutStreak', 'dispatchTimeoutCount',
                 'dispatchRejectCount', 'lastTimeoutAt', 'lastRejectedAt',
                 'lastAcceptedAt', 'autoPausedReason', 'autoPausedAt',
@@ -113,12 +446,13 @@ service cloud.firestore {
     // USERS — фойдаланувчилар
     // ══════════════════════════════════════
     match /users/{userId} {
-      // Ўқиш — барча (ҳайдовчилар FCM token учун)
-      allow read: if true;
+      // Баланс ва профил — фақат эга ёки админ
+      allow read: if isOwner(userId) || isAdmin();
 
       // create — Phone Auth'siz web/mobil uchun.
       // update — Phone Auth (`isOwner`) yoki mehmon profil patch (`usersGuestProfilePatchOnly`).
-      allow create: if request.resource.data.keys().hasAll(['phone'])
+      allow create: if isAuth()
+          && request.resource.data.keys().hasAll(['phone'])
           && !request.resource.data.keys().hasAny(['bonusBalance', 'balanceUpdatedAt'])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
@@ -126,30 +460,42 @@ service cloud.firestore {
           walletFieldsUntouched()
           && (
             usersWebLooseDriverPromotion()
+            || usersLeaveDriverDemotion()
+            || (isOwner(userId) && usersCarInfoPatch())
             || (
               (notChanged('role') || isAdmin())
               && (isOwner(userId) || isAdmin() || usersGuestProfilePatchOnly())
             )
           )
-        ) || birthdayBonusBalancePatchOnly();
+        );
 
-      // Ҳисоб-китоб журнали — фақат ўқиш, ёзиш Cloud Functions
+      // Ҳисоб-китоб журнали — фақат эга ёки админ
       match /wallet_ledger/{txId} {
-        allow read: if true;
-        allow create: if request.resource.data.type == 'birthday_bonus';
-        allow update, delete: if false;
+        allow read: if isAuth()
+            && (userDocIdFromPhoneToken() == userId || isAdmin());
+        allow create, update, delete: if false;
       }
 
       match /birthday_bonus_claims/{year} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+      }
+
+      match /marshrut_state/{docId} {
         allow read: if true;
-        allow create: if request.resource.data.status == 'granted';
-        allow update, delete: if false;
+        allow create: if (isOwner(userId) && marshrutStateCreateOk())
+            || marshrutStateDriverSyncOk(userId);
+        allow update: if (isOwner(userId) && marshrutStatePatchOnly())
+            || marshrutStateDriverSyncOk(userId);
+        allow delete: if false;
       }
     }
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)
     match /users/{userId}/driverProfiles/{profileId} {
-      allow read, create, update: if true;
+      allow read: if true;
+      allow create, update: if isOwner(userId) || isAdmin()
+          || marshrutDriverProfileGuestWriteOk(userId, profileId);
       allow delete: if false;
     }
 
@@ -163,18 +509,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Device binding: биринчи рақам қурилмага боғланади. Conflict бўлса
-    // client фақат request яратади, binding'ни admin тасдиқлайди.
-    match /device_bindings/{deviceId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+    // O'qish: admin web collection query (eski ID lar hali bo'lsa ham).
+    // Yangi tizim faqat hash-doc ishlatadi; yozuv faqat Cloud Functions.
+    // Admin kod (fake SMS) — mobil so'rov, admin kod yozadi, ilova stream kuzatadi.
+    match /pending_codes/{phoneId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
+    }
+
+    match /device_bindings/{hash} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /device_bindings_legacy/{legacyId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /device_aliases/{phone} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /device_change_requests/{id} {
-      allow create: if true;
-      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
-      // `isAdmin()`ga qaytaramiz.
-      allow read, update: if true;
+      allow create: if request.auth != null;
+      allow read, update: if isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -188,11 +550,14 @@ service cloud.firestore {
 
     // Marshrut blok holati — faqat o'z telefon raqami yoki admin
     match /users/{userId}/marshrut_block/{doc} {
-      allow read: if true;
-      allow write: if isOwner(userId) || isAdmin()
-          || (!isAuth()
-              && request.resource.data.diff(resource.data).affectedKeys()
-                  .hasOnly(['cancelCount', 'blockedUntil', 'updatedAt']));
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Local taxi qidiruv bloki — CF yozadi
+    match /users/{userId}/local_taxi_block/{doc} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
     }
 
     // ══════════════════════════════════════
@@ -205,43 +570,108 @@ service cloud.firestore {
       // Яратиш — телефон рақами бўлса
       allow create: if request.resource.data.keys().hasAll(['phone', 'name']);
 
-      // Ўз маълумотларини ёки admin ўзгартира олади
-      allow update: if isOwner(driverId) || isAdmin();
+      // Ўз маълумотларини ёки admin ўзгартира олади.
+      // Phone Auth тўлиқ жорий қилинмагунча, тасдиқланган ҳайдовчига фақат
+      // ишга чиқиш/онлайн ҳолати майдонларини ўзгартиришга рухсат.
+      allow update: if isOwner(driverId) || isAdmin()
+          || driverWorkPatchOnly(driverId)
+          || marshrutDriverRegisterPatch(driverId)
+          || driverApprovalPatchOnly();
 
       // Ўчириш — йўқ
       allow delete: if false;
     }
 
+    // Marshrut `trips` — status va haydovchi maydonlari (whitelist).
+    function marshrutTripLifecycleUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return resource.data.taxiType == 'marshrut'
+          && changed.hasOnly([
+            'status', 'expiredAt', 'rejectedAt', 'rejectedBy',
+            'cancelledAt', 'cancelledBy', 'cancelledByPhone', 'cancelReason',
+            'notifyPassengerReroute',
+            'completedAt', 'completedBy', 'completedByPhone',
+            'acceptedDriverId', 'acceptedDriverName', 'acceptedDriverPhone',
+            'acceptedDriverCar', 'acceptedDriverPlate', 'acceptedAt',
+            'driverLat', 'driverLng', 'targetDriverId', 'targetedAt',
+            'fare', 'cashPaid', 'updatedAt'
+          ])
+          && request.resource.data.status in [
+            'pending', 'accepted', 'rejected', 'no_seats',
+            'cancelled', 'completed', 'expired', 'searching'
+          ];
+    }
+
+    // Mahalliy taksi — qattiq ownership (passenger / target driver / accepted driver).
+    function localTripLifecycleUpdate() {
+      let d = request.resource.data;
+      let prev = resource.data;
+      let uid = userDocIdFromPhoneToken();
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+
+      let passengerFields = [
+        'targetDriverId', 'targetedAt', 'cancelledBy', 'cancelReason',
+        'cancelledAt', 'status', 'radiusKm'
+      ];
+      let driverFields = [
+        'driverId', 'driverName', 'driverCar', 'driverPlate', 'acceptedAt',
+        'price', 'completedAt', 'date', 'status'
+      ];
+      let driverRejectFields = [
+        'targetDriverId', 'lastRejectedBy', 'lastRejectReason', 'lastRejectedAt'
+      ];
+
+      // Passenger: own trip — target driver, cancel, radius expand
+      let isPassenger = uid == prev.userPhone
+          && affectedKeys.hasOnly(passengerFields);
+
+      // Driver: accepted → completed
+      let isDriver = prev.status == 'accepted'
+          && uid == prev.driverId
+          && d.status == 'completed'
+          && affectedKeys.hasOnly(driverFields);
+
+      // searching → accepted: only targeted driver
+      let isAccept = prev.status == 'searching'
+          && d.status == 'accepted'
+          && uid == prev.targetDriverId
+          && affectedKeys.hasOnly(driverFields);
+
+      // Driver reject: clear targetDriverId while searching
+      let isDriverReject = prev.status == 'searching'
+          && uid == prev.targetDriverId
+          && affectedKeys.hasOnly(driverRejectFields);
+
+      return isAuth()
+          && prev.taxiType in ['local', 'alone']
+          && (isPassenger || isDriver || isAccept || isDriverReject);
+    }
+
     // TRIPS — taksi (Flutter + web mahalliy modul `taxiType: local` / marshrut).
     // Yaratishda Phone Auth talab qilinmaydi; yangilanishlar alohida shartlar bilan.
     match /trips/{tripId} {
-      // Ўқиш — барча (real-time tracking учун)
+      // Ўқиш: Admin web (PIN, Phone Auth йўқ) Monitoring Center collection query
+      // учун ochiq; yozish alohida cheklangan.
       allow read: if true;
 
       // Яратиш — lokal/intercity taksi
-      allow create: if (
-          request.resource.data.keys().hasAll(['userPhone', 'fromAddr', 'status'])
-          && request.resource.data.status == 'searching'
-      )
-      // Marshrut taksi: pickupAddr + pending/searching
-      || (
-          request.resource.data.keys().hasAll(['userPhone', 'pickupAddr', 'status', 'taxiType'])
-          && request.resource.data.taxiType == 'marshrut'
-          && request.resource.data.status in ['pending', 'searching']
+      allow create: if isAuth() && (
+          (
+            request.resource.data.keys().hasAll(['userPhone', 'fromAddr', 'status'])
+            && request.resource.data.status == 'searching'
+          )
+          || (
+            request.resource.data.keys().hasAll(['userPhone', 'pickupAddr', 'status', 'taxiType'])
+            && request.resource.data.taxiType == 'marshrut'
+            && request.resource.data.status in ['pending', 'searching']
+            && request.resource.data.userPhone.matches('^[0-9]{9,15}$')
+          )
       );
 
-      // Янгилаш — рухсат этилган майдонлар
-      allow update: if
-        // Статус ўзгариши
-        (request.resource.data.status in ['accepted', 'rejected', 'no_seats', 'cancelled', 'completed', 'expired'])
-        // Ҳайдовчига йўналтириш (yo'lovchi selectDriver() chaqiradi)
-        || request.resource.data.keys().hasAny(['targetDriverId', 'targetedAt'])
-        // GPS позиция янгилаш
-        || request.resource.data.keys().hasAny(['driverLat', 'driverLng'])
-        // Radius янгилаш
-        || (request.resource.data.keys().hasOnly(['radius', 'updatedAt']))
-        // Fare сақлаш
-        || request.resource.data.keys().hasAny(['fare', 'completedAt', 'cashPaid']);
+      // Янгилаш — marshrut whitelist + mahalliy eski qoidalar
+      allow update: if isAdmin()
+          || marshrutTripLifecycleUpdate()
+          || localTripLifecycleUpdate();
 
       // Ўчириш — йўқ
       allow delete: if false;
@@ -251,25 +681,38 @@ service cloud.firestore {
     // ORDERS — нон/овқат буюртмалар
     // ══════════════════════════════════════
     match /orders/{orderId} {
-      // Ўқиш — userPhone мос келса ёки admin
-      allow read: if true; // Вақтинча барча — Admin панели учун
+      allow read: if true;
 
-      // Яратиш — userPhone ва items бўлса
-      allow create: if request.resource.data.keys().hasAll(['userPhone', 'items', 'total', 'status'])
+      allow create: if isAuth()
+          && request.resource.data.keys().hasAll(['userPhone', 'items', 'total', 'status'])
           && request.resource.data.status == 'new'
           && request.resource.data.total > 0;
 
-      // Янгилаш — статус ёки kuryer yetkazib berish maydonlari
       allow update: if (
-          request.resource.data.keys().hasAny(['status'])
-          && request.resource.data.status in ['new', 'accepted', 'ready', 'delivered', 'rejected', 'cancelled']
+          // Status transitions allowed from client
+          request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'updatedAt', 'cancelledAt', 'cancelReason'])
+          && request.resource.data.status in ['cancelled']
+          && resource.data.status in ['new', 'accepted']
       ) || (
-          // Kuryer markDelivered — deliveredAt va courierId ham yoziladi
-          request.resource.data.keys().hasAny(['deliveredAt', 'courierId'])
+          // Courier delivery fields — courier app
+          request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['deliveredAt', 'courierId', 'status', 'updatedAt'])
+      ) || (
+          // Admin or system updates
+          isAdmin()
       );
 
-      // Ўчириш — йўқ
       allow delete: if false;
+
+      match /payment_lines/{lineId} {
+        allow read: if true;
+        allow write: if false;
+      }
+      match /payment_events/{eventId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
     }
 
     // ══════════════════════════════════════
@@ -277,8 +720,9 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /schedules/{scheduleId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['driverId', 'taxiType', 'date', 'seats', 'isActive']);
-      allow update: if request.resource.data.keys().hasAny(['isActive', 'seatsLeft', 'updatedAt']);
+      allow create: if request.resource.data.keys().hasAll(['driverId', 'taxiType', 'date', 'seats', 'isActive'])
+          && approvedDriverForTaxi(request.resource.data.driverId, request.resource.data.taxiType);
+      allow update: if isAdmin() || isOwner(resource.data.driverId) || scheduleLifecyclePatchOnly();
       allow delete: if false;
     }
 
@@ -287,7 +731,8 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /ratings/{ratingId} {
       allow read:   if true;
-      allow create: if request.resource.data.keys().hasAll(['driverId', 'stars', 'userPhone']);
+      allow create: if isAuth()
+          && request.resource.data.keys().hasAll(['driverId', 'stars', 'userPhone']);
       allow update: if false;
       allow delete: if false;
     }
@@ -297,27 +742,26 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /bread_products/{id} {
       allow read, create, update: if true;
-      // Админ Firebase Console'дан ўчирa олиши учун.
-      allow delete: if true;
+      allow delete: if false;
     }
 
     match /extra_products/{id} {
       allow read, create, update: if true;
-      allow delete: if true;
-    }
-
-    // Овqat каталоги (`food_catalog`): admin web ҳозир PIN/session билан ишлайди,
-    // Firebase Auth эмас. Шунинг учун bread/extra каби вақтинча очиқ.
-    match /food_catalog/{id} {
-      allow read: if true;
-      allow create, update: if true;
       allow delete: if false;
     }
 
-    // Овqат stock — `food_inventory/{slug}` (`totalStock`, `soldToday`).
-    // `InventoryRepository.createOrderAtomically` транзакцияда ёзади.
-    match /food_inventory/{id} {
-      allow read, create, update: if true;
+    match /procurement_products/{code} {
+      allow read: if isAuth();
+      allow create, update: if isAdmin()
+          && request.resource.data.keys().hasAll([
+            'code', 'label', 'unit', 'price', 'active', 'updatedAt'
+          ])
+          && request.resource.data.code is string
+          && request.resource.data.label is string
+          && request.resource.data.unit is string
+          && request.resource.data.price is int
+          && request.resource.data.price >= 0
+          && request.resource.data.active is bool;
       allow delete: if false;
     }
 
@@ -394,6 +838,35 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // NOTIFICATIONS — FCM орқали хабар (илова listener + update sent)
     // ══════════════════════════════════════
+    match /intercity_booking_locks/{lockId} {
+      allow read: if true;
+      allow create, update: if true;
+      // cancelBooking — mijoz yoki haydovchi o'z qulfini ochadi (delete CF/admin);
+      // mijoz cancel: bookingId tozalash (update if true) — delete auth talab qiladi
+      allow delete: if isAuth() && (
+          phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.userKey)
+          || isOwner(resource.data.driverId)
+      );
+    }
+
+    match /intercity_passenger_locks/{userPhone} {
+      allow read: if request.auth != null
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(), userPhone);
+      allow create, update: if request.auth != null
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(), userPhone);
+      allow delete: if request.auth != null
+          && (phoneDocIdsMatch(
+                userDocIdFromPhoneToken(), userPhone)
+              || isAdmin()
+              || (isAuth()
+                  && resource.data.driverId != null
+                  && phoneDocIdsMatch(
+                       userDocIdFromPhoneToken(),
+                       resource.data.driverId)));
+    }
+
     match /notifications/{notificationId} {
       allow read: if true;
       // Яратишда: барча майдонлар бўлсин + sent мажбурий false
@@ -406,25 +879,166 @@ service cloud.firestore {
     }
 
     // ══════════════════════════════════════
+    // CONFIG — yo'lovchi blok qoidalari va boshqa server sozlamalar
+    // ══════════════════════════════════════
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ══════════════════════════════════════
     // SETTINGS — нархлар ва бошқа созламалар
     // ══════════════════════════════════════
     match /settings/{docId} {
-      allow read, create, update: if true;
+      allow read: if true;
+      // Only specific safe fields allowed from client; sensitive fields (driverApprovalMode etc) — Cloud Functions only.
+      allow create: if !request.resource.data.keys().hasAny([
+          'driverApprovalMode', 'adminPhone', 'secret'
+        ]);
+      allow update: if !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'driverApprovalMode', 'adminPhone', 'secret'
+        ]);
       allow delete: if false;
+    }
+
+    // Bosh ekran begushchaya qator — admin web (PIN) to'g'ridan yozadi.
+    function homeTickerAdPayloadOk() {
+      return (
+            !('text' in request.resource.data)
+            || (
+              request.resource.data.text is string
+              && request.resource.data.text.size() > 0
+              && request.resource.data.text.size() <= 500
+            )
+          )
+          && (
+            !('audience' in request.resource.data)
+            || request.resource.data.audience in
+                ['all', 'user', 'driver', 'courier', 'admin']
+          )
+          && (
+            !('durationSec' in request.resource.data)
+            || (
+              request.resource.data.durationSec is int
+              && request.resource.data.durationSec >= 5
+              && request.resource.data.durationSec <= 120
+            )
+          )
+          && (
+            !('scrollSpeed' in request.resource.data)
+            || (
+              request.resource.data.scrollSpeed is int
+              && request.resource.data.scrollSpeed >= 15
+              && request.resource.data.scrollSpeed <= 120
+            )
+          )
+          && (
+            !('priority' in request.resource.data)
+            || request.resource.data.priority is int
+          )
+          && (
+            !('active' in request.resource.data)
+            || request.resource.data.active is bool
+          )
+          && (
+            !('activeFrom' in request.resource.data)
+            || request.resource.data.activeFrom is timestamp
+          )
+          && (
+            !('activeTo' in request.resource.data)
+            || request.resource.data.activeTo is timestamp
+          )
+          && (
+            !('animationStyle' in request.resource.data)
+            || request.resource.data.animationStyle in
+                [
+                  'auto', 'marquee', 'typewriter', 'cascade', 'fade_in', 'slide_in',
+                  'fit_fade', 'fit_lines', 'fit_words', 'fit_pulse', 'fit_pop'
+                ]
+          )
+          && (
+            !('fontSize' in request.resource.data)
+            || (
+              request.resource.data.fontSize is int
+              && request.resource.data.fontSize >= 10
+              && request.resource.data.fontSize <= 24
+            )
+          );
+    }
+
+    match /home_ticker_ads/{adId} {
+      allow read: if true;
+      allow create: if homeTickerAdPayloadOk()
+          && request.resource.data.keys().hasAll([
+            'text', 'audience', 'active', 'priority',
+            'durationSec', 'scrollSpeed', 'animationStyle', 'fontSize',
+            'createdAt', 'updatedAt'
+          ]);
+      allow update: if homeTickerAdPayloadOk()
+          && notChanged('createdAt');
+      allow delete: if false;
+    }
+
+    // Мобил ариза — marshrut/intercity маршрут майдонлари билан.
+    function driverRequestGuestPatchKeys() {
+      return [
+        'name', 'phone', 'car', 'plate', 'taxiType', 'updatedAt',
+        'routeFrom', 'routeTo', 'routeStops', 'routeLabel',
+        'status', 'rejectedAt', 'rejectedReason', 'rejectedBy',
+      ];
+    }
+
+    function driverRequestGuestPendingUpdateOk(id) {
+      return resource.data.status == 'pending'
+          && request.resource.data.status == 'pending'
+          && request.resource.data.uid == id
+          && request.resource.data.taxiType in ['intercity', 'marshrut', 'alone', 'local']
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(driverRequestGuestPatchKeys());
+    }
+
+    function driverRequestGuestResubmitOk(id) {
+      return resource.data.status == 'rejected'
+          && request.resource.data.status == 'pending'
+          && request.resource.data.uid == id
+          && request.resource.data.taxiType in ['intercity', 'marshrut', 'alone', 'local']
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(driverRequestGuestPatchKeys());
     }
 
     // ══════════════════════════════════════
     // DRIVER_REQUESTS / QUEUE — админ ва ҳайдовчи панели
     // ══════════════════════════════════════
     match /driver_requests/{id} {
-      allow read, create, update: if true;
+      allow read: if isAdmin() || true;
+      allow create: if isAdmin()
+          || (
+            isAuth()
+            && request.resource.data.uid == id
+            && request.resource.data.status == 'pending'
+            && request.resource.data.taxiType in ['intercity', 'marshrut', 'alone', 'local']
+            && request.resource.data.keys()
+                .hasAll(['uid', 'name', 'phone', 'taxiType', 'status'])
+          );
+      allow update: if isAdmin()
+          || driverRequestGuestPendingUpdateOk(id)
+          || driverRequestGuestResubmitOk(id);
       allow delete: if false;
     }
 
     match /queue/{driverId} {
       allow read: if true;
-      allow create: if isOwner(driverId) || isAdmin();
-      allow update: if isOwner(driverId) || isAdmin() || queueGuestDispatchPatchOnly();
+      allow create: if isOwner(driverId) || isAdmin()
+          || (
+            request.resource.data.driverId == driverId
+            && approvedDriverForTaxi(driverId, request.resource.data.taxiType)
+          );
+      allow update: if isOwner(driverId) || isAdmin()
+          || queueGuestDispatchPatchOnly()
+          || (
+            request.resource.data.driverId == driverId
+            && approvedDriverForTaxi(driverId, request.resource.data.taxiType)
+          );
       allow delete: if false;
     }
 
@@ -434,19 +1048,39 @@ service cloud.firestore {
     match /intercity_drivers/{id} {
       allow read: if true;
       // Haydovchi profili — admin / Phone Auth owner; anonim: schedule sync yoki seat patch
-      allow create: if isAdmin() || isOwner(id) || intercityDriverScheduleCreate();
+      allow create: if isAdmin() || isOwner(id) || intercityDriverScheduleCreate()
+          || intercityDriverEntertainmentAllowedCreate();
       allow update: if isAdmin() || isOwner(id)
           || intercityDriverScheduleSync()
-          || intercityDriverSeatBookingPatch();
+          || intercityDriverPanelPatch()
+          || intercityDriverAutoAcceptPatch()
+          || intercityDriverEntertainmentAllowedPatch()
+          || intercityDriverEntertainmentPatch()
+          || intercityDriverListingEnd()
+          || intercityDriverSeatBookingPatch()
+          || intercityTripStartPatch(id);
       allow delete: if false;
 
-      // Doimiy mijoz aggregation — bron transaction'ida (client SDK)
-      // Phone Auth bilan cheklash keyinroq; hozircha yozish ochiq.
+      // Doimiy mijоз aggregation — bron transaction'ida
       match /clients/{phone} {
-        allow read: if isAdmin() || isOwner(id);
-        allow create, update: if true;
+        // Bron transaction: faqat o'z telefonidagi client doc o'qiladi
+        allow read: if isAdmin() || isOwner(id)
+            || phoneDocIdsMatch(userDocIdFromPhoneToken(), phone);
+        allow create, update: if intercityClientStatsPatch()
+            || isAdmin()
+            || isOwner(id);
         allow delete: if false;
       }
+    }
+
+    // ══════════════════════════════════════
+    // ENTERTAINMENT — safar kino katalogi (B variant)
+    // ══════════════════════════════════════
+    match /entertainment_catalog/{videoId} {
+      allow read: if true;
+      allow create: if isAdmin() || entertainmentCatalogCreate();
+      allow update: if isAdmin() || entertainmentCatalogActivePatch();
+      allow delete: if false;
     }
 
     // ══════════════════════════════════════
@@ -457,26 +1091,39 @@ service cloud.firestore {
       allow read: if true;
 
       // Яратиш — userPhone, driverId, status, totalAmount > 0 бўлиши шарт.
-      // Status фақат 'pending' ёки 'confirmed' (auto-confirm) бўла олади.
-      allow create: if request.resource.data.keys()
-              .hasAll(['userPhone', 'driverId', 'status', 'totalAmount'])
+      allow create: if isAuth()
+          && 'userPhone' in request.resource.data
+          && 'driverId' in request.resource.data
+          && 'status' in request.resource.data
+          && 'totalAmount' in request.resource.data
           && request.resource.data.totalAmount is number
           && request.resource.data.totalAmount > 0
           && request.resource.data.status in ['pending', 'confirmed'];
 
-      // Янгилаш — статус ўзгариши ёки bekor qilish maydonlari
-      allow update: if (
-          request.resource.data.status in
-              ['pending', 'confirmed', 'completed', 'cancelled', 'expired']
-          && notChanged('userPhone')
-          && notChanged('driverId')
-      ) || (
-          // cancelBooking — cancelledAt, cancelReason ham yoziladi
-          request.resource.data.keys().hasAny(
-              ['cancelledAt', 'cancelledBy', 'reason', 'cancelReason'])
-          && notChanged('userPhone')
-          && notChanged('driverId')
-      );
+      // Янгилаш — faqat auth + owner (yo'lovchi/haydovchi) yoki admin
+      allow update: if isAuth()
+          && (
+            (
+              phoneDocIdsMatch(
+                  userDocIdFromPhoneToken(), resource.data.userPhone)
+              && (
+                intercityBookingPassengerCancelPatch()
+                || intercityBookingPickupPatch()
+              )
+            )
+            || (
+              phoneDocIdsMatch(
+                  userDocIdFromPhoneToken(), resource.data.driverId)
+              && (
+                intercityBookingDriverConfirm()
+                || intercityBookingPassengerCancelPatch()
+                || intercityBookingCompletePatch()
+                || intercityBookingDriverArchivePatch()
+                || intercityBookingPickedUpPatch()
+              )
+            )
+            || isAdmin()
+          );
 
       allow delete: if false;
     }
@@ -499,8 +1146,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /marshrut_coordinates/{routeKey} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+          && request.resource.data.confirmCount == 1;
+      allow update: if request.auth != null
+          && resource.data.isLocked == false
+          && request.resource.data.confirmCount
+             <= resource.data.confirmCount + 1;
+    }
+
     match /marshrut_dispatch_events/{id} {
-      allow read, create: if true;
+      allow read: if true;
+      allow create: if marshrutDispatchEventCreateOk();
       allow update, delete: if false;
     }
 
@@ -509,14 +1167,154 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function adAuthorPhoneOk(phone) {
+      return phone is string && phone.matches('^[0-9]{9,15}$');
+    }
+
+    function adCreateOk() {
+      return request.resource.data.keys().hasAll([
+            'type', 'text', 'authorPhone', 'authorName', 'status', 'createdAt'])
+          && request.resource.data.type in ['work', 'service', 'ad', 'sell']
+          && request.resource.data.status == 'pending'
+          && adAuthorPhoneOk(request.resource.data.authorPhone);
+    }
+
+    function adAuthorImmutable() {
+      return request.resource.data.authorPhone == resource.data.authorPhone
+          && request.resource.data.authorName == resource.data.authorName;
+    }
+
+    function adOwnerPatchOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return adAuthorImmutable()
+          && changed.hasOnly([
+            'text', 'title', 'priceText', 'isUrgent', 'type', 'editedAt'
+          ]);
+    }
+
+    function adModerationPatchOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return adAuthorImmutable()
+          && changed.hasOnly([
+            'text', 'title', 'priceText', 'isUrgent', 'type', 'status',
+            'editedAt', 'moderatedAt'
+          ])
+          && request.resource.data.status in [
+            'pending', 'active', 'completed', 'blocked'
+          ];
+    }
+
+    function isCheapProductAdData(d) {
+      return d.get('type', '') == 'cheap_product';
+    }
+
+    function cheapProductCreateOk() {
+      return isAuth()
+          && isCheapProductAdData(request.resource.data)
+          && request.resource.data.ownerId == userDocIdFromPhoneToken()
+          && request.resource.data.status == 'active'
+          && request.resource.data.keys().hasAll([
+            'type', 'ownerId', 'title', 'titleLower', 'description', 'price',
+            'phone', 'sellerName', 'imageUrls', 'status', 'views',
+            'createdAt', 'updatedAt', 'publishedAt'
+          ]);
+    }
+
+    function cheapProductOwnerUpdateOk() {
+      return isAuth()
+          && isCheapProductAdData(resource.data)
+          && resource.data.ownerId == userDocIdFromPhoneToken()
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.type == resource.data.type;
+    }
+
+    function cheapProductViewIncrementOk() {
+      return isCheapProductAdData(resource.data)
+          && resource.data.status == 'active'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+          && request.resource.data.views is int
+          && request.resource.data.views >= resource.data.views;
+    }
+
     match /ads/{id} {
-      allow read, create, update: if true;
-      allow delete: if false;
+      // Jobs board: барча; арзон маҳсулот: active ёки эгаси.
+      allow read: if !isCheapProductAdData(resource.data)
+          || resource.data.status == 'active'
+          || (isAuth()
+              && resource.data.ownerId == userDocIdFromPhoneToken());
+      allow create: if adCreateOk() || cheapProductCreateOk();
+      allow update: if adOwnerPatchOk()
+          || adModerationPatchOk()
+          || cheapProductOwnerUpdateOk()
+          || cheapProductViewIncrementOk();
+      allow delete: if isAuth()
+          && isCheapProductAdData(resource.data)
+          && resource.data.ownerId == userDocIdFromPhoneToken();
     }
 
     match /complaints/{id} {
-      allow read, create: if true;
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['adId', 'reason', 'createdAt'])
+          && request.resource.data.adId is string
+          && request.resource.data.reason is string;
       allow update, delete: if false;
+    }
+
+    // Сотиш таклифлари — фойдаланувчи юборadi; админ/оператор кўради.
+    function sellSubmissionCreateOk() {
+      return request.resource.data.keys().hasAll([
+            'userId', 'userPhone', 'items', 'status', 'createdAt', 'updatedAt'])
+          && request.resource.data.status == 'pending'
+          && request.resource.data.userId is string
+          && request.resource.data.userId.size() >= 9
+          && request.resource.data.userPhone is string
+          && request.resource.data.items is list
+          && request.resource.data.items.size() >= 1
+          && request.resource.data.items.size() <= 20
+          && request.resource.data.visibleToUserIds is list;
+    }
+
+    function sellSubmissionAdminPatchOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+            'status', 'adminNote', 'visibleToUserIds', 'updatedAt',
+            'forwardAudience', 'forwardedAt',
+            'collectionTaskId', 'inCollection'
+          ])
+          && request.resource.data.status in ['pending', 'reviewed', 'archived'];
+    }
+
+    function isCollectionTaskCourier() {
+      return isAuth()
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               resource.data.courierId
+             );
+    }
+
+    function isCollectionTaskCustomer() {
+      return isOwner(resource.data.customerUid)
+          || isOwner(resource.data.customerPhone);
+    }
+
+    match /sell_submissions/{id} {
+      allow read: if true;
+      allow create: if sellSubmissionCreateOk();
+      allow update: if sellSubmissionAdminPatchOk();
+      allow delete: if false;
+    }
+
+    match /collection_tasks/{id} {
+      allow read: if isAdmin()
+          || isCollectionTaskCourier()
+          || isCollectionTaskCustomer();
+      allow create, update, delete: if false;
+    }
+
+    // Омбор қолдиғи — фақат CF ёзади (courierFinalizeCollection).
+    match /warehouse_stock/{code} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     // ══════════════════════════════════════
@@ -557,12 +1355,13 @@ service cloud.firestore {
 
     match /couriers/{id} {
       allow read: if true;
-      // Kuryer birinchi marta upsertStatus
-      allow create: if true;
-      // Kuryer o'z holatini (GPS, isOnline) yangilaydi.
-      // Phone Auth to'liq bo'lgach: isOwner(id) || isAdmin()
-      allow update: if true;
-      allow delete: if false;
+      allow create: if request.resource.data.keys().hasAll(['isOnline', 'name', 'phone']);
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'isOnline', 'lat', 'lng', 'name', 'phone', 'fcmToken',
+            'updatedAt', 'lastSeen'
+          ]);
+      allow delete: if isAdmin();
     }
 
     // ══════════════════════════════════════
@@ -571,8 +1370,7 @@ service cloud.firestore {
     match /payout_requests/{id} {
       allow read: if true;
       allow create: if false;
-      // Web admin tasdiqlash (anonim Auth); to'liq ishonch uchun CF tavsiya etiladi.
-      allow update: if true;
+      allow update: if false;
       allow delete: if false;
     }
 
@@ -584,8 +1382,10 @@ service cloud.firestore {
     // Client-side admin'lar `regenerateTodayReport()` орqали қайта-ясaши учун.
     // Кейин Phone Auth + admin tekshiruvига ўрнатилaди.
     match /daily_reports/{dateKey} {
+      // Reports are generated by Cloud Functions and read by admin
       allow read: if true;
-      allow create, update: if true;
+      // Temporary: allow admin regeneration from client; lock down after Phone Auth
+      allow create, update: if request.resource.data.keys().hasAll(['date', 'generatedAt']);
       allow delete: if false;
     }
 

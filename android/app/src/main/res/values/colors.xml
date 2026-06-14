@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#ffffff</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- splash_full chet rangi — Android 12+ fon (drawable emas, faqat color). -->
+    <color name="splash_screen_bg">#F7FAF4</color>
 </resources>

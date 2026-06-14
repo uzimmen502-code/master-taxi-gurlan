@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../core/theme/app_theme.dart';
+
 /// Xaritada manzil tanlash ekrani.
 ///
 /// `Navigator.pop(context, String)` orqali tanlangan manzilni qaytaradi.
@@ -27,7 +29,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     _RecentPlace(name: 'Сергели-8', lat: 41.2911, lng: 69.2497),
   ];
 
-  GoogleMapController? _mapController;
   LatLng? _selectedLocation;
   String? _selectedAddress;
   bool _showRecentPlaces = false;
@@ -56,7 +57,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Colors.green,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           if (_selectedAddress != null)
@@ -74,7 +75,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         GoogleMap(
           initialCameraPosition:
               const CameraPosition(target: _initialCenter, zoom: 12),
-          onMapCreated: (controller) => _mapController = controller,
+          onMapCreated: (_) {},
           onTap: _onMapTap,
           onCameraMove: (_) => _hideRecentPlaces(),
           myLocationEnabled: true,
@@ -138,7 +139,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ],
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.history, size: 18, color: Colors.green),
+            const Icon(Icons.history, size: 18, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
               'Сўнгги ${_recentAddresses.length} та',
@@ -230,7 +231,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 style: TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.button,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),

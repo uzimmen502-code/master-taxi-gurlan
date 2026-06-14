@@ -1,14 +1,20 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart' show ChangeNotifier, kIsWeb;
+import 'package:flutter/foundation.dart' show ChangeNotifier, VoidCallback, debugPrint, kIsWeb;
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../../../core/utils/formatters.dart';
 import '../../../../models/active_trip.dart';
+import '../../../../services/location_service.dart';
+import '../../../../models/schedule.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/notification_service.dart';
+import '../../../../utils/gurlan_places.dart';
 
 /// Marshrut haydovchi panelining state mashinasi.
 ///
@@ -21,29 +27,37 @@ import '../../../../services/notification_service.dart';
 /// - App resume'da pending tekshiruvi
 class MarshrutDriverPanelController extends ChangeNotifier {
   MarshrutDriverPanelController({
-    required this.driverId,
+    required String driverId,
     required this.driverName,
     required this.driverPhone,
-    required this.carModel,
-    required this.plate,
-    required this.seats,
+    required String carModel,
+    required String plate,
+    required int seats,
     required List<String> initialStops,
     required MarshrutDriverRepository marshrutRepo,
     required SchedulesRepository schedulesRepo,
     required RidesRepository ridesRepo,
     NotificationService? notifications,
-  })  : _marshrut = marshrutRepo,
+  })  : driverId = canonicalPhoneId(driverId),
+        _marshrut = marshrutRepo,
         _schedules = schedulesRepo,
         _rides = ridesRepo,
         _notifications = notifications ?? NotificationService.instance,
-        _stops = List<String>.from(initialStops);
+        _stops = List<String>.from(initialStops),
+        _carModel = carModel,
+        _plate = plate,
+        _profileSeats = seats;
 
   final String driverId;
   final String driverName;
   final String driverPhone;
-  final String carModel;
-  final String plate;
-  final int seats;
+  String _carModel;
+  String _plate;
+  int _profileSeats;
+
+  String get carModel => _carModel;
+  String get plate => _plate;
+  int get seats => _profileSeats;
 
   final MarshrutDriverRepository _marshrut;
   final SchedulesRepository _schedules;
@@ -65,6 +79,16 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   String? _errorMessage;
   String? _info;
   String? _pendingDialogTripId;
+  bool _isDialogOpen = false;
+  VoidCallback? onStopRingtone;
+  VoidCallback? onEndStopApproaching;
+  void Function(String tripId)? onPassengerOrderCancelled;
+
+  LatLng? _endStopCoords;
+  bool _endStopDialogShown = false;
+  bool _endStopDialogActive = false;
+  double? _currentLat;
+  double? _currentLng;
 
   bool get isOnline => _isOnline;
   bool get hasScheduleToday => _hasScheduleToday;
@@ -81,6 +105,10 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get info => _info;
   String? get pendingDialogTripId => _pendingDialogTripId;
+  bool get isDialogOpen => _isDialogOpen;
+  set isDialogOpen(bool value) {
+    _isDialogOpen = value;
+  }
   bool get hasRequests => _requests.isNotEmpty;
   bool get hasAcceptedTrips => _acceptedTrips.isNotEmpty;
 
@@ -97,6 +125,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   StreamSubscription<int>? _queueSub;
   StreamSubscription<String?>? _pauseSub;
   StreamSubscription<List<ConnectivityResult>>? _connectSub;
+  StreamSubscription<Schedule?>? _scheduleSub;
   Timer? _heartbeatTimer;
   bool _disposed = false;
 
@@ -112,7 +141,43 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   Future<void> init() async {
     _notifications.setOnTapped(checkPendingTrips);
     if (!kIsWeb) await _notifications.setup();
+    await refreshProfileInfo();
     await checkTodaySchedule();
+    await _restoreOnlineState();
+  }
+
+  Future<void> _restoreOnlineState() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(driverId)
+          .get();
+      if (!snap.exists || _disposed) return;
+      final isOnline = snap.data()?['isOnline'] as bool? ?? false;
+      if (isOnline) {
+        _isOnline = true;
+        _listenTrips();
+        _listenQueue();
+        _listenAutoPause();
+        _listenConnectivity();
+        _startHeartbeat();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('restoreOnlineState error: $e');
+    }
+  }
+
+  Future<void> refreshProfileInfo() async {
+    try {
+      final profile = await _marshrut.getProfile(driverId);
+      if (_disposed || profile == null) return;
+      if (profile.carModel.trim().isNotEmpty) _carModel = profile.carModel.trim();
+      if (profile.plate.trim().isNotEmpty) _plate = profile.plate.trim();
+      if (profile.seats > 0) _profileSeats = profile.seats;
+      if (profile.stops.isNotEmpty) _stops = List<String>.from(profile.stops);
+      _safeNotify();
+    } catch (_) {}
   }
 
   @override
@@ -124,17 +189,35 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     _queueSub?.cancel();
     _pauseSub?.cancel();
     _connectSub?.cancel();
+    _scheduleSub?.cancel();
     _heartbeatTimer?.cancel();
-    if (_isOnline) {
-      // Best-effort offline'ni yutamiz — fire-and-forget
-      _marshrut.goOffline(driverId).catchError((_) {});
-    }
+    // Panel close ≠ go offline.
+    // goOffline() only via: toggle, forceLeave,
+    // app terminate (marshrutDriverAutoOffline CF)
     super.dispose();
   }
 
   void clearTransient() {
     _errorMessage = null;
     _info = null;
+    _safeNotify();
+  }
+
+  void clearError() => clearTransient();
+
+  /// Push / deep link: dialog uchun tripId (pending ro'yxatni yangilaydi).
+  Future<void> setPendingDialogTripId(String tripId) async {
+    if (tripId.isEmpty || _disposed) return;
+    _pendingDialogTripId = tripId;
+    try {
+      final list =
+          await _rides.getPendingForDriver(driverId, taxiType: 'marshrut');
+      if (!_disposed) {
+        _requests = list;
+      }
+    } catch (e) {
+      debugPrint('setPendingDialogTripId: $e');
+    }
     _safeNotify();
   }
 
@@ -148,6 +231,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
 
   Future<void> checkTodaySchedule() async {
     try {
+      await refreshProfileInfo();
       final s = await _schedules.getTodayActiveForDriver(
         driverId: driverId,
         date: _todayDateStr,
@@ -157,16 +241,21 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         _hasScheduleToday = true;
         _scheduleId = s.id;
         _seatsLeft = s.seatsLeft;
-        _seatsTotal = seats;
+        _seatsTotal = s.seats;
         _direction = s.direction;
         if (s.stops.isNotEmpty) _stops = List<String>.from(s.stops);
         _listenAutoPause();
+        _listenSchedule();
       } else {
         _hasScheduleToday = false;
+        _scheduleSub?.cancel();
+        _errorMessage = 'no_schedule_today';
       }
       _safeNotify();
-    } catch (_) {
-      // Tekshiruvda xato — bayroqlar o'z holatida qoladi
+    } catch (e) {
+      _errorMessage = 'schedule_load_failed';
+      debugPrint('checkTodaySchedule error: $e');
+      _safeNotify();
     }
   }
 
@@ -178,21 +267,27 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       double? lng;
       if (!kIsWeb) {
         try {
-          var perm = await Geolocator.checkPermission();
-          if (perm == LocationPermission.denied) {
-            perm = await Geolocator.requestPermission();
-          }
-          if (perm != LocationPermission.denied &&
-              perm != LocationPermission.deniedForever) {
-            final pos = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.high,
-              timeLimit: const Duration(seconds: 8),
-            );
-            lat = pos.latitude;
-            lng = pos.longitude;
-          }
+          final coords = await const LocationService().getCurrentCoords(
+            mediumTimeout: const Duration(seconds: 4),
+            highTimeout: const Duration(seconds: 6),
+          );
+          lat = coords.lat;
+          lng = coords.lng;
+          _currentLat = lat;
+          _currentLng = lng;
+        } on LocationException catch (e) {
+          _errorMessage = switch (e.kind) {
+            LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
+            LocationErrorKind.serviceDisabled => 'gps_service_disabled_msg',
+            LocationErrorKind.timeout => 'gps_timeout_msg',
+            LocationErrorKind.lookupFailed => 'gps_lookup_failed_msg',
+          };
+          _safeNotify();
+          return;
         } catch (_) {
-          // GPS xatosida ham onlайн bo'lishni davom ettiramiz
+          _errorMessage = 'gps_unavailable';
+          _safeNotify();
+          return;
         }
       }
 
@@ -204,7 +299,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       );
       if (_disposed) return;
       _isOnline = true;
-      _info = '🟢 Онлайн';
+      _info = 'online';
       _safeNotify();
 
       _listenTrips();
@@ -212,15 +307,62 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _listenAutoPause();
       _startHeartbeat();
       _listenConnectivity();
+      await _loadEndStopCoords();
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
     }
   }
 
-  Future<void> goOffline() async {
-    if (_acceptedTrips.isNotEmpty) {
-      _errorMessage = '❗ Аввал қабул қилинган сафарни якунланг';
+  void markEndStopDialogClosed() {
+    _endStopDialogActive = false;
+  }
+
+  Future<void> _loadEndStopCoords() async {
+    if (_stops.length < 2) return;
+    final from = _stops.first;
+    final to = _stops.last;
+    final targetFrom = _direction == 'forward' ? from : to;
+    final targetTo = _direction == 'forward' ? to : from;
+
+    var coords = await _marshrut.getRouteCoordinates(targetFrom, targetTo);
+    var reversed = false;
+    if (coords == null) {
+      coords = await _marshrut.getRouteCoordinates(targetTo, targetFrom);
+      reversed = true;
+    }
+    if (coords == null || _disposed) return;
+
+    final num endLat;
+    final num endLng;
+    if (reversed) {
+      endLat = _direction == 'forward' ? coords['startLat']! : coords['endLat']!;
+      endLng = _direction == 'forward' ? coords['startLng']! : coords['endLng']!;
+    } else {
+      endLat = _direction == 'forward' ? coords['endLat']! : coords['startLat']!;
+      endLng = _direction == 'forward' ? coords['endLng']! : coords['startLng']!;
+    }
+    _endStopCoords = LatLng(endLat.toDouble(), endLng.toDouble());
+  }
+
+  Future<void> _finishAllAcceptedTrips() async {
+    final trips = List<ActiveTrip>.from(_acceptedTrips);
+    for (final trip in trips) {
+      if (trip.id.isEmpty) continue;
+      try {
+        await _rides.completeMarshrutRide(tripId: trip.id, driverId: driverId);
+      } catch (e) {
+        debugPrint('marshrut complete ${trip.id}: $e');
+      }
+    }
+    if (_disposed) return;
+    _acceptedTrips = const [];
+    _safeNotify();
+  }
+
+  Future<void> goOffline({bool force = false}) async {
+    if (!force && _acceptedTrips.isNotEmpty) {
+      _errorMessage = 'finish_accepted_trip_first';
       _safeNotify();
       return;
     }
@@ -242,6 +384,11 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     _isOnline = false;
     _requests = const [];
     _acceptedTrips = const [];
+    _endStopDialogShown = false;
+    _endStopDialogActive = false;
+    _endStopCoords = null;
+    _currentLat = null;
+    _currentLng = null;
     _safeNotify();
   }
 
@@ -252,18 +399,25 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         .listen((list) {
       if (_disposed) return;
       _requests = list;
-      if (list.isNotEmpty) {
+      if (_pendingDialogTripId != null &&
+          !_requests.any((r) => r.id == _pendingDialogTripId)) {
+        final removedId = _pendingDialogTripId!;
+        _pendingDialogTripId = null;
+        onStopRingtone?.call();
+        unawaited(_notifyPassengerCancelIfNeeded(removedId));
+        notifyListeners();
+      }
+      if (list.isNotEmpty &&
+          _pendingDialogTripId == null &&
+          !_isDialogOpen) {
         final first = list.first;
-        if (_pendingDialogTripId != first.id) {
-          _pendingDialogTripId = first.id;
-          // Bildirishnoma — UI ko'rsatadi yoki forecstda foyda beradi
-          if (!kIsWeb) {
-            _notifications.showIncomingMarshrutRide(
-              pickupMfy: first.pickupMfy,
-              dropoffMfy: first.dropoffMfy,
-            );
-          }
-        }
+        _pendingDialogTripId = first.id;
+        unawaited(
+          _notifications.showIncomingMarshrutRide(
+            pickupMfy: first.pickupMfy,
+            dropoffMfy: first.dropoffMfy,
+          ),
+        );
       }
       _safeNotify();
     });
@@ -273,9 +427,25 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         .watchAcceptedForDriver(driverId, taxiType: 'marshrut')
         .listen((list) {
       if (_disposed) return;
+      final removedIds = _acceptedTrips
+          .where((t) => !list.any((n) => n.id == t.id))
+          .map((t) => t.id);
       _acceptedTrips = list;
+      for (final id in removedIds) {
+        unawaited(_notifyPassengerCancelIfNeeded(id));
+      }
       _safeNotify();
     });
+  }
+
+  Future<void> _notifyPassengerCancelIfNeeded(String tripId) async {
+    if (tripId.isEmpty) return;
+    try {
+      final trip = await _rides.getTrip(tripId);
+      if (trip != null && trip.isPassengerCancelled) {
+        onPassengerOrderCancelled?.call(tripId);
+      }
+    } catch (_) {}
   }
 
   void _listenQueue() {
@@ -295,7 +465,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _autoPausedReason = reason;
       if (reason != null) {
         _queuePosition = 0;
-        _info = '⏸ Навбатдан вақтинча чиқарилдингиз';
+        _info = 'queue_paused_temporarily';
       }
       _safeNotify();
     });
@@ -306,10 +476,10 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       await _marshrut.reactivateAutoPaused(driverId);
       if (_disposed) return;
       _autoPausedReason = null;
-      _info = '✅ Навбатга қайтдингиз';
+      _info = 'queue_rejoined';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
     }
   }
@@ -319,8 +489,57 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (!_isOnline || _disposed) return;
       try {
-        await _marshrut.heartbeat(driverId);
+        double? lat;
+        double? lng;
+        if (!kIsWeb) {
+          try {
+            final pos = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.medium,
+              timeLimit: const Duration(seconds: 6),
+            );
+            lat = pos.latitude;
+            lng = pos.longitude;
+            _currentLat = lat;
+            _currentLng = lng;
+          } catch (_) {}
+        }
+        await _marshrut.heartbeat(driverId, lat: lat, lng: lng);
+
+        if (_endStopCoords == null) {
+          await _loadEndStopCoords();
+        }
+        if (_endStopCoords != null &&
+            !_endStopDialogShown &&
+            !_endStopDialogActive &&
+            _currentLat != null &&
+            _currentLng != null) {
+          final dist = LocationService.distanceKm(
+            _currentLat!,
+            _currentLng!,
+            _endStopCoords!.latitude,
+            _endStopCoords!.longitude,
+          );
+          if (dist <= 1.0) {
+            _endStopDialogShown = true;
+            _endStopDialogActive = true;
+            onEndStopApproaching?.call();
+          }
+        }
       } catch (_) {}
+    });
+  }
+
+  void _listenSchedule() {
+    _scheduleSub?.cancel();
+    final id = _scheduleId;
+    if (id == null || id.isEmpty) return;
+    _scheduleSub = _schedules.watchById(id).listen((sched) {
+      if (_disposed || sched == null) return;
+      _seatsLeft = sched.seatsLeft;
+      _seatsTotal = sched.seats;
+      _direction = sched.direction;
+      if (sched.stops.isNotEmpty) _stops = List<String>.from(sched.stops);
+      _safeNotify();
     });
   }
 
@@ -330,30 +549,89 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       final offline = results.every((r) => r == ConnectivityResult.none);
       if (offline && _isOnline) {
         if (_disposed) return;
+        try {
+          await _marshrut.goOffline(driverId);
+        } catch (_) {}
+        await _tripsSub?.cancel();
+        await _acceptedTripsSub?.cancel();
+        await _queueSub?.cancel();
+        _tripsSub = null;
+        _acceptedTripsSub = null;
+        _queueSub = null;
+        _heartbeatTimer?.cancel();
         _isOnline = false;
-        _info = '📵 Интернет узилди';
+        _requests = const [];
+        _info = 'internet_disconnected_offline';
         _safeNotify();
       } else if (!offline && !_isOnline && _hasScheduleToday) {
-        await goOnline();
-        _info = '🟢 Уланиш тикланди';
-        _safeNotify();
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission != LocationPermission.denied &&
+            permission != LocationPermission.deniedForever) {
+          await goOnline();
+          _info = 'connection_restored';
+          _safeNotify();
+        }
       }
     });
   }
 
   // ─── Direction switch ──────────────────────────────────────────────
 
-  Future<void> finishTrip() async {
+  Future<void> switchDirection() async {
     if (_requests.isNotEmpty) {
-      _errorMessage = '❗ Аввал буюртмаларни ҳал қилинг';
+      _errorMessage = 'resolve_orders_first';
       _safeNotify();
       return;
     }
     if (_acceptedTrips.isNotEmpty) {
-      _errorMessage = '❗ Аввал қабул қилинган сафарни якунланг';
+      _errorMessage = 'finish_accepted_trip_first';
       _safeNotify();
       return;
     }
+    await _applyDirectionSwitch();
+  }
+
+  /// Охирги бекатга яқинлашганда: accepted рўйхатни якунлаб тозалайди, йўналиш алмашади.
+  /// Ҳайдовчи onlayn qoladi va yangi buyurtmalarni qabul qila oladi.
+  Future<void> forceEndAndSwitch() async {
+    if (_requests.isNotEmpty) {
+      _errorMessage = 'resolve_orders_first';
+      _safeNotify();
+      return;
+    }
+    _errorMessage = null;
+    try {
+      await _finishAllAcceptedTrips();
+      if (_disposed) return;
+      await _applyDirectionSwitch();
+    } catch (e) {
+      _errorMessage = 'error_generic|$e';
+      _safeNotify();
+    }
+  }
+
+  /// «Йўқ» — accepted tripni yakunlab, oflayn.
+  Future<void> forceEndAndGoOffline() async {
+    if (_requests.isNotEmpty) {
+      _errorMessage = 'resolve_orders_first';
+      _safeNotify();
+      return;
+    }
+    _errorMessage = null;
+    try {
+      await _finishAllAcceptedTrips();
+      if (_disposed) return;
+      await goOffline(force: true);
+    } catch (e) {
+      _errorMessage = 'error_generic|$e';
+      _safeNotify();
+    }
+  }
+
+  Future<void> _applyDirectionSwitch() async {
     try {
       final newDir = _direction == 'forward' ? 'backward' : 'forward';
       await _marshrut.switchDirection(
@@ -365,10 +643,14 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       if (_disposed) return;
       _direction = newDir;
       _seatsLeft = _seatsTotal;
-      _info = '✅ Йўналиш ўзгарди';
+      _endStopDialogShown = false;
+      _endStopDialogActive = false;
+      _endStopCoords = null;
+      await _loadEndStopCoords();
+      _info = 'direction_switched';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
     }
   }
@@ -382,14 +664,13 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     if (ride == null) return false;
 
     if (!_isValidRoute(ride.pickupMfy, ride.dropoffMfy)) {
-      _errorMessage = '❌ Нотўғри маршрут';
+      _errorMessage = 'invalid_route';
       _safeNotify();
-      await rejectRide(tripId);
       return false;
     }
 
     try {
-      final ok = await _rides.acceptMarshrutRide(
+      final outcome = await _rides.acceptMarshrutRide(
         tripId: tripId,
         scheduleId: _scheduleId,
         driverId: driverId,
@@ -399,18 +680,23 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         driverPlate: plate,
       );
       if (_disposed) return false;
-      if (!ok) {
-        _errorMessage = '🚫 Бўш жой йўқ ёки буюртма яроқсиз';
+      if (!outcome.ok) {
+        if (outcome.code == 'expired') {
+          _errorMessage = 'request_expired';
+        } else if (outcome.code == 'no_seats') {
+          _errorMessage = 'no_seats_available';
+        } else {
+          _errorMessage = 'order_invalid_or_busy';
+        }
         _safeNotify();
         return false;
       }
-      _seatsLeft = (_seatsLeft - 1).clamp(0, _seatsTotal);
       _requests = _requests.where((r) => r.id != tripId).toList();
-      _info = '✅ Қабул қилинди';
+      _info = 'ride_accepted';
       _safeNotify();
       return true;
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
       return false;
     }
@@ -419,7 +705,32 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   Future<void> rejectRide(String tripId) async {
     try {
       await _rides.rejectRide(tripId: tripId, driverId: driverId);
-    } catch (_) {}
+    } on FirebaseException catch (e) {
+      _errorMessage = 'reject_failed';
+      debugPrint('rejectRide error: ${e.code} ${e.message}');
+      _safeNotify();
+    } catch (e) {
+      _errorMessage = 'reject_failed';
+      debugPrint('rejectRide unexpected: $e');
+      _safeNotify();
+    }
+  }
+
+  Future<void> cancelAcceptedNoRoom(String tripId) async {
+    try {
+      await _rides.cancelMarshrutAcceptedByDriver(
+        tripId: tripId,
+        driverId: driverId,
+        noRoom: true,
+      );
+      if (_disposed) return;
+      _acceptedTrips = _acceptedTrips.where((r) => r.id != tripId).toList();
+      _info = 'booking_cancelled_reassign';
+      _safeNotify();
+    } catch (e) {
+      _errorMessage = 'error_generic|$e';
+      _safeNotify();
+    }
   }
 
   Future<void> completeRide(String tripId) async {
@@ -430,19 +741,24 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       );
       if (_disposed) return;
       _acceptedTrips = _acceptedTrips.where((r) => r.id != tripId).toList();
-      _info = '✅ Сафар якунланди';
+      _info = 'trip_completed';
       _safeNotify();
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
     }
   }
 
-  bool _isValidRoute(String from, String to) {
-    final fromIdx = _stops.indexOf(from);
-    final toIdx = _stops.indexOf(to);
-    if (fromIdx == -1 || toIdx == -1) return false;
-    return _direction == 'forward' ? fromIdx < toIdx : fromIdx > toIdx;
+  bool _isValidRoute(String pickup, String dropoff) {
+    final norm = GurlanPlaces.normalizeMfyName;
+    final all = _stops.map(norm).toList();
+    final iFrom = all.indexOf(norm(pickup));
+    final iTo = all.indexOf(norm(dropoff));
+    if (_direction == 'forward') {
+      return iFrom >= 0 && iTo >= 0 && iFrom < iTo;
+    } else {
+      return iFrom >= 0 && iTo >= 0 && iFrom > iTo;
+    }
   }
 
   // ─── App lifecycle (screen forwards) ───────────────────────────────
@@ -453,10 +769,9 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       final list =
           await _rides.getPendingForDriver(driverId, taxiType: 'marshrut');
       if (_disposed || list.isEmpty) return;
-      final first = list.first;
-      if (_pendingDialogTripId != first.id) {
+      if (_pendingDialogTripId == null && !_isDialogOpen) {
         _requests = list;
-        _pendingDialogTripId = first.id;
+        _pendingDialogTripId = list.first.id;
         _safeNotify();
       }
     } catch (_) {}

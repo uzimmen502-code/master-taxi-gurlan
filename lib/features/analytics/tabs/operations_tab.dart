@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
@@ -69,7 +70,7 @@ class _OperationsTabState extends State<OperationsTab>
                 'Eng band: ${o.peakHour.toString().padLeft(2, '0')}:00',
             child: HourlyBarChart(
                 series: o.ordersHourlyHeatmap,
-                color: const Color(0xFFE65100)),
+                color: AppColors.primary),
           ),
           const SizedBox(height: 12),
           SectionCard(
@@ -77,7 +78,7 @@ class _OperationsTabState extends State<OperationsTab>
             icon: '🕐',
             child: HourlyBarChart(
                 series: o.tripsHourlyHeatmap,
-                color: const Color(0xFF1565C0)),
+                color: AppColors.primary),
           ),
           const SizedBox(height: 12),
           SectionCard(
@@ -86,12 +87,12 @@ class _OperationsTabState extends State<OperationsTab>
             child: Column(children: [
               TrendChart(
                   series: o.ordersDailyTrend,
-                  color: const Color(0xFFE65100),
+                  color: AppColors.primary,
                   height: 140),
               const SizedBox(height: 8),
               TrendChart(
                   series: o.tripsDailyTrend,
-                  color: const Color(0xFF1565C0),
+                  color: AppColors.primary,
                   height: 140),
             ]),
           ),
@@ -157,7 +158,7 @@ class _OperationsTabState extends State<OperationsTab>
                   icon: '🏆',
                   child: TopList(
                     items: o.topOrderProducts,
-                    color: const Color(0xFFE65100),
+                    color: AppColors.primary,
                     maxItems: 5,
                   ),
                 ),
@@ -169,7 +170,7 @@ class _OperationsTabState extends State<OperationsTab>
                   icon: '🛣',
                   child: TopList(
                     items: o.topTripRoutes,
-                    color: const Color(0xFF1565C0),
+                    color: AppColors.primary,
                     maxItems: 5,
                   ),
                 ),
@@ -215,7 +216,7 @@ class _OperationsTabState extends State<OperationsTab>
       icon: '⚙️',
       child: KpiGrid(
         aspectRatio: 1.45,
-        accent: const Color(0xFFE65100),
+        accent: AppColors.primary,
         kpis: [
           KpiValue(
               label: 'Бугунги буюртмалар',
@@ -256,21 +257,21 @@ class _OperationsTabState extends State<OperationsTab>
           decoration: BoxDecoration(
             color: const Color(0xFFFFF3E0),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE65100).withOpacity(0.3)),
+            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
           ),
           child: Row(children: [
             const Icon(Icons.notifications_active,
-                color: Color(0xFFE65100), size: 22),
+                color: AppColors.primary, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text('$n та ҳайдовчи аризаси кутмоқда',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFE65100))),
+                      color: AppColors.primary)),
             ),
             // Аризаларни кўриш — pending_drivers экранига
             // (улар Cloud Functions/Repository орқали ҳал қилинади).
-            const Icon(Icons.chevron_right, color: Color(0xFFE65100)),
+            const Icon(Icons.chevron_right, color: AppColors.primary),
           ]),
         );
       },

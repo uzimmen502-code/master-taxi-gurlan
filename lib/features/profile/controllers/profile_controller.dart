@@ -1,22 +1,29 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../../../models/order_model.dart';
 import '../../../models/trip_model.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/driver_repository.dart';
+import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../repositories/trips_repository.dart';
+import '../../../repositories/couriers_repository.dart';
+import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
-import '../../../services/device_identity_service.dart';
+import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
 import '../../../services/location_service.dart';
+import '../../../services/user_role_sync.dart';
 
 /// ProfileScreen uchun butun holatni boshqaradigan ChangeNotifier.
 ///
@@ -29,18 +36,22 @@ class ProfileController extends ChangeNotifier {
     required OrdersRepository ordersRepo,
     required UserRepository userRepo,
     required LocationService locationService,
+    MarshrutDriverRepository? marshrutDriverRepo,
   })  : _driverRepo = driverRepo,
+        _marshrutDriverRepo = marshrutDriverRepo ?? MarshrutDriverRepository(),
         _tripsRepo = tripsRepo,
         _ordersRepo = ordersRepo,
         _userRepo = userRepo,
         _locationService = locationService;
 
   final DriverRepository _driverRepo;
+  final MarshrutDriverRepository _marshrutDriverRepo;
   final TripsRepository _tripsRepo;
   final OrdersRepository _ordersRepo;
   final UserRepository _userRepo;
   final LocationService _locationService;
-  final DeviceIdentityService _deviceIdentity = DeviceIdentityService();
+  final _fingerprintService = DeviceFingerprintService();
+  final _bindingRepo = DeviceBindingRepository();
 
   final ImagePicker _picker = ImagePicker();
 
@@ -60,10 +71,21 @@ class ProfileController extends ChangeNotifier {
   String? imagePath;
 
   // Mashina ma'lumotlari
-  String carModel = '';
-  String carColor = '';
-  String carPlate = '';
+  String _carModel = '';
+  String _carColor = '';
+  String _carPlate = '';
+  int _carSeats = 0;
   String taxiType = 'alone';
+
+  String get carModel => _carModel;
+  String get carColor => _carColor;
+  String get carPlate => _carPlate;
+  int get carSeats => _carSeats;
+  bool get hasCarInfo =>
+      _carModel.isNotEmpty &&
+      _carColor.isNotEmpty &&
+      _carPlate.isNotEmpty &&
+      _carSeats > 0;
 
   // Haydovchi statistikasi
   double driverRating = 0.0;
@@ -84,6 +106,11 @@ class ProfileController extends ChangeNotifier {
   String? errorMessage;
   String? successMessage;
 
+  SharedPreferences? _prefs;
+  bool _driverOnline = false;
+
+  bool get isDriverOnline => _prefs?.getBool('driver_is_online') ?? _driverOnline;
+
   String _oldRole = '';
   bool get roleChangedAfterSave => role != _oldRole;
 
@@ -101,23 +128,43 @@ class ProfileController extends ChangeNotifier {
   // ─── Yuklash ────────────────────────────────────────────────────────
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
+    _prefs = prefs;
+    _driverOnline = prefs.getBool('driver_is_online') ?? false;
+    role = await UserRoleSync().syncToPreferences();
     name = prefs.getString('user_name') ?? '';
     phone = prefs.getString('user_phone') ?? '';
     gender = prefs.getString('user_gender') ?? 'male';
-    role = prefs.getString('user_role') ?? 'user';
     birthDate = prefs.getString('user_birth_date') ?? '';
     address = prefs.getString('user_address') ?? '';
     imagePath = prefs.getString('profile_image');
-    carModel = prefs.getString('car_model') ?? '';
-    carColor = prefs.getString('car_color') ?? '';
-    carPlate = prefs.getString('car_plate') ?? '';
     taxiType = prefs.getString('taxi_type') ?? 'alone';
+
+    final carFromFirestore =
+        await _userRepo.getCarInfo(phoneDigits(phone));
+    if (carFromFirestore != null) {
+      _carModel = carFromFirestore['carModel'] ?? '';
+      _carColor = carFromFirestore['carColor'] ?? '';
+      _carPlate = carFromFirestore['carPlate'] ?? '';
+      _carSeats =
+          int.tryParse(carFromFirestore['carSeats'] ?? '') ??
+              prefs.getInt('car_seats') ??
+              0;
+    } else {
+      _carModel = prefs.getString('car_model') ?? '';
+      _carColor = prefs.getString('car_color') ?? '';
+      _carPlate = prefs.getString('car_plate') ?? '';
+      _carSeats = prefs.getInt('car_seats') ?? 0;
+    }
     notifyListeners();
 
     // Структуралaнган манзилни Firestore'дан ўқиш (паралел).
     final tasks = <Future<void>>[_loadStructuredAddress()];
     if (role == 'driver' && phone.isNotEmpty) {
-      tasks.addAll([_loadDriverStats(), _loadDriverTrips()]);
+      tasks.addAll([
+        _loadDriverStats(),
+        _loadDriverTrips(),
+        _syncDriverOnlineFromFirestore(),
+      ]);
     } else {
       tasks.addAll([_loadOrders(), _loadUserTrips()]);
     }
@@ -133,7 +180,7 @@ class ProfileController extends ChangeNotifier {
   ///
   /// Internet йўқ ёки ҳужжат йўқ бўлса — silent fail.
   Future<void> _loadStructuredAddress() async {
-    final uid = phoneDigits(phone);
+    final uid = canonicalPhoneId(phone);
     if (uid.length < 9) return;
     try {
       final user = await _userRepo.getById(uid);
@@ -144,11 +191,14 @@ class ProfileController extends ChangeNotifier {
       if (address.isEmpty && user.addressLegacy.isNotEmpty) {
         address = user.addressLegacy;
       }
-      // Role'ни Firestore'дан синxронlaш (agar фарqли бўлса).
-      if (user.role.isNotEmpty && user.role != role) {
-        role = user.role;
+      final resolved = UserRoleSync.reconcile(
+        localRole: role,
+        firestoreRole: user.role,
+      );
+      if (resolved != role) {
+        role = resolved;
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_role', user.role);
+        await prefs.setString('user_role', resolved);
       }
       if (user.birthDate.isNotEmpty && user.birthDate != birthDate) {
         birthDate = user.birthDate;
@@ -162,7 +212,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> _loadDriverStats() async {
-    final uid = phoneDigits(phone);
+    final uid = canonicalPhoneId(phone);
     final stats = await _driverRepo.getStats(uid);
     if (stats != null) {
       driverRating = stats.rating;
@@ -173,7 +223,7 @@ class ProfileController extends ChangeNotifier {
 
   Future<void> _loadDriverTrips() async {
     try {
-      final uid = phoneDigits(phone);
+      final uid = canonicalPhoneId(phone);
       final list = await _tripsRepo.completedByDriver(uid);
       trips = list;
       driverEarnings = list.fold<int>(0, (sum, t) => sum + t.fare);
@@ -254,6 +304,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   void setRole(String v) {
+    if (UserRoleSync.isPrivileged(v)) return;
     role = v;
     notifyListeners();
   }
@@ -263,19 +314,104 @@ class ProfileController extends ChangeNotifier {
   ///
   /// Firestore сaқлaш муҳим: `AdminService.isCurrentUserAdmin()` server-side
   /// rolени тeкширaди — фaқaт локaл сaқлaнсa, Админ панелгa киришни рaд этaди.
+  Future<void> _syncDriverOnlineFromFirestore() async {
+    final uid = canonicalPhoneId(phone);
+    if (uid.length < 9) return;
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('drivers').doc(uid).get();
+      final online = snap.data()?['isOnline'] == true;
+      _driverOnline = online;
+      await _prefs?.setBool('driver_is_online', online);
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Смена тугатиш — роль `driver` қолади, офлайн (Concept B).
+  Future<void> endShift() async {
+    final uid = canonicalPhoneId(phone);
+    if (uid.length < 9) {
+      errorMessage = 'shift_end_error';
+      notifyListeners();
+      return;
+    }
+    try {
+      await _marshrutDriverRepo.goOffline(uid);
+      await _driverRepo.goOffline(uid);
+      _driverOnline = false;
+      await _prefs?.setBool('driver_is_online', false);
+      notifyListeners();
+    } catch (e) {
+      errorMessage = 'shift_end_error';
+      notifyListeners();
+    }
+  }
+
+  Future<bool> saveCarInfo({
+    required String model,
+    required String color,
+    required String plate,
+    required int seats,
+  }) async {
+    try {
+      await _userRepo.saveCarInfo(
+        uid: phoneDigits(phone),
+        carModel: model,
+        carColor: color,
+        carPlate: plate,
+        carSeats: seats,
+      );
+      _carModel = model;
+      _carColor = color;
+      _carPlate = plate;
+      _carSeats = seats;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      errorMessage = 'error_generic';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> clearCarInfo() async {
+    try {
+      final uid = canonicalPhoneId(phoneDigits(phone));
+      await _userRepo.clearCarInfo(uid);
+      _carModel = '';
+      _carColor = '';
+      _carPlate = '';
+      _carSeats = 0;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('car_model');
+      await prefs.remove('car_color');
+      await prefs.remove('car_plate');
+      await prefs.remove('car_seats');
+      notifyListeners();
+    } catch (e) {
+      errorMessage = 'error_generic';
+      notifyListeners();
+    }
+  }
+
   Future<void> quickSaveRole(String v) async {
+    if (!isClientAssignableRole(v)) {
+      errorMessage =
+          'Админ ролини фақат админ панел орқали бериш мумкин.';
+      notifyListeners();
+      return;
+    }
     role = v;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_role', v);
 
-    // Firestore'гa ёзиш — `AdminService` ва бошқa role-aware экранлaр учун.
-    final uid = phoneDigits(phone);
+    final uid = canonicalPhoneId(phone);
     if (uid.length >= 9) {
       try {
         await _userRepo.updateProfile(uid: uid, role: v);
       } catch (_) {
-        // Internet yo'q — keyingi load()да синxронлaнaди.
+        // Internet yo'q — keyingi load()да синxронlанadi.
       }
     }
 
@@ -285,34 +421,6 @@ class ProfileController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Admin PIN — Cloud Function orqali Firestore'da `role: admin` (client rules ruxsat bermaydi).
-  Future<String?> promoteToAdminWithPin(String pin) async {
-    final uid = phoneDigits(phone);
-    if (uid.length < 9) {
-      return 'Аввал телефон рақамингизни профилда сақланг.';
-    }
-    try {
-      final fn =
-          FirebaseFunctions.instance.httpsCallable('promoteToAdminWithPin');
-      await fn.call(<String, dynamic>{
-        'phone': phone,
-        'pin': pin.trim(),
-      });
-      await quickSaveRole('admin');
-      return null;
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'not-found' || e.code == 'unimplemented') {
-        return 'Server funksiyasi deploy qilinmagan. '
-            'Firebase Console → users/$uid → role = admin qo\'ying '
-            'yoki: firebase deploy --only functions:promoteToAdminWithPin';
-      }
-      return e.message ?? 'Admin rol berilmadi (${e.code})';
-    } catch (e) {
-      return 'Xatolik: $e';
-    }
-  }
-
-  /// Forma maydonlaridan kelgan yangi qiymatlar bilan saqlash.
   Future<bool> save({
     required String newName,
     required String newPhone,
@@ -342,24 +450,13 @@ class ProfileController extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-      try {
-        final device = await _deviceIdentity.getSnapshot();
-        await _userRepo.requestPhoneChange(
-          deviceId: device.deviceId,
-          currentUserId: currentUid,
-          currentPhone: currentPhone,
-          requestedPhone: requestedPhone,
-          signalKey: device.signalKey,
-          signals: device.signals,
-        );
-        successMessage =
-            'Телефон рақамини ўзгартириш сўрови админга юборилди';
-      } catch (e) {
+      await _changePhone(requestedPhone);
+      if (errorMessage != null) {
         isSaving = false;
-        errorMessage = 'Телефон ўзгартириш сўрови юборилмади: $e';
         notifyListeners();
         return false;
       }
+      successMessage = 'Телефон рақами янгиланди';
     }
 
     await prefs.setString('user_name', newName.trim());
@@ -367,7 +464,12 @@ class ProfileController extends ChangeNotifier {
       await prefs.setString('user_phone', requestedPhone);
     }
     await prefs.setString('user_gender', gender);
-    await prefs.setString('user_role', role);
+    final roleToSave =
+        isClientAssignableRole(role) ? role : 'user';
+    if (roleToSave != role) {
+      role = roleToSave;
+    }
+    await prefs.setString('user_role', roleToSave);
     await prefs.setString('user_address', newAddress.trim());
 
     name = newName.trim();
@@ -418,7 +520,7 @@ class ProfileController extends ChangeNotifier {
       return false;
     }
 
-    final uid = phoneDigits(phone);
+    final uid = canonicalPhoneId(phone);
     if (uid.length < 9) {
       errorMessage = 'Аввал телефон рақамингизни профилда сақланг';
       notifyListeners();
@@ -469,9 +571,7 @@ class ProfileController extends ChangeNotifier {
       address = addr;
       return addr;
     } on LocationException catch (e) {
-      errorMessage = e.kind == LocationErrorKind.permissionDenied
-          ? 'GPS рухсати берилмади'
-          : 'GPS аниқланмади';
+      errorMessage = LocationException.userMessage(e.kind);
       return null;
     } finally {
       isGpsLoading = false;
@@ -502,6 +602,41 @@ class ProfileController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _changePhone(String newPhone) async {
+    try {
+      final snapshot = await _fingerprintService.collect();
+      final fingerprintHash = snapshot.hash;
+      if (!DeviceBindingRepository.isValidFingerprintHash(fingerprintHash)) {
+        _showError('Қурилма идентификатори хато');
+        return;
+      }
+      final currentBinding =
+          await _bindingRepo.getBinding(fingerprintHash);
+      if (currentBinding == null) {
+        _showError('Қурилма топилмади');
+        return;
+      }
+      await FirebaseFunctions.instance
+          .httpsCallable('changeDevicePhone')
+          .call({
+        'deviceFingerprintHash': fingerprintHash,
+        'newPhone': phoneDigits(newPhone),
+      });
+      await load();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_phone', canonicalPhoneId(newPhone));
+      phone = canonicalPhoneId(newPhone);
+      notifyListeners();
+    } catch (e) {
+      _showError('Хатолик: $e');
+    }
+  }
+
+  void _showError(String message) {
+    errorMessage = message;
+    notifyListeners();
+  }
+
   // ─── Snackbar xabarlarini "iste'mol" qilish ───────────────────────
   String? consumeError() {
     final m = errorMessage;
@@ -517,7 +652,17 @@ class ProfileController extends ChangeNotifier {
 
   // ─── Chiqib ketish ─────────────────────────────────────────────────
   Future<void> logout() async {
+    IntercityDriverResume.resetSession();
     final prefs = await SharedPreferences.getInstance();
+    final role = prefs.getString('role') ?? '';
+    final userId = prefs.getString('userId') ?? '';
+    if (role == 'courier' && userId.isNotEmpty) {
+      try {
+        await CouriersRepository().goOffline(userId);
+      } catch (_) {}
+    }
+    await FirebaseAuth.instance.signOut();
+    await prefs.remove('phone_reverified');
     await prefs.clear();
   }
 }

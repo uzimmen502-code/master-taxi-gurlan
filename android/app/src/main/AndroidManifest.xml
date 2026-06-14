@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="Master Taxi Gurlan"
@@ -20,7 +21,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDVUJcqRLQdKJJXjgMwGzKipPudwKFWMfE"/>
+            android:value="AIzaSyDbPdY7bqWbRuTrGc42Wif6LVbghl4IfZE"/>
 
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
@@ -43,6 +44,11 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
+
+            <!-- To'liq ekran poster — birinchi Flutter frame gacha (Android 12+). -->
+            <meta-data
+                android:name="io.flutter.embedding.android.SplashScreenDrawable"
+                android:resource="@drawable/launch_background"/>
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -71,7 +77,7 @@
          кўриш ва deep link билан очиш учун рухсат. -->
     <queries>
         <!-- Debug / current applicationId -->
-        <package android:name="com.example.master_taxi_driver"/>
+        <package android:name="com.example.master_taxi_gurlan_driver"/>
         <!-- Production applicationId (forward-compat — миграциядан сўнг ишлайди) -->
         <package android:name="uz.master_taxi.driver"/>
         <intent>

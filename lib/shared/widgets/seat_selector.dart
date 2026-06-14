@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 /// 1..maxSeats оралиқдаги рақамларни танлаш widget'и. Driver flow'ларидa
 /// (register, schedule) қайта ишлатилади.
@@ -8,7 +9,7 @@ class SeatSelector extends StatelessWidget {
     required this.value,
     required this.maxSeats,
     required this.onChanged,
-    this.color = const Color(0xFF00695C),
+    this.color = AppColors.primaryDark,
   });
 
   final int value;

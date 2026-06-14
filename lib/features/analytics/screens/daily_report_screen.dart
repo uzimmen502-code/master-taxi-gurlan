@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../models/analytics/daily_report.dart';
 import '../controllers/analytics_controller.dart';
 import '../widgets/metric_row.dart';
@@ -32,7 +33,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('📊 Кундалик ҳисобот'),
-        backgroundColor: const Color(0xFF1B5E20),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -112,7 +113,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 color: const Color(0xFFFFF3E0),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: const Color(0xFFE65100).withOpacity(0.3)),
+                    color: AppColors.primary.withOpacity(0.3)),
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +123,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             child: Text(n,
                                 style: const TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFFE65100),
+                                    color: AppColors.primary,
                                     fontWeight: FontWeight.w600)),
                           ))
                       .toList()),
@@ -178,7 +179,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 icon: '💵',
                 label: 'Бугунги тушум',
                 value: '${_money.format(r.todayRevenue)} сўм',
-                valueColor: const Color(0xFF2E7D32)),
+                valueColor: AppColors.primary),
             MetricRow(
                 label: 'Ҳафталик тушум',
                 value: '${_money.format(r.weekRevenue)} сўм'),
@@ -202,7 +203,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 value:
                     '${r.pendingPayouts} та · ${_money.format(r.pendingPayoutsAmount)} сўм',
                 valueColor: r.pendingPayouts > 0
-                    ? const Color(0xFFE65100)
+                    ? AppColors.primary
                     : null),
           ]),
           _section('⚙️ Эффективлик', [
@@ -275,11 +276,11 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-              color: const Color(0xFF1565C0).withOpacity(0.1),
+              color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10)),
           child: const Center(
               child: Icon(Icons.calendar_today,
-                  color: Color(0xFF1565C0), size: 18)),
+                  color: AppColors.primary, size: 18)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -298,7 +299,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         ),
         if (r.notes.isNotEmpty)
           const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFE65100), size: 18),
+              color: AppColors.primary, size: 18),
       ]),
     );
   }

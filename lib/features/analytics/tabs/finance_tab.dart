@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 
@@ -68,7 +69,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '💰',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: const Color(0xFF2E7D32),
+              accent: AppColors.primary,
               kpis: [
                 KpiValue(
                     label: 'Бугунги тушум',
@@ -125,7 +126,7 @@ class _FinanceTabState extends State<FinanceTab>
             subtitle: 'Жами: ${_money(f.revenueDailyTrend.total)} сўм',
             child: TrendChart(
               series: f.revenueDailyTrend,
-              color: const Color(0xFF2E7D32),
+              color: AppColors.primary,
               formatValue: (v) => _money(v),
             ),
           ),
@@ -135,7 +136,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '🕐',
             child: HourlyBarChart(
               series: f.revenueHourly,
-              color: const Color(0xFF1565C0),
+              color: AppColors.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -156,7 +157,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '🥇',
             child: TopList(
               items: f.topProducts,
-              color: const Color(0xFFE65100),
+              color: AppColors.primary,
               formatValue: (v) => '${_money(v)} сўм',
             ),
           ),
@@ -166,7 +167,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '🛣',
             child: TopList(
               items: f.topRoutes,
-              color: const Color(0xFF00695C),
+              color: AppColors.primaryDark,
               formatValue: (v) => '${_money(v)} сўм',
             ),
           ),

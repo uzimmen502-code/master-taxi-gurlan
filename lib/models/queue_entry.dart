@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/gurlan_places.dart';
+
 /// `queue/{driverId}` ҳужжатини ифодалайди.
 class QueueEntry {
   const QueueEntry({
@@ -17,6 +19,12 @@ class QueueEntry {
     this.lat,
     this.lng,
     this.onlineAt,
+    this.plannedStartAt,
+    this.actualOnlineAt,
+    this.queueEligibleAt,
+    this.todayTrips = 0,
+    this.todayRejects = 0,
+    this.todayTimeouts = 0,
     this.expiresAt,
     this.taxiType = '',
     this.scheduleId = '',
@@ -36,6 +44,12 @@ class QueueEntry {
   final double? lat;
   final double? lng;
   final DateTime? onlineAt;
+  final DateTime? plannedStartAt;
+  final DateTime? actualOnlineAt;
+  final DateTime? queueEligibleAt;
+  final int todayTrips;
+  final int todayRejects;
+  final int todayTimeouts;
   final DateTime? expiresAt;
   final String taxiType;
   final String scheduleId;
@@ -46,19 +60,35 @@ class QueueEntry {
     return e.isBefore(DateTime.now());
   }
 
+  bool get isTimeEligible {
+    if (actualOnlineAt != null) return true;
+    final eligible = queueEligibleAt;
+    if (eligible == null) return false;
+    return !eligible.isAfter(DateTime.now());
+  }
+
+  int get todayMisses => todayRejects + todayTimeouts;
+
   bool routeAllows(String fromMfy, String toMfy) {
+    final normalize = GurlanPlaces.normalizeMfyName;
+    final normFromMfy = normalize(fromMfy);
+    final normToMfy = normalize(toMfy);
+
     if (stops.isEmpty) {
-      if (fromMfy.isEmpty || toMfy.isEmpty) return true;
-      final f = from.toLowerCase();
-      final t = to.toLowerCase();
-      return f.contains(fromMfy.toLowerCase()) ||
-          t.contains(toMfy.toLowerCase());
+      if (normFromMfy.isEmpty || normToMfy.isEmpty) return true;
+      final f = normalize(from).toLowerCase();
+      final t = normalize(to).toLowerCase();
+      return f.contains(normFromMfy.toLowerCase()) ||
+          t.contains(normToMfy.toLowerCase());
     }
-    if (fromMfy.isNotEmpty && !stops.contains(fromMfy)) return false;
-    if (toMfy.isEmpty) return true;
-    if (!stops.contains(toMfy)) return false;
-    final fromIdx = stops.indexOf(fromMfy);
-    final toIdx = stops.indexOf(toMfy);
+    final normalizedStops = stops.map(normalize).toList();
+    if (normFromMfy.isNotEmpty && !normalizedStops.contains(normFromMfy)) {
+      return false;
+    }
+    if (normToMfy.isEmpty) return true;
+    if (!normalizedStops.contains(normToMfy)) return false;
+    final fromIdx = normalizedStops.indexOf(normFromMfy);
+    final toIdx = normalizedStops.indexOf(normToMfy);
     if (fromIdx == -1 || toIdx == -1) return false;
     return direction == 'forward' ? fromIdx < toIdx : fromIdx > toIdx;
   }
@@ -80,6 +110,12 @@ class QueueEntry {
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
       onlineAt: (d['onlineAt'] as Timestamp?)?.toDate(),
+      plannedStartAt: (d['plannedStartAt'] as Timestamp?)?.toDate(),
+      actualOnlineAt: (d['actualOnlineAt'] as Timestamp?)?.toDate(),
+      queueEligibleAt: (d['queueEligibleAt'] as Timestamp?)?.toDate(),
+      todayTrips: (d['todayTrips'] as num?)?.toInt() ?? 0,
+      todayRejects: (d['todayRejects'] as num?)?.toInt() ?? 0,
+      todayTimeouts: (d['todayTimeouts'] as num?)?.toInt() ?? 0,
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
       taxiType: (d['taxiType'] ?? '') as String,
       scheduleId: (d['scheduleId'] ?? '') as String,

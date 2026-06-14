@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../models/active_trip.dart';
 import '../../../../models/marshrut_driver_option.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
-import '../../../../utils/app_theme.dart';
+import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../controllers/marshrut_waiting_controller.dart';
+import 'marshrut_accepted_screen.dart';
 
 /// Marshrut taksi haydovchilarni ketma-ket chaqirayotgan vaqtda
 /// foydalanuvchiga ko'rsatiladigan screen.
@@ -55,12 +55,29 @@ class _MarshrutWaitingView extends StatefulWidget {
 }
 
 class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
-  static const Color _color = Color(0xFF0288D1);
+  static const Color _color = AppColors.primary;
   bool _dialogShown = false;
+  bool _cancelAfterAcceptShown = false;
 
   @override
   void initState() {
     super.initState();
+    final ctrl = context.read<MarshrutWaitingController>();
+    ctrl.onCancelWarning = (remaining) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('marshrut_cancel_warning')),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: context.tr('understood'),
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
+      );
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) => _react());
   }
 
@@ -70,28 +87,30 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
 
     if (c.missingPhoneError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(c.missingPhoneError!)));
+          SnackBar(content: Text(context.trMsg(c.missingPhoneError!))));
       Navigator.pop(context);
       return;
     }
     if (c.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(c.errorMessage!),
+          content: Text(context.trMsg(c.errorMessage!)),
           backgroundColor: Colors.red));
       c.clearTransient();
     }
     if (c.skipReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${c.skipReason!} — навбатдагини қидирмоқда...'),
+        content: Text(
+            '${context.trMsg(c.skipReason!)} — ${context.tr('searching_next_in_queue')}'),
         backgroundColor: Colors.orange,
         duration: const Duration(milliseconds: 1500),
       ));
       c.clearTransient();
     }
-    if (!_dialogShown && c.acceptedTrip != null) {
-      _dialogShown = true;
+    if (!_cancelAfterAcceptShown && c.acceptedTrip != null) {
+      _cancelAfterAcceptShown = true;
       final t = c.consumeAcceptedTrip()!;
-      _showAcceptedDialog(t);
+      _showAcceptedWithCancelDialog(t);
+      return;
     }
     if (!_dialogShown && c.allRejected) {
       _dialogShown = true;
@@ -105,107 +124,86 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
     if (mounted) Navigator.pop(context);
   }
 
-  void _showAcceptedDialog(ActiveTrip t) {
-    showDialog(
+  Future<void> _showAcceptedWithCancelDialog(ActiveTrip trip) async {
+    final c = context.read<MarshrutWaitingController>();
+
+    final cancel = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.check_circle, color: Colors.green, size: 28),
-          SizedBox(width: 8),
-          Text('Қабул қилинди!',
-              style: TextStyle(fontSize: AppText.titleMedium)),
-        ]),
+        title: Text(context.tr('marshrut_driver_accepted')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('🚐 Ҳайдовчи маълумоти:'),
-            const SizedBox(height: 8),
-            Text(t.driverName,
-                style: const TextStyle(
-                    fontSize: AppText.titleSmall,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('${t.driverCar} • ${t.driverPlate}',
-                style: TextStyle(color: Colors.grey.shade700)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _color.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _color.withOpacity(0.3)),
-              ),
-              child: Row(children: [
-                Icon(Icons.info_outline, color: _color, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(
-                  'Манзил тушунмаса, ҳайдовчига қўнғироқ қилишингиз мумкин',
-                  style: TextStyle(
-                      fontSize: AppText.bodySmall,
-                      color: Colors.grey.shade700),
-                )),
-              ]),
-            ),
+            Text('🚌 ${trip.driverName}'),
+            Text('📞 ${trip.driverPhone}'),
+            Text('🚗 ${trip.driverCar}'),
           ],
         ),
         actions: [
-          TextButton.icon(
-            onPressed: t.driverPhone.isEmpty
-                ? null
-                : () async {
-                    try {
-                      await launchUrl(Uri(scheme: 'tel', path: t.driverPhone),
-                          mode: LaunchMode.externalApplication);
-                    } catch (_) {}
-                  },
-            icon: const Icon(Icons.phone, color: Colors.green, size: 18),
-            label: const Text('Қўнғироқ',
-                style: TextStyle(
-                    color: Colors.green, fontWeight: FontWeight.bold)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('cancel_trip'),
+                style: const TextStyle(color: Colors.red)),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _color,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('ОК'),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('ok')),
           ),
         ],
       ),
     );
+
+    if (!mounted) return;
+    if (cancel == true) {
+      await c.cancelAfterAccept(trip.id);
+      if (mounted) Navigator.of(context).pop();
+    } else {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MarshrutAcceptedScreen(trip: trip),
+          ),
+        );
+      }
+    }
   }
 
   void _showAllRejectedDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.error_outline, color: Colors.red, size: 28),
-          SizedBox(width: 8),
-          Text('Ҳайдовчи топилмади',
-              style: TextStyle(fontSize: AppText.titleMedium)),
+        title: Row(children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 28),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              ctx.tr('marshrut_all_drivers_no_response_title'),
+              style: const TextStyle(fontSize: AppText.titleMedium),
+            ),
+          ),
         ]),
-        content: const Text(
-            'Афсус, ҳозир ҳайдовчилар банд. Бироз вақтдан кейин уриниб кўринг.'),
+        content: Text(ctx.tr('marshrut_all_drivers_no_response_body')),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(ctx);
               Navigator.pop(context);
             },
-            child: Text('ОК', style: TextStyle(color: _color)),
+            child: Text(ctx.tr('ok'), style: const TextStyle(color: _color)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(backgroundColor: _color),
+            child: Text(ctx.tr('marshrut_search_again')),
           ),
         ],
       ),
@@ -225,11 +223,11 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
         if (!didPop) await _onCancel();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFE1F5FE),
+        backgroundColor: AppColors.moduleBg,
         body: SafeArea(
           child: Column(children: [
             Container(
-              color: const Color(0xFF0277BD),
+              color: AppColors.primary,
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(children: [
@@ -237,9 +235,9 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                   icon: const Icon(Icons.close, color: Colors.white),
                   onPressed: _onCancel,
                 ),
-                const Expanded(
-                    child: Text('Ҳайдовчи қидирилмоқда',
-                        style: TextStyle(
+                Expanded(
+                    child: Text(context.tr('marshrut_offer_pending_title'),
+                        style: const TextStyle(
                             color: Colors.white,
                             fontSize: AppText.titleMedium,
                             fontWeight: FontWeight.bold))),
@@ -269,8 +267,8 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                               fontSize: 48,
                               fontWeight: FontWeight.bold,
                               color: _color)),
-                      const Text('сек',
-                          style: TextStyle(
+                      Text(context.tr('sec_short'),
+                          style: const TextStyle(
                               fontSize: AppText.bodySmall,
                               color: Colors.grey)),
                     ]),
@@ -303,10 +301,19 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('БЕКОР ҚИЛИШ',
-                          style: TextStyle(
+                      child: Text(context.tr('marshrut_cancel_waiting'),
+                          style: const TextStyle(
                               fontSize: AppText.bodyLarge,
                               fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    context.tr('marshrut_cancel_waiting_hint'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: AppText.bodySmall,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],
@@ -365,7 +372,8 @@ class _DriverCard extends StatelessWidget {
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text('Ҳайдовчи ${currentIndex + 1} / $totalDrivers',
+          child: Text(
+              context.tr('driver_n_of_m').replaceAll('{current}', '${currentIndex + 1}').replaceAll('{total}', '$totalDrivers'),
               style: TextStyle(
                   fontSize: AppText.bodySmall,
                   color: color,

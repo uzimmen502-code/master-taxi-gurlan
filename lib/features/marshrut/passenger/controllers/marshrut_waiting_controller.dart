@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/utils/formatters.dart';
+import '../../../../core/passenger_cancel_block_rules.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/marshrut_driver_option.dart';
 import '../../../../models/schedule.dart';
@@ -15,8 +15,8 @@ import '../../../../repositories/schedules_repository.dart';
 /// haydovchilarni navbat bilan chaqirib chiqadi, har biri uchun [_timeoutSec]
 /// kutadi va trip status'ini real-time eshitadi.
 ///
-/// Ghost protection: 3 marta bekor qilish — 30 daqiqa blok
-/// (`users/{phone}/marshrut_block/state`, Firestore).
+/// Blok: qabul qilingan safardan keyin bekor (CF `applyMarshhrutCancelBlock`,
+/// faqat `before.status === accepted`). Kutish bekorida hisoblanmaydi.
 class MarshrutWaitingController extends ChangeNotifier {
   MarshrutWaitingController({
     required RidesRepository ridesRepo,
@@ -29,6 +29,11 @@ class MarshrutWaitingController extends ChangeNotifier {
     this.userLng,
   })  : _rides = ridesRepo,
         _schedules = schedulesRepo;
+
+  /// CF bilan mos — [PassengerCancelBlockRules].
+  static int get cancelLimit => PassengerCancelBlockRules.cancelLimit;
+  static int get blockMinutes => PassengerCancelBlockRules.blockMinutes;
+  static int get windowMinutes => PassengerCancelBlockRules.windowMinutes;
 
   static const int _defaultTimeoutSec = 15;
 
@@ -70,6 +75,8 @@ class MarshrutWaitingController extends ChangeNotifier {
   String? get skipReason => _skipReason;
   int get timeoutSec => _timeoutSec;
 
+  void Function(int remaining)? onCancelWarning;
+
   // ─── Internal ───────────────────────────────────────────────────────
   Timer? _timer;
   StreamSubscription<ActiveTrip>? _tripSub;
@@ -79,10 +86,15 @@ class MarshrutWaitingController extends ChangeNotifier {
 
   Future<void> start() async {
     final prefs = await SharedPreferences.getInstance();
-    _userPhone = prefs.getString('user_phone') ?? '';
-    _userAddr = prefs.getString('user_address') ?? '';
+    _userPhone = RidesRepository.normalizeMarshrutPhone(
+      prefs.getString('user_phone') ?? '',
+    );
+    final legacyAddr = prefs.getString('user_address') ?? '';
+    _userAddr = pickupAddr.trim().isNotEmpty
+        ? pickupAddr.trim()
+        : legacyAddr.trim();
     if (_userPhone.isEmpty) {
-      _missingPhoneError = 'Профилдан телефон рақамини киритинг';
+      _missingPhoneError = 'fill_phone_first';
       _safeNotify();
       return;
     }
@@ -99,6 +111,10 @@ class MarshrutWaitingController extends ChangeNotifier {
     _disposed = true;
     _timer?.cancel();
     _tripSub?.cancel();
+    final id = _activeTripId;
+    if (id != null) {
+      _rides.closeMarshrutOfferIfPending(id).catchError((_) {});
+    }
     super.dispose();
   }
 
@@ -131,17 +147,20 @@ class MarshrutWaitingController extends ChangeNotifier {
     final Schedule? sched =
         await _safe(() => _schedules.getById(driver.scheduleId));
     if (sched == null) {
-      _moveToNext('Жадвал топилмади');
+      _moveToNext('marshrut_driver_not_active');
       return;
     }
     if (sched.seatsLeft <= 0) {
-      _moveToNext('Бу ҳайдовчида ўрин қолмаган');
+      _moveToNext('no_seat_on_driver');
       return;
     }
     if (!sched.routeAllows(pickupMfy, dropoffMfy)) {
-      _moveToNext('Йўналиш тўғри келмади');
+      _errorMessage = 'direction_mismatch';
+      _safeNotify();
       return;
     }
+
+    await _finalizeActiveOffer();
 
     _currentIndex = index;
     _secondsLeft = _timeoutSec;
@@ -165,12 +184,12 @@ class MarshrutWaitingController extends ChangeNotifier {
       );
     } on StateError catch (e) {
       _errorMessage = e.message == 'active_marshrut_request_exists'
-          ? 'Сизда аллақачон актив маршрут такси сўрови бор'
-          : 'Хатолик: ${e.message}';
+          ? 'active_marshrut_request_exists'
+          : 'error_generic|${e.message}';
       _safeNotify();
       return;
     } catch (e) {
-      _errorMessage = 'Хатолик: $e';
+      _errorMessage = 'error_generic|$e';
       _safeNotify();
       return;
     }
@@ -212,10 +231,10 @@ class MarshrutWaitingController extends ChangeNotifier {
       _safeNotify();
     } else if (trip.isRejected) {
       _timer?.cancel();
-      _moveToNext('Ҳайдовчи рад этди');
+      _moveToNext('driver_rejected_short');
     } else if (trip.isNoSeats) {
       _timer?.cancel();
-      _moveToNext('Бу ҳайдовчида ўрин қолмаган');
+      _moveToNext('no_seat_on_driver');
     }
   }
 
@@ -225,13 +244,27 @@ class MarshrutWaitingController extends ChangeNotifier {
       try {
         await _rides.markExpired(id);
       } catch (_) {}
+      _activeTripId = null;
     }
-    _moveToNext('Ҳайдовчи жавоб бермади');
+    _moveToNext('driver_no_response');
+  }
+
+  Future<void> _finalizeActiveOffer() async {
+    final id = _activeTripId;
+    if (id == null) return;
+    _tripSub?.cancel();
+    _timer?.cancel();
+    _activeTripId = null;
+    try {
+      await _rides.closeMarshrutOfferIfPending(id);
+    } catch (_) {}
   }
 
   void _moveToNext(String reason) {
     if (_disposed) return;
     _tripSub?.cancel();
+    _timer?.cancel();
+    _activeTripId = null;
     _skipReason = reason;
     _safeNotify();
     Future.delayed(const Duration(milliseconds: 800), () {
@@ -240,8 +273,7 @@ class MarshrutWaitingController extends ChangeNotifier {
     });
   }
 
-  /// Foydalanuvchi "БЕКОР ҚИЛИШ" tugmasini bosganda.
-  /// Ghost protection: 3 ta cancel — 30 daqiqa blok (Firestore).
+  /// Foydalanuvchi "БЕКОР ҚИЛИШ" tugmasini bosganda (pending — blok hisobi yo'q).
   Future<void> cancelByUser() async {
     final id = _activeTripId;
     if (id != null) {
@@ -249,41 +281,34 @@ class MarshrutWaitingController extends ChangeNotifier {
         await _rides.markCancelled(id);
       } catch (_) {}
     }
+  }
 
-    if (_userPhone.isEmpty) return;
-    final uid = phoneDigits(_userPhone);
-    if (uid.isEmpty) return;
-
+  /// Qabul qilingan safarni bekor qilish (waiting ekranidan).
+  Future<void> cancelAfterAccept(String tripId) async {
     try {
-      final blockRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('marshrut_block')
-          .doc('state');
-
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(blockRef);
-        final count = (snap.data()?['cancelCount'] as num?)?.toInt() ?? 0;
-        final newCount = count + 1;
-
-        if (newCount >= 3) {
-          tx.set(blockRef, {
-            'cancelCount': 0,
-            'blockedUntil': Timestamp.fromDate(
-              DateTime.now().add(const Duration(minutes: 30)),
-            ),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          tx.set(blockRef, {
-            'cancelCount': newCount,
-            'blockedUntil': null,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('marshrutPassengerCancelAfterAccept');
+      final result = await callable.call({
+        'tripId': tripId,
+        'reason': 'passenger_cancel_after_accept',
       });
-    } catch (_) {
-      // Firestore xatosi — davom etamiz
+      final data = result.data;
+      if (data is Map) {
+        if (data['warning'] == true) {
+          final remaining = (data['remaining'] as num?)?.toInt() ?? 2;
+          onCancelWarning?.call(remaining);
+        }
+      }
+    } catch (e) {
+      debugPrint('cancelAfterAccept error: $e');
+      try {
+        await _rides.cancelMarshrutByPassenger(
+          tripId: tripId,
+          reason: 'passenger_cancel_after_accept',
+        );
+      } catch (e2) {
+        debugPrint('cancelAfterAccept fallback error: $e2');
+      }
     }
   }
 

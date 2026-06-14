@@ -37,7 +37,7 @@
       position: fixed; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #E65100 0%, #FF8F00 100%);
+      background: linear-gradient(135deg, #14532D 0%, #0E7A38 55%, #2E9E57 100%);
       color: white;
       z-index: 9999;
       transition: opacity 0.5s;
@@ -78,7 +78,7 @@
   </script>
   <script>
     (function () {
-      var resetKey = 'mtg_sw_cache_reset_v2';
+      var resetKey = 'mtg_sw_cache_reset_v3';
       if (!('serviceWorker' in navigator) || sessionStorage.getItem(resetKey)) {
         return;
       }
@@ -97,6 +97,7 @@
       });
     })();
   </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA90OclnNKts45eIqB5S524OibPT73fwfQ&libraries=places"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

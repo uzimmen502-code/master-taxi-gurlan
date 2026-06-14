@@ -8,7 +8,7 @@ import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
-import '../../../utils/app_theme.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
 import '../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../profile/screens/profile_screen.dart';
@@ -49,8 +49,7 @@ class _DriverHomeView extends StatefulWidget {
 }
 
 class _DriverHomeViewState extends State<_DriverHomeView> {
-  static const _blue = Color(0xFF1565C0);
-  static const _green = Color(0xFF2E7D32);
+  static const _green = AppColors.primaryDark;
   static const _red = Color(0xFFB71C1C);
 
   StreamSubscription<TripRequest>? _requestSub;
@@ -208,7 +207,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   Widget build(BuildContext context) {
     final c = context.watch<DriverHomeController>();
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: AppColors.scaffold,
       body: SafeArea(
         child: Column(children: [
           if (!c.hasInternet)
@@ -300,7 +299,7 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final int count;
 
-  static const _blue = Color(0xFF1565C0);
+  static const _blue = AppColors.primary;
 
   @override
   Widget build(BuildContext context) {

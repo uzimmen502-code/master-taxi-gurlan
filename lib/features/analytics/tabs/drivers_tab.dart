@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
@@ -56,7 +57,7 @@ class _DriversTabState extends State<DriversTab>
             icon: '🚖',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: const Color(0xFF00695C),
+              accent: AppColors.primaryDark,
               kpis: [
                 KpiValue(
                     label: 'Жами',
@@ -135,12 +136,14 @@ class _DriversTabState extends State<DriversTab>
                   icon: '💰',
                   label: 'Ўртача даромад / ҳайдовчи (7 кун)',
                   value: '${d.avgEarningsPerDriver} сўм',
-                  valueColor: const Color(0xFF2E7D32)),
+                  valueColor: AppColors.primary),
               MetricRow(
-                  icon: '⭐',
-                  label: 'Ўртача рейтинг',
-                  value: d.avgRating.toStringAsFixed(2),
-                  valueColor: const Color(0xFFE65100)),
+                  icon: '📊',
+                  label: 'Онлайн ulushi',
+                  value: d.totalDrivers > 0
+                      ? '${(100 * d.onlineDrivers / d.totalDrivers).toStringAsFixed(0)}%'
+                      : '0%',
+                  valueColor: AppColors.primaryDark),
             ]),
           ),
           const SizedBox(height: 12),
@@ -148,21 +151,21 @@ class _DriversTabState extends State<DriversTab>
             title: 'Топ — сафарлар бўйича (7 кун)',
             icon: '🏆',
             child: TopList(
-                items: d.topByTrips, color: const Color(0xFF1565C0)),
+                items: d.topByTrips, color: AppColors.primary),
           ),
           const SizedBox(height: 12),
           SectionCard(
             title: 'Топ — даромад бўйича (7 кун)',
             icon: '💎',
             child: TopList(
-                items: d.topByEarnings, color: const Color(0xFF2E7D32)),
+                items: d.topByEarnings, color: AppColors.primary),
           ),
           const SizedBox(height: 12),
           SectionCard(
             title: 'Топ — рейтинг бўйича',
             icon: '⭐',
             child: TopList(
-                items: d.topByRating, color: const Color(0xFFE65100)),
+                items: d.topByRating, color: AppColors.primary),
           ),
         ],
       ),

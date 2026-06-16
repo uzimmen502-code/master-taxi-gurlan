@@ -17,7 +17,9 @@ import '../../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/marshrut_driver_panel_controller.dart';
 import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
-import '../widgets/online_toggle_tile.dart';
+import '../services/marshrut_panel_status_sounds.dart';
+import '../widgets/marshrut_panel_bottom_bar.dart';
+import '../widgets/marshrut_smena_info_sheet.dart';
 import '../widgets/ride_request_card.dart';
 import '../widgets/route_card.dart';
 import 'driver_register_marshrut_screen.dart';
@@ -81,6 +83,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   String? _lastPassengerCancelSnackTripId;
   VoidCallback? _closeRequestDialog;
   final FlutterRingtonePlayer _ringtonePlayer = FlutterRingtonePlayer();
+  bool _shiftEnded = false;
 
   @override
   void initState() {
@@ -122,7 +125,10 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      context.read<MarshrutDriverPanelController>().checkPendingTrips();
+      final ctrl = context.read<MarshrutDriverPanelController>();
+      ctrl.checkPendingTrips();
+      unawaited(ctrl.refreshProfileInfo());
+      unawaited(ctrl.probeNetworkNow());
     }
   }
 
@@ -368,113 +374,137 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.stop_circle_outlined,
-                color: Colors.redAccent),
-            tooltip: context.tr('end_shift'),
-            onPressed: () => _showEndShiftDialog(context),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(children: [
+                if (c.hasScheduleToday) ...[
+                  RouteCard(
+                    stops: c.stops,
+                    direction: c.direction,
+                    seatsLeft: c.seatsLeft,
+                    isOnline: c.isOnline,
+                    onSwitchDirection: c.switchDirection,
+                  ),
+                  const SizedBox(height: 16),
+                  if (c.isAutoPaused) ...[
+                    _AutoPausedBanner(reason: c.autoPausedReason ?? ''),
+                    const SizedBox(height: 16),
+                  ],
+                  if (c.hasAcceptedTrips) ...[
+                    const _AcceptedTripsHeader(),
+                    const SizedBox(height: 8),
+                    for (final r in c.acceptedTrips)
+                      _AcceptedTripCard(
+                        ride: r,
+                        onCall: () => _callUser(r.userPhone),
+                        onCancelNoRoom: () => _confirmCancelNoRoom(c, r),
+                        onComplete: () => _confirmCompleteRide(c, r),
+                      ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (c.hasRequests) ...[
+                    _RequestsHeader(count: c.requests.length),
+                    const SizedBox(height: 8),
+                    for (final r in c.requests)
+                      RideRequestCard(
+                        ride: r,
+                        onView: () =>
+                            _showRequestDialog(r, controller: c, tripId: r.id),
+                      ),
+                  ],
+                ] else if (!_shiftEnded) ...[
+                  Text(
+                    context.tr('start_work_subtitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: AppText.bodyMedium,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ]),
+            ),
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            onSelected: (val) async {
-              if (val == 'edit') {
-                if (!await ensureCarInfoViaProfile(context)) return;
-                if (!context.mounted) return;
-                Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                const DriverRegisterMarshrutScreen()))
-                    .then((_) => c.checkTodaySchedule());
-              }
-            },
-            itemBuilder: (ctx) => [
-              PopupMenuItem(
-                value: 'edit',
-                child: Row(children: [
-                  const Icon(Icons.edit, size: 18, color: Colors.black87),
-                  const SizedBox(width: 10),
-                  Text(ctx.tr('edit_driver_data')),
-                ]),
-              ),
-            ],
+          MarshrutPanelBottomBar(
+            barState: resolveMarshrutPanelBarState(
+              shiftEnded: _shiftEnded,
+              hasScheduleToday: c.hasScheduleToday,
+              isOnline: c.isOnline,
+            ),
+            onOnlineTap: () => _onBottomBarOnline(c),
+            onTanaffusTap: () => _onBottomBarTanaffus(c),
+            onSmenaStartedTap: () => _openStartSchedule(c),
+            onSmenaEndedTap: () => _showEndShiftDialog(context),
+            onSmenaInfoTap: () => _openSmenaInfo(c),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          _DriverInfoCard(
-            driverName: c.driverName,
-            carModel: c.carModel,
-            plate: c.plate,
-            seats: c.seats,
-          ),
-          const SizedBox(height: 16),
-          if (!c.hasScheduleToday) ...[
-            _StartScheduleTile(
-              taxiType: 'marshrut',
-              driverName: c.driverName,
-              driverPhone: c.driverPhone,
-              driverCar: c.carModel,
-              driverPlate: c.plate,
-              onReturned: c.checkTodaySchedule,
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (c.hasScheduleToday) ...[
-            RouteCard(
-              stops: c.stops,
-              direction: c.direction,
-              seatsLeft: c.seatsLeft,
-              onSwitchDirection: c.switchDirection,
-            ),
-            const SizedBox(height: 16),
-            if (c.isAutoPaused) ...[
-              _AutoPausedBanner(
-                reason: c.autoPausedReason ?? '',
-                onReactivate: c.reactivateFromAutoPause,
-              ),
-              const SizedBox(height: 16),
-            ],
-            OnlineToggleTile(
-              isOnline: c.isOnline,
-              queuePosition: c.queuePosition,
-              onTap: c.isAutoPaused
-                  ? c.reactivateFromAutoPause
-                  : (c.isOnline ? c.goOffline : c.goOnline),
-            ),
-            const SizedBox(height: 16),
-            if (c.hasAcceptedTrips) ...[
-              const _AcceptedTripsHeader(),
-              const SizedBox(height: 8),
-              for (final r in c.acceptedTrips)
-                _AcceptedTripCard(
-                  ride: r,
-                  onCall: () => _callUser(r.userPhone),
-                  onCancelNoRoom: () => _confirmCancelNoRoom(c, r),
-                  onComplete: () => _confirmCompleteRide(c, r),
-                ),
-              const SizedBox(height: 16),
-            ],
-            if (c.hasRequests) ...[
-              _RequestsHeader(count: c.requests.length),
-              const SizedBox(height: 8),
-              for (final r in c.requests)
-                RideRequestCard(
-                  ride: r,
-                  onView: () =>
-                      _showRequestDialog(r, controller: c, tripId: r.id),
-                ),
-            ],
-          ],
-          const SizedBox(height: 80),
-        ]),
+    );
+  }
+
+  Future<void> _openStartSchedule(MarshrutDriverPanelController c) async {
+    await c.refreshProfileInfo();
+    if (!context.mounted) return;
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DriverScheduleScreen(
+          taxiType: 'marshrut',
+          driverName: c.driverName,
+          driverPhone: c.driverPhone,
+          driverCar: c.carModel,
+          driverPlate: c.plate,
+          initialSeats: c.seats,
+        ),
       ),
     );
+    if (result == true) await c.checkTodaySchedule();
+  }
+
+  Future<void> _openSmenaInfo(MarshrutDriverPanelController c) async {
+    await c.refreshProfileInfo();
+    if (!context.mounted) return;
+    await showMarshrutSmenaInfoSheet(
+      context,
+      controller: c,
+      onEditProfile: () async {
+        if (!await ensureCarInfoViaProfile(context)) return;
+        if (!context.mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const DriverRegisterMarshrutScreen(),
+          ),
+        );
+        if (!context.mounted) return;
+        await c.checkTodaySchedule();
+        await c.refreshProfileInfo();
+      },
+    );
+  }
+
+  Future<void> _onBottomBarOnline(MarshrutDriverPanelController c) async {
+    if (c.isAutoPaused) {
+      await c.reactivateFromAutoPause();
+    } else if (!c.isOnline) {
+      await c.goOnline();
+    }
+    if (c.isOnline) {
+      await MarshrutPanelStatusSounds.playOnline();
+    }
+  }
+
+  Future<void> _onBottomBarTanaffus(MarshrutDriverPanelController c) async {
+    if (!c.isAutoPaused && !c.isOnline) return;
+    final wasActive = c.isOnline || c.isAutoPaused;
+    if (wasActive) await c.goOffline();
+    if (wasActive && !c.isOnline) {
+      await MarshrutPanelStatusSounds.playOffline();
+    }
   }
 
   Future<void> _showEndShiftDialog(BuildContext context) async {
@@ -503,7 +533,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     final ctrl = context.read<MarshrutDriverPanelController>();
     await ctrl.goOffline();
     if (!context.mounted) return;
-    Navigator.of(context).pop();
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _confirmCancelNoRoom(
@@ -663,11 +693,9 @@ class _AcceptedTripCard extends StatelessWidget {
 class _AutoPausedBanner extends StatelessWidget {
   const _AutoPausedBanner({
     required this.reason,
-    required this.onReactivate,
   });
 
   final String reason;
-  final Future<void> Function() onReactivate;
 
   @override
   Widget build(BuildContext context) {
@@ -698,152 +726,7 @@ class _AutoPausedBanner extends StatelessWidget {
                   .replaceAll('{reason}', reason),
           style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
         ),
-        const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton.icon(
-            onPressed: onReactivate,
-            icon: const Icon(Icons.play_arrow, size: 16),
-            label: Text(context.tr('return_to_queue_btn')),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ),
       ]),
-    );
-  }
-}
-
-class _DriverInfoCard extends StatelessWidget {
-  const _DriverInfoCard({
-    required this.driverName,
-    required this.carModel,
-    required this.plate,
-    required this.seats,
-  });
-
-  final String driverName;
-  final String carModel;
-  final String plate;
-  final int seats;
-
-  static const Color _color = AppColors.button;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryDark, AppColors.primaryMid],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: _color.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: Row(children: [
-        CircleAvatar(
-          radius: 24,
-          backgroundColor: Colors.white.withValues(alpha: 0.2),
-          child: Text(
-            driverName.isNotEmpty ? driverName[0] : 'Д',
-            style: const TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(driverName,
-              style: const TextStyle(
-                  fontSize: AppText.titleMedium,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
-          Text('🚐 $carModel · $plate · 💺$seats',
-              style: const TextStyle(
-                  fontSize: AppText.labelSmall, color: Colors.white70)),
-        ])),
-      ]),
-    );
-  }
-}
-
-class _StartScheduleTile extends StatelessWidget {
-  const _StartScheduleTile({
-    required this.taxiType,
-    required this.driverName,
-    required this.driverPhone,
-    required this.driverCar,
-    required this.driverPlate,
-    required this.onReturned,
-  });
-
-  final String taxiType;
-  final String driverName;
-  final String driverPhone;
-  final String driverCar;
-  final String driverPlate;
-  final Future<void> Function() onReturned;
-
-  static const Color _color = AppColors.button;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => DriverScheduleScreen(
-                      taxiType: taxiType,
-                      driverName: driverName,
-                      driverPhone: driverPhone,
-                      driverCar: driverCar,
-                      driverPlate: driverPlate,
-                    )));
-        if (result == true) await onReturned();
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _color.withValues(alpha: 0.3)),
-        ),
-        child: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-                color: _color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.play_circle_fill, color: _color, size: 28),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(context.tr('start_work_title'),
-                    style: const TextStyle(
-                        fontSize: AppText.bodyLarge,
-                        fontWeight: FontWeight.bold,
-                        color: _color)),
-                Text(context.tr('start_work_subtitle'),
-                    style: const TextStyle(
-                        fontSize: AppText.labelSmall, color: Colors.grey)),
-              ])),
-          const Icon(Icons.chevron_right, color: Colors.grey),
-        ]),
-      ),
     );
   }
 }

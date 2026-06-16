@@ -143,7 +143,7 @@ class IntercityPlaces {
     return LocaleUtils.isLatin(locale) ? _allLatn[idx] : allLocations[idx];
   }
 
-  /// Фақат «Тошкент» (tumansiz) — keyingi qadamda tuman tanlash.
+  /// Фақат «Тошкент» (tumansiz) — avtokompletdan to'g'ridan-to'g'ri tanlanadi.
   static bool isBareTashkentCity(String canonical) {
     return normalizeLocation(canonical) == 'Тошкент';
   }

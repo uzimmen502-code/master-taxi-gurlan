@@ -13,6 +13,7 @@ import '../../../../models/schedule.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
+import '../../../../repositories/user_repository.dart';
 import '../../../../services/notification_service.dart';
 import '../../../../utils/gurlan_places.dart';
 
@@ -127,7 +128,12 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   StreamSubscription<List<ConnectivityResult>>? _connectSub;
   StreamSubscription<Schedule?>? _scheduleSub;
   Timer? _heartbeatTimer;
+  Timer? _reachabilityTimer;
   bool _disposed = false;
+  bool _offlineDueToNetwork = false;
+  bool _pendingServerOffline = false;
+  static const Duration _reachabilityProbeInterval = Duration(seconds: 5);
+  static const Duration _serverReachabilityTimeout = Duration(seconds: 3);
 
   String get _todayDateStr {
     final d = DateTime.now();
@@ -148,10 +154,11 @@ class MarshrutDriverPanelController extends ChangeNotifier {
 
   Future<void> _restoreOnlineState() async {
     try {
+      if (!await _hasNetworkInterface()) return;
       final snap = await FirebaseFirestore.instance
           .collection('drivers')
           .doc(driverId)
-          .get();
+          .get(const GetOptions(source: Source.server));
       if (!snap.exists || _disposed) return;
       final isOnline = snap.data()?['isOnline'] as bool? ?? false;
       if (isOnline) {
@@ -161,6 +168,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         _listenAutoPause();
         _listenConnectivity();
         _startHeartbeat();
+        _startReachabilityProbe();
         notifyListeners();
       }
     } catch (e) {
@@ -168,16 +176,124 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     }
   }
 
+  Future<bool> _hasNetworkInterface() async {
+    if (kIsWeb) return true;
+    final results = await Connectivity().checkConnectivity();
+    return results.any((r) => r != ConnectivityResult.none);
+  }
+
+  Future<bool> _canReachFirestoreServer() async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(driverId)
+          .get(const GetOptions(source: Source.server))
+          .timeout(_serverReachabilityTimeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// App resume yoki connectivity o'zgarishida — darhol tekshirish.
+  Future<void> probeNetworkNow() => _probeNetworkAndMaybeOffline();
+
+  Future<void> _probeNetworkAndMaybeOffline() async {
+    if (!_isOnline || _disposed) return;
+    if (!await _hasNetworkInterface()) {
+      await _goOfflineForNetworkLoss();
+      return;
+    }
+    if (!await _canReachFirestoreServer()) {
+      await _goOfflineForNetworkLoss();
+    }
+  }
+
+  Future<void> _goOfflineForNetworkLoss() async {
+    if (!_isOnline || _disposed) return;
+    _offlineDueToNetwork = true;
+    await _applyOffline(
+      cancelConnectivityListener: false,
+      infoMessage: 'internet_disconnected_offline',
+    );
+  }
+
+  void _startReachabilityProbe() {
+    _reachabilityTimer?.cancel();
+    if (kIsWeb) return;
+    unawaited(_probeNetworkAndMaybeOffline());
+    _reachabilityTimer = Timer.periodic(
+      _reachabilityProbeInterval,
+      (_) => unawaited(_probeNetworkAndMaybeOffline()),
+    );
+  }
+
+  void _stopReachabilityProbe() {
+    _reachabilityTimer?.cancel();
+    _reachabilityTimer = null;
+  }
+
   Future<void> refreshProfileInfo() async {
     try {
+      var model = _carModel;
+      var plate = _plate;
+      var seats = _profileSeats;
+      var userSeats = 0;
+
+      final carInfo = await UserRepository().getCarInfo(driverId);
+      if (!_disposed && carInfo != null) {
+        final userModel = (carInfo['carModel'] ?? '').trim();
+        final userPlate = (carInfo['carPlate'] ?? '').trim();
+        userSeats = int.tryParse(carInfo['carSeats'] ?? '') ?? 0;
+        if (userModel.isNotEmpty) model = userModel;
+        if (userPlate.isNotEmpty) plate = userPlate.toUpperCase();
+        if (userSeats > 0) seats = userSeats;
+      }
+
       final profile = await _marshrut.getProfile(driverId);
-      if (_disposed || profile == null) return;
-      if (profile.carModel.trim().isNotEmpty) _carModel = profile.carModel.trim();
-      if (profile.plate.trim().isNotEmpty) _plate = profile.plate.trim();
-      if (profile.seats > 0) _profileSeats = profile.seats;
-      if (profile.stops.isNotEmpty) _stops = List<String>.from(profile.stops);
+      if (_disposed) return;
+      if (profile != null && profile.stops.isNotEmpty) {
+        _stops = List<String>.from(profile.stops);
+      }
+
+      final scheduleSeatsMismatch =
+          userSeats > 0 && _hasScheduleToday && _seatsTotal != userSeats;
+      final changed = model.trim() != _carModel.trim() ||
+          plate.trim().toUpperCase() != _plate.trim().toUpperCase() ||
+          (seats > 0 && seats != _profileSeats) ||
+          scheduleSeatsMismatch;
+
+      if (model.trim().isNotEmpty) _carModel = model.trim();
+      if (plate.trim().isNotEmpty) _plate = plate.trim().toUpperCase();
+      if (seats > 0) _profileSeats = seats;
+
+      if (changed &&
+          _carModel.isNotEmpty &&
+          _plate.isNotEmpty &&
+          _profileSeats > 0) {
+        await _marshrut.syncCarFields(
+          uid: driverId,
+          carModel: _carModel,
+          plate: _plate,
+          seats: _profileSeats,
+          activeScheduleId: _scheduleId,
+        );
+        if (_hasScheduleToday && _scheduleId != null) {
+          final sched = await _schedules.getTodayActiveForDriver(
+            driverId: driverId,
+            date: _todayDateStr,
+          );
+          if (!_disposed && sched != null) {
+            _seatsLeft = sched.seatsLeft;
+            _seatsTotal = sched.seats;
+          }
+        }
+      }
+
       _safeNotify();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('refreshProfileInfo error: $e');
+    }
   }
 
   @override
@@ -191,6 +307,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     _connectSub?.cancel();
     _scheduleSub?.cancel();
     _heartbeatTimer?.cancel();
+    _stopReachabilityProbe();
     // Panel close ≠ go offline.
     // goOffline() only via: toggle, forceLeave,
     // app terminate (marshrutDriverAutoOffline CF)
@@ -298,7 +415,16 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         scheduleId: _scheduleId,
       );
       if (_disposed) return;
+      if (!kIsWeb && !await _canReachFirestoreServer()) {
+        try {
+          await _marshrut.goOffline(driverId, scheduleId: _scheduleId);
+        } catch (_) {}
+        _errorMessage = 'internet_disconnected_offline';
+        _safeNotify();
+        return;
+      }
       _isOnline = true;
+      _offlineDueToNetwork = false;
       _info = 'online';
       _safeNotify();
 
@@ -307,6 +433,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _listenAutoPause();
       _startHeartbeat();
       _listenConnectivity();
+      _startReachabilityProbe();
       await _loadEndStopCoords();
     } catch (e) {
       _errorMessage = 'error_generic|$e';
@@ -366,12 +493,34 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _safeNotify();
       return;
     }
+    _offlineDueToNetwork = false;
+    await _applyOffline(cancelConnectivityListener: true);
+  }
+
+  Future<void> _applyOffline({
+    required bool cancelConnectivityListener,
+    String? infoMessage,
+  }) async {
+    final wasOnline = _isOnline;
     _heartbeatTimer?.cancel();
-    await _connectSub?.cancel();
-    _connectSub = null;
-    try {
-      await _marshrut.goOffline(driverId);
-    } catch (_) {}
+    _stopReachabilityProbe();
+
+    // UI darhol offline — server javobini kutmaymiz.
+    _isOnline = false;
+    _requests = const [];
+    _acceptedTrips = const [];
+    _endStopDialogShown = false;
+    _endStopDialogActive = false;
+    _endStopCoords = null;
+    _currentLat = null;
+    _currentLng = null;
+    if (infoMessage != null) _info = infoMessage;
+    _safeNotify();
+
+    if (cancelConnectivityListener) {
+      await _connectSub?.cancel();
+      _connectSub = null;
+    }
     await _tripsSub?.cancel();
     await _acceptedTripsSub?.cancel();
     await _queueSub?.cancel();
@@ -381,15 +530,36 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     _queueSub = null;
     _pauseSub = null;
     if (_disposed) return;
-    _isOnline = false;
-    _requests = const [];
-    _acceptedTrips = const [];
-    _endStopDialogShown = false;
-    _endStopDialogActive = false;
-    _endStopCoords = null;
-    _currentLat = null;
-    _currentLng = null;
-    _safeNotify();
+
+    if (wasOnline) {
+      unawaited(_syncOfflineToServer());
+    }
+  }
+
+  Future<void> _syncOfflineToServer() async {
+    try {
+      await _marshrut
+          .goOffline(driverId, scheduleId: _scheduleId)
+          .timeout(_serverReachabilityTimeout);
+      _pendingServerOffline = false;
+    } catch (_) {
+      _pendingServerOffline = true;
+    }
+  }
+
+  Future<bool> _flushPendingServerOffline() async {
+    if (!_pendingServerOffline || _disposed) return true;
+    if (!await _hasNetworkInterface()) return false;
+    if (!await _canReachFirestoreServer()) return false;
+    try {
+      await _marshrut
+          .goOffline(driverId, scheduleId: _scheduleId)
+          .timeout(_serverReachabilityTimeout);
+      _pendingServerOffline = false;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void _listenTrips() {
@@ -476,7 +646,6 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       await _marshrut.reactivateAutoPaused(driverId);
       if (_disposed) return;
       _autoPausedReason = null;
-      _info = 'queue_rejoined';
       _safeNotify();
     } catch (e) {
       _errorMessage = 'error_generic|$e';
@@ -544,38 +713,51 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   }
 
   void _listenConnectivity() {
+    if (kIsWeb) return;
     _connectSub?.cancel();
-    _connectSub = Connectivity().onConnectivityChanged.listen((results) async {
-      final offline = results.every((r) => r == ConnectivityResult.none);
-      if (offline && _isOnline) {
-        if (_disposed) return;
-        try {
-          await _marshrut.goOffline(driverId);
-        } catch (_) {}
-        await _tripsSub?.cancel();
-        await _acceptedTripsSub?.cancel();
-        await _queueSub?.cancel();
-        _tripsSub = null;
-        _acceptedTripsSub = null;
-        _queueSub = null;
-        _heartbeatTimer?.cancel();
-        _isOnline = false;
-        _requests = const [];
-        _info = 'internet_disconnected_offline';
-        _safeNotify();
-      } else if (!offline && !_isOnline && _hasScheduleToday) {
-        var permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-        }
-        if (permission != LocationPermission.denied &&
-            permission != LocationPermission.deniedForever) {
-          await goOnline();
+    _connectSub =
+        Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
+    unawaited(_onConnectivityChanged(null));
+  }
+
+  Future<void> _onConnectivityChanged(List<ConnectivityResult>? results) async {
+    if (_disposed) return;
+    final list = results ?? await Connectivity().checkConnectivity();
+    final hasInterface = list.any((r) => r != ConnectivityResult.none);
+
+    if (_isOnline) {
+      if (!hasInterface) {
+        await _goOfflineForNetworkLoss();
+        return;
+      }
+      if (!await _canReachFirestoreServer()) {
+        await _goOfflineForNetworkLoss();
+      }
+      return;
+    }
+
+    if (hasInterface &&
+        _offlineDueToNetwork &&
+        !_isOnline &&
+        _hasScheduleToday &&
+        !isAutoPaused) {
+      if (_pendingServerOffline) {
+        final flushed = await _flushPendingServerOffline();
+        if (!flushed) return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        await goOnline();
+        if (_isOnline) {
           _info = 'connection_restored';
           _safeNotify();
         }
       }
-    });
+    }
   }
 
   // ─── Direction switch ──────────────────────────────────────────────
@@ -647,7 +829,6 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       _endStopDialogActive = false;
       _endStopCoords = null;
       await _loadEndStopCoords();
-      _info = 'direction_switched';
       _safeNotify();
     } catch (e) {
       _errorMessage = 'error_generic|$e';

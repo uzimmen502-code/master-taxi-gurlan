@@ -1,4 +1,4 @@
-/// Yo'lovchi bekor qilish bloki — Firestore `config/passenger_cancel_block`.
+/// Yo'lovchi bekor qilish bloki (marshrut) — Firestore `config/passenger_cancel_block`.
 /// CF `getPassengerCancelRules` bilan mos (default qiymatlar bir xil bo'lishi kerak).
 class PassengerCancelRulesConfig {
   const PassengerCancelRulesConfig({

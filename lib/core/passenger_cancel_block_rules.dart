@@ -1,7 +1,7 @@
 import 'passenger_cancel_rules_config.dart';
 import 'passenger_cancel_rules_holder.dart';
 
-/// Yo'lovchi bekor qilish bloki — marshrut va local taxi uchun umumiy qoidalar.
+/// Yo'lovchi bekor qilish bloki — marshrut uchun.
 /// Qiymatlar: Firestore `config/passenger_cancel_block` (yuklash: [PassengerCancelRulesHolder.load]).
 /// CF: `getPassengerCancelRules()` — defaultlar bir xil bo'lishi kerak.
 class PassengerCancelBlockRules {

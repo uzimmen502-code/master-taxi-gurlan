@@ -188,10 +188,7 @@ class RidesRepository {
 
   // ─── Local taxi (qidiruv bekor) ─────────────────────────────────────
   //
-  // Faqat `taxiType != 'marshrut'` qidiruvlari. Trip `cancelled` bo'lganda CF
-  // `onTripUpdate` → `local_taxi_block/state` (5 bekor / 10 daq oyna → 10 daq blok,
-  // `config/passenger_cancel_block` yoki default). Marshrut blokiga tegishli emas.
-  // Client `users.blockedUntil` yoki `cancelCount` yozmaydi (eski 3→30 daq yo'li).
+  // Faqat `taxiType != 'marshrut'` qidiruvlari. Marshrut blokiga tegishli emas.
 
   /// Qidiruvni bekor qiladi (`status: cancelled`, `cancelReason: search_cancelled`).
   Future<void> cancelSearch({

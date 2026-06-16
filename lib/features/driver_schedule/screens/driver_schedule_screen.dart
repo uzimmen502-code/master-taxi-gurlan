@@ -23,6 +23,7 @@ class DriverScheduleScreen extends StatelessWidget {
     required this.driverPlate,
     this.initialRouteStops,
     this.initialRouteReversed = false,
+    this.initialSeats,
   });
 
   final String taxiType;
@@ -33,6 +34,7 @@ class DriverScheduleScreen extends StatelessWidget {
   /// Панельдан «қайтиш рейси» — маршрут олдиндан тўлдирилади.
   final List<String>? initialRouteStops;
   final bool initialRouteReversed;
+  final int? initialSeats;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +50,7 @@ class DriverScheduleScreen extends StatelessWidget {
           marshrutDriverRepo: ctx.read<MarshrutDriverRepository>(),
           initialRouteStops: initialRouteStops,
           initialRouteReversed: initialRouteReversed,
+          initialSeats: initialSeats,
         );
         c.init();
         return c;

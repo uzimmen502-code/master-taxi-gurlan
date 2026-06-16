@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
@@ -263,11 +264,8 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
       if (!mounted) return;
       setState(() => _otpVerified = true);
     } on FirebaseFunctionsException catch (e) {
-      final msg = e.message?.trim();
       if (!mounted) return;
-      setState(() => _error = (msg != null && msg.isNotEmpty && msg != 'INTERNAL')
-          ? msg
-          : '${context.tr('error')}: ${e.code}');
+      setState(() => _error = firebaseFunctionsUserMessage(e));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '${context.tr('error')}: $e');

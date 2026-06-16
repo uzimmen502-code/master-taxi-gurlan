@@ -23,7 +23,6 @@ import '../../driver/screens/driver_panel_marshrut_screen.dart';
 import '../../driver/screens/driver_register_marshrut_screen.dart';
 import '../../../../services/location_service.dart';
 import '../../../../services/user_role_sync.dart';
-import '../../../local_taxi/passenger/services/driver_app_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../models/marshrut_search_filter_stats.dart';
 import '../controllers/marshrut_search_controller.dart';
@@ -139,33 +138,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     super.dispose();
   }
 
-  Future<void> _tryLaunchDriverApp() async {
-    final prefs = await SharedPreferences.getInstance();
-    final phone = prefs.getString('user_phone') ?? '';
-    if (phone.isEmpty) return;
-    final carUid = canonicalPhoneId(phoneDigits(phone));
-    final carFromProfile = await UserRepository().getCarInfo(carUid);
-    var model = carFromProfile?['carModel'] ?? prefs.getString('car_model') ?? '';
-    var color = carFromProfile?['carColor'] ?? prefs.getString('car_color') ?? '';
-    var plate = carFromProfile?['carPlate'] ?? prefs.getString('car_plate') ?? '';
-    if (carFromProfile != null) {
-      await prefs.setString('car_model', model);
-      await prefs.setString('car_color', color);
-      await prefs.setString('car_plate', plate);
-    }
-    const launcher = DriverAppLauncher();
-    final installed = await launcher.isInstalled();
-    if (!installed || !mounted) return;
-    await launcher.launchOnboard(
-      phone: phone,
-      name: prefs.getString('user_name') ?? '',
-      model: model,
-      color: color,
-      plate: plate,
-      taxiType: 'marshrut',
-    );
-  }
-
   Future<void> _pushMarshrutDriverPanel(String userId) async {
     final profile =
         await context.read<MarshrutDriverRepository>().getProfile(userId);
@@ -194,7 +166,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         ),
       );
     }
-    await _tryLaunchDriverApp();
   }
 
   Future<void> _onDriverApproved(String uid) async {
@@ -820,8 +791,6 @@ class _SearchPanel extends StatelessWidget {
     required this.onSearch,
   });
 
-  static const Color _swapOrange = Color(0xFFFF8C00);
-
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
   final String fromMfy;
@@ -845,102 +814,124 @@ class _SearchPanel extends StatelessWidget {
     return Container(
       color: _MarshrutTaxiViewState._accent,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Column(children: [
-              Text(context.tr('from'),
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white70)),
-              const SizedBox(height: 4),
-              MfyDropdown(
-                ctrl: fromCtrl,
-                hint: context.tr('mfy_select_hint'),
-                value: fromMfy,
-                show: showFromDropdown,
-                icon: Icons.circle_outlined,
-                iconColor: AppColors.primaryMid,
-                recentPlaces: recentFrom,
-                onTap: onFromTap,
-                onQueryChanged: onFromQueryChanged,
-                onSelected: onFromSelected,
-              ),
-              const SizedBox(height: 16),
-              Text(context.tr('to'),
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white70)),
-              const SizedBox(height: 4),
-              MfyDropdown(
-                ctrl: toCtrl,
-                hint: context.tr('mfy_select_hint'),
-                value: toMfy,
-                show: showToDropdown,
-                icon: Icons.location_on,
-                iconColor: Colors.redAccent,
-                recentPlaces: recentTo,
-                onTap: onToTap,
-                onQueryChanged: onToQueryChanged,
-                onSelected: onToSelected,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: onSearch,
-                  icon: isSearching
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.search, size: 20),
-                  label: Text(
-                      isSearching
-                          ? context.tr('searching')
-                          : context.tr('search_driver'),
-                      style: const TextStyle(
-                          fontSize: AppText.bodyLarge,
-                          fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: _MarshrutTaxiViewState._accent,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            ]),
+          Text(context.tr('from'),
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70)),
+          const SizedBox(height: 4),
+          MfyDropdown(
+            ctrl: fromCtrl,
+            hint: context.tr('mfy_select_hint'),
+            value: fromMfy,
+            show: showFromDropdown,
+            icon: Icons.circle_outlined,
+            iconColor: AppColors.primaryMid,
+            recentPlaces: recentFrom,
+            onTap: onFromTap,
+            onQueryChanged: onFromQueryChanged,
+            onSelected: onFromSelected,
           ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(top: 52),
-            child: Material(
-              color: _swapOrange,
-              shape: const CircleBorder(),
-              elevation: 2,
-              shadowColor: _swapOrange.withOpacity(0.4),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onSwapDirection,
-                child: Tooltip(
-                  message: context.tr('switch_direction'),
-                  child: const SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(Icons.swap_vert,
-                        color: Colors.white, size: 24),
-                  ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 34,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(context.tr('to'),
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white70)),
                 ),
+                _SwapDirectionPill(onTap: onSwapDirection),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          MfyDropdown(
+            ctrl: toCtrl,
+            hint: context.tr('mfy_select_hint'),
+            value: toMfy,
+            show: showToDropdown,
+            icon: Icons.location_on,
+            iconColor: Colors.redAccent,
+            recentPlaces: recentTo,
+            onTap: onToTap,
+            onQueryChanged: onToQueryChanged,
+            onSelected: onToSelected,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton.icon(
+              onPressed: onSearch,
+              icon: isSearching
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.search, size: 20),
+              label: Text(
+                  isSearching
+                      ? context.tr('searching')
+                      : context.tr('search_driver'),
+                  style: const TextStyle(
+                      fontSize: AppText.bodyLarge,
+                      fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: _MarshrutTaxiViewState._accent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Qayerdan ↔ Qayerga — gorizontal pill, «Qayerga» qatori markazida.
+class _SwapDirectionPill extends StatelessWidget {
+  const _SwapDirectionPill({required this.onTap});
+
+  static const Color _swapOrange = Color(0xFFFF8C00);
+  static const double _height = 34;
+  static const double _minWidth = 72;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _swapOrange,
+      elevation: 2,
+      shadowColor: _swapOrange.withOpacity(0.4),
+      borderRadius: BorderRadius.circular(_height / 2),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(_height / 2),
+        child: Tooltip(
+          message: context.tr('switch_direction'),
+          child: const SizedBox(
+            height: _height,
+            width: _minWidth,
+            child: Icon(
+              Icons.swap_vert,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ),
       ),
     );
   }

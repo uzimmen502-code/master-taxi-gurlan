@@ -30,7 +30,7 @@ function passengerCancelRulesFromDefaults() {
   };
 }
 
-/** `config/passenger_cancel_block` — marshrut + local taxi (60s kesh). */
+/** `config/passenger_cancel_block` — marshrut (60s kesh). */
 async function getPassengerCancelRules() {
   const now = Date.now();
   if (cachedPassengerCancelRules &&
@@ -179,15 +179,6 @@ async function applyMarshhrutCancelBlock(userPhone) {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { blocked: false, warning: false };
-}
-
-async function applyLocalTaxiCancelBlock(userPhone) {
-  const phone = digits(userPhone);
-  if (phone.length < 9) return;
-
-  const ref = db.collection('users').doc(phone)
-      .collection('local_taxi_block').doc('state');
-  await applyPassengerCancelBlock(ref);
 }
 
 function isValidFingerprintHash(hash) {
@@ -1124,19 +1115,6 @@ exports.onTripUpdate = functions.firestore
         const userPhone = digits(after.userPhone || '');
         if (userPhone.length >= 9 && after.marshrutBlockCounted !== true) {
           await applyMarshhrutCancelBlock(userPhone);
-        }
-      }
-    }
-
-    if (after.status === 'cancelled' && (after.taxiType || '') === 'local') {
-      const cancelledBy = String(after.cancelledBy || '');
-      if (
-        before.status === 'searching' &&
-        (cancelledBy === 'passenger' || cancelledBy === 'user')
-      ) {
-        const userPhone = digits(after.userPhone || '');
-        if (userPhone.length >= 9) {
-          await applyLocalTaxiCancelBlock(userPhone);
         }
       }
     }
@@ -4584,12 +4562,14 @@ async function applyDriverRequestApproval(requestId, req, approvedBy) {
   if (taxiType === 'marshrut') {
     const carModel = parseCarModelFromApplication(car);
     const stops = buildMarshrutStopsFromRequest(req);
+    const userSeats = Number(userData.carSeats) || 0;
+    const resolvedSeats = userSeats > 0 ? userSeats : maxSeatsForCarModel(carModel);
     batch.set(
       db.collection('users').doc(userPhone).collection('driverProfiles').doc('marshrut'),
       {
         carModel: car,
         plate: plate.toUpperCase(),
-        seats: maxSeatsForCarModel(carModel),
+        seats: resolvedSeats,
         stops,
         driverName: name,
         driverPhone: phoneRaw || userPhone,

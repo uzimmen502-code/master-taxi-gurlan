@@ -38,6 +38,108 @@ class MarshrutDriverRepository {
     return MarshrutDriverProfile.fromDoc(uid, snap);
   }
 
+  /// Profil (`users/{uid}`) dagi avtomobil → marshrut profil + haydovchi + smena.
+  Future<void> syncCarFields({
+    required String uid,
+    required String carModel,
+    required String plate,
+    required int seats,
+    String? activeScheduleId,
+  }) async {
+    final id = _canonUid(uid);
+    if (id.isEmpty || carModel.trim().isEmpty || plate.trim().isEmpty || seats <= 0) {
+      return;
+    }
+    final model = carModel.trim();
+    final plateNorm = plate.trim().toUpperCase();
+    final batch = _db.batch();
+    final now = FieldValue.serverTimestamp();
+
+    batch.set(
+      _profileRef(id),
+      {
+        'carModel': model,
+        'plate': plateNorm,
+        'seats': seats,
+        'updatedAt': now,
+      },
+      SetOptions(merge: true),
+    );
+
+    batch.set(
+      _drivers.doc(id),
+      {
+        'car': model,
+        'plate': plateNorm,
+        'seats': seats,
+        'updatedAt': now,
+      },
+      SetOptions(merge: true),
+    );
+
+    final driverSnap = await _drivers.doc(id).get();
+
+    if (activeScheduleId != null && activeScheduleId.isNotEmpty) {
+      final schedRef = _schedules.doc(activeScheduleId);
+      final schedSnap = await schedRef.get();
+      if (schedSnap.exists) {
+        final oldSeats = (schedSnap.data()?['seats'] as num?)?.toInt() ?? seats;
+        final seatsLeft =
+            (schedSnap.data()?['seatsLeft'] as num?)?.toInt() ?? seats;
+        final newLeft = seats > oldSeats
+            ? (seatsLeft + (seats - oldSeats)).clamp(0, seats)
+            : seatsLeft.clamp(0, seats);
+        batch.update(schedRef, {
+          'car': model,
+          'plate': plateNorm,
+          'seats': seats,
+          'seatsLeft': newLeft,
+          'updatedAt': now,
+        });
+      }
+    }
+
+    final queueRef = _queue.doc(id);
+    final queueSnap = await queueRef.get();
+    if (queueSnap.exists) {
+      final oldSeats = (queueSnap.data()?['seats'] as num?)?.toInt() ?? seats;
+      final seatsLeft =
+          (queueSnap.data()?['seatsLeft'] as num?)?.toInt() ?? seats;
+      final newLeft = seats > oldSeats
+          ? (seatsLeft + (seats - oldSeats)).clamp(0, seats)
+          : seatsLeft.clamp(0, seats);
+      batch.set(
+        queueRef,
+        {
+          'car': model,
+          'plate': plateNorm,
+          'seats': seats,
+          'seatsLeft': newLeft,
+          'updatedAt': now,
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    if (driverSnap.exists) {
+      final oldSeats = (driverSnap.data()?['seats'] as num?)?.toInt() ?? seats;
+      final driverSeatsLeft =
+          (driverSnap.data()?['seatsLeft'] as num?)?.toInt() ?? seats;
+      final newLeft = seats > oldSeats
+          ? (driverSeatsLeft + (seats - oldSeats)).clamp(0, seats)
+          : driverSeatsLeft.clamp(0, seats);
+      batch.set(
+        _drivers.doc(id),
+        {
+          'seatsLeft': newLeft,
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
   Future<DriverCarPrefill?> resolveCarPrefill(String uid) async {
     if (uid.isEmpty) return null;
 
@@ -369,21 +471,36 @@ class MarshrutDriverRepository {
     }, SetOptions(merge: true));
   }
 
-  Future<void> goOffline(String uid) async {
+  Future<void> goOffline(String uid, {String? scheduleId}) async {
     final id = _canonUid(uid);
     if (id.isEmpty) return;
     // Drivers'ni alohida yangilaymiz — queue doc bo'lmasa ham xatoga uchramaslik
-    // uchun. Ikkala operatsiya mustaqil — bittasi kerак bo'lsa, ikkinchisi
+    // uchun. Ikkala operatsiya mustaqil — bittasi kerak bo'lsa, ikkinchisi
     // ishlamasa ham, drivers off'ni saqlash muhim.
     try {
       await _drivers.doc(id).update({
         'isOnline': false,
+        'actualOnlineAt': FieldValue.delete(),
+        'queueEligibleAt': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (_) {}
     try {
-      await _queue.doc(id).update({'isActive': false});
+      await _queue.doc(id).update({
+        'isActive': false,
+        'actualOnlineAt': FieldValue.delete(),
+        'queueEligibleAt': FieldValue.delete(),
+      });
     } catch (_) {}
+    if (scheduleId != null && scheduleId.isNotEmpty) {
+      try {
+        await _schedules.doc(scheduleId).update({
+          'actualOnlineAt': FieldValue.delete(),
+          'queueEligibleAt': FieldValue.delete(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
   }
 
   /// Har 30 sekundda haydovchi va navbat GPS/holatini yangilash.

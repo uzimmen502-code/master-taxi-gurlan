@@ -4,26 +4,21 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../models/saved_place.dart';
-import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../services/location_service.dart';
 
-/// Mahalliy taksi yo'lovchi entry-экранининг ҳолатини бошқаради:
-///   - GPS орқали жорий манзилни аниқлаш
-///   - SharedPreferences'da сақланган манзилларни (`SavedPlace`) бошқариш
-///   - Qidiruv bekor blok (`local_taxi_block/state`, CF, 5/10/10)
+/// Mahalliy taksi yo'lovchi entry-эkranining holatini boshqaradi:
+///   - GPS orqali joriy manzilni aniqlash
+///   - SharedPreferences'da saqlangan manzillar (`SavedPlace`)
 ///
-/// `from`/`to` text fieldlarini ушбу controller кузатмайди — View ўз
-/// `TextEditingController`лари бўйича иш олиб боради ва қидирув тугмаси
-/// босилганда қийматларни бевосита `SearchingScreen`-га узатади.
+/// `from`/`to` text fieldlarini ushbu controller kuzatmaydi — View o'z
+/// `TextEditingController`lari bo'yicha ish olib boradi va qidiruv tugmasi
+/// bosilganda qiymatlarni bevosita `SearchingScreen`-ga uzatadi.
 class LocalTaxiController extends ChangeNotifier {
   LocalTaxiController({
     required LocationService locationService,
-    LocalTaxiBlockRepository? blockRepo,
-  })  : _locationService = locationService,
-        _blockRepo = blockRepo ?? LocalTaxiBlockRepository();
+  }) : _locationService = locationService;
 
   final LocationService _locationService;
-  final LocalTaxiBlockRepository _blockRepo;
 
   static const _savedPlacesKey = 'saved_places';
   static const _maxSavedPlaces = 6;
@@ -39,8 +34,8 @@ class LocalTaxiController extends ChangeNotifier {
 
   // ─── GPS ───────────────────────────────────────────────────────────
 
-  /// Жорий GPS манзилни матн кўринишида қайтаради. Хатолик бўлса `null`,
-  /// `errorMessage` сақланади.
+  /// Joriy GPS manzilni matn ko'rinishida qaytaradi. Xatolik bo'lsa `null`,
+  /// `errorMessage` saqlanadi.
   Future<String?> getCurrentAddress() async {
     isGpsLoading = true;
     notifyListeners();
@@ -96,7 +91,7 @@ class LocalTaxiController extends ChangeNotifier {
         _savedPlacesKey, jsonEncode(savedPlaces.map((p) => p.toJson()).toList()));
   }
 
-  /// Янги манзил қўшиш. Лимит ошса `false` ва `errorMessage` сақланади.
+  /// Yangi manzil qo'shish. Limit oshsa `false` va `errorMessage` saqlanadi.
   Future<bool> addSavedPlace(SavedPlace place) async {
     if (savedPlaces.length >= _maxSavedPlaces) {
       errorMessage = 'max_saved_places|$_maxSavedPlaces';
@@ -117,21 +112,6 @@ class LocalTaxiController extends ChangeNotifier {
     await _persist();
     infoMessage = 'place_deleted|$name';
     notifyListeners();
-  }
-
-  // ─── Local taxi qidiruv bloki ─────────────────────────────────────
-
-  /// Агар фойдаланувчи hозирча бloкlangan bo'lsa, "qancha minutdan keyin"
-  /// xabari qaytadi; aks holda `null`.
-  Future<String?> checkGhostBlock() async {
-    final prefs = await SharedPreferences.getInstance();
-    final phone = (prefs.getString('user_phone') ?? '')
-        .replaceAll(RegExp(r'[^\d]'), '');
-    if (phone.isEmpty) return null;
-    final blockedUntil = await _blockRepo.getBlockedUntil(phone);
-    if (blockedUntil == null) return null;
-    final remaining = blockedUntil.difference(DateTime.now());
-    return 'ghost_blocked|${remaining.inMinutes}';
   }
 
   void clearMessages() {

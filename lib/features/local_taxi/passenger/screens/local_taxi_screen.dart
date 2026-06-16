@@ -309,13 +309,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         _snack(context.tr('local_trip_already_active'));
         return;
       }
-      final blocked =
-          await context.read<LocalTaxiController>().checkGhostBlock();
-      if (!mounted) return;
-      if (blocked != null) {
-        _snack(context.trMsg(blocked));
-        return;
-      }
       if (!mounted) return;
       await Navigator.push(
         context,

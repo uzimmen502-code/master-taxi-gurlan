@@ -311,70 +311,11 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     });
   }
 
-  Future<String?> _pickTashkentDistrict() {
-    final locale = _currentLocale;
-    final districts = IntercityPlaces.tashkentDistrictsFor(locale);
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(ctx).size.height * 0.45,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Тошкент туманини танланг',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: districts.length,
-                itemBuilder: (_, i) => ListTile(
-                  title: Text(districts[i]),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: IntercityColors.primary,
-                  ),
-                  onTap: () => Navigator.pop(ctx, districts[i]),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _applyFromSelection(
     String displayLabel, {
     bool saveHistory = true,
   }) async {
-    var canonical = IntercityPlaces.normalizeLocation(displayLabel);
-    if (IntercityPlaces.isBareTashkentCity(canonical)) {
-      final districtLabel = await _pickTashkentDistrict();
-      if (districtLabel == null || !mounted) return;
-      canonical =
-          IntercityPlaces.districtCanonicalFromPicker(districtLabel, _currentLocale);
-    }
+    final canonical = IntercityPlaces.normalizeLocation(displayLabel);
     if (!mounted) return;
     final c = context.read<IntercityTaxiController>();
     _fromCtrl.text = IntercityPlaces.displayForLocale(canonical, _currentLocale);
@@ -394,13 +335,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     String displayLabel, {
     bool saveHistory = true,
   }) async {
-    var canonical = IntercityPlaces.normalizeLocation(displayLabel);
-    if (IntercityPlaces.isBareTashkentCity(canonical)) {
-      final districtLabel = await _pickTashkentDistrict();
-      if (districtLabel == null || !mounted) return;
-      canonical =
-          IntercityPlaces.districtCanonicalFromPicker(districtLabel, _currentLocale);
-    }
+    final canonical = IntercityPlaces.normalizeLocation(displayLabel);
     if (!mounted) return;
     final c = context.read<IntercityTaxiController>();
     _toCtrl.text = IntercityPlaces.displayForLocale(canonical, _currentLocale);

@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/device_binding_repository.dart';
@@ -219,6 +221,11 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (!await _hasNetworkInterface()) {
+        phoneStepError =
+            'Интернет уланиши йўқ. Internetni yoqing va qayta urinib ko\'ring.';
+        return false;
+      }
       if (!await _requireValidFingerprintHash()) {
         return false;
       }
@@ -268,7 +275,7 @@ class OnboardingController extends ChangeNotifier {
           return false;
       }
     } on FirebaseFunctionsException catch (e) {
-      phoneStepError = e.message ?? e.code;
+      phoneStepError = firebaseFunctionsUserMessage(e);
       return false;
     } catch (e) {
       phoneStepError = 'Xatolik: $e';
@@ -417,19 +424,13 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _callableErrorMessage(FirebaseFunctionsException e) {
-    final detail = e.message?.trim();
-    if (detail != null && detail.isNotEmpty && detail != 'INTERNAL') {
-      return detail;
-    }
-    return switch (e.code) {
-      'not-found' => 'Код сўрови топилмади',
-      'permission-denied' => 'Код нотўғри',
-      'deadline-exceeded' => 'Код муддати ўтган',
-      'failed-precondition' => 'Қурилма ёки рақам мос эмас',
-      'invalid-argument' => 'Нотўғри маълумот',
-      _ => 'Хатолик: ${e.code}',
-    };
+  String _callableErrorMessage(FirebaseFunctionsException e) =>
+      firebaseFunctionsUserMessage(e);
+
+  Future<bool> _hasNetworkInterface() async {
+    if (kIsWeb) return true;
+    final results = await Connectivity().checkConnectivity();
+    return results.any((r) => r != ConnectivityResult.none);
   }
 
   Future<bool> fetchGps() async {

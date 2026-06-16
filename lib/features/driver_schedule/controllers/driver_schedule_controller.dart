@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/car/car_info_record.dart';
 import '../../../core/utils/driver_car_prefill.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/route_points_validator.dart';
 import '../../../models/marshrut_driver_profile.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
@@ -28,12 +30,18 @@ class DriverScheduleController extends ChangeNotifier {
     required MarshrutDriverRepository marshrutDriverRepo,
     List<String>? initialRouteStops,
     this.initialRouteReversed = false,
+    int? initialSeats,
   })  : _schedulesRepo = schedulesRepo,
         _marshrutDriverRepo = marshrutDriverRepo,
         initialRouteStops = initialRouteStops == null
             ? null
             : List<String>.unmodifiable(initialRouteStops) {
-    seats = maxSeats;
+    if (initialSeats != null && initialSeats > 0) {
+      _userMaxSeats = initialSeats;
+      seats = initialSeats;
+    } else {
+      seats = maxSeats;
+    }
     if (this.initialRouteStops != null && this.initialRouteStops!.length >= 2) {
       applyRouteStops(this.initialRouteStops!, reversed: initialRouteReversed);
     }
@@ -56,7 +64,12 @@ class DriverScheduleController extends ChangeNotifier {
   bool get isAlone => taxiType == 'alone';
   bool get isIntercity => taxiType == 'intercity';
 
-  int get maxSeats => DriverCarPrefill.maxSeatsForModel(driverCar);
+  int _userMaxSeats = 0;
+
+  int get maxSeats {
+    if (_userMaxSeats > 0) return _userMaxSeats;
+    return DriverCarPrefill.maxSeatsForModel(driverCar);
+  }
 
   // ─── Marshrut state ────────────────────────────────────────────────
   String fromMfy = '';
@@ -109,8 +122,17 @@ class DriverScheduleController extends ChangeNotifier {
     if (isMarshrut) {
       final uid = await _loadUid();
       if (uid.isEmpty) return;
+      final car = await CarInfoRecord.load(canonicalPhoneId(uid));
+      if (car != null && car.seats > 0) {
+        _userMaxSeats = car.seats;
+        seats = car.seats;
+      }
       final profile = await _marshrutDriverRepo.getProfile(uid);
       final stops = profile?.stops ?? const <String>[];
+      if (_userMaxSeats == 0 && profile != null && profile.seats > 0) {
+        _userMaxSeats = profile.seats;
+        seats = profile.seats;
+      }
       if (stops.length >= 2) {
         fromMfy = stops.first;
         toMfy = stops.last;

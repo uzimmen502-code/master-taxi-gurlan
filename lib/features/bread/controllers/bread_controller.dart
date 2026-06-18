@@ -171,19 +171,38 @@ class BreadController extends ChangeNotifier {
       if (list.isEmpty) return 0;
 
       int sent = 0;
+      final remaining = <Map<String, dynamic>>[];
       for (final order in list) {
+        final data = Map<String, dynamic>.from(order as Map<String, dynamic>);
         try {
-          final data = Map<String, dynamic>.from(order as Map<String, dynamic>);
-          if (data['createdAt'] is String) {
-            data['createdAt'] =
-                Timestamp.fromDate(DateTime.parse(data['createdAt'] as String));
-          }
-          await _ordersRepo.createBreadOrder(data);
+          final payload = Map<String, dynamic>.from(data)
+            ..removeWhere((k, _) =>
+                k == 'createdAt' || k == 'idempotencyKey' || k == 'decrements');
+          final phone = data['userPhone'] as String? ?? '';
+          final idempotencyKey = data['idempotencyKey'] as String? ??
+              _buildIdempotencyKey(phone, data);
+          await OrderPaymentService.placeOrderPostPaid(
+            userPhone: phone,
+            idempotencyKey: idempotencyKey,
+            orderBase: payload,
+            decrements: (data['decrements'] as List?)
+                    ?.map((e) => Map<String, dynamic>.from(e as Map))
+                    .toList() ??
+                [],
+          );
           sent++;
-        } catch (_) {}
+        } on FirebaseFunctionsException {
+          remaining.add(data);
+        } catch (_) {
+          remaining.add(data);
+        }
       }
-      await prefs.remove('pending_orders');
-      pendingCount = 0;
+      if (remaining.isEmpty) {
+        await prefs.remove('pending_orders');
+      } else {
+        await prefs.setString('pending_orders', jsonEncode(remaining));
+      }
+      pendingCount = remaining.length;
       notifyListeners();
       return sent;
     } catch (_) {
@@ -434,10 +453,24 @@ class BreadController extends ChangeNotifier {
       deliveryLng: deliveryLng,
     );
 
+    final decrements = _inventoryDecrementsForCart();
+    final decMaps = <Map<String, dynamic>>[
+      for (final e in decrements)
+        {
+          'kind': e.kind.name,
+          'id': e.id,
+          'qty': e.qty,
+          'label': e.label,
+        },
+    ];
+    final idempotencyKey = _buildIdempotencyKey(phone, orderData);
+
     if (!hasInternet) {
       try {
         final offline = Map<String, dynamic>.from(orderData);
         offline['createdAt'] = DateTime.now().toIso8601String();
+        offline['idempotencyKey'] = idempotencyKey;
+        offline['decrements'] = decMaps;
         final prefs = await SharedPreferences.getInstance();
         final existing =
             jsonDecode(prefs.getString('pending_orders') ?? '[]') as List;
@@ -451,23 +484,12 @@ class BreadController extends ChangeNotifier {
       }
     }
 
-    final decrements = _inventoryDecrementsForCart();
     try {
       final payload = Map<String, dynamic>.from(orderData)
         ..removeWhere((k, _) => k == 'createdAt');
-      final decMaps = <Map<String, dynamic>>[
-        for (final e in decrements)
-          {
-            'kind': e.kind.name,
-            'id': e.id,
-            'qty': e.qty,
-            'label': e.label,
-          },
-      ];
       await OrderPaymentService.placeOrderPostPaid(
         userPhone: phone,
-        idempotencyKey:
-            'bread_${phone}_${DateTime.now().microsecondsSinceEpoch}',
+        idempotencyKey: idempotencyKey,
         orderBase: payload,
         decrements: decMaps,
       );
@@ -487,6 +509,28 @@ class BreadController extends ChangeNotifier {
     } catch (e) {
       return (success: false, isOffline: false, error: 'Хатолик: $e');
     }
+  }
+
+  String _buildIdempotencyKey(String phone, Map<String, dynamic> orderData) {
+    final parts = <String>[];
+    for (final it in orderData['items'] as List? ?? const []) {
+      final m = Map<String, dynamic>.from(it as Map);
+      parts.add('${m['id']}_${m['count']}_${m['flourMilk']}');
+    }
+    for (final ex in orderData['extras'] as List? ?? const []) {
+      final m = Map<String, dynamic>.from(ex as Map);
+      parts.add('x_${m['name']}_${m['count']}');
+    }
+    if (orderData['saltYeastCost'] != null) {
+      parts.add('salt_${orderData['saltYeastCost']}');
+    }
+    parts.sort();
+    final cartSignature = parts.join('|');
+    final dateStr = DateTime.now().toIso8601String().substring(0, 10);
+    final hash = base64Url
+        .encode(utf8.encode('$phone|$dateStr|$cartSignature'))
+        .substring(0, 16);
+    return 'bread_${phone}_${dateStr}_$hash';
   }
 
   String _mapFunctionError(String code, String? message) {

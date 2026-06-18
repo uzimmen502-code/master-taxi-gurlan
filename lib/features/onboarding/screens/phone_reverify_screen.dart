@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../home/screens/home_screen.dart';
@@ -32,8 +32,8 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   final _pageController = PageController();
   final _otpCtrl = TextEditingController();
   final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
   final _fingerprintService = DeviceFingerprintService();
+  final _pendingCodeRepo = PendingCodeRepository();
   final _userRepo = UserRepository();
 
   int _step = 0;
@@ -46,7 +46,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   String _birthDate = '';
   String _address = '';
 
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _codeSub;
+  StreamSubscription<PendingCodeStatusUpdate>? _codeSub;
   bool _waitingCode = false;
   bool _codeReady = false;
   String? _generatedCode;
@@ -187,26 +187,20 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
 
     try {
       final snapshot = await _fingerprintService.collect();
-      final docRef = _firestore.collection('pending_codes').doc(_phoneDigits);
-      await docRef.set({
-        'phone': _phoneE164,
-        'status': 'pending',
-        'code': FieldValue.delete(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(
-          DateTime.now().add(const Duration(minutes: 5)),
-        ),
-        'deviceFingerprintHash': snapshot.hash,
-      }, SetOptions(merge: true));
+      await _pendingCodeRepo.requestPendingCode(
+        phone: _phoneDigits,
+        snapshot: snapshot,
+      );
 
-      _codeSub = docRef.snapshots().listen((doc) {
-        if (!doc.exists || !mounted) return;
-        final data = doc.data();
-        if (data == null) return;
-        final status = (data['status'] ?? '').toString();
-        final code = (data['code'] as String?)?.trim();
+      _codeSub = _pendingCodeRepo
+          .watchStatus(
+            phone: _phoneDigits,
+            deviceFingerprintHash: snapshot.hash,
+          )
+          .listen((update) {
+        if (!mounted) return;
 
-        if (status == 'expired') {
+        if (update.status == 'expired') {
           setState(() {
             _error = context.tr('reverify_code_expired');
             _waitingCode = false;
@@ -215,7 +209,8 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
           return;
         }
 
-        if (status == 'approved' && code != null && code.length == 6) {
+        if (update.isApproved) {
+          final code = update.code!;
           setState(() {
             _generatedCode = code;
             _codeReady = true;
@@ -227,6 +222,9 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             _otpCtrl.selection = TextSelection.collapsed(offset: code.length);
           }
         }
+      }, onError: (Object e) {
+        if (!mounted) return;
+        setState(() => _error = '${context.tr('error')}: $e');
       });
 
       await _goToStep(2);
@@ -533,7 +531,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
           const SizedBox(height: 24),
           _readOnlyCard(
             icon: Icons.phone_outlined,
-            label: context.tr('enter_phone'),
+            label: context.tr('reverify_phone_label'),
             value: _phoneE164,
           ),
         ],

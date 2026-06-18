@@ -112,6 +112,8 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   }
   bool get hasRequests => _requests.isNotEmpty;
   bool get hasAcceptedTrips => _acceptedTrips.isNotEmpty;
+  bool _initDone = false;
+  bool get initDone => _initDone;
 
   ActiveTrip? rideById(String id) {
     for (final r in _requests) {
@@ -150,6 +152,8 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     await refreshProfileInfo();
     await checkTodaySchedule();
     await _restoreOnlineState();
+    _initDone = true;
+    _safeNotify();
   }
 
   Future<void> _restoreOnlineState() async {

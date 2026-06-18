@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +10,7 @@ import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/device_binding_repository.dart';
+import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
@@ -23,20 +23,21 @@ class OnboardingController extends ChangeNotifier {
     required LocationService locationService,
     DeviceFingerprintService? fingerprintService,
     DeviceBindingRepository? deviceBindingRepo,
+    PendingCodeRepository? pendingCodeRepo,
   })  : _userRepo = userRepo,
         _locationService = locationService,
         _fingerprintService = fingerprintService ?? DeviceFingerprintService(),
-        _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository();
+        _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository(),
+        _pendingCodeRepo = pendingCodeRepo ?? PendingCodeRepository();
 
   final UserRepository _userRepo;
   final LocationService _locationService;
   final DeviceFingerprintService _fingerprintService;
   final DeviceBindingRepository _deviceBindingRepo;
+  final PendingCodeRepository _pendingCodeRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-      _pendingCodeSubscription;
+  StreamSubscription<PendingCodeStatusUpdate>? _pendingCodeSubscription;
   bool isVerifyingOtp = false;
   bool isSendingOtp = false;
   String? otpError;
@@ -314,27 +315,19 @@ class OnboardingController extends ChangeNotifier {
         return false;
       }
       final snapshot = _fingerprintSnapshot!;
-      final docRef = _firestore.collection('pending_codes').doc(digits);
-      final expiresAt = DateTime.now().add(const Duration(minutes: 5));
-
-      await docRef.set({
-        'phone': '+$digits',
-        'status': 'pending',
-        'code': FieldValue.delete(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(expiresAt),
-        'deviceFingerprintHash': snapshot.hash,
-      }, SetOptions(merge: true));
+      await _pendingCodeRepo.requestPendingCode(
+        phone: digits,
+        snapshot: snapshot,
+      );
 
       cancelPendingCodeWatch();
-      _pendingCodeSubscription = docRef.snapshots().listen((doc) {
-        if (!doc.exists) return;
-        final data = doc.data();
-        if (data == null) return;
-        final status = (data['status'] ?? '').toString();
-        final code = (data['code'] as String?)?.trim();
-
-        if (status == 'expired') {
+      _pendingCodeSubscription = _pendingCodeRepo
+          .watchStatus(
+            phone: digits,
+            deviceFingerprintHash: snapshot.hash,
+          )
+          .listen((update) {
+        if (update.status == 'expired') {
           otpError = 'Код муддати ўтган. Қайта урининг.';
           isAdminCodeReady = false;
           generatedAdminCode = null;
@@ -342,12 +335,15 @@ class OnboardingController extends ChangeNotifier {
           return;
         }
 
-        if (status == 'approved' && code != null && code.length == 6) {
-          generatedAdminCode = code;
+        if (update.isApproved) {
+          generatedAdminCode = update.code;
           isAdminCodeReady = true;
           otpError = null;
           notifyListeners();
         }
+      }, onError: (Object e) {
+        otpError = 'Xatolik: $e';
+        notifyListeners();
       });
 
       return true;

@@ -1313,21 +1313,54 @@ exports.sendDailyOnboardingPromo = functions.pubsub
 // BALANCE (ҳисоб-китоб / кошелёк) — callable
 // ══════════════════════════════════════
 
-function assertAdmin(operatorPhone) {
+async function assertAdmin(operatorPhone, context) {
+  // 1. Firebase Auth token must exist
+  if (!context || !context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated', 'Login required');
+  }
   const uid = digits(operatorPhone);
-  if (!uid) throw new functions.https.HttpsError('invalid-argument', 'operatorPhone');
+  if (!uid) throw new functions.https.HttpsError(
+    'invalid-argument', 'operatorPhone');
+
+  // 2. Auth token phone must match operatorPhone
+  const tokenPhone = String(
+    context.auth.token.phone_number || '').replace(/\D/g, '');
+  const tokenUid = String(context.auth.uid || '');
+  if (tokenPhone !== uid && tokenUid !== uid) {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'Phone mismatch');
+  }
+
+  // 3. Firestore role check (unchanged)
   return db.collection('users').doc(uid).get().then((doc) => {
     const role = (doc.data() || {}).role || 'user';
-    if (role !== 'admin' && role !== 'superadmin' && role !== 'dispatcher') {
-      throw new functions.https.HttpsError('permission-denied', 'Admin only');
+    if (role !== 'admin' && role !== 'superadmin'
+        && role !== 'dispatcher') {
+      throw new functions.https.HttpsError(
+        'permission-denied', 'Admin only');
     }
     return uid;
   });
 }
 
-function assertAdminOrDriver(operatorPhone) {
+async function assertAdminOrDriver(operatorPhone, context) {
+  if (!context || !context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated', 'Login required');
+  }
   const uid = digits(operatorPhone);
-  if (!uid) throw new functions.https.HttpsError('invalid-argument', 'operatorPhone');
+  if (!uid) throw new functions.https.HttpsError(
+    'invalid-argument', 'operatorPhone');
+
+  const tokenPhone = String(
+    context.auth.token.phone_number || '').replace(/\D/g, '');
+  const tokenUid = String(context.auth.uid || '');
+  if (tokenPhone !== uid && tokenUid !== uid) {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'Phone mismatch');
+  }
+
   return db.collection('users').doc(uid).get().then((doc) => {
     const role = (doc.data() || {}).role || 'user';
     if (role !== 'admin' && role !== 'driver') {
@@ -2715,6 +2748,215 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
 });
 
 /** Мижоз нақд чиқариш талаби */
+/** Kuryer: courier_orders to'lov + yetkazildi (Admin SDK, bitta transaction). */
+exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const orderId = String(data.orderId || '').trim();
+  const courierPhone = String(data.courierPhone || '');
+  const courierDigits = assertCourierPhone(courierPhone);
+  const caller = callerPhone(context);
+  if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  const courierUid = await resolveAuthorizedCourierUid(courierPhone);
+
+  const cashGiven = parseInt(String(data.cashGiven ?? 0), 10);
+  const cardGiven = parseInt(String(data.cardGiven ?? 0), 10);
+  const walletGiven = parseInt(String(data.walletGiven ?? 0), 10);
+  if (!Number.isFinite(cashGiven) || cashGiven < 0
+      || !Number.isFinite(cardGiven) || cardGiven < 0
+      || !Number.isFinite(walletGiven) || walletGiven < 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amounts must be >= 0');
+  }
+  if (!orderId) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+
+  const orderRef = db.collection('courier_orders').doc(orderId);
+
+  const courierOrderTotal = (od) => {
+    const totalPrice = parseInt(String(od.totalPrice ?? 0), 10) || 0;
+    if (totalPrice > 0) return totalPrice;
+    const estimated = parseInt(String(od.estimatedPrice ?? 0), 10) || 0;
+    const fee = parseInt(String(od.deliveryFee ?? 0), 10) || 0;
+    return estimated + fee;
+  };
+
+  let txnResult = null;
+
+  await db.runTransaction(async (t) => {
+    const orderSnap = await t.get(orderRef);
+    if (!orderSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'order not found');
+    }
+    const od = orderSnap.data() || {};
+    const status = String(od.status || '');
+
+    if (status === 'delivered') {
+      txnResult = {
+        ok: true,
+        idempotent: true,
+        total: courierOrderTotal(od),
+        paid: parseInt(String(od.totalPaid ?? 0), 10) || 0,
+        changeCredit: parseInt(String(od.changeCredit ?? 0), 10) || 0,
+        newBalance: null,
+        customerUid: '',
+        description: String(od.description || ''),
+      };
+      return;
+    }
+
+    const storedCourier = String(od.courierId || '');
+    if (canonicalUid(storedCourier) !== canonicalUid(courierUid)) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your order');
+    }
+    if (status !== 'picked_up') {
+      throw new functions.https.HttpsError('failed-precondition', 'picked_up first');
+    }
+
+    const total = courierOrderTotal(od);
+    if (!Number.isFinite(total) || total <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+    }
+
+    const paid = cashGiven + cardGiven + walletGiven;
+    if (paid < total - 1) {
+      throw new functions.https.HttpsError('failed-precondition', 'underpayment');
+    }
+
+    const walletApplied = Math.min(
+      walletGiven,
+      Math.max(0, total - cashGiven - cardGiven),
+    );
+    const changeCredit = Math.max(0, cashGiven + cardGiven + walletApplied - total);
+
+    const customerPhone = String(od.customerPhone || '');
+    const uid9 = userUid(customerPhone);
+    const uid12 = canonicalUid(customerPhone);
+    let customerRef = db.collection('users').doc(uid12);
+    let userSnap = await t.get(customerRef);
+    if (!userSnap.exists && uid9 !== uid12) {
+      customerRef = db.collection('users').doc(uid9);
+      userSnap = await t.get(customerRef);
+    }
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'customer user not found');
+    }
+
+    if (walletGiven > 0) {
+      const prevBalance = parseInt(String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
+      if (prevBalance < walletGiven) {
+        throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
+      }
+      t.update(customerRef, {
+        bonusBalance: admin.firestore.FieldValue.increment(-walletGiven),
+        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.set(customerRef.collection('wallet_ledger').doc(), {
+        type: 'purchase_debit',
+        amount: -walletGiven,
+        module: 'courier_order',
+        refType: 'courier_order',
+        refId: orderId,
+        meta: { orderTotal: total },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'courier_order_payment',
+      });
+    }
+
+    if (changeCredit > 0) {
+      t.update(customerRef, {
+        bonusBalance: admin.firestore.FieldValue.increment(changeCredit),
+        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.set(customerRef.collection('wallet_ledger').doc(), {
+        type: 'change_accrued',
+        amount: changeCredit,
+        module: 'courier_order',
+        refType: 'courier_order',
+        refId: orderId,
+        meta: { orderTotal: total, paidSum: paid },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'courier_order_payment',
+      });
+    }
+
+    t.update(orderRef, {
+      status: 'delivered',
+      deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+      cashGiven,
+      cardGiven,
+      walletGiven,
+      totalPaid: paid,
+      changeCredit,
+    });
+
+    const afterSnap = await t.get(customerRef);
+    const newBalance = parseInt(String(afterSnap.data()?.bonusBalance ?? 0), 10) || 0;
+
+    txnResult = {
+      ok: true,
+      idempotent: false,
+      total,
+      paid,
+      changeCredit,
+      newBalance,
+      customerUid: customerRef.id,
+      description: String(od.description || ''),
+    };
+  });
+
+  if (!txnResult) {
+    throw new functions.https.HttpsError('internal', 'transaction failed');
+  }
+
+  if (txnResult.idempotent) {
+    return {
+      ok: true,
+      total: txnResult.total,
+      paid: txnResult.paid,
+      changeCredit: txnResult.changeCredit,
+      newBalance: txnResult.newBalance,
+    };
+  }
+
+  let body = txnResult.description.trim();
+  if (body) body += '\n';
+  body += `Jami: ${txnResult.total} so'm`;
+  if (cashGiven > 0) body += `\n💵 Naqd: ${cashGiven}`;
+  if (walletGiven > 0) body += `\n💼 Hamyondan: ${walletGiven}`;
+  if (txnResult.changeCredit > 0) {
+    body += `\n🔁 Qaytim: ${txnResult.changeCredit} so'm`;
+  }
+
+  try {
+    await notifyUserInApp({
+      userId: txnResult.customerUid,
+      title: '✅ Buyurtma yetkazildi',
+      body,
+      category: 'order',
+      source: 'courier_order_receipt',
+      dataType: 'courier_order',
+      screen: 'profile',
+      extraData: { orderId, changeCredit: String(txnResult.changeCredit) },
+    });
+  } catch (e) {
+    console.error('courierSubmitCourierOrderPayment receipt push:', e.message || e);
+  }
+
+  return {
+    ok: true,
+    total: txnResult.total,
+    paid: txnResult.paid,
+    changeCredit: txnResult.changeCredit,
+    newBalance: txnResult.newBalance,
+  };
+});
+
+
 exports.requestPayout = functions.https.onCall(async (data, context) => {
   const userPhone = String(data.userPhone || '');
   const amount = parseInt(String(data.amount ?? 0), 10);
@@ -2725,6 +2967,19 @@ exports.requestPayout = functions.https.onCall(async (data, context) => {
   }
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
+  }
+
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated',
+      'Login required');
+  }
+  const callerPhone = String(
+    context.auth.token.phone_number || '').replace(/\D/g, '');
+  const callerUid = String(context.auth.uid || '');
+  const targetUid = userUid(userPhone);
+  if (callerPhone !== targetUid && callerUid !== targetUid) {
+    throw new functions.https.HttpsError('permission-denied',
+      'Can only request payout for your own account');
   }
 
   const uid = userUid(userPhone);
@@ -3322,6 +3577,85 @@ exports.registerDeviceBinding = functions.https.onCall(async (data, context) => 
   return { ok: true, deviceFingerprintHash: hash };
 });
 
+/** Mobil: admin kod so'rovi — faqat CF yozadi (Firestore rules client write blok). */
+exports.requestPendingCode = functions.https.onCall(async (data) => {
+  const phone = canonicalUid(data.phone || '');
+  const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+  const fingerprint = sanitizeFingerprintMap(data.fingerprint);
+
+  if (phone.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
+  }
+  if (!isValidFingerprintHash(hash)) {
+    throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
+  }
+
+  const pendingRef = db.collection('pending_codes').doc(phone);
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+  await pendingRef.set({
+    phone: `+${phone}`,
+    status: 'pending',
+    code: admin.firestore.FieldValue.delete(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+    deviceFingerprintHash: hash,
+    ...(Object.keys(fingerprint).length > 0 ? { fingerprint } : {}),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { ok: true, phone };
+});
+
+/** Mobil: kod holati (auth talab qilinmaydi — hash tekshiruvi). */
+exports.getPendingCodeStatus = functions.https.onCall(async (data) => {
+  const phone = canonicalUid(data.phone || '');
+  const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+
+  if (phone.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
+  }
+  if (!isValidFingerprintHash(hash)) {
+    throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
+  }
+
+  const pendingRef = db.collection('pending_codes').doc(phone);
+  const pendingSnap = await pendingRef.get();
+  if (!pendingSnap.exists) {
+    return { status: 'none' };
+  }
+
+  const pending = pendingSnap.data() || {};
+  const storedHash = String(pending.deviceFingerprintHash || '').toLowerCase();
+  if (storedHash && isValidFingerprintHash(storedHash) && storedHash !== hash) {
+    throw new functions.https.HttpsError('permission-denied', 'Qurilma mos emas');
+  }
+
+  let status = String(pending.status || 'pending');
+  const expiresAt = pending.expiresAt;
+  if (expiresAt && typeof expiresAt.toDate === 'function') {
+    if (expiresAt.toDate().getTime() < Date.now()) {
+      if (status === 'approved' || status === 'pending') {
+        await pendingRef.set({
+          status: 'expired',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      return { status: 'expired' };
+    }
+  }
+
+  if (status === 'approved') {
+    const code = String(pending.code || '').trim();
+    return {
+      status: 'approved',
+      code: /^\d{6}$/.test(code) ? code : null,
+    };
+  }
+
+  return { status: status || 'pending' };
+});
+
 /** Admin panel kodidan keyin: pending_codes tekshiruvi + device_bindings + custom token. */
 exports.verifyPendingCodeAndRegister = functions.https.onCall(async (data) => {
   try {
@@ -3616,8 +3950,8 @@ exports.changeDevicePhone = functions.https.onCall(async (data, context) => {
 });
 
 /** Admin: global avtomatik tasdiqlash rejimi. */
-exports.adminSetDeviceBindingAutoApprove = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminSetDeviceBindingAutoApprove = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const enabled = data.enabled === true;
   await db.collection('settings').doc('app').set({
     deviceBindingAutoApprove: enabled,
@@ -3627,8 +3961,8 @@ exports.adminSetDeviceBindingAutoApprove = functions.https.onCall(async (data) =
 });
 
 /** Admin: bir bosishda avtomatik tasdiqlash (konfliktlarni hal qiladi). */
-exports.adminAutoApproveDeviceBinding = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminAutoApproveDeviceBinding = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   let phone = canonicalUid(data.phone || '');
   if (!isValidFingerprintHash(hash)) {
@@ -3650,8 +3984,8 @@ exports.adminAutoApproveDeviceBinding = functions.https.onCall(async (data) => {
 });
 
 /** Admin: qo'lda tasdiqlash (telefonni admin kiritadi). */
-exports.adminManualApproveDeviceBinding = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminManualApproveDeviceBinding = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   const phone = canonicalUid(data.phone || '');
   if (!isValidFingerprintHash(hash)) {
@@ -3669,8 +4003,8 @@ exports.adminManualApproveDeviceBinding = functions.https.onCall(async (data) =>
 });
 
 /** Admin: blokni ochish. */
-exports.adminUnblockDeviceBinding = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminUnblockDeviceBinding = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   if (!isValidFingerprintHash(hash)) {
     throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
@@ -3685,8 +4019,8 @@ exports.adminUnblockDeviceBinding = functions.https.onCall(async (data) => {
 });
 
 /** Admin: binding rad etish / o'chirish. */
-exports.adminRejectDeviceBinding = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminRejectDeviceBinding = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   if (!isValidFingerprintHash(hash)) {
     throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
@@ -3710,8 +4044,8 @@ exports.adminRejectDeviceBinding = functions.https.onCall(async (data) => {
  * Bir martalik: eski `device_bindings` (ID hash emas) → `device_bindings_legacy`.
  * `dryRun: true` — faqat hisob, yozmaydi.
  */
-exports.migrateOldBindings = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.migrateOldBindings = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const dryRun = data.dryRun === true;
   const now = admin.firestore.FieldValue.serverTimestamp();
 
@@ -3867,8 +4201,8 @@ const ADMIN_ORDER_STATUSES = new Set([
 ]);
 
 /** Admin web: буюртма status (Firestore rules `isAdmin()` custom token bilan ишламайди). */
-exports.adminSetOrderStatus = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminSetOrderStatus = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const orderId = String(data.orderId || '').trim();
   const status = String(data.status || '').trim();
   if (!orderId) {
@@ -3887,8 +4221,8 @@ exports.adminSetOrderStatus = functions.https.onCall(async (data) => {
 });
 
 /** Admin web: бир нечта буюртма status (Kanban ustun tugmasi). */
-exports.adminSetOrderStatusBatch = functions.https.onCall(async (data) => {
-  await assertAdmin(String(data.adminPhone || ''));
+exports.adminSetOrderStatusBatch = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
   const status = String(data.status || '').trim();
   const orderIds = Array.isArray(data.orderIds)
     ? data.orderIds.map((id) => String(id || '').trim()).filter(Boolean)
@@ -3921,9 +4255,9 @@ exports.adminSetOrderStatusBatch = functions.https.onCall(async (data) => {
 });
 
 /** Admin: sell_submission → collection_task (йiғib оlish). */
-exports.adminCreateCollectionTask = functions.https.onCall(async (data) => {
+exports.adminCreateCollectionTask = functions.https.onCall(async (data, context) => {
   try {
-    const adminUid = await assertAdmin(String(data.adminPhone || ''));
+    const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
     const submissionId = String(data.submissionId || '').trim();
     const courierPhone = String(data.courierPhone || '');
     const itemsIn = Array.isArray(data.items) ? data.items : [];
@@ -4043,9 +4377,9 @@ exports.adminCreateCollectionTask = functions.https.onCall(async (data) => {
 /** Админ — омбор (`warehouse_stock`) ҳолатини ўқиш (read-only).
  *  Веб-админ Firestore'да isAdmin() эмас, шунинг учун Admin SDK орқали ўқиймиз.
  */
-exports.adminGetWarehouseStock = functions.https.onCall(async (data) => {
+exports.adminGetWarehouseStock = functions.https.onCall(async (data, context) => {
   try {
-    await assertAdmin(String(data.adminPhone || ''));
+    await assertAdmin(String(data.adminPhone || ''), context);
 
     const snap = await db.collection('warehouse_stock').get();
     const items = snap.docs.map((doc) => {
@@ -4367,7 +4701,7 @@ exports.rejectPayout = functions.https.onCall(async (data, context) => {
 /** Админ web: фoydalanuvchi rolini boshqarish (admin ↔ user). */
 exports.setUserRoleByAdmin = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  const adminUid = await assertAdmin(adminPhone);
+  const adminUid = await assertAdmin(adminPhone, context);
 
   const targetPhone = digits(data.targetPhone || data.userPhone || '');
   if (targetPhone.length < 9) {
@@ -4741,7 +5075,7 @@ exports.autoApproveDriverApplication = functions.https.onCall(async (data, conte
 /** Админ: haydovchi arizasini tasdiqlash (Admin SDK batch). */
 exports.approveDriverRequest = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  const adminUid = await assertAdmin(adminPhone);
+  const adminUid = await assertAdmin(adminPhone, context);
 
   const requestId = String(data.requestId || '').trim();
   if (!requestId) {
@@ -4767,7 +5101,7 @@ exports.approveDriverRequest = functions.https.onCall(async (data, context) => {
 /** Админ: haydovchi arizasini rad etish. */
 exports.rejectDriverRequest = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  const adminUid = await assertAdmin(adminPhone);
+  const adminUid = await assertAdmin(adminPhone, context);
 
   const requestId = String(data.requestId || '').trim();
   const reason = String(data.reason || '').trim();
@@ -4830,7 +5164,7 @@ exports.rejectDriverRequest = functions.https.onCall(async (data, context) => {
 /** Админ: tasdiqlangan haydovchini faol bo‘lmaganda ruxsatdan chiqarish. */
 exports.revokeDriverApproval = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  const adminUid = await assertAdmin(adminPhone);
+  const adminUid = await assertAdmin(adminPhone, context);
 
   const requestId = String(data.requestId || '').trim();
   const reason = String(data.reason || '').trim();
@@ -5106,7 +5440,7 @@ async function wipeCollection(colName, stats, key) {
 /** Admin: marshrut/mahalliy/shaharlararo haydovchi bazasini tozalash — yangi ro'yxatdan o'tish. */
 exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone);
+  await assertAdmin(adminPhone, context);
 
   const confirmText = String(data.confirmText || '').trim();
   if (confirmText !== 'RESET_TAXI_DRIVERS') {
@@ -5259,7 +5593,7 @@ exports.bootstrapAdminUser = functions
 /** Operator chat javobi — admin role + Admin SDK (client Firestore rules bypass). */
 exports.sendSupportChatReply = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '').trim();
-  await assertAdmin(adminPhone);
+  await assertAdmin(adminPhone, context);
   const chatId = digits(data.chatId || '');
   const text = String(data.text || '').trim();
   if (chatId.length < 9 || !text) {
@@ -5278,7 +5612,7 @@ exports.sendSupportChatReply = functions.https.onCall(async (data, context) => {
 /** Callable: support чатига админ хабари (Admin SDK — fromAdmin: true, systemOrder). */
 exports.appendAdminSystemChat = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone);
+  await assertAdmin(adminPhone, context);
 
   const chatId = String(data.chatId || '').replace(/\D/g, '');
   const text = String(data.text || '').trim();
@@ -5587,7 +5921,7 @@ exports.dailyReport20 = functions.pubsub
 /// Қўлда ишга тушириш — админдан callable.
 exports.generateDailyReportNow = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone);
+  await assertAdmin(adminPhone, context);
   const now = new Date();
   const report = await _buildDailyReport(now);
   await db.collection('daily_reports').doc(report.dateKey).set(report);
@@ -5638,7 +5972,7 @@ exports.resetDailySoldStock = functions.pubsub
 /// Қўлда ишга тушириш — админдан callable (test/recovery учун).
 exports.resetSoldStockNow = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone);
+  await assertAdmin(adminPhone, context);
   const [bread, extras, food] = await Promise.all([
     _resetCollectionSoldToday('bread_products'),
     _resetCollectionSoldToday('extra_products'),

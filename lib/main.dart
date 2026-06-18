@@ -18,6 +18,7 @@ import 'repositories/analytics_repository.dart';
 import 'repositories/bread_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/collection_tasks_repository.dart';
+import 'repositories/courier_orders_repository.dart';
 import 'repositories/couriers_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
@@ -34,6 +35,7 @@ import 'repositories/orders_repository.dart';
 import 'repositories/queue_repository.dart';
 import 'repositories/rides_repository.dart';
 import 'repositories/schedules_repository.dart';
+import 'repositories/settings_repository.dart';
 import 'repositories/trips_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/admin_service.dart';
@@ -47,7 +49,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
 import 'features/home/screens/home_screen.dart';
 import 'core/utils/formatters.dart';
-import 'features/onboarding/screens/phone_reverify_screen.dart';
+import 'features/onboarding/screens/auth_restore_screen.dart';
 import 'features/onboarding/screens/language_select_screen.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/ads/repositories/ads_repository.dart';
@@ -199,6 +201,8 @@ class _MyAppState extends State<MyApp> {
         Provider<CollectionTasksRepository>(
             create: (_) => CollectionTasksRepository()),
         Provider<CouriersRepository>(create: (_) => CouriersRepository()),
+        Provider<CourierOrdersRepository>(create: (_) => CourierOrdersRepository()),
+        Provider<SettingsRepository>(create: (_) => SettingsRepository()),
         Provider<AdsStorageService>(create: (_) => AdsStorageService()),
         Provider<AdsRepository>(create: (_) => AdsRepository()),
         Provider<AnalyticsRepository>.value(value: widget.analyticsRepo),
@@ -229,7 +233,7 @@ class _MyAppState extends State<MyApp> {
                     ? const OnboardingScreen()
                     : widget.hasFirebaseAuth
                         ? const HomeScreen()
-                        : const PhoneReverifyScreen(),
+                        : const AuthRestoreScreen(),
             ),
           );
         },

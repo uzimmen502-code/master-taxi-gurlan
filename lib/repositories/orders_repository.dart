@@ -96,6 +96,7 @@ class OrdersRepository {
   /// Нон buyurtmasi yaratish. Tayyor map қабул қилинади — pricing/extras
   /// caller тарафда йиғилади. Reference қайтарилади (id кейинги
   /// `BalanceService` чақириқлари учун керак).
+  /// Direct write — use only for admin/test purposes.
   Future<DocumentReference<Map<String, dynamic>>> createBreadOrder(
       Map<String, dynamic> data) async {
     return _col.add(data);

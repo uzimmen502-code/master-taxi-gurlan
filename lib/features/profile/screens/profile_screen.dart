@@ -735,12 +735,21 @@ class _ProfileViewState extends State<_ProfileView> {
     }
 
     final c = context.read<ProfileController>();
+    if (c.role == 'driver') {
+      _snack('Haydovchi rolini PIN orqali o\'zgartirib bo\'lmaydi', isError: true);
+      return;
+    }
     final newRole = c.role == 'courier' ? 'user' : 'courier';
-    await c.quickSaveRole(newRole);
+    final ok = await c.quickSaveRole(newRole);
     if (!mounted) return;
+    if (!ok && c.errorMessage != null) {
+      _snack(c.errorMessage!, isError: true);
+      c.consumeError();
+      return;
+    }
     await c.load();
     if (!mounted) return;
-    _snack('Роль ўзгартирилди: ${_roleLabel(context, newRole, loc)}');
+    _snack('Роль ўзгартирилди: ${_roleLabel(context, c.role, loc)}');
   }
 
   void _snack(String msg, {bool isError = false}) {

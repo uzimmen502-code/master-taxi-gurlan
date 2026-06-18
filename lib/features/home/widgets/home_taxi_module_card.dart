@@ -8,6 +8,7 @@ import '../controllers/home_label_animator.dart';
 import 'home_module_card_background_image.dart';
 import 'home_module_card_leaves.dart';
 import 'home_module_fitted_box.dart';
+import 'home_module_title_layout.dart';
 import 'wave_label_text.dart';
 
 /// Taksi moduli — chapda rasm (fon), o‘ngda matn + uchburchak.
@@ -23,8 +24,11 @@ class HomeTaxiModuleCard extends StatelessWidget {
   final VoidCallback onTap;
   final String? subtitle;
 
-  /// Matn zonasi — karta kengligining chap qismi (rasmdan keyin).
-  static const double _textZoneLeftFraction = 0.30;
+  /// Matn zonasi — tor ekranda rasm kichrayadi, matn kengroq.
+  static double _textZoneLeftFraction(double cardWidth) =>
+      HomeModuleTitleLayout.textZoneLeftFraction(cardWidth);
+
+  static const _titleMaxLines = 2;
 
   static const _titleStyle = TextStyle(
     fontSize: 15,
@@ -92,7 +96,7 @@ class HomeTaxiModuleCard extends StatelessWidget {
     double imageLeft,
     double maxHeightFrac,
   }) _layoutFor(bool hasSub) {
-    final cardH = (hasSub ? 118.0 : 106.0) * _taxiCardHeightScale;
+    final cardH = (hasSub ? 128.0 : 112.0) * _taxiCardHeightScale;
     const s = _taxiImageScale;
     return (
       cardH: cardH,
@@ -118,7 +122,8 @@ class HomeTaxiModuleCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final layout = _layoutFor(hasSub);
-        final textLeft = constraints.maxWidth * _textZoneLeftFraction;
+        final textLeft = _textZoneLeftFraction(constraints.maxWidth) *
+            constraints.maxWidth;
 
         return Material(
           color: Colors.transparent,
@@ -163,11 +168,16 @@ class HomeTaxiModuleCard extends StatelessWidget {
                           return Center(
                             child: HomeModuleFittedBox(
                               maxWidth: textConstraints.maxWidth,
+                              minScale: HomeModuleFittedBox.defaultMinScale,
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  _buildTitle(context, plain),
+                                  _buildTitle(
+                                    context,
+                                    plain,
+                                    textConstraints.maxWidth,
+                                  ),
                                   if (hasSub) ...[
                                     const SizedBox(height: 4),
                                     Text(
@@ -194,7 +204,12 @@ class HomeTaxiModuleCard extends StatelessWidget {
     );
   }
 
-  Widget _buildTitle(BuildContext context, String plain) {
+  Widget _buildTitle(
+    BuildContext context,
+    String plain,
+    double maxWidth,
+  ) {
+    final displayPlain = HomeModuleTitleLayout.splitTitleLines(plain);
     if (module.id == 'jobs') {
       return const HomeJobsThreeRowTitle(moduleId: 'jobs');
     }
@@ -204,8 +219,9 @@ class HomeTaxiModuleCard extends StatelessWidget {
             context.tr('home_module_cheap_products_online').characters.length;
         return WaveLabelText(
           moduleId: module.id,
-          plainText: plain,
-          maxLines: 1,
+          plainText: displayPlain,
+          maxLines: _titleMaxLines,
+          maxWidth: maxWidth,
           wrapAlignment: WrapAlignment.center,
           baseStyle: _onlinePrefixStyle(_titleStyle),
           highlightFromIndex: onlineLen,
@@ -214,15 +230,16 @@ class HomeTaxiModuleCard extends StatelessWidget {
       }
       return WaveLabelText(
         moduleId: module.id,
-        plainText: plain,
-        maxLines: 1,
+        plainText: displayPlain,
+        maxLines: _titleMaxLines,
+        maxWidth: maxWidth,
         wrapAlignment: WrapAlignment.center,
         baseStyle: _titleStyle,
       );
     }
     return Text(
-      plain.isNotEmpty ? plain : module.label,
-      maxLines: 1,
+      displayPlain.isNotEmpty ? displayPlain : module.label,
+      maxLines: _titleMaxLines,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
       style: _titleStyle,

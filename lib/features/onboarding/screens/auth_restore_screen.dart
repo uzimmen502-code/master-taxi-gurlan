@@ -10,9 +10,7 @@ import 'phone_reverify_screen.dart';
 
 /// Restores Firebase Auth (trusted device) before Home or full reverify.
 class AuthRestoreScreen extends StatefulWidget {
-  const AuthRestoreScreen({super.key, required this.phoneReverified});
-
-  final bool phoneReverified;
+  const AuthRestoreScreen({super.key});
 
   @override
   State<AuthRestoreScreen> createState() => _AuthRestoreScreenState();
@@ -31,40 +29,39 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
       return;
     }
 
-    if (widget.phoneReverified) {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final phone = prefs.getString('user_phone') ?? '';
-        if (phoneDigits(phone).length < 12) {
-          _goReverify();
-          return;
-        }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final phone = prefs.getString('user_phone') ?? '';
+      if (phoneDigits(phone).length < 12) {
+        _goReverify();
+        return;
+      }
 
-        final snapshot = await DeviceFingerprintService().collect();
-        if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
-          _goReverify();
-          return;
-        }
+      final snapshot = await DeviceFingerprintService().collect();
+      if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
+        _goReverify();
+        return;
+      }
 
-        final repo = DeviceBindingRepository();
-        final result = await repo.checkDeviceBinding(
-          phone: phone,
-          snapshot: snapshot,
-        );
+      final repo = DeviceBindingRepository();
+      final result = await repo.checkDeviceBinding(
+        phone: phone,
+        snapshot: snapshot,
+      );
 
-        if (result.status == DeviceBindingStatus.trustedDevice) {
-          final token = result.customToken;
-          if (token != null && token.isNotEmpty) {
-            await FirebaseAuth.instance.signInWithCustomToken(token);
-            if (FirebaseAuth.instance.currentUser != null) {
-              _goHome();
-              return;
-            }
+      if (result.status == DeviceBindingStatus.trustedDevice) {
+        final token = result.customToken;
+        if (token != null && token.isNotEmpty) {
+          await FirebaseAuth.instance.signInWithCustomToken(token);
+          if (FirebaseAuth.instance.currentUser != null) {
+            await prefs.setBool('phone_reverified', true);
+            _goHome();
+            return;
           }
         }
-      } catch (_) {
-        // Trusted device failed — fall through to reverify.
       }
+    } catch (_) {
+      // Trusted device failed — full reverify wizard.
     }
 
     _goReverify();

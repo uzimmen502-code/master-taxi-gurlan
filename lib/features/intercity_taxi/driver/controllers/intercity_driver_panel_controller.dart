@@ -202,9 +202,9 @@ class IntercityDriverPanelController extends ChangeNotifier {
       (b) => b.id == bookingId && b.driverId == driverId,
     );
     if (!owns) return;
-    await _bookingsRepo.cancelBooking(
+    await _bookingsRepo.completeBooking(
       bookingId: bookingId,
-      reason: 'Ҳайдовчи бронни қайтарди',
+      driverId: driverId,
     );
   }
 

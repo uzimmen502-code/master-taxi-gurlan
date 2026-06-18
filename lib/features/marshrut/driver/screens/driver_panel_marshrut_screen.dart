@@ -84,12 +84,16 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   VoidCallback? _closeRequestDialog;
   final FlutterRingtonePlayer _ringtonePlayer = FlutterRingtonePlayer();
   bool _shiftEnded = false;
+  bool _autoScheduleOpened = false;
+  MarshrutDriverPanelController? _panelCtrl;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final ctrl = context.read<MarshrutDriverPanelController>();
+    _panelCtrl = ctrl;
+    ctrl.addListener(_onPanelControllerUpdate);
     ctrl.onStopRingtone = _stopRingtone;
     ctrl.onPassengerOrderCancelled = _onPassengerOrderCancelled;
     ctrl.onEndStopApproaching = () {
@@ -97,6 +101,18 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPendingTripFromPush();
+      _onPanelControllerUpdate();
+    });
+  }
+
+  void _onPanelControllerUpdate() {
+    final ctrl = _panelCtrl;
+    if (ctrl == null || !mounted || _autoScheduleOpened || _shiftEnded) return;
+    if (!ctrl.initDone || ctrl.hasScheduleToday) return;
+    _autoScheduleOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_openStartSchedule(ctrl));
     });
   }
 
@@ -113,6 +129,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
 
   @override
   void dispose() {
+    _panelCtrl?.removeListener(_onPanelControllerUpdate);
     final ctrl = context.read<MarshrutDriverPanelController>();
     ctrl.onStopRingtone = null;
     ctrl.onPassengerOrderCancelled = null;
@@ -190,8 +207,12 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     if (msg != null && msg != _lastSnackShown) {
       _lastSnackShown = msg;
       if (msg == 'no_schedule_today') {
-        c.clearTransient();
-        _lastSnackShown = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _snack(context.tr('no_schedule_today'), Colors.orange.shade800);
+          c.clearTransient();
+          _lastSnackShown = null;
+        });
       } else {
         final isError = c.errorMessage != null;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -417,12 +438,38 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
                       ),
                   ],
                 ] else if (!_shiftEnded) ...[
-                  Text(
-                    context.tr('start_work_subtitle'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: AppText.bodyMedium,
-                      color: Colors.grey.shade600,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.orange.shade800, size: 28),
+                        const SizedBox(height: 8),
+                        Text(
+                          context.tr('no_schedule_today'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: AppText.bodyMedium,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          context.tr('start_work_subtitle'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: AppText.bodySmall,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

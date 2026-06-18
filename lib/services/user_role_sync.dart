@@ -52,6 +52,12 @@ class UserRoleSync {
     if (isPrivileged(local)) {
       return fs.isNotEmpty ? fsNorm : 'user';
     }
+    final localNorm = local.toLowerCase();
+    // Profil PIN — local `courier` serverda `user`/bo'sh bo'lsa ham saqlansin.
+    if (localNorm == 'courier' &&
+        (fsNorm.isEmpty || fsNorm == 'user')) {
+      return 'courier';
+    }
     if (fs.isNotEmpty) return fsNorm;
     return local;
   }

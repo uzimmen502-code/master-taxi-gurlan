@@ -18,15 +18,15 @@ class MapPickerScreen extends StatefulWidget {
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  /// Boshlang'ich xarita markazi (Toshkent — vaqtinchalik).
-  static const _initialCenter = LatLng(41.3111, 69.2797);
+  /// Boshlang'ich xarita markazi (Gurlan, Xorazm).
+  static const _initialCenter = LatLng(41.4957, 60.5822);
 
   /// Placeholder "so'nggi manzillar" — kelajakda foydalanuvchi tarixidan kelishi kerak.
   static const _recentAddresses = <_RecentPlace>[
-    _RecentPlace(name: 'Юнусобод-14', lat: 41.3111, lng: 69.2797),
-    _RecentPlace(name: 'Чилонзор-19', lat: 41.3211, lng: 69.2697),
-    _RecentPlace(name: 'Миробод-5', lat: 41.3011, lng: 69.2597),
-    _RecentPlace(name: 'Сергели-8', lat: 41.2911, lng: 69.2497),
+    _RecentPlace(name: 'Гурлан маркази', lat: 41.4957, lng: 60.5822),
+    _RecentPlace(name: 'Гурлан бозори', lat: 41.4980, lng: 60.5850),
+    _RecentPlace(name: 'Гурлан МФЙ-1', lat: 41.4940, lng: 60.5800),
+    _RecentPlace(name: 'Гурлан МФЙ-2', lat: 41.4920, lng: 60.5780),
   ];
 
   LatLng? _selectedLocation;

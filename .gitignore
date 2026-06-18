@@ -68,3 +68,15 @@ functions/service-account.json
 # Local archives
 *.rar
 functions/firebase
+.dart_tool/ 
+build/ 
+pubspec.lock 
+.idea/ 
+.vscode/ 
+*.log 
+.dart_tool/ 
+build/ 
+pubspec.lock 
+.idea/ 
+.vscode/ 
+*.log 

@@ -7,11 +7,11 @@ class HomeModuleFittedBox extends StatelessWidget {
     required this.maxWidth,
     required this.child,
     this.alignment = Alignment.center,
-    this.minScale = 0.82,
+    this.minScale = defaultMinScale,
   });
 
   /// Barcha modul kartalari uchun bir xil pastki chegara.
-  static const double defaultMinScale = 0.82;
+  static const double defaultMinScale = 0.68;
 
   final double maxWidth;
   final Widget child;

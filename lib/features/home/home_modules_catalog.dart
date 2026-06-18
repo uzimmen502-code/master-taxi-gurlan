@@ -15,6 +15,13 @@ class HomeModulesCatalog {
   static String resolveLabel(BuildContext context, HomeModule module) =>
       AppLocalizations.of(context)!.translate(module.label);
 
+  static HomeModule byId(String id) {
+    for (final m in modules) {
+      if (m.id == id) return m;
+    }
+    throw ArgumentError.value(id, 'id', 'Unknown home module');
+  }
+
   static const List<HomeModule> modules = [
     HomeModule(
       id: 'bread',
@@ -31,7 +38,6 @@ class HomeModulesCatalog {
       id: 'sell',
       image: 'assets/images/sell.png',
       label: 'home_module_sell',
-      enabled: false,
     ),
     HomeModule(
       id: 'cheap_products_home',

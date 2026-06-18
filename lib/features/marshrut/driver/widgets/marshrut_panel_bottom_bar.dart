@@ -61,15 +61,43 @@ class MarshrutPanelBottomBar extends StatelessWidget {
     final row1Enabled = barState == MarshrutPanelBarState.b ||
         barState == MarshrutPanelBarState.c;
 
-    final smenaStartedLeftActive =
-        barState == MarshrutPanelBarState.b ||
-            barState == MarshrutPanelBarState.c;
-    final smenaEndedRightActive =
-        barState == MarshrutPanelBarState.a ||
-            barState == MarshrutPanelBarState.d;
-
     final smenaInfoEnabled = barState == MarshrutPanelBarState.b ||
         barState == MarshrutPanelBarState.c;
+
+    final String smenaLeftLabel;
+    final String smenaRightLabel;
+    final bool smenaLeftActive;
+    final bool smenaRightActive;
+    final VoidCallback? smenaLeftTap;
+    final VoidCallback? smenaRightTap;
+
+    switch (barState) {
+      case MarshrutPanelBarState.a:
+        // Smena yo'q: boshlash (yashil) | smena yo'q (kulrang).
+        smenaLeftLabel = context.tr('marshrut_seg_smena_start');
+        smenaRightLabel = context.tr('marshrut_seg_smena_none');
+        smenaLeftActive = true;
+        smenaRightActive = false;
+        smenaLeftTap = onSmenaStartedTap;
+        smenaRightTap = null;
+      case MarshrutPanelBarState.b:
+      case MarshrutPanelBarState.c:
+        // Smena faol: faol (yashil) | tugatish (qizil).
+        smenaLeftLabel = context.tr('marshrut_seg_smena_active');
+        smenaRightLabel = context.tr('marshrut_seg_smena_end_action');
+        smenaLeftActive = true;
+        smenaRightActive = true;
+        smenaLeftTap = null;
+        smenaRightTap = onSmenaEndedTap;
+      case MarshrutPanelBarState.d:
+        // Smena tugagan: ikkala tomonda status, faqat o'ng qizil.
+        smenaLeftLabel = context.tr('marshrut_seg_smena_ended_status');
+        smenaRightLabel = context.tr('marshrut_seg_smena_ended_status');
+        smenaLeftActive = false;
+        smenaRightActive = true;
+        smenaLeftTap = null;
+        smenaRightTap = null;
+    }
 
     return Material(
       color: Colors.white,
@@ -97,20 +125,14 @@ class MarshrutPanelBottomBar extends StatelessWidget {
               _SegmentRow(
                 height: _rowHeight,
                 fontSize: _segmentFontSize,
-                leftLabel: context.tr('marshrut_seg_smena_started'),
-                rightLabel: context.tr('marshrut_seg_smena_ended'),
-                leftActive: smenaStartedLeftActive,
-                rightActive: smenaEndedRightActive,
+                leftLabel: smenaLeftLabel,
+                rightLabel: smenaRightLabel,
+                leftActive: smenaLeftActive,
+                rightActive: smenaRightActive,
                 leftActiveColor: _green,
                 rightActiveColor: _red,
-                onLeftTap: barState == MarshrutPanelBarState.a
-                    ? onSmenaStartedTap
-                    : null,
-                onRightTap:
-                    barState == MarshrutPanelBarState.b ||
-                            barState == MarshrutPanelBarState.c
-                        ? onSmenaEndedTap
-                        : null,
+                onLeftTap: smenaLeftTap,
+                onRightTap: smenaRightTap,
               ),
               const SizedBox(height: 8),
               _SmenaInfoButton(

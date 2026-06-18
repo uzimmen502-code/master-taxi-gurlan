@@ -25,6 +25,7 @@ import 'jobs_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
+import 'courier_orders_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'driver_applications_screen.dart';
@@ -76,6 +77,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
       description: 'Нон ва овқат буюртмалари',
+    ),
+    _AdminSection(
+      label: '🛵 Kuryer buyurtmalari',
+      icon: Icons.two_wheeler,
+      description: 'Kuryer buyurtmalari monitoring',
     ),
     _AdminSection(
       label: 'Курьер',
@@ -333,6 +339,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Буюртмалар') {
       return const AdminOrdersScreen(embedded: true);
+    }
+    if (section.label == '🛵 Kuryer buyurtmalari') {
+      return const CourierOrdersAdminScreen();
     }
     if (section.label == 'Чат қўллaб-қуввaтлaш') {
       return const ChatSupportScreen();

@@ -191,9 +191,22 @@ class ProfileController extends ChangeNotifier {
       if (address.isEmpty && user.addressLegacy.isNotEmpty) {
         address = user.addressLegacy;
       }
+      var firestoreRole = user.role;
+      if (role == 'courier' && firestoreRole.trim() != 'courier') {
+        try {
+          await _userRepo.updateProfile(uid: uid, role: 'courier');
+          firestoreRole = 'courier';
+        } catch (_) {}
+      } else if (role == 'user' && firestoreRole.trim() == 'courier') {
+        try {
+          await _userRepo.updateProfile(uid: uid, role: 'user');
+          firestoreRole = 'user';
+        } catch (_) {}
+      }
+
       final resolved = UserRoleSync.reconcile(
         localRole: role,
-        firestoreRole: user.role,
+        firestoreRole: firestoreRole,
       );
       if (resolved != role) {
         role = resolved;
@@ -394,24 +407,37 @@ class ProfileController extends ChangeNotifier {
     }
   }
 
-  Future<void> quickSaveRole(String v) async {
+  Future<bool> quickSaveRole(String v) async {
     if (!isClientAssignableRole(v)) {
       errorMessage =
           'Админ ролини фақат админ панел орқали бериш мумкин.';
       notifyListeners();
-      return;
+      return false;
+    }
+    if (v == 'courier' && role == 'driver') {
+      errorMessage = 'Haydovchi rolini PIN orqali kuryerga o\'zgartirib bo\'lmaydi.';
+      notifyListeners();
+      return false;
+    }
+    if (UserRoleSync.isPrivileged(role)) {
+      errorMessage =
+          'Админ ролини фақат админ панел орқали бериш мумкин.';
+      notifyListeners();
+      return false;
     }
     role = v;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_role', v);
 
+    var firestoreOk = true;
     final uid = canonicalPhoneId(phone);
-    if (uid.length >= 9) {
+    if (uid.length >= 9 &&
+        (v == 'courier' || v == 'user')) {
       try {
         await _userRepo.updateProfile(uid: uid, role: v);
       } catch (_) {
-        // Internet yo'q — keyingi load()да синxронlанadi.
+        firestoreOk = false;
       }
     }
 
@@ -419,6 +445,8 @@ class ProfileController extends ChangeNotifier {
       FCMService().stopListeners();
       await FCMService().startListeners();
     } catch (_) {}
+
+    return firestoreOk || v == 'courier';
   }
 
   Future<bool> save({

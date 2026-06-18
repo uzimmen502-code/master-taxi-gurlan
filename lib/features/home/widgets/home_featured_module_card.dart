@@ -143,6 +143,7 @@ class HomeFeaturedModuleCard extends StatelessWidget {
                     child: HomeModuleFittedBox(
                       maxWidth: textConstraints.maxWidth,
                       alignment: Alignment.topRight,
+                      minScale: HomeModuleFittedBox.defaultMinScale,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -151,6 +152,7 @@ class HomeFeaturedModuleCard extends StatelessWidget {
                             moduleId: 'bread',
                             plainText: plain,
                             maxLines: 2,
+                            maxWidth: textConstraints.maxWidth,
                             wrapAlignment: WrapAlignment.end,
                             baseStyle: _labelStyle,
                           ),
@@ -190,10 +192,15 @@ class HomeFeaturedModuleCard extends StatelessWidget {
             builder: (context, textConstraints) {
               return Align(
                 alignment: Alignment.centerRight,
-                child: HomeJobsThreeRowTitle(
-                  moduleId: 'jobs',
+                child: HomeModuleFittedBox(
+                  maxWidth: textConstraints.maxWidth,
                   alignment: Alignment.centerRight,
-                  firstLineStyle: _labelStyle.copyWith(fontSize: 15),
+                  minScale: HomeModuleFittedBox.defaultMinScale,
+                  child: HomeJobsThreeRowTitle(
+                    moduleId: 'jobs',
+                    alignment: Alignment.centerRight,
+                    firstLineStyle: _labelStyle.copyWith(fontSize: 15),
+                  ),
                 ),
               );
             },

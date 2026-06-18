@@ -7,7 +7,9 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
+import '../../../models/procurement_product.dart';
 import '../../../services/order_payment_service.dart';
+import '../../../services/procurement_prices_service.dart';
 import '../controllers/courier_controller.dart';
 
 /// Курьер «Тўлов» — нақд / карта / кошелёк / маҳсулот(лар).
@@ -32,7 +34,9 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
   final _cashCtrl = TextEditingController();
   final _cardCtrl = TextEditingController();
 
-  PaymentProductOption? _product;
+  ProcurementProduct? _product;
+  List<ProcurementProduct> _catalog = [];
+  bool _catalogLoading = true;
   final _qtyCtrl = TextEditingController(text: '1');
   final _priceCtrl = TextEditingController();
   final List<Map<String, dynamic>> _productLines = [];
@@ -59,9 +63,48 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     _cashCtrl.text = '${widget.order.total}';
     _cashCtrl.addListener(_onAmountChanged);
     _cardCtrl.addListener(_onAmountChanged);
-    _product = PaymentProducts.defaults.first;
-    _priceCtrl.text = '${_product!.defaultUnitPrice}';
+    _loadCatalog();
     _loadWalletBalance();
+  }
+
+  List<ProcurementProduct> _fallbackCatalog() {
+    return PaymentProducts.defaults
+        .map(
+          (p) => ProcurementProduct(
+            code: p.code,
+            label: p.labelUz,
+            unit: p.unit,
+            price: p.defaultUnitPrice,
+            active: true,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final items = await ProcurementPricesService().getAll();
+      if (!mounted) return;
+      final active = items.where((p) => p.active).toList();
+      setState(() {
+        _catalog = active.isNotEmpty ? active : _fallbackCatalog();
+        _catalogLoading = false;
+        if (_catalog.isNotEmpty) {
+          _product = _catalog.first;
+          _priceCtrl.text = '${_product!.price}';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _catalog = _fallbackCatalog();
+        _catalogLoading = false;
+        if (_catalog.isNotEmpty) {
+          _product = _catalog.first;
+          _priceCtrl.text = '${_product!.price}';
+        }
+      });
+    }
   }
 
   Future<void> _loadWalletBalance() async {
@@ -369,27 +412,34 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
   }
 
   Widget _buildProductEntry() {
+    if (_catalogLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_catalog.isEmpty) {
+      return const SizedBox();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<PaymentProductOption>(
+        DropdownButtonFormField<ProcurementProduct>(
           value: _product,
           decoration: InputDecoration(
             labelText: _l('courier_product_field'),
             border: OutlineInputBorder(),
           ),
           items: [
-            for (final p in PaymentProducts.defaults)
+            for (final p in _catalog)
               DropdownMenuItem(
                 value: p,
-                child: Text(p.labelUz),
+                child: Text(p.label),
               ),
           ],
           onChanged: (p) {
             if (p == null) return;
             setState(() {
               _product = p;
-              _priceCtrl.text = '${p.defaultUnitPrice}';
+              _priceCtrl.text = '${p.price}';
             });
           },
         ),
@@ -569,11 +619,11 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
       _productLines.add({
         'kind': 'product',
         'productCode': p.code,
-        'productLabel': p.labelUz,
+        'productLabel': p.label,
         'qty': qty,
         'unit': p.unit,
         'unitPrice': unitPrice,
-        'suggestedUnitPrice': p.defaultUnitPrice,
+        'suggestedUnitPrice': p.price,
         'amount': amount,
       });
       _fillCashOrCardForMode(_mode);

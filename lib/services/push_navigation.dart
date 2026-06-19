@@ -20,7 +20,7 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
-import '../../features/sell/screens/sell_offer_screen.dart';
+import '../features/sell/screens/sell_offer_screen.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.

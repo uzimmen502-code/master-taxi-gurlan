@@ -27,7 +27,7 @@ class ProductsManagerScreen extends StatefulWidget {
 class _ProductsManagerScreenState extends State<ProductsManagerScreen>
     with SingleTickerProviderStateMixin {
   // Phase-3 decommission switch: hide Food tab in admin UI.
-  static const bool _enableFoodTab = false;
+  static const bool _enableFoodTab = true;
 
   late final TabController _tabCtrl;
   late final List<String> _tabKeys =

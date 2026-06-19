@@ -32,7 +32,6 @@ class HomeModulesCatalog {
       id: 'food',
       image: 'assets/images/food.png',
       label: 'home_module_food',
-      enabled: false,
     ),
     HomeModule(
       id: 'sell',

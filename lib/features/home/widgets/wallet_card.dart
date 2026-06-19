@@ -9,17 +9,27 @@ class WalletCard extends StatelessWidget {
     required this.balance,
     required this.lastTxAmount,
     required this.lastTxLabel,
+    this.lastTxIsCredit,
     this.onHistoryTap,
   });
 
   final String balance;
   final String lastTxAmount;
   final String lastTxLabel;
+
+  /// `true` — kirim (oq), `false` — chiqim (qizil), `null` — tranzaksiya yo'q.
+  final bool? lastTxIsCredit;
   final VoidCallback? onHistoryTap;
 
   static const _green = Color(0xFF36A63A);
   static const _gold = Color(0xFFF5C518);
   static const _badgeText = Color(0xFF1A5E1C);
+  static const _debitTint = Color(0xFFFFCDD2);
+
+  Color get _txAmountColor {
+    if (lastTxIsCredit == null) return Colors.white;
+    return lastTxIsCredit! ? Colors.white : _debitTint;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +39,7 @@ class WalletCard extends StatelessWidget {
         onTap: onHistoryTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 120,
+          height: 96,
           decoration: BoxDecoration(
             color: _green,
             borderRadius: BorderRadius.circular(16),
@@ -42,8 +52,9 @@ class WalletCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -59,7 +70,7 @@ class WalletCard extends StatelessWidget {
                                 color: Colors.white.withValues(alpha: 0.6),
                               ),
                             ),
-                            const SizedBox(height: 3),
+                            const SizedBox(height: 2),
                             Text(
                               balance,
                               style: const TextStyle(
@@ -90,12 +101,6 @@ class WalletCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Container(
-                      height: 0.5,
-                      color: Colors.white.withValues(alpha: 0.25),
-                    ),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Container(
@@ -116,14 +121,22 @@ class WalletCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Oxirgi: $lastTxAmount',
+                              RichText(
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white,
+                                text: TextSpan(
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                  ),
+                                  children: [
+                                    const TextSpan(text: 'Oxirgi: '),
+                                    TextSpan(
+                                      text: lastTxAmount,
+                                      style: TextStyle(color: _txAmountColor),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 1),

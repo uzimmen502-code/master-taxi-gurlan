@@ -17,7 +17,7 @@ import '../../repositories/user_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
-import '../chat/screens/chat_screen.dart';
+import '../food/screens/food_screen.dart';
 import '../courier_order/screens/courier_order_screen.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
@@ -30,7 +30,7 @@ import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_offer_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
-import 'widgets/non_promo_card.dart';
+import 'widgets/promo_carousel.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -215,6 +215,9 @@ class _HomeViewState extends State<_HomeView> {
       case 'bread':
         screen = const BreadScreen();
         break;
+      case 'food':
+        screen = const FoodScreen();
+        break;
       case 'cheap_products_home':
         screen = const CheapProductsScreen();
         break;
@@ -236,18 +239,19 @@ class _HomeViewState extends State<_HomeView> {
     await _push(screen);
   }
 
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
   String _displayName(UserModel? user, HomeController home) {
     final name = (user?.name ?? home.name).trim();
     final phone = user?.phone.trim().isNotEmpty == true
         ? user!.phone
         : home.phone;
     if (name.isEmpty) return phone.isNotEmpty ? phone : 'Foydalanuvchi';
-    final gender = user?.gender ?? home.gender;
-    return gender == 'female' ? '$name xonim' : '$name boy aka';
+    return '$name aka';
+  }
+
+  void _showTezKundaSnack() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tez kunda')),
+    );
   }
 
   String _initials(UserModel? user, HomeController home) {
@@ -273,7 +277,7 @@ class _HomeViewState extends State<_HomeView> {
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: _HomeBottomNav(
-        onChat: () => _HomeBottomNav.openChat(context),
+        onOrders: _showTezKundaSnack,
         onWallet: () => _HomeBottomNav.openWallet(context),
         onProfile: () async {
           await _HomeBottomNav.openProfile(context);
@@ -320,11 +324,17 @@ class _HomeViewState extends State<_HomeView> {
                               children: [
                                 SizedBox(
                                     height: _sectionGap(context, base: 10)),
+                                _HomeSearchBar(onTap: _showTezKundaSnack),
+                                SizedBox(
+                                    height: _sectionGap(context, base: 10)),
                                 WalletCard(
                                   balance: _formatBalance(
                                       user?.bonusBalance ?? 0),
                                   lastTxAmount: _lastTxAmount(lastEntry),
                                   lastTxLabel: _lastTxLabel(lastEntry),
+                                  lastTxIsCredit: lastEntry == null
+                                      ? null
+                                      : lastEntry.amount >= 0,
                                   onHistoryTap: () {
                                     if (uid.length < 9) {
                                       _HomeBottomNav.needPhone(context);
@@ -338,6 +348,20 @@ class _HomeViewState extends State<_HomeView> {
                                       ),
                                     );
                                   },
+                                ),
+                                SizedBox(
+                                    height: _sectionGap(context, base: 12)),
+                                PromoCarousel(
+                                  onNonTap: () => _openModule(
+                                    HomeModulesCatalog.byId('bread'),
+                                  ),
+                                  onTaomTap: () => _openModule(
+                                    HomeModulesCatalog.byId('food'),
+                                  ),
+                                  onBozorTap: () => _openModule(
+                                    HomeModulesCatalog.byId(
+                                        'cheap_products_home'),
+                                  ),
                                 ),
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),
@@ -375,7 +399,9 @@ class _HomeViewState extends State<_HomeView> {
                                   onSell: () => _openModule(
                                     HomeModulesCatalog.byId('sell'),
                                   ),
-                                  onAvtotex: () => _snack('Tez kunda'),
+                                  onFood: () => _openModule(
+                                    HomeModulesCatalog.byId('food'),
+                                  ),
                                   onJobAd: () => _push(
                                     const JobsScreen(
                                       initialTabIndex: JobsTabs.ad,
@@ -384,12 +410,6 @@ class _HomeViewState extends State<_HomeView> {
                                   onOnlineMarket: () => _openModule(
                                     HomeModulesCatalog.byId(
                                         'cheap_products_home'),
-                                  ),
-                                ),
-                                SizedBox(height: _sectionGap(context, base: 8)),
-                                NonPromoCard(
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('bread'),
                                   ),
                                 ),
                               ],
@@ -439,14 +459,18 @@ class _HomeHeader extends StatelessWidget {
                   children: [
                     const Text(
                       'Assalomu alaykum',
-                      style: TextStyle(fontSize: 12, color: _sectionLabel),
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.1,
+                        color: _sectionLabel,
+                      ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
                       displayName,
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w500,
+                        height: 1.12,
                         color: _titleDark,
                       ),
                     ),
@@ -495,6 +519,48 @@ class _HomeHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Search bar (placeholder) ────────────────────────────────────────────────
+class _HomeSearchBar extends StatelessWidget {
+  const _HomeSearchBar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  static const _fill = Color(0xFFE8EAEC);
+  static const _hint = Color(0xFF9CA3AF);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(27),
+        child: Ink(
+          height: 53,
+          decoration: BoxDecoration(
+            color: _fill,
+            borderRadius: BorderRadius.circular(27),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const _StrokeIcon(_IconKind.search, color: _hint, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                'Taksi, taom, buyumlar qidirish...',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _hint.withValues(alpha: 0.95),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -668,14 +734,14 @@ class _ServicesGrid extends StatelessWidget {
   const _ServicesGrid({
     required this.onCourier,
     required this.onSell,
-    required this.onAvtotex,
+    required this.onFood,
     required this.onJobAd,
     required this.onOnlineMarket,
   });
 
   final VoidCallback onCourier;
   final VoidCallback onSell;
-  final VoidCallback onAvtotex;
+  final VoidCallback onFood;
   final VoidCallback onJobAd;
   final VoidCallback onOnlineMarket;
 
@@ -711,12 +777,12 @@ class _ServicesGrid extends StatelessWidget {
             SizedBox(width: gap),
             Expanded(
               child: _TaxiCard(
-                iconBg: const Color(0xFFFFF8E1),
-                icon: const _StrokeIcon(_IconKind.wrench,
-                    color: Color(0xFFF57F17)),
-                label: 'AvtoTex Xizmat',
+                iconBg: const Color(0xFFFFF3E0),
+                icon: const _StrokeIcon(_IconKind.receipt,
+                    color: Color(0xFFE65100)),
+                label: context.tr('home_module_food'),
                 sub: '',
-                onTap: onAvtotex,
+                onTap: onFood,
               ),
             ),
           ],
@@ -876,12 +942,12 @@ class _ServiceCardState extends State<_ServiceCard> {
 // ─── Bottom nav ──────────────────────────────────────────────────────────────
 class _HomeBottomNav extends StatelessWidget {
   const _HomeBottomNav({
-    required this.onChat,
+    required this.onOrders,
     required this.onWallet,
     required this.onProfile,
   });
 
-  final VoidCallback onChat;
+  final VoidCallback onOrders;
   final VoidCallback onWallet;
   final VoidCallback onProfile;
 
@@ -893,20 +959,6 @@ class _HomeBottomNav extends StatelessWidget {
       ),
     );
     openProfile(context);
-  }
-
-  static void openChat(BuildContext context) {
-    final phone = phoneDigits(context.read<HomeController>().phone);
-    if (phone.length < 9) {
-      needPhone(context);
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(targetPhone: phone),
-      ),
-    );
   }
 
   static Future<void> openWallet(BuildContext context) async {
@@ -948,9 +1000,9 @@ class _HomeBottomNav extends StatelessWidget {
                 onTap: () {},
               ),
               _NavItem(
-                icon: _IconKind.message,
-                label: 'Chat',
-                onTap: onChat,
+                icon: _IconKind.package,
+                label: 'Buyurtmalar',
+                onTap: onOrders,
               ),
               _NavItem(
                 icon: _IconKind.wallet,
@@ -1012,6 +1064,7 @@ class _NavItem extends StatelessWidget {
 // ─── Stroke icons (Lucide-style) ───────────────────────────────────────────
 enum _IconKind {
   home,
+  search,
   message,
   wallet,
   user,
@@ -1071,6 +1124,8 @@ class _StrokeIconPainter extends CustomPainter {
     switch (kind) {
       case _IconKind.home:
         _home(canvas, paint);
+      case _IconKind.search:
+        _search(canvas, paint);
       case _IconKind.message:
         _message(canvas, paint);
       case _IconKind.wallet:
@@ -1119,6 +1174,11 @@ class _StrokeIconPainter extends CustomPainter {
         ..close(),
       p,
     );
+  }
+
+  void _search(Canvas c, Paint p) {
+    c.drawCircle(const Offset(10.5, 10.5), 5.5, p);
+    c.drawLine(const Offset(14.5, 14.5), const Offset(20, 20), p);
   }
 
   void _message(Canvas c, Paint p) {

@@ -365,7 +365,7 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),
-                                _TaxiServicesGrid(
+                                _UnifiedServicesGrid(
                                   onLocal: () => _openModule(
                                     HomeModulesCatalog.byId('local_taxi'),
                                   ),
@@ -375,17 +375,6 @@ class _HomeViewState extends State<_HomeView> {
                                   onMarshrut: () => _openModule(
                                     HomeModulesCatalog.byId('marshrut'),
                                   ),
-                                ),
-                                SizedBox(
-                                    height: _sectionGap(context, base: 10)),
-                                const Divider(
-                                  height: 1,
-                                  thickness: 0.5,
-                                  color: _headerBorder,
-                                ),
-                                SizedBox(
-                                    height: _sectionGap(context, base: 10)),
-                                _ServicesGrid(
                                   onCourier: () async {
                                     final phone = phoneDigits(
                                       context.read<HomeController>().phone,
@@ -411,6 +400,12 @@ class _HomeViewState extends State<_HomeView> {
                                     HomeModulesCatalog.byId(
                                         'cheap_products_home'),
                                   ),
+                                  onNon: () => _openModule(
+                                    HomeModulesCatalog.byId('bread'),
+                                  ),
+                                  onCarWash: _showTezKundaSnack,
+                                  onTire: _showTezKundaSnack,
+                                  onOilChange: _showTezKundaSnack,
                                 ),
                               ],
                             ),
@@ -560,276 +555,96 @@ class _HomeSearchBar extends StatelessWidget {
 }
 
 // ─── Taxi grid ───────────────────────────────────────────────────────────────
-class _TaxiServicesGrid extends StatelessWidget {
-  const _TaxiServicesGrid({
+// ─── Unified services grid (4 ustun x 3 qator, PNG rasmlar) ──────────────────
+class _UnifiedServicesGrid extends StatelessWidget {
+  const _UnifiedServicesGrid({
     required this.onLocal,
     required this.onIntercity,
     required this.onMarshrut,
-  });
-
-  final VoidCallback onLocal;
-  final VoidCallback onIntercity;
-  final VoidCallback onMarshrut;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _TaxiCard(
-            iconBg: const Color(0xFFE8F5E9),
-            icon: const _StrokeIcon(_IconKind.car, color: _primaryGreen),
-            label: 'Mahalliy',
-            sub: 'TAXI',
-            onTap: onLocal,
-          ),
-        ),
-        SizedBox(width: _scaled(context, 8)),
-        Expanded(
-          child: _TaxiCard(
-            iconBg: const Color(0xFFE3F2FD),
-            icon: const _StrokeIcon(_IconKind.navigation,
-                color: Color(0xFF1565C0)),
-            label: 'Shaharlararo',
-            sub: 'TAXI',
-            onTap: onIntercity,
-          ),
-        ),
-        SizedBox(width: _scaled(context, 8)),
-        Expanded(
-          child: _TaxiCard(
-            iconBg: const Color(0xFFEDE7F6),
-            icon: const _StrokeIcon(_IconKind.bus, color: Color(0xFF6A1B9A)),
-            label: 'Marshrut',
-            sub: 'TAXI',
-            onTap: onMarshrut,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TaxiCard extends StatefulWidget {
-  const _TaxiCard({
-    required this.iconBg,
-    required this.icon,
-    required this.label,
-    required this.sub,
-    required this.onTap,
-  });
-
-  final Color iconBg;
-  final Widget icon;
-  final String label;
-  final String sub;
-  final VoidCallback onTap;
-
-  @override
-  State<_TaxiCard> createState() => _TaxiCardState();
-}
-
-class _TaxiCardState extends State<_TaxiCard> {
-  bool _pressed = false;
-
-  Future<void> _handleTap() async {
-    if (_pressed) return;
-    setState(() => _pressed = true);
-    await Future<void>.delayed(const Duration(milliseconds: 140));
-    if (!mounted) return;
-    widget.onTap();
-    if (mounted) setState(() => _pressed = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final iconSize = _scaled(context, 42).clamp(36.0, 42.0);
-    final labelSize = _scaled(context, 11).clamp(9.5, 11.0);
-    final subSize = _scaled(context, 10).clamp(9.0, 10.0);
-    final bg = _pressed ? _brandGreen : Colors.white;
-    final labelColor = _pressed ? Colors.white : _titleDark;
-    final subColor =
-        _pressed ? Colors.white.withValues(alpha: 0.85) : _sectionLabel;
-    final tileIconBg =
-        _pressed ? Colors.white.withValues(alpha: 0.2) : widget.iconBg;
-
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: _handleTap,
-        borderRadius: BorderRadius.circular(14),
-        splashColor: Colors.white24,
-        highlightColor: Colors.white12,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            vertical: _scaled(context, 10),
-            horizontal: 4,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: _pressed ? _brandGreen : _cardBorder,
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: iconSize,
-                height: iconSize,
-                decoration: BoxDecoration(
-                  color: tileIconBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: _pressed
-                    ? ColorFiltered(
-                        colorFilter: const ColorFilter.mode(
-                          Colors.white,
-                          BlendMode.srcIn,
-                        ),
-                        child: widget.icon,
-                      )
-                    : widget.icon,
-              ),
-              SizedBox(height: _scaled(context, 6)),
-              Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: labelSize,
-                  fontWeight: FontWeight.w500,
-                  color: labelColor,
-                ),
-              ),
-              const SizedBox(height: 2),
-              if (widget.sub.trim().isNotEmpty)
-                Text(
-                  widget.sub,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: subSize, color: subColor),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Services grid ───────────────────────────────────────────────────────────
-class _ServicesGrid extends StatelessWidget {
-  const _ServicesGrid({
     required this.onCourier,
     required this.onSell,
     required this.onFood,
     required this.onJobAd,
     required this.onOnlineMarket,
+    required this.onNon,
+    required this.onCarWash,
+    required this.onTire,
+    required this.onOilChange,
   });
 
+  final VoidCallback onLocal;
+  final VoidCallback onIntercity;
+  final VoidCallback onMarshrut;
   final VoidCallback onCourier;
   final VoidCallback onSell;
   final VoidCallback onFood;
   final VoidCallback onJobAd;
   final VoidCallback onOnlineMarket;
+  final VoidCallback onNon;
+  final VoidCallback onCarWash;
+  final VoidCallback onTire;
+  final VoidCallback onOilChange;
 
   @override
   Widget build(BuildContext context) {
-    final gap = _sectionGap(context, base: 8);
-    return Column(
-      children: [
-        // 3 ustun — taksi bo‘limi bilan bir xil ritm (2+2+1 o‘rniga 3+2)
-        Row(
-          children: [
-            Expanded(
-              child: _TaxiCard(
-                iconBg: const Color(0xFFE8F5E9),
-                icon: const _StrokeIcon(_IconKind.package,
-                    color: _primaryGreen),
-                label: 'Kuryer',
-                sub: 'XIZMATI',
-                onTap: onCourier,
-              ),
-            ),
-            SizedBox(width: gap),
-            Expanded(
-              child: _TaxiCard(
-                iconBg: const Color(0xFFFCE4EC),
-                icon: const _StrokeIcon(_IconKind.shoppingBag,
-                    color: Color(0xFFAD1457)),
-                label: 'Mahsulot sotaman',
-                sub: '',
-                onTap: onSell,
-              ),
-            ),
-            SizedBox(width: gap),
-            Expanded(
-              child: _TaxiCard(
-                iconBg: const Color(0xFFFFF3E0),
-                icon: const _StrokeIcon(_IconKind.receipt,
-                    color: Color(0xFFE65100)),
-                label: context.tr('home_module_food'),
-                sub: '',
-                onTap: onFood,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: gap),
-        Row(
-          children: [
-            Expanded(
-              child: _ServiceCard(
-                iconBg: const Color(0xFFE8EAF6),
-                icon: const _StrokeIcon(_IconKind.briefcase,
-                    color: Color(0xFF3949AB)),
-                title: 'Ish e\'lon',
-                desc: 'Vakansiya va ishlar',
-                onTap: onJobAd,
-              ),
-            ),
-            SizedBox(width: gap),
-            Expanded(
-              child: _ServiceCard(
-                iconBg: const Color(0xFFE3F2FD),
-                icon: const _StrokeIcon(_IconKind.shoppingCart,
-                    color: Color(0xFF1565C0)),
-                title: 'Oline BOZOR+',
-                onTap: onOnlineMarket,
-              ),
-            ),
-          ],
-        ),
-      ],
+    final items = <_GridItemData>[
+      _GridItemData('assets/images/services/service_taxi_local.png',
+          'Mahalliy TAKSI', onLocal),
+      _GridItemData('assets/images/services/service_taxi_intercity.png',
+          'Shaharlararo TAKSI', onIntercity),
+      _GridItemData('assets/images/services/service_marshrut.png',
+          'Marshrut TAKSI', onMarshrut),
+      _GridItemData('assets/images/services/service_courier.png',
+          'Kuryer xizmati', onCourier),
+      _GridItemData('assets/images/services/service_sell.png',
+          'Mahsulot sotaman', onSell),
+      _GridItemData('assets/images/services/service_food.png',
+          'Taom buyurtma', onFood),
+      _GridItemData('assets/images/services/service_jobs.png',
+          'Ish va E\'lon', onJobAd),
+      _GridItemData('assets/images/services/service_market.png',
+          'Onlayn BOZOR', onOnlineMarket),
+      _GridItemData('assets/images/services/service_bread.png',
+          'Non buyurtma', onNon),
+      _GridItemData('assets/images/services/service_car_wash.png',
+          'Avto yuvish', onCarWash),
+      _GridItemData('assets/images/services/service_tire.png',
+          'Avto Shina', onTire),
+      _GridItemData('assets/images/services/service_oil_change.png',
+          'Moy almashtirish', onOilChange),
+    ];
+
+    final colGap = _scaled(context, 13).clamp(10.0, 13.0);
+    const rowGap = 8.0;
+
+    return GridView.count(
+      crossAxisCount: 4,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: rowGap,
+      crossAxisSpacing: colGap,
+      childAspectRatio: 0.78,
+      children: items.map((d) => _GridTile(data: d)).toList(),
     );
   }
 }
 
-class _ServiceCard extends StatefulWidget {
-  const _ServiceCard({
-    required this.iconBg,
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.desc,
-  });
-
-  final Color iconBg;
-  final Widget icon;
-  final String title;
-  final String? desc;
+class _GridItemData {
+  const _GridItemData(this.image, this.label, this.onTap);
+  final String image;
+  final String label;
   final VoidCallback onTap;
-
-  @override
-  State<_ServiceCard> createState() => _ServiceCardState();
 }
 
-class _ServiceCardState extends State<_ServiceCard> {
+class _GridTile extends StatefulWidget {
+  const _GridTile({required this.data});
+  final _GridItemData data;
+
+  @override
+  State<_GridTile> createState() => _GridTileState();
+}
+
+class _GridTileState extends State<_GridTile> {
   bool _pressed = false;
 
   Future<void> _handleTap() async {
@@ -837,91 +652,46 @@ class _ServiceCardState extends State<_ServiceCard> {
     setState(() => _pressed = true);
     await Future<void>.delayed(const Duration(milliseconds: 140));
     if (!mounted) return;
-    widget.onTap();
+    widget.data.onTap();
     if (mounted) setState(() => _pressed = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final iconSize = _scaled(context, 42).clamp(36.0, 42.0);
-    final titleSize = _scaled(context, 12).clamp(10.0, 12.0);
-    final descSize = _scaled(context, 10).clamp(9.0, 10.0);
-    final hasDesc = widget.desc != null && widget.desc!.trim().isNotEmpty;
-    final bg = _pressed ? _brandGreen : Colors.white;
-    final titleColor = _pressed ? Colors.white : _titleDark;
-    final descColor =
-        _pressed ? Colors.white.withValues(alpha: 0.85) : _sectionLabel;
-    final tileIconBg =
-        _pressed ? Colors.white.withValues(alpha: 0.2) : widget.iconBg;
+    final iconSize = _scaled(context, 52).clamp(44.0, 56.0);
+    final labelSize = _scaled(context, 10.5).clamp(9.5, 10.5);
 
     return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
         onTap: _handleTap,
-        borderRadius: BorderRadius.circular(14),
-        splashColor: Colors.white24,
-        highlightColor: Colors.white12,
-        child: Container(
-          constraints: BoxConstraints(minHeight: _scaled(context, 64)),
-          padding: EdgeInsets.all(_scaled(context, 10).clamp(8.0, 10.0)),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: _pressed ? _brandGreen : _cardBorder,
-              width: 0.5,
-            ),
-          ),
-          child: Row(
+        borderRadius: BorderRadius.circular(12),
+        splashColor: _brandGreen.withValues(alpha: 0.15),
+        highlightColor: _brandGreen.withValues(alpha: 0.08),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
+              SizedBox(
                 width: iconSize,
                 height: iconSize,
-                decoration: BoxDecoration(
-                  color: tileIconBg,
-                  borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  widget.data.image,
+                  fit: BoxFit.contain,
                 ),
-                alignment: Alignment.center,
-                child: _pressed
-                    ? ColorFiltered(
-                        colorFilter: const ColorFilter.mode(
-                          Colors.white,
-                          BlendMode.srcIn,
-                        ),
-                        child: widget.icon,
-                      )
-                    : widget.icon,
               ),
-              SizedBox(width: _scaled(context, 8).clamp(6.0, 8.0)),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: titleSize,
-                        fontWeight: FontWeight.w500,
-                        color: titleColor,
-                        height: 1.15,
-                      ),
-                    ),
-                    if (hasDesc) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.desc!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: descSize,
-                          color: descColor,
-                        ),
-                      ),
-                    ],
-                  ],
+              const SizedBox(height: 4),
+              Text(
+                widget.data.label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: labelSize,
+                  fontWeight: FontWeight.w500,
+                  color: _titleDark,
+                  height: 1.15,
                 ),
               ),
             ],
@@ -932,7 +702,6 @@ class _ServiceCardState extends State<_ServiceCard> {
   }
 }
 
-// ─── Bottom nav ──────────────────────────────────────────────────────────────
 class _HomeBottomNav extends StatelessWidget {
   const _HomeBottomNav({
     required this.onOrders,

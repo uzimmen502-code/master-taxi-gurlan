@@ -152,24 +152,6 @@ class WalletCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        const Row(
-                          children: [
-                            Icon(
-                              Icons.access_time_rounded,
-                              size: 12,
-                              color: _gold,
-                            ),
-                            SizedBox(width: 3),
-                            Text(
-                              'Tarix',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: _gold,
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ],

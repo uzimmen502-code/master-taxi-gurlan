@@ -87,6 +87,7 @@ flutter:
     - assets/lang/uz_Cyrl.json
     - assets/lang/ru.json
     - assets/images/
+    - assets/images/services/
     - assets/bread_yupqa.png
     - assets/bread_churak.png
     - assets/bread_qovoq.png

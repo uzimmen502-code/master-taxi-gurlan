@@ -33,7 +33,11 @@ class WalletCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: TextScaler.noScaling,
+      ),
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onHistoryTap,
@@ -145,6 +149,7 @@ class WalletCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

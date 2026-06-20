@@ -30,7 +30,9 @@ import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_offer_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
+import 'widgets/featured_products_section.dart';
 import 'widgets/promo_carousel.dart';
+import 'widgets/seller_cta_banner.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -406,6 +408,14 @@ class _HomeViewState extends State<_HomeView> {
                                   onCarWash: _showTezKundaSnack,
                                   onTire: _showTezKundaSnack,
                                   onOilChange: _showTezKundaSnack,
+                                ),
+                                const SizedBox(height: 16),
+                                const FeaturedProductsSection(),
+                                const SizedBox(height: 12),
+                                SellerCtaBanner(
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('sell'),
+                                  ),
                                 ),
                               ],
                             ),

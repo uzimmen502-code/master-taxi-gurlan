@@ -40,6 +40,11 @@ class FeaturedProductsService {
     return [...bread, ...food, ...market];
   }
 
+  List<FeaturedProduct> _positivePrice(Iterable<FeaturedProduct> items,
+      {int take = 2}) {
+    return items.where((e) => e.price > 0).take(take).toList(growable: false);
+  }
+
   Future<List<FeaturedProduct>> _fetchBread() async {
     try {
       final snap = await _db
@@ -48,10 +53,9 @@ class FeaturedProductsService {
           .limit(12)
           .get();
 
-      return snap.docs
+      final items = snap.docs
           .map(BreadProduct.fromFirestore)
           .where(_breadInStock)
-          .take(2)
           .map(
             (p) => FeaturedProduct(
               id: p.firestoreId ?? '${p.id}',
@@ -60,8 +64,9 @@ class FeaturedProductsService {
               imageUrl: p.imageUrl.trim().isNotEmpty ? p.imageUrl : p.image,
               source: 'bread',
             ),
-          )
-          .toList(growable: false);
+          );
+
+      return _positivePrice(items);
     } catch (_) {
       return const [];
     }
@@ -77,44 +82,41 @@ class FeaturedProductsService {
       final snap = await _db
           .collection('food_catalog')
           .orderBy('id')
-          .limit(2)
+          .limit(12)
           .get();
 
       List<FoodProduct> products;
       if (snap.docs.isEmpty) {
-        products = FoodCatalog.products.take(2).toList(growable: false);
+        products = FoodCatalog.products;
       } else {
         products = snap.docs
             .map((d) => FoodProduct.fromFirestore(d.data(), d.id))
-            .take(2)
             .toList(growable: false);
       }
 
-      return products
-          .map(
-            (p) => FeaturedProduct(
-              id: '${p.id}',
-              name: p.name,
-              price: p.price,
-              imageUrl: p.imageUrl,
-              source: 'food',
-            ),
-          )
-          .toList(growable: false);
+      final items = products.map(
+        (p) => FeaturedProduct(
+          id: '${p.id}',
+          name: p.name,
+          price: p.price,
+          imageUrl: p.imageUrl,
+          source: 'food',
+        ),
+      );
+
+      return _positivePrice(items);
     } catch (_) {
       try {
-        return FoodCatalog.products
-            .take(2)
-            .map(
-              (p) => FeaturedProduct(
-                id: '${p.id}',
-                name: p.name,
-                price: p.price,
-                imageUrl: p.imageUrl,
-                source: 'food',
-              ),
-            )
-            .toList(growable: false);
+        final items = FoodCatalog.products.map(
+          (p) => FeaturedProduct(
+            id: '${p.id}',
+            name: p.name,
+            price: p.price,
+            imageUrl: p.imageUrl,
+            source: 'food',
+          ),
+        );
+        return _positivePrice(items);
       } catch (_) {
         return const [];
       }
@@ -139,10 +141,10 @@ class FeaturedProductsService {
         .where('type', isEqualTo: AdModel.typeKey)
         .where('status', isEqualTo: 'active')
         .orderBy(orderField, descending: true)
-        .limit(2)
+        .limit(6)
         .get();
 
-    return snap.docs.map((doc) {
+    final items = snap.docs.map((doc) {
       final ad = AdModel.fromFirestore(doc);
       final imageUrl =
           ad.imageUrls.isNotEmpty ? ad.imageUrls.first.trim() : '';
@@ -153,6 +155,8 @@ class FeaturedProductsService {
         imageUrl: imageUrl,
         source: 'market',
       );
-    }).toList(growable: false);
+    });
+
+    return _positivePrice(items);
   }
 }

@@ -7,7 +7,9 @@ import '../../../services/featured_products_service.dart';
 
 /// «Tavsiya etamiz» — non, taom, bozor dan 2×3 ta mahsulot.
 class FeaturedProductsSection extends StatefulWidget {
-  const FeaturedProductsSection({super.key});
+  const FeaturedProductsSection({super.key, required this.onProductTap});
+
+  final void Function(String source) onProductTap;
 
   @override
   State<FeaturedProductsSection> createState() =>
@@ -104,8 +106,10 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
                 childAspectRatio: 0.82,
               ),
               itemCount: items.length,
-              itemBuilder: (context, index) =>
-                  _FeaturedProductCard(product: items[index], onAdd: _tezKunda),
+              itemBuilder: (context, index) => _FeaturedProductCard(
+                product: items[index],
+                onTap: () => widget.onProductTap(items[index].source),
+              ),
             ),
           ],
         );
@@ -117,16 +121,15 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
 class _FeaturedProductCard extends StatelessWidget {
   const _FeaturedProductCard({
     required this.product,
-    required this.onAdd,
+    required this.onTap,
   });
 
   final FeaturedProduct product;
-  final VoidCallback onAdd;
+  final VoidCallback onTap;
 
   static const _titleDark = Color(0xFF1A3A20);
   static const _priceGreen = Color(0xFF2E5C1E);
   static const _cardBorder = Color(0xFFC8DDB8);
-  static const _brandGreen = Color(0xFF36A63A);
 
   String get _fallbackEmoji {
     switch (product.source) {
@@ -159,75 +162,58 @@ class _FeaturedProductCard extends StatelessWidget {
     final priceText =
         '${NumberFormat('#,###').format(product.price)} so\'m';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: _cardBorder, width: 0.5),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                    height: 88,
-                    width: double.infinity,
-                    child: _ProductImage(
-                      imageUrl: product.imageUrl,
-                      fallbackEmoji: _fallbackEmoji,
-                      fallbackTint: _fallbackTint,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  product.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: _titleDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  priceText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _priceGreen,
-                  ),
-                ),
-              ],
-            ),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: _cardBorder, width: 0.5),
           ),
-          Positioned(
-            right: 8,
-            bottom: 8,
-            child: Material(
-              color: _brandGreen,
-              shape: const CircleBorder(),
-              elevation: 0,
-              child: InkWell(
-                onTap: onAdd,
-                customBorder: const CircleBorder(),
-                child: const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Icon(Icons.add, size: 18, color: Colors.white),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  height: 88,
+                  width: double.infinity,
+                  child: _ProductImage(
+                    imageUrl: product.imageUrl,
+                    fallbackEmoji: _fallbackEmoji,
+                    fallbackTint: _fallbackTint,
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                product.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _titleDark,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                priceText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: _priceGreen,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

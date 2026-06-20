@@ -410,7 +410,20 @@ class _HomeViewState extends State<_HomeView> {
                                   onOilChange: _showTezKundaSnack,
                                 ),
                                 const SizedBox(height: 16),
-                                const FeaturedProductsSection(),
+                                FeaturedProductsSection(
+                                  onProductTap: (source) {
+                                    final moduleId = switch (source) {
+                                      'bread' => 'bread',
+                                      'food' => 'food',
+                                      'market' => 'cheap_products_home',
+                                      _ => null,
+                                    };
+                                    if (moduleId == null) return;
+                                    _openModule(
+                                      HomeModulesCatalog.byId(moduleId),
+                                    );
+                                  },
+                                ),
                                 const SizedBox(height: 12),
                                 SellerCtaBanner(
                                   onTap: () => _openModule(

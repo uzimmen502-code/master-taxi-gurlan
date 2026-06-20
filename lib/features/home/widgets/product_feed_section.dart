@@ -143,7 +143,7 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 0.82,
+              childAspectRatio: 1.0,
             ),
             itemCount: _items.length,
             itemBuilder: (context, index) => _FeedProductCard(
@@ -360,7 +360,7 @@ class _FeedProductCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(13),
             border: Border.all(color: _cardBorder, width: 0.5),
           ),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -22,7 +22,6 @@ void main() {
         for (final m in HomeModulesCatalog.modules)
           HomeModule(
             id: m.id,
-            image: m.image,
             label: m.label,
             enabled: m.id == 'food' || m.enabled,
           ),

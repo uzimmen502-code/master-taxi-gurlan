@@ -2,7 +2,6 @@
 class HomeModule {
   const HomeModule({
     required this.id,
-    required this.image,
     required this.label,
     this.enabled = true,
   });
@@ -12,6 +11,5 @@ class HomeModule {
 
   /// `false` — вақтинча ёпилган; grid avtomatik qayta tuziladi.
   final bool enabled;
-  final String image;
   final String label;
 }

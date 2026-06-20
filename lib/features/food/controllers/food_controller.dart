@@ -76,10 +76,10 @@ class FoodController extends ChangeNotifier {
 
   Future<void> init() async {
     _listenFoodCatalog();
+    await _loadPendingOrder();
     await Future.wait([
       _loadWallet(),
       _initConnectivity(),
-      _loadPendingOrder(),
     ]);
   }
 

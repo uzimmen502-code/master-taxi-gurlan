@@ -35,8 +35,25 @@ class FoodScreen extends StatelessWidget {
   }
 }
 
-class _FoodView extends StatelessWidget {
+class _FoodView extends StatefulWidget {
   const _FoodView();
+
+  @override
+  State<_FoodView> createState() => _FoodViewState();
+}
+
+class _FoodViewState extends State<_FoodView> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = context.read<FoodController>();
+      if (c.hasInternet && c.pendingCount > 0) {
+        c.flushPendingOrders();
+      }
+    });
+  }
 
   static String _formatPrice(int price) {
     final s = price.toString();

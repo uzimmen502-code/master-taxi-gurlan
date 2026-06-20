@@ -60,9 +60,43 @@ class BreadScreen extends StatelessWidget {
 
 
 
-class _BreadView extends StatelessWidget {
+class _BreadView extends StatefulWidget {
 
   const _BreadView();
+
+
+
+  @override
+
+  State<_BreadView> createState() => _BreadViewState();
+
+}
+
+
+
+class _BreadViewState extends State<_BreadView> {
+
+  @override
+
+  void initState() {
+
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+      if (!mounted) return;
+
+      final c = context.read<BreadController>();
+
+      if (c.hasInternet && c.pendingCount > 0) {
+
+        c.flushPendingOrders();
+
+      }
+
+    });
+
+  }
 
 
 

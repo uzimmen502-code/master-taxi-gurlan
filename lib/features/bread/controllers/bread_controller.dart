@@ -114,8 +114,8 @@ class BreadController extends ChangeNotifier {
       _clampTiedExtras();
       notifyListeners();
     });
-    await _initConnectivity();
     await _loadPendingOrder();
+    await _initConnectivity();
   }
 
   Future<void> _loadPrices() async {

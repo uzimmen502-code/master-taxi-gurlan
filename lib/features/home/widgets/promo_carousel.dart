@@ -28,13 +28,11 @@ class PromoCarousel extends StatefulWidget {
 class _PromoBannerData {
   const _PromoBannerData({
     required this.title,
-    required this.subtitle,
     required this.imagePath,
     required this.onTap,
   });
 
   final String title;
-  final String subtitle;
   final String imagePath;
   final VoidCallback onTap;
 }
@@ -42,11 +40,13 @@ class _PromoBannerData {
 class _PromoCarouselState extends State<PromoCarousel> {
   static const _autoPlayInterval = Duration(seconds: 4);
   static const _resumeDelay = Duration(seconds: 8);
+  static const _virtualPageCount = 100000;
+  static const _initialVirtualPage = 50000;
 
-  final PageController _controller = PageController();
+  final PageController _controller =
+      PageController(initialPage: _initialVirtualPage);
   Timer? _timer;
   bool _autoPaused = false;
-  int _current = 0;
 
   late final List<_PromoBannerData> _banners;
 
@@ -56,37 +56,31 @@ class _PromoCarouselState extends State<PromoCarousel> {
     _banners = [
       _PromoBannerData(
         title: 'Non buyurtma',
-        subtitle: 'Yangi non — eshigingizga',
         imagePath: 'assets/images/banners/banner_bread.jpg',
         onTap: widget.onNonTap,
       ),
       _PromoBannerData(
         title: 'Taom buyurtma',
-        subtitle: 'Issiq taomlar — tez yetkazib berish',
         imagePath: 'assets/images/banners/banner_food.jpg',
         onTap: widget.onTaomTap,
       ),
       _PromoBannerData(
         title: 'Online bozor',
-        subtitle: 'Arzon mahsulotlar — uyingizga',
         imagePath: 'assets/images/banners/banner_market.jpg',
         onTap: widget.onBozorTap,
       ),
       _PromoBannerData(
         title: 'Mahalliy taksi',
-        subtitle: 'Tez va qulay — hozir chaqiring',
         imagePath: 'assets/images/banners/banner_local_taxi.jpg',
         onTap: widget.onLocalTaxiTap,
       ),
       _PromoBannerData(
         title: 'Marshrut taksi',
-        subtitle: 'Navbatli, qulay yo\'nalishlar',
         imagePath: 'assets/images/banners/banner_marshrut.jpg',
         onTap: widget.onMarshrutTap,
       ),
       _PromoBannerData(
         title: 'Shaharlararo',
-        subtitle: 'Uzoq safarlar — ishonchli haydovchilar',
         imagePath: 'assets/images/banners/banner_intercity.jpg',
         onTap: widget.onIntercityTap,
       ),
@@ -97,10 +91,11 @@ class _PromoCarouselState extends State<PromoCarousel> {
   void _startAutoPlay() {
     _timer?.cancel();
     _timer = Timer.periodic(_autoPlayInterval, (_) {
-      if (!mounted || _autoPaused) return;
-      final next = (_current + 1) % _banners.length;
+      if (!mounted || _autoPaused || !_controller.hasClients) return;
+      final page = _controller.page;
+      if (page == null) return;
       _controller.animateToPage(
-        next,
+        page.round() + 1,
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeInOut,
       );
@@ -136,10 +131,9 @@ class _PromoCarouselState extends State<PromoCarousel> {
         },
         child: PageView.builder(
           controller: _controller,
-          itemCount: _banners.length,
-          onPageChanged: (index) => setState(() => _current = index),
+          itemCount: _virtualPageCount,
           itemBuilder: (context, index) {
-            final banner = _banners[index];
+            final banner = _banners[index % _banners.length];
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: _PromoBannerCard(data: banner),
@@ -185,33 +179,19 @@ class _PromoBannerCard extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        data.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        data.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.75),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    data.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),

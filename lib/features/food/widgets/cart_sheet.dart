@@ -25,11 +25,12 @@ class CartSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
-    final cartEntries = controller.cart.entries.toList(growable: false);
 
     return AnimatedBuilder(
       animation: controller,
       builder: (_, __) {
+        final cartEntries = controller.cart.entries.toList(growable: false);
+
         if (controller.cart.isEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (Navigator.canPop(context)) Navigator.pop(context);

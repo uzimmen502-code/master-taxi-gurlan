@@ -5,7 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../models/food_product.dart';
 import '../controllers/food_controller.dart';
 
-/// Овqat маҳсулоти карточкаси — emoji, ном, изоҳ, нарх ва "Қўшиш" / +– юракloв.
+/// Овqat маҳсулоти карточкаси — emoji, ном, изоҳ, нарх ва "Қўшиш" / Tanlandi.
 class ProductCard extends StatelessWidget {
   const ProductCard({
     super.key,
@@ -28,16 +28,10 @@ class ProductCard extends StatelessWidget {
     return buf.toString();
   }
 
-  String _formatQty(double qty, String unit) {
-    if (qty == qty.roundToDouble()) return '${qty.toInt()} $unit';
-    return '$qty $unit';
-  }
-
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
     final inCart = controller.isInCart(product.id);
-    final qty = controller.qtyOf(product.id);
     final outOfStock = controller.isOutOfStock(product.id);
     final stock = controller.stockOf(product.id);
     final localizedUnit = switch (product.unit) {
@@ -53,7 +47,6 @@ class ProductCard extends StatelessWidget {
         loc,
         localizedUnit,
         inCart,
-        qty,
         outOfStock,
         stock,
       );
@@ -63,7 +56,6 @@ class ProductCard extends StatelessWidget {
       loc,
       localizedUnit,
       inCart,
-      qty,
       outOfStock,
       stock,
     );
@@ -74,7 +66,6 @@ class ProductCard extends StatelessWidget {
     AppLocalizations loc,
     String localizedUnit,
     bool inCart,
-    double qty,
     bool outOfStock,
     int stock,
   ) {
@@ -114,7 +105,7 @@ class ProductCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: _action(loc, localizedUnit, inCart, qty, outOfStock),
+                    child: _action(loc, inCart, outOfStock),
                   ),
                 ],
               ),
@@ -130,7 +121,6 @@ class ProductCard extends StatelessWidget {
     AppLocalizations loc,
     String localizedUnit,
     bool inCart,
-    double qty,
     bool outOfStock,
     int stock,
   ) {
@@ -169,7 +159,7 @@ class ProductCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    child: _action(loc, localizedUnit, inCart, qty, outOfStock),
+                    child: _action(loc, inCart, outOfStock),
                   ),
                 ],
               ),
@@ -250,9 +240,7 @@ class ProductCard extends StatelessWidget {
 
   Widget _action(
     AppLocalizations loc,
-    String localizedUnit,
     bool inCart,
-    double qty,
     bool outOfStock,
   ) {
     if (inCart) {
@@ -262,25 +250,22 @@ class ProductCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.green[300]!),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(
-            onPressed: () => controller.decrease(product.id),
-            icon: const Icon(Icons.remove, size: 18, color: Colors.green),
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-          ),
-          Text(_formatQty(qty, localizedUnit),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green)),
-          IconButton(
-            onPressed: () => controller.increase(product.id),
-            icon: const Icon(Icons.add, size: 18, color: Colors.green),
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-          ),
-        ]),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
+            const SizedBox(width: 6),
+            Text(
+              loc.translate('selected'),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.green[700],
+              ),
+            ),
+          ],
+        ),
       );
     }
     return ElevatedButton(

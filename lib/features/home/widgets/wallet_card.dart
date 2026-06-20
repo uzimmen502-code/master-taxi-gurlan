@@ -43,7 +43,7 @@ class WalletCard extends StatelessWidget {
         onTap: onHistoryTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 84,
+          height: 80,
           decoration: BoxDecoration(
             color: _green,
             borderRadius: BorderRadius.circular(16),
@@ -58,7 +58,7 @@ class WalletCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -105,6 +105,7 @@ class WalletCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -115,7 +116,7 @@ class WalletCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             text: TextSpan(
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.white,
                               ),
@@ -129,13 +130,13 @@ class WalletCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         Text(
                           displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 19,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: _gold,
                           ),

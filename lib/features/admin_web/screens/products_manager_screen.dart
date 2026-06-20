@@ -112,8 +112,7 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
         const Text('📦 Маҳсулoтлaр',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
-        if (_currentTabKey != 'food')
-          ElevatedButton.icon(
+        ElevatedButton.icon(
             onPressed: _openAdd,
             icon: const Icon(Icons.add),
             label: const Text('Янги мaҳсулoт'),
@@ -134,6 +133,8 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
       await _openBreadEditor(context, null);
     } else if (_currentTabKey == 'extra') {
       await _openExtraEditor(context, null);
+    } else if (_currentTabKey == 'food') {
+      await _openFoodEditor(context, null);
     }
   }
 }
@@ -1583,6 +1584,50 @@ Future<void> _openExtraEditor(
   await showDialog<void>(
     context: context,
     builder: (ctx) => _ExtraEditorDialog(existing: existing),
+  );
+}
+
+Future<void> _openFoodEditor(
+    BuildContext context, FoodProduct? existing) async {
+  if (existing != null) {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _FoodProductEditorDialog(
+        product: existing,
+        docId: 'food_${existing.id}',
+      ),
+    );
+    return;
+  }
+
+  final snap = await FirebaseFirestore.instance
+      .collection('food_catalog')
+      .orderBy('id', descending: true)
+      .limit(1)
+      .get();
+  var newId = 1;
+  if (snap.docs.isNotEmpty) {
+    final data = snap.docs.first.data();
+    newId = ((data['id'] as num?)?.toInt() ?? 0) + 1;
+  }
+  final product = FoodProduct(
+    id: newId,
+    name: '',
+    emoji: '🍽',
+    price: 0,
+    unit: 'кг',
+    minQty: 0.5,
+    step: 0.5,
+    category: '',
+    desc: '',
+  );
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (_) => _FoodProductEditorDialog(
+      product: product,
+      docId: 'food_$newId',
+    ),
   );
 }
 

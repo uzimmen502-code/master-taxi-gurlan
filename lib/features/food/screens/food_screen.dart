@@ -62,12 +62,6 @@ class _FoodView extends StatelessWidget {
           duration: const Duration(seconds: 1)));
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final uid = phoneDigits(prefs.getString('user_phone') ?? '');
-    Stream<int>? bonusStream;
-    if (uid.length >= 9 && context.mounted) {
-      bonusStream = context.read<UserRepository>().watchBonusBalance(uid);
-    }
     if (!context.mounted) return;
     showModalBottomSheet(
       context: context,
@@ -75,7 +69,6 @@ class _FoodView extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => CartSheet(
         controller: c,
-        bonusBalanceStream: bonusStream,
         onOrder: () {
           Navigator.pop(context);
           _showOrderForm(context);
@@ -132,38 +125,61 @@ class _FoodView extends StatelessWidget {
         loc: loc,
         addressCtrl: addressCtrl,
         phoneCtrl: phoneCtrl,
-        onAfterSubmit: (root, ok) {
-          if (ok) {
-            _showConfirmedDialog(
-              root,
-              addressCtrl.text.trim(),
-              phoneCtrl.text.trim(),
-            );
-          } else if (c.errorMessage != null) {
-            ScaffoldMessenger.of(root).showSnackBar(
-              SnackBar(content: Text(c.errorMessage!)),
-            );
+        onAfterSubmit: (root, result, cartSnapshot, totalSnapshot) {
+          if (!result.success) {
+            if (result.error != null) {
+              ScaffoldMessenger.of(root).showSnackBar(
+                SnackBar(content: Text(result.error!)),
+              );
+            }
             c.clearError();
+            return;
           }
+          if (result.isOffline) {
+            ScaffoldMessenger.of(root).showSnackBar(
+              SnackBar(
+                content: Text(loc.translate('bread_snack_order_saved_offline')),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            return;
+          }
+          _showConfirmedDialog(
+            root,
+            addressCtrl.text.trim(),
+            phoneCtrl.text.trim(),
+            cartSnapshot,
+            totalSnapshot,
+          );
         },
       ),
     );
   }
 
   void _showConfirmedDialog(
-      BuildContext context, String address, String phone) {
+    BuildContext context,
+    String address,
+    String phone,
+    Map<int, double> cartSnapshot,
+    int totalSnapshot,
+  ) {
     final c = context.read<FoodController>();
     final loc = AppLocalizations.of(context)!;
 
     final buffer = StringBuffer();
-    for (final entry in c.cart.entries) {
-      final p = FoodCatalog.byId(entry.key);
+    for (final entry in cartSnapshot.entries) {
+      final p = c.products.firstWhere(
+        (e) => e.id == entry.key,
+        orElse: () => FoodCatalog.byId(entry.key),
+      );
       final qty = entry.value;
       final price = (p.price * qty).round();
       buffer.writeln(
           '${p.emoji} ${p.name}: ${_formatQty(qty, p.unit)} = ${_formatPrice(price)} сўм');
     }
-    final total = c.cartTotal;
+    final total = totalSnapshot;
 
     showDialog(
       context: context,
@@ -250,9 +266,37 @@ class _FoodView extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (c.pendingCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    loc
+                        .translate('bread_pending_count')
+                        .replaceAll('{n}', c.pendingCount.toString()),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
@@ -324,6 +368,67 @@ class _FoodView extends StatelessWidget {
               },
             ),
           ),
+        ],
+      ),
+          if (!c.hasInternet)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off,
+                          color: Colors.white, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          loc.translate('bread_offline_banner'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      if (c.pendingCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            loc
+                                .translate('bread_pending_count')
+                                .replaceAll('{n}', c.pendingCount.toString()),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: c.cartItemCount > 0

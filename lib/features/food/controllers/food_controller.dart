@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,8 +14,8 @@ import '../../../repositories/orders_repository.dart';
 import '../../../services/order_payment_service.dart';
 import '../../../utils/food_catalog.dart';
 
-/// Овqat sotib olish flow'i: категория танлаш, саватга маҳсулот қўшиш ва
-/// миқдорини ўзгартириш, буюртма yuborish.
+/// Овqat sotib olish flow'i: категория танлаш, саватга маҳsулot қўшish ва
+/// миқdorini ўzgartirish, buyurtma yuborish.
 ///
 /// `cart` — `productId -> qty` (qty `0.5`-multiples).
 class FoodController extends ChangeNotifier {
@@ -23,6 +24,8 @@ class FoodController extends ChangeNotifier {
     required InventoryRepository inventoryRepo,
   })  : _ordersRepo = ordersRepo,
         _inventoryRepo = inventoryRepo;
+
+  static const _pendingOrdersKey = 'food_pending_orders';
 
   // ignore: unused_field — Provider контракти.
   final OrdersRepository _ordersRepo;
@@ -35,13 +38,16 @@ class FoodController extends ChangeNotifier {
   int walletBalance = 0;
   bool isSubmitting = false;
   String? errorMessage;
+  bool hasInternet = true;
+  int pendingCount = 0;
 
   List<FoodProduct> _products = List<FoodProduct>.from(FoodCatalog.products);
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _catalogSub;
+  StreamSubscription<List<ConnectivityResult>>? _connSub;
 
   List<FoodProduct> get products => List.unmodifiable(_products);
 
-  /// Категория чиплари: «Барчаси», кейин белгилаш тартибидаги категориялар.
+  /// Категория чiplari: «Барчasi», кейin belgilash tartibidagi kategoriyalar.
   List<String> get categoryKeys {
     final present =
         _products.map((e) => e.category).where((e) => e.isNotEmpty).toSet();
@@ -62,9 +68,19 @@ class FoodController extends ChangeNotifier {
     return s != null && s <= 0;
   }
 
+  bool _wouldExceedStock(int productId, double nextQty) {
+    final remaining = stockOf(productId);
+    if (remaining >= 999999) return false;
+    return nextQty > remaining + 1e-9;
+  }
+
   Future<void> init() async {
     _listenFoodCatalog();
-    await _loadWallet();
+    await Future.wait([
+      _loadWallet(),
+      _initConnectivity(),
+      _loadPendingOrder(),
+    ]);
   }
 
   void _listenFoodCatalog() {
@@ -101,6 +117,7 @@ class FoodController extends ChangeNotifier {
   void dispose() {
     _alive = false;
     _catalogSub?.cancel();
+    _connSub?.cancel();
     super.dispose();
   }
 
@@ -145,6 +162,88 @@ class FoodController extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> _initConnectivity() async {
+    final initial = await Connectivity().checkConnectivity();
+    _onConnectivity(initial);
+    _connSub = Connectivity().onConnectivityChanged.listen(_onConnectivity);
+  }
+
+  void _onConnectivity(List<ConnectivityResult> results) {
+    final connected = results.any((r) => r != ConnectivityResult.none);
+    hasInternet = connected;
+    notifyListeners();
+    if (connected && pendingCount > 0) {
+      _flushPendingOrders();
+    }
+  }
+
+  Future<void> _loadPendingOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = prefs.getString(_pendingOrdersKey);
+    if (pending == null) return;
+    try {
+      final list = jsonDecode(pending) as List;
+      pendingCount = list.length;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<int> _flushPendingOrders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getString(_pendingOrdersKey);
+      if (pending == null) return 0;
+      final list = jsonDecode(pending) as List;
+      if (list.isEmpty) return 0;
+
+      int sent = 0;
+      final remaining = <Map<String, dynamic>>[];
+      for (final order in list) {
+        final data = Map<String, dynamic>.from(order as Map<String, dynamic>);
+        try {
+          final payload = Map<String, dynamic>.from(data)
+            ..removeWhere((k, _) =>
+                k == 'createdAt' || k == 'idempotencyKey' || k == 'decrements');
+          final phone = data['userPhone'] as String? ?? '';
+          final idempotencyKey = data['idempotencyKey'] as String? ??
+              _buildIdempotencyKey(
+                phone,
+                (payload['items'] as List?)
+                        ?.map((e) => Map<String, dynamic>.from(e as Map))
+                        .toList() ??
+                    const [],
+              );
+          await OrderPaymentService.placeOrderPostPaid(
+            userPhone: phone,
+            idempotencyKey: idempotencyKey,
+            orderBase: payload,
+            decrements: (data['decrements'] as List?)
+                    ?.map((e) => Map<String, dynamic>.from(e as Map))
+                    .toList() ??
+                [],
+          );
+          sent++;
+        } on FirebaseFunctionsException {
+          remaining.add(data);
+        } catch (_) {
+          remaining.add(data);
+        }
+      }
+      if (remaining.isEmpty) {
+        await prefs.remove(_pendingOrdersKey);
+      } else {
+        await prefs.setString(_pendingOrdersKey, jsonEncode(remaining));
+      }
+      pendingCount = remaining.length;
+      notifyListeners();
+      return sent;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> flushPendingOrders() => _flushPendingOrders();
+
   void selectCategory(String c) {
     if (selectedCategory == c) return;
     selectedCategory = c;
@@ -177,13 +276,19 @@ class FoodController extends ChangeNotifier {
 
   void addToCart(FoodProduct p) {
     if (isOutOfStock(p.id)) return;
-    _cart[p.id] = (_cart[p.id] ?? 0) + p.minQty;
+    final current = _cart[p.id] ?? 0;
+    final next = current + p.minQty;
+    if (_wouldExceedStock(p.id, next)) return;
+    _cart[p.id] = next;
     notifyListeners();
   }
 
   void increase(int productId) {
     final p = _productById(productId);
-    _cart[productId] = (_cart[productId] ?? 0) + p.step;
+    final current = _cart[productId] ?? 0;
+    final next = current + p.step;
+    if (_wouldExceedStock(productId, next)) return;
+    _cart[productId] = next;
     notifyListeners();
   }
 
@@ -212,14 +317,15 @@ class FoodController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitOrder({
+  /// Натижа: `(success: bool, isOffline: bool, error: String?)`
+  Future<({bool success, bool isOffline, String? error})> submitOrder({
     required String address,
     required String phone,
   }) async {
     if (_cart.isEmpty) {
       errorMessage = 'Сават бўш';
       notifyListeners();
-      return false;
+      return (success: false, isOffline: false, error: errorMessage);
     }
     isSubmitting = true;
     notifyListeners();
@@ -230,9 +336,9 @@ class FoodController extends ChangeNotifier {
       final uid = phoneDigits(userPhone);
       if (uid.length < 9) {
         isSubmitting = false;
-        errorMessage = 'Телефон рақамингизни профилда тўлдиринг.';
+        errorMessage = 'Телефон рақamingizni profilда tўldiring.';
         notifyListeners();
-        return false;
+        return (success: false, isOffline: false, error: errorMessage);
       }
 
       final items = <Map<String, dynamic>>[];
@@ -285,10 +391,35 @@ class FoodController extends ChangeNotifier {
             'label': e.label,
           },
       ];
+      final idempotencyKey = _buildIdempotencyKey(userPhone, items);
+
+      if (!hasInternet) {
+        try {
+          final offline = Map<String, dynamic>.from(orderData);
+          offline['createdAt'] = DateTime.now().toIso8601String();
+          offline['idempotencyKey'] = idempotencyKey;
+          offline['decrements'] = decMaps;
+          final existing = jsonDecode(
+                  prefs.getString(_pendingOrdersKey) ?? '[]')
+              as List;
+          existing.add(offline);
+          await prefs.setString(_pendingOrdersKey, jsonEncode(existing));
+          pendingCount = existing.length;
+          clearCart();
+          isSubmitting = false;
+          notifyListeners();
+          return (success: true, isOffline: true, error: null);
+        } catch (e) {
+          isSubmitting = false;
+          errorMessage = 'Хатолик: $e';
+          notifyListeners();
+          return (success: false, isOffline: false, error: errorMessage);
+        }
+      }
 
       await OrderPaymentService.placeOrderPostPaid(
         userPhone: userPhone,
-        idempotencyKey: _buildIdempotencyKey(userPhone, items),
+        idempotencyKey: idempotencyKey,
         orderBase: orderData,
         decrements: decMaps,
       );
@@ -296,7 +427,7 @@ class FoodController extends ChangeNotifier {
       await Future.wait([_loadStock(), _loadWallet()]);
       isSubmitting = false;
       notifyListeners();
-      return true;
+      return (success: true, isOffline: false, error: null);
     } on FirebaseFunctionsException catch (e) {
       isSubmitting = false;
       final m = e.message ?? e.code;
@@ -306,12 +437,12 @@ class FoodController extends ChangeNotifier {
         errorMessage = 'Хатолик: $m';
       }
       notifyListeners();
-      return false;
+      return (success: false, isOffline: false, error: errorMessage);
     } catch (e) {
       isSubmitting = false;
       errorMessage = 'Хатолик: $e';
       notifyListeners();
-      return false;
+      return (success: false, isOffline: false, error: errorMessage);
     }
   }
 

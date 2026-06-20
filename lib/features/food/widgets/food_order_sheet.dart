@@ -22,7 +22,12 @@ class FoodOrderSheet extends StatefulWidget {
   final BuildContext parentContext;
   final TextEditingController addressCtrl;
   final TextEditingController phoneCtrl;
-  final void Function(BuildContext rootContext, bool success) onAfterSubmit;
+  final void Function(
+    BuildContext rootContext,
+    ({bool success, bool isOffline, String? error}) result,
+    Map<int, double> cartSnapshot,
+    int totalSnapshot,
+  ) onAfterSubmit;
 
   @override
   State<FoodOrderSheet> createState() => _FoodOrderSheetState();
@@ -160,12 +165,20 @@ class _FoodOrderSheetState extends State<FoodOrderSheet> {
                               return;
                             }
                             Navigator.of(context).pop();
-                            final ok = await c.submitOrder(
+                            final cartSnapshot =
+                                Map<int, double>.from(c.cart);
+                            final totalSnapshot = c.cartTotal;
+                            final result = await c.submitOrder(
                               address: address,
                               phone: phone,
                             );
                             if (!widget.parentContext.mounted) return;
-                            widget.onAfterSubmit(widget.parentContext, ok);
+                            widget.onAfterSubmit(
+                              widget.parentContext,
+                              result,
+                              cartSnapshot,
+                              totalSnapshot,
+                            );
                           },
                     icon: c.isSubmitting
                         ? const SizedBox(

@@ -3,23 +3,19 @@ import 'package:flutter/material.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../utils/food_catalog.dart';
-import '../../../utils/wallet_payment.dart';
+import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../controllers/food_controller.dart';
 
-/// Сават bottom-sheet'и — сават рўйхати + жами сумма + "Буюртма бериш" tugmasi.
+/// Сават bottom-sheet'и — сават рўйхати + жами сумма + "Буюртма berish" tugmasi.
 class CartSheet extends StatelessWidget {
   const CartSheet({
     super.key,
     required this.controller,
     required this.onOrder,
-    this.bonusBalanceStream,
   });
 
   final FoodController controller;
   final VoidCallback onOrder;
-
-  /// Профил телефони бўйича — кошелёкдан тўлов таклифи.
-  final Stream<int>? bonusBalanceStream;
 
   String _formatQty(double qty, String unit) {
     if (qty == qty.roundToDouble()) return '${qty.toInt()} $unit';
@@ -77,7 +73,10 @@ class CartSheet extends StatelessWidget {
                   itemCount: cartEntries.length,
                   itemBuilder: (_, index) {
                     final entry = cartEntries[index];
-                    final product = FoodCatalog.byId(entry.key);
+                    final product = controller.products.firstWhere(
+                      (p) => p.id == entry.key,
+                      orElse: () => FoodCatalog.byId(entry.key),
+                    );
                     final qty = entry.value;
                     final itemTotal = (product.price * qty).round();
                     return ListTile(
@@ -141,53 +140,11 @@ class CartSheet extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                             color: Colors.green)),
                   ]),
-              if (bonusBalanceStream != null) ...[
-                const SizedBox(height: 10),
-                StreamBuilder<int>(
-                  stream: bonusBalanceStream,
-                  builder: (_, snap) {
-                    final bal = snap.data ?? 0;
-                    final applied = WalletPayment.maxDebitFromWallet(
-                      bal,
-                      controller.cartTotal,
-                    );
-                    final rest =
-                        (controller.cartTotal - applied).clamp(0, 999999999);
-                    if (applied <= 0 && bal <= 0) {
-                      return Text(
-                        'Кошелёк: ${formatPrice(bal)} ${loc.translate("sum")} '
-                        '(баланс бўлса, буюртмада ишлатилади)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          height: 1.3,
-                          color: Colors.grey.shade700,
-                        ),
-                      );
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Кошелёкдан: ${formatPrice(applied)} ${loc.translate("sum")}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue.shade800,
-                          ),
-                        ),
-                        if (rest > 0)
-                          Text(
-                            'Қолдиқ тўлов (нақд/карта): ${formatPrice(rest)} ${loc.translate("sum")}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ],
+              const SizedBox(height: 10),
+              OrderCheckoutWalletBanner(
+                orderTotal: controller.cartTotal,
+                walletBalance: controller.walletBalance,
+              ),
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,

@@ -625,7 +625,7 @@ class _UnifiedServicesGrid extends StatelessWidget {
     ];
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);
-    const rowGap = 3.0;
+    const rowGap = 2.0;
 
     return GridView.count(
       crossAxisCount: 4,
@@ -633,7 +633,7 @@ class _UnifiedServicesGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: rowGap,
       crossAxisSpacing: colGap,
-      childAspectRatio: 0.69,
+      childAspectRatio: 0.80,
       children: items.map((d) => _GridTile(data: d)).toList(),
     );
   }
@@ -679,7 +679,7 @@ class _GridTileState extends State<_GridTile> {
         splashColor: _brandGreen.withValues(alpha: 0.15),
         highlightColor: _brandGreen.withValues(alpha: 0.08),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: EdgeInsets.zero,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

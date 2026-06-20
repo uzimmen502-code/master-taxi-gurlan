@@ -326,9 +326,6 @@ class _HomeViewState extends State<_HomeView> {
                               children: [
                                 SizedBox(
                                     height: _sectionGap(context, base: 10)),
-                                _HomeSearchBar(onTap: _showTezKundaSnack),
-                                SizedBox(
-                                    height: _sectionGap(context, base: 10)),
                                 WalletCard(
                                   balance: _formatBalance(
                                       user?.bonusBalance ?? 0),
@@ -351,6 +348,9 @@ class _HomeViewState extends State<_HomeView> {
                                     );
                                   },
                                 ),
+                                SizedBox(
+                                    height: _sectionGap(context, base: 10)),
+                                _HomeSearchBar(onTap: _showTezKundaSnack),
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),
                                 PromoCarousel(

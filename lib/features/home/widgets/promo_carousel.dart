@@ -2,18 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Non / Taom / Bozor promo bannerlari — avtomatik aylantirish, nuqtasiz.
+/// Non / Taom / Bozor / taksi promo bannerlari — avtomatik aylantirish, nuqtasiz.
 class PromoCarousel extends StatefulWidget {
   const PromoCarousel({
     super.key,
     required this.onNonTap,
     required this.onTaomTap,
     required this.onBozorTap,
+    required this.onLocalTaxiTap,
+    required this.onIntercityTap,
+    required this.onMarshrutTap,
   });
 
   final VoidCallback onNonTap;
   final VoidCallback onTaomTap;
   final VoidCallback onBozorTap;
+  final VoidCallback onLocalTaxiTap;
+  final VoidCallback onIntercityTap;
+  final VoidCallback onMarshrutTap;
 
   @override
   State<PromoCarousel> createState() => _PromoCarouselState();
@@ -23,13 +29,13 @@ class _PromoBannerData {
   const _PromoBannerData({
     required this.title,
     required this.subtitle,
-    required this.colors,
+    required this.imagePath,
     required this.onTap,
   });
 
   final String title;
   final String subtitle;
-  final List<Color> colors;
+  final String imagePath;
   final VoidCallback onTap;
 }
 
@@ -51,20 +57,38 @@ class _PromoCarouselState extends State<PromoCarousel> {
       _PromoBannerData(
         title: 'Non buyurtma',
         subtitle: 'Yangi non — eshigingizga',
-        colors: const [Color(0xFF5D4037), Color(0xFF8D6E63)],
+        imagePath: 'assets/images/banners/banner_bread.jpg',
         onTap: widget.onNonTap,
       ),
       _PromoBannerData(
         title: 'Taom buyurtma',
         subtitle: 'Issiq taomlar — tez yetkazib berish',
-        colors: const [Color(0xFFE65100), Color(0xFFFF9800)],
+        imagePath: 'assets/images/banners/banner_food.jpg',
         onTap: widget.onTaomTap,
       ),
       _PromoBannerData(
         title: 'Online bozor',
         subtitle: 'Arzon mahsulotlar — uyingizga',
-        colors: const [Color(0xFF1565C0), Color(0xFF42A5F5)],
+        imagePath: 'assets/images/banners/banner_market.jpg',
         onTap: widget.onBozorTap,
+      ),
+      _PromoBannerData(
+        title: 'Mahalliy taksi',
+        subtitle: 'Tez va qulay — hozir chaqiring',
+        imagePath: 'assets/images/banners/banner_local_taxi.jpg',
+        onTap: widget.onLocalTaxiTap,
+      ),
+      _PromoBannerData(
+        title: 'Marshrut taksi',
+        subtitle: 'Navbatli, qulay yo\'nalishlar',
+        imagePath: 'assets/images/banners/banner_marshrut.jpg',
+        onTap: widget.onMarshrutTap,
+      ),
+      _PromoBannerData(
+        title: 'Shaharlararo',
+        subtitle: 'Uzoq safarlar — ishonchli haydovchilar',
+        imagePath: 'assets/images/banners/banner_intercity.jpg',
+        onTap: widget.onIntercityTap,
       ),
     ];
     _startAutoPlay();
@@ -142,46 +166,58 @@ class _PromoBannerCard extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: data.colors,
+            image: DecorationImage(
+              image: AssetImage(data.imagePath),
+              fit: BoxFit.cover,
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      data.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      data.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ],
-                ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black.withValues(alpha: 0.55),
+                  Colors.black.withValues(alpha: 0.15),
+                ],
               ),
-              const SizedBox(width: 10),
-              _CtaButton(onTap: data.onTap),
-            ],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        data.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        data.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _CtaButton(onTap: data.onTap),
+              ],
+            ),
           ),
         ),
       ),

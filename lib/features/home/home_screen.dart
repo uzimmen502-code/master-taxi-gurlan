@@ -366,6 +366,15 @@ class _HomeViewState extends State<_HomeView> {
                                     HomeModulesCatalog.byId(
                                         'cheap_products_home'),
                                   ),
+                                  onLocalTaxiTap: () => _openModule(
+                                    HomeModulesCatalog.byId('local_taxi'),
+                                  ),
+                                  onIntercityTap: () => _openModule(
+                                    HomeModulesCatalog.byId('intercity'),
+                                  ),
+                                  onMarshrutTap: () => _openModule(
+                                    HomeModulesCatalog.byId('marshrut'),
+                                  ),
                                 ),
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),

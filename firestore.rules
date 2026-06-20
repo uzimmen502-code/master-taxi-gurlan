@@ -61,6 +61,14 @@ service cloud.firestore {
               in ['admin', 'superadmin', 'dispatcher'];
     }
 
+    function isStaff() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/users/$(uid))
+          && get(/databases/$(database)/documents/users/$(uid)).data.role
+              in ['admin', 'superadmin', 'dispatcher', 'courier'];
+    }
+
     // Phone Auth enabled — Firebase verifyPhoneNumber.
     // Faqat quyidagi ustunlarga tegadigan profil patchlariga ruxsat.
     function usersGuestProfilePatchOnly() {
@@ -705,7 +713,10 @@ service cloud.firestore {
     // ORDERS — нон/овқат буюртмалар
     // ══════════════════════════════════════
     match /orders/{orderId} {
-      allow read: if true;
+      allow read: if isAuth() && (
+          isStaff()
+          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+      );
 
       allow create: if isAuth()
           && request.resource.data.keys().hasAll(['userPhone', 'items', 'total', 'status'])
@@ -730,7 +741,10 @@ service cloud.firestore {
       allow delete: if false;
 
       match /payment_lines/{lineId} {
-        allow read: if true;
+        allow read: if isAuth() && (
+            isStaff()
+            || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+        );
         allow write: if false;
       }
       match /payment_events/{eventId} {

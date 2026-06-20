@@ -18,18 +18,11 @@ class FeaturedProductsSection extends StatefulWidget {
 
 class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
   static const _titleDark = Color(0xFF1A3A20);
-  static const _brandGreen = Color(0xFF36A63A);
   static const _sectionMuted = Color(0xFF7A9070);
 
   final _service = FeaturedProductsService();
   late final Future<List<FeaturedProduct>> _future =
       _service.getFeaturedProducts();
-
-  void _tezKunda() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tez kunda')),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,34 +59,13 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Tavsiya etamiz',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _titleDark,
-                    ),
-                  ),
-                ),
-                InkWell(
-                  onTap: _tezKunda,
-                  borderRadius: BorderRadius.circular(6),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Text(
-                      'Tez kunda',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: _brandGreen,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            const Text(
+              'Tavsiya etamiz',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: _titleDark,
+              ),
             ),
             const SizedBox(height: 10),
             GridView.builder(

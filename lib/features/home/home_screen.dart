@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
-import '../../core/utils/wallet_ledger_labels.dart';
 import '../../models/feed_item.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
@@ -73,16 +72,6 @@ String _lastTxAmount(WalletLedgerEntry? entry) {
   if (entry == null) return '—';
   final sign = entry.amount >= 0 ? '+' : '−';
   return '$sign${NumberFormat('#,###').format(entry.amount.abs())} so\'m';
-}
-
-String _lastTxLabel(WalletLedgerEntry? entry) {
-  if (entry == null) return 'Tranzaksiya yo\'q';
-  final sub = walletLedgerSubtitle(entry).trim();
-  if (sub.isNotEmpty) return sub;
-  if (entry.createdAt != null) {
-    return DateFormat('dd.MM HH:mm').format(entry.createdAt!);
-  }
-  return '—';
 }
 
 /// Bosh ekran — yangi layout (hamyon, taksi, xizmatlar).
@@ -313,7 +302,6 @@ class _HomeViewState extends State<_HomeView> {
                         padding: const EdgeInsets.only(bottom: 16),
                         children: [
                           _HomeHeader(
-                            displayName: _displayName(user, home),
                             initials: _initials(user, home),
                           ),
                           Padding(
@@ -332,7 +320,7 @@ class _HomeViewState extends State<_HomeView> {
                                   balance: _formatBalance(
                                       user?.bonusBalance ?? 0),
                                   lastTxAmount: _lastTxAmount(lastEntry),
-                                  lastTxLabel: _lastTxLabel(lastEntry),
+                                  displayName: _displayName(user, home),
                                   lastTxIsCredit: lastEntry == null
                                       ? null
                                       : lastEntry.amount >= 0,
@@ -482,15 +470,17 @@ class _HomeViewState extends State<_HomeView> {
 // ─── Header ──────────────────────────────────────────────────────────────────
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
-    required this.displayName,
     required this.initials,
   });
 
-  final String displayName;
   final String initials;
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final dateText =
+        '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year} yil';
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFEAF5E4),
@@ -503,7 +493,7 @@ class _HomeHeader extends StatelessWidget {
           Expanded(
             flex: 3,
             child: Text(
-              displayName,
+              dateText,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

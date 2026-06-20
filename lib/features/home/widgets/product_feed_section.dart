@@ -363,6 +363,7 @@ class _FeedProductCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),

@@ -8,14 +8,14 @@ class WalletCard extends StatelessWidget {
     super.key,
     required this.balance,
     required this.lastTxAmount,
-    required this.lastTxLabel,
+    required this.displayName,
     this.lastTxIsCredit,
     this.onHistoryTap,
   });
 
   final String balance;
   final String lastTxAmount;
-  final String lastTxLabel;
+  final String displayName;
 
   /// `true` — kirim (oq), `false` — chiqim (qizil), `null` — tranzaksiya yo'q.
   final bool? lastTxIsCredit;
@@ -39,7 +39,7 @@ class WalletCard extends StatelessWidget {
         onTap: onHistoryTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 96,
+          height: 84,
           decoration: BoxDecoration(
             color: _green,
             borderRadius: BorderRadius.circular(16),
@@ -52,7 +52,7 @@ class WalletCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -102,54 +102,38 @@ class WalletCard extends StatelessWidget {
                       ],
                     ),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: const Icon(
-                            Icons.receipt_outlined,
-                            size: 15,
-                            color: _gold,
+                        Flexible(
+                          child: RichText(
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            text: TextSpan(
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                              children: [
+                                const TextSpan(text: 'Oxirgi: '),
+                                TextSpan(
+                                  text: lastTxAmount,
+                                  style: TextStyle(color: _txAmountColor),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              RichText(
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                text: TextSpan(
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                  ),
-                                  children: [
-                                    const TextSpan(text: 'Oxirgi: '),
-                                    TextSpan(
-                                      text: lastTxAmount,
-                                      style: TextStyle(color: _txAmountColor),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 1),
-                              Text(
-                                lastTxLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white.withValues(alpha: 0.54),
-                                ),
-                              ),
-                            ],
+                        const SizedBox(width: 8),
+                        Text(
+                          displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: _gold,
                           ),
                         ),
                       ],

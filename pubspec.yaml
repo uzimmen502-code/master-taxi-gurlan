@@ -88,6 +88,7 @@ flutter:
     - assets/lang/ru.json
     - assets/images/
     - assets/images/services/
+    - assets/images/banners/
     - assets/bread_yupqa.png
     - assets/bread_churak.png
     - assets/bread_qovoq.png

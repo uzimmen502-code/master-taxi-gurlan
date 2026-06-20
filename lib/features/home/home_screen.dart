@@ -9,6 +9,7 @@ import '../../core/l10n/l10n_extension.dart';
 import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
 import '../../core/utils/wallet_ledger_labels.dart';
+import '../../models/feed_item.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/wallet_ledger_entry.dart';
@@ -31,6 +32,7 @@ import '../sell/screens/sell_offer_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
+import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
 import 'widgets/wallet_card.dart';
@@ -429,6 +431,27 @@ class _HomeViewState extends State<_HomeView> {
                                   onTap: () => _openModule(
                                     HomeModulesCatalog.byId('sell'),
                                   ),
+                                ),
+                                const SizedBox(height: 16),
+                                ProductFeedSection(
+                                  onProductTap: (source) {
+                                    switch (source) {
+                                      case FeedSource.bread:
+                                        _openModule(
+                                          HomeModulesCatalog.byId('bread'),
+                                        );
+                                      case FeedSource.food:
+                                        _openModule(
+                                          HomeModulesCatalog.byId('food'),
+                                        );
+                                      case FeedSource.market:
+                                        _openModule(
+                                          HomeModulesCatalog.byId(
+                                            'cheap_products_home',
+                                          ),
+                                        );
+                                    }
+                                  },
                                 ),
                               ],
                             ),

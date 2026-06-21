@@ -12,9 +12,12 @@ import '../../models/feed_item.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/wallet_ledger_entry.dart';
+import '../../models/home_ticker_ad.dart';
 import '../../repositories/intercity_bookings_repository.dart';
 import '../../repositories/user_repository.dart';
+import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
+import 'widgets/home_info_ticker.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
 import '../food/screens/food_screen.dart';
@@ -351,7 +354,21 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                                 SizedBox(
                                     height: _sectionGap(context, base: 10)),
-                                _HomeSearchBar(onTap: _showTezKundaSnack),
+                                StreamBuilder<List<HomeTickerAd>>(
+                                  stream: context
+                                      .read<HomeTickerRepository>()
+                                      .watchForModule('home_search', 'user'),
+                                  builder: (context, snap) {
+                                    final ads =
+                                        snap.data ?? const <HomeTickerAd>[];
+                                    if (ads.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    final shuffled =
+                                        List<HomeTickerAd>.of(ads)..shuffle();
+                                    return HomeInfoTicker(ads: shuffled);
+                                  },
+                                ),
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),
                                 PromoCarousel(
@@ -472,48 +489,6 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Search bar (placeholder) ────────────────────────────────────────────────
-class _HomeSearchBar extends StatelessWidget {
-  const _HomeSearchBar({required this.onTap});
-
-  final VoidCallback onTap;
-
-  static const _fill = Color(0xFFE8EAEC);
-  static const _hint = Color(0xFF9CA3AF);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(27),
-        child: Ink(
-          height: 53,
-          decoration: BoxDecoration(
-            color: _fill,
-            borderRadius: BorderRadius.circular(27),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              const _StrokeIcon(_IconKind.search, color: _hint, size: 20),
-              const SizedBox(width: 10),
-              Text(
-                'Taksi, taom, buyumlar qidirish...',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _hint.withValues(alpha: 0.95),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

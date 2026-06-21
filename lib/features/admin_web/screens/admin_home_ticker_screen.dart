@@ -277,7 +277,9 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                                   label: Text(
                                     ad.module == 'bread'
                                         ? 'Нон модули'
-                                        : 'Бош экран',
+                                        : ad.module == 'home_search'
+                                            ? 'Маълумот майдони'
+                                            : 'Бош экран',
                                     style: const TextStyle(fontSize: 11),
                                   ),
                                   visualDensity: VisualDensity.compact,
@@ -561,6 +563,9 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                 ),
                 items: const [
                   DropdownMenuItem(value: 'home', child: Text('Бош экран')),
+                  DropdownMenuItem(
+                      value: 'home_search',
+                      child: Text('Бош экран — маълумот майдони')),
                   DropdownMenuItem(value: 'bread', child: Text('Нон модули')),
                 ],
                 onChanged: (v) {

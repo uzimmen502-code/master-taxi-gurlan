@@ -9,6 +9,8 @@ class WalletCard extends StatelessWidget {
     required this.balance,
     required this.lastTxAmount,
     required this.displayName,
+    required this.dateText,
+    required this.locationText,
     this.lastTxIsCredit,
     this.onHistoryTap,
   });
@@ -16,6 +18,8 @@ class WalletCard extends StatelessWidget {
   final String balance;
   final String lastTxAmount;
   final String displayName;
+  final String dateText;
+  final String locationText;
 
   /// `true` — kirim (oq), `false` — chiqim (qizil), `null` — tranzaksiya yo'q.
   final bool? lastTxIsCredit;
@@ -69,13 +73,19 @@ class WalletCard extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Balans',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.6),
+                          Flexible(
+                            child: Text(
+                              dateText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -97,42 +107,23 @@ class WalletCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 3),
-                      Center(
-                        child: Text(
-                          balance,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Flexible(
-                            child: RichText(
+                            child: Text(
+                              balance,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white,
-                                ),
-                                children: [
-                                  const TextSpan(text: 'Oxirgi: '),
-                                  TextSpan(
-                                    text: lastTxAmount,
-                                    style: TextStyle(color: _txAmountColor),
-                                  ),
-                                ],
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Flexible(
                             child: ShaderMask(
                               shaderCallback: (bounds) =>
@@ -164,6 +155,72 @@ class WalletCard extends StatelessWidget {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: RichText(
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'Oxirgi: '),
+                                  TextSpan(
+                                    text: lastTxAmount,
+                                    style: TextStyle(color: _txAmountColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFFAC775),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Flexible(
+                                    child: Text(
+                                      locationText,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

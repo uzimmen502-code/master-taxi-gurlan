@@ -250,7 +250,10 @@ class _HomeViewState extends State<_HomeView> {
 
   void _showTezKundaSnack() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tez kunda')),
+      const SnackBar(
+        content: Text('Tez kunda'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 

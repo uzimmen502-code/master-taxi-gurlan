@@ -15,7 +15,7 @@ class HomeInfoTicker extends StatefulWidget {
   final List<HomeTickerAd> ads;
 
   static const _fill = Color(0xFFE8EAEC);
-  static const _navy = Color(0xFF173A5E); // to'q ko'k — ishonchli, ma'lumot
+  static const _accent = Color(0xFF1B5E20); // to'q yashil — brendga mos, o'qilishi yaxshi
 
   @override
   State<HomeInfoTicker> createState() => _HomeInfoTickerState();
@@ -73,7 +73,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         children: [
           const Icon(
             Icons.lightbulb_outline,
-            color: HomeInfoTicker._navy,
+            color: HomeInfoTicker._accent,
             size: 20,
           ),
           const SizedBox(width: 10),
@@ -98,7 +98,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
                         fontSize: 13,
                         height: 1.05,
                         fontWeight: FontWeight.w500,
-                        color: HomeInfoTicker._navy,
+                        color: HomeInfoTicker._accent,
                       ),
                     ),
                   ),

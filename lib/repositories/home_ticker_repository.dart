@@ -13,11 +13,17 @@ class HomeTickerRepository {
       _db.collection('home_ticker_ads');
 
   Stream<List<HomeTickerAd>> watchForRole(String role) {
+    return watchForModule('home', role);
+  }
+
+  /// Berilgan modul (`home` | `bread`) va rol uchun faol matnlar.
+  Stream<List<HomeTickerAd>> watchForModule(String module, String role) {
     return _col.orderBy('priority', descending: true).snapshots().map((snap) {
       final now = DateTime.now();
       return snap.docs
           .map(HomeTickerAd.fromDoc)
           .where((a) =>
+              a.module == module &&
               a.active &&
               a.text.isNotEmpty &&
               a.isVisibleForRole(role) &&

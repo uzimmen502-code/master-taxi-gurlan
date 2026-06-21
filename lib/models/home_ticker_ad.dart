@@ -14,6 +14,7 @@ class HomeTickerAd {
     required this.fontSize,
     required this.priority,
     required this.active,
+    this.module = 'home',
     this.activeFrom,
     this.activeTo,
     this.createdAt,
@@ -24,6 +25,8 @@ class HomeTickerAd {
   final String text;
   /// `all` | `user` | `driver` | `courier` | `admin`
   final String audience;
+  /// Qaysi ekranda ko'rsatiladi: `home` (bosh ekran) | `bread` (non moduli).
+  final String module;
   /// Bir matn necha soniya ekranda qoladi (keyingisiga o'tish).
   final int durationSec;
   /// Marquee: px/sek; boshqalar: harf tezligi (qiymat oshsa tezroq).
@@ -48,6 +51,7 @@ class HomeTickerAd {
       id: doc.id,
       text: (d['text'] ?? '').toString().trim(),
       audience: (d['audience'] ?? 'all').toString(),
+      module: (d['module'] ?? 'home').toString(),
       durationSec: ((d['durationSec'] as num?)?.toInt() ?? defaultDurationSec)
           .clamp(5, 120),
       scrollSpeed: ((d['scrollSpeed'] as num?)?.toInt() ?? defaultScrollSpeed)
@@ -70,6 +74,7 @@ class HomeTickerAd {
     String? id,
     String? text,
     String? audience,
+    String? module,
     int? durationSec,
     int? scrollSpeed,
     String? animationStyle,
@@ -87,6 +92,7 @@ class HomeTickerAd {
       id: id ?? this.id,
       text: text ?? this.text,
       audience: audience ?? this.audience,
+      module: module ?? this.module,
       durationSec: durationSec ?? this.durationSec,
       scrollSpeed: scrollSpeed ?? this.scrollSpeed,
       animationStyle: animationStyle ?? this.animationStyle,
@@ -104,6 +110,7 @@ class HomeTickerAd {
     return {
       'text': text,
       'audience': audience,
+      'module': module,
       'active': active,
       'priority': priority,
       'durationSec': durationSec,
@@ -122,6 +129,7 @@ class HomeTickerAd {
     return {
       'text': text,
       'audience': audience,
+      'module': module,
       'active': active,
       'priority': priority,
       'durationSec': durationSec,

@@ -274,6 +274,15 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                               runSpacing: 6,
                               children: [
                                 Chip(
+                                  label: Text(
+                                    ad.module == 'bread'
+                                        ? 'Нон модули'
+                                        : 'Бош экран',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Chip(
                                   label: Text(_audienceLabel(ad.audience),
                                       style: const TextStyle(fontSize: 11)),
                                   visualDensity: VisualDensity.compact,
@@ -383,6 +392,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
 
   late final TextEditingController _textCtrl;
   late String _audience;
+  late String _module;
   late int _priority;
   late int _durationSec;
   late int _scrollSpeed;
@@ -401,6 +411,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
     final e = widget.existing;
     _textCtrl = TextEditingController(text: e?.text ?? '');
     _audience = e?.audience ?? 'all';
+    _module = e?.module ?? 'home';
     _priority = e?.priority ?? 0;
     _durationSec = e?.durationSec ?? HomeTickerAd.defaultDurationSec;
     _scrollSpeed = e?.scrollSpeed ?? HomeTickerAd.defaultScrollSpeed;
@@ -471,6 +482,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
       id: widget.existing?.id ?? '',
       text: text,
       audience: _audience,
+      module: _module,
       durationSec: _durationSec,
       scrollSpeed: _scrollSpeed,
       animationStyle: _animationStyle,
@@ -538,6 +550,21 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                     .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _audience = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _module,
+                decoration: const InputDecoration(
+                  labelText: 'Қайси экранда',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'home', child: Text('Бош экран')),
+                  DropdownMenuItem(value: 'bread', child: Text('Нон модули')),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _module = v);
                 },
               ),
               const SizedBox(height: 16),

@@ -982,6 +982,10 @@ service cloud.firestore {
                 ['all', 'user', 'driver', 'courier', 'admin']
           )
           && (
+            !('module' in request.resource.data)
+            || request.resource.data.module in ['home', 'bread']
+          )
+          && (
             !('durationSec' in request.resource.data)
             || (
               request.resource.data.durationSec is int

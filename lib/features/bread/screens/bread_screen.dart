@@ -12,6 +12,12 @@ import '../../../repositories/inventory_repository.dart';
 
 import '../../../repositories/orders_repository.dart';
 
+import '../../../repositories/home_ticker_repository.dart';
+
+import '../../../models/home_ticker_ad.dart';
+
+import '../../home/widgets/home_ticker_shell.dart';
+
 import '../../../core/theme/app_theme.dart';
 
 import '../controllers/bread_controller.dart';
@@ -19,8 +25,6 @@ import '../controllers/bread_controller.dart';
 import '../widgets/bread_cart_sheet.dart';
 
 import '../widgets/bread_extra_product_card.dart';
-
-import '../widgets/bread_history_card.dart';
 
 import '../widgets/bread_product_card.dart';
 
@@ -260,145 +264,27 @@ class _BreadViewState extends State<_BreadView> {
 
                 ),
 
-                SliverToBoxAdapter(
-
-                  child: Padding(
-
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-
-                    child: GestureDetector(
-
-                      onTap: () => c.toggleHistory(),
-
-                      child: Container(
-
-                        padding: const EdgeInsets.symmetric(
-
-                            horizontal: 16, vertical: 12),
-
-                        decoration: BoxDecoration(
-
-                          color: Colors.white,
-
-                          borderRadius: BorderRadius.circular(14),
-
-                          border:
-
-                              Border.all(color: _primary.withOpacity(0.3)),
-
-                          boxShadow: [
-
-                            BoxShadow(
-
-                                color: Colors.black.withOpacity(0.04),
-
-                                blurRadius: 6),
-
-                          ],
-
-                        ),
-
-                        child: Row(children: [
-
-                          const Icon(Icons.history,
-
-                              color: AppColors.primary, size: 20),
-
-                          const SizedBox(width: 10),
-
-                          Text(loc.translate('bread_orders_history'),
-
-                              style: const TextStyle(
-
-                                  fontSize: 14,
-
-                                  fontWeight: FontWeight.bold)),
-
-                          const Spacer(),
-
-                          Icon(
-
-                            c.showHistory
-
-                                ? Icons.keyboard_arrow_up
-
-                                : Icons.keyboard_arrow_down,
-
-                            color: Colors.grey,
-
-                          ),
-
-                        ]),
-
+                // Tarix tugmasi o'rniga — Firestore ticker (module: bread).
+                // Matnlar admin paneldan boshqariladi, tasodifiy aralashtiriladi,
+                // har bir matn durationSec soniya ko'rsatiladi.
+                StreamBuilder<List<HomeTickerAd>>(
+                  stream: context
+                      .read<HomeTickerRepository>()
+                      .watchForModule('bread', 'user'),
+                  builder: (context, snap) {
+                    final ads = snap.data ?? const <HomeTickerAd>[];
+                    if (ads.isEmpty) {
+                      return const SliverToBoxAdapter(child: SizedBox.shrink());
+                    }
+                    final shuffled = List<HomeTickerAd>.of(ads)..shuffle();
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+                        child: HomeTickerShell(ads: shuffled),
                       ),
-
-                    ),
-
-                  ),
-
+                    );
+                  },
                 ),
-
-                if (c.showHistory)
-
-                  SliverToBoxAdapter(
-
-                    child: c.historyLoading
-
-                        ? const Padding(
-
-                            padding: EdgeInsets.all(20),
-
-                            child: Center(
-
-                                child: CircularProgressIndicator(
-
-                                    color: AppColors.primary)),
-
-                          )
-
-                        : c.orderHistory.isEmpty
-
-                            ? Container(
-
-                                margin: const EdgeInsets.symmetric(
-
-                                    horizontal: 16, vertical: 8),
-
-                                padding: const EdgeInsets.all(16),
-
-                                decoration: BoxDecoration(
-
-                                  color: Colors.white,
-
-                                  borderRadius: BorderRadius.circular(14),
-
-                                ),
-
-                                child: Center(
-
-                                  child: Text(
-
-                                      loc.translate('bread_history_empty'),
-
-                                      style: const TextStyle(
-
-                                          color: Colors.grey)),
-
-                                ),
-
-                              )
-
-                            : Column(
-
-                                children: c.orderHistory
-
-                                    .map((o) => BreadHistoryCard(order: o))
-
-                                    .toList(),
-
-                              ),
-
-                  ),
 
                 _sectionHeader(loc.translate('bread_section_yopish')),
 

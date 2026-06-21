@@ -23,6 +23,7 @@ class WalletCard extends StatelessWidget {
 
   static const _green = Color(0xFF36A63A);
   static const _gold = Color(0xFFF5C518);
+  static const _silver = Color(0xFFC0C0C0);
   static const _badgeText = Color(0xFF1A5E1C);
   static const _debitTint = Color(0xFFFFCDD2);
 
@@ -101,7 +102,7 @@ class WalletCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 6),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -129,14 +130,14 @@ class WalletCard extends StatelessWidget {
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              displayName,
+                              displayName.toUpperCase(),
                               textAlign: TextAlign.right,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: _gold,
+                                color: _silver,
                               ),
                             ),
                           ),

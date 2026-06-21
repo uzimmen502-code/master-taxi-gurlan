@@ -295,13 +295,21 @@ class _HomeViewState extends State<_HomeView> {
                         ? userRepo.watchWalletLedger(uid, limit: 10)
                         : Stream.value(const []),
                     builder: (context, ledgerSnap) {
-                      // Balansga ta'sir qilmaydigan qaydlar (order_payment_cash/
-                      // card/product — amount: 0) tranzaksiya emas; kartada
-                      // balansni o'zgartirgan oxirgi yozuvni ko'rsatamiz.
+                      // Balansga ta'sir qilmaydigan qaydlar tranzaksiya emas:
+                      // order_payment_cash/card — amount: 0 (to'lov tasdig'i);
+                      // order_payment_product — amount musbat, lekin bu mahsulot
+                      // bilan to'lov qaydi (meta.debitCredit: none), kirim emas.
+                      // Kartada faqat balansni o'zgartirgan oxirgi yozuvni
+                      // ko'rsatamiz (change_accrued, purchase_debit, payout, ...).
+                      const skipTypes = {
+                        'order_payment_cash',
+                        'order_payment_card',
+                        'order_payment_product',
+                      };
                       final entries = ledgerSnap.data ?? const <WalletLedgerEntry>[];
                       WalletLedgerEntry? lastEntry;
                       for (final e in entries) {
-                        if (e.amount != 0) {
+                        if (e.amount != 0 && !skipTypes.contains(e.type)) {
                           lastEntry = e;
                           break;
                         }

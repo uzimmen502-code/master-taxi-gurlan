@@ -292,12 +292,20 @@ class _HomeViewState extends State<_HomeView> {
                   final user = userSnap.data;
                   return StreamBuilder<List<WalletLedgerEntry>>(
                     stream: uid.length >= 9
-                        ? userRepo.watchWalletLedger(uid, limit: 1)
+                        ? userRepo.watchWalletLedger(uid, limit: 10)
                         : Stream.value(const []),
                     builder: (context, ledgerSnap) {
-                      final lastEntry = (ledgerSnap.data ?? const []).isNotEmpty
-                          ? ledgerSnap.data!.first
-                          : null;
+                      // Balansga ta'sir qilmaydigan qaydlar (order_payment_cash/
+                      // card/product — amount: 0) tranzaksiya emas; kartada
+                      // balansni o'zgartirgan oxirgi yozuvni ko'rsatamiz.
+                      final entries = ledgerSnap.data ?? const <WalletLedgerEntry>[];
+                      WalletLedgerEntry? lastEntry;
+                      for (final e in entries) {
+                        if (e.amount != 0) {
+                          lastEntry = e;
+                          break;
+                        }
+                      }
                       return ListView(
                         padding: const EdgeInsets.only(bottom: 16),
                         children: [

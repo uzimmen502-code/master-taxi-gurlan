@@ -208,7 +208,7 @@ class _BreadViewState extends State<_BreadView> {
 
                   pinned: true,
 
-                  expandedHeight: 130,
+                  expandedHeight: 56,
 
                   backgroundColor: AppColors.primary,
 

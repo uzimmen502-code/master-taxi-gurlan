@@ -99,6 +99,26 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 ),
               ),
             ),
+          if (product.isReady)
+            Positioned(
+              top: 6,
+              left: 6,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                    color: Colors.deepOrange.shade700,
+                    borderRadius: BorderRadius.circular(6)),
+                child: const Text(
+                  'Тайёр',
+                  style: TextStyle(
+                    fontSize: AppText.labelTiny,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
           if (product.isReady && product.totalStock > 0)
             Positioned(
               top: 6,

@@ -23,9 +23,14 @@ class WalletCard extends StatelessWidget {
 
   static const _green = Color(0xFF36A63A);
   static const _gold = Color(0xFFF5C518);
-  static const _silver = Color(0xFFC0C0C0);
   static const _badgeText = Color(0xFF1A5E1C);
   static const _debitTint = Color(0xFFFFCDD2);
+
+  // Тўқ металлик 3D effekt учун градиент стопллари (юқоридан пастга:
+  // ёруғ металл → асосий → тўқ соя — ёруғлик акси таассуроти).
+  static const _metalLight = Color(0xFF9DA3A8);
+  static const _metalBase = Color(0xFF6E7378);
+  static const _metalDark = Color(0xFF3E4347);
 
   Color get _txAmountColor {
     if (lastTxIsCredit == null) return Colors.white;
@@ -129,15 +134,36 @@ class WalletCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Flexible(
-                            child: Text(
-                              displayName.toUpperCase(),
-                              textAlign: TextAlign.right,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: _silver,
+                            child: ShaderMask(
+                              shaderCallback: (bounds) =>
+                                  const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [_metalLight, _metalBase, _metalDark],
+                                stops: [0.0, 0.5, 1.0],
+                              ).createShader(bounds),
+                              child: Text(
+                                displayName.toUpperCase(),
+                                textAlign: TextAlign.right,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      offset: Offset(0, 1),
+                                      blurRadius: 1,
+                                      color: Color(0x99000000),
+                                    ),
+                                    Shadow(
+                                      offset: Offset(0, -0.5),
+                                      blurRadius: 0.5,
+                                      color: Color(0x66FFFFFF),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

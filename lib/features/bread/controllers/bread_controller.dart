@@ -527,10 +527,27 @@ class BreadController extends ChangeNotifier {
     parts.sort();
     final cartSignature = parts.join('|');
     final dateStr = DateTime.now().toIso8601String().substring(0, 10);
-    final hash = base64Url
-        .encode(utf8.encode('$phone|$dateStr|$cartSignature'))
-        .substring(0, 16);
-    return 'bread_${phone}_${dateStr}_$hash';
+    final raw = '$phone|$dateStr|$cartSignature';
+    final hash = _stableHash(raw);
+    return 'bread_${dateStr}_$hash';
+  }
+
+  /// Бутун raw сатр бўйича барқарор (deterministic) hash — FNV-1a 64-bit.
+  /// Тузатиш: эски base64Url.substring(0,16) фақат биринчи 12 байтни
+  /// (телефон) сақлар эди, сават таркиби hashга кирмасди — натижада бир
+  /// кунда бир телефондан барча буюртмалар бир хил key олиб, фақат
+  /// биринчиси ёзилар, қолгани "duplicate" бўлиб йўқоларди.
+  static String _stableHash(String input) {
+    // FNV-1a 64-bit — ташқи кутубхонасиз, барча платформаларда бир хил.
+    var hash = BigInt.parse('14695981039346656037'); // FNV offset basis
+    final prime = BigInt.parse('1099511628211'); // FNV prime
+    final mask = (BigInt.one << 64) - BigInt.one;
+    final bytes = utf8.encode(input);
+    for (final b in bytes) {
+      hash = (hash ^ BigInt.from(b)) & mask;
+      hash = (hash * prime) & mask;
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 
   String _mapFunctionError(String code, String? message) {

@@ -457,9 +457,24 @@ class FoodController extends ChangeNotifier {
     parts.sort();
     final cartSignature = parts.join('|');
     final dateStr = DateTime.now().toIso8601String().substring(0, 10);
-    final hash = base64Url
-        .encode(utf8.encode('$phone|$dateStr|$cartSignature'))
-        .substring(0, 16);
-    return 'food_${phoneDigits(phone)}_${dateStr}_$hash';
+    final raw = '$phone|$dateStr|$cartSignature';
+    final hash = _stableHash(raw);
+    return 'food_${dateStr}_$hash';
+  }
+
+  /// Бутун raw сатр бўйича барқарор (deterministic) hash — FNV-1a 64-bit.
+  /// Эски base64Url.substring(0,16) фақат телефонни сақлар эди, сават
+  /// таркиби hashга кирмасди — бир кунда бир телефондан барча буюртмалар
+  /// бир хил key олиб, фақат биринчиси ёзилар, қолгани йўқоларди.
+  static String _stableHash(String input) {
+    var hash = BigInt.parse('14695981039346656037'); // FNV offset basis
+    final prime = BigInt.parse('1099511628211'); // FNV prime
+    final mask = (BigInt.one << 64) - BigInt.one;
+    final bytes = utf8.encode(input);
+    for (final b in bytes) {
+      hash = (hash ^ BigInt.from(b)) & mask;
+      hash = (hash * prime) & mask;
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 }

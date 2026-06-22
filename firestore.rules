@@ -1037,15 +1037,17 @@ service cloud.firestore {
 
     match /home_ticker_ads/{adId} {
       allow read: if true;
-      allow create: if homeTickerAdPayloadOk()
+      allow create: if isAdmin()
+          && homeTickerAdPayloadOk()
           && request.resource.data.keys().hasAll([
             'text', 'audience', 'active', 'priority',
             'durationSec', 'scrollSpeed', 'animationStyle', 'fontSize',
             'createdAt', 'updatedAt'
           ]);
-      allow update: if homeTickerAdPayloadOk()
+      allow update: if isAdmin()
+          && homeTickerAdPayloadOk()
           && notChanged('createdAt');
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     // Мобил ариза — marshrut/intercity маршрут майдонлари билан.

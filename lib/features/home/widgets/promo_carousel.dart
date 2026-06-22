@@ -178,26 +178,30 @@ class _PromoBannerCard extends StatelessWidget {
               ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    data.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+            child: Stack(
+            children: [
+              Positioned(
+                top: 12,
+                left: 14,
+                right: 14,
+                child: Text(
+                  data.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                 ),
-                const SizedBox(width: 10),
-                _CtaButton(onTap: data.onTap),
-              ],
-            ),
+              ),
+              Positioned(
+                bottom: 12,
+                right: 14,
+                child: _CtaButton(onTap: data.onTap),
+              ),
+            ],
+          ),
           ),
         ),
       ),

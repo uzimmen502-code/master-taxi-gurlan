@@ -62,19 +62,19 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   InlineSpan _buildSpan(String text) {
     final qi = text.indexOf('?');
     const qStyle = TextStyle(
-      fontSize: 18,
+      fontSize: 43,
       height: 1.05,
       fontStyle: FontStyle.italic,
       color: HomeInfoTicker._question,
     );
     const sepStyle = TextStyle(
-      fontSize: 18,
+      fontSize: 43,
       height: 1.05,
       fontWeight: FontWeight.w500,
       color: HomeInfoTicker._question,
     );
     const aStyle = TextStyle(
-      fontSize: 18,
+      fontSize: 43,
       height: 1.05,
       fontWeight: FontWeight.w700,
       color: HomeInfoTicker._answer,
@@ -109,7 +109,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         color: HomeInfoTicker._fill,
         borderRadius: BorderRadius.circular(8),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
         child: Align(

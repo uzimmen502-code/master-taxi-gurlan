@@ -56,12 +56,21 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     super.dispose();
   }
 
+  // Matn "qisqa" hisoblanadi — 2 qatorga sig'sa (taxminan 60 belgi)
+  static const _shortThreshold = 60;
+
   InlineSpan _buildSpan(String text) {
     final qi = text.indexOf('?');
     const qStyle = TextStyle(
       fontSize: 13,
       height: 1.05,
       fontStyle: FontStyle.italic,
+      color: HomeInfoTicker._question,
+    );
+    const sepStyle = TextStyle(
+      fontSize: 13,
+      height: 1.05,
+      fontWeight: FontWeight.w500,
       color: HomeInfoTicker._question,
     );
     const aStyle = TextStyle(
@@ -81,7 +90,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     return TextSpan(children: [
       TextSpan(text: q, style: qStyle),
       if (a.isNotEmpty) ...[
-        const TextSpan(text: ' '),
+        const TextSpan(text: ' ✦ ', style: sepStyle),
         TextSpan(text: a, style: aStyle),
       ],
     ]);
@@ -92,6 +101,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
     final text = widget.ads[_index].text;
     final maxW = MediaQuery.sizeOf(context).width - 4;
+    final isShort = text.length <= _shortThreshold;
 
     return Container(
       height: 53,
@@ -104,12 +114,13 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         duration: const Duration(milliseconds: 350),
         child: Align(
           key: ValueKey(_index),
-          alignment: Alignment.centerLeft,
+          alignment: isShort ? Alignment.center : Alignment.centerLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxW),
             child: RichText(
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textAlign: isShort ? TextAlign.center : TextAlign.start,
               text: _buildSpan(text),
             ),
           ),

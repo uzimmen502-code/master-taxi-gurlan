@@ -13,7 +13,7 @@ class HomeInfoTicker extends StatefulWidget {
   final List<HomeTickerAd> ads;
 
   static const _fill     = Color(0xFFE8EAEC);
-  static const _question = Color(0xFF5D6B6E); // kulrang — savol (kursiv)
+  static const _question = Color(0xFF173A5E); // to'q ko'k — savol (kursiv)
   static const _answer   = Color(0xFF1B5E20); // to'q yashil — javob (bold)
 
   @override

@@ -177,13 +177,13 @@ class _PromoBannerCard extends StatelessWidget {
                 ],
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: EdgeInsets.zero,
             child: Stack(
             children: [
               Positioned(
-                top: 2,
-                left: 2,
-                right: 14,
+                top: 6,
+                left: 8,
+                right: 80,
                 child: Text(
                   data.title,
                   maxLines: 1,
@@ -196,8 +196,8 @@ class _PromoBannerCard extends StatelessWidget {
                 ),
               ),
               Positioned(
-                bottom: 2,
-                right: 2,
+                bottom: 6,
+                right: 8,
                 child: _CtaButton(onTap: data.onTap),
               ),
             ],

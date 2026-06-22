@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import '../../../models/home_ticker_ad.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Pill (radius 8px, 53px balandlik). Matn chap chegaraga maksimal yaqin.
-/// Savol: kursiv + to'q ko'k. Javob: qalin (bold) + to'q yashil.
+/// Maydon doim 53px. Matn maydonni (kenglik + balandlik) to'ldiradi:
+/// uzunligiga qarab boshlang'ich shrift tanlanadi, so'ng BoxFit.contain bilan
+/// bo'sh joyga sig'dirib kattalashtiriladi — lekin maksimal 22px, minimal 12px.
+/// Savol: kursiv (#2C2C2A). Javob: qalin bold (#412402). Fon: Amber Orange.
 class HomeInfoTicker extends StatefulWidget {
   const HomeInfoTicker({super.key, required this.ads});
 
@@ -56,26 +58,36 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     super.dispose();
   }
 
-  // Matn "qisqa" hisoblanadi — 2 qatorga sig'sa (taxminan 60 belgi)
-  static const _shortThreshold = 60;
+  // Matn uzunligiga qarab boshlang'ich shrift (max 22, min 12).
+  // BoxFit.contain bu o'lchamdan kattalashtirib bo'sh joyni to'ldiradi,
+  // lekin RichText o'zi shu o'lchamda yozadi — natijada uzun matn kichik,
+  // qisqa matn katta bo'ladi, ikkalasi ham maydonni to'ldiradi.
+  double _baseFont(String text) {
+    final n = text.length;
+    if (n <= 25) return 22;
+    if (n <= 45) return 18;
+    if (n <= 70) return 15;
+    if (n <= 95) return 13;
+    return 12;
+  }
 
-  InlineSpan _buildSpan(String text) {
+  InlineSpan _buildSpan(String text, double fs) {
     final qi = text.indexOf('?');
-    const qStyle = TextStyle(
-      fontSize: 43,
-      height: 1.05,
+    final qStyle = TextStyle(
+      fontSize: fs,
+      height: 1.1,
       fontStyle: FontStyle.italic,
       color: HomeInfoTicker._question,
     );
-    const sepStyle = TextStyle(
-      fontSize: 43,
-      height: 1.05,
+    final sepStyle = TextStyle(
+      fontSize: fs,
+      height: 1.1,
       fontWeight: FontWeight.w500,
       color: HomeInfoTicker._question,
     );
-    const aStyle = TextStyle(
-      fontSize: 43,
-      height: 1.05,
+    final aStyle = TextStyle(
+      fontSize: fs,
+      height: 1.1,
       fontWeight: FontWeight.w700,
       color: HomeInfoTicker._answer,
     );
@@ -90,7 +102,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     return TextSpan(children: [
       TextSpan(text: q, style: qStyle),
       if (a.isNotEmpty) ...[
-        const TextSpan(text: ' ✦ ', style: sepStyle),
+        TextSpan(text: ' ✦ ', style: sepStyle),
         TextSpan(text: a, style: aStyle),
       ],
     ]);
@@ -100,8 +112,8 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   Widget build(BuildContext context) {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
     final text = widget.ads[_index].text;
-    final maxW = MediaQuery.sizeOf(context).width - 4;
-    final isShort = text.length <= _shortThreshold;
+    final fs = _baseFont(text);
+    final isShort = text.length <= 25;
 
     return Container(
       height: 53,
@@ -109,22 +121,26 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         color: HomeInfoTicker._fill,
         borderRadius: BorderRadius.circular(8),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
-        child: FittedBox(
+        child: LayoutBuilder(
           key: ValueKey(_index),
-          fit: BoxFit.scaleDown,
-          alignment: isShort ? Alignment.center : Alignment.centerLeft,
-          child: SizedBox(
-            width: maxW,
-            child: RichText(
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: isShort ? TextAlign.center : TextAlign.start,
-              text: _buildSpan(text),
-            ),
-          ),
+          builder: (context, constraints) {
+            return FittedBox(
+              fit: BoxFit.contain,
+              alignment: isShort ? Alignment.center : Alignment.centerLeft,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: isShort ? TextAlign.center : TextAlign.start,
+                  text: _buildSpan(text, fs),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

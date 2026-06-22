@@ -12,9 +12,9 @@ class HomeInfoTicker extends StatefulWidget {
 
   final List<HomeTickerAd> ads;
 
-  static const _fill     = Color(0xFFE8EAEC);
-  static const _question = Color(0xFF173A5E);
-  static const _answer   = Color(0xFF1B5E20);
+  static const _fill     = Color(0xFFFFB000);
+  static const _question = Color(0xFF2C2C2A);
+  static const _answer   = Color(0xFF412402);
 
   @override
   State<HomeInfoTicker> createState() => _HomeInfoTickerState();

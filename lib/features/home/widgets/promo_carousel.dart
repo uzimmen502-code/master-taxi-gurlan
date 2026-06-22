@@ -181,8 +181,8 @@ class _PromoBannerCard extends StatelessWidget {
             child: Stack(
             children: [
               Positioned(
-                top: 12,
-                left: 14,
+                top: 2,
+                left: 2,
                 right: 14,
                 child: Text(
                   data.title,
@@ -196,8 +196,8 @@ class _PromoBannerCard extends StatelessWidget {
                 ),
               ),
               Positioned(
-                bottom: 12,
-                right: 14,
+                bottom: 2,
+                right: 2,
                 child: _CtaButton(onTap: data.onTap),
               ),
             ],

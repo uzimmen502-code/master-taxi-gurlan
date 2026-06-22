@@ -109,23 +109,20 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         color: HomeInfoTicker._fill,
         borderRadius: BorderRadius.circular(8),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
-        child: Align(
+        child: FittedBox(
           key: ValueKey(_index),
+          fit: BoxFit.scaleDown,
           alignment: isShort ? Alignment.center : Alignment.centerLeft,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: isShort ? Alignment.center : Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxW),
-              child: RichText(
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: isShort ? TextAlign.center : TextAlign.start,
-                text: _buildSpan(text),
-              ),
+          child: SizedBox(
+            width: maxW,
+            child: RichText(
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: isShort ? TextAlign.center : TextAlign.start,
+              text: _buildSpan(text),
             ),
           ),
         ),

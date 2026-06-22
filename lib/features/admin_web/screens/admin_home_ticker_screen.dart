@@ -58,6 +58,87 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
     return code;
   }
 
+  Future<void> _openBulkDuration() async {
+    int value = 4;
+    final repo = context.read<HomeTickerRepository>();
+    final applied = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Барча матнлар давомийлиги'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Бош экран маълумот майдони (home_search) барча '
+                'матнлари учун кўрсатилиш вақти (сония):',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: value > 3
+                        ? () => setLocal(() => value--)
+                        : null,
+                  ),
+                  Container(
+                    width: 56,
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$value',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: value < 12
+                        ? () => setLocal(() => value++)
+                        : null,
+                  ),
+                ],
+              ),
+              const Text('(3–12 сония)',
+                  style: TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Бекор'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Ҳаммасига қўллаш'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (applied != true || !mounted) return;
+    try {
+      final count = await repo.setDurationForModule('home_search', value);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text('✅ $count та матн $value сонияга ўрнатилди'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Хатолик: $e')),
+      );
+    }
+  }
+
   Future<void> _openEditor({HomeTickerAd? existing}) async {
     final saved = await showDialog<bool>(
       context: context,
@@ -180,6 +261,16 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                   ),
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Янги матн'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _openBulkDuration,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white70),
+                  ),
+                  icon: const Icon(Icons.timer_outlined, size: 18),
+                  label: const Text('Давомийлик'),
                 ),
               ],
             ),

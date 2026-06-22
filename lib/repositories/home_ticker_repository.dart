@@ -65,4 +65,20 @@ class HomeTickerRepository {
     if (id.isEmpty) return;
     await _col.doc(id).delete();
   }
+
+  /// Berilgan modulning BARCHA matnlari uchun `durationSec` ni bittada
+  /// o'rnatadi. Qaytaradi: yangilangan hujjatlar soni.
+  Future<int> setDurationForModule(String module, int durationSec) async {
+    final snap = await _col.where('module', isEqualTo: module).get();
+    if (snap.docs.isEmpty) return 0;
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'durationSec': durationSec,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    return snap.docs.length;
+  }
 }

@@ -21,6 +21,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
 
   bool _adminChecked = false;
   bool _isAdmin = false;
+  String _query = '';
 
   static const _audiences = [
     ('all', 'Барча'),
@@ -183,6 +184,26 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              decoration: InputDecoration(
+                hintText: 'Матн бўйича қидириш...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () => setState(() => _query = ''),
+                      ),
+              ),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<HomeTickerAd>>(
               stream: repo.watchForAdmin(),
@@ -194,8 +215,13 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                 if (snap.hasError) {
                   return Center(child: Text('Хатолик: ${snap.error}'));
                 }
-                final items = snap.data ?? const [];
-                if (items.isEmpty) {
+                final allItems = snap.data ?? const <HomeTickerAd>[];
+                final items = _query.isEmpty
+                    ? allItems
+                    : allItems
+                        .where((a) => a.text.toLowerCase().contains(_query))
+                        .toList(growable: false);
+                if (allItems.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -217,6 +243,15 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                           label: const Text('Биринчи матнни қўшиш'),
                         ),
                       ],
+                    ),
+                  );
+                }
+
+                if (items.isEmpty) {
+                  return Center(
+                    child: Text(
+                      '"$_query" бўйича ҳеч нарса топилмади',
+                      style: TextStyle(color: Colors.grey.shade600),
                     ),
                   );
                 }

@@ -62,19 +62,19 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   InlineSpan _buildSpan(String text) {
     final qi = text.indexOf('?');
     const qStyle = TextStyle(
-      fontSize: 13,
+      fontSize: 18,
       height: 1.05,
       fontStyle: FontStyle.italic,
       color: HomeInfoTicker._question,
     );
     const sepStyle = TextStyle(
-      fontSize: 13,
+      fontSize: 18,
       height: 1.05,
       fontWeight: FontWeight.w500,
       color: HomeInfoTicker._question,
     );
     const aStyle = TextStyle(
-      fontSize: 13,
+      fontSize: 18,
       height: 1.05,
       fontWeight: FontWeight.w700,
       color: HomeInfoTicker._answer,
@@ -115,13 +115,17 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
         child: Align(
           key: ValueKey(_index),
           alignment: isShort ? Alignment.center : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxW),
-            child: RichText(
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: isShort ? TextAlign.center : TextAlign.start,
-              text: _buildSpan(text),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: isShort ? Alignment.center : Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxW),
+              child: RichText(
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: isShort ? TextAlign.center : TextAlign.start,
+                text: _buildSpan(text),
+              ),
             ),
           ),
         ),

@@ -38,6 +38,33 @@ class OrdersRepository {
     return list;
   }
 
+  /// Foydalanuvchi buyurtmalarini real-vaqtda kuzatish (Buyurtmalar ekrani).
+  /// Telefon aliaslari bo'yicha, eng yangi birinchi.
+  Stream<List<OrderModel>> watchByUser(
+    List<String> phoneAliases, {
+    int limit = 50,
+  }) {
+    if (phoneAliases.isEmpty) {
+      return Stream.value(const <OrderModel>[]);
+    }
+    return _col
+        .where('userPhone', whereIn: phoneAliases)
+        .limit(limit)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs.map(OrderModel.fromDoc).toList();
+      list.sort((a, b) {
+        final at = a.createdAt;
+        final bt = b.createdAt;
+        if (at == null && bt == null) return 0;
+        if (at == null) return 1;
+        if (bt == null) return -1;
+        return bt.compareTo(at);
+      });
+      return list;
+    });
+  }
+
   /// Bir martalik buyurtma o'qish (kuryer flow yoki detail screen uchun).
   Future<OrderModel?> getById(String id) async {
     if (id.isEmpty) return null;

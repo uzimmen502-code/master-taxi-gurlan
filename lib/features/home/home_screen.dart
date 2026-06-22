@@ -18,6 +18,7 @@ import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import 'widgets/home_info_ticker.dart';
+import '../orders/screens/orders_screen.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
 import '../food/screens/food_screen.dart';
@@ -269,7 +270,9 @@ class _HomeViewState extends State<_HomeView> {
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: _HomeBottomNav(
-        onOrders: _showTezKundaSnack,
+        onOrders: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        ),
         onWallet: () => _HomeBottomNav.openWallet(context),
         onProfile: () async {
           await _HomeBottomNav.openProfile(context);

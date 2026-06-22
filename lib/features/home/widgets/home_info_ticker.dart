@@ -5,16 +5,16 @@ import 'package:flutter/material.dart';
 import '../../../models/home_ticker_ad.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Kulrang pill (53px). Lampochka yo'q — matn chap chegaraga maksimal yaqin.
-/// Savol: kursiv + kulrang. Javob: qalin (bold) + to'q yashil.
+/// Pill (radius 8px, 53px balandlik). Matn chap chegaraga maksimal yaqin.
+/// Savol: kursiv + to'q ko'k. Javob: qalin (bold) + to'q yashil.
 class HomeInfoTicker extends StatefulWidget {
   const HomeInfoTicker({super.key, required this.ads});
 
   final List<HomeTickerAd> ads;
 
   static const _fill     = Color(0xFFE8EAEC);
-  static const _question = Color(0xFF173A5E); // to'q ko'k — savol (kursiv)
-  static const _answer   = Color(0xFF1B5E20); // to'q yashil — javob (bold)
+  static const _question = Color(0xFF173A5E);
+  static const _answer   = Color(0xFF1B5E20);
 
   @override
   State<HomeInfoTicker> createState() => _HomeInfoTickerState();
@@ -56,7 +56,6 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     super.dispose();
   }
 
-  // Matnni "?" dan savol va javobga ajratadi.
   InlineSpan _buildSpan(String text) {
     final qi = text.indexOf('?');
     const qStyle = TextStyle(
@@ -92,31 +91,26 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   Widget build(BuildContext context) {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
     final text = widget.ads[_index].text;
+    final maxW = MediaQuery.sizeOf(context).width - 4;
 
     return Container(
       height: 53,
       decoration: BoxDecoration(
         color: HomeInfoTicker._fill,
-        borderRadius: BorderRadius.circular(27),
+        borderRadius: BorderRadius.circular(8),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
         child: Align(
           key: ValueKey(_index),
           alignment: Alignment.centerLeft,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.sizeOf(context).width - 32,
-              ),
-              child: RichText(
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                text: _buildSpan(text),
-              ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxW),
+            child: RichText(
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              text: _buildSpan(text),
             ),
           ),
         ),

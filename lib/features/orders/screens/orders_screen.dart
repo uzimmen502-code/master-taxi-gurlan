@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
 import '../../../repositories/orders_repository.dart';
-import '../../home/controllers/home_controller.dart';
 import '../../profile/widgets/order_card.dart';
 
 /// Buyurtmalar ekrani (bottom-nav). 1-bosqich: faqat non + taom (`orders`).
@@ -23,11 +23,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
   static const _doneStatuses = {'delivered'};
 
   bool _showActive = true;
+  String _phone = '';
+  bool _phoneLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhone();
+  }
+
+  Future<void> _loadPhone() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('user_phone') ?? '';
+    if (!mounted) return;
+    setState(() {
+      _phone = phoneDigits(raw);
+      _phoneLoaded = true;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final home = context.watch<HomeController>();
-    final aliases = phoneAliases(home.phone);
+    final aliases = phoneAliases(_phone);
     final repo = context.read<OrdersRepository>();
 
     return Scaffold(
@@ -54,36 +71,41 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<List<OrderModel>>(
-              stream: repo.watchByUser(aliases),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting &&
-                    !snap.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(child: Text('Хатолик: ${snap.error}'));
-                }
-                final all = snap.data ?? const <OrderModel>[];
-                final filtered = all.where((o) {
-                  final s = o.status;
-                  return _showActive
-                      ? _activeStatuses.contains(s)
-                      : _doneStatuses.contains(s);
-                }).toList(growable: false);
+            child: !_phoneLoaded
+                ? const Center(child: CircularProgressIndicator())
+                : StreamBuilder<List<OrderModel>>(
+                    stream: repo.watchByUser(aliases),
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting &&
+                          !snap.hasData) {
+                        return const Center(
+                            child: CircularProgressIndicator());
+                      }
+                      if (snap.hasError) {
+                        return Center(child: Text('Хатолик: ${snap.error}'));
+                      }
+                      final all = snap.data ?? const <OrderModel>[];
+                      final filtered = all.where((o) {
+                        final s = o.status;
+                        return _showActive
+                            ? _activeStatuses.contains(s)
+                            : _doneStatuses.contains(s);
+                      }).toList(growable: false);
 
-                if (filtered.isEmpty) {
-                  return _EmptyState(showActive: _showActive);
-                }
+                      if (filtered.isEmpty) {
+                        return _EmptyState(showActive: _showActive);
+                      }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, i) => OrderCard(order: filtered[i]),
-                );
-              },
-            ),
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, i) =>
+                            OrderCard(order: filtered[i]),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

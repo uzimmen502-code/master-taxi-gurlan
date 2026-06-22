@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/orders_repository.dart';
@@ -63,11 +63,6 @@ class _FoodViewState extends State<_FoodView> {
       buf.write(s[i]);
     }
     return buf.toString();
-  }
-
-  static String _formatQty(double qty, String unit) {
-    if (qty == qty.roundToDouble()) return '${qty.toInt()} $unit';
-    return '$qty $unit';
   }
 
   Future<void> _showCart(BuildContext context) async {
@@ -153,6 +148,7 @@ class _FoodViewState extends State<_FoodView> {
             return;
           }
           if (result.isOffline) {
+            c.clearCart();
             ScaffoldMessenger.of(root).showSnackBar(
               SnackBar(
                 content: Text(loc.translate('bread_snack_order_saved_offline')),
@@ -163,99 +159,19 @@ class _FoodViewState extends State<_FoodView> {
             );
             return;
           }
-          _showConfirmedDialog(
-            root,
-            addressCtrl.text.trim(),
-            phoneCtrl.text.trim(),
-            cartSnapshot,
-            totalSnapshot,
+          c.clearCart();
+          ScaffoldMessenger.of(root).showSnackBar(
+            SnackBar(
+              content: Text(loc.translate('bread_snack_order_sent')),
+              backgroundColor: AppColors.primary,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
           );
         },
-      ),
-    );
-  }
-
-  void _showConfirmedDialog(
-    BuildContext context,
-    String address,
-    String phone,
-    Map<int, double> cartSnapshot,
-    int totalSnapshot,
-  ) {
-    final c = context.read<FoodController>();
-    final loc = AppLocalizations.of(context)!;
-
-    final buffer = StringBuffer();
-    for (final entry in cartSnapshot.entries) {
-      final p = c.products.firstWhere(
-        (e) => e.id == entry.key,
-        orElse: () => FoodCatalog.byId(entry.key),
-      );
-      final qty = entry.value;
-      final price = (p.price * qty).round();
-      buffer.writeln(
-          '${p.emoji} ${p.name}: ${_formatQty(qty, p.unit)} = ${_formatPrice(price)} сўм');
-    }
-    final total = totalSnapshot;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 28),
-          const SizedBox(width: 8),
-          Text(loc.translate('order_confirmed')),
-        ]),
-        content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(loc.translate('will_contact_soon'),
-                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(12)),
-                child: Text(buffer.toString(),
-                    style: const TextStyle(fontSize: 12)),
-              ),
-              const Divider(height: 16),
-              Text('📍 $address', style: const TextStyle(fontSize: 12)),
-              Text('📞 $phone', style: const TextStyle(fontSize: 12)),
-              Text('💰 ${_formatPrice(total)} ${loc.translate("sum")}',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green)),
-            ]),
-        actions: [
-          OutlinedButton.icon(
-            onPressed: () async {
-              final url = Uri.parse('tel:$phone');
-              if (await canLaunchUrl(url)) await launchUrl(url);
-            },
-            icon: const Icon(Icons.phone, size: 18),
-            label: Text(loc.translate('call')),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.green),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              c.clearCart();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text(loc.translate('ok')),
-          ),
-        ],
       ),
     );
   }

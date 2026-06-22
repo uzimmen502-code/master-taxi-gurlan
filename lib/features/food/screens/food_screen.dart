@@ -2,18 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/utils/formatters.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/orders_repository.dart';
-import '../../../repositories/user_repository.dart';
-import '../../../utils/food_catalog.dart';
 import '../controllers/food_controller.dart';
-import '../widgets/cart_sheet.dart';
-import '../widgets/food_order_sheet.dart';
+import '../widgets/food_cart_sheet.dart';
 import '../widgets/product_card.dart';
 
 class FoodScreen extends StatelessWidget {
@@ -79,100 +73,7 @@ class _FoodViewState extends State<_FoodView> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CartSheet(
-        controller: c,
-        onOrder: () {
-          Navigator.pop(context);
-          _showOrderForm(context);
-        },
-      ),
-    );
-  }
-
-  Future<void> _showOrderForm(BuildContext context) async {
-    final c = context.read<FoodController>();
-    final loc = AppLocalizations.of(context)!;
-
-    // Профил маълумотларини бирваракай юклаймиз — телефон ва манзил аввалдан
-    // тўлдирилган бўлсин, фойдаланувчи кейин ҳам таҳрирлай олади.
-    //
-    // Бирламчи манба — SharedPreferences (тезкор, оффлайн ҳам ишлайди).
-    // Иккиламчи — Firestore'даги `users/{uid}.address` (структурaли). Агар
-    // SharedPreferences бўш бўлса (масалан, фойдаланувчи манзилни faqat profil
-    // saqlash exрanida янги форматда сақлаган бўлса) — Firestore'дан formatted
-    // string ишлатамиз.
-    final prefs = await SharedPreferences.getInstance();
-    var savedPhone = prefs.getString('user_phone') ?? '';
-    var savedAddress = prefs.getString('user_address') ?? '';
-
-    if (savedAddress.isEmpty) {
-      try {
-        final uid = phoneDigits(savedPhone);
-        if (uid.length >= 9 && context.mounted) {
-          final user = await context.read<UserRepository>().getById(uid);
-          if (user != null) {
-            if (user.address.isComplete) {
-              savedAddress = user.address.formatted;
-            } else if (user.addressLegacy.isNotEmpty) {
-              savedAddress = user.addressLegacy;
-            }
-          }
-        }
-      } catch (_) {
-        // Силент — Firestore топилмаса фойдаланувчи қўлда ёзади.
-      }
-    }
-
-    if (!context.mounted) return;
-    final addressCtrl = TextEditingController(text: savedAddress);
-    final phoneCtrl = TextEditingController(text: savedPhone);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => FoodOrderSheet(
-        parentContext: context,
-        controller: c,
-        loc: loc,
-        addressCtrl: addressCtrl,
-        phoneCtrl: phoneCtrl,
-        onAfterSubmit: (root, result, cartSnapshot, totalSnapshot) {
-          if (!result.success) {
-            if (result.error != null) {
-              ScaffoldMessenger.of(root).showSnackBar(
-                SnackBar(content: Text(result.error!)),
-              );
-            }
-            c.clearError();
-            return;
-          }
-          if (result.isOffline) {
-            c.clearCart();
-            ScaffoldMessenger.of(root).showSnackBar(
-              SnackBar(
-                content: Text(loc.translate('bread_snack_order_saved_offline')),
-                backgroundColor: Colors.orange,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-            return;
-          }
-          c.clearCart();
-          ScaffoldMessenger.of(root).showSnackBar(
-            SnackBar(
-              content: Text(loc.translate('bread_snack_order_sent')),
-              backgroundColor: AppColors.primary,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          );
-        },
-      ),
+      builder: (_) => const FoodCartSheet(),
     );
   }
 

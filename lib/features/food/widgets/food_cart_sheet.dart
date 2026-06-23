@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/user_model.dart';
+import '../../../models/food_product.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../utils/food_catalog.dart';
 import '../../../widgets/order_checkout_wallet_banner.dart';
@@ -229,12 +230,21 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
               children: [
                 // ─── Сават рўйхати ───
                 ...cartEntries.map((entry) {
-                  final p = c.products.firstWhere(
-                    (e) => e.id == entry.key,
-                    orElse: () => FoodCatalog.byId(entry.key),
-                  );
+                  FoodProduct? p;
+                  for (final e in c.products) {
+                    if (e.id == entry.key) {
+                      p = e;
+                      break;
+                    }
+                  }
+                  p ??= FoodCatalog.products
+                      .where((e) => e.id == entry.key)
+                      .cast<FoodProduct?>()
+                      .firstWhere((e) => e != null, orElse: () => null);
+                  if (p == null) return const SizedBox.shrink();
+                  final product = p;
                   final qty = entry.value;
-                  final itemTotal = (p.price * qty).round();
+                  final itemTotal = (product.price * qty).round();
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(12),
@@ -244,13 +254,13 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                       border: Border.all(color: Colors.grey.shade200),
                     ),
                     child: Row(children: [
-                      Text(p.emoji, style: const TextStyle(fontSize: 22)),
+                      Text(product.emoji, style: const TextStyle(fontSize: 22)),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(p.name,
+                            Text(product.name,
                                 style: const TextStyle(
                                     fontSize: AppText.bodyMedium,
                                     fontWeight: FontWeight.w600)),
@@ -262,16 +272,16 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => c.decrease(p.id),
+                        onPressed: () => c.decrease(product.id),
                         icon: const Icon(Icons.remove_circle_outline,
                             color: Colors.red, size: 24),
                       ),
-                      Text(_formatQty(qty, p.unit),
+                      Text(_formatQty(qty, product.unit),
                           style: const TextStyle(
                               fontSize: AppText.bodyMedium,
                               fontWeight: FontWeight.bold)),
                       IconButton(
-                        onPressed: () => c.increase(p.id),
+                        onPressed: () => c.increase(product.id),
                         icon: const Icon(Icons.add_circle_outline,
                             color: _green, size: 24),
                       ),

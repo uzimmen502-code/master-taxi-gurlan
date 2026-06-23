@@ -480,7 +480,102 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
           icon: const Icon(Icons.add),
           label: Text(_l('courier_add_product')),
         ),
+        _buildProductSummary(),
       ],
+    );
+  }
+
+  /// Маҳсулот режими ҳисоб-китоби (X=кошелёк, Y=тўлов, Z=маҳсулот):
+  ///  Z-Y>0 → Қайтим, кошелёк = X+(Z-Y)
+  ///  Z-Y=0 → тенг, кошелёк = X
+  ///  Z-Y<0 → кошелёкдан Y-Z; X етса тўлов, кошелёк = X+(Z-Y); акс ҳолда «етмади»
+  Widget _buildProductSummary() {
+    final z = _productLinesSum();
+    if (z <= 0) return const SizedBox.shrink();
+    final y = widget.order.total;
+    final x = _walletBalance ?? 0;
+    final diff = z - y; // Z - Y
+    final newBalance = x + diff; // X + (Z - Y)
+
+    final rows = <Widget>[
+      _summaryRow('Кошелёк', '${formatPrice(x)} $_cur'),
+      _summaryRow('Тўлов', '${formatPrice(y)} $_cur'),
+      _summaryRow('Маҳсулот', '${formatPrice(z)} $_cur'),
+    ];
+
+    Color borderColor;
+    if (diff > 0) {
+      // Ортиқча — қайтим
+      rows.add(_summaryRow('Қайтим', '${formatPrice(diff)} $_cur',
+          color: AppColors.primaryDark));
+      rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
+          bold: true, color: AppColors.primaryDark));
+      borderColor = AppColors.primary;
+    } else if (diff == 0) {
+      rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(x)} $_cur',
+          bold: true, color: AppColors.primaryDark));
+      borderColor = AppColors.primary;
+    } else {
+      // Маҳсулот кам — кошелёкдан Y - Z
+      final need = -diff; // Y - Z
+      rows.add(_summaryRow('Кошелёкдан', '${formatPrice(need)} $_cur',
+          color: Colors.orange.shade800));
+      if (newBalance >= 0) {
+        rows.add(_summaryRow(
+            'Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
+            bold: true, color: AppColors.primaryDark));
+        borderColor = AppColors.primary;
+      } else {
+        rows.add(_summaryRow('Етишмаяпти', '${formatPrice(-newBalance)} $_cur',
+            bold: true, color: Colors.red.shade700));
+        rows.add(const SizedBox(height: 4));
+        rows.add(Text(
+          'Маҳсулотингиз етмади — маҳсулот қўшинг ёки миқдорни оширинг',
+          style: TextStyle(
+              color: Colors.red.shade700,
+              fontWeight: FontWeight.w600,
+              fontSize: 12),
+        ));
+        borderColor = Colors.red.shade300;
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value,
+      {bool bold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+                color: color ?? Colors.grey.shade800,
+              )),
+          Text(value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+                color: color ?? Colors.grey.shade900,
+              )),
+        ],
+      ),
     );
   }
 

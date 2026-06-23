@@ -567,7 +567,7 @@ class _UnifiedServicesGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: rowGap,
       crossAxisSpacing: colGap,
-      childAspectRatio: 0.80,
+      childAspectRatio: 0.95,
       children: items.map((d) => _GridTile(data: d)).toList(),
     );
   }

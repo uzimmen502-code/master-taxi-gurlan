@@ -1070,7 +1070,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
               onPressed: (_busy || _walletModeUnavailable) ? null : _submit,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 21),
               ),
               child: _busy
                   ? const SizedBox(

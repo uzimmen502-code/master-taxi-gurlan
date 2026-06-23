@@ -73,7 +73,10 @@ class _FoodViewState extends State<_FoodView> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const FoodCartSheet(),
+      builder: (_) => ChangeNotifierProvider<FoodController>.value(
+        value: c,
+        child: const FoodCartSheet(),
+      ),
     );
   }
 

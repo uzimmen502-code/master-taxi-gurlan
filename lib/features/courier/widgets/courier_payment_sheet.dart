@@ -206,10 +206,10 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     return 0;
   }
 
-  /// Нақд/карта режимида киритилган сумма буюртмадан кам бўлса,
+  /// Нақд/карта/маҳсулot режимида киритилган сумма буюртмадан кам бўлса,
   /// қолган қисм автоматик кошелёкдан ечилади (баланс етганча).
   int get _autoWalletTopUp {
-    if (_mode != 'cash' && _mode != 'card') return 0;
+    if (_mode != 'cash' && _mode != 'card' && _mode != 'product') return 0;
     final deficit = _remainingDue - _enteredCashOrCard();
     if (deficit <= 0) return 0;
     final bal = _walletBalance ?? 0;
@@ -648,6 +648,12 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
       if (card > 0) {
         lines.add({'kind': 'card', 'amount': card, 'qty': 1, 'unit': 'сўм'});
       }
+      final topUp = _autoWalletTopUp;
+      if (topUp > 0) {
+        lines.add({'kind': 'wallet', 'amount': topUp});
+      }
+    } else if (_mode == 'product') {
+      // Маҳсулот суммаси буюртмадан кам бўлса — қолгани кошелёкдан.
       final topUp = _autoWalletTopUp;
       if (topUp > 0) {
         lines.add({'kind': 'wallet', 'amount': topUp});

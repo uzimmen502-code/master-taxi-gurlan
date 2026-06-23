@@ -19,7 +19,7 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   // Faol holatlar (hali yetkazilmagan) va tugagan holatlar.
-  static const _activeStatuses = {'new', 'accepted', 'ready'};
+  static const _activeStatuses = {'new', 'accepted', 'ready', 'in_delivery'};
   static const _doneStatuses = {'delivered'};
 
   bool _showActive = true;

@@ -43,6 +43,9 @@ class SearchingController extends ChangeNotifier {
   // ── State ──────────────────────────────────────────────────────────
   String? tripId;
   String _userPhone = '';
+  String _userName = '';
+  String _userGender = '';
+  String _userBirthDate = '';
   double _fromLat = 0;
   double _fromLng = 0;
 
@@ -80,6 +83,9 @@ class SearchingController extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     _userPhone = prefs.getString('user_phone') ?? '';
+    _userName = prefs.getString('user_name') ?? '';
+    _userGender = prefs.getString('user_gender') ?? '';
+    _userBirthDate = prefs.getString('user_birth_date') ?? '';
 
     try {
       final coords = await _locationService.getCurrentCoords();
@@ -101,6 +107,9 @@ class SearchingController extends ChangeNotifier {
       } else {
         tripId = await _ridesRepo.createSearchRequest(
           userPhone: _userPhone,
+          userName: _userName,
+          userGender: _userGender,
+          userBirthDate: _userBirthDate,
           fromAddr: from,
           toAddr: to,
           fromLat: _fromLat,

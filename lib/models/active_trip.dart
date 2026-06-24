@@ -9,6 +9,9 @@ class ActiveTrip {
   final String status; // searching | pending | accepted | rejected |
   // no_seats | expired | completed | cancelled
   final String userPhone;
+  final String userName;
+  final String userGender;
+  final String userBirthDate;
   final String taxiType; // alone | marshrut | ...
 
   // ─── Manzil (alone-taxi uchun lat/lng, marshrut uchun MFY nomlari) ───
@@ -50,6 +53,9 @@ class ActiveTrip {
     required this.id,
     this.status = 'searching',
     this.userPhone = '',
+    this.userName = '',
+    this.userGender = '',
+    this.userBirthDate = '',
     this.taxiType = 'alone',
     this.fromAddr = '',
     this.toAddr = '',
@@ -96,6 +102,9 @@ class ActiveTrip {
       id: doc.id,
       status: d['status'] ?? 'searching',
       userPhone: d['userPhone'] ?? '',
+      userName: d['userName'] ?? '',
+      userGender: d['userGender'] ?? '',
+      userBirthDate: d['userBirthDate'] ?? '',
       taxiType: d['taxiType'] ?? 'alone',
       fromAddr: d['fromAddr'] ?? d['from'] ?? d['pickupAddr'] ?? '',
       toAddr: d['toAddr'] ?? d['to'] ?? '',

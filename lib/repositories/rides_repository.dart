@@ -110,6 +110,9 @@ class RidesRepository {
     required double fromLat,
     required double fromLng,
     required String taxiType,
+    String userName = '',
+    String userGender = '',
+    String userBirthDate = '',
     double initialRadiusKm = 3,
     Duration ttl = const Duration(minutes: 3),
   }) async {
@@ -117,6 +120,9 @@ class RidesRepository {
     final ref = await _trips.add({
       'status': 'searching',
       'userPhone': userPhone,
+      'userName': userName,
+      'userGender': userGender,
+      'userBirthDate': userBirthDate,
       'fromAddr': fromAddr,
       'toAddr': toAddr,
       'fromLat': fromLat,

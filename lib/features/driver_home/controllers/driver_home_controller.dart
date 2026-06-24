@@ -293,6 +293,11 @@ class DriverHomeController extends ChangeNotifier {
         return TripRequest(
           id: t.id,
           userPhone: t.userPhone,
+          userName: t.userName,
+          userGender: t.userGender,
+          userBirthDate: t.userBirthDate,
+          fromLat: t.fromLat,
+          fromLng: t.fromLng,
           from: t.fromAddr,
           to: t.toAddr,
           taxiType: t.taxiType,

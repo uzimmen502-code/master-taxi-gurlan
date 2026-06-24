@@ -17,9 +17,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../utils/gurlan_places.dart';
 import '../../../map_picker/screens/map_picker_screen.dart';
 import '../controllers/local_taxi_controller.dart';
-import '../services/driver_app_launcher.dart';
+import '../../../driver_home/screens/driver_home_screen.dart';
 import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
-import '../widgets/install_driver_app_dialog.dart';
 import '../../../../shared/widgets/driver_application_feedback.dart';
 import 'local_taxi_active_trip_screen.dart';
 import 'searching_screen.dart';
@@ -551,8 +550,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       }
     }
 
-    // ─── Driver app launch ─────────────────────────────────────────
-    // Vebda deep link ishlamaydi — haydovchi ilovasi faqat mobilda
+    // ─── Ҳайдовчи панели (ИЧКИ) ─────────────────────────────────────
+    // Веб GPS/реал-вақтни тўлиқ қўлламайди — фақат мобилда.
     if (kIsWeb) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -564,48 +563,10 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       ));
       return;
     }
-    const launcher = DriverAppLauncher();
-    final installed = await launcher.isInstalled();
     if (!mounted) return;
-
-    if (installed) {
-      final name = prefs.getString('user_name') ?? '';
-      final ok = await launcher.launchOnboard(
-        phone: phone,
-        name: name,
-        model: carModel,
-        color: carColor,
-        plate: carPlate,
-        taxiType: 'local',
-      );
-      if (!mounted) return;
-      if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          content: Text(
-              context.tr('driver_app_open_error')),
-        ));
-      }
-      return;
-    }
-
-    // Ўрнатилмаган — APK юклаш диалоги.
-    final wantsDownload = await showInstallDriverAppDialog(context);
-    if (!mounted || wantsDownload != true) return;
-    final downloaded = await launcher.openApkDownload();
-    if (!mounted) return;
-    if (!downloaded) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: Colors.blue.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: Text(
-            context.tr('browser_open_fail')),
-      ));
-    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+    );
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().contains('invalid_phone_format')

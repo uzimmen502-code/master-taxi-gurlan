@@ -58,6 +58,85 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
     return code;
   }
 
+  Future<void> _openBulkAnimation() async {
+    String value = HomeTickerAnimationStyle.auto;
+    final repo = context.read<HomeTickerRepository>();
+    final applied = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Барча матнлар анимацияси'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Бош экран маълумот майдони (home_search) барча '
+                'матнлари учун анимация услуби:',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: value,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  for (final s in HomeTickerAnimationStyle.all)
+                    DropdownMenuItem(
+                      value: s,
+                      child: Text(
+                        HomeTickerAnimationStyle.label(s),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setLocal(() => value = v ?? HomeTickerAnimationStyle.auto),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                HomeTickerAnimationStyle.description(value),
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Бекор'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Ҳаммасига қўллаш'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (applied != true || !mounted) return;
+    try {
+      final count =
+          await repo.setAnimationStyleForModule('home_search', value);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text(
+              '✅ $count та матн "${HomeTickerAnimationStyle.label(value)}" услубига ўрнатилди'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Хатолик: $e')),
+      );
+    }
+  }
+
   Future<void> _openBulkDuration() async {
     int value = 4;
     final repo = context.read<HomeTickerRepository>();
@@ -271,6 +350,16 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                   ),
                   icon: const Icon(Icons.timer_outlined, size: 18),
                   label: const Text('Давомийлик'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _openBulkAnimation,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white70),
+                  ),
+                  icon: const Icon(Icons.animation, size: 18),
+                  label: const Text('Анимация'),
                 ),
               ],
             ),

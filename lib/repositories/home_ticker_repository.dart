@@ -81,4 +81,21 @@ class HomeTickerRepository {
     await batch.commit();
     return snap.docs.length;
   }
+
+  /// Berilgan modulning BARCHA matnlari uchun `animationStyle` ni bittada
+  /// o'rnatadi. Qaytaradi: yangilangan hujjatlar soni.
+  Future<int> setAnimationStyleForModule(
+      String module, String animationStyle) async {
+    final snap = await _col.where('module', isEqualTo: module).get();
+    if (snap.docs.isEmpty) return 0;
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'animationStyle': animationStyle,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    return snap.docs.length;
+  }
 }

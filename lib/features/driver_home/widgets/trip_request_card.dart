@@ -3,28 +3,53 @@ import 'package:flutter/material.dart';
 import '../../../models/trip_request.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// "Янги буюртмалар" рўйхатидаги битта карта — таймер билан.
+/// "Янги буюртмалар" рўйхатидаги битта карта — йўловчи маълумоти
+/// (исм, жинс, ёш, телефон, масофа) + Қабул/Рад тугмалари.
 class TripRequestCard extends StatelessWidget {
   const TripRequestCard({
     super.key,
     required this.ride,
-    required this.onTap,
+    required this.onAccept,
+    required this.onReject,
+    this.disabled = false,
   });
 
   final TripRequest ride;
-  final VoidCallback onTap;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+  final bool disabled;
 
-  static const _blue = AppColors.primary;
   static const _green = AppColors.primaryDark;
-  static const _orange = AppColors.primary;
   static const _red = Color(0xFFB71C1C);
+
+  String _genderLabel() {
+    switch (ride.userGender) {
+      case 'female':
+        return '👩 Аёл';
+      case 'male':
+        return '👨 Эркак';
+      default:
+        return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final secs = ride.secsLeft;
     final m = secs ~/ 60;
     final s = secs % 60;
-    final color = secs > 60 ? _green : secs > 30 ? _orange : _red;
+    final timerColor = secs > 60 ? _green : secs > 30 ? AppColors.primary : _red;
+
+    final name = ride.userName.trim().isNotEmpty
+        ? ride.userName.trim()
+        : ride.userPhone;
+    final age = ride.age;
+    final gender = _genderLabel();
+
+    final subParts = <String>[
+      if (gender.isNotEmpty) gender,
+      if (age != null) '$age ёш',
+    ];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -34,63 +59,153 @@ class TripRequestCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: secs <= 30
             ? Border.all(color: _red.withOpacity(0.4), width: 1.5)
-            : null,
+            : Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
         ],
       ),
-      child: Row(children: [
-        Expanded(
-          child: Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ─── Йўловчи маълумоти ───
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(ride.from,
-                  style: const TextStyle(
-                      fontSize: AppText.bodyMedium,
-                      fontWeight: FontWeight.bold)),
-              if (ride.to.isNotEmpty)
-                Text('→ ${ride.to}',
-                    style: TextStyle(
-                        fontSize: AppText.labelSmall,
-                        color: Colors.grey.shade500)),
-              Text(ride.userPhone,
-                  style: TextStyle(
-                      fontSize: AppText.labelSmall,
-                      color: Colors.grey.shade400)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                            fontSize: AppText.bodyLarge,
+                            fontWeight: FontWeight.bold)),
+                    if (subParts.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(subParts.join('  ·  '),
+                            style: TextStyle(
+                                fontSize: AppText.labelSmall,
+                                color: Colors.grey.shade600)),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(ride.userPhone,
+                          style: TextStyle(
+                              fontSize: AppText.labelSmall,
+                              color: Colors.grey.shade500)),
+                    ),
+                  ],
+                ),
+              ),
+              // ─── Масофа + таймер ───
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (ride.distanceKm > 0)
+                    Text('${ride.distanceKm.toStringAsFixed(1)} км',
+                        style: const TextStyle(
+                            fontSize: AppText.bodyMedium,
+                            fontWeight: FontWeight.bold,
+                            color: _green)),
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                        color: timerColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border:
+                            Border.all(color: timerColor.withOpacity(0.3))),
+                    child: Text('⏱ $m:${s.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                            fontSize: AppText.labelSmall,
+                            fontWeight: FontWeight.bold,
+                            color: timerColor)),
+                  ),
+                ],
+              ),
             ],
           ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withOpacity(0.3))),
-          child: Column(children: [
-            Text('$m:${s.toString().padLeft(2, '0')}',
-                style: TextStyle(
-                    fontSize: AppText.bodyLarge,
-                    fontWeight: FontWeight.bold,
-                    color: color)),
-            const Text('⏱', style: TextStyle(fontSize: AppText.labelTiny)),
+          if (ride.from.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.location_on,
+                  size: 14, color: Colors.grey.shade500),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  ride.to.isNotEmpty ? '${ride.from} → ${ride.to}' : ride.from,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: AppText.labelSmall,
+                      color: Colors.grey.shade600),
+                ),
+              ),
+            ]),
+          ],
+          const SizedBox(height: 10),
+          // ─── Қабул / Рад тугмалари ───
+          Row(children: [
+            Expanded(
+              child: _ActionButton(
+                label: 'Рад',
+                color: _red,
+                filled: false,
+                onTap: disabled ? null : onReject,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: _ActionButton(
+                label: 'Қабул',
+                color: _green,
+                filled: true,
+                onTap: disabled ? null : onAccept,
+              ),
+            ),
           ]),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-                color: _blue, borderRadius: BorderRadius.circular(10)),
-            child: const Text('КЎРИШ',
-                style: TextStyle(
-                    fontSize: AppText.labelSmall,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    required this.filled,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool filled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.4 : 1.0,
+        child: Container(
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: filled ? color : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color, width: 1.5),
           ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: AppText.bodyMedium,
+                  fontWeight: FontWeight.bold,
+                  color: filled ? Colors.white : color)),
         ),
-      ]),
+      ),
     );
   }
 }

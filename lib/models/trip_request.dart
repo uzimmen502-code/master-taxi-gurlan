@@ -18,6 +18,7 @@ class TripRequest {
     this.userBirthDate = '',
     this.fromLat = 0,
     this.fromLng = 0,
+    this.distanceKm = 0,
     this.scheduleId = '',
     this.targetDriverId = '',
   });
@@ -33,6 +34,7 @@ class TripRequest {
   final String userBirthDate;
   final double fromLat;
   final double fromLng;
+  final double distanceKm;
   final String scheduleId;
   final String targetDriverId;
 

@@ -87,6 +87,20 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     ));
   }
 
+  Future<void> _onAcceptRequest(TripRequest ride) async {
+    final c = context.read<DriverHomeController>();
+    final result = await c.acceptRide(ride);
+    if (!mounted) return;
+    if (!result.success && result.error != null) {
+      _showSnack(result.error!, Colors.orange);
+    }
+  }
+
+  Future<void> _onRejectRequest(TripRequest ride) async {
+    final c = context.read<DriverHomeController>();
+    await c.rejectRide(ride);
+  }
+
   Future<void> _onNewRequest(TripRequest ride) async {
     if (!mounted || _isDialogOpen) return;
     _isDialogOpen = true;
@@ -280,7 +294,9 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
                   const SizedBox(height: 8),
                   ...c.activeRequests.map((r) => TripRequestCard(
                         ride: r,
-                        onTap: () => _onNewRequest(r),
+                        disabled: c.isBusy,
+                        onAccept: () => _onAcceptRequest(r),
+                        onReject: () => _onRejectRequest(r),
                       )),
                 ],
                 const SizedBox(height: 80),

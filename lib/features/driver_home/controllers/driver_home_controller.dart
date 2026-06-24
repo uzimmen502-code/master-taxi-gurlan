@@ -59,6 +59,9 @@ class DriverHomeController extends ChangeNotifier {
   StreamSubscription<List<QueueEntry>>? _queueSub;
   StreamSubscription<Position>? _gpsSub;
 
+  double? _driverLat;
+  double? _driverLng;
+
   /// Стрим янги request топилганда UI диалог кўрсатиш учун —
   /// `_tripsSub` ичида берилади. View подпиёса бўлади.
   final _newRequestController = StreamController<TripRequest>.broadcast();
@@ -243,6 +246,8 @@ class DriverHomeController extends ChangeNotifier {
       locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high, distanceFilter: 20),
     ).listen((pos) {
+      _driverLat = pos.latitude;
+      _driverLng = pos.longitude;
       if (!isOnline || session.driverId.isEmpty) return;
       _driverRepo.updateLocation(
           uid: session.driverId, lat: pos.latitude, lng: pos.longitude);
@@ -290,6 +295,19 @@ class DriverHomeController extends ChangeNotifier {
           secs = (180 - now.difference(t.createdAt!).inSeconds)
               .clamp(0, 180);
         }
+        double distKm = 0;
+        if (_driverLat != null &&
+            _driverLng != null &&
+            t.fromLat != 0 &&
+            t.fromLng != 0) {
+          distKm = Geolocator.distanceBetween(
+                _driverLat!,
+                _driverLng!,
+                t.fromLat,
+                t.fromLng,
+              ) /
+              1000;
+        }
         return TripRequest(
           id: t.id,
           userPhone: t.userPhone,
@@ -298,6 +316,7 @@ class DriverHomeController extends ChangeNotifier {
           userBirthDate: t.userBirthDate,
           fromLat: t.fromLat,
           fromLng: t.fromLng,
+          distanceKm: distKm,
           from: t.fromAddr,
           to: t.toAddr,
           taxiType: t.taxiType,

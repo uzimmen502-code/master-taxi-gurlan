@@ -369,9 +369,10 @@ class DriverScheduleController extends ChangeNotifier {
         to: toMfy,
         midStops: midStops,
       );
-    } else {
+    } else if (!isAlone) {
+      // Маҳаллий такси (alone) йўналиш белгиламайди — манзил талаб қилинмайди.
       if (fromAddr.trim().isEmpty) return 'Қаердан манзилини киритинг';
-      if (!isAlone && toAddr.trim().isEmpty) return 'Қаерга манзилини киритинг';
+      if (toAddr.trim().isEmpty) return 'Қаерга манзилини киритинг';
     }
     if (isIntercity && priceText.trim().isEmpty) {
       return 'Нархни киритинг';

@@ -242,104 +242,68 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             children: [
               _HeaderCard(controller: c),
               const SizedBox(height: 10),
-              Row(children: [
-                const Icon(Icons.route, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                const Text('ЙЎНАЛИШ',
-                    style: TextStyle(
-                        fontSize: AppText.titleSmall,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                        letterSpacing: 1.2)),
-              ]),
-              const SizedBox(height: 12),
-              if (c.isMarshrut) ...[
-                _buildMarshrutStops(c),
-                const SizedBox(height: 12),
-              ] else if (c.isIntercity) ...[
-                _buildIntercityStops(c),
-                const SizedBox(height: 10),
+              // ЙЎНАЛИШ — фақат marshrut/intercity учун. Маҳаллий такси
+              // (alone) мижоз буюртмаси бўйича ишлайди, ўз йўналишини
+              // белгиламайди — шунинг учун бу бўлим кўрсатилмайди.
+              if (!c.isAlone) ...[
                 Row(children: [
-                  Expanded(
-                    child: _dayChip(
-                      label: 'БУГУН',
-                      selected: !c.departureIsTomorrow,
-                      onTap: () => c.setDepartureIsTomorrow(false),
-                    ),
-                  ),
+                  const Icon(Icons.route, color: AppColors.primary, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: _dayChip(
-                      label: 'ЭРТАГА',
-                      selected: c.departureIsTomorrow,
-                      onTap: () => c.setDepartureIsTomorrow(true),
-                    ),
-                  ),
+                  const Text('ЙЎНАЛИШ',
+                      style: TextStyle(
+                          fontSize: AppText.titleSmall,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                          letterSpacing: 1.2)),
                 ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
-                    child: _compactTimeCard(
-                      'Жўнаш',
-                      _fmt(c.departureTime),
-                      () => _pickDeparture(c),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: _textField(
-                      ctrl: _priceCtrl,
-                      hint: 'Нарх (сўм)',
-                      icon: Icons.payments_outlined,
-                      inputType: TextInputType.number,
-                      formatters: [FilteringTextInputFormatter.digitsOnly],
-                      onChanged: c.setPriceText,
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-              ] else ...[
-                _addressField(
-                  ctrl: _fromAddrCtrl,
-                  hint: 'Қаердан',
-                  icon: Icons.circle_outlined,
-                  iconColor: AppColors.primary,
-                  onChanged: _onFromAddrChanged,
-                ),
-                if (_fromAddrSug.isNotEmpty)
-                  _suggestList(_fromAddrSug, _fromAddrCtrl, (v) {
-                    context.read<DriverScheduleController>().setFromAddr(v);
-                  }, () {
-                    setState(() => _fromAddrSug = const []);
-                  }),
-                const SizedBox(height: 6),
-                Center(
-                  child: IconButton(
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      final tmp = _fromAddrCtrl.text;
-                      _fromAddrCtrl.text = _toAddrCtrl.text;
-                      _toAddrCtrl.text = tmp;
-                      context.read<DriverScheduleController>().swapAddrs();
-                    },
-                    icon: const Icon(Icons.swap_vert, color: AppColors.primary),
-                  ),
-                ),
-                _addressField(
-                  ctrl: _toAddrCtrl,
-                  hint: 'Қаерга',
-                  icon: Icons.location_on,
-                  iconColor: Colors.red,
-                  onChanged: _onToAddrChanged,
-                ),
-                if (_toAddrSug.isNotEmpty)
-                  _suggestList(_toAddrSug, _toAddrCtrl, (v) {
-                    context.read<DriverScheduleController>().setToAddr(v);
-                  }, () {
-                    setState(() => _toAddrSug = const []);
-                  }),
                 const SizedBox(height: 12),
+                if (c.isMarshrut) ...[
+                  _buildMarshrutStops(c),
+                  const SizedBox(height: 12),
+                ] else if (c.isIntercity) ...[
+                  _buildIntercityStops(c),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: _dayChip(
+                        label: 'БУГУН',
+                        selected: !c.departureIsTomorrow,
+                        onTap: () => c.setDepartureIsTomorrow(false),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _dayChip(
+                        label: 'ЭРТАГА',
+                        selected: c.departureIsTomorrow,
+                        onTap: () => c.setDepartureIsTomorrow(true),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: _compactTimeCard(
+                        'Жўнаш',
+                        _fmt(c.departureTime),
+                        () => _pickDeparture(c),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: _textField(
+                        ctrl: _priceCtrl,
+                        hint: 'Нарх (сўм)',
+                        icon: Icons.payments_outlined,
+                        inputType: TextInputType.number,
+                        formatters: [FilteringTextInputFormatter.digitsOnly],
+                        onChanged: c.setPriceText,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                ],
               ],
               if (c.isAlone) ...[
                 _sectionTitle('🕐 Иш вақти'),

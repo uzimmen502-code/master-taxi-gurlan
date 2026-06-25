@@ -10,6 +10,7 @@ import '../../../models/active_trip.dart';
 import '../../../models/driver_session.dart';
 import '../../../models/queue_entry.dart';
 import '../../../models/trip_request.dart';
+import '../../../utils/fare_calculator.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
@@ -93,6 +94,7 @@ class DriverHomeController extends ChangeNotifier {
   // ─── Init ──────────────────────────────────────────────────────────
   Future<void> _init() async {
     await _loadSession();
+    await FareCalculator.loadPrices();
     _listenConnectivity();
   }
 

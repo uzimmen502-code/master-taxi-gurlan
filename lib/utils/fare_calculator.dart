@@ -1,14 +1,37 @@
 // ══════════════════════════════════════════════════════
 // Йўлкира ҳисоблаш тизими
-// Формула: (5000 + масофа×2500 + кутиш×200) × масофа_коэф × қўшимча_коэф
+// Формула: (base + масофа×perKm + кутиш×200) × масофа_коэф × қўшимча_коэф
+// `base` ва `perKm` — `settings/prices` (local_base / local_per_km) дан.
 // ══════════════════════════════════════════════════════
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class FareCalculator {
-  // ── Базавий нархлар ──
-  static const int baseFare      = 5000;  // Базавий нарх
-  static const int pricePerKm    = 2500;  // 1 км учун
+  // ── Базавий нархлар (settings/prices дан юкланади) ──
+  static int baseFare      = 5000;  // Базавий нарх (local_base)
+  static int pricePerKm    = 1500;  // 1 км учун (local_per_km)
   static const int pricePerMin   = 200;   // Кутиш: 1 дақ учун
   static const int freeWaitMins  = 3;     // Бепул кутиш дақиқаси
+  static bool _loaded = false;
+
+  /// Нархларни Firestore `settings/prices` дан бир марта юклаш.
+  static Future<void> loadPrices() async {
+    if (_loaded) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('prices')
+          .get();
+      final data = doc.data();
+      if (data != null) {
+        baseFare = (data['local_base'] as num?)?.toInt() ?? baseFare;
+        pricePerKm = (data['local_per_km'] as num?)?.toInt() ?? pricePerKm;
+      }
+      _loaded = true;
+    } catch (_) {
+      // Хато — default қийматлар сақланади.
+    }
+  }
 
   // ── Масофа коэффициентлари ──
   static double distanceCoefficient(double km) {

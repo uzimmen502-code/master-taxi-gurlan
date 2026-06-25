@@ -132,6 +132,9 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
               '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм',
               _green);
         },
+        onCancel: () async {
+          await c.abandonRide();
+        },
       ),
     ));
   }
@@ -296,7 +299,10 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                if (c.isBusy && c.acceptedRide != null) ...[
+                if (c.isBusy &&
+                    c.acceptedRide != null &&
+                    c.acceptedRide!.taxiType != 'local' &&
+                    c.acceptedRide!.taxiType != 'alone') ...[
                   ActiveRideCard(
                       ride: c.acceptedRide!, onComplete: _onCompleteRide),
                   const SizedBox(height: 16),

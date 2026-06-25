@@ -19,12 +19,16 @@ class DriverTripScreen extends StatefulWidget {
     super.key,
     required this.ride,
     required this.onFinish,
+    required this.onCancel,
   });
 
   final TripRequest ride;
 
   /// Сафар якунлангач чақирилади — `(fare)` узатилади.
   final void Function(int fare) onFinish;
+
+  /// Сафар тугатилмасдан чиқилганда — бандликни бекор қилиш учун.
+  final VoidCallback onCancel;
 
   @override
   State<DriverTripScreen> createState() => _DriverTripScreenState();
@@ -60,6 +64,14 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
       widget.ride.fromLat != 0 ? widget.ride.fromLat : 41.4957,
       widget.ride.fromLng != 0 ? widget.ride.fromLng : 60.5822,
     );
+  }
+
+  @override
+  void dispose() {
+    if (_mapController.isCompleted) {
+      _mapController.future.then((c) => c.dispose());
+    }
+    super.dispose();
   }
 
   void _onMapTap(LatLng latLng) {
@@ -173,16 +185,27 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
         ride.userName.trim().isNotEmpty ? ride.userName.trim() : ride.userPhone;
     final baseFare = FareCalculator.baseFare;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: _green,
-        foregroundColor: Colors.white,
-        title: Text(passengerName),
-      ),
-      body: Stack(
-        children: [
-          // ─── Харита ───
-          GoogleMap(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final leave = await _confirmLeave();
+        if (leave == true && mounted) {
+          // Сафарни тугатмасдан чиқиш — бандликни бекор қилиб қайтамиз.
+          widget.onCancel();
+          if (mounted) Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: _green,
+          foregroundColor: Colors.white,
+          title: Text(passengerName),
+        ),
+        body: Stack(
+          children: [
+            // ─── Харита ───
+            GoogleMap(
             initialCameraPosition:
                 CameraPosition(target: _origin, zoom: 14),
             markers: _markers(),
@@ -341,6 +364,31 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+        ),
+      ),
+    );
+  }
+
+  /// Сафарни тугатмасдан чиқишни тасдиқлаш.
+  Future<bool?> _confirmLeave() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Сафардан чиқиш'),
+        content: const Text(
+            'Сафар ҳали якунланмади. Чиқсангиз, буюртма бекор қилинади. '
+            'Чиқишни хоҳлайсизми?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ҳа, чиқиш',
+                style: TextStyle(color: Color(0xFFB71C1C))),
           ),
         ],
       ),

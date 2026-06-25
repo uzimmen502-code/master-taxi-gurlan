@@ -1459,7 +1459,37 @@ class RidesRepository {
     } catch (_) {}
   }
 
-  /// Сафарни якунлаш — `status: 'completed'`, `fare`, `cashPaid` ёзилади.
+  /// Қабул қилинган трипни `searching`'га қайтаради (ҳайдовчи сафарни
+  /// тугатмасдан чиқиб кетганда — back тугмаси). Фақат шу ҳайдовчи қабул
+  /// қилган бўлса ишлайди.
+  Future<void> releaseAcceptedTrip({
+    required String tripId,
+    required String driverId,
+  }) async {
+    if (tripId.isEmpty) return;
+    try {
+      await _db.runTransaction((tx) async {
+        final tripRef = _trips.doc(tripId);
+        final tripDoc = await tx.get(tripRef);
+        if (!tripDoc.exists) return;
+        final data = tripDoc.data() ?? const <String, dynamic>{};
+        final status = (data['status'] ?? '') as String;
+        final by = (data['acceptedDriverId'] ?? '') as String;
+        if (status != 'accepted' || by != driverId) return;
+        tx.update(tripRef, {
+          'status': 'searching',
+          'acceptedDriverId': '',
+          'acceptedDriverName': '',
+          'acceptedDriverPhone': '',
+          'acceptedDriverCar': '',
+          'acceptedDriverPlate': '',
+          'reservedBy': '',
+          'reservedByName': '',
+          'reservedAt': FieldValue.delete(),
+        });
+      });
+    } catch (_) {}
+  }
   Future<void> finishTrip({
     required String tripId,
     required int fare,

@@ -442,30 +442,44 @@ class DriverHomeController extends ChangeNotifier {
       return (success: false, error: '⚠️ Аллақачон қабул қилинган');
     }
 
-    // Marshrut'дан ташқари — schedule'да scheduleId бўлса камайтириш
-    if (ride.taxiType != 'marshrut' && ride.scheduleId.isNotEmpty) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('schedules')
-            .doc(ride.scheduleId)
-            .update({'seatsLeft': FieldValue.increment(-1)});
-      } catch (_) {}
+    // Local taxi (alone/local) — "ўрин" тушунчаси йўқ (битта ҳайдовчи,
+    // битта йўловчи). Seats камайтириш фақат marshrut/schedule учун.
+    final isLocalTaxi =
+        ride.taxiType == 'alone' || ride.taxiType == 'local';
+
+    if (!isLocalTaxi) {
+      // Marshrut'дан ташқари — schedule'да scheduleId бўлса камайтириш
+      if (ride.taxiType != 'marshrut' && ride.scheduleId.isNotEmpty) {
+        try {
+          await FirebaseFirestore.instance
+              .collection('schedules')
+              .doc(ride.scheduleId)
+              .update({'seatsLeft': FieldValue.increment(-1)});
+        } catch (_) {}
+      }
+      await _driverRepo.decrementSeats(session.driverId);
+
+      final newSeats = seatsLeft - 1;
+      await _queueRepo.decrementSeats(
+          driverId: session.driverId, currentSeats: seatsLeft);
+
+      acceptedRide = ride;
+      isBusy = true;
+      seatsLeft = newSeats.clamp(0, totalSeats);
+      activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
+      notifyListeners();
+
+      if (newSeats <= 0) {
+        _seatsFullController.add(null);
+      }
+      return (success: true, error: null);
     }
-    await _driverRepo.decrementSeats(session.driverId);
 
-    final newSeats = seatsLeft - 1;
-    await _queueRepo.decrementSeats(
-        driverId: session.driverId, currentSeats: seatsLeft);
-
+    // Local taxi — оддий қабул, seats'сиз.
     acceptedRide = ride;
     isBusy = true;
-    seatsLeft = newSeats.clamp(0, totalSeats);
     activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
     notifyListeners();
-
-    if (newSeats <= 0) {
-      _seatsFullController.add(null);
-    }
     return (success: true, error: null);
   }
 
@@ -509,9 +523,27 @@ class DriverHomeController extends ChangeNotifier {
     );
     acceptedRide = null;
     isBusy = false;
+    // #5: GPS'ни қайта ёқамиз — кейинги йўловчилар учун масофа ишлаши учун.
+    if (isOnline) _startGpsTracking();
     notifyListeners();
     await _saveStats();
     return fare;
+  }
+
+  /// Сафарни тугатмасдан тарк этиш (back тугмаси) — трипни озод қилади.
+  Future<void> abandonRide() async {
+    final ride = acceptedRide;
+    acceptedRide = null;
+    isBusy = false;
+    if (isOnline) _startGpsTracking();
+    notifyListeners();
+    if (ride != null) {
+      // Трипни `searching`'га қайтариш — бошқа ҳайдовчи қабул қила олиши учун.
+      try {
+        await _ridesRepo.releaseAcceptedTrip(
+            tripId: ride.id, driverId: session.driverId);
+      } catch (_) {}
+    }
   }
 
   Future<void> _saveStats() async {

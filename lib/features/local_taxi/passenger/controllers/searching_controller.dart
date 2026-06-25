@@ -62,6 +62,9 @@ class SearchingController extends ChangeNotifier {
   /// Haydovchi qabul qilganda to'ladi. UI buni "iste'mol" qilib dialog ko'rsatadi.
   ActiveTrip? acceptedTrip;
 
+  /// Бирор ҳайдовчи трипни банд қилди (reserved) — "топилди, кутилмоқда".
+  bool driverReserved = false;
+
   /// Hozir taklif yuborilgan haydovchining UID'si. Bo'sh — hech kim
   /// tanlanmagan. UI shu ID bo'yicha tanlangan kartaga "yuborildi"
   /// belgisini chizadi.
@@ -213,10 +216,23 @@ class SearchingController extends ChangeNotifier {
     // Қабул қилинди
     if (trip.isAccepted && acceptedTrip == null) {
       acceptedTrip = trip;
+      driverReserved = false;
       _timer?.cancel();
       _tripSub?.cancel();
       notifyListeners();
       return;
+    }
+
+    // Ҳайдовчи банд қилди (reserved) — "Ҳайдовчи топилди, кутилмоқда".
+    if (trip.isReserved && !driverReserved) {
+      driverReserved = true;
+      notifyListeners();
+      return;
+    }
+    // Банд бекор қилинди — қидирув давом этади.
+    if (!trip.isReserved && driverReserved && !trip.isAccepted) {
+      driverReserved = false;
+      notifyListeners();
     }
 
     // Ҳайдовчи status: rejected қилди

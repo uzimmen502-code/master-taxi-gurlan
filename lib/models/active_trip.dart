@@ -93,6 +93,7 @@ class ActiveTrip {
   bool get isDriverNoRoomCancel =>
       isCancelled && cancelledBy == 'driver' && cancelReason == 'no_room';
   bool get isSearching => status == 'searching';
+  bool get isReserved => status == 'reserved';
   bool get isRejected => status == 'rejected';
   bool get isNoSeats => status == 'no_seats';
   bool get isExpired =>

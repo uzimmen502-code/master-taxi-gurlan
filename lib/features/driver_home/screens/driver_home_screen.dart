@@ -21,7 +21,6 @@ import '../widgets/online_pulse_toggle.dart';
 import '../widgets/queue_card.dart';
 import '../widgets/seats_card.dart';
 import '../widgets/trip_request_card.dart';
-import '../widgets/trip_request_dialog.dart';
 
 /// Ҳайдовчи бош экрани — Provider орқали [DriverHomeController].
 class DriverHomeScreen extends StatelessWidget {
@@ -52,9 +51,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   static const _green = AppColors.primaryDark;
   static const _red = Color(0xFFB71C1C);
 
-  StreamSubscription<TripRequest>? _requestSub;
   StreamSubscription<void>? _seatsFullSub;
-  bool _isDialogOpen = false;
 
   @override
   void initState() {
@@ -65,13 +62,11 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   void _hookEvents() {
     if (!mounted) return;
     final c = context.read<DriverHomeController>();
-    _requestSub = c.onNewRequest.listen(_onNewRequest);
     _seatsFullSub = c.onSeatsFull.listen((_) => _showSeatsFullDialog());
   }
 
   @override
   void dispose() {
-    _requestSub?.cancel();
     _seatsFullSub?.cancel();
     super.dispose();
   }
@@ -99,25 +94,6 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   Future<void> _onRejectRequest(TripRequest ride) async {
     final c = context.read<DriverHomeController>();
     await c.rejectRide(ride);
-  }
-
-  Future<void> _onNewRequest(TripRequest ride) async {
-    if (!mounted || _isDialogOpen) return;
-    _isDialogOpen = true;
-    final action = await showTripRequestDialog(context, ride);
-    _isDialogOpen = false;
-    if (!mounted) return;
-    final c = context.read<DriverHomeController>();
-    if (action == 'accept') {
-      final result = await c.acceptRide(ride);
-      if (result.success) {
-        // Қўнғироқ қилишни UI томонда қилмаймиз — диалог ичида тугма бор
-      } else if (result.error != null) {
-        _showSnack(result.error!, Colors.orange);
-      }
-    } else if (action == 'reject') {
-      await c.rejectRide(ride);
-    }
   }
 
   void _showSeatsFullDialog() {

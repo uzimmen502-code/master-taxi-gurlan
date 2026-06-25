@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,8 +13,16 @@ import '../firebase_options.dart';
 class BackgroundGpsService {
   static final _service = FlutterBackgroundService();
 
+  /// Foreground service notification канали. configure'даги
+  /// `notificationChannelId` билан АЙНАН бир хил бўлиши шарт.
+  static const String _channelId = 'gps_channel';
+
   // ── Инициализация ──
   static Future<void> init() async {
+    // ⚠️ Канал АВВАЛ яратилиши шарт: акс ҳолда foreground service
+    // startForeground'да "invalid channel" → CannotPostForegroundService
+    // NotificationException бериб иловани йиқитади (Android 12+/targetSdk 34+).
+    await _ensureChannel();
     await _service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart:         onStart,
@@ -32,8 +41,29 @@ class BackgroundGpsService {
     );
   }
 
+  /// `gps_channel` нотификация каналини яратади (idempotent — қайта чақириш
+  /// хавфсиз). Importance.low — товуш/вибрациясиз, доимий GPS бельгиси учун.
+  static Future<void> _ensureChannel() async {
+    const channel = AndroidNotificationChannel(
+      _channelId,
+      'GPS фон хизмати',
+      description: 'Ҳайдовчи онлайн пайтида GPS жойлашувини юборади',
+      importance: Importance.low,
+      playSound: false,
+      enableVibration: false,
+    );
+    try {
+      await FlutterLocalNotificationsPlugin()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    } catch (_) {}
+  }
+
   // ── Сервисни бошлаш ──
   static Future<void> start() async {
+    // Канал яратилганлигига кафолат (init чақирилмаган бўлса ҳам).
+    await _ensureChannel();
     final running = await _service.isRunning();
     if (!running) await _service.startService();
   }

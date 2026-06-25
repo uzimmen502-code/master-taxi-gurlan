@@ -317,6 +317,7 @@ class DriverHomeController extends ChangeNotifier {
           fromLat: t.fromLat,
           fromLng: t.fromLng,
           distanceKm: distKm,
+          reservedBy: t.reservedBy,
           from: t.fromAddr,
           to: t.toAddr,
           taxiType: t.taxiType,

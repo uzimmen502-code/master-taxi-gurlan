@@ -1313,7 +1313,7 @@ class RidesRepository {
   /// Сlient тарафда taxi тури ва вақт бўйича фильтрланади.
   Stream<List<ActiveTrip>> watchPendingTrips({int limit = 20}) {
     return _trips
-        .where('status', whereIn: ['searching', 'pending'])
+        .where('status', whereIn: ['searching', 'pending', 'reserved'])
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
@@ -1343,7 +1343,12 @@ class RidesRepository {
         final tripDoc = await tx.get(tripRef);
         if (!tripDoc.exists) throw Exception('taken');
         final status = (tripDoc.data()?['status'] ?? '') as String;
-        if (status != 'searching' && status != 'pending') {
+        final reservedBy = (tripDoc.data()?['reservedBy'] ?? '') as String;
+        // searching/pending — to'g'ridan-to'g'ri; reserved — faqat band qilgan haydovchi.
+        final canAccept = status == 'searching' ||
+            status == 'pending' ||
+            (status == 'reserved' && reservedBy == driverId);
+        if (!canAccept) {
           throw Exception('taken');
         }
         if (taxiType == 'marshrut' &&
@@ -1393,6 +1398,65 @@ class RidesRepository {
       }
       return (success: false, errorCode: 'taken');
     }
+  }
+
+  /// "Қабул" босилганда — трипни ВАҚТИНЧА банд қилади (`reserved`).
+  /// Бошқа ҳайдовчилар бу трипни "Кутиб туринг" ҳолатида кўради.
+  /// Фақат бошланғич `searching` ҳолатидаги трипни банд қилади (lock).
+  Future<({bool success, String? errorCode})> reserveRide({
+    required String tripId,
+    required String driverId,
+    required String driverName,
+  }) async {
+    if (tripId.isEmpty) {
+      return (success: false, errorCode: 'taken');
+    }
+    try {
+      await _db.runTransaction((tx) async {
+        final tripRef = _trips.doc(tripId);
+        final tripDoc = await tx.get(tripRef);
+        if (!tripDoc.exists) throw Exception('taken');
+        final status = (tripDoc.data()?['status'] ?? '') as String;
+        if (status != 'searching') {
+          throw Exception('taken');
+        }
+        tx.update(tripRef, {
+          'status': 'reserved',
+          'reservedBy': driverId,
+          'reservedByName': driverName,
+          'reservedAt': FieldValue.serverTimestamp(),
+        });
+      });
+      return (success: true, errorCode: null);
+    } catch (_) {
+      return (success: false, errorCode: 'taken');
+    }
+  }
+
+  /// Бандликни бекор қилади — трип `searching`'га қайтади (Рад ёки таймаут).
+  /// Фақат шу ҳайдовчи банд қилган бўлса (`reservedBy == driverId`) ишлайди.
+  Future<void> releaseReservation({
+    required String tripId,
+    required String driverId,
+  }) async {
+    if (tripId.isEmpty) return;
+    try {
+      await _db.runTransaction((tx) async {
+        final tripRef = _trips.doc(tripId);
+        final tripDoc = await tx.get(tripRef);
+        if (!tripDoc.exists) return;
+        final data = tripDoc.data() ?? const <String, dynamic>{};
+        final status = (data['status'] ?? '') as String;
+        final by = (data['reservedBy'] ?? '') as String;
+        if (status != 'reserved' || by != driverId) return;
+        tx.update(tripRef, {
+          'status': 'searching',
+          'reservedBy': '',
+          'reservedByName': '',
+          'reservedAt': FieldValue.delete(),
+        });
+      });
+    } catch (_) {}
   }
 
   /// Сафарни якунлаш — `status: 'completed'`, `fare`, `cashPaid` ёзилади.

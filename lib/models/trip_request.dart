@@ -19,6 +19,7 @@ class TripRequest {
     this.fromLat = 0,
     this.fromLng = 0,
     this.distanceKm = 0,
+    this.reservedBy = '',
     this.scheduleId = '',
     this.targetDriverId = '',
   });
@@ -35,6 +36,7 @@ class TripRequest {
   final double fromLat;
   final double fromLng;
   final double distanceKm;
+  final String reservedBy;
   final String scheduleId;
   final String targetDriverId;
 

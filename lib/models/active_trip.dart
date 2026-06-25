@@ -12,6 +12,7 @@ class ActiveTrip {
   final String userName;
   final String userGender;
   final String userBirthDate;
+  final String reservedBy;
   final String taxiType; // alone | marshrut | ...
 
   // ─── Manzil (alone-taxi uchun lat/lng, marshrut uchun MFY nomlari) ───
@@ -56,6 +57,7 @@ class ActiveTrip {
     this.userName = '',
     this.userGender = '',
     this.userBirthDate = '',
+    this.reservedBy = '',
     this.taxiType = 'alone',
     this.fromAddr = '',
     this.toAddr = '',
@@ -105,6 +107,7 @@ class ActiveTrip {
       userName: d['userName'] ?? '',
       userGender: d['userGender'] ?? '',
       userBirthDate: d['userBirthDate'] ?? '',
+      reservedBy: d['reservedBy'] ?? '',
       taxiType: d['taxiType'] ?? 'alone',
       fromAddr: d['fromAddr'] ?? d['from'] ?? d['pickupAddr'] ?? '',
       toAddr: d['toAddr'] ?? d['to'] ?? '',

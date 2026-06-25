@@ -420,25 +420,16 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     await context.read<LocalTaxiController>().removeSavedPlaceByName(name);
   }
 
-  // ─── Driver app handoff ────────────────────────────────────────────
+  // ─── Ҳайдовчи режими (ИЧКИ панель) ─────────────────────────────────
   //
-  // Маҳаллий такси режимини алоҳида `master_taxi_driver` иловаси орқaли
-  // юритиш — пассажир ва ҳайдовчи приложенияларининг **интеграцияси**:
+  // Маҳаллий такси ҳайдовчи режими шу илованинг ўзида юритилади (ташқи
+  // `master_taxi_driver` иловаси кераксиз):
   //
   //   1. Профил тўлдирилганлигини текширамиз (`user_phone` 9+ рақам).
-  //   2. SharedPreferences'дан мавжуд авто маълумотларини ўқиймиз.
-  //   3. Авто маълумотлари тўлиқ эмас бўлса — `_DriverOnboardingDialog`'ни
-  //      очамиз ва фойдаланувчидан **русум / ранг / рақам**ни сўраймиз.
-  //      Сақласа — SharedPreferences + Firestore'нинг `drivers/{uid}` ҳужжатига
-  //      `merge:true` билан ёзамиз (admin web модератор учун).
-  //   4. Driver app **ўрнатилганми** текширамиз —
-  //      [DriverAppLauncher.isInstalled].
-  //        - **Ҳа** → deep link билан очамиз: `mastertaxidriver://onboard?...`.
-  //          Driver app параметрларни ўқиб: `drivers/{uid}` Firestore'да бўлсa
-  //          auto-login → home; бўлмаса pre-filled register screen.
-  //        - **Йўқ** → `showInstallDriverAppDialog` орқaли APK юклaш диалоги.
-  //          Юклaш тугмасини боссa — Firebase Hosting'даги APK URL очилaди.
-  //   5. "Бекор қилиш" → ҳеч нима бўлмaйди.
+  //   2. Авто маълумотларини профилдан оламиз (модель / ранг / рақам).
+  //   3. Ҳайдовчи тасдиқланмаган бўлса — ариза юборамиз / авто-тасдиқ.
+  //   4. Тасдиқлангандан сўнг ички `DriverHomeScreen`'ни очамиз
+  //      (веб — қўлланмайди, фақат мобил).
   Future<void> _onDriverTap() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);

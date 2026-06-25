@@ -73,18 +73,9 @@
 
     </application>
 
-    <!-- ✅ Package visibility (Android 11+) — master_taxi_driver иловасини
-         кўриш ва deep link билан очиш учун рухсат. -->
+    <!-- ✅ Package visibility (Android 11+) — браузер/телефон каби ташқи
+         амалларни очиш учун рухсат (https/tel). -->
     <queries>
-        <!-- Debug / current applicationId -->
-        <package android:name="com.example.master_taxi_gurlan_driver"/>
-        <!-- Production applicationId (forward-compat — миграциядан сўнг ишлайди) -->
-        <package android:name="uz.master_taxi.driver"/>
-        <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="mastertaxidriver"/>
-        </intent>
-        <!-- Browser fallback'и учун — APK юклаб олиш ҳаволаси -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>

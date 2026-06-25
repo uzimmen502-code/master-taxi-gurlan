@@ -32,6 +32,7 @@ import 'driver_applications_screen.dart';
 import 'payout_management_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
+import 'taxi_price_screen.dart';
 import 'warehouse_stock_screen.dart';
 import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
@@ -127,6 +128,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Харид нархлари',
       icon: Icons.price_change_outlined,
       description: 'Йиғиб олиш ва тўлов нархлари',
+    ),
+    _AdminSection(
+      label: '🚕 Такси нархи',
+      icon: Icons.local_taxi,
+      description: 'Маҳаллий такси бошланғич ва км нархи',
     ),
     _AdminSection(
       label: 'Омбор',
@@ -312,6 +318,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Харид нархлари') {
       return const ProcurementPricesScreen();
+    }
+    if (section.label == '🚕 Такси нархи') {
+      return const TaxiPriceScreen();
     }
     if (section.label == 'Омбор') {
       return const WarehouseStockScreen();

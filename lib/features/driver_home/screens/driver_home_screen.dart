@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/trip_request.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
@@ -82,13 +84,39 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     ));
   }
 
+  /// "Қабул" босилди — трипни банд қилади, дайлерни очади, 10 сония таймер.
   Future<void> _onAcceptRequest(TripRequest ride) async {
     final c = context.read<DriverHomeController>();
-    final result = await c.acceptRide(ride);
+    final result = await c.reserveRide(ride);
+    if (!mounted) return;
+    if (!result.success) {
+      if (result.error != null) _showSnack(result.error!, Colors.orange);
+      return;
+    }
+    // Дайлерни очамиз — ҳайдовчи қўнғироқ қилади.
+    final phone = ride.userPhone.trim();
+    if (phone.isNotEmpty) {
+      try {
+        final url = Uri.parse('tel:${phoneForCall(phone)}');
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+  }
+
+  /// Банд қилинган трипни ЯКУНИЙ қабул қилиш.
+  Future<void> _onConfirmReserved() async {
+    final c = context.read<DriverHomeController>();
+    final result = await c.confirmReservedRide();
     if (!mounted) return;
     if (!result.success && result.error != null) {
       _showSnack(result.error!, Colors.orange);
     }
+  }
+
+  /// Бандликни бекор қилиш (Рад).
+  Future<void> _onCancelReserved() async {
+    final c = context.read<DriverHomeController>();
+    await c.cancelReservation();
   }
 
   Future<void> _onRejectRequest(TripRequest ride) async {
@@ -268,12 +296,41 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
                       title: '📥 Буюртмалар',
                       count: c.activeRequests.length),
                   const SizedBox(height: 8),
-                  ...c.activeRequests.map((r) => TripRequestCard(
+                  ...c.activeRequests.map((r) {
+                    final myId = c.session.driverId;
+                    final reservingId = c.reservingRide?.id;
+                    // Ҳолат аниқлаш:
+                    if (reservingId == r.id) {
+                      // Бу ҳайдовчи банд қилган — Қабул/Рад + таймер.
+                      return TripRequestCard(
                         ride: r,
-                        disabled: c.isBusy,
-                        onAccept: () => _onAcceptRequest(r),
-                        onReject: () => _onRejectRequest(r),
-                      )),
+                        mode: TripCardMode.reserving,
+                        reserveSecsLeft: c.reserveSecsLeft,
+                        onAccept: _onConfirmReserved,
+                        onReject: _onCancelReserved,
+                      );
+                    }
+                    final reservedByOther =
+                        r.reservedBy.isNotEmpty && r.reservedBy != myId;
+                    if (reservedByOther || c.reservingRide != null) {
+                      // Бошқа ҳайдовчи банд қилган ЁКИ бу ҳайдовчи бошқа трипни
+                      // банд қилган — "Кутиб туринг" (пассив).
+                      return TripRequestCard(
+                        ride: r,
+                        mode: TripCardMode.waiting,
+                        onAccept: () {},
+                        onReject: () {},
+                      );
+                    }
+                    // Оддий — Қабул/Рад фаол.
+                    return TripRequestCard(
+                      ride: r,
+                      mode: TripCardMode.normal,
+                      disabled: c.isBusy,
+                      onAccept: () => _onAcceptRequest(r),
+                      onReject: () => _onRejectRequest(r),
+                    );
+                  }),
                 ],
                 const SizedBox(height: 80),
               ]),

@@ -47,6 +47,18 @@ class DriverHomeController extends ChangeNotifier {
   List<TripRequest> activeRequests = const [];
   TripRequest? acceptedRide;
 
+  // ─── Reserve (band qilish) holati ───
+  /// Ҳозир бу ҳайдовчи банд қилиб, қарор кутаётган трип (Қабул/Рад учун).
+  TripRequest? reservingRide;
+
+  /// Қарор учун қолган сония (10 дан 0 гача).
+  int reserveSecsLeft = 0;
+
+  /// "Қабул" босилганда қарор учун бериладиган вақт (сония).
+  static const int reserveDecisionSeconds = 10;
+
+  Timer? _reserveTimer;
+
   int seatsLeft = 0;
   int totalSeats = 0;
 
@@ -348,6 +360,68 @@ class DriverHomeController extends ChangeNotifier {
   }
 
   // ─── Қабул қилиш / рад этиш ──────────────────────────────────────
+
+  /// 1-қадам: "Қабул" босилди — трипни ВАҚТИНЧА банд қилади ва 10 сонияли
+  /// таймер бошлайди. Бошқа ҳайдовчилар бу трипни "Кутиб туринг" кўради.
+  Future<({bool success, String? error})> reserveRide(TripRequest ride) async {
+    if (reservingRide != null || isBusy) {
+      return (success: false, error: null);
+    }
+    final result = await _ridesRepo.reserveRide(
+      tripId: ride.id,
+      driverId: session.driverId,
+      driverName: session.name,
+    );
+    if (!result.success) {
+      return (success: false, error: '⚠️ Аллақачон банд қилинган');
+    }
+    reservingRide = ride;
+    reserveSecsLeft = reserveDecisionSeconds;
+    notifyListeners();
+
+    _reserveTimer?.cancel();
+    _reserveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_disposed) return;
+      reserveSecsLeft--;
+      if (reserveSecsLeft <= 0) {
+        // Вақт тугади — бандликни бекор қилиб, трипни озод қиламиз.
+        cancelReservation(timedOut: true);
+      } else {
+        notifyListeners();
+      }
+    });
+    return (success: true, error: null);
+  }
+
+  /// 2а-қадам: банд қилинган трипни ЯКУНИЙ қабул қилиш.
+  Future<({bool success, String? error})> confirmReservedRide() async {
+    final ride = reservingRide;
+    if (ride == null) return (success: false, error: null);
+    _reserveTimer?.cancel();
+    final res = await acceptRide(ride);
+    if (res.success) {
+      reservingRide = null;
+      reserveSecsLeft = 0;
+    }
+    notifyListeners();
+    return res;
+  }
+
+  /// 2б-қадам: бандликни бекор қилиш (Рад ёки таймаут) — трип `searching`'га.
+  Future<void> cancelReservation({bool timedOut = false}) async {
+    final ride = reservingRide;
+    _reserveTimer?.cancel();
+    reservingRide = null;
+    reserveSecsLeft = 0;
+    notifyListeners();
+    if (ride != null) {
+      await _ridesRepo.releaseReservation(
+        tripId: ride.id,
+        driverId: session.driverId,
+      );
+    }
+  }
+
   Future<({bool success, String? error})> acceptRide(TripRequest ride) async {
     final result = await _ridesRepo.acceptRide(
       tripId: ride.id,
@@ -504,6 +578,7 @@ class DriverHomeController extends ChangeNotifier {
     _tripsSub?.cancel();
     _queueSub?.cancel();
     _gpsSub?.cancel();
+    _reserveTimer?.cancel();
     _newRequestController.close();
     _seatsFullController.close();
     if (isOnline) _driverRepo.goOffline(session.driverId);

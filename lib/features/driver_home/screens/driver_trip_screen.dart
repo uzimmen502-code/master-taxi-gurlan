@@ -51,6 +51,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   int? _fare;
   bool _calculating = false;
   String? _calcError;
+  bool _finishing = false;
 
   @override
   void initState() {
@@ -149,6 +150,20 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
       ));
     }
     return set;
+  }
+
+  /// "Тўловни олдим" — сафарни якунлайди ва ҳайдовчи экранига қайтади.
+  Future<void> _onFinishTrip() async {
+    final fare = _fare;
+    if (fare == null || _finishing) return;
+    setState(() => _finishing = true);
+    try {
+      widget.onFinish(fare);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) setState(() => _finishing = false);
+    }
   }
 
   @override
@@ -289,15 +304,38 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => setState(() {
-                            _destination = null;
-                            _polylines.clear();
-                            _fare = null;
-                            _distanceKm = null;
-                          }),
+                          onPressed: _finishing
+                              ? null
+                              : () => setState(() {
+                                    _destination = null;
+                                    _polylines.clear();
+                                    _fare = null;
+                                    _distanceKm = null;
+                                  }),
                           child: const Text('Ўзгартириш'),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _finishing ? null : _onFinishTrip,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        icon: _finishing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.check_circle),
+                        label: Text(_finishing
+                            ? 'Якунланмоқда...'
+                            : 'Тўловни олдим — сафарни якунлаш'),
+                      ),
                     ),
                   ],
                 ],

@@ -121,10 +121,17 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   void _openTripScreen(TripRequest? ride) {
     if (ride == null) return;
     if (ride.taxiType != 'local' && ride.taxiType != 'alone') return;
+    final c = context.read<DriverHomeController>();
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => DriverTripScreen(
         ride: ride,
-        onFinish: (fare) {},
+        onFinish: (fare) async {
+          final earned = await c.finishRide(fare: fare, cashPaid: fare);
+          if (!mounted) return;
+          _showSnack(
+              '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм',
+              _green);
+        },
       ),
     ));
   }

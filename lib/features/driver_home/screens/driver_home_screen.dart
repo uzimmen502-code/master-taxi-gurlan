@@ -15,6 +15,7 @@ import '../../../utils/fare_calculator.dart';
 import '../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../controllers/driver_home_controller.dart';
+import 'driver_trip_screen.dart';
 import '../widgets/active_ride_card.dart';
 import '../widgets/driver_hero_card.dart';
 import '../widgets/fare_calculator_dialog.dart';
@@ -106,11 +107,26 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   /// Банд қилинган трипни ЯКУНИЙ қабул қилиш.
   Future<void> _onConfirmReserved() async {
     final c = context.read<DriverHomeController>();
+    final ride = c.reservingRide;
     final result = await c.confirmReservedRide();
     if (!mounted) return;
-    if (!result.success && result.error != null) {
-      _showSnack(result.error!, Colors.orange);
+    if (!result.success) {
+      if (result.error != null) _showSnack(result.error!, Colors.orange);
+      return;
     }
+    _openTripScreen(ride);
+  }
+
+  /// Local taxi сафар экранини очади (marshrut учун эмас).
+  void _openTripScreen(TripRequest? ride) {
+    if (ride == null) return;
+    if (ride.taxiType != 'local' && ride.taxiType != 'alone') return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DriverTripScreen(
+        ride: ride,
+        onFinish: (fare) {},
+      ),
+    ));
   }
 
   /// Бандликни бекор қилиш (Рад).

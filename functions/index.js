@@ -7446,3 +7446,40 @@ exports.autoUpdateDepartureTime =
           console.log(`autoUpdateDepartureTime: ${count} updated`);
           return null;
         });
+
+// ─────────────────────────────────────────────────────────────────────
+// Local taxi: "осилиб қолган" reserved трипларни тозалаш (захира).
+// Ҳайдовчи "Қабул" босиб трипни банд қилади (status: reserved), илова
+// 10 сонияли таймер юритади. Агар илова ёпилса/интернет узилса, трип
+// "reserved" ҳолатида осилиб қолмаслиги учун — бу CF ҳар 1 дақиқада
+// reservedAt'дан 60+ сония ўтган reserved трипларни "searching"'га
+// қайтаради (бошқа ҳайдовчилар яна кўра олиши учун).
+// ─────────────────────────────────────────────────────────────────────
+exports.releaseStaleReservations = functions.pubsub
+  .schedule('every 1 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const cutoff = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() - 60 * 1000)); // 60 сония олдин
+    const snap = await db.collection('trips')
+        .where('status', '==', 'reserved')
+        .where('reservedAt', '<=', cutoff)
+        .limit(100)
+        .get();
+    if (snap.empty) return null;
+
+    const batch = db.batch();
+    let count = 0;
+    snap.forEach((doc) => {
+      batch.update(doc.ref, {
+        status: 'searching',
+        reservedBy: '',
+        reservedByName: '',
+        reservedAt: admin.firestore.FieldValue.delete(),
+      });
+      count++;
+    });
+    await batch.commit();
+    console.log(`releaseStaleReservations: ${count} trip(s) released`);
+    return null;
+  });

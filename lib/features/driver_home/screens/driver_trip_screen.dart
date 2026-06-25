@@ -5,7 +5,11 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../models/route_candidate.dart';
+import '../../../models/route_stop.dart';
 import '../../../models/trip_request.dart';
+import '../../../services/google_directions_service.dart';
+import '../../../services/polyline_decoder.dart';
 import '../../../utils/fare_calculator.dart';
 
 /// Ҳайдовчи сафар экрани — йўловчи қабул қилингандан кейин.
@@ -30,12 +34,23 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   static const _green = AppColors.primaryDark;
 
   final _mapController = Completer<GoogleMapController>();
+  final _directionsService = GoogleDirectionsService();
+  final _polylineDecoder = const PolylineDecoder();
 
   /// Йўловчи жойлашуви (бошланиш нуқтаси).
   late final LatLng _origin;
 
   /// Ҳайдовчи танлаган манзил (тугаш нуқтаси).
   LatLng? _destination;
+
+  /// Маршрут чизиғи (Google Directions polyline).
+  final Set<Polyline> _polylines = {};
+
+  /// Йўл масофаси (км) ва ҳисобланган йўлкира.
+  double? _distanceKm;
+  int? _fare;
+  bool _calculating = false;
+  String? _calcError;
 
   @override
   void initState() {
@@ -47,7 +62,72 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   }
 
   void _onMapTap(LatLng latLng) {
-    setState(() => _destination = latLng);
+    setState(() {
+      _destination = latLng;
+      _polylines.clear();
+      _distanceKm = null;
+      _fare = null;
+      _calcError = null;
+    });
+    _calculateRoute();
+  }
+
+  /// Йўловчи → манзил: Google Directions орқали йўл масофаси, маршрут
+  /// чизиғи ва йўлкира нархини ҳисоблайди.
+  Future<void> _calculateRoute() async {
+    final dest = _destination;
+    if (dest == null) return;
+    setState(() {
+      _calculating = true;
+      _calcError = null;
+    });
+    try {
+      final candidate = RouteCandidate(
+        id: 'trip',
+        startLat: _origin.latitude,
+        startLng: _origin.longitude,
+        directionLabel: '',
+        directionDegrees: 0,
+        distanceKm: 0,
+        durationMin: 0,
+        stops: [
+          RouteStop(
+            orderId: 'dest',
+            sequence: 0,
+            lat: dest.latitude,
+            lng: dest.longitude,
+          ),
+        ],
+      );
+      final result = await _directionsService.fetchDirections(candidate);
+      if (!mounted) return;
+
+      final km = result.distanceKm;
+      final fare = FareCalculator.calculate(distanceKm: km);
+
+      // Маршрут чизиғи.
+      final points = _polylineDecoder.decode(result.polyline);
+
+      setState(() {
+        _distanceKm = km;
+        _fare = fare;
+        _polylines
+          ..clear()
+          ..add(Polyline(
+            polylineId: const PolylineId('route'),
+            points: points,
+            color: AppColors.primaryDark,
+            width: 5,
+          ));
+        _calculating = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _calculating = false;
+        _calcError = 'Масофани ҳисоблаб бўлмади. Қайта уриниб кўринг.';
+      });
+    }
   }
 
   Set<Marker> _markers() {
@@ -91,6 +171,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
             initialCameraPosition:
                 CameraPosition(target: _origin, zoom: 14),
             markers: _markers(),
+            polylines: _polylines,
             myLocationEnabled: true,
             myLocationButtonEnabled: true,
             onMapCreated: (c) {
@@ -159,25 +240,65 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                         ),
                       ),
                     ]),
-                  ] else ...[
+                  ] else if (_calculating) ...[
+                    const Row(children: [
+                      SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 12),
+                      Text('Масофа ва нарх ҳисобланмоқда...'),
+                    ]),
+                  ] else if (_calcError != null) ...[
                     Row(children: [
-                      const Icon(Icons.flag, color: Color(0xFFB71C1C),
-                          size: 20),
+                      Icon(Icons.error_outline,
+                          color: Colors.red.shade700, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'Манзил белгиланди. Йўлкира нархини ҳисоблаш '
-                          'кейинги қадамда.',
-                          style: TextStyle(
-                              fontSize: 14, color: Colors.grey.shade700),
-                        ),
+                        child: Text(_calcError!,
+                            style: TextStyle(color: Colors.red.shade700)),
                       ),
                       TextButton(
-                        onPressed: () =>
-                            setState(() => _destination = null),
-                        child: const Text('Ўзгартириш'),
-                      ),
+                          onPressed: _calculateRoute,
+                          child: const Text('Қайта')),
                     ]),
+                  ] else if (_fare != null) ...[
+                    // ─── Йўлкира нархи (катта ёзув) ───
+                    if (_distanceKm != null)
+                      Text('Масофа: ${_distanceKm!.toStringAsFixed(1)} км',
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Йўлкира нархи',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600)),
+                              Text('${formatPrice(_fare!)} сўм',
+                                  style: const TextStyle(
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.bold,
+                                      color: _green)),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _destination = null;
+                            _polylines.clear();
+                            _fare = null;
+                            _distanceKm = null;
+                          }),
+                          child: const Text('Ўзгартириш'),
+                        ),
+                      ],
+                    ),
                   ],
                 ],
               ),

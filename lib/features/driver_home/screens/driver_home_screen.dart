@@ -12,7 +12,6 @@ import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
-import '../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../controllers/driver_home_controller.dart';
 import 'driver_trip_screen.dart';
@@ -20,7 +19,6 @@ import '../widgets/active_ride_card.dart';
 import '../widgets/driver_hero_card.dart';
 import '../widgets/fare_calculator_dialog.dart';
 import '../widgets/main_action_buttons.dart';
-import '../widgets/online_pulse_toggle.dart';
 import '../widgets/queue_card.dart';
 import '../widgets/seats_card.dart';
 import '../widgets/trip_request_card.dart';
@@ -187,40 +185,22 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     );
   }
 
-  Future<void> _onToggleOnline() async {
+  Future<void> _onStartWork() async {
     final c = context.read<DriverHomeController>();
-    final result = await c.toggleOnline();
+    final result = await c.startLocalWork();
     if (!mounted) return;
     if (!result.success && result.error != null) {
       _showSnack(result.error!, Colors.orange);
       return;
     }
-    _showSnack(c.isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
-        c.isOnline ? _green : Colors.grey.shade700);
-  }
-
-  Future<void> _onStartWork() async {
-    final c = context.read<DriverHomeController>();
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DriverScheduleScreen(
-          taxiType: c.session.taxiType,
-          driverName: c.session.name,
-          driverPhone: c.session.phone,
-          driverCar: c.session.carModel,
-          driverPlate: c.session.carPlate,
-        ),
-      ),
-    );
-    if (result == true) await c.refreshTodaySchedule();
+    _showSnack('🟢 Иш бошланди — онлайн', _green);
   }
 
   Future<void> _onEndWork() async {
     final c = context.read<DriverHomeController>();
     await c.endWorkDay();
     if (!mounted) return;
-    _showSnack('✅ Иш тугатилди', _green);
+    _showSnack('⚫ Иш тугатилди — оффлайн', Colors.grey.shade700);
   }
 
   Future<void> _onCompleteRide() async {
@@ -293,11 +273,6 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
                     onRemove: _onRemovePassenger,
                   ),
                   const SizedBox(height: 16),
-                  OnlinePulseToggle(
-                    isOnline: c.isOnline,
-                    onTap: _onToggleOnline,
-                  ),
-                  const SizedBox(height: 16),
                 ],
                 if (c.isBusy &&
                     c.acceptedRide != null &&
@@ -316,10 +291,32 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
                 ],
                 MainActionButtons(
                   hasScheduleToday: c.hasScheduleToday,
+                  isOnline: c.isOnline,
                   onStart: _onStartWork,
                   onEnd: _onEndWork,
                 ),
                 const SizedBox(height: 16),
+                if (c.isOnline && !c.isBusy && c.activeRequests.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 28, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(children: [
+                      const Text('⏳', style: TextStyle(fontSize: 36)),
+                      const SizedBox(height: 10),
+                      Text('Йўловчи кутилмоқда...',
+                          style: TextStyle(
+                              fontSize: AppText.bodyMedium,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade600)),
+                    ]),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 if (c.isOnline && !c.isBusy && c.activeRequests.isNotEmpty) ...[
                   _SectionTitle(
                       title: '📥 Буюртмалар',

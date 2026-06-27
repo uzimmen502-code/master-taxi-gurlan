@@ -158,6 +158,48 @@ class DriverHomeController extends ChangeNotifier {
   /// Ишни бошлаш экранидан қайтгандан кейин қайта чақирилади.
   Future<void> refreshTodaySchedule() => _checkTodaySchedule();
 
+  /// Маҳаллий такси (alone/local) учун "ИШНИ БОШЛАШ" — бир босишда:
+  /// бугунги жадвални яратади (агар йўқ бўлса) ва онлайнга чиқаради.
+  /// Ҳеч қандай экран ёки диалог очилмайди.
+  Future<({bool success, String? error})> startLocalWork() async {
+    if (session.driverId.isEmpty) {
+      return (success: false, error: 'Ҳайдовчи топилмади');
+    }
+    try {
+      if (!hasScheduleToday) {
+        final now = DateTime.now();
+        final midnight = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        await _schedulesRepo.registerDriverSchedule(
+          driverId: session.driverId,
+          taxiType: session.taxiType,
+          driverName: session.name,
+          driverPhone: session.phone,
+          driverCar: session.carModel,
+          driverPlate: session.carPlate,
+          date: _todayDateStr,
+          expiresAt: midnight,
+          seats: 1,
+          fromText: '',
+          toText: '',
+        );
+        await _checkTodaySchedule();
+      }
+      if (!isOnline) {
+        return await toggleOnline();
+      }
+      return (success: true, error: null);
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('permission-denied')) {
+        return (
+          success: false,
+          error: 'Firestore рухсати йўқ. Admin тасдиғини текширинг.'
+        );
+      }
+      return (success: false, error: 'Хатолик: $e');
+    }
+  }
+
   // ─── Онлайн/оффлайн ────────────────────────────────────────────────
   Future<({bool success, String? error})> toggleOnline() async {
     try {

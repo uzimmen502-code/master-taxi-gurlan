@@ -9,11 +9,13 @@ class MainActionButtons extends StatelessWidget {
     required this.hasScheduleToday,
     required this.onStart,
     required this.onEnd,
+    this.isOnline = false,
   });
 
   final bool hasScheduleToday;
   final VoidCallback onStart;
   final VoidCallback onEnd;
+  final bool isOnline;
 
   static const _green = AppColors.primaryDark;
   static const _red = Color(0xFFB71C1C);
@@ -36,11 +38,12 @@ class MainActionButtons extends StatelessWidget {
                   offset: const Offset(0, 4)),
             ],
           ),
-          child: const Column(children: [
-            Icon(Icons.play_circle_fill, color: Colors.white, size: 28),
-            SizedBox(height: 6),
-            Text('ИШНИ БОШЛАШ',
-                style: TextStyle(
+          child: Column(children: [
+            Icon(isOnline ? Icons.check_circle : Icons.play_circle_fill,
+                color: Colors.white, size: 28),
+            const SizedBox(height: 6),
+            Text(isOnline ? 'ИШ БОШЛАНДИ' : 'ИШНИ БОШЛАШ',
+                style: const TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,
                     color: Colors.white)),
@@ -73,7 +76,7 @@ class MainActionButtons extends StatelessWidget {
                 color: hasScheduleToday ? Colors.white : Colors.grey.shade600,
                 size: 28),
             const SizedBox(height: 6),
-            Text('ИШНИ ТУГАТИШ',
+            Text(isOnline ? 'ИШНИ ТУГАТИШ' : 'ИШ ТУГАДИ',
                 style: TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,

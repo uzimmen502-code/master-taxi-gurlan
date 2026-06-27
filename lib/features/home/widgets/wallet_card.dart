@@ -30,11 +30,8 @@ class WalletCard extends StatelessWidget {
   static const _badgeText = Color(0xFF1A5E1C);
   static const _debitTint = Color(0xFFFFCDD2);
 
-  // Тўқ металлик 3D effekt учун градиент стопллари (юқоридан пастга:
-  // ёруғ металл → асосий → тўқ соя — ёруғлик акси таассуроти).
-  static const _metalLight = Color(0xFF9DA3A8);
-  static const _metalBase = Color(0xFF6E7378);
-  static const _metalDark = Color(0xFF3E4347);
+  static const _goldLight = Color(0xFFFFF4C2);
+  static const _goldDark = Color(0xFFC9A000);
 
   Color get _txAmountColor {
     if (lastTxIsCredit == null) return Colors.white;
@@ -130,7 +127,7 @@ class WalletCard extends StatelessWidget {
                                   const LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [_metalLight, _metalBase, _metalDark],
+                                colors: [_goldLight, _gold, _goldDark],
                                 stops: [0.0, 0.5, 1.0],
                               ).createShader(bounds),
                               child: Text(
@@ -146,12 +143,7 @@ class WalletCard extends StatelessWidget {
                                     Shadow(
                                       offset: Offset(0, 1),
                                       blurRadius: 1,
-                                      color: Color(0x99000000),
-                                    ),
-                                    Shadow(
-                                      offset: Offset(0, -0.5),
-                                      blurRadius: 0.5,
-                                      color: Color(0x66FFFFFF),
+                                      color: Color(0x66000000),
                                     ),
                                   ],
                                 ),

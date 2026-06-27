@@ -165,33 +165,32 @@ class _PromoBannerCard extends StatelessWidget {
               fit: BoxFit.cover,
             ),
           ),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.black.withValues(alpha: 0.55),
-                  Colors.black.withValues(alpha: 0.15),
-                ],
-              ),
-            ),
-            padding: EdgeInsets.zero,
-            child: Stack(
+          child: Stack(
             children: [
+              // Sarlavha — faqat matn orqasida kichik scrim, rasm yorqin qoladi.
               Positioned(
                 top: 6,
                 left: 8,
                 right: 80,
-                child: Text(
-                  data.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      data.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -201,7 +200,6 @@ class _PromoBannerCard extends StatelessWidget {
                 child: _CtaButton(onTap: data.onTap),
               ),
             ],
-          ),
           ),
         ),
       ),
@@ -217,7 +215,7 @@ class _CtaButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.22),
+      color: Colors.black.withValues(alpha: 0.45),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
@@ -228,7 +226,7 @@ class _CtaButton extends StatelessWidget {
             'Buyurtma berish →',
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),

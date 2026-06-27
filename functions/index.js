@@ -4153,6 +4153,60 @@ exports.adminWebSignIn = functions.https.onCall(async (data) => {
   };
 });
 
+/**
+ * Admin web: maxfiy kod (PIN) bilan kirish — telefonsiz.
+ * Kiritilgan kodning sha256 xeshi serverdagi xesh bilan solishtiriladi
+ * (kod manba kodida ochiq turmaydi). To'g'ri bo'lsa — ishonchli admin
+ * operator (TRUSTED_ADMIN_WEB_PHONE) uchun custom token qaytariladi.
+ */
+const ADMIN_WEB_CODE_SHA256 =
+  'fca12b2d97e45c6117190cc65bf0f2e83a0c582c961a40796b7ee0c7bac54f9e';
+
+exports.adminWebSignInWithCode = functions.https.onCall(async (data) => {
+  const code = String((data && data.code) || '').trim();
+  if (!code) {
+    throw new functions.https.HttpsError('invalid-argument', 'Kod kiritilmadi');
+  }
+  const hash = crypto.createHash('sha256').update(code).digest('hex');
+  // Doimiy vaqtli (timing-safe) solishtirish — brute-force timing'ni kamaytirish.
+  const a = Buffer.from(hash, 'utf8');
+  const b = Buffer.from(ADMIN_WEB_CODE_SHA256, 'utf8');
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!ok) {
+    throw new functions.https.HttpsError('permission-denied', 'Kod noto\'g\'ri');
+  }
+
+  const phone = TRUSTED_ADMIN_WEB_PHONE;
+  const found = await findUserDocByPhone(phone);
+  if (!found) {
+    throw new functions.https.HttpsError('not-found', 'Admin operator topilmadi');
+  }
+  const role = (found.snap.data() || {}).role || 'user';
+  if (!['admin', 'superadmin', 'dispatcher'].includes(role)) {
+    throw new functions.https.HttpsError('permission-denied', 'Not an admin');
+  }
+  const e164 = `+${phone}`;
+  let authUser;
+  try {
+    authUser = await admin.auth().getUserByPhoneNumber(e164);
+  } catch (e) {
+    if (e.code === 'auth/user-not-found') {
+      authUser = await admin.auth().createUser({ phoneNumber: e164 });
+    } else {
+      throw e;
+    }
+  }
+  const token = await admin.auth().createCustomToken(authUser.uid, {
+    phone_number: e164,
+  });
+  return {
+    token,
+    uid: found.docId,
+    phone: e164,
+    role,
+  };
+});
+
 /** Буюртма status patch — `OrdersRepository._statusPatch` билан синхрон. */
 function buildOrderStatusPatch(status) {
   const s = String(status || '').trim();

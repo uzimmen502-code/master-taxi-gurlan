@@ -1,15 +1,13 @@
-# Native splash — Android 12+ (API 31+) alohida ishlaydi.
-# MUHIM: android_12 da faqat "color" yozmang — u splash_full ni bekor qiladi va
-# markazda launcher ikonkasini ko'rsatadi. To'liq poster uchun android_12 bo'limini
-# ishlatmang; values-v31/styles.xml qo'lda launch_background ga bog'langan (docs/SPLASH.md).
 flutter_native_splash:
   background_image: assets/images/splash_full.png
-
   fullscreen: true
   android: true
   ios: true
   web: false
-
   ios_content_mode: scaleAspectFill
 
-  # android_12 bo'limi YO'Q — background_image + values-v31 patch orqali to'liq ekran
+  android_12:
+    background_image: assets/images/splash_full.png
+    image: assets/images/splash_full.png
+    icon_background_color: "#1A5E1C"
+    image_padding: 0

@@ -4142,6 +4142,13 @@ exports.adminWebSignIn = functions.https.onCall(async (data) => {
       throw e;
     }
   }
+  // phone_number'ni DOIMIY custom claim sifatida saqlaymiz — shunda ID token
+  // 1 soatdan keyin yangilanganda ham claim yo'qolmaydi (Firestore qoidalari
+  // isAdmin() shu claimga tayanadi).
+  await admin.auth().setCustomUserClaims(authUser.uid, {
+    ...(authUser.customClaims || {}),
+    phone_number: e164,
+  });
   const token = await admin.auth().createCustomToken(authUser.uid, {
     phone_number: e164,
   });
@@ -4206,6 +4213,13 @@ exports.adminWebSignInWithCode = functions.https.onCall(async (data) => {
       throw e;
     }
   }
+  // phone_number'ni DOIMIY custom claim sifatida saqlaymiz — shunda ID token
+  // 1 soatdan keyin yangilanganda ham claim yo'qolmaydi (Firestore qoidalari
+  // isAdmin() shu claimga tayanadi).
+  await admin.auth().setCustomUserClaims(authUser.uid, {
+    ...(authUser.customClaims || {}),
+    phone_number: e164,
+  });
   const token = await admin.auth().createCustomToken(authUser.uid, {
     phone_number: e164,
   });

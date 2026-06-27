@@ -14,7 +14,7 @@ class HomeTickerAd {
     required this.fontSize,
     required this.priority,
     required this.active,
-    this.module = 'home',
+    this.module = 'home_search',
     this.activeFrom,
     this.activeTo,
     this.createdAt,
@@ -25,7 +25,7 @@ class HomeTickerAd {
   final String text;
   /// `all` | `user` | `driver` | `courier` | `admin`
   final String audience;
-  /// Qaysi ekranda ko'rsatiladi: `home` (bosh ekran) | `bread` (non moduli).
+  /// Qaysi ekranda ko'rsatiladi: `home_search` (bosh ekran ma'lumot maydoni).
   final String module;
   /// Bir matn necha soniya ekranda qoladi (keyingisiga o'tish).
   final int durationSec;
@@ -51,7 +51,7 @@ class HomeTickerAd {
       id: doc.id,
       text: (d['text'] ?? '').toString().trim(),
       audience: (d['audience'] ?? 'all').toString(),
-      module: (d['module'] ?? 'home').toString(),
+      module: (d['module'] ?? 'home_search').toString(),
       durationSec: ((d['durationSec'] as num?)?.toInt() ?? defaultDurationSec)
           .clamp(5, 120),
       scrollSpeed: ((d['scrollSpeed'] as num?)?.toInt() ?? defaultScrollSpeed)

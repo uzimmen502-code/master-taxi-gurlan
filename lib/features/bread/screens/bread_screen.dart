@@ -12,12 +12,6 @@ import '../../../repositories/inventory_repository.dart';
 
 import '../../../repositories/orders_repository.dart';
 
-import '../../../repositories/home_ticker_repository.dart';
-
-import '../../../models/home_ticker_ad.dart';
-
-import '../../home/widgets/home_ticker_shell.dart';
-
 import '../../../core/theme/app_theme.dart';
 
 import '../controllers/bread_controller.dart';
@@ -262,28 +256,6 @@ class _BreadViewState extends State<_BreadView> {
 
                   ),
 
-                ),
-
-                // Tarix tugmasi o'rniga — Firestore ticker (module: bread).
-                // Matnlar admin paneldan boshqariladi, tasodifiy aralashtiriladi,
-                // har bir matn durationSec soniya ko'rsatiladi.
-                StreamBuilder<List<HomeTickerAd>>(
-                  stream: context
-                      .read<HomeTickerRepository>()
-                      .watchForModule('bread', 'user'),
-                  builder: (context, snap) {
-                    final ads = snap.data ?? const <HomeTickerAd>[];
-                    if (ads.isEmpty) {
-                      return const SliverToBoxAdapter(child: SizedBox.shrink());
-                    }
-                    final shuffled = List<HomeTickerAd>.of(ads)..shuffle();
-                    return SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
-                        child: HomeTickerShell(ads: shuffled),
-                      ),
-                    );
-                  },
                 ),
 
                 _sectionHeader(loc.translate('bread_section_yopish')),

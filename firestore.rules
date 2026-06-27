@@ -983,7 +983,7 @@ service cloud.firestore {
           )
           && (
             !('module' in request.resource.data)
-            || request.resource.data.module in ['home', 'bread', 'home_search']
+            || request.resource.data.module in ['home_search']
           )
           && (
             !('durationSec' in request.resource.data)

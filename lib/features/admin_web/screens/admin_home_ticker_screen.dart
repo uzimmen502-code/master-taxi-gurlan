@@ -326,7 +326,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Бош экран — дуо остидаги югурувчи матн',
+                        'Бош экран — маълумот майдони (сариқ панел)',
                         style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
@@ -386,7 +386,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
           ),
           Expanded(
             child: StreamBuilder<List<HomeTickerAd>>(
-              stream: repo.watchForAdmin(),
+              stream: repo.watchForAdmin(limit: 300),
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting &&
                     !snap.hasData) {
@@ -488,17 +488,6 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                               spacing: 6,
                               runSpacing: 6,
                               children: [
-                                Chip(
-                                  label: Text(
-                                    ad.module == 'bread'
-                                        ? 'Нон модули'
-                                        : ad.module == 'home_search'
-                                            ? 'Маълумот майдони'
-                                            : 'Бош экран',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
                                 Chip(
                                   label: Text(_audienceLabel(ad.audience),
                                       style: const TextStyle(fontSize: 11)),
@@ -628,7 +617,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
     final e = widget.existing;
     _textCtrl = TextEditingController(text: e?.text ?? '');
     _audience = e?.audience ?? 'all';
-    _module = e?.module ?? 'home';
+    _module = 'home_search';
     _priority = e?.priority ?? 0;
     _durationSec = e?.durationSec ?? HomeTickerAd.defaultDurationSec;
     _scrollSpeed = e?.scrollSpeed ?? HomeTickerAd.defaultScrollSpeed;
@@ -767,24 +756,6 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                     .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _audience = v);
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _module,
-                decoration: const InputDecoration(
-                  labelText: 'Қайси экранда',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'home', child: Text('Бош экран')),
-                  DropdownMenuItem(
-                      value: 'home_search',
-                      child: Text('Бош экран — маълумот майдони')),
-                  DropdownMenuItem(value: 'bread', child: Text('Нон модули')),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => _module = v);
                 },
               ),
               const SizedBox(height: 16),

@@ -19,20 +19,20 @@ abstract final class AppText {
 // COLOURS — yagona brend palitra
 // ══════════════════════════════════════
 abstract final class AppColors {
-  static const scaffold = Color(0xFFF7FAF4);
-  static const scaffoldGradientEnd = Color(0xFFEEF7E8);
+  static const scaffold = Color(0xFFF2FAF2);
+  static const scaffoldGradientEnd = Color(0xFFE8F5E8);
 
-  static const primary = Color(0xFF0E7A38);
-  static const primaryDark = Color(0xFF14532D);
-  static const primaryMid = Color(0xFF2E9E57);
-  static const primarySoft = Color(0xFF2C5A3D);
+  static const primary = Color(0xFF36A63A);
+  static const primaryDark = Color(0xFF1A5E1C);
+  static const primaryMid = Color(0xFF4DC452);
+  static const primarySoft = Color(0xFF1F6B22);
 
-  static const cardGradientStart = Color(0xFFF4F9EF);
-  static const cardGradientEnd = Color(0xFFE6F2DE);
-  static const cardImageBg = Color(0xFFEDF7E8);
-  static const tickerShell = Color(0xFFEEF7E8);
+  static const cardGradientStart = Color(0xFFF0FAF0);
+  static const cardGradientEnd = Color(0xFFE0F5E0);
+  static const cardImageBg = Color(0xFFE8F5E8);
+  static const tickerShell = Color(0xFFE8F5E8);
   static const bottomBarCapsule = Color(0xFFFFFFFF);
-  static const arabicText = Color(0xFF0E7A38);
+  static const arabicText = Color(0xFF36A63A);
 
   /// Bosh ekran «500 СЎМ» festive (faqat home kartada).
   static const accentOrange = AppColors.primary;

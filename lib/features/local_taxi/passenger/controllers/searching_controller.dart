@@ -51,7 +51,7 @@ class SearchingController extends ChangeNotifier {
 
   /// 0 → 3km, 1 → 5km, 2 → 7km
   int cycle = 0;
-  int seconds = 20;
+  int seconds = 30;
 
   bool isSearching = true;
   bool _isDisposed = false;
@@ -166,7 +166,7 @@ class SearchingController extends ChangeNotifier {
       return;
     }
     cycle++;
-    seconds = 20;
+    seconds = 30;
     notifyListeners();
 
     if (tripId != null) {

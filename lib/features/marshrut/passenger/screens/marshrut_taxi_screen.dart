@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,6 +73,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   Timer? _debounce;
   String? _lastErrorShown;
   bool _directionChanged = false;
+  bool _isSubmitting = false;
   List<String> _recentFrom = const [];
   List<String> _recentTo = const [];
   StreamSubscription<ActiveTrip>? _acceptedTripSub;
@@ -339,6 +341,17 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   }
 
   Future<void> _openDriverPanel() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+    HapticFeedback.mediumImpact();
+    try {
+      await _runOpenDriverPanel();
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _runOpenDriverPanel() async {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('user_phone') ?? '';
     final userId = phoneDigits(phone);
@@ -536,20 +549,42 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 10),
-            child: GestureDetector(
-              onTap: _openDriverPanel,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+            child: Opacity(
+              opacity: _isSubmitting ? 0.6 : 1,
+              child: GestureDetector(
+                onTap: _isSubmitting ? null : _openDriverPanel,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isSubmitting) ...[
+                        const SizedBox(
+                          width: 13,
+                          height: 13,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                          _isSubmitting
+                              ? 'Юкланмоқда...'
+                              : context.tr('become_driver'),
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary)),
+                    ],
+                  ),
                 ),
-                child: Text(context.tr('become_driver'),
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary)),
               ),
             ),
           ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -433,6 +434,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   Future<void> _onDriverTap() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
+    HapticFeedback.mediumImpact();
     try {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('user_phone') ?? '';
@@ -588,7 +590,10 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          _DriverButton(onTap: _isSubmitting ? null : _onDriverTap),
+          _DriverButton(
+            onTap: _isSubmitting ? null : _onDriverTap,
+            loading: _isSubmitting,
+          ),
         ],
       ),
       body: Column(
@@ -704,27 +709,47 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 // ─────────────────────────────────────────────────────────────────────
 
 class _DriverButton extends StatelessWidget {
-  const _DriverButton({this.onTap});
+  const _DriverButton({this.onTap, this.loading = false});
   final VoidCallback? onTap;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          margin: const EdgeInsets.only(top: 8, bottom: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+      child: Opacity(
+        opacity: loading ? 0.6 : 1,
+        child: GestureDetector(
+          onTap: loading ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.only(top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (loading) ...[
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primaryMid,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Text(loading ? 'Юкланмоқда...' : context.tr('become_driver'),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primaryMid)),
+              ],
+            ),
           ),
-          child: Text(context.tr('become_driver'),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primaryMid)),
         ),
       ),
     );

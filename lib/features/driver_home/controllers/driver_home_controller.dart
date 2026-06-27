@@ -300,7 +300,23 @@ class DriverHomeController extends ChangeNotifier {
           final age = now.difference(t.createdAt!);
           if (age.inMinutes >= 3) return false;
         }
-        return _matchesTaxiType(t.taxiType);
+        if (!_matchesTaxiType(t.taxiType)) return false;
+        // Radius gate: haydovchi faqat yo'lovchining joriy qidiruv radiusi
+        // ichidagi buyurtmalarni ko'radi (0.5 km — GPS xatosi uchun bufer).
+        if (_driverLat != null &&
+            _driverLng != null &&
+            t.fromLat != 0 &&
+            t.fromLng != 0) {
+          final dKm = Geolocator.distanceBetween(
+                _driverLat!,
+                _driverLng!,
+                t.fromLat,
+                t.fromLng,
+              ) /
+              1000;
+          if (dKm > t.radiusKm + 0.5) return false;
+        }
+        return true;
       }).toList();
 
       final list = filtered.map((t) {

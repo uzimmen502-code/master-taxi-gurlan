@@ -499,8 +499,8 @@ class _HomeViewState extends State<_HomeView> {
 }
 
 // ─── Taxi grid ───────────────────────────────────────────────────────────────
-// ─── Unified services grid (4 ustun x 3 qator, PNG rasmlar) ──────────────────
-class _UnifiedServicesGrid extends StatelessWidget {
+// ─── Unified services grid (4 ustun x 3 qator, sahifalanadigan PNG rasmlar) ──
+class _UnifiedServicesGrid extends StatefulWidget {
   const _UnifiedServicesGrid({
     required this.onLocal,
     required this.onIntercity,
@@ -530,45 +530,138 @@ class _UnifiedServicesGrid extends StatelessWidget {
   final VoidCallback onOilChange;
 
   @override
+  State<_UnifiedServicesGrid> createState() => _UnifiedServicesGridState();
+}
+
+class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
+  static const int _columns = 4;
+  static const int _rowsPerPage = 3;
+  static const int _perPage = _columns * _rowsPerPage; // 12
+  static const double _aspectRatio = 0.88;
+  static const double _rowGap = 2.0;
+
+  final PageController _pageController = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final items = <_GridItemData>[
       _GridItemData('assets/images/services/service_taxi_local.png',
-          'Mahalliy TAKSI', onLocal),
+          'Mahalliy TAKSI', widget.onLocal),
       _GridItemData('assets/images/services/service_taxi_intercity.png',
-          'Shaharlararo TAKSI', onIntercity),
+          'Shaharlararo TAKSI', widget.onIntercity),
       _GridItemData('assets/images/services/service_marshrut.png',
-          'Marshrut TAKSI', onMarshrut),
+          'Marshrut TAKSI', widget.onMarshrut),
       _GridItemData('assets/images/services/service_courier.png',
-          'Kuryer xizmati', onCourier),
+          'Kuryer xizmati', widget.onCourier),
       _GridItemData('assets/images/services/service_sell.png',
-          'Mahsulot sotaman', onSell),
+          'Mahsulot sotaman', widget.onSell),
       _GridItemData('assets/images/services/service_food.png',
-          'Taom buyurtma', onFood),
+          'Taom buyurtma', widget.onFood),
       _GridItemData('assets/images/services/service_jobs.png',
-          'Ish va E\'lon', onJobAd),
+          'Ish va E\'lon', widget.onJobAd),
       _GridItemData('assets/images/services/service_market.png',
-          'Onlayn BOZOR', onOnlineMarket),
+          'Onlayn BOZOR', widget.onOnlineMarket),
       _GridItemData('assets/images/services/service_bread.png',
-          'Non buyurtma', onNon),
+          'Non buyurtma', widget.onNon),
       _GridItemData('assets/images/services/service_car_wash.png',
-          'Avto yuvish', onCarWash),
+          'Avto yuvish', widget.onCarWash),
       _GridItemData('assets/images/services/service_tire.png',
-          'Avto Shina', onTire),
+          'Avto Shina', widget.onTire),
       _GridItemData('assets/images/services/service_oil_change.png',
-          'Moy almashtirish', onOilChange),
+          'Moy almashtirish', widget.onOilChange),
     ];
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);
-    const rowGap = 2.0;
+    final pageCount = (items.length / _perPage).ceil();
 
-    return GridView.count(
-      crossAxisCount: 4,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: rowGap,
-      crossAxisSpacing: colGap,
-      childAspectRatio: 0.88,
-      children: items.map((d) => _GridTile(data: d)).toList(),
+    Widget pageGrid(List<_GridItemData> pageItems) {
+      return GridView.count(
+        crossAxisCount: _columns,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: _rowGap,
+        crossAxisSpacing: colGap,
+        childAspectRatio: _aspectRatio,
+        children: pageItems.map((d) => _GridTile(data: d)).toList(),
+      );
+    }
+
+    // Bitta sahifaga sig'sa (<=12 modul) — avvalgidek, sahifalashsiz.
+    if (pageCount <= 1) {
+      return pageGrid(items);
+    }
+
+    // 12 dan ortiq bo'lsa — gorizontal svayp qilinadigan sahifalar + nuqtalar.
+    // Har sahifa o'zgarmagan 3x4 joylashuv; ikonka/matn o'lchami o'sha-o'sha.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cellW = (c.maxWidth - (_columns - 1) * colGap) / _columns;
+        final cellH = cellW / _aspectRatio;
+        final pageH = _rowsPerPage * cellH + (_rowsPerPage - 1) * _rowGap;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: pageH,
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: pageCount,
+                onPageChanged: (i) => setState(() => _page = i),
+                itemBuilder: (_, page) {
+                  final start = page * _perPage;
+                  final end = (start + _perPage) > items.length
+                      ? items.length
+                      : start + _perPage;
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: pageGrid(items.sublist(start, end)),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            _PageDots(count: pageCount, index: _page),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PageDots extends StatelessWidget {
+  const _PageDots({required this.count, required this.index});
+
+  final int count;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (int i = 0; i < count; i++)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: i == index ? 18 : 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: i == index
+                  ? _brandGreen
+                  : _brandGreen.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+      ],
     );
   }
 }

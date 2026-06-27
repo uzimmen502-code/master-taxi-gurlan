@@ -1,5 +1,6 @@
 flutter_native_splash:
   background_image: assets/images/splash_full.png
+  android_gravity: fill
   fullscreen: true
   android: true
   ios: true
@@ -7,6 +8,6 @@ flutter_native_splash:
   ios_content_mode: scaleAspectFill
 
   android_12:
-    background_image: assets/images/splash_full.png
+    color: "#1A5E1C"
     image: assets/images/splash_full.png
     icon_background_color: "#1A5E1C"

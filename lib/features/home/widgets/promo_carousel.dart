@@ -30,11 +30,15 @@ class _PromoBannerData {
     required this.title,
     required this.imagePath,
     required this.onTap,
+    this.darkText = false,
   });
 
   final String title;
   final String imagePath;
   final VoidCallback onTap;
+
+  /// Yorug' (oq fonli) rasmlar uchun matn qora bo'lsin.
+  final bool darkText;
 }
 
 class _PromoCarouselState extends State<PromoCarousel> {
@@ -78,6 +82,7 @@ class _PromoCarouselState extends State<PromoCarousel> {
         title: 'Marshrut taksi',
         imagePath: 'assets/images/banners/banner_marshrut.jpg',
         onTap: widget.onMarshrutTap,
+        darkText: true,
       ),
       _PromoBannerData(
         title: 'Shaharlararo',
@@ -145,6 +150,27 @@ class _PromoCarouselState extends State<PromoCarousel> {
   }
 }
 
+/// Banner rasmlariga kontrast + to'yinganlik (saturation) + ozgina yorug'lik
+/// qo'shadi — rasmlar yorqinroq va "pop" bo'lib ko'rinadi.
+final ColorFilter _vividFilter = _buildVividFilter();
+
+ColorFilter _buildVividFilter() {
+  const s = 1.22; // to'yinganlik (saturation)
+  const c = 1.16; // kontrast
+  const br = 18.0; // yorug'lik (0–255 shkalada)
+  const lumR = 0.2126, lumG = 0.7152, lumB = 0.0722;
+  const sr = (1 - s) * lumR;
+  const sg = (1 - s) * lumG;
+  const sb = (1 - s) * lumB;
+  const k = 128 * (1 - c) + br;
+  return const ColorFilter.matrix(<double>[
+    c * (sr + s), c * sg, c * sb, 0, k, //
+    c * sr, c * (sg + s), c * sb, 0, k, //
+    c * sr, c * sg, c * (sb + s), 0, k, //
+    0, 0, 0, 1, 0, //
+  ]);
+}
+
 class _PromoBannerCard extends StatelessWidget {
   const _PromoBannerCard({required this.data});
 
@@ -152,6 +178,7 @@ class _PromoBannerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fg = data.darkText ? Colors.black87 : Colors.white;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -163,6 +190,7 @@ class _PromoBannerCard extends StatelessWidget {
             image: DecorationImage(
               image: AssetImage(data.imagePath),
               fit: BoxFit.cover,
+              colorFilter: _vividFilter,
             ),
           ),
           child: Stack(
@@ -178,17 +206,17 @@ class _PromoBannerCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.42),
+                      color: Colors.white.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       data.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: fg,
                       ),
                     ),
                   ),
@@ -197,7 +225,7 @@ class _PromoBannerCard extends StatelessWidget {
               Positioned(
                 bottom: 6,
                 right: 8,
-                child: _CtaButton(onTap: data.onTap),
+                child: _CtaButton(onTap: data.onTap, textColor: fg),
               ),
             ],
           ),
@@ -208,26 +236,27 @@ class _PromoBannerCard extends StatelessWidget {
 }
 
 class _CtaButton extends StatelessWidget {
-  const _CtaButton({required this.onTap});
+  const _CtaButton({required this.onTap, this.textColor = Colors.white});
 
   final VoidCallback onTap;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.45),
+      color: Colors.white.withValues(alpha: 0.22),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           child: Text(
             'Buyurtma berish →',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: textColor,
             ),
           ),
         ),

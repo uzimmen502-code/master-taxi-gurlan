@@ -10,15 +10,11 @@ import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
-import '../../profile/screens/profile_screen.dart';
 import '../controllers/driver_home_controller.dart';
 import 'driver_trip_screen.dart';
 import '../widgets/active_ride_card.dart';
-import '../widgets/driver_hero_card.dart';
 import '../widgets/fare_calculator_dialog.dart';
 import '../widgets/main_action_buttons.dart';
-import '../widgets/queue_card.dart';
-import '../widgets/seats_card.dart';
 import '../widgets/trip_request_card.dart';
 
 /// Ҳайдовчи бош экрани — Provider орқали [DriverHomeController].
@@ -205,20 +201,6 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
         '✅ Сафар якунланди! +${FareCalculator.format(fare)} сўм', _green);
   }
 
-  Future<void> _onAddPassenger() async {
-    final c = context.read<DriverHomeController>();
-    final result = await c.addPassenger();
-    if (!mounted || result.error == null) return;
-    _showSnack(result.error!, result.success ? _green : Colors.orange);
-  }
-
-  Future<void> _onRemovePassenger() async {
-    final c = context.read<DriverHomeController>();
-    final result = await c.removePassenger();
-    if (!mounted || result.error == null) return;
-    _showSnack(result.error!, result.success ? _green : Colors.orange);
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.watch<DriverHomeController>();
@@ -248,37 +230,12 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(children: [
-                DriverHeroCard(
-                  session: c.session,
-                  onProfileTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ProfileScreen()),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (c.hasScheduleToday) ...[
-                  SeatsCard(
-                    seatsLeft: c.seatsLeft,
-                    totalSeats: c.totalSeats,
-                    onAdd: _onAddPassenger,
-                    onRemove: _onRemovePassenger,
-                  ),
-                  const SizedBox(height: 16),
-                ],
                 if (c.isBusy &&
                     c.acceptedRide != null &&
                     c.acceptedRide!.taxiType != 'local' &&
                     c.acceptedRide!.taxiType != 'alone') ...[
                   ActiveRideCard(
                       ride: c.acceptedRide!, onComplete: _onCompleteRide),
-                  const SizedBox(height: 16),
-                ],
-                if (c.isOnline && c.queueList.isNotEmpty) ...[
-                  QueueCard(
-                      queueList: c.queueList,
-                      myPosition: c.queuePosition,
-                      myDriverId: c.session.driverId),
                   const SizedBox(height: 16),
                 ],
                 MainActionButtons(

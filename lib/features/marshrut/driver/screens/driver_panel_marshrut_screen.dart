@@ -389,6 +389,30 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          if (c.hasScheduleToday) ...[
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: context.tr('marshrut_smena_info_btn'),
+              onPressed: () => _openSmenaInfo(c),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) {
+                if (v == 'end') _showEndShiftDialog(context);
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem<String>(
+                  value: 'end',
+                  child: Row(children: [
+                    const Icon(Icons.logout, color: AppColors.error, size: 20),
+                    const SizedBox(width: 8),
+                    Text(context.tr('marshrut_seg_smena_end_action')),
+                  ]),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
       body: Column(
         children: [
@@ -430,6 +454,11 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
                         onView: () =>
                             _showRequestDialog(r, controller: c, tripId: r.id),
                       ),
+                  ],
+                  if (c.isOnline &&
+                      !c.hasAcceptedTrips &&
+                      !c.hasRequests) ...[
+                    const _WaitingPlaceholder(),
                   ],
                 ] else if (!_shiftEnded) ...[
                   Container(
@@ -479,8 +508,6 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
             onOnlineTap: () => _onBottomBarOnline(c),
             onTanaffusTap: () => _onBottomBarTanaffus(c),
             onSmenaStartedTap: () => _openStartSchedule(c),
-            onSmenaEndedTap: () => _showEndShiftDialog(context),
-            onSmenaInfoTap: () => _openSmenaInfo(c),
           ),
         ],
       ),
@@ -503,7 +530,15 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
         ),
       ),
     );
-    if (result == true) await c.checkTodaySchedule();
+    if (result == true) {
+      await c.checkTodaySchedule();
+      // Smena boshlangach avtomatik ONLINE (bitta tegish — lokal taksi kabi).
+      if (!mounted) return;
+      if (c.hasScheduleToday && !c.isOnline) {
+        await c.goOnline();
+        if (c.isOnline) await MarshrutPanelStatusSounds.playOnline();
+      }
+    }
   }
 
   Future<void> _openSmenaInfo(MarshrutDriverPanelController c) async {
@@ -767,6 +802,32 @@ class _AutoPausedBanner extends StatelessWidget {
                   .replaceAll('{reason}', reason),
           style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
         ),
+      ]),
+    );
+  }
+}
+
+class _WaitingPlaceholder extends StatelessWidget {
+  const _WaitingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(children: [
+        const Text('⏳', style: TextStyle(fontSize: 36)),
+        const SizedBox(height: 10),
+        Text('Йўловчи кутилмоқда...',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: AppText.bodyMedium,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600)),
       ]),
     );
   }

@@ -238,7 +238,8 @@ class TripRequestCard extends StatelessWidget {
       Expanded(
         flex: 2,
         child: _ActionButton(
-          label: 'Қабул',
+          label: 'Қўнғироқ',
+          icon: Icons.phone,
           color: _green,
           filled: true,
           onTap: disabled ? null : onAccept,
@@ -254,15 +255,18 @@ class _ActionButton extends StatelessWidget {
     required this.color,
     required this.filled,
     required this.onTap,
+    this.icon,
   });
 
   final String label;
   final Color color;
   final bool filled;
   final VoidCallback? onTap;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
+    final fg = filled ? Colors.white : color;
     return GestureDetector(
       onTap: onTap,
       child: Opacity(
@@ -275,11 +279,20 @@ class _ActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: color, width: 1.5),
           ),
-          child: Text(label,
-              style: TextStyle(
-                  fontSize: AppText.bodyMedium,
-                  fontWeight: FontWeight.bold,
-                  color: filled ? Colors.white : color)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 18, color: fg),
+                const SizedBox(width: 6),
+              ],
+              Text(label,
+                  style: TextStyle(
+                      fontSize: AppText.bodyMedium,
+                      fontWeight: FontWeight.bold,
+                      color: fg)),
+            ],
+          ),
         ),
       ),
     );

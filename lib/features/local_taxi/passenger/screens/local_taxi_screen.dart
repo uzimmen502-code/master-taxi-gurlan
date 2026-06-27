@@ -299,6 +299,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   Future<void> _onSearch() async {
     if (_isSearching) return;
     setState(() => _isSearching = true);
+    HapticFeedback.mediumImpact();
     try {
       if (_fromCtrl.text.trim().isEmpty) {
         _showGpsDialog();
@@ -675,21 +676,36 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                                   offset: const Offset(0, 4))
                             ],
                           ),
-                          child: InkWell(
-                            onTap: _onSearch,
-                            borderRadius: BorderRadius.circular(14),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.search,
-                                    size: 22, color: Colors.white),
-                                const SizedBox(width: 8),
-                                Text(loc.translate('search_driver'),
-                                    style: const TextStyle(
-                                        fontSize: AppText.bodyLarge,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white)),
-                              ],
+                          child: Opacity(
+                            opacity: _isSearching ? 0.7 : 1,
+                            child: InkWell(
+                              onTap: _isSearching ? null : _onSearch,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_isSearching)
+                                    const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2.4,
+                                          color: Colors.white),
+                                    )
+                                  else
+                                    const Icon(Icons.search,
+                                        size: 22, color: Colors.white),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                      _isSearching
+                                          ? 'Қидирилмоқда...'
+                                          : loc.translate('search_driver'),
+                                      style: const TextStyle(
+                                          fontSize: AppText.bodyLarge,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white)),
+                                ],
+                              ),
                             ),
                           ),
                         ),

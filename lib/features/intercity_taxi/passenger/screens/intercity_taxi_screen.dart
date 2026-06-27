@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/l10n/locale_notifier.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
+import '../../../../shared/widgets/become_driver_button.dart';
 import '../../../../models/intercity_ride.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
@@ -670,8 +670,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
   }
 
   void _callDriver(String phone) {
-    final uri = Uri.parse('tel:${phoneForCall(phone)}');
-    launchUrl(uri);
+    callPhone(phone);
   }
 
   double _panelBottomPadding(
@@ -710,9 +709,10 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
               title: Text(context.tr('intercity_taxi'),
                   style: TextStyle(fontWeight: FontWeight.bold)),
               actions: [
-                _DriverButton(
+                BecomeDriverButton(
                   onTap: _onIntercityDriverTap,
                   loading: _isSubmitting,
+                  color: IntercityColors.primary,
                 ),
               ],
             ),
@@ -734,7 +734,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     return Column(
       children: [
         Container(
-          color: const Color(0xFF2E7D32),
+          color: AppColors.courierGreen,
           padding: EdgeInsets.only(
             top: MediaQuery.of(context).padding.top + 8,
             bottom: 12,
@@ -793,7 +793,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
           child: c.isSearching
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: Color(0xFF2E7D32),
+                    color: AppColors.courierGreen,
                   ),
                 )
               : c.rides.isEmpty
@@ -1039,54 +1039,6 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
 // ─────────────────────────────────────────────────────────────────────
 // Inline widgets
 // ─────────────────────────────────────────────────────────────────────
-
-class _DriverButton extends StatelessWidget {
-  const _DriverButton({required this.onTap, this.loading = false});
-  final VoidCallback onTap;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Opacity(
-        opacity: loading ? 0.6 : 1,
-        child: GestureDetector(
-          onTap: loading ? null : onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            margin: const EdgeInsets.only(top: 8, bottom: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (loading) ...[
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: IntercityColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Text(loading ? 'Юкланмоқда...' : context.tr('become_driver'),
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: IntercityColors.primary)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _RouteCard extends StatelessWidget {
   const _RouteCard({

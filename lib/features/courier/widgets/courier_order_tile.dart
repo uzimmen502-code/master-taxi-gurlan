@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/phone_launcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/order_model.dart';
@@ -37,9 +38,7 @@ class CourierOrderTile extends StatelessWidget {
   static const Color _green = AppColors.primaryDark;
 
   Future<void> _call() async {
-    if (order.userPhone.isEmpty) return;
-    final url = Uri.parse('tel:${phoneForCall(order.userPhone)}');
-    await launchUrl(url, mode: LaunchMode.externalApplication);
+    await callPhone(order.userPhone);
   }
 
   Future<void> _navigate() async {

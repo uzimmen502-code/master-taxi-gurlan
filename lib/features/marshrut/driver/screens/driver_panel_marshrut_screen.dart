@@ -5,10 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
-import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
@@ -257,11 +255,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   }
 
   Future<void> _callUser(String phone) async {
-    if (phone.isEmpty || phoneDigits(phone).length < 9) return;
-    final url = Uri.parse('tel:${phoneForCall(phone)}');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
+    await callPhone(phone);
   }
 
   void _onPassengerOrderCancelled(String tripId) {

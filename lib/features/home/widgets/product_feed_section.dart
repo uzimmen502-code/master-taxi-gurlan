@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../models/feed_item.dart';
 import '../../../services/product_feed_service.dart';
@@ -17,7 +18,7 @@ class ProductFeedSection extends StatefulWidget {
 
 class _ProductFeedSectionState extends State<ProductFeedSection> {
   static const _titleDark = Color(0xFF1A3A20);
-  static const _sectionMuted = Color(0xFF7A9070);
+  static const _sectionMuted = AppColors.sectionMuted;
 
   late final ProductFeedService _service;
 
@@ -321,7 +322,7 @@ class _FeedProductCard extends StatelessWidget {
 
   static const _titleDark = Color(0xFF1A3A20);
   static const _priceGreen = Color(0xFF2E5C1E);
-  static const _cardBorder = Color(0xFFC8DDB8);
+  static const _cardBorder = AppColors.cardBorderMuted;
 
   String get _fallbackEmoji {
     switch (item.source) {

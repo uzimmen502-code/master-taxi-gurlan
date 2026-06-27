@@ -30,6 +30,13 @@ abstract final class AppColors {
   static const cardGradientStart = Color(0xFFF0FAF0);
   static const cardGradientEnd = Color(0xFFE0F5E0);
   static const cardImageBg = Color(0xFFE8F5E8);
+
+  /// Home/courier kartalari uchun muted yashil palitra (avval har bir
+  /// ekranda `_cardBorder` / `_sectionLabel` / `_primaryGreen` bo'lib
+  /// takrorlanardi).
+  static const cardBorderMuted = Color(0xFFC8DDB8);
+  static const sectionMuted = Color(0xFF7A9070);
+  static const courierGreen = Color(0xFF2E7D32);
   static const tickerShell = Color(0xFFE8F5E8);
   static const bottomBarCapsule = Color(0xFFFFFFFF);
   static const arabicText = Color(0xFF36A63A);

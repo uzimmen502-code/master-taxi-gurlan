@@ -3,12 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/passenger_cancel_block_rules.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/schedule.dart';
 import '../../../../repositories/marshrut_block_repository.dart';
@@ -140,11 +138,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
   }
 
   Future<void> _callDriver(String phone) async {
-    if (phoneDigits(phone).length < 9) return;
-    final uri = Uri.parse('tel:${phoneForCall(phone)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await callPhone(phone);
   }
 
   String _formatCountdown(BuildContext context) {

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../core/utils/map_launcher.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
@@ -512,10 +511,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         Row(children: [
           IconButton(
             visualDensity: VisualDensity.compact,
-            onPressed: () async {
-              final tel = Uri.parse('tel:${phoneForCall(b.userPhone)}');
-              if (await canLaunchUrl(tel)) await launchUrl(tel);
-            },
+            onPressed: () => callPhone(b.userPhone),
             icon: const Icon(Icons.call, color: IntercityDriverPanelScreen._primary),
           ),
           if (b.hasPickupGps)

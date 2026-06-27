@@ -9,11 +9,10 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/notification_service.dart';
@@ -78,13 +77,6 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   void dispose() {
     _driverLocationSub?.cancel();
     super.dispose();
-  }
-
-  String _formatPrice(int price) {
-    return price.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]} ',
-        );
   }
 
   void _syncDriverLocationListener(String driverId) {
@@ -252,9 +244,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   }
 
   Future<void> _callDriver(String phone) async {
-    if (phoneDigits(phone).length < 9) return;
-    final uri = Uri.parse('tel:${phoneForCall(phone)}');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    await callPhone(phone);
   }
 
   Widget _buildCancelButton(BuildContext context) {
@@ -468,7 +458,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                           ),
                         ),
                         Text(
-                          '${_formatPrice(estimatedPrice)} сўм',
+                          '${formatPrice(estimatedPrice)} сўм',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

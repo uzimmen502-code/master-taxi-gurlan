@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../intercity_driver_alert_text.dart';
 
@@ -85,12 +84,7 @@ Future<void> showIntercityBookingRequestDialog({
               style: const TextStyle(color: Colors.red)),
         ),
         FilledButton.icon(
-          onPressed: () async {
-            final tel = Uri.parse('tel:${phoneForCall(booking.userPhone)}');
-            if (await canLaunchUrl(tel)) {
-              await launchUrl(tel, mode: LaunchMode.externalApplication);
-            }
-          },
+          onPressed: () => callPhone(booking.userPhone),
           icon: const Icon(Icons.call, size: 18),
           label: const Text('Қўнғироқ'),
         ),

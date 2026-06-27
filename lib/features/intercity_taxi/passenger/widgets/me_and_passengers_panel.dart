@@ -1,10 +1,9 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../controllers/intercity_taxi_controller.dart';
@@ -346,10 +345,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               ),
               padding: EdgeInsets.symmetric(vertical: vPad),
             ),
-            onPressed: () {
-              final phone = c.myBooking!.driverPhone;
-              launchUrl(Uri.parse('tel:+$phone'));
-            },
+            onPressed: () => callPhone(c.myBooking!.driverPhone),
             icon: const Icon(Icons.phone, size: 16),
             label: Text(
               context.tr('call_lowercase'),
@@ -936,11 +932,7 @@ class _PassengerTile extends StatelessWidget {
           ),
           if (booking.userPhone.isNotEmpty)
             IconButton(
-              onPressed: () {
-                launchUrl(Uri.parse(
-                  'tel:+${booking.userPhone.replaceAll(RegExp(r'[^\d]'), '')}',
-                ));
-              },
+              onPressed: () => callPhone(booking.userPhone),
               icon: Icon(
                 Icons.phone,
                 color: Colors.green.shade600,

@@ -2,10 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../../models/trip_request.dart';
-import '../../../core/utils/formatters.dart';
+import '../../../core/utils/phone_launcher.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
@@ -93,13 +91,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
       return;
     }
     // Дайлерни очамиз — ҳайдовчи қўнғироқ қилади.
-    final phone = ride.userPhone.trim();
-    if (phone.isNotEmpty) {
-      try {
-        final url = Uri.parse('tel:${phoneForCall(phone)}');
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } catch (_) {}
-    }
+    await callPhone(ride.userPhone);
   }
 
   /// Банд қилинган трипни ЯКУНИЙ қабул қилиш.

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/orders_repository.dart';
@@ -47,16 +48,6 @@ class _FoodViewState extends State<_FoodView> {
         c.flushPendingOrders();
       }
     });
-  }
-
-  static String _formatPrice(int price) {
-    final s = price.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-      buf.write(s[i]);
-    }
-    return buf.toString();
   }
 
   Future<void> _showCart(BuildContext context) async {
@@ -295,7 +286,7 @@ class _FoodViewState extends State<_FoodView> {
                 ],
               ),
               label: Text(
-                '${_formatPrice(c.cartTotal)} ${loc.translate("sum")}',
+                '${formatPrice(c.cartTotal)} ${loc.translate("sum")}',
                 style:
                     const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
               ),

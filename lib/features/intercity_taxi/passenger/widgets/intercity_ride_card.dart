@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_ride.dart';
 
 class IntercityRideCard extends StatelessWidget {
@@ -15,7 +17,7 @@ class IntercityRideCard extends StatelessWidget {
     required this.onBook,
   });
 
-  static const Color _green = Color(0xFF2E7D32);
+  static const Color _green = AppColors.courierGreen;
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +137,7 @@ class IntercityRideCard extends StatelessWidget {
           textBaseline: TextBaseline.alphabetic,
           children: [
             Text(
-              _formatPrice(ride.price),
+              formatPrice(ride.price),
               style: const TextStyle(
                 color: _green,
                 fontWeight: FontWeight.bold,
@@ -296,13 +298,6 @@ class IntercityRideCard extends StatelessWidget {
 
   String _buildRouteLabel(IntercityRide ride, Locale locale) {
     return ride.routeDisplayLabel(locale);
-  }
-
-  String _formatPrice(int price) {
-    return price.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]} ',
-        );
   }
 
   String _formatTime(DateTime time) {

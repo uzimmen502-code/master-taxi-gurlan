@@ -4,16 +4,17 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/courier_order.dart';
 import '../../../repositories/courier_orders_repository.dart';
 import 'courier_order_detail_screen.dart';
 
 const _bg = Color(0xFFF6FAF2);
-const _cardBorder = Color(0xFFC8DDB8);
-const _sectionLabel = Color(0xFF7A9070);
+const _cardBorder = AppColors.cardBorderMuted;
+const _sectionLabel = AppColors.sectionMuted;
 const _titleDark = Color(0xFF1A3A20);
-const _primaryGreen = Color(0xFF2E7D32);
+const _primaryGreen = AppColors.courierGreen;
 
 /// Kuryer — yangi va faol buyurtmalar ro'yxati.
 class CourierOrdersListScreen extends StatefulWidget {

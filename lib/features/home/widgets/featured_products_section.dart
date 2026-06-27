@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../services/featured_products_service.dart';
 
@@ -18,7 +19,7 @@ class FeaturedProductsSection extends StatefulWidget {
 
 class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
   static const _titleDark = Color(0xFF1A3A20);
-  static const _sectionMuted = Color(0xFF7A9070);
+  static const _sectionMuted = AppColors.sectionMuted;
 
   final _service = FeaturedProductsService();
   late final Future<List<FeaturedProduct>> _future =
@@ -101,7 +102,7 @@ class _FeaturedProductCard extends StatelessWidget {
 
   static const _titleDark = Color(0xFF1A3A20);
   static const _priceGreen = Color(0xFF2E5C1E);
-  static const _cardBorder = Color(0xFFC8DDB8);
+  static const _cardBorder = AppColors.cardBorderMuted;
 
   String get _fallbackEmoji {
     switch (product.source) {

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../shared/widgets/become_driver_button.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/saved_place.dart';
 import '../../../../repositories/driver_repository.dart';
@@ -129,13 +130,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     ));
   }
 
-  String _formatPrice(int price) {
-    return price.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]} ',
-        );
-  }
-
   Future<void> _loadEstimatedPrice() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -149,7 +143,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       final est = base + (perKm * 3);
       if (mounted) {
         setState(() {
-          _estimatedPriceText = '${_formatPrice(est)}+ сўм';
+          _estimatedPriceText = '${formatPrice(est)}+ сўм';
         });
       }
     } catch (_) {}
@@ -591,7 +585,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          _DriverButton(
+          BecomeDriverButton(
             onTap: _isSubmitting ? null : _onDriverTap,
             loading: _isSubmitting,
           ),
@@ -723,54 +717,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 // ─────────────────────────────────────────────────────────────────────
 // Helpers / inline widgets
 // ─────────────────────────────────────────────────────────────────────
-
-class _DriverButton extends StatelessWidget {
-  const _DriverButton({this.onTap, this.loading = false});
-  final VoidCallback? onTap;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Opacity(
-        opacity: loading ? 0.6 : 1,
-        child: GestureDetector(
-          onTap: loading ? null : onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            margin: const EdgeInsets.only(top: 8, bottom: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (loading) ...[
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primaryMid,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Text(loading ? 'Юкланмоқда...' : context.tr('become_driver'),
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primaryMid)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _HeroCard extends StatelessWidget {
   const _HeroCard({

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/data_url_image.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/food_product.dart';
 import '../controllers/food_controller.dart';
@@ -17,16 +18,6 @@ class ProductCard extends StatelessWidget {
   final FoodProduct product;
   final FoodController controller;
   final bool grid;
-
-  String _formatPrice(int price) {
-    final s = price.toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-      buf.write(s[i]);
-    }
-    return buf.toString();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +87,7 @@ class ProductCard extends StatelessWidget {
                       style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                   const SizedBox(height: 6),
                   Text(
-                    '${_formatPrice(product.price)} ${loc.translate("sum")} / $localizedUnit',
+                    '${formatPrice(product.price)} ${loc.translate("sum")} / $localizedUnit',
                     style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -150,7 +141,7 @@ class ProductCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis),
                   const Spacer(),
                   Text(
-                    '${_formatPrice(product.price)} ${loc.translate("sum")} / $localizedUnit',
+                    '${formatPrice(product.price)} ${loc.translate("sum")} / $localizedUnit',
                     style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,

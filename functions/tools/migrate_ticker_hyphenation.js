@@ -19,7 +19,6 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-const { TEXTS: BREAD_TEXTS } = require('./seed_bread_ticker.js');
 const { TEXTS: HOME_SEARCH_TEXTS } = require('./seed_home_search_ticker.js');
 
 function stripSoftHyphen(s) {
@@ -63,7 +62,6 @@ async function migrateModule(moduleName, hyphenatedTexts) {
 }
 
 async function main() {
-  await migrateModule('bread', BREAD_TEXTS);
   await migrateModule('home_search', HOME_SEARCH_TEXTS);
 }
 

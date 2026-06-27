@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
-        android:label="Master Taxi Gurlan"
+        android:label="AVA Gurlan"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

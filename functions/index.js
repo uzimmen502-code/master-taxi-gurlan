@@ -4177,15 +4177,25 @@ exports.adminWebSignInWithCode = functions.https.onCall(async (data) => {
   }
 
   const phone = TRUSTED_ADMIN_WEB_PHONE;
-  const found = await findUserDocByPhone(phone);
-  if (!found) {
-    throw new functions.https.HttpsError('not-found', 'Admin operator topilmadi');
-  }
-  const role = (found.snap.data() || {}).role || 'user';
-  if (!['admin', 'superadmin', 'dispatcher'].includes(role)) {
-    throw new functions.https.HttpsError('permission-denied', 'Not an admin');
-  }
   const e164 = `+${phone}`;
+  const adminRoles = ['admin', 'superadmin', 'dispatcher'];
+
+  // Kod to'g'ri — maxfiy kodning o'zi admin huquqini beradi. Operator
+  // hujjati admin bo'lmasa (yoki yo'q bo'lsa) — uni 'admin' qilamiz, shunda
+  // Firebase Console'da qo'lda role o'zgartirish kerak bo'lmaydi.
+  const found = await findUserDocByPhone(phone);
+  const docId = found ? found.docId : canonicalUid(phone);
+  const existingRole = found ? ((found.snap.data() || {}).role || '') : '';
+  let role = existingRole;
+  if (!adminRoles.includes(existingRole)) {
+    await db.collection('users').doc(docId).set({
+      role: 'admin',
+      phone: e164,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    role = 'admin';
+  }
+
   let authUser;
   try {
     authUser = await admin.auth().getUserByPhoneNumber(e164);
@@ -4201,7 +4211,7 @@ exports.adminWebSignInWithCode = functions.https.onCall(async (data) => {
   });
   return {
     token,
-    uid: found.docId,
+    uid: docId,
     phone: e164,
     role,
   };

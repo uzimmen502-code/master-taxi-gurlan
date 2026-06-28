@@ -7578,3 +7578,128 @@ exports.reconcileLedger = functions.https.onCall(async (data, context) => {
   );
   return settlementLedger.reconcile(db);
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Settlement Ledger — Driver Float (Qadam 2).
+//   floatTopUp     — haydovchi naqd depozit topshiradi (admin/finance yozadi)
+//                    Dr admin_cash / Cr driver_float:{uid}, floatMax cap bilan.
+//   floatReturn    — float qaytarish (finance tasdig'i)
+//                    Dr driver_float:{uid} / Cr admin_cash, manfiylik bo'lmasin.
+//   driverFloatStatus — float balansi + zona (read-only).
+// Idempotent: klient `opId` (UUID) yuboradi. Cap/manfiylik TRANSACTION
+// ichida (assert) tekshiriladi. To'liq dizayn: docs/settlement_ledger_v1_uz.md
+// ─────────────────────────────────────────────────────────────────────
+
+/** `data`'dan haydovchi uid (998 + 9), summa (butun, >0) va opId ni tekshiradi. */
+function parseFloatOpInput(data) {
+  const driverUid = canonicalUid(data && (data.driverUid || data.driverPhone));
+  const amount = Math.trunc(Number((data && data.amount) || 0));
+  const opId = String((data && data.opId) || '').trim();
+  if (!driverUid || driverUid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'driverUid noto\'g\'ri');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amount musbat butun bo\'lsin');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId (idempotency key) kerak');
+  }
+  return { driverUid, amount, opId };
+}
+
+async function floatStatusOf(driverUid) {
+  const config = await settlementLedger.getConfig(db);
+  const ref = db.collection(settlementLedger.COL_ACCOUNTS)
+      .doc(settlementLedger.driverFloatAccount(driverUid));
+  const snap = await ref.get();
+  const balance = snap.exists ? (snap.data().balance || 0) : 0;
+  return {
+    driverUid,
+    balance,
+    zone: settlementLedger.floatZone(balance, config),
+    settlementEnabled: settlementLedger.settlementEnabled(balance, config),
+    config,
+  };
+}
+
+exports.floatTopUp = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+  const { driverUid, amount, opId } = parseFloatOpInput(data);
+  const config = await settlementLedger.getConfig(db);
+  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
+
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `floatTopUp:${opId}`,
+    kind: 'float_topup',
+    refType: 'float_topup',
+    refId: opId,
+    postedBy: callerUid,
+    postedRole: 'finance',
+    legs: [
+      { account: 'admin_cash', dr: amount },
+      { account: floatAcc, cr: amount },
+    ],
+  }, {
+    mirrorBonus: false,
+    meta: { driverUid, amount },
+    assert: ({ accounts }) => {
+      const fa = accounts.get(floatAcc);
+      if (fa && fa.next > config.floatMax) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Float chegarasidan oshib ketadi (max ${config.floatMax})`);
+      }
+    },
+  });
+
+  const status = await floatStatusOf(driverUid);
+  return { ok: true, idempotent: res.idempotent, ...status };
+});
+
+exports.floatReturn = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+  const { driverUid, amount, opId } = parseFloatOpInput(data);
+  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
+
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `floatReturn:${opId}`,
+    kind: 'float_return',
+    refType: 'float_return',
+    refId: opId,
+    postedBy: callerUid,
+    postedRole: 'finance',
+    legs: [
+      { account: floatAcc, dr: amount },
+      { account: 'admin_cash', cr: amount },
+    ],
+  }, {
+    mirrorBonus: false,
+    meta: { driverUid, amount },
+    assert: ({ accounts }) => {
+      const fa = accounts.get(floatAcc);
+      if (fa && fa.next < 0) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            'Float yetarli emas (qaytarish balansdan oshmasin)');
+      }
+    },
+  });
+
+  const status = await floatStatusOf(driverUid);
+  return { ok: true, idempotent: res.idempotent, ...status };
+});
+
+exports.driverFloatStatus = functions.https.onCall(async (data, context) => {
+  await requireCallerRoles(
+      context,
+      ['admin', 'superadmin', 'finance', 'auditor'],
+      'Finance/audit role required',
+  );
+  const driverUid = canonicalUid(data && (data.driverUid || data.driverPhone));
+  if (!driverUid || driverUid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'driverUid noto\'g\'ri');
+  }
+  return floatStatusOf(driverUid);
+});

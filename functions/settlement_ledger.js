@@ -132,9 +132,17 @@ function buildEntry(input) {
  *   walletLedgerType (default null)  — berilsa, users/{uid}/wallet_ledger ga
  *                                      foydalanuvchiga ko'rinadigan yozuv qo'shadi
  *   meta             (default {})    — qo'shimcha ma'lumot
+ *   assert           (default null)  — TRANSACTION ICHIDA chaqiriladi:
+ *                                      assert({ accounts: Map(id -> {prev,delta,next}) }).
+ *                                      Error tashlasa, post bekor qilinadi (atomar
+ *                                      precondition: float cap, manfiylik, h.k.)
+ *
+ * Qaytaradi: { id, idempotent, amount, balances } — balances: { accountId: next }.
  */
 async function postEntry(db, entryInput, options = {}) {
-  const { mirrorBonus = true, walletLedgerType = null, meta = {} } = options;
+  const {
+    mirrorBonus = true, walletLedgerType = null, meta = {}, assert = null,
+  } = options;
   const entry = buildEntry(entryInput);
   const entryRef = db.collection(COL_JOURNAL).doc(entry.idempotencyKey);
 
@@ -142,7 +150,7 @@ async function postEntry(db, entryInput, options = {}) {
     // 1) Idempotentlik — allaqachon postlangan bo'lsa, hech narsa qilmaymiz.
     const existing = await tx.get(entryRef);
     if (existing.exists) {
-      return { id: entryRef.id, idempotent: true, amount: entry.amount };
+      return { id: entryRef.id, idempotent: true, amount: entry.amount, balances: {} };
     }
 
     // Hisob bo'yicha umumiy delta'lar.
@@ -166,6 +174,23 @@ async function postEntry(db, entryInput, options = {}) {
     // 2) BARCHA o'qishlar yozuvdan OLDIN (transaction qoidasi).
     const accSnaps = await Promise.all(accRefs.map((r) => tx.get(r)));
 
+    // Hisob holatlari (prev/delta/next) — assert va yozuv uchun.
+    const state = new Map();
+    const balances = {};
+    for (let i = 0; i < accIds.length; i++) {
+      const id = accIds[i];
+      const prev = accSnaps[i].exists ? (accSnaps[i].data().balance || 0) : 0;
+      const delta = accDelta.get(id);
+      const next = prev + delta;
+      state.set(id, { prev, delta, next });
+      balances[id] = next;
+    }
+
+    // Atomar precondition (ixtiyoriy): float cap, manfiylik tekshiruvi va h.k.
+    if (typeof assert === 'function') {
+      await assert({ accounts: state });
+    }
+
     // 3) Yozuvlar.
     tx.set(entryRef, {
       ts: admin.firestore.FieldValue.serverTimestamp(),
@@ -183,12 +208,10 @@ async function postEntry(db, entryInput, options = {}) {
 
     for (let i = 0; i < accIds.length; i++) {
       const id = accIds[i];
-      const snap = accSnaps[i];
-      const prev = snap.exists ? (snap.data().balance || 0) : 0;
       tx.set(accRefs[i], {
         type: accountTypeOf(id),
         ownerUid: ownerUidOf(id),
-        balance: prev + accDelta.get(id),
+        balance: state.get(id).next,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
     }
@@ -215,8 +238,56 @@ async function postEntry(db, entryInput, options = {}) {
       }
     }
 
-    return { id: entryRef.id, idempotent: false, amount: entry.amount };
+    return { id: entryRef.id, idempotent: false, amount: entry.amount, balances };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Float sozlamalari va zona siyosati (settings/settlement).
+// To'liq dizayn: docs/settlement_ledger_v1_uz.md (8-bo'lim)
+// ─────────────────────────────────────────────────────────────────────
+const DEFAULT_CONFIG = {
+  floatMin: 100000, // 🟢 sog'lom chegarasi
+  floatCritical: 20000, // 🔴 kritik chegara (settlement o'chadi)
+  floatMax: 500000, // ⛔ maksimal float (deposit cap)
+  deferredNegativeFloatPct: 10, // deferred: manfiy float % (oxirgi depozitdan)
+  deferredTimeoutHours: 48, // deferred reconcile muddati
+};
+
+function numOr(v, def) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+}
+
+/** `settings/settlement` config (default'lar bilan). */
+async function getConfig(db) {
+  try {
+    const doc = await db.collection('settings').doc('settlement').get();
+    const d = doc.exists ? (doc.data() || {}) : {};
+    return {
+      floatMin: numOr(d.floatMin, DEFAULT_CONFIG.floatMin),
+      floatCritical: numOr(d.floatCritical, DEFAULT_CONFIG.floatCritical),
+      floatMax: numOr(d.floatMax, DEFAULT_CONFIG.floatMax),
+      deferredNegativeFloatPct: numOr(
+          d.deferredNegativeFloatPct, DEFAULT_CONFIG.deferredNegativeFloatPct),
+      deferredTimeoutHours: numOr(
+          d.deferredTimeoutHours, DEFAULT_CONFIG.deferredTimeoutHours),
+    };
+  } catch (e) {
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
+/** Float zonasi: 'critical' | 'low' | 'healthy'. */
+function floatZone(balance, config) {
+  if (balance < config.floatCritical) return 'critical';
+  if (balance < config.floatMin) return 'low';
+  return 'healthy';
+}
+
+/** Settlement shu float bilan ishlay oladimi (kritik emas va > 0). */
+function settlementEnabled(balance, config) {
+  return balance > 0 && floatZone(balance, config) !== 'critical';
 }
 
 /**
@@ -283,6 +354,7 @@ module.exports = {
   COL_ACCOUNTS,
   COL_JOURNAL,
   ACCOUNT_TYPES,
+  DEFAULT_CONFIG,
   accountTypeOf,
   ownerUidOf,
   naturalDelta,
@@ -290,5 +362,8 @@ module.exports = {
   driverFloatAccount,
   buildEntry,
   postEntry,
+  getConfig,
+  floatZone,
+  settlementEnabled,
   reconcile,
 };

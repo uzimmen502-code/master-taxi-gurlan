@@ -8,6 +8,8 @@ String walletLedgerTitle(WalletLedgerEntry e) {
       return module.isEmpty ? 'Кошелёкдан тўлов' : '$module — тўлов';
     case 'change_accrued':
       return module.isEmpty ? 'Қaytim' : '$module — qaytim';
+    case 'settlement_credit':
+      return module.isEmpty ? 'Қaytim (settlement)' : '$module — qaytim';
     case 'supplier_credit':
       return module.isEmpty ? 'Kredit' : '$module — kredit';
     case 'payout_request':

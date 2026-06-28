@@ -16,6 +16,7 @@ import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/notification_service.dart';
+import '../../../../services/settlement_service.dart';
 
 /// Mahalliy taksi — haydovchi qabul qilgandan keyin safar ekrani.
 class LocalTaxiActiveTripScreen extends StatefulWidget {
@@ -341,6 +342,55 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     }
   }
 
+  /// Settlement Ledger — safar tugagach qaytim ҳamyonga o'tkazilsinmi.
+  Future<void> _showSettlementDialog(
+      BuildContext context, String settlementId, int amount) async {
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Қайтим — ҳамёнга'),
+        content: Text(
+          'Ҳайдовчи ${formatPrice(amount)} сўм қайтимни ҳамёнингизга '
+          'ўтказмоқчи. Тасдиқлайсизми?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Нақд керак'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'confirm'),
+            child: const Text('Тасдиқлайман'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      if (choice == 'confirm') {
+        await SettlementService.confirmSettlement(settlementId: settlementId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
+          backgroundColor: Colors.green,
+        ));
+      } else {
+        await SettlementService.cancelSettlement(
+          settlementId: settlementId,
+          reason: 'passenger_wants_cash',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Settlement: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
   Future<void> _confirmCancel(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -416,6 +466,18 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
             if (!_tripEndHandled) {
               _tripEndHandled = true;
               WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!mounted) return;
+                final settlementId = (data['settlementId'] ?? '').toString();
+                final settlementState =
+                    (data['settlementState'] ?? '').toString();
+                final settlementAmount =
+                    (data['settlementAmount'] as num?)?.toInt() ?? 0;
+                if (settlementState == 'pending' &&
+                    settlementId.isNotEmpty &&
+                    settlementAmount > 0) {
+                  await _showSettlementDialog(
+                      context, settlementId, settlementAmount);
+                }
                 if (!mounted) return;
                 await _showRatingDialog(context, data);
                 if (mounted) Navigator.of(context).pop();

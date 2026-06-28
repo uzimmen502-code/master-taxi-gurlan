@@ -7786,6 +7786,7 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
   }
 
   const ref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
+  const tripRef = db.collection('trips').doc(tripId);
   const created = await db.runTransaction(async (tx) => {
     const ex = await tx.get(ref);
     if (ex.exists) return false; // idempotent
@@ -7801,6 +7802,12 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       journalEntryId: '',
     });
+    // Yo'lovchi ekrani trip doc'ni tinglaydi — settlement holatini tamg'alaymiz.
+    tx.set(tripRef, {
+      settlementId: opId,
+      settlementState: 'pending',
+      settlementAmount,
+    }, { merge: true });
     return true;
   });
 
@@ -7880,6 +7887,11 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
         journalEntryId: entryId,
       });
+      if (s.tripId) {
+        tx.set(db.collection('trips').doc(s.tripId), {
+          settlementState: 'completed',
+        }, { merge: true });
+      }
     },
   });
 
@@ -7927,6 +7939,11 @@ exports.cancelSettlement = functions.https.onCall(async (data, context) => {
       cancelledBy: callerUid,
       cancelReason: reason,
     });
+    if (s.tripId) {
+      tx.set(db.collection('trips').doc(s.tripId), {
+        settlementState: 'cancelled',
+      }, { merge: true });
+    }
   });
 
   return { ok: true, settlementId, state: 'cancelled' };

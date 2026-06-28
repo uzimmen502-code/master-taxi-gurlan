@@ -15,8 +15,10 @@ import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../services/background_gps_service.dart';
 import '../../../services/balance_service.dart';
+import '../../../services/settlement_service.dart';
 
 /// Ҳайдовчи бош экранининг controller'и — сессия, онлайн, навбат, буюртмалар.
 class DriverHomeController extends ChangeNotifier {
@@ -558,19 +560,38 @@ class DriverHomeController extends ChangeNotifier {
         tripId: ride.id, fare: fare, cashPaid: cashPaid);
 
     if (ride.userPhone.isNotEmpty && cashPaid > fare) {
+      final change = cashPaid - fare;
+      // Settlement Ledger: float yetarli bo'lsa → Pending settlement ochiladi
+      // (yo'lovchi tasdiqlagach kredit). Float yo'q/kritik bo'lsa yoki xato →
+      // eski to'g'ridan-to'g'ri kreditlash (creditChange) fallback sifatida.
+      var settled = false;
       try {
-        await BalanceService.creditChange(
-          userPhone: ride.userPhone,
-          orderTotal: fare,
-          cashPaid: cashPaid,
-          refType: 'trip',
-          refId: ride.id,
-          module: session.taxiType,
-          idempotencyKey: 'change_trip_${ride.id}',
-          operatorPhone: session.phone,
+        await SettlementService.openSettlement(
+          passengerPhone: canonicalPhoneId(ride.userPhone),
+          tripId: ride.id,
+          opId: 'settle_trip_${ride.id}',
+          totalChange: change,
+          cashGiven: 0,
         );
+        settled = true;
       } catch (e, st) {
-        debugPrint('creditChange: $e\n$st');
+        debugPrint('openSettlement: $e\n$st');
+      }
+      if (!settled) {
+        try {
+          await BalanceService.creditChange(
+            userPhone: ride.userPhone,
+            orderTotal: fare,
+            cashPaid: cashPaid,
+            refType: 'trip',
+            refId: ride.id,
+            module: session.taxiType,
+            idempotencyKey: 'change_trip_${ride.id}',
+            operatorPhone: session.phone,
+          );
+        } catch (e, st) {
+          debugPrint('creditChange: $e\n$st');
+        }
       }
     }
 

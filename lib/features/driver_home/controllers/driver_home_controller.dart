@@ -18,6 +18,7 @@ import '../../../repositories/schedules_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../services/background_gps_service.dart';
 import '../../../services/balance_service.dart';
+import '../../../services/deferred_settlement_queue.dart';
 import '../../../services/settlement_service.dart';
 
 /// Ҳайдовчи бош экранининг controller'и — сессия, онлайн, навбат, буюртмалар.
@@ -98,6 +99,8 @@ class DriverHomeController extends ChangeNotifier {
     await _loadSession();
     await FareCalculator.loadPrices();
     _listenConnectivity();
+    // Ilova ochilishida — kutib qolgan deferred settlement'larni yuborish.
+    unawaited(DeferredSettlementQueue.flush());
   }
 
   Future<void> _loadSession() async {
@@ -134,8 +137,13 @@ class DriverHomeController extends ChangeNotifier {
 
   void _listenConnectivity() {
     _connSub = Connectivity().onConnectivityChanged.listen((r) {
+      final wasOffline = !hasInternet;
       hasInternet = !r.contains(ConnectivityResult.none);
       if (!_disposed) notifyListeners();
+      // Internet qaytgach — kutib qolgan deferred settlement'larni yuborish.
+      if (hasInternet && wasOffline) {
+        unawaited(DeferredSettlementQueue.flush());
+      }
     });
   }
 
@@ -564,12 +572,13 @@ class DriverHomeController extends ChangeNotifier {
       // Settlement Ledger: float yetarli bo'lsa → Pending settlement ochiladi
       // (yo'lovchi tasdiqlagach kredit). Float yo'q/kritik bo'lsa yoki xato →
       // eski to'g'ridan-to'g'ri kreditlash (creditChange) fallback sifatida.
+      final opId = 'settle_trip_${ride.id}';
       var settled = false;
       try {
         await SettlementService.openSettlement(
           passengerPhone: canonicalPhoneId(ride.userPhone),
           tripId: ride.id,
-          opId: 'settle_trip_${ride.id}',
+          opId: opId,
           totalChange: change,
           cashGiven: 0,
         );
@@ -577,6 +586,7 @@ class DriverHomeController extends ChangeNotifier {
       } catch (e, st) {
         debugPrint('openSettlement: $e\n$st');
       }
+      var credited = false;
       if (!settled) {
         try {
           await BalanceService.creditChange(
@@ -589,9 +599,20 @@ class DriverHomeController extends ChangeNotifier {
             idempotencyKey: 'change_trip_${ride.id}',
             operatorPhone: session.phone,
           );
+          credited = true;
         } catch (e, st) {
           debugPrint('creditChange: $e\n$st');
         }
+      }
+      // Internet yo'q/xato → deferred (offline-lite) navbatga: internet
+      // qaytgach `submitDeferredSettlement` orqali post qilinadi (idempotent).
+      if (!settled && !credited) {
+        await DeferredSettlementQueue.enqueue(
+          passengerPhone: canonicalPhoneId(ride.userPhone),
+          tripId: ride.id,
+          opId: opId,
+          settlementAmount: change,
+        );
       }
     }
 

@@ -1430,6 +1430,11 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
     const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
     const next = prev + delta;
 
+    // Ledger ko'zgusi (READ fazasi) — yozuvlardan oldin.
+    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
+      idempotencyKey,
+    });
+
     t.set(userRef, {
       bonusBalance: next,
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1444,6 +1449,17 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
       meta: { orderTotal, cashPaid },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: operatorUid,
+    });
+
+    // Ledger ko'zgusi (WRITE fazasi) — Dr admin_clearing / Cr passenger_credit.
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta,
+      kind: 'change_accrued',
+      refType,
+      refId,
+      meta: { module, orderTotal, cashPaid },
+      postedBy: operatorUid,
+      postedRole: 'operator',
     });
 
     t.set(idemRef, {
@@ -1498,6 +1514,11 @@ exports.creditSupplier = functions.https.onCall(async (data, context) => {
     const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
     const next = prev + amount;
 
+    // Ledger ko'zgusi (READ fazasi).
+    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
+      idempotencyKey,
+    });
+
     t.set(userRef, {
       bonusBalance: next,
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1512,6 +1533,17 @@ exports.creditSupplier = functions.https.onCall(async (data, context) => {
       meta: { note, productKind: module },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: adminUid,
+    });
+
+    // Ledger ko'zgusi (WRITE fazasi) — Dr admin_clearing / Cr passenger_credit.
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: amount,
+      kind: 'supplier_credit',
+      refType: 'supplier_day',
+      refId: dateKey,
+      meta: { module: safeMod, note },
+      postedBy: adminUid,
+      postedRole: 'admin',
     });
 
     t.set(idemRef, {
@@ -1577,6 +1609,11 @@ exports.debitForOrder = functions.https.onCall(async (data, context) => {
     }
     const next = prev - amount;
 
+    // Ledger ko'zgusi (READ fazasi).
+    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
+      idempotencyKey,
+    });
+
     t.set(userRef, {
       bonusBalance: next,
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1591,6 +1628,17 @@ exports.debitForOrder = functions.https.onCall(async (data, context) => {
       meta: {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: 'client',
+    });
+
+    // Ledger ko'zgusi (WRITE fazasi) — Dr passenger_credit / Cr admin_clearing.
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: -amount,
+      kind: 'purchase_debit',
+      refType,
+      refId,
+      meta: { module },
+      postedBy: callerUid || 'client',
+      postedRole: 'client',
     });
 
     t.set(idemRef, {
@@ -3066,6 +3114,12 @@ exports.confirmPayout = functions.https.onCall(async (data, context) => {
     const next = prev - amount;
     const ledgerId = db.collection('users').doc(uid).collection('wallet_ledger').doc().id;
 
+    // Ledger ko'zgusi (READ fazasi) — naqd echish: funding = admin_cash.
+    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
+      idempotencyKey,
+      fundingAccount: 'admin_cash',
+    });
+
     t.set(userRef, {
       bonusBalance: next,
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -3080,6 +3134,17 @@ exports.confirmPayout = functions.https.onCall(async (data, context) => {
       meta: {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: adminUid,
+    });
+
+    // Ledger ko'zgusi (WRITE fazasi) — Dr passenger_credit / Cr admin_cash.
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: -amount,
+      kind: 'payout_paid',
+      refType: 'payout_request',
+      refId: requestId,
+      meta: { module: 'admin' },
+      postedBy: adminUid,
+      postedRole: 'admin',
     });
 
     t.update(reqRef, {

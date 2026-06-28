@@ -268,6 +268,96 @@ async function postEntry(db, entryInput, options = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Bonus (passenger_credit) ledger ko'zgusi — ikki-fazali, tx-aware (Qadam 5).
+//
+// Mavjud to'lov CF'lari bonusBalance + wallet_ledger ni O'ZI yozadi; bu
+// yordamchilar FAQAT ledger tomonini (journal_entries + ledger_accounts)
+// AYNI tranzaksiyada yozadi. Shu bois passenger_credit == bonusBalance
+// invarianti har bir mutatsiyada saqlanadi (har ikkisi bir xil delta, bir txn).
+//
+// Firestore qoidasi: barcha READ'lar WRITE'dan OLDIN. Shuning uchun:
+//   - prepareBonusInTx(tx, ...) — READ fazasida (hech qanday yozuvdan oldin)
+//   - commitBonusInTx(tx, ctx, ...) — WRITE fazasida
+//
+// To'liq dizayn: docs/settlement_ledger_v1_uz.md (5C, 14-bo'lim)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * READ fazasi: passenger_credit + funding hisoblari va idempotentlik (journal)
+ * holatini o'qiydi. Hech qanday yozuvdan OLDIN chaqirilishi shart.
+ */
+async function prepareBonusInTx(tx, db, uid, options = {}) {
+  const { fundingAccount = 'admin_clearing', idempotencyKey } = options;
+  if (!uid) throw new Error('prepareBonus: uid required');
+  if (!idempotencyKey) throw new Error('prepareBonus: idempotencyKey required');
+  if (!accountTypeOf(fundingAccount)) {
+    throw new Error(`prepareBonus: unknown funding "${fundingAccount}"`);
+  }
+  const pcId = passengerCreditAccount(uid);
+  const pcRef = db.collection(COL_ACCOUNTS).doc(pcId);
+  const fundRef = db.collection(COL_ACCOUNTS).doc(fundingAccount);
+  const jRef = db.collection(COL_JOURNAL).doc(`bonus:${idempotencyKey}`);
+  const [jSnap, pcSnap, fundSnap] = await Promise.all([
+    tx.get(jRef), tx.get(pcRef), tx.get(fundRef),
+  ]);
+  return {
+    uid, pcId, pcRef, fundRef, jRef, fundingAccount, idempotencyKey,
+    jExists: jSnap.exists,
+    pcPrev: pcSnap.exists ? (pcSnap.data().balance || 0) : 0,
+    fundPrev: fundSnap.exists ? (fundSnap.data().balance || 0) : 0,
+  };
+}
+
+/**
+ * WRITE fazasi: double-entry yozuvini (journal + 2 hisob balansi) yozadi.
+ * delta > 0 → kredit (Dr funding / Cr passenger_credit), pc += delta.
+ * delta < 0 → sarf  (Dr passenger_credit / Cr funding), pc -= |delta|.
+ * Journal allaqachon mavjud bo'lsa (idempotent) — hech narsa yozmaydi.
+ */
+function commitBonusInTx(tx, ctx, input = {}) {
+  if (ctx.jExists) return { idempotent: true, pcBalance: ctx.pcPrev };
+  const {
+    delta, kind, refType = '', refId = '', meta = {},
+    postedBy = 'system', postedRole = 'system',
+  } = input;
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error('commitBonus: delta must be non-zero integer');
+  }
+  const amount = Math.abs(delta);
+  const credit = delta > 0;
+  const legs = credit
+    ? [{ account: ctx.fundingAccount, dr: amount }, { account: ctx.pcId, cr: amount }]
+    : [{ account: ctx.pcId, dr: amount }, { account: ctx.fundingAccount, cr: amount }];
+  const pcNext = ctx.pcPrev + (credit ? amount : -amount);
+  const fundNext = ctx.fundPrev + naturalDelta(
+      ctx.fundingAccount, credit ? amount : 0, credit ? 0 : amount);
+  const ts = admin.firestore.FieldValue.serverTimestamp();
+  tx.set(ctx.jRef, {
+    ts,
+    kind,
+    idempotencyKey: ctx.idempotencyKey,
+    refType,
+    refId,
+    postedBy,
+    postedRole,
+    amount,
+    legs,
+    meta,
+    status: 'posted',
+  });
+  tx.set(ctx.pcRef, {
+    type: 'liability', ownerUid: ctx.uid, balance: pcNext, updatedAt: ts,
+  }, { merge: true });
+  tx.set(ctx.fundRef, {
+    type: accountTypeOf(ctx.fundingAccount),
+    ownerUid: ownerUidOf(ctx.fundingAccount),
+    balance: fundNext,
+    updatedAt: ts,
+  }, { merge: true });
+  return { idempotent: false, pcBalance: pcNext };
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Float sozlamalari va zona siyosati (settings/settlement).
 // To'liq dizayn: docs/settlement_ledger_v1_uz.md (8-bo'lim)
 // ─────────────────────────────────────────────────────────────────────
@@ -400,6 +490,8 @@ module.exports = {
   driverFloatAccount,
   buildEntry,
   postEntry,
+  prepareBonusInTx,
+  commitBonusInTx,
   getConfig,
   floatZone,
   settlementEnabled,

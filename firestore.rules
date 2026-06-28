@@ -1514,8 +1514,14 @@ service cloud.firestore {
     }
 
     // Trip settlement holati (state machine) — CF boshqaradi.
+    // O'qish: finance YOKI shu settlement tarafi (yo'lovchi/haydovchi) —
+    // ilovada ko'rib tasdiqlash uchun. Yozuv faqat CF (confirm/cancel CF orqali).
     match /settlements/{settlementId} {
-      allow read: if isFinanceReader();
+      allow read: if isFinanceReader()
+          || (isAuth() && (
+                phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.passengerUid)
+                || phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.driverUid)
+              ));
       allow create, update, delete: if false; // CF (Admin SDK) only
     }
 

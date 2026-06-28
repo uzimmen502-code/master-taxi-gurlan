@@ -7703,3 +7703,231 @@ exports.driverFloatStatus = functions.https.onCall(async (data, context) => {
   }
   return floatStatusOf(driverUid);
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Settlement Ledger — Trip settlement (Qadam 3).
+//   openSettlement    — haydovchi Pending settlement yaratadi (pul ko'chmaydi)
+//   confirmSettlement — yo'lovchi tasdiqlaydi → Dr driver_float / Cr
+//                       passenger_credit ATOMAR post + state 'completed'
+//   cancelSettlement  — yo'lovchi/haydovchi/admin bekor qiladi (Pending → Cancelled)
+//
+// Faqat IDENTIFIKATSIYALANGAN foydalanuvchilar (users hujjati mavjud).
+// Online: float manfiyga tushmaydi (assert). To'liq dizayn:
+// docs/settlement_ledger_v1_uz.md (5–7 bo'lim)
+// ─────────────────────────────────────────────────────────────────────
+
+/** Auth token'dan chaqiruvchi uid (998 + 9). */
+function requireCallerUid(context) {
+  if (!context || !context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 12) {
+    throw new functions.https.HttpsError('unauthenticated', 'Phone token required');
+  }
+  return uid;
+}
+
+/** Identifikatsiyalangan = `users/{uid}` hujjati mavjud. */
+async function isIdentifiedUser(uid) {
+  const doc = await db.collection('users').doc(uid).get();
+  return doc.exists;
+}
+
+exports.openSettlement = functions.https.onCall(async (data, context) => {
+  const driverUid = requireCallerUid(context);
+  const passengerUid = canonicalUid(data && (data.passengerUid || data.passengerPhone));
+  const tripId = String((data && data.tripId) || '').trim();
+  const opId = String((data && data.opId) || '').trim();
+  const totalChange = Math.trunc(Number((data && data.totalChange) || 0));
+  const cashGiven = Math.trunc(Number((data && data.cashGiven) || 0));
+  const settlementAmount = totalChange - cashGiven;
+
+  if (!passengerUid || passengerUid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'passengerUid noto\'g\'ri');
+  }
+  if (passengerUid === driverUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'driver == passenger');
+  }
+  if (!tripId) {
+    throw new functions.https.HttpsError('invalid-argument', 'tripId kerak');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId (idempotency key) kerak');
+  }
+  if (!Number.isInteger(totalChange) || totalChange <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'totalChange musbat bo\'lsin');
+  }
+  if (!Number.isInteger(cashGiven) || cashGiven < 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'cashGiven >= 0 bo\'lsin');
+  }
+  if (!Number.isInteger(settlementAmount) || settlementAmount <= 0) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'settlementAmount musbat bo\'lsin (cashGiven < totalChange)');
+  }
+
+  if (!(await isIdentifiedUser(driverUid))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Haydovchi identifikatsiyadan o\'tmagan');
+  }
+  if (!(await isIdentifiedUser(passengerUid))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Yo\'lovchi identifikatsiyadan o\'tmagan');
+  }
+
+  const status = await floatStatusOf(driverUid);
+  if (!status.settlementEnabled) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Float kritik — settlement o\'chiq, faqat naqd');
+  }
+  if (status.balance < settlementAmount) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Float yetarli emas — qolganini naqd qaytaring');
+  }
+
+  const ref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
+  const created = await db.runTransaction(async (tx) => {
+    const ex = await tx.get(ref);
+    if (ex.exists) return false; // idempotent
+    tx.set(ref, {
+      tripId,
+      driverUid,
+      passengerUid,
+      totalChange,
+      cashGiven,
+      settlementAmount,
+      state: 'pending',
+      createdBy: driverUid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      journalEntryId: '',
+    });
+    return true;
+  });
+
+  return {
+    ok: true,
+    idempotent: !created,
+    settlementId: opId,
+    state: 'pending',
+    settlementAmount,
+    floatBalance: status.balance,
+    floatZone: status.zone,
+  };
+});
+
+exports.confirmSettlement = functions.https.onCall(async (data, context) => {
+  const callerUid = requireCallerUid(context);
+  const settlementId = String((data && data.settlementId) || '').trim();
+  if (!settlementId) {
+    throw new functions.https.HttpsError('invalid-argument', 'settlementId kerak');
+  }
+
+  const sref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(settlementId);
+  const snap = await sref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Settlement topilmadi');
+  }
+  const s = snap.data() || {};
+  if (s.passengerUid !== callerUid) {
+    throw new functions.https.HttpsError(
+        'permission-denied', 'Faqat yo\'lovchi tasdiqlay oladi');
+  }
+  if (s.state !== 'pending') {
+    throw new functions.https.HttpsError(
+        'failed-precondition', `Settlement holati: ${s.state} (pending kerak)`);
+  }
+  const amount = Math.trunc(Number(s.settlementAmount || 0));
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('failed-precondition', 'settlementAmount noto\'g\'ri');
+  }
+
+  const floatAcc = settlementLedger.driverFloatAccount(s.driverUid);
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `settle:${settlementId}`,
+    kind: 'trip_settlement',
+    refType: 'settlement',
+    refId: settlementId,
+    postedBy: callerUid,
+    postedRole: 'passenger',
+    legs: [
+      { account: floatAcc, dr: amount },
+      { account: settlementLedger.passengerCreditAccount(s.passengerUid), cr: amount },
+    ],
+  }, {
+    mirrorBonus: true,
+    walletLedgerType: 'settlement_credit',
+    meta: { tripId: s.tripId, settlementId, driverUid: s.driverUid },
+    precheck: async (tx) => {
+      const fresh = await tx.get(sref);
+      const fd = fresh.exists ? (fresh.data() || {}) : {};
+      if (!fresh.exists || fd.state !== 'pending') {
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'Settlement endi pending emas');
+      }
+      return fd;
+    },
+    assert: ({ accounts }) => {
+      const fa = accounts.get(floatAcc);
+      if (fa && fa.next < 0) {
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'Float yetarli emas (online: manfiylik mumkin emas)');
+      }
+    },
+    onCommit: (tx, { entryId }) => {
+      tx.update(sref, {
+        state: 'completed',
+        confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        journalEntryId: entryId,
+      });
+    },
+  });
+
+  return {
+    ok: true,
+    idempotent: res.idempotent,
+    settlementId,
+    state: 'completed',
+    amount,
+  };
+});
+
+exports.cancelSettlement = functions.https.onCall(async (data, context) => {
+  const callerUid = requireCallerUid(context);
+  const settlementId = String((data && data.settlementId) || '').trim();
+  const reason = String((data && data.reason) || '').slice(0, 200);
+  if (!settlementId) {
+    throw new functions.https.HttpsError('invalid-argument', 'settlementId kerak');
+  }
+
+  const sref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(settlementId);
+  const callerRoleDoc = await db.collection('users').doc(callerUid).get();
+  const callerRole = (callerRoleDoc.data() || {}).role || 'user';
+  const isAdminCaller = ['admin', 'superadmin', 'finance'].includes(callerRole);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(sref);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Settlement topilmadi');
+    }
+    const s = snap.data() || {};
+    if (!isAdminCaller
+        && s.passengerUid !== callerUid
+        && s.driverUid !== callerUid) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Faqat tomonlar yoki admin bekor qiladi');
+    }
+    if (s.state !== 'pending') {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Settlement holati: ${s.state} (pending kerak)`);
+    }
+    tx.update(sref, {
+      state: 'cancelled',
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      cancelledBy: callerUid,
+      cancelReason: reason,
+    });
+  });
+
+  return { ok: true, settlementId, state: 'cancelled' };
+});

@@ -14,6 +14,7 @@ const admin = require('firebase-admin');
 
 const COL_ACCOUNTS = 'ledger_accounts';
 const COL_JOURNAL = 'journal_entries';
+const COL_SETTLEMENTS = 'settlements';
 
 /**
  * Hisob turlari va ularning "normal" tomoni:
@@ -132,16 +133,23 @@ function buildEntry(input) {
  *   walletLedgerType (default null)  — berilsa, users/{uid}/wallet_ledger ga
  *                                      foydalanuvchiga ko'rinadigan yozuv qo'shadi
  *   meta             (default {})    — qo'shimcha ma'lumot
+ *   precheck         (default null)  — TRANSACTION ICHIDA, yozuvdan OLDIN (READ
+ *                                      fazasi): precheck(tx) → pre. Settlement
+ *                                      holatini o'qish/validatsiya uchun.
  *   assert           (default null)  — TRANSACTION ICHIDA chaqiriladi:
- *                                      assert({ accounts: Map(id -> {prev,delta,next}) }).
+ *                                      assert({ accounts: Map(id -> {prev,delta,next}), pre }).
  *                                      Error tashlasa, post bekor qilinadi (atomar
  *                                      precondition: float cap, manfiylik, h.k.)
+ *   onCommit         (default null)  — TRANSACTION ICHIDA, yozuv fazasida:
+ *                                      onCommit(tx, { entryId, balances, pre }).
+ *                                      Settlement holatini ATOMAR yangilash uchun.
  *
- * Qaytaradi: { id, idempotent, amount, balances } — balances: { accountId: next }.
+ * Qaytaradi: { id, idempotent, amount, balances, pre }.
  */
 async function postEntry(db, entryInput, options = {}) {
   const {
-    mirrorBonus = true, walletLedgerType = null, meta = {}, assert = null,
+    mirrorBonus = true, walletLedgerType = null, meta = {},
+    assert = null, precheck = null, onCommit = null,
   } = options;
   const entry = buildEntry(entryInput);
   const entryRef = db.collection(COL_JOURNAL).doc(entry.idempotencyKey);
@@ -150,8 +158,13 @@ async function postEntry(db, entryInput, options = {}) {
     // 1) Idempotentlik — allaqachon postlangan bo'lsa, hech narsa qilmaymiz.
     const existing = await tx.get(entryRef);
     if (existing.exists) {
-      return { id: entryRef.id, idempotent: true, amount: entry.amount, balances: {} };
+      return {
+        id: entryRef.id, idempotent: true, amount: entry.amount, balances: {}, pre: null,
+      };
     }
+
+    // READ fazasi: caller validatsiyasi (settlement holati va h.k.) — yozuvdan oldin.
+    const pre = (typeof precheck === 'function') ? await precheck(tx) : null;
 
     // Hisob bo'yicha umumiy delta'lar.
     const accDelta = new Map();
@@ -188,7 +201,7 @@ async function postEntry(db, entryInput, options = {}) {
 
     // Atomar precondition (ixtiyoriy): float cap, manfiylik tekshiruvi va h.k.
     if (typeof assert === 'function') {
-      await assert({ accounts: state });
+      await assert({ accounts: state, pre });
     }
 
     // 3) Yozuvlar.
@@ -238,7 +251,12 @@ async function postEntry(db, entryInput, options = {}) {
       }
     }
 
-    return { id: entryRef.id, idempotent: false, amount: entry.amount, balances };
+    // Qo'shimcha atomar yozuvlar (ixtiyoriy): settlement holatini yangilash.
+    if (typeof onCommit === 'function') {
+      await onCommit(tx, { entryId: entryRef.id, balances, pre });
+    }
+
+    return { id: entryRef.id, idempotent: false, amount: entry.amount, balances, pre };
   });
 }
 
@@ -353,6 +371,7 @@ async function reconcile(db) {
 module.exports = {
   COL_ACCOUNTS,
   COL_JOURNAL,
+  COL_SETTLEMENTS,
   ACCOUNT_TYPES,
   DEFAULT_CONFIG,
   accountTypeOf,

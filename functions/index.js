@@ -6,6 +6,8 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
+const settlementLedger = require('./settlement_ledger');
+
 const DEVICE_BINDING_MAX_FAILED = 5;
 const DEVICE_BINDING_BLOCK_MS = 24 * 60 * 60 * 1000;
 
@@ -7561,3 +7563,18 @@ exports.releaseStaleReservations = functions.pubsub
     console.log(`releaseStaleReservations: ${count} trip(s) released`);
     return null;
   });
+
+// ─────────────────────────────────────────────────────────────────────
+// Settlement Ledger — sverka (reconciliation).
+// Faqat admin/superadmin/finance/auditor o'qiy oladi. Invariantlarni
+// tekshiradi: Σdr==Σcr, buxgalteriya tengligi, passenger_credit proeksiyasi.
+// To'liq dizayn: docs/settlement_ledger_v1_uz.md
+// ─────────────────────────────────────────────────────────────────────
+exports.reconcileLedger = functions.https.onCall(async (data, context) => {
+  await requireCallerRoles(
+      context,
+      ['admin', 'superadmin', 'finance', 'auditor'],
+      'Finance/audit role required',
+  );
+  return settlementLedger.reconcile(db);
+});

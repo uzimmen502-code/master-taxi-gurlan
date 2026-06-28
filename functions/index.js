@@ -7612,12 +7612,21 @@ async function floatStatusOf(driverUid) {
   const ref = db.collection(settlementLedger.COL_ACCOUNTS)
       .doc(settlementLedger.driverFloatAccount(driverUid));
   const snap = await ref.get();
-  const balance = snap.exists ? (snap.data().balance || 0) : 0;
+  const a = snap.exists ? (snap.data() || {}) : {};
+  const balance = a.balance || 0;
+  const lastTopUpAmount = a.lastTopUpAmount || 0;
+  const dto = a.deferredTimeoutAt && a.deferredTimeoutAt.toMillis
+      ? a.deferredTimeoutAt.toMillis() : null;
   return {
     driverUid,
     balance,
     zone: settlementLedger.floatZone(balance, config),
     settlementEnabled: settlementLedger.settlementEnabled(balance, config),
+    blocked: balance < 0,
+    blockedReason: balance < 0 ? (a.blockedReason || 'deferred_debt') : '',
+    lastTopUpAmount,
+    deferredFloor: settlementLedger.deferredFloor(lastTopUpAmount, config),
+    deferredTimeoutAt: dto,
     config,
   };
 }
@@ -7650,6 +7659,22 @@ exports.floatTopUp = functions.https.onCall(async (data, context) => {
             'failed-precondition',
             `Float chegarasidan oshib ketadi (max ${config.floatMax})`);
       }
+    },
+    // Depozit: oxirgi summa eslab qolinadi (deferred floor uchun). Balans >= 0
+    // bo'lsa, deferred blok yechiladi.
+    accountExtras: (id, st) => {
+      if (id !== floatAcc) return null;
+      const cleared = st.next >= 0;
+      return {
+        lastTopUpAmount: amount,
+        blocked: !cleared,
+        ...(cleared ? { blockedReason: '', deferredTimeoutAt: null } : {}),
+      };
+    },
+    onCommit: (tx, { balances }) => {
+      const next = balances[floatAcc] || 0;
+      tx.set(db.collection('users').doc(driverUid),
+          { settlementBlocked: next < 0 }, { merge: true });
     },
   });
 
@@ -7948,3 +7973,168 @@ exports.cancelSettlement = functions.https.onCall(async (data, context) => {
 
   return { ok: true, settlementId, state: 'cancelled' };
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Settlement Ledger — Deferred (offline-lite, Qadam 4).
+//   submitDeferredSettlement — haydovchi internet qaytgach, naqd qaytara
+//     olmagan qaytimni post qiladi. Float MANFIYGA tushishi mumkin (qarz),
+//     ammo FAQAT headroom ichida: floor = -(oxirgi depozit %i). Floordan
+//     oshsa → rad (naqd/top-up shart). Float < 0 bo'lsa → haydovchi BLOK
+//     (yangi trip yo'q) + reconcile taymeri (deferredTimeoutHours).
+//   settlementDeferredWatch — muddati o'tgan manfiy floatlarni
+//     ledger_exceptions ga belgilaydi (finance ko'rishi uchun).
+//
+// Faqat IDENTIFIKATSIYALANGAN tomonlar. Yo'lovchi onlayn tasdiqlay olmagani
+// uchun haydovchi ATTESTATSIYA qiladi (V1, ishonchli kontur).
+// To'liq dizayn: docs/settlement_ledger_v1_uz.md (7-bo'lim)
+// ─────────────────────────────────────────────────────────────────────
+exports.submitDeferredSettlement = functions.https.onCall(async (data, context) => {
+  const driverUid = requireCallerUid(context);
+  const passengerUid = canonicalUid(data && (data.passengerUid || data.passengerPhone));
+  const tripId = String((data && data.tripId) || '').trim();
+  const opId = String((data && data.opId) || '').trim();
+  const settlementAmount = Math.trunc(Number((data && data.settlementAmount) || 0));
+
+  if (!passengerUid || passengerUid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'passengerUid noto\'g\'ri');
+  }
+  if (passengerUid === driverUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'driver == passenger');
+  }
+  if (!tripId) {
+    throw new functions.https.HttpsError('invalid-argument', 'tripId kerak');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId (idempotency key) kerak');
+  }
+  if (!Number.isInteger(settlementAmount) || settlementAmount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'settlementAmount musbat bo\'lsin');
+  }
+  if (!(await isIdentifiedUser(driverUid))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Haydovchi identifikatsiyadan o\'tmagan');
+  }
+  if (!(await isIdentifiedUser(passengerUid))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Yo\'lovchi identifikatsiyadan o\'tmagan');
+  }
+
+  const config = await settlementLedger.getConfig(db);
+  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
+  const faRef = db.collection(settlementLedger.COL_ACCOUNTS).doc(floatAcc);
+  const faSnap = await faRef.get();
+  const lastTopUpAmount = faSnap.exists ? (faSnap.data().lastTopUpAmount || 0) : 0;
+  const floor = settlementLedger.deferredFloor(lastTopUpAmount, config);
+
+  const sref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
+  const tripRef = db.collection('trips').doc(tripId);
+  const timeoutAt = admin.firestore.Timestamp.fromMillis(
+      Date.now() + (config.deferredTimeoutHours * 3600 * 1000));
+
+  let resultNext = 0;
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `settle:${opId}`,
+    kind: 'trip_settlement_deferred',
+    refType: 'settlement',
+    refId: opId,
+    postedBy: driverUid,
+    postedRole: 'driver',
+    legs: [
+      { account: floatAcc, dr: settlementAmount },
+      { account: settlementLedger.passengerCreditAccount(passengerUid), cr: settlementAmount },
+    ],
+  }, {
+    mirrorBonus: true,
+    walletLedgerType: 'settlement_credit',
+    meta: { tripId, settlementId: opId, driverUid, deferred: true },
+    // Headroom: float floordan past tushmasin (deferred chegarasi).
+    assert: ({ accounts }) => {
+      const fa = accounts.get(floatAcc);
+      if (fa && fa.next < floor) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Deferred chegarasidan oshdi (eng past float ${floor}) — naqd/top-up shart`);
+      }
+    },
+    // Float manfiy bo'lsa → blok + reconcile taymeri; aks holda toza.
+    accountExtras: (id, st) => {
+      if (id !== floatAcc) return null;
+      const blocked = st.next < 0;
+      return blocked
+        ? { blocked: true, blockedReason: 'deferred_debt', deferredTimeoutAt: timeoutAt }
+        : { blocked: false, blockedReason: '', deferredTimeoutAt: null };
+    },
+    onCommit: (tx, { entryId, balances }) => {
+      const next = balances[floatAcc] || 0;
+      resultNext = next;
+      tx.set(sref, {
+        tripId,
+        driverUid,
+        passengerUid,
+        totalChange: settlementAmount,
+        cashGiven: 0,
+        settlementAmount,
+        state: 'completed',
+        origin: 'deferred',
+        attestedBy: 'driver',
+        createdBy: driverUid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        journalEntryId: entryId,
+      }, { merge: true });
+      tx.set(tripRef, {
+        settlementId: opId,
+        settlementState: 'completed',
+        settlementAmount,
+      }, { merge: true });
+      tx.set(db.collection('users').doc(driverUid),
+          { settlementBlocked: next < 0 }, { merge: true });
+    },
+  });
+
+  const status = await floatStatusOf(driverUid);
+  return {
+    ok: true,
+    idempotent: res.idempotent,
+    settlementId: opId,
+    state: 'completed',
+    amount: settlementAmount,
+    floatBalance: res.idempotent ? status.balance : resultNext,
+    blocked: status.blocked,
+    deferredFloor: floor,
+  };
+});
+
+// Muddati o'tgan deferred qarzlarni (manfiy float) belgilaydi — finance ko'rishi uchun.
+exports.settlementDeferredWatch = functions.pubsub
+    .schedule('every 6 hours')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => {
+      const now = Date.now();
+      const snap = await db.collection(settlementLedger.COL_ACCOUNTS)
+          .where('blocked', '==', true)
+          .get();
+      const batch = db.batch();
+      let n = 0;
+      snap.forEach((d) => {
+        const a = d.data() || {};
+        if (!d.id.startsWith('driver_float:')) return;
+        const to = a.deferredTimeoutAt && a.deferredTimeoutAt.toMillis
+            ? a.deferredTimeoutAt.toMillis() : null;
+        if ((a.balance || 0) < 0 && to && to <= now) {
+          const uid = a.ownerUid || d.id.split(':').slice(1).join(':');
+          batch.set(db.collection('ledger_exceptions').doc(`deferred_timeout:${uid}`), {
+            type: 'deferred_timeout',
+            driverUid: uid,
+            balance: a.balance || 0,
+            deferredTimeoutAt: a.deferredTimeoutAt,
+            detectedAt: admin.firestore.FieldValue.serverTimestamp(),
+            resolved: false,
+          }, { merge: true });
+          n++;
+        }
+      });
+      if (n > 0) await batch.commit();
+      console.log(`settlementDeferredWatch: ${n} timed-out deferred debt(s)`);
+      return null;
+    });

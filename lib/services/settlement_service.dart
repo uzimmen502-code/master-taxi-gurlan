@@ -41,6 +41,26 @@ class SettlementService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
+  /// Deferred (offline-lite): internet qaytgach, naqd qaytarib bo'lmagan
+  /// qaytimni post qiladi. Float manfiyga (qarz) tushishi mumkin — faqat
+  /// headroom (oxirgi depozit %i) ichida. Manfiy bo'lsa haydovchi bloklanadi.
+  /// Qaytaradi: { ok, idempotent, settlementId, state, amount, floatBalance, blocked, deferredFloor }
+  static Future<Map<String, dynamic>> submitDeferredSettlement({
+    required String passengerPhone,
+    required String tripId,
+    required String opId,
+    required int settlementAmount,
+  }) async {
+    final callable = _fn.httpsCallable('submitDeferredSettlement');
+    final result = await callable.call(<String, dynamic>{
+      'passengerPhone': passengerPhone,
+      'tripId': tripId,
+      'opId': opId,
+      'settlementAmount': settlementAmount,
+    });
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   /// Settlement'ni bekor qiladi (yo'lovchi/haydovchi/admin) — pul ko'chmaydi.
   static Future<Map<String, dynamic>> cancelSettlement({
     required String settlementId,

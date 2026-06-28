@@ -143,13 +143,16 @@ function buildEntry(input) {
  *   onCommit         (default null)  — TRANSACTION ICHIDA, yozuv fazasida:
  *                                      onCommit(tx, { entryId, balances, pre }).
  *                                      Settlement holatini ATOMAR yangilash uchun.
+ *   accountExtras    (default null)  — accountExtras(accountId, {prev,delta,next})
+ *                                      → hisob hujjatiga qo'shimcha merge maydonlari
+ *                                      (masalan float blok/lastTopUp) — ikkilanmas yozuv.
  *
  * Qaytaradi: { id, idempotent, amount, balances, pre }.
  */
 async function postEntry(db, entryInput, options = {}) {
   const {
     mirrorBonus = true, walletLedgerType = null, meta = {},
-    assert = null, precheck = null, onCommit = null,
+    assert = null, precheck = null, onCommit = null, accountExtras = null,
   } = options;
   const entry = buildEntry(entryInput);
   const entryRef = db.collection(COL_JOURNAL).doc(entry.idempotencyKey);
@@ -221,11 +224,15 @@ async function postEntry(db, entryInput, options = {}) {
 
     for (let i = 0; i < accIds.length; i++) {
       const id = accIds[i];
+      const extra = (typeof accountExtras === 'function')
+        ? (accountExtras(id, state.get(id)) || {})
+        : {};
       tx.set(accRefs[i], {
         type: accountTypeOf(id),
         ownerUid: ownerUidOf(id),
         balance: state.get(id).next,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...extra,
       }, { merge: true });
     }
 
@@ -309,6 +316,18 @@ function settlementEnabled(balance, config) {
 }
 
 /**
+ * Deferred (offline-lite) uchun ruxsat etilgan ENG PAST float (manfiy).
+ * = -(oxirgi depozitning deferredNegativeFloatPct %i), butun songacha.
+ * lastTopUpAmount yo'q bo'lsa → 0 (deferred ruxsat etilmaydi, naqd shart).
+ */
+function deferredFloor(lastTopUpAmount, config) {
+  const base = numOr(lastTopUpAmount, 0);
+  if (base <= 0) return 0;
+  const pct = numOr(config.deferredNegativeFloatPct, 0);
+  return -Math.round((base * pct) / 100);
+}
+
+/**
  * Sverka (reconciliation): invariantlarni tekshiradi.
  *   1) Global Σdebit == Σcredit
  *   2) Buxgalteriya tengligi: Σ asset balanslar == Σ liability balanslar
@@ -384,5 +403,6 @@ module.exports = {
   getConfig,
   floatZone,
   settlementEnabled,
+  deferredFloor,
   reconcile,
 };

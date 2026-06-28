@@ -1531,5 +1531,12 @@ service cloud.firestore {
       allow create, update, delete: if false; // CF (Admin SDK) only
     }
 
+    // Deferred (offline-lite) istisnolari — muddati o'tgan manfiy floatlar.
+    // settlementDeferredWatch (CF) yozadi, finance ko'radi.
+    match /ledger_exceptions/{exceptionId} {
+      allow read: if isFinanceReader();
+      allow create, update, delete: if false; // CF (Admin SDK) only
+    }
+
   }
 }

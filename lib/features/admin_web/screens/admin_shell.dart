@@ -29,6 +29,7 @@ import 'courier_orders_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'driver_applications_screen.dart';
+import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
@@ -185,6 +186,11 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Payout ва тушум',
     ),
     _AdminSection(
+      label: 'Finance Center',
+      icon: Icons.account_balance,
+      description: 'Settlement Ledger — float, settlement, журнал',
+    ),
+    _AdminSection(
       label: 'Birthday bonus',
       icon: Icons.card_giftcard,
       description: 'Йиллик туғилган кун бонуси',
@@ -327,6 +333,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Молия') {
       return const PayoutManagementScreen();
+    }
+    if (section.label == 'Finance Center') {
+      return const FinanceCenterScreen();
     }
     if (section.label == 'Birthday bonus') {
       return const BirthdayBonusScreen();

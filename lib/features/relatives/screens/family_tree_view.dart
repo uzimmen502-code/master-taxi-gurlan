@@ -1,10 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 
 import '../../../models/relative_person.dart';
 
-/// 🌳 Nasab daraxti — ota/ona bog'lanishlari asosida graf vizualizatsiyasi
-/// (Sugiyama layered layout — bir nechta ota-onali DAG'ni qo'llab-quvvatlaydi).
+/// 🌳 Nasab daraxti — ota/ona bog'lanishlari asosida graf vizualizatsiyasi.
+/// To'liq boshqariladigan pan/zoom: erkin surish (har tomonga), silliq
+/// animatsiyali kattalashtirish/kichraytirish, double-tap zoom, auto-fit.
 class FamilyTreeView extends StatefulWidget {
   const FamilyTreeView({
     super.key,
@@ -19,17 +22,28 @@ class FamilyTreeView extends StatefulWidget {
   State<FamilyTreeView> createState() => _FamilyTreeViewState();
 }
 
-class _FamilyTreeViewState extends State<FamilyTreeView> {
+class _FamilyTreeViewState extends State<FamilyTreeView>
+    with SingleTickerProviderStateMixin {
   static const _accent = Color(0xFF6A4C93);
+  static const double _minScale = 0.1;
+  static const double _maxScale = 4.0;
 
   late Graph _graph;
   late SugiyamaConfiguration _config;
   late Map<String, RelativePerson> _byId;
   int _connected = 0;
+  String _sig = '';
 
   final _transform = TransformationController();
-  late final GraphViewController _gvController =
-      GraphViewController(transformationController: _transform);
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+  Animation<Matrix4>? _matrixAnim;
+
+  Size _viewport = Size.zero;
+  Offset _doubleTapPos = Offset.zero;
+  bool _didInitialFit = false;
 
   @override
   void initState() {
@@ -40,37 +54,46 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
   @override
   void didUpdateWidget(covariant FamilyTreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final prev = _connected;
-    _build();
-    // Yangi qarindosh qo'shilsa — qayta moslab ko'rsatamiz.
-    if (_connected != prev && _connected > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _gvController.zoomToFit();
-      });
+    final newSig = _signatureOf(widget.people);
+    if (newSig != _sig) {
+      _build();
+      // Tuzilma o'zgardi — qayta moslab ko'rsatamiz.
+      _didInitialFit = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fit());
     }
   }
 
   @override
   void dispose() {
-    // _transform GraphView tomonidan dispose qilinadi (controller orqali).
+    _anim.dispose();
+    _transform.dispose();
     super.dispose();
   }
 
-  void _zoomBy(double factor) {
-    final box = context.findRenderObject() as RenderBox?;
-    final size = box?.size ?? const Size(320, 480);
-    final center = Offset(size.width / 2, size.height / 2);
-    final current = _transform.value.clone();
-    final newScale = current.getMaxScaleOnAxis() * factor;
-    if (newScale < 0.08 || newScale > 8) return;
-    final zoom = Matrix4.identity()
-      ..translateByDouble(center.dx, center.dy, 0, 1)
-      ..scaleByDouble(factor, factor, 1, 1)
-      ..translateByDouble(-center.dx, -center.dy, 0, 1);
-    _transform.value = zoom.multiplied(current);
+  // ---- Graf qurish ----
+
+  String _signatureOf(List<RelativePerson> ps) {
+    final b = StringBuffer();
+    for (final p in ps) {
+      b
+        ..write(p.id)
+        ..write('|')
+        ..write(p.fatherId ?? '')
+        ..write(',')
+        ..write(p.motherId ?? '')
+        ..write(',')
+        ..write(p.spouseId ?? '')
+        ..write(',')
+        ..write(p.fullName)
+        ..write(',')
+        ..write(p.photoUrl)
+        ..write(';');
+    }
+    return b.toString();
   }
 
   void _build() {
+    _sig = _signatureOf(widget.people);
     _byId = {for (final p in widget.people) p.id: p};
     _graph = Graph();
     final nodes = <String, Node>{};
@@ -94,64 +117,158 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
       ..orientation = SugiyamaConfiguration.ORIENTATION_TOP_BOTTOM;
   }
 
+  // ---- Pan / Zoom boshqaruvi ----
+
+  void _animateTo(Matrix4 target) {
+    _matrixAnim = Matrix4Tween(begin: _transform.value, end: target)
+        .animate(CurvedAnimation(parent: _anim, curve: Curves.easeInOut));
+    void tick() {
+      _transform.value = _matrixAnim!.value;
+      if (!_anim.isAnimating) {
+        _matrixAnim?.removeListener(tick);
+      }
+    }
+
+    _matrixAnim!.addListener(tick);
+    _anim
+      ..reset()
+      ..forward();
+  }
+
+  double get _scale => _transform.value.getMaxScaleOnAxis();
+
+  void _zoomAround(Offset focal, double targetScale) {
+    final clamped = targetScale.clamp(_minScale, _maxScale);
+    final scenePt = _transform.toScene(focal);
+    final tx = focal.dx - scenePt.dx * clamped;
+    final ty = focal.dy - scenePt.dy * clamped;
+    final m = Matrix4.identity()
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(clamped, clamped, 1, 1);
+    _animateTo(m);
+  }
+
+  void _zoomBy(double factor) {
+    final center = Offset(_viewport.width / 2, _viewport.height / 2);
+    _zoomAround(center, _scale * factor);
+  }
+
+  void _handleDoubleTap() {
+    // Kichik bo'lsa — yaqinlashtir; katta bo'lsa — moslab qaytar.
+    if (_scale < 1.4) {
+      _zoomAround(_doubleTapPos, 2.0);
+    } else {
+      _fit();
+    }
+  }
+
+  void _fit() {
+    if (_viewport.isEmpty || _connected == 0) return;
+    final bounds = _graph.calculateGraphBounds();
+    if (!bounds.width.isFinite ||
+        !bounds.height.isFinite ||
+        bounds.width <= 0 ||
+        bounds.height <= 0) {
+      return;
+    }
+    const pad = 0.86;
+    final scale = (math.min(
+      _viewport.width / bounds.width,
+      _viewport.height / bounds.height,
+    ) *
+            pad)
+        .clamp(_minScale, _maxScale);
+    final tx = (_viewport.width - bounds.width * scale) / 2 - bounds.left * scale;
+    final ty =
+        (_viewport.height - bounds.height * scale) / 2 - bounds.top * scale;
+    final m = Matrix4.identity()
+      ..translateByDouble(tx, ty, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+    _didInitialFit = true;
+    _animateTo(m);
+  }
+
+  // ---- UI ----
+
   @override
   Widget build(BuildContext context) {
     if (_connected == 0) {
       return _hint();
     }
-    return Container(
-      color: const Color(0xFFF5F4F8),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GraphView.builder(
-              graph: _graph,
-              algorithm: SugiyamaAlgorithm(_config),
-              controller: _gvController,
-              autoZoomToFit: true,
-              centerGraph: true,
-              paint: Paint()
-                ..color = _accent.withValues(alpha: 0.55)
-                ..strokeWidth = 1.6
-                ..style = PaintingStyle.stroke,
-              builder: (Node node) {
-                final id = node.key?.value as String?;
-                final p = id == null ? null : _byId[id];
-                if (p == null) return const SizedBox.shrink();
-                return _card(p);
-              },
-            ),
-          ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: _ZoomControls(
-              onZoomIn: () => _zoomBy(1.25),
-              onZoomOut: () => _zoomBy(0.8),
-              onFit: () => _gvController.zoomToFit(),
-              onReset: () => _gvController.resetView(),
-            ),
-          ),
-          Positioned(
-            left: 12,
-            bottom: 12,
-            child: IgnorePointer(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.82),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '☝ Сурилади · 🤏 Кенгайтиринг',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewport = Size(constraints.maxWidth, constraints.maxHeight);
+        if (!_didInitialFit) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_didInitialFit) _fit();
+          });
+        }
+        return Container(
+          color: const Color(0xFFF5F4F8),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+                  onDoubleTap: _handleDoubleTap,
+                  child: InteractiveViewer(
+                    transformationController: _transform,
+                    constrained: false,
+                    boundaryMargin: const EdgeInsets.all(1200),
+                    minScale: _minScale,
+                    maxScale: _maxScale,
+                    child: GraphView(
+                      graph: _graph,
+                      algorithm: SugiyamaAlgorithm(_config),
+                      animated: false,
+                      paint: Paint()
+                        ..color = _accent.withValues(alpha: 0.55)
+                        ..strokeWidth = 1.6
+                        ..style = PaintingStyle.stroke,
+                      builder: (Node node) {
+                        final id = node.key?.value as String?;
+                        final p = id == null ? null : _byId[id];
+                        if (p == null) return const SizedBox.shrink();
+                        return _card(p);
+                      },
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: _ZoomControls(
+                  onZoomIn: () => _zoomBy(1.3),
+                  onZoomOut: () => _zoomBy(1 / 1.3),
+                  onFit: _fit,
+                  onReset: _fit,
+                ),
+              ),
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: IgnorePointer(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '☝ Сурилади · 🤏 Кенгайтиринг · 👆👆 Якинлаштириш',
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -241,7 +358,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
   }
 }
 
-/// Daraxt uchun ekran boshqaruvi: kattalashtirish/kichraytirish, moslash, reset.
+/// Daraxt uchun ekran boshqaruvi: kattalashtirish/kichraytirish, moslash.
 class _ZoomControls extends StatelessWidget {
   const _ZoomControls({
     required this.onZoomIn,
@@ -267,8 +384,6 @@ class _ZoomControls extends StatelessWidget {
         _btn(Icons.remove, 'Кичрайтириш', onZoomOut),
         const SizedBox(height: 8),
         _btn(Icons.fit_screen_outlined, 'Экранга мослаш', onFit),
-        const SizedBox(height: 8),
-        _btn(Icons.center_focus_strong_outlined, 'Бошланғич ҳолат', onReset),
       ],
     );
   }

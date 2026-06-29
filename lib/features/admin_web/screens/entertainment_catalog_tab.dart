@@ -101,7 +101,8 @@ class _EntertainmentCatalogTabState extends State<EntertainmentCatalogTab> {
             children: [
               const Expanded(
                 child: Text(
-                  'Katalog — haydovchilar tanlaydi, yo‘lovchi offline tomosha qiladi.',
+                  'Katalog — haydovchilar tanlaydi, yo‘lovchi offline tomosha qiladi.\n'
+                  'Yuklangan video avtomatik 720p\'ga siqiladi (bir necha daqiqada).',
                   style: TextStyle(fontSize: 13),
                 ),
               ),

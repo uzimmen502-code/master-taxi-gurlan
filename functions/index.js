@@ -7581,6 +7581,236 @@ exports.updateDriverRating = functions.https.onCall(async (data, context) => {
   return { ok: true };
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// Marshrut yo'nalish narxi (flat, bir o'rin) — "birinchi haydovchi
+// belgilaydi, qolganlar o'zgartira olmaydi, faqat admin tahrirlaydi".
+//   marshrut_route_prices/{routeKey}  (routeKey = `${from}|${to}`)
+//   seedMarshrutRoutePrice      — haydovchi: narx yo'q bo'lsa seed (bir marta),
+//                                 bor bo'lsa o'z schedule/queue'siga ko'zgu.
+//   adminSetMarshrutRoutePrice  — admin/finance: tahrir + faol reyslarga tarqatish.
+// schedules.price / queue.price — faqat shu CF yozadi (fare manbai).
+// ─────────────────────────────────────────────────────────────────────
+
+const MARSHRUT_PRICE_CAP = 1000000;
+
+function marshrutRouteKey(from, to) {
+  return `${String(from || '').trim()}|${String(to || '').trim()}`;
+}
+
+exports.seedMarshrutRoutePrice = functions.https.onCall(async (data, context) => {
+  const callerUid = requireCallerUid(context);
+  const scheduleId = String((data && data.scheduleId) || '').trim();
+  const proposed = Math.trunc(Number((data && data.price) || 0));
+  if (!scheduleId) {
+    throw new functions.https.HttpsError('invalid-argument', 'scheduleId kerak');
+  }
+
+  const schedRef = db.collection('schedules').doc(scheduleId);
+  const result = await db.runTransaction(async (tx) => {
+    const schedSnap = await tx.get(schedRef);
+    if (!schedSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Reys topilmadi');
+    }
+    const sched = schedSnap.data() || {};
+    if (canonicalUid(sched.driverId) !== callerUid) {
+      throw new functions.https.HttpsError('permission-denied', 'Faqat reys egasi');
+    }
+    if ((sched.taxiType || '') !== 'marshrut') {
+      throw new functions.https.HttpsError('failed-precondition', 'Faqat marshrut');
+    }
+    const from = sched.from || '';
+    const to = sched.to || '';
+    const routeKey = marshrutRouteKey(from, to);
+    const routeRef = db.collection('marshrut_route_prices').doc(routeKey);
+    const routeSnap = await tx.get(routeRef);
+
+    let price;
+    let seeded = false;
+    if (routeSnap.exists && Number((routeSnap.data() || {}).price) > 0) {
+      // Mavjud — o'zgartirilmaydi, faqat ko'zgu.
+      price = Math.trunc(Number(routeSnap.data().price));
+    } else {
+      // Birinchi haydovchi — seed.
+      if (!Number.isInteger(proposed) || proposed <= 0 ||
+          proposed > MARSHRUT_PRICE_CAP) {
+        throw new functions.https.HttpsError(
+            'invalid-argument', 'Narx 0 dan katta va haqiqiy bo\'lsin');
+      }
+      price = proposed;
+      seeded = true;
+      tx.set(routeRef, {
+        from,
+        to,
+        price,
+        setByDriverId: callerUid,
+        setByName: sched.driverName || '',
+        lockedByAdmin: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+
+    // Ko'zgu: schedule + queue (fare manbai).
+    tx.set(schedRef,
+        {price, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+        {merge: true});
+    tx.set(db.collection('queue').doc(callerUid),
+        {price, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+        {merge: true});
+    return {price, seeded, routeKey};
+  });
+
+  return {ok: true, ...result};
+});
+
+exports.adminSetMarshrutRoutePrice = functions.https.onCall(
+    async (data, context) => {
+      const callerUid = await requireCallerRoles(
+          context, ['admin', 'superadmin', 'finance'],
+          'Admin/finance role required');
+      const from = String((data && data.from) || '').trim();
+      const to = String((data && data.to) || '').trim();
+      const price = Math.trunc(Number((data && data.price) || 0));
+      if (!from || !to) {
+        throw new functions.https.HttpsError('invalid-argument', 'from/to kerak');
+      }
+      if (!Number.isInteger(price) || price <= 0 || price > MARSHRUT_PRICE_CAP) {
+        throw new functions.https.HttpsError('invalid-argument', 'Narx noto\'g\'ri');
+      }
+      const routeKey = marshrutRouteKey(from, to);
+      await db.collection('marshrut_route_prices').doc(routeKey).set({
+        from,
+        to,
+        price,
+        lockedByAdmin: true,
+        lastEditedBy: callerUid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+
+      // Faol reyslar + navbatga tarqatish.
+      let propagated = 0;
+      const schedSnap = await db.collection('schedules')
+          .where('taxiType', '==', 'marshrut')
+          .where('isActive', '==', true)
+          .where('from', '==', from)
+          .where('to', '==', to)
+          .get();
+      const batch = db.batch();
+      schedSnap.forEach((doc) => {
+        batch.set(doc.ref,
+            {price, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+            {merge: true});
+        const driverId = canonicalUid((doc.data() || {}).driverId);
+        if (driverId) {
+          batch.set(db.collection('queue').doc(driverId),
+              {price, updatedAt: admin.firestore.FieldValue.serverTimestamp()},
+              {merge: true});
+        }
+        propagated += 1;
+      });
+      await batch.commit();
+
+      return {ok: true, routeKey, price, propagated};
+    });
+
+// ─────────────────────────────────────────────────────────────────────
+// Entertainment — yuklangan video avtomat 720p'ga siqiladi (ffmpeg).
+//   Trigger: Storage finalize (2-avlod / Eventarc — .firebasestorage.app uchun).
+//   Faqat `entertainment/*.mp4`. Loop oldini olish: `transcoded` metadata flag.
+//   Natija: o'sha path ustiga 720p yoziladi + catalog.downloadUrl yangilanadi.
+// ─────────────────────────────────────────────────────────────────────
+const {onObjectFinalized} = require('firebase-functions/v2/storage');
+
+exports.transcodeEntertainmentVideo = onObjectFinalized(
+    {
+      bucket: 'master-taxi-gurlan.firebasestorage.app',
+      region: 'us-central1',
+      memory: '4GiB',
+      timeoutSeconds: 540,
+      cpu: 2,
+    },
+    async (event) => {
+      const object = event.data;
+      const name = object.name || '';
+      if (!name.startsWith('entertainment/') || !name.endsWith('.mp4')) {
+        return;
+      }
+      // Loop guard — biz qayta yuklagan (siqilgan) fayl.
+      const meta = object.metadata || {};
+      if (meta.transcoded === 'true') {
+        return;
+      }
+
+      const os = require('os');
+      const path = require('path');
+      const fs = require('fs');
+      const {spawnSync} = require('child_process');
+      const ffmpegPath = require('ffmpeg-static');
+
+      const bucketName = object.bucket;
+      const bucket = admin.storage().bucket(bucketName);
+      const videoId = path.basename(name, '.mp4');
+      const tmpIn = path.join(os.tmpdir(), `${videoId}_in.mp4`);
+      const tmpOut = path.join(os.tmpdir(), `${videoId}_720.mp4`);
+
+      try {
+        await bucket.file(name).download({destination: tmpIn});
+
+        try {
+          fs.chmodSync(ffmpegPath, 0o755);
+        } catch (_) {}
+
+        // 720p (kichikni kattalashtirmaymiz), H.264 + faststart (stream uchun).
+        const res = spawnSync(ffmpegPath, [
+          '-i', tmpIn,
+          '-vf', 'scale=-2:\'min(720,ih)\'',
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '26',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          '-y', tmpOut,
+        ], {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+
+        if (res.status !== 0 || !fs.existsSync(tmpOut)) {
+          console.error('ffmpeg failed', res.status, res.error);
+          return;
+        }
+
+        const token = crypto.randomUUID();
+        await bucket.upload(tmpOut, {
+          destination: name,
+          metadata: {
+            contentType: 'video/mp4',
+            metadata: {
+              transcoded: 'true',
+              firebaseStorageDownloadTokens: token,
+            },
+          },
+        });
+
+        const encoded = encodeURIComponent(name);
+        const url = `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
+            `/o/${encoded}?alt=media&token=${token}`;
+
+        await db.collection('entertainment_catalog').doc(videoId).set({
+          downloadUrl: url,
+          transcoded: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, {merge: true});
+      } catch (e) {
+        console.error('transcodeEntertainmentVideo error:', e);
+      } finally {
+        try {
+          if (fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn);
+        } catch (_) {}
+        try {
+          if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+        } catch (_) {}
+      }
+    });
+
 exports.migratePhoneFormats = functions.https.onCall(
     async (data, context) => {
       if (!context.auth) {

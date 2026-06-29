@@ -36,6 +36,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
   bool _loading = true;
   String? _error;
   final Set<String> _cached = {};
+  final Set<String> _downloading = {};
 
   @override
   void initState() {
@@ -79,6 +80,34 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
         _error = '$e';
         _loading = false;
       });
+    }
+  }
+
+  /// Wi‑Fi'da oldindan yuklab olish → safarda internetsiz tomosha.
+  Future<void> _downloadVideo(EntertainmentVideo video) async {
+    if (_downloading.contains(video.id)) return;
+    setState(() => _downloading.add(video.id));
+    try {
+      final f = await _cache.download(
+        videoId: video.id,
+        storagePath: video.storagePath,
+      );
+      if (!mounted) return;
+      if (f != null) {
+        setState(() => _cached.add(video.id));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Юклаб бўлмади. Wi‑Fi ни текширинг.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Хато: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloading.remove(video.id));
     }
   }
 
@@ -162,10 +191,29 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                 [
                                   if (v.durationLabel.isNotEmpty)
                                     v.durationLabel,
-                                  cached ? 'Офлайн тайёр' : 'Юклаш керак',
+                                  cached ? 'Офлайн тайёр' : 'Онлайн кўрилади',
                                 ].join(' · '),
                               ),
-                              trailing: const Icon(Icons.play_circle_fill),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!cached)
+                                    _downloading.contains(v.id)
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2),
+                                          )
+                                        : IconButton(
+                                            icon: const Icon(
+                                                Icons.download_outlined),
+                                            tooltip: 'Wi‑Fi да юклаб олиш',
+                                            onPressed: () => _downloadVideo(v),
+                                          ),
+                                  const Icon(Icons.play_circle_fill),
+                                ],
+                              ),
                               onTap: () => _openVideo(v),
                             ),
                           );

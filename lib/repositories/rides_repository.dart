@@ -757,12 +757,14 @@ class RidesRepository {
   Future<void> completeMarshrutRide({
     required String tripId,
     required String driverId,
+    int? cashPaid,
   }) async {
     await _completeMarshrutRide(
       tripId: tripId,
       driverId: driverId,
       completedBy: driverId,
       eventType: 'completed',
+      cashPaid: cashPaid,
     );
   }
 
@@ -786,6 +788,7 @@ class RidesRepository {
     required String completedBy,
     String completedByPhone = '',
     required String eventType,
+    int? cashPaid,
   }) async {
     if (tripId.isEmpty) return;
     Map<String, dynamic>? tripData;
@@ -814,7 +817,8 @@ class RidesRepository {
             'completedByPhone': completedByPhone,
           'completedAt': FieldValue.serverTimestamp(),
           'fare': (tripData!['fare'] as num?)?.toInt() ?? 0,
-          'cashPaid': (tripData!['fare'] as num?)?.toInt() ?? 0,
+          'cashPaid':
+              cashPaid ?? ((tripData!['fare'] as num?)?.toInt() ?? 0),
         },
         SetOptions(merge: true),
       );

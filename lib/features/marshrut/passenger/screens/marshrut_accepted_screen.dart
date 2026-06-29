@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/passenger_cancel_block_rules.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/schedule.dart';
@@ -13,6 +15,7 @@ import '../../../../repositories/marshrut_block_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/location_service.dart';
+import '../../../../services/settlement_service.dart';
 
 /// Marshrut — haydovchi qabul qilgandan keyingi to'liq safar ekrani.
 class MarshrutAcceptedScreen extends StatefulWidget {
@@ -38,6 +41,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
   int _secondsLeft = 0;
   double? _distanceKmBuffered;
   int _gpsRefreshCounter = 0;
+  bool _tripEndHandled = false;
 
   @override
   void initState() {
@@ -177,10 +181,20 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         initialData: widget.trip,
         builder: (context, tripSnap) {
           final trip = tripSnap.data ?? widget.trip;
-          if (trip.status == 'cancelled' || trip.status == 'completed') {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) Navigator.of(context).pop();
-            });
+          if (trip.status == 'cancelled') {
+            if (!_tripEndHandled) {
+              _tripEndHandled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) Navigator.of(context).pop();
+              });
+            }
+          } else if (trip.status == 'completed') {
+            if (!_tripEndHandled) {
+              _tripEndHandled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _handleCompleted(trip.id);
+              });
+            }
           }
           if (trip.userLat != null && trip.userLng != null) {
             _userLat ??= trip.userLat;
@@ -383,6 +397,78 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
           ),
         ],
       );
+
+  /// Safar tugadi — qaytim (settlement) pending bo'lsa tasdiq dialogi, so'ng pop.
+  Future<void> _handleCompleted(String tripId) async {
+    if (!mounted) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('trips')
+          .doc(tripId)
+          .get();
+      final data = snap.data() ?? const <String, dynamic>{};
+      final settlementId = (data['settlementId'] ?? '').toString();
+      final settlementState = (data['settlementState'] ?? '').toString();
+      final settlementAmount = (data['settlementAmount'] as num?)?.toInt() ?? 0;
+      if (settlementState == 'pending' &&
+          settlementId.isNotEmpty &&
+          settlementAmount > 0 &&
+          mounted) {
+        await _showSettlementDialog(settlementId, settlementAmount);
+      }
+    } catch (e) {
+      debugPrint('marshrut completed settlement: $e');
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Settlement Ledger — qaytim hamyonga o'tkazilsinmi (yo'lovchi tasdig'i).
+  Future<void> _showSettlementDialog(String settlementId, int amount) async {
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Қайтим — ҳамёнга'),
+        content: Text(
+          'Ҳайдовчи ${formatPrice(amount)} сўм қайтимни ҳамёнингизга '
+          'ўтказмоқчи. Тасдиқлайсизми?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
+            child: const Text('Нақд керак'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'confirm'),
+            child: const Text('Тасдиқлайман'),
+          ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      if (choice == 'confirm') {
+        await SettlementService.confirmSettlement(settlementId: settlementId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
+          backgroundColor: Colors.green,
+        ));
+      } else {
+        await SettlementService.cancelSettlement(
+          settlementId: settlementId,
+          reason: 'passenger_wants_cash',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Settlement: $e'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
 
   Future<void> _confirmCancel(BuildContext context, ActiveTrip trip) async {
     final prefs = await SharedPreferences.getInstance();

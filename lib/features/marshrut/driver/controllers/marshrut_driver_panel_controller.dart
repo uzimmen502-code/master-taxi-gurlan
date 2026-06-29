@@ -14,7 +14,10 @@ import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../repositories/user_repository.dart';
+import '../../../../services/balance_service.dart';
+import '../../../../services/deferred_settlement_queue.dart';
 import '../../../../services/notification_service.dart';
+import '../../../../services/settlement_service.dart';
 import '../../../../utils/gurlan_places.dart';
 
 /// Marshrut haydovchi panelining state mashinasi.
@@ -918,12 +921,25 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     }
   }
 
-  Future<void> completeRide(String tripId) async {
+  Future<void> completeRide(String tripId, {int? cashPaid}) async {
     try {
+      ActiveTrip? trip;
+      for (final t in _acceptedTrips) {
+        if (t.id == tripId) {
+          trip = t;
+          break;
+        }
+      }
       await _rides.completeMarshrutRide(
         tripId: tripId,
         driverId: driverId,
+        cashPaid: cashPaid,
       );
+      // Qaytim (ledger) — mahalliy taksi bilan bir xil oqim: cashPaid > fare
+      // bo'lsa ortib qolgan summa yo'lovchi hisobiga (settlement) o'tkaziladi.
+      if (trip != null && cashPaid != null) {
+        await _settleMarshrutChange(trip, cashPaid);
+      }
       if (_disposed) return;
       _acceptedTrips = _acceptedTrips.where((r) => r.id != tripId).toList();
       _info = 'trip_completed';
@@ -931,6 +947,55 @@ class MarshrutDriverPanelController extends ChangeNotifier {
     } catch (e) {
       _errorMessage = 'error_generic|$e';
       _safeNotify();
+    }
+  }
+
+  /// Qaytim — mahalliy taksi `finishRide` mantig'i: Settlement Ledger orqali
+  /// (float yetarli bo'lsa Pending settlement; aks holda creditChange; xato →
+  /// deferred navbat). Komissiya yo'q — faqat ortiqcha pul yo'lovchiga qaytadi.
+  Future<void> _settleMarshrutChange(ActiveTrip trip, int cashPaid) async {
+    final fare = trip.fare;
+    if (trip.userPhone.isEmpty || cashPaid <= fare) return;
+    final change = cashPaid - fare;
+    final opId = 'settle_trip_${trip.id}';
+    var settled = false;
+    try {
+      await SettlementService.openSettlement(
+        passengerPhone: canonicalPhoneId(trip.userPhone),
+        tripId: trip.id,
+        opId: opId,
+        totalChange: change,
+        cashGiven: 0,
+      );
+      settled = true;
+    } catch (e, st) {
+      debugPrint('marshrut openSettlement: $e\n$st');
+    }
+    var credited = false;
+    if (!settled) {
+      try {
+        await BalanceService.creditChange(
+          userPhone: trip.userPhone,
+          orderTotal: fare,
+          cashPaid: cashPaid,
+          refType: 'trip',
+          refId: trip.id,
+          module: 'marshrut',
+          idempotencyKey: 'change_trip_${trip.id}',
+          operatorPhone: driverPhone,
+        );
+        credited = true;
+      } catch (e, st) {
+        debugPrint('marshrut creditChange: $e\n$st');
+      }
+    }
+    if (!settled && !credited) {
+      await DeferredSettlementQueue.enqueue(
+        passengerPhone: canonicalPhoneId(trip.userPhone),
+        tripId: trip.id,
+        opId: opId,
+        settlementAmount: change,
+      );
     }
   }
 

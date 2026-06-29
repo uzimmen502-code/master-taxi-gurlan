@@ -288,6 +288,10 @@ class MarshrutSearchController extends ChangeNotifier {
         stats = _copyStats(stats, routeMismatch: stats.routeMismatch + 1);
         continue;
       }
+      // Narx belgilanmagan reys ko'rsatilmaydi (dispatch'ga ham chiqmaydi).
+      if (s.price <= 0) {
+        continue;
+      }
 
       double? distance;
       int? eta;
@@ -351,6 +355,7 @@ class MarshrutSearchController extends ChangeNotifier {
         if (q.hasExpired) return false;
         if (!q.isTimeEligible) return false;
         if (q.scheduleId.isEmpty) return false;
+        if (q.price <= 0) return false;
         if (!q.routeAllows(_fromMfy, _toMfy)) return false;
         return true;
       }).toList();

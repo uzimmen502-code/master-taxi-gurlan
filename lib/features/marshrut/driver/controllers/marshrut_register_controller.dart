@@ -6,13 +6,31 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/route_points_validator.dart';
 import '../../../../models/marshrut_driver_profile.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
+import '../../../../repositories/marshrut_route_price_repository.dart';
+import '../../../../services/marshrut_pricing_service.dart';
+import '../../../../utils/gurlan_places.dart';
 
 /// Marshrut haydovchi ro'yxatdan o'tish/yangilash formasi state mashinasi.
 class MarshrutRegisterController extends ChangeNotifier {
-  MarshrutRegisterController({required MarshrutDriverRepository repo})
-      : _repo = repo;
+  MarshrutRegisterController({
+    required MarshrutDriverRepository repo,
+    MarshrutRoutePriceRepository? priceRepo,
+  })  : _repo = repo,
+        _priceRepo = priceRepo ?? MarshrutRoutePriceRepository();
 
   final MarshrutDriverRepository _repo;
+  final MarshrutRoutePriceRepository _priceRepo;
+
+  /// Joriy yo'nalish (from|to) uchun belgilangan narx (boshqa haydovchi seed
+  /// qilgan) — `null` bo'lsa hali narx yo'q (shu haydovchi birinchi).
+  int? _existingRoutePrice;
+  bool _priceLoading = false;
+  int? _priceInput;
+
+  int? get existingRoutePrice => _existingRoutePrice;
+  bool get routePriceLocked => _existingRoutePrice != null;
+  bool get priceLoading => _priceLoading;
+  int? get priceInput => _priceInput;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -97,6 +115,7 @@ class MarshrutRegisterController extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+    await _refreshRoutePrice();
   }
 
   void _applyProfile(MarshrutDriverProfile profile) {
@@ -119,6 +138,39 @@ class MarshrutRegisterController extends ChangeNotifier {
     if (route.to.isNotEmpty) _toMfy = route.to;
     if (route.mid.isNotEmpty) _midStops = List<String>.from(route.mid);
   }
+
+  /// Joriy from|to uchun belgilangan yo'nalish narxini o'qiydi.
+  /// Bor bo'lsa — read-only (qulflangan); yo'q bo'lsa — shu haydovchi belgilaydi.
+  Future<void> _refreshRoutePrice() async {
+    final from = GurlanPlaces.normalizeMfyName(_fromMfy);
+    final to = GurlanPlaces.normalizeMfyName(_toMfy);
+    if (from.isEmpty || to.isEmpty) {
+      _existingRoutePrice = null;
+      _priceLoading = false;
+      notifyListeners();
+      return;
+    }
+    _priceLoading = true;
+    notifyListeners();
+    try {
+      _existingRoutePrice = await _priceRepo.getPrice(from, to);
+    } catch (_) {
+      _existingRoutePrice = null;
+    }
+    _priceLoading = false;
+    notifyListeners();
+  }
+
+  void setPriceInput(int? value) {
+    _priceInput = (value != null && value > 0) ? value : null;
+    notifyListeners();
+  }
+
+  /// Narx tayyor: yo'nalish qulflangan (mavjud) yoki haydovchi musbat narx kiritgan.
+  bool get hasValidPrice => routePriceLocked || (_priceInput ?? 0) > 0;
+
+  /// Saqlash uchun yo'nalish + narx ikkalasi ham to'g'ri bo'lsin.
+  bool get canSave => canSaveRoute && hasValidPrice;
 
   void setStartTime(int hour, int minute) {
     _startTime = TimeOfDayValue(hour: hour, minute: minute);
@@ -144,6 +196,7 @@ class MarshrutRegisterController extends ChangeNotifier {
         .where((m) => !RoutePointsValidator.samePoint(m, _fromMfy))
         .toList();
     notifyListeners();
+    _refreshRoutePrice();
     return null;
   }
 
@@ -166,6 +219,7 @@ class MarshrutRegisterController extends ChangeNotifier {
         .where((m) => !RoutePointsValidator.samePoint(m, _toMfy))
         .toList();
     notifyListeners();
+    _refreshRoutePrice();
     return null;
   }
 
@@ -235,12 +289,26 @@ class MarshrutRegisterController extends ChangeNotifier {
         _startTime.hour,
         _startTime.minute,
       );
-      await _repo.register(
+      final scheduleId = await _repo.register(
         profile: profile,
         date: _todayDateStr,
         expiresAt: midnight,
         plannedStartAt: plannedStartAt,
       );
+      // Yo'nalish narxini server avtoritetida belgilash/ko'zgu qilish.
+      // Mavjud bo'lsa CF uni qaytaradi (proposed e'tiborga olinmaydi).
+      final proposed = _existingRoutePrice ?? _priceInput ?? 0;
+      try {
+        final res = await MarshrutPricingService.seedRoutePrice(
+          scheduleId: scheduleId,
+          price: proposed,
+        );
+        _existingRoutePrice = (res['price'] as num?)?.toInt();
+      } catch (e) {
+        // Narx ko'zgusi muvaffaqiyatsiz — reys baribir yaratildi.
+        // Haydovchi navbatga price>0 darvozasidan o'tmaguncha kirmaydi.
+        debugPrint('seedRoutePrice: $e');
+      }
       _savedProfile = profile;
       _isSaving = false;
       notifyListeners();

@@ -7,7 +7,8 @@ import '../../../models/queue_entry.dart';
 import '../../../core/passenger_cancel_block_rules.dart';
 import '../../../repositories/local_taxi_block_repository.dart';
 import '../../../repositories/marshrut_block_repository.dart';
-import '../../../repositories/marshrut_tariff_repository.dart';
+import '../../../repositories/marshrut_route_price_repository.dart';
+import '../../../services/marshrut_pricing_service.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -806,55 +807,51 @@ class _MarshrutTariffPolicyCard extends StatefulWidget {
 }
 
 class _MarshrutTariffPolicyCardState extends State<_MarshrutTariffPolicyCard> {
-  final _defaultCtrl = TextEditingController();
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
-  final _routePriceCtrl = TextEditingController();
-  final _repo = MarshrutTariffRepository();
+  final _priceCtrl = TextEditingController();
+  final _priceRepo = MarshrutRoutePriceRepository();
   bool _busy = false;
 
   @override
   void dispose() {
-    _defaultCtrl.dispose();
     _fromCtrl.dispose();
     _toCtrl.dispose();
-    _routePriceCtrl.dispose();
+    _priceCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _saveDefault() async {
-    final v = int.tryParse(_defaultCtrl.text.trim());
-    if (v == null) return;
-    setState(() => _busy = true);
-    try {
-      await _repo.setDefaultPricePerSeat(v);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Default narx saqlandi')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _saveRoute() async {
-    final price = int.tryParse(_routePriceCtrl.text.trim());
-    if (price == null ||
-        _fromCtrl.text.trim().isEmpty ||
-        _toCtrl.text.trim().isEmpty) {
+    final price = int.tryParse(_priceCtrl.text.trim());
+    final from = _fromCtrl.text.trim();
+    final to = _toCtrl.text.trim();
+    if (price == null || price <= 0 || from.isEmpty || to.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('From / To / narx to\'g\'ri kiriting')),
+      );
       return;
     }
     setState(() => _busy = true);
     try {
-      await _repo.setRoutePrice(
-        fromMfy: _fromCtrl.text.trim(),
-        toMfy: _toCtrl.text.trim(),
-        pricePerSeat: price,
+      final res = await MarshrutPricingService.setByAdmin(
+        from: from,
+        to: to,
+        price: price,
       );
+      final propagated = (res['propagated'] as num?)?.toInt() ?? 0;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Yo\'nalish narxi saqlandi')),
+          SnackBar(
+            content: Text(
+              'Yo\'nalish narxi saqlandi ($propagated faol reysga qo\'llandi)',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xatolik: $e')),
         );
       }
     } finally {
@@ -862,94 +859,106 @@ class _MarshrutTariffPolicyCardState extends State<_MarshrutTariffPolicyCard> {
     }
   }
 
+  void _prefill(MarshrutRoutePrice r) {
+    _fromCtrl.text = r.from;
+    _toCtrl.text = r.to;
+    _priceCtrl.text = '${r.price}';
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<MarshrutTariffConfig>(
-      stream: _repo.watchConfig(),
-      builder: (ctx, snap) {
-        final cfg = snap.data ?? const MarshrutTariffConfig();
-        if (_defaultCtrl.text.isEmpty && cfg.defaultPricePerSeat > 0) {
-          _defaultCtrl.text = '${cfg.defaultPricePerSeat}';
-        }
-        return Card(
-          elevation: 0,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Marshrut tariflari',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _defaultCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Default narx / o\'rin (so\'m)',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: _busy ? null : _saveDefault,
-                    child: const Text('Default saqlash'),
-                  ),
-                ),
-                const Divider(height: 24),
-                TextField(
-                  controller: _fromCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Qayerdan (MFY)',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _toCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Qayerga (MFY)',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _routePriceCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Narx / o\'rin (so\'m)',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: _busy ? null : _saveRoute,
-                    child: const Text('Yo\'nalish narxini saqlash'),
-                  ),
-                ),
-                if (cfg.routePrices.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text('Saqlangan yo\'nalishlar:',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                  ...cfg.routePrices.entries.map(
-                    (e) => Text('• ${e.key}: ${e.value} so\'m',
-                        style: const TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ],
+    return Card(
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Marshrut yo\'nalish narxlari',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 4),
+            Text(
+              'Narxni birinchi haydovchi belgilaydi. Bu yerda admin tahrir '
+              'qiladi — o\'zgarish darhol faol reyslarga qo\'llanadi.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _fromCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Qayerdan (MFY)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _toCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Qayerga (MFY)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _priceCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Narx / o\'rin (so\'m)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: _busy ? null : _saveRoute,
+                child: const Text('Narxni saqlash'),
+              ),
+            ),
+            const Divider(height: 24),
+            StreamBuilder<List<MarshrutRoutePrice>>(
+              stream: _priceRepo.watchAll(),
+              builder: (ctx, snap) {
+                final routes = snap.data ?? const <MarshrutRoutePrice>[];
+                if (routes.isEmpty) {
+                  return Text(
+                    'Hali yo\'nalish narxi belgilanmagan.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Belgilangan yo\'nalishlar:',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    ...routes.map(
+                      (r) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${r.from} → ${r.to}'),
+                        subtitle: Text(
+                          '${r.price} so\'m'
+                          '${r.lockedByAdmin ? ' • admin' : ''}'
+                          '${r.setByName.isNotEmpty ? ' • ${r.setByName}' : ''}',
+                        ),
+                        trailing: const Icon(Icons.edit, size: 18),
+                        onTap: () => _prefill(r),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

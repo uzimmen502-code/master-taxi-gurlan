@@ -13,7 +13,6 @@ import '../../../../models/active_trip.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
-import '../../../../repositories/marshrut_tariff_repository.dart';
 import '../../../../repositories/queue_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
@@ -119,14 +118,20 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     }
   }
 
-  Future<void> _refreshPrice(MarshrutSearchController c) async {
-    if (c.fromMfy.isEmpty || c.toMfy.isEmpty) {
-      if (mounted) setState(() => _pricePerSeat = null);
-      return;
+  void _refreshPrice(MarshrutSearchController c) {
+    // Yo'nalish narxi — haydovchi belgilagan flat narx (schedule.price).
+    // Navbat tartibidagi birinchi mos reysning narxini ko'rsatamiz.
+    int? price;
+    for (final r in c.results) {
+      final p = r.schedule.price;
+      if (p > 0) {
+        price = p;
+        break;
+      }
     }
-    final price = await MarshrutTariffRepository()
-        .priceForRoute(c.fromMfy, c.toMfy);
-    if (mounted) setState(() => _pricePerSeat = price);
+    if (_pricePerSeat != price && mounted) {
+      setState(() => _pricePerSeat = price);
+    }
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../models/entertainment_video.dart';
 import '../../services/entertainment_cache_service.dart';
+import '../../services/entertainment_storage.dart';
 
 /// Offline/online video player (Android: ExoPlayer orqali).
 class EntertainmentPlayerScreen extends StatefulWidget {
@@ -26,11 +27,11 @@ class EntertainmentPlayerScreen extends StatefulWidget {
 
 class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
   final _cache = EntertainmentCacheService();
+  final _storage = EntertainmentStorage();
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   bool _loading = true;
   String? _error;
-  double? _downloadProgress;
 
   @override
   void initState() {
@@ -40,17 +41,23 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
 
   Future<void> _initPlayer() async {
     try {
-      File? file = await _cache.localFile(widget.video.id);
-      file ??= await _cache.download(
-        videoId: widget.video.id,
-        storagePath: widget.video.storagePath,
-      );
-
-      if (file == null || !file.existsSync()) {
-        throw Exception('Видеони юклаб бўлмади. Wi‑Fi ни текширинг.');
+      // 1. Lokal cache bo'lsa — darhol, offline o'ynatamiz.
+      // 2. Aks holda — STREAM (faqat ko'rilayotgan qism buferlanadi),
+      //    butun faylni yuklab o'tirmaymiz → trafik va xotira tejaladi.
+      final VideoPlayerController vc;
+      final cached = await _cache.localFile(widget.video.id);
+      if (cached != null && cached.existsSync()) {
+        vc = VideoPlayerController.file(cached);
+      } else {
+        var url = widget.video.downloadUrl;
+        if (url.isEmpty) {
+          url = await _storage.downloadUrl(widget.video.storagePath);
+        }
+        if (url.isEmpty) {
+          throw Exception('Видео манзили топилмади.');
+        }
+        vc = VideoPlayerController.networkUrl(Uri.parse(url));
       }
-
-      final vc = VideoPlayerController.file(file);
       await vc.initialize();
       final chewie = ChewieController(
         videoPlayerController: vc,
@@ -101,11 +108,9 @@ class _EntertainmentPlayerScreenState extends State<EntertainmentPlayerScreen> {
                 children: [
                   const CircularProgressIndicator(color: Colors.white),
                   const SizedBox(height: 16),
-                  Text(
-                    _downloadProgress != null
-                        ? 'Юкланмоқда… ${(_downloadProgress! * 100).toStringAsFixed(0)}%'
-                        : 'Тайёрланмоқда…',
-                    style: const TextStyle(color: Colors.white70),
+                  const Text(
+                    'Тайёрланмоқда…',
+                    style: TextStyle(color: Colors.white70),
                   ),
                 ],
               ),

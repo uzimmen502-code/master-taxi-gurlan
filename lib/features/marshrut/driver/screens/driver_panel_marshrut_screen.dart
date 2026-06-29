@@ -6,6 +6,7 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
@@ -644,32 +645,121 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
     MarshrutDriverPanelController controller,
     ActiveTrip ride,
   ) async {
-    final ok = await showDialog<bool>(
+    final cashPaid = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('complete_trip_title')),
-        content: Text(
-          ctx.tr('complete_trip_confirm').replaceAll('{from}', ride.pickupMfy).replaceAll('{to}', ride.dropoffMfy),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(ctx.tr('no')),
+      builder: (ctx) => _MarshrutCashDialog(ride: ride, color: _color),
+    );
+    if (cashPaid != null) {
+      await controller.completeRide(ride.id, cashPaid: cashPaid);
+    }
+  }
+}
+
+/// Safarni yakunlashda naqd kiritish — qaytim bo'lsa (cashPaid > fare) ortiqcha
+/// summa Settlement Ledger orqali yo'lovchi hisobiga o'tadi.
+class _MarshrutCashDialog extends StatefulWidget {
+  const _MarshrutCashDialog({required this.ride, required this.color});
+
+  final ActiveTrip ride;
+  final Color color;
+
+  @override
+  State<_MarshrutCashDialog> createState() => _MarshrutCashDialogState();
+}
+
+class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
+  late final TextEditingController _cashCtrl;
+  late int _cash;
+
+  int get _fare => widget.ride.fare;
+
+  @override
+  void initState() {
+    super.initState();
+    _cash = _fare;
+    _cashCtrl = TextEditingController(text: '$_fare');
+  }
+
+  @override
+  void dispose() {
+    _cashCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final change = _cash - _fare;
+    return AlertDialog(
+      title: Text(context.tr('complete_trip_title')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${widget.ride.pickupMfy} → ${widget.ride.dropoffMfy}'),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Нарх:', style: TextStyle(color: Colors.grey.shade700)),
+              Text('${formatPrice(_fare)} сўм',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _color,
-              foregroundColor: Colors.white,
+          const SizedBox(height: 12),
+          TextField(
+            controller: _cashCtrl,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            onChanged: (v) =>
+                setState(() => _cash = int.tryParse(v.trim()) ?? 0),
+            decoration: InputDecoration(
+              labelText: 'Йўловчи берган нақд',
+              suffixText: 'сўм',
+              border: const OutlineInputBorder(),
+              isDense: true,
             ),
-            child: Text(ctx.tr('complete_trip_confirm_btn')),
           ),
+          if (change > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined,
+                      size: 18, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Қайтим ${formatPrice(change)} сўм — йўловчи ҳисобига '
+                      'ўтказилади.',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.tr('no')),
+        ),
+        ElevatedButton(
+          onPressed: _cash < _fare ? null : () => Navigator.pop(context, _cash),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: widget.color,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(context.tr('complete_trip_confirm_btn')),
+        ),
+      ],
     );
-    if (ok == true) {
-      await controller.completeRide(ride.id);
-    }
   }
 }
 

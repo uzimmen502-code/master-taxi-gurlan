@@ -1246,6 +1246,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Marshrut yo'nalish narxi — faqat CF yozadi (birinchi haydovchi seed,
+    // admin tahrir). Client faqat o'qiydi (yo'lovchi + haydovchi ko'rsatish).
+    match /marshrut_route_prices/{routeKey} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /requests/{id} {
       allow read, create, update: if true;
       allow delete: if false;

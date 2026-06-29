@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../utils/gurlan_places.dart';
 import 'driver_panel_marshrut_screen.dart';
@@ -41,6 +42,7 @@ class _DriverRegisterMarshrutViewState
   final _fromCtrl = TextEditingController();
   final _midCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
 
   String _fromQuery = '';
   String _midQuery = '';
@@ -58,6 +60,7 @@ class _DriverRegisterMarshrutViewState
     _fromCtrl.dispose();
     _midCtrl.dispose();
     _toCtrl.dispose();
+    _priceCtrl.dispose();
     super.dispose();
   }
 
@@ -313,6 +316,8 @@ class _DriverRegisterMarshrutViewState
             if (c.fromMfy.isNotEmpty && c.toMfy.isNotEmpty) ...[
               const SizedBox(height: 12),
               _routePreview(c.allStops),
+              const SizedBox(height: 20),
+              _priceSection(c),
             ],
             const SizedBox(height: 32),
             _saveButton(c),
@@ -420,6 +425,112 @@ class _DriverRegisterMarshrutViewState
     ];
   }
 
+  Widget _priceSection(MarshrutRegisterController c) {
+    final titleWidget = _sectionTitle('Бир ўрин нархи');
+
+    if (c.priceLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titleWidget,
+          const SizedBox(height: 8),
+          const SizedBox(
+            height: 22,
+            width: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ],
+      );
+    }
+
+    if (c.routePriceLocked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titleWidget,
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline, color: Colors.grey, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${formatPrice(c.existingRoutePrice ?? 0)} сўм',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Бу йўналиш нархи белгиланган — фақат админ ўзгартиради',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        titleWidget,
+        const SizedBox(height: 4),
+        Text(
+          'Сиз бу йўналишда биринчи ҳайдовчисиз — бир ўрин нархини белгиланг. '
+          'Кейинги ҳайдовчилар учун шу нарх амал қилади.',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+            ],
+          ),
+          child: TextField(
+            controller: _priceCtrl,
+            keyboardType: TextInputType.number,
+            onChanged: (v) => c.setPriceInput(int.tryParse(v.trim())),
+            decoration: InputDecoration(
+              hintText: 'Масалан: 6000',
+              prefixIcon: const Icon(Icons.payments_outlined, color: _color),
+              suffixText: 'сўм',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _routePreview(List<String> stops) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -463,7 +574,7 @@ class _DriverRegisterMarshrutViewState
     return SizedBox(
       height: 52,
       child: ElevatedButton.icon(
-        onPressed: (c.isSaving || !c.canSaveRoute)
+        onPressed: (c.isSaving || !c.canSave)
             ? null
             : () async {
                 _normalizeControllerRoute(c);

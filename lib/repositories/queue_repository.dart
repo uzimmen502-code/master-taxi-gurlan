@@ -104,6 +104,8 @@ class QueueRepository {
       if (q.hasExpired) return false;
       if (!q.isTimeEligible) return false;
       if (q.scheduleId.isEmpty) return false;
+      // Narx belgilanmagan reys dispatch'ga chiqmaydi (fare=0 oldini olish).
+      if (q.price <= 0) return false;
       if (!q.routeAllows(
         GurlanPlaces.normalizeMfyName(pickupMfy),
         GurlanPlaces.normalizeMfyName(dropoffMfy),

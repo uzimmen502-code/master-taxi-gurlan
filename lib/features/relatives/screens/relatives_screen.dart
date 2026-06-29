@@ -10,6 +10,7 @@ import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
+import '../services/tree_service.dart';
 import 'family_tree_view.dart';
 import 'relative_album_screen.dart';
 import 'relative_event_form_screen.dart';
@@ -43,6 +44,12 @@ class _RelativesScreenState extends State<RelativesScreen> {
     final prefs = await SharedPreferences.getInstance();
     final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     if (mounted) setState(() => _phone = phone);
+    // Faza 1: global nasab grafiga komponent + migratsiya (idempotent,
+    // fonda — UI'ga ta'sir qilmaydi).
+    if (phone.length >= 12) {
+      unawaited(TreeService.ensureMyTree().catchError(
+          (_) => <String, dynamic>{}));
+    }
   }
 
   Future<void> _add() async {

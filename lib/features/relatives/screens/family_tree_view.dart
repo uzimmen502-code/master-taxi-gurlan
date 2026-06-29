@@ -27,6 +27,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
   late Map<String, RelativePerson> _byId;
   int _connected = 0;
 
+  final _transform = TransformationController();
+  late final GraphViewController _gvController =
+      GraphViewController(transformationController: _transform);
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +40,34 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
   @override
   void didUpdateWidget(covariant FamilyTreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final prev = _connected;
     _build();
+    // Yangi qarindosh qo'shilsa — qayta moslab ko'rsatamiz.
+    if (_connected != prev && _connected > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _gvController.zoomToFit();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // _transform GraphView tomonidan dispose qilinadi (controller orqali).
+    super.dispose();
+  }
+
+  void _zoomBy(double factor) {
+    final box = context.findRenderObject() as RenderBox?;
+    final size = box?.size ?? const Size(320, 480);
+    final center = Offset(size.width / 2, size.height / 2);
+    final current = _transform.value.clone();
+    final newScale = current.getMaxScaleOnAxis() * factor;
+    if (newScale < 0.08 || newScale > 8) return;
+    final zoom = Matrix4.identity()
+      ..translateByDouble(center.dx, center.dy, 0, 1)
+      ..scaleByDouble(factor, factor, 1, 1)
+      ..translateByDouble(-center.dx, -center.dy, 0, 1);
+    _transform.value = zoom.multiplied(current);
   }
 
   void _build() {
@@ -70,19 +101,56 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
     }
     return Container(
       color: const Color(0xFFF5F4F8),
-      child: GraphView.builder(
-        graph: _graph,
-        algorithm: SugiyamaAlgorithm(_config),
-        paint: Paint()
-          ..color = _accent.withValues(alpha: 0.55)
-          ..strokeWidth = 1.6
-          ..style = PaintingStyle.stroke,
-        builder: (Node node) {
-          final id = node.key?.value as String?;
-          final p = id == null ? null : _byId[id];
-          if (p == null) return const SizedBox.shrink();
-          return _card(p);
-        },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GraphView.builder(
+              graph: _graph,
+              algorithm: SugiyamaAlgorithm(_config),
+              controller: _gvController,
+              autoZoomToFit: true,
+              centerGraph: true,
+              paint: Paint()
+                ..color = _accent.withValues(alpha: 0.55)
+                ..strokeWidth = 1.6
+                ..style = PaintingStyle.stroke,
+              builder: (Node node) {
+                final id = node.key?.value as String?;
+                final p = id == null ? null : _byId[id];
+                if (p == null) return const SizedBox.shrink();
+                return _card(p);
+              },
+            ),
+          ),
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: _ZoomControls(
+              onZoomIn: () => _zoomBy(1.25),
+              onZoomOut: () => _zoomBy(0.8),
+              onFit: () => _gvController.zoomToFit(),
+              onReset: () => _gvController.resetView(),
+            ),
+          ),
+          Positioned(
+            left: 12,
+            bottom: 12,
+            child: IgnorePointer(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '☝ Сурилади · 🤏 Кенгайтиринг',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -167,6 +235,58 @@ class _FamilyTreeViewState extends State<FamilyTreeView> {
               style: TextStyle(color: Colors.grey.shade600),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Daraxt uchun ekran boshqaruvi: kattalashtirish/kichraytirish, moslash, reset.
+class _ZoomControls extends StatelessWidget {
+  const _ZoomControls({
+    required this.onZoomIn,
+    required this.onZoomOut,
+    required this.onFit,
+    required this.onReset,
+  });
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+  final VoidCallback onFit;
+  final VoidCallback onReset;
+
+  static const _accent = Color(0xFF6A4C93);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _btn(Icons.add, 'Катталаштириш', onZoomIn),
+        const SizedBox(height: 8),
+        _btn(Icons.remove, 'Кичрайтириш', onZoomOut),
+        const SizedBox(height: 8),
+        _btn(Icons.fit_screen_outlined, 'Экранга мослаш', onFit),
+        const SizedBox(height: 8),
+        _btn(Icons.center_focus_strong_outlined, 'Бошланғич ҳолат', onReset),
+      ],
+    );
+  }
+
+  Widget _btn(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white,
+        elevation: 3,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: _accent, size: 22),
+          ),
         ),
       ),
     );

@@ -53,6 +53,15 @@ service cloud.firestore {
       return phoneFromToken();
     }
 
+    // Nasab daraxti — joriy foydalanuvchining komponenti (tree_persons read uchun).
+    function myTreeComponent() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/users/$(uid))
+          ? get(/databases/$(database)/documents/users/$(uid)).data.treeComponentId
+          : '';
+    }
+
     function isAdmin() {
       let uid = userDocIdFromPhoneToken();
       return uid != ''
@@ -1415,6 +1424,18 @@ service cloud.firestore {
     // Bloklash — har kim o'z ro'yxatini boshqaradi.
     match /dating_blocks/{uid}/list/{targetId} {
       allow read, write: if isOwner(uid);
+    }
+
+    // ── Nasab daraxti — global graf (Faza 1) ───────────────────────
+    // O'qish: o'z komponentidagi tugunlar (yoki ega/claim/admin).
+    // Yozish: faqat Cloud Functions (Admin SDK). Mijoz to'g'ridan yozmaydi.
+    match /tree_persons/{personId} {
+      allow read: if isAuth()
+          && (resource.data.componentId == myTreeComponent()
+              || resource.data.ownerUid == userDocIdFromPhoneToken()
+              || resource.data.claimedBy == userDocIdFromPhoneToken()
+              || isAdmin());
+      allow write: if false;
     }
 
     // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).

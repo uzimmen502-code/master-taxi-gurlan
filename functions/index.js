@@ -8854,3 +8854,129 @@ exports.respondDatingInterest = functions.https.onCall(async (data, context) => 
     return { ok: true, status: 'accepted', matchId: mId };
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NASAB DARAXTI — global graf poydevori (Faza 1: migratsiya + komponent)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function treeComponentIdFor(uid) {
+  return `cmp_${uid}`;
+}
+
+/// relatives/people hujjatidan ulashiladigan maydonlar (identity + bog'lanish).
+/// relationDegree/side/phone/address/notes — SHAXSIY (perspektivaga bog'liq),
+/// shu sabab global tugunga ko'chirilmaydi.
+function treeNodeFromRelative(d) {
+  return {
+    fullName: String(d.fullName || ''),
+    photoUrl: String(d.photoUrl || ''),
+    photoPath: String(d.photoPath || ''),
+    gender: String(d.gender || ''),
+    birthDate: d.birthDate || null,
+    fatherId: d.fatherId || null,
+    motherId: d.motherId || null,
+    spouseId: d.spouseId || null,
+  };
+}
+
+/// Illa kirishda: komponent + "Men" tuguni + mavjud qarindoshlarni migratsiya.
+/// Idempotent — qayta chaqirsa zarar yo'q.
+exports.ensureMyTree = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  const u = userSnap.data() || {};
+  const componentId = u.treeComponentId || treeComponentIdFor(uid);
+
+  const updates = {};
+  if (!u.treeComponentId) updates.treeComponentId = componentId;
+
+  // "Men" tuguni
+  let selfId = u.treePersonId || null;
+  if (!selfId) {
+    const selfRef = db.collection('tree_persons').doc();
+    selfId = selfRef.id;
+    await selfRef.set({
+      fullName: String(u.name || u.fullName || u.displayName || 'Мен'),
+      photoUrl: String(u.photoUrl || u.avatar || ''),
+      photoPath: '',
+      gender: String(u.gender || ''),
+      birthDate: u.birthDate || null,
+      fatherId: null,
+      motherId: null,
+      spouseId: null,
+      claimedBy: uid,
+      ownerUid: uid,
+      componentId,
+      createdBy: uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    updates.treePersonId = selfId;
+  }
+
+  // Backfill: relatives/{uid}/people → tree_persons/{xuddi shu id}
+  const peopleSnap =
+    await db.collection('relatives').doc(uid).collection('people').get();
+  let migrated = 0;
+  let batch = db.batch();
+  let ops = 0;
+  for (const doc of peopleSnap.docs) {
+    const ref = db.collection('tree_persons').doc(doc.id);
+    batch.set(ref, {
+      ...treeNodeFromRelative(doc.data() || {}),
+      claimedBy: null,
+      ownerUid: uid,
+      componentId,
+      createdBy: uid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    migrated++;
+    ops++;
+    if (ops >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+
+  updates.treeMigratedAt = admin.firestore.FieldValue.serverTimestamp();
+  await userRef.set(updates, { merge: true });
+
+  return { ok: true, componentId, personId: selfId, migrated };
+});
+
+/// relatives/people o'zgarsa — global tree_persons'ni sinxron tutadi (Faza 1).
+exports.onRelativePersonWrite = functions.firestore
+  .document('relatives/{uid}/people/{pid}')
+  .onWrite(async (change, context) => {
+    const uid = context.params.uid;
+    const pid = context.params.pid;
+    const treeRef = db.collection('tree_persons').doc(pid);
+
+    if (!change.after.exists) {
+      // O'chirildi — faqat egasiniki (claim qilinmagan) bo'lsa o'chiramiz.
+      const cur = await treeRef.get();
+      if (cur.exists && !cur.data().claimedBy) {
+        await treeRef.delete();
+      }
+      return null;
+    }
+
+    const userSnap = await db.collection('users').doc(uid).get();
+    const u = userSnap.data() || {};
+    const componentId = u.treeComponentId || treeComponentIdFor(uid);
+    if (!u.treeComponentId) {
+      await db.collection('users').doc(uid)
+        .set({ treeComponentId: componentId }, { merge: true });
+    }
+
+    await treeRef.set({
+      ...treeNodeFromRelative(change.after.data() || {}),
+      ownerUid: uid,
+      componentId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return null;
+  });

@@ -37,6 +37,14 @@
       ]
     },
     {
+      "collectionGroup": "tree_persons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "componentId", "order": "ASCENDING" },
+        { "fieldPath": "fullName", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "schedules",
       "queryScope": "COLLECTION",
       "fields": [

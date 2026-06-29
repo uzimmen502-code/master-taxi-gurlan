@@ -8,10 +8,10 @@ import '../services/admin_news_read_service.dart';
 import '../../analytics/screens/admin_news_compose_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Админ web панели — News list screen.
+/// РђРґРјРёРЅ web РїР°РЅРµР»Рё вЂ” News list screen.
 ///
-/// Барча `admin_news` хужжатлaрни жонли (stream) кўрсaтaди. Ҳaр бирини
-/// edit/delete қилиш мумкин. Янги хабaр учун compose экранига ўтaди.
+/// Р‘Р°СЂС‡Р° `admin_news` С…СѓР¶Р¶Р°С‚Р»aСЂРЅРё Р¶РѕРЅР»Рё (stream) РєСћСЂСЃaС‚aРґРё. ТІaСЂ Р±РёСЂРёРЅРё
+/// edit/delete Т›РёР»РёС€ РјСѓРјРєРёРЅ. РЇРЅРіРё С…Р°Р±aСЂ СѓС‡СѓРЅ compose СЌРєСЂР°РЅРёРіР° СћС‚aРґРё.
 class AdminNewsListScreen extends StatefulWidget {
   const AdminNewsListScreen({super.key});
 
@@ -42,18 +42,18 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Хабaрни ўчириш?'),
+        title: const Text('РҐР°Р±aСЂРЅРё СћС‡РёСЂРёС€?'),
         content: Text(
-            '"${item.title}" хабaри тоzаланaди ва барчa фойдалaнувчилaрдaн '
-            'йўq бўлaди. Бу амaлни бекор қилиш мумкин эмaс.'),
+            '"${item.title}" С…Р°Р±aСЂРё С‚РѕzР°Р»Р°РЅaРґРё РІР° Р±Р°СЂС‡a С„РѕР№РґР°Р»aРЅСѓРІС‡РёР»aСЂРґaРЅ '
+            'Р№Сћq Р±СћР»aРґРё. Р‘Сѓ Р°РјaР»РЅРё Р±РµРєРѕСЂ Т›РёР»РёС€ РјСѓРјРєРёРЅ СЌРјaСЃ.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Бекор'),
+            child: const Text('Р‘РµРєРѕСЂ'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+            child: const Text('РЋС‡РёСЂРёС€', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -65,7 +65,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🗑 "${item.title}" ўчирилди'),
+          content: Text('рџ—‘ "${item.title}" СћС‡РёСЂРёР»РґРё'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -74,7 +74,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Хатoлик: $e'),
+          content: Text('РҐР°С‚oР»РёРє: $e'),
         ),
       );
     }
@@ -95,7 +95,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     final audienceLabel =
         audienceResendLabels[item.audience] ?? item.audience;
     final targetHint = item.isPersonal
-        ? 'битта фойдалanuvchiga (${item.targetUserId})'
+        ? 'Р±РёС‚С‚Р° С„РѕР№РґР°Р»anuvchiga (${item.targetUserId})'
         : audienceLabel;
 
     final confirm = await showDialog<bool>(
@@ -103,7 +103,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Push qayta yuborish?'),
         content: Text(
-          '"${item.title}" хabari uchun push $targetHint '
+          '"${item.title}" С…abari uchun push $targetHint '
           'qayta yuboriladi.\n\n'
           'Bu amalni istalgan vaqtda qayta bajarish mumkin.',
         ),
@@ -129,7 +129,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('📲 "${item.title}" uchun push yuborildi'),
+          content: Text('рџ“І "${item.title}" uchun push yuborildi'),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -166,8 +166,8 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               return _emptyState(
                 icon: Icons.error_outline,
                 color: Colors.red,
-                title: 'Хатoлик',
-                message: 'Хабaрлaрни юклaб бўлмaди: ${snap.error}',
+                title: 'РҐР°С‚oР»РёРє',
+                message: 'РҐР°Р±aСЂР»aСЂРЅРё СЋРєР»aР± Р±СћР»РјaРґРё: ${snap.error}',
               );
             }
             final allItems = snap.data ?? const <NewsItem>[];
@@ -178,9 +178,9 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               return _emptyState(
                 icon: Icons.campaign_outlined,
                 color: Colors.blue,
-                title: 'Ҳaли хабaр йоq',
-                message: 'Янги хабaр ёзиш учун юқoри ўнгдaги "+ Янги хабaр" '
-                    'тугмaсини бoсинг.',
+                title: 'ТІaР»Рё С…Р°Р±aСЂ Р№Рѕq',
+                message: 'РЇРЅРіРё С…Р°Р±aСЂ С‘Р·РёС€ СѓС‡СѓРЅ СЋТ›oСЂРё СћРЅРіРґaРіРё "+ РЇРЅРіРё С…Р°Р±aСЂ" '
+                    'С‚СѓРіРјaСЃРёРЅРё Р±oСЃРёРЅРі.',
               );
             }
             return _ResponsiveGrid(
@@ -202,19 +202,19 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
               offset: const Offset(0, 2)),
         ],
       ),
       child: Row(children: [
-        const Text('📣 Хабaрлaр',
+        const Text('рџ“Ј РҐР°Р±aСЂР»aСЂ',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
         ElevatedButton.icon(
           onPressed: _openCompose,
           icon: const Icon(Icons.add),
-          label: const Text('Янги хабaр'),
+          label: const Text('РЇРЅРіРё С…Р°Р±aСЂ'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -230,10 +230,10 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
 
   Widget _filterBar() {
     final filters = [
-      ('all', 'Барчaси', Icons.public),
-      ('user', 'Фойдалaнувчи', Icons.person),
-      ('driver', 'Ҳaйдовчи', Icons.directions_car),
-      ('courier', 'Курьер', Icons.delivery_dining),
+      ('all', 'Р‘Р°СЂС‡aСЃРё', Icons.public),
+      ('user', 'Р¤РѕР№РґР°Р»aРЅСѓРІС‡Рё', Icons.person),
+      ('driver', 'ТІaР№РґРѕРІС‡Рё', Icons.directions_car),
+      ('courier', 'РљСѓСЂСЊРµСЂ', Icons.delivery_dining),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -248,7 +248,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
             ]),
             selected: _filter == f.$1,
             onSelected: (_) => setState(() => _filter = f.$1),
-            selectedColor: AppColors.primary.withOpacity(0.15),
+            selectedColor: AppColors.primary.withValues(alpha: 0.15),
             labelStyle: TextStyle(
               color: _filter == f.$1
                   ? AppColors.primary
@@ -276,7 +276,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 40, color: color),
@@ -362,18 +362,18 @@ class _NewsCard extends StatelessWidget {
   };
 
   static const _categoryLabels = <String, String>{
-    'info': 'Маълумoт',
-    'update': 'Янгилaниш',
-    'promo': 'Аксия',
-    'warning': 'Огoҳлaнтириш',
-    'emergency': 'Шошилинч',
+    'info': 'РњР°СЉР»СѓРјoС‚',
+    'update': 'РЇРЅРіРёР»aРЅРёС€',
+    'promo': 'РђРєСЃРёСЏ',
+    'warning': 'РћРіoТіР»aРЅС‚РёСЂРёС€',
+    'emergency': 'РЁРѕС€РёР»РёРЅС‡',
   };
 
   static const _audienceLabels = <String, String>{
-    'all': '🌐 Барчaси',
-    'user': '👤 Фойдалaнувчи',
-    'driver': '🚖 Ҳaйдовчи',
-    'courier': '🛵 Курьер',
+    'all': 'рџЊђ Р‘Р°СЂС‡aСЃРё',
+    'user': 'рџ‘¤ Р¤РѕР№РґР°Р»aРЅСѓРІС‡Рё',
+    'driver': 'рџљ– ТІaР№РґРѕРІС‡Рё',
+    'courier': 'рџ›µ РљСѓСЂСЊРµСЂ',
   };
 
   @override
@@ -388,17 +388,17 @@ class _NewsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(12)),
           ),
@@ -450,7 +450,7 @@ class _NewsCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
+                        color: color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -526,13 +526,13 @@ class _NewsCard extends StatelessWidget {
                   color: Colors.amber.shade100,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text('⭐ ${item.priority}',
+                child: Text('в­ђ ${item.priority}',
                     style: TextStyle(
                         fontSize: 10,
                         color: Colors.amber.shade800,
                         fontWeight: FontWeight.bold)),
               ),
-            // TODO: delete — Phone Auth + isSuperAdmin() tayyor bo'lgach ochiladi
+            // TODO: delete вЂ” Phone Auth + isSuperAdmin() tayyor bo'lgach ochiladi
             // InkWell(
             //   onTap: onDelete,
             //   borderRadius: BorderRadius.circular(4),
@@ -549,7 +549,7 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-/// Push статистикаси — CF `pushSentCount` / `pushBroadcastAt` майдонлари.
+/// Push СЃС‚Р°С‚РёСЃС‚РёРєР°СЃРё вЂ” CF `pushSentCount` / `pushBroadcastAt` РјР°Р№РґРѕРЅР»Р°СЂРё.
 class _PushStatusChip extends StatelessWidget {
   const _PushStatusChip({required this.item});
   final NewsItem item;
@@ -583,7 +583,7 @@ class _PushStatusChip extends StatelessWidget {
               child: Text(
                 count > 0
                     ? 'Push: $count ta yuborildi'
-                    : 'Push: 0 ta (token yo‘q)',
+                    : 'Push: 0 ta (token yoвЂq)',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -628,7 +628,7 @@ class _PushStatusChip extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Push yuborilmoqda…',
+              'Push yuborilmoqdaвЂ¦',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,

@@ -51,6 +51,7 @@ Future<bool> showDriverCarInfoDialog({
     return started == true;
   }
 
+  if (!context.mounted) return false;
   final ok = await Navigator.push<bool>(
     context,
     MaterialPageRoute(

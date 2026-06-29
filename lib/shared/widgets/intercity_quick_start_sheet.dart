@@ -8,7 +8,7 @@ import '../../utils/intercity_places.dart';
 
 /// Shaharlararo haydovchi uchun tez ishga chiqish bottom sheet.
 ///
-/// `DriverScheduleScreen` (to'liq ekran) o'rniga — ekran o'tishsiz, faqat
+/// `DriverScheduleScreen` (to'liq ekran) o'rniga вЂ” ekran o'tishsiz, faqat
 /// bottom sheet. Muvaffaqiyatli saqlansa `Navigator.pop(context, true)`.
 /// Saqlash mantig'i `DriverScheduleController`dagi intercity oqimini takrorlaydi
 /// (date/expiresAt/startTime/price/stops) va `SchedulesRepository`ni to'g'ridan
@@ -29,7 +29,7 @@ class IntercityQuickStartSheet extends StatefulWidget {
   final String driverCar;
   final String driverPlate;
 
-  /// Avtomobil sig'imidan olingan o'rindiqlar (UI yo'q — auto).
+  /// Avtomobil sig'imidan olingan o'rindiqlar (UI yo'q вЂ” auto).
   final int seats;
   final Color primaryColor;
 
@@ -54,7 +54,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
 
   late int _seats;
 
-  /// Avtomobil sig'imi — yuqori chegara.
+  /// Avtomobil sig'imi вЂ” yuqori chegara.
   int get _maxSeats => widget.seats > 0 ? widget.seats : 4;
 
   final _repo = SchedulesRepository();
@@ -126,21 +126,21 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
     final priceText = _priceCtrl.text.trim().replaceAll(' ', '');
 
     if (fromText.isEmpty) {
-      _snack('Қаердан — шаҳарни киритинг');
+      _snack('ТљР°РµСЂРґР°РЅ вЂ” С€Р°ТіР°СЂРЅРё РєРёСЂРёС‚РёРЅРі');
       return;
     }
     if (toText.isEmpty) {
-      _snack('Қаерга — шаҳарни киритинг');
+      _snack('ТљР°РµСЂРіР° вЂ” С€Р°ТіР°СЂРЅРё РєРёСЂРёС‚РёРЅРі');
       return;
     }
     if (priceText.isEmpty) {
-      _snack('Нархни киритинг');
+      _snack('РќР°СЂС…РЅРё РєРёСЂРёС‚РёРЅРі');
       return;
     }
 
     final uid = phoneDigits(widget.driverPhone);
     if (uid.length < 9) {
-      _snack('Телефон рақами топилмади');
+      _snack('РўРµР»РµС„РѕРЅ СЂР°Т›Р°РјРё С‚РѕРїРёР»РјР°РґРё');
       return;
     }
 
@@ -175,7 +175,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
         price: price,
       );
 
-      // Keyingi safar prefill uchun — DriverScheduleController bilan mos.
+      // Keyingi safar prefill uchun вЂ” DriverScheduleController bilan mos.
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('route_from_intercity', fromText);
       await prefs.setString('route_to_intercity', toText);
@@ -190,11 +190,11 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
       setState(() => _saving = false);
       final msg = e.toString();
       if (msg.contains('permission-denied')) {
-        _snack('Firestore рухсати йўқ. Admin тасдиғи ва интернетни текширинг.');
+        _snack('Firestore СЂСѓС…СЃР°С‚Рё Р№СћТ›. Admin С‚Р°СЃРґРёТ“Рё РІР° РёРЅС‚РµСЂРЅРµС‚РЅРё С‚РµРєС€РёСЂРёРЅРі.');
       } else if (msg.contains('failed-precondition')) {
-        _snack('Индекс кутилмоқда. Бир неча дақиқа сабр қилинг.');
+        _snack('РРЅРґРµРєСЃ РєСѓС‚РёР»РјРѕТ›РґР°. Р‘РёСЂ РЅРµС‡Р° РґР°Т›РёТ›Р° СЃР°Р±СЂ Т›РёР»РёРЅРі.');
       } else {
-        _snack('Хатолик: $e');
+        _snack('РҐР°С‚РѕР»РёРє: $e');
       }
     }
   }
@@ -235,7 +235,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
-                      'Шаҳарлараро — ишга чиқиш',
+                      'РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ вЂ” РёС€РіР° С‡РёТ›РёС€',
                       style:
                           TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                     ),
@@ -244,7 +244,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                 const SizedBox(height: 16),
                 _placeField(
                   ctrl: _fromCtrl,
-                  hint: 'Қаердан (шаҳар)',
+                  hint: 'ТљР°РµСЂРґР°РЅ (С€Р°ТіР°СЂ)',
                   color: color,
                   showSug: _showFromSug,
                   query: _fromQuery,
@@ -261,7 +261,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                 const SizedBox(height: 12),
                 _placeField(
                   ctrl: _toCtrl,
-                  hint: 'Қаерга (шаҳар)',
+                  hint: 'ТљР°РµСЂРіР° (С€Р°ТіР°СЂ)',
                   color: color,
                   showSug: _showToSug,
                   query: _toQuery,
@@ -279,11 +279,11 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                 Row(children: [
                   Expanded(
                     child: ChoiceChip(
-                      label: const Text('Бугун'),
+                      label: const Text('Р‘СѓРіСѓРЅ'),
                       selected: !_departureIsTomorrow,
                       onSelected: (_) =>
                           setState(() => _departureIsTomorrow = false),
-                      selectedColor: color.withOpacity(0.18),
+                      selectedColor: color.withValues(alpha: 0.18),
                       labelStyle: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: !_departureIsTomorrow ? color : Colors.grey,
@@ -293,11 +293,11 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ChoiceChip(
-                      label: const Text('Эртага'),
+                      label: const Text('Р­СЂС‚Р°РіР°'),
                       selected: _departureIsTomorrow,
                       onSelected: (_) =>
                           setState(() => _departureIsTomorrow = true),
-                      selectedColor: color.withOpacity(0.18),
+                      selectedColor: color.withValues(alpha: 0.18),
                       labelStyle: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: _departureIsTomorrow ? color : Colors.grey,
@@ -312,7 +312,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                       onPressed: _pickTime,
                       icon: Icon(Icons.access_time, size: 18, color: color),
                       label: Text(
-                        'Жўнаш: ${_fmtTime(_departure)}',
+                        'Р–СћРЅР°С€: ${_fmtTime(_departure)}',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       style: OutlinedButton.styleFrom(
@@ -332,7 +332,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                         FilteringTextInputFormatter.digitsOnly
                       ],
                       decoration: InputDecoration(
-                        hintText: 'Нарх (сўм)',
+                        hintText: 'РќР°СЂС… (СЃСћРј)',
                         prefixIcon: Icon(Icons.payments_outlined,
                             color: color, size: 20),
                         border: OutlineInputBorder(
@@ -353,7 +353,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                   child: Row(children: [
                     Icon(Icons.event_seat, color: color, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Ўриндиқлар',
+                    const Text('РЋСЂРёРЅРґРёТ›Р»Р°СЂ',
                         style: TextStyle(fontWeight: FontWeight.w600)),
                     const Spacer(),
                     IconButton(
@@ -393,7 +393,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.check_circle_outline, size: 22),
-                    label: Text(_saving ? 'Сақланмоқда...' : 'Тасдиқлаш'),
+                    label: Text(_saving ? 'РЎР°Т›Р»Р°РЅРјРѕТ›РґР°...' : 'РўР°СЃРґРёТ›Р»Р°С€'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: color,
                       foregroundColor: Colors.white,

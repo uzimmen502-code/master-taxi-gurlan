@@ -10,11 +10,11 @@ import '../../../repositories/driver_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_driver_requests_service.dart';
 
-/// Админ web — `driver_requests`.
+/// РђРґРјРёРЅ web вЂ” `driver_requests`.
 ///
-/// 3 ustun (статус): Кутаётган | Тасдиқланган | Рад этилган.
-/// Ҳар статус ustuni ichida: Маҳаллий | Маршрут | Шаҳарлараро (yonma-yon).
-/// Кенг экран: 3 статус ustuni yonma-yon. Тор: PageView (100% kenglik).
+/// 3 ustun (СЃС‚Р°С‚СѓСЃ): РљСѓС‚Р°С‘С‚РіР°РЅ | РўР°СЃРґРёТ›Р»Р°РЅРіР°РЅ | Р Р°Рґ СЌС‚РёР»РіР°РЅ.
+/// ТІР°СЂ СЃС‚Р°С‚СѓСЃ ustuni ichida: РњР°ТіР°Р»Р»РёР№ | РњР°СЂС€СЂСѓС‚ | РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ (yonma-yon).
+/// РљРµРЅРі СЌРєСЂР°РЅ: 3 СЃС‚Р°С‚СѓСЃ ustuni yonma-yon. РўРѕСЂ: PageView (100% kenglik).
 class DriverApplicationsScreen extends StatefulWidget {
   const DriverApplicationsScreen({super.key});
 
@@ -31,9 +31,9 @@ class _StatusColumnMeta {
 }
 
 const _statusColumns = [
-  _StatusColumnMeta('pending', '🟠 Кутаётган', AppColors.primary),
-  _StatusColumnMeta('approved', '🟢 Тасдиқланган', AppColors.primary),
-  _StatusColumnMeta('rejected', '🔴 Рад / Чиқарilgan', Color(0xFFD32F2F)),
+  _StatusColumnMeta('pending', 'рџџ  РљСѓС‚Р°С‘С‚РіР°РЅ', AppColors.primary),
+  _StatusColumnMeta('approved', 'рџџў РўР°СЃРґРёТ›Р»Р°РЅРіР°РЅ', AppColors.primary),
+  _StatusColumnMeta('rejected', 'рџ”ґ Р Р°Рґ / Р§РёТ›Р°СЂilgan', Color(0xFFD32F2F)),
 ];
 
 class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
@@ -136,7 +136,7 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
                   curve: Curves.easeOut,
                 );
               },
-              selectedColor: meta.color.withOpacity(0.2),
+              selectedColor: meta.color.withValues(alpha: 0.2),
               checkmarkColor: meta.color,
               labelStyle: TextStyle(
                 color: active ? meta.color : Colors.grey.shade700,
@@ -156,17 +156,17 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
               offset: const Offset(0, 2)),
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('🚗 Ҳайдовчи аризалари',
+          const Text('рџљ— ТІР°Р№РґРѕРІС‡Рё Р°СЂРёР·Р°Р»Р°СЂРё',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const Spacer(),
-          // Pending count badge — Real-time.
+          // Pending count badge вЂ” Real-time.
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('driver_requests')
@@ -188,7 +188,7 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
                   const Icon(Icons.pending_actions,
                       size: 16, color: AppColors.primary),
                   const SizedBox(width: 6),
-                  Text('$n та кутяпти',
+                  Text('$n С‚Р° РєСѓС‚СЏРїС‚Рё',
                       style: const TextStyle(
                           color: AppColors.primary,
                           fontSize: 13,
@@ -203,7 +203,7 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
           controller: _searchCtrl,
           onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
           decoration: InputDecoration(
-            hintText: 'Қидириш: ism, telefon, avto…',
+            hintText: 'ТљРёРґРёСЂРёС€: ism, telefon, avtoвЂ¦',
             prefixIcon: const Icon(Icons.search, size: 20),
             suffixIcon: _searchQuery.isEmpty
                 ? null
@@ -252,9 +252,9 @@ class _ResetTaxiDriversRegistryTileState
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('⚠️ Ҳайдовчilar bazasini tozalash'),
+        title: const Text('вљ пёЏ ТІР°Р№РґРѕРІС‡ilar bazasini tozalash'),
         content: const Text(
-          'Маршрут, маҳаллий ва шаҳарлараро бўйича барча аризалар, '
+          'РњР°СЂС€СЂСѓС‚, РјР°ТіР°Р»Р»РёР№ РІР° С€Р°ТіР°СЂР»Р°СЂР°СЂРѕ Р±СћР№РёС‡Р° Р±Р°СЂС‡Р° Р°СЂРёР·Р°Р»Р°СЂ, '
           'navbat, jadval va intercity ro\'yxatlari o\'chiriladi. '
           'Haydovchilar qayta ro\'yxatdan o\'tishi kerak.\n\n'
           'Davom etish uchun RESET_TAXI_DRIVERS deb yozing.',
@@ -262,12 +262,12 @@ class _ResetTaxiDriversRegistryTileState
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Бекор'),
+            child: const Text('Р‘РµРєРѕСЂ'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Тозалаш'),
+            child: const Text('РўРѕР·Р°Р»Р°С€'),
           ),
         ],
       ),
@@ -285,7 +285,7 @@ class _ResetTaxiDriversRegistryTileState
       _snack(result.error!);
       return;
     }
-    _snack('Тозаланди: ${result.stats}');
+    _snack('РўРѕР·Р°Р»Р°РЅРґРё: ${result.stats}');
   }
 
   void _snack(String msg) {
@@ -300,7 +300,7 @@ class _ResetTaxiDriversRegistryTileState
       child: ListTile(
         leading: Icon(Icons.delete_sweep, color: Colors.red.shade700),
         title: Text(
-          'Такси ҳайдовчилар базасини тозалаш',
+          'РўР°РєСЃРё ТіР°Р№РґРѕРІС‡РёР»Р°СЂ Р±Р°Р·Р°СЃРёРЅРё С‚РѕР·Р°Р»Р°С€',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.red.shade900,
@@ -308,7 +308,7 @@ class _ResetTaxiDriversRegistryTileState
           ),
         ),
         subtitle: const Text(
-          'Маршрут + маҳаллий + шаҳарлараро — yangi ro\'yxatdan o\'tish',
+          'РњР°СЂС€СЂСѓС‚ + РјР°ТіР°Р»Р»РёР№ + С€Р°ТіР°СЂР»Р°СЂР°СЂРѕ вЂ” yangi ro\'yxatdan o\'tish',
           style: TextStyle(fontSize: 12),
         ),
         trailing: _busy
@@ -319,7 +319,7 @@ class _ResetTaxiDriversRegistryTileState
               )
             : TextButton(
                 onPressed: _runReset,
-                child: const Text('Ишга тушириш'),
+                child: const Text('РС€РіР° С‚СѓС€РёСЂРёС€'),
               ),
       ),
     );
@@ -356,8 +356,8 @@ class _DriverApprovalModeTile extends StatelessWidget {
             Expanded(
               child: Text(
                 manual
-                    ? 'Driver approval: MANUAL — янги ҳайдовчилар админ тасдиғини кутади'
-                    : 'Driver approval: AUTO — янги ҳайдовчилар автомат фаоллашади',
+                    ? 'Driver approval: MANUAL вЂ” СЏРЅРіРё ТіР°Р№РґРѕРІС‡РёР»Р°СЂ Р°РґРјРёРЅ С‚Р°СЃРґРёТ“РёРЅРё РєСѓС‚Р°РґРё'
+                    : 'Driver approval: AUTO вЂ” СЏРЅРіРё ТіР°Р№РґРѕРІС‡РёР»Р°СЂ Р°РІС‚РѕРјР°С‚ С„Р°РѕР»Р»Р°С€Р°РґРё',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -393,7 +393,7 @@ class _DriverApprovalModeTile extends StatelessWidget {
   }
 }
 
-/// Бир статус ustuni: сарлавҳа + ичида 3 ustun (Маҳаллий | Маршрут | Шаҳарлараро).
+/// Р‘РёСЂ СЃС‚Р°С‚СѓСЃ ustuni: СЃР°СЂР»Р°РІТіР° + РёС‡РёРґР° 3 ustun (РњР°ТіР°Р»Р»РёР№ | РњР°СЂС€СЂСѓС‚ | РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ).
 class _StatusColumnPanel extends StatelessWidget {
   const _StatusColumnPanel({
     required this.meta,
@@ -428,10 +428,10 @@ class _StatusColumnPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withOpacity(0.35), width: 1.5),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -460,9 +460,9 @@ class _StatusColumnPanel extends StatelessWidget {
             return _ApplicationsEmptyState(
               icon: Icons.error_outline,
               color: Colors.red,
-              title: 'Хатолик',
+              title: 'РҐР°С‚РѕР»РёРє',
               msg:
-                  'Аризаларни юклаб бўлмади: ${snap.error}\n\n`createdAt` index керак бўлиши мумкин.',
+                  'РђСЂРёР·Р°Р»Р°СЂРЅРё СЋРєР»Р°Р± Р±СћР»РјР°РґРё: ${snap.error}\n\n`createdAt` index РєРµСЂР°Рє Р±СћР»РёС€Рё РјСѓРјРєРёРЅ.',
             );
           }
 
@@ -480,7 +480,7 @@ class _StatusColumnPanel extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.1),
+                  color: accent.withValues(alpha: 0.1),
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(14)),
                 ),
@@ -527,10 +527,10 @@ class _StatusColumnPanel extends StatelessWidget {
                                 ? Icons.check_circle_outline
                                 : Icons.block,
                         color: accent,
-                        title: searchQuery.isEmpty ? 'Ариза йўқ' : 'Топилмади',
+                        title: searchQuery.isEmpty ? 'РђСЂРёР·Р° Р№СћТ›' : 'РўРѕРїРёР»РјР°РґРё',
                         msg: searchQuery.isEmpty
-                            ? 'Бу статусда ҳозирча ариза йўқ.'
-                            : 'Қidiruv bo\'yicha mos ariza yo\'q.',
+                            ? 'Р‘Сѓ СЃС‚Р°С‚СѓСЃРґР° ТіРѕР·РёСЂС‡Р° Р°СЂРёР·Р° Р№СћТ›.'
+                            : 'Тљidiruv bo\'yicha mos ariza yo\'q.',
                       )
                     : _buildGroupedList(docs, status),
               ),
@@ -580,7 +580,7 @@ class _ApplicationsEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: color.withOpacity(0.7)),
+            Icon(icon, size: 40, color: color.withValues(alpha: 0.7)),
             const SizedBox(height: 12),
             Text(
               title,
@@ -603,7 +603,7 @@ const _driverTypeOrder = ['local', 'marshrut', 'intercity'];
 const _minTaxiTypeColumnWidth = 150.0;
 const _taxiTypeColumnGap = 6.0;
 
-/// Статус ustuni ichidagi 3 ta такси тури ustuni (yonma-yon).
+/// РЎС‚Р°С‚СѓСЃ ustuni ichidagi 3 ta С‚Р°РєСЃРё С‚СѓСЂРё ustuni (yonma-yon).
 class _TaxiTypeColumnsRow extends StatelessWidget {
   const _TaxiTypeColumnsRow({
     required this.groups,
@@ -688,11 +688,11 @@ String _normalizeTaxiType(String? type) {
 String _driverTypeLabel(String type) {
   switch (type) {
     case 'marshrut':
-      return 'Маршрут такси';
+      return 'РњР°СЂС€СЂСѓС‚ С‚Р°РєСЃРё';
     case 'intercity':
-      return 'Шаҳарлараро';
+      return 'РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ';
     default:
-      return 'Маҳаллий такси';
+      return 'РњР°ТіР°Р»Р»РёР№ С‚Р°РєСЃРё';
   }
 }
 
@@ -707,7 +707,7 @@ Color _driverTypeColor(String type) {
   }
 }
 
-/// Маҳаллий | Маршрут | Шаҳарлараро — бир статус ustuni ichidagi bitta ustun.
+/// РњР°ТіР°Р»Р»РёР№ | РњР°СЂС€СЂСѓС‚ | РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ вЂ” Р±РёСЂ СЃС‚Р°С‚СѓСЃ ustuni ichidagi bitta ustun.
 class _ApplicationsTypeSection extends StatelessWidget {
   const _ApplicationsTypeSection({
     required this.title,
@@ -725,9 +725,9 @@ class _ApplicationsTypeSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withOpacity(0.04),
+        color: color.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -735,7 +735,7 @@ class _ApplicationsTypeSection extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(12)),
             ),
@@ -772,7 +772,7 @@ class _ApplicationsTypeSection extends StatelessWidget {
                 child: Padding(
                   padding: EdgeInsets.all(12),
                   child: Text(
-                    'Ариза йўқ',
+                    'РђСЂРёР·Р° Р№СћТ›',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontSize: 11),
                   ),
@@ -855,8 +855,8 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     }
 
     final msg = result.warnings.isEmpty
-        ? '✅ Ариза тасдиқланди: ${_f('name', 'Aризa')}'
-        : '✅ Ариза тасдиқланди. Қўшимча: ${result.warnings.join(' | ')}';
+        ? 'вњ… РђСЂРёР·Р° С‚Р°СЃРґРёТ›Р»Р°РЅРґРё: ${_f('name', 'AСЂРёР·a')}'
+        : 'вњ… РђСЂРёР·Р° С‚Р°СЃРґРёТ›Р»Р°РЅРґРё. ТљСћС€РёРјС‡Р°: ${result.warnings.join(' | ')}';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: result.warnings.isEmpty ? AppColors.primary : Colors.orange,
@@ -873,9 +873,9 @@ class _ApplicationCardState extends State<_ApplicationCard> {
       final reason = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Аризани рад этиш'),
+          title: const Text('РђСЂРёР·Р°РЅРё СЂР°Рґ СЌС‚РёС€'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Рад этиш сабабини киритинг:'),
+            const Text('Р Р°Рґ СЌС‚РёС€ СЃР°Р±Р°Р±РёРЅРё РєРёСЂРёС‚РёРЅРі:'),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
@@ -890,7 +890,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Бекор'),
+              child: const Text('Р‘РµРєРѕСЂ'),
             ),
             TextButton(
               onPressed: () {
@@ -898,7 +898,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                 Navigator.pop(ctx, reasonCtrl.text.trim());
               },
               child:
-                  const Text('Рад этиш', style: TextStyle(color: Colors.red)),
+                  const Text('Р Р°Рґ СЌС‚РёС€', style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
@@ -921,7 +921,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Ариза рад этилди: ${_f('name', 'Ариза')}'),
+            content: Text('РђСЂРёР·Р° СЂР°Рґ СЌС‚РёР»РґРё: ${_f('name', 'РђСЂРёР·Р°')}'),
           ),
         );
       }
@@ -1058,7 +1058,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  active ? 'Faol (online/panelda)' : 'Faol emas — navbat vaqtida chiqmadi',
+                  active ? 'Faol (online/panelda)' : 'Faol emas вЂ” navbat vaqtida chiqmadi',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1140,11 +1140,11 @@ class _ApplicationCardState extends State<_ApplicationCard> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1153,13 +1153,13 @@ class _ApplicationCardState extends State<_ApplicationCard> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Row(children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: color.withOpacity(0.2),
+              backgroundColor: color.withValues(alpha: 0.2),
               child: Text(
                   (_f('name').isEmpty ? '?' : _f('name').substring(0, 1))
                       .toUpperCase(),
@@ -1170,12 +1170,12 @@ class _ApplicationCardState extends State<_ApplicationCard> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_f('name', 'Ҳайдовчи номи йўқ'),
+                    Text(_f('name', 'ТІР°Р№РґРѕРІС‡Рё РЅРѕРјРё Р№СћТ›'),
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 14),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
-                    Text(_f('phone', 'Тел йўқ'),
+                    Text(_f('phone', 'РўРµР» Р№СћТ›'),
                         style: TextStyle(
                             fontSize: 12, color: Colors.grey.shade700)),
                   ]),
@@ -1195,15 +1195,15 @@ class _ApplicationCardState extends State<_ApplicationCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _row('🚗 Авто', _f('car', '—')),
-              _row('🚕 Тур',
+              _row('рџљ— РђРІС‚Рѕ', _f('car', 'вЂ”')),
+              _row('рџљ• РўСѓСЂ',
                   _driverTypeLabel(_normalizeTaxiType(_f('taxiType')))),
-              _row('🔢 Рақам', _f('plate', _f('carNumber', '—'))),
-              if (_f('passport').isNotEmpty) _row('📃 Pasport', _f('passport')),
+              _row('рџ”ў Р Р°Т›Р°Рј', _f('plate', _f('carNumber', 'вЂ”'))),
+              if (_f('passport').isNotEmpty) _row('рџ“ѓ Pasport', _f('passport')),
               if (_f('birthYear').isNotEmpty)
-                _row('🎂 Туғилган йил', _f('birthYear')),
+                _row('рџЋ‚ РўСѓТ“РёР»РіР°РЅ Р№РёР»', _f('birthYear')),
               if (_f('experience').isNotEmpty)
-                _row('📅 Тажриба', _f('experience')),
+                _row('рџ“… РўР°Р¶СЂРёР±Р°', _f('experience')),
               if (docStatus == 'rejected' && _f('rejectedReason').isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(top: 8),
@@ -1213,7 +1213,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '⛔ ${_f('rejectedReason')}',
+                    'в›” ${_f('rejectedReason')}',
                     style: TextStyle(fontSize: 11, color: Colors.red.shade700),
                   ),
                 ),
@@ -1226,17 +1226,17 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    '🚫 Chiqarilgan: ${_f('revokedReason')}',
+                    'рџљ« Chiqarilgan: ${_f('revokedReason')}',
                     style:
                         TextStyle(fontSize: 11, color: Colors.deepPurple.shade700),
                   ),
                 ),
               if (_f('routeLabel').isNotEmpty)
-                _row('📍 Маршрут', _f('routeLabel'))
+                _row('рџ“Ќ РњР°СЂС€СЂСѓС‚', _f('routeLabel'))
               else if (_f('routeFrom').isNotEmpty || _f('routeTo').isNotEmpty)
                 _row(
-                  '📍 Маршрут',
-                  '${_f('routeFrom')} → ${_f('routeTo')}',
+                  'рџ“Ќ РњР°СЂС€СЂСѓС‚',
+                  '${_f('routeFrom')} в†’ ${_f('routeTo')}',
                 ),
               if (_normalizeTaxiType(_f('taxiType')) == 'marshrut' &&
                   _f('routeLabel').isEmpty &&
@@ -1244,13 +1244,13 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    'ℹ️ Маршрут киритилмаган',
+                    'в„№пёЏ РњР°СЂС€СЂСѓС‚ РєРёСЂРёС‚РёР»РјР°РіР°РЅ',
                     style: TextStyle(fontSize: 10, color: Colors.orange.shade800),
                   ),
                 ),
               if (createdAt != null) ...[
                 const SizedBox(height: 6),
-                Text('⏱ ${DateFormat('dd.MM.yyyy HH:mm').format(createdAt)}',
+                Text('вЏ± ${DateFormat('dd.MM.yyyy HH:mm').format(createdAt)}',
                     style:
                         TextStyle(fontSize: 10, color: Colors.grey.shade500)),
               ],
@@ -1270,7 +1270,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                 child: OutlinedButton.icon(
                   onPressed: _busy ? null : _reject,
                   icon: const Icon(Icons.close, size: 16),
-                  label: const Text('Рад этиш'),
+                  label: const Text('Р Р°Рґ СЌС‚РёС€'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
                     side: const BorderSide(color: Colors.red),
@@ -1289,7 +1289,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check, size: 16),
-                  label: const Text('Тасдиқ'),
+                  label: const Text('РўР°СЃРґРёТ›'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.button,
                     foregroundColor: Colors.white,

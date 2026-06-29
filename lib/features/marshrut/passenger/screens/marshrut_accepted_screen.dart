@@ -17,7 +17,7 @@ import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../services/settlement_service.dart';
 
-/// Marshrut — haydovchi qabul qilgandan keyingi to'liq safar ekrani.
+/// Marshrut вЂ” haydovchi qabul qilgandan keyingi to'liq safar ekrani.
 class MarshrutAcceptedScreen extends StatefulWidget {
   const MarshrutAcceptedScreen({super.key, required this.trip});
 
@@ -243,7 +243,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row('🚌', trip.driverName),
+                  _row('рџљЊ', trip.driverName),
                   const SizedBox(height: 8),
                   Material(
                     color: Colors.transparent,
@@ -256,13 +256,13 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
                           children: [
-                            const Text('📞', style: TextStyle(fontSize: 20)),
+                            const Text('рџ“ћ', style: TextStyle(fontSize: 20)),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 trip.driverPhone.isNotEmpty
                                     ? trip.driverPhone
-                                    : '—',
+                                    : 'вЂ”',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: trip.driverPhone.isNotEmpty
@@ -283,7 +283,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _row('🚗', '${trip.driverCar} · ${trip.driverPlate}'),
+                  _row('рџљ—', '${trip.driverCar} В· ${trip.driverPlate}'),
                 ],
               ),
             ),
@@ -327,7 +327,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '$distanceStr · ${_formatCountdown(context)}',
+                    '$distanceStr В· ${_formatCountdown(context)}',
                     style: TextStyle(
                       fontSize: AppText.bodySmall,
                       color: Colors.grey.shade700,
@@ -341,9 +341,9 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             ),
             child: Column(
               children: [
@@ -398,7 +398,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         ],
       );
 
-  /// Safar tugadi — qaytim (settlement) pending bo'lsa tasdiq dialogi, so'ng pop.
+  /// Safar tugadi вЂ” qaytim (settlement) pending bo'lsa tasdiq dialogi, so'ng pop.
   Future<void> _handleCompleted(String tripId) async {
     if (!mounted) return;
     try {
@@ -422,26 +422,26 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Settlement Ledger — qaytim hamyonga o'tkazilsinmi (yo'lovchi tasdig'i).
+  /// Settlement Ledger вЂ” qaytim hamyonga o'tkazilsinmi (yo'lovchi tasdig'i).
   Future<void> _showSettlementDialog(String settlementId, int amount) async {
     final choice = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Қайтим — ҳамёнга'),
+        title: const Text('ТљР°Р№С‚РёРј вЂ” ТіР°РјС‘РЅРіР°'),
         content: Text(
-          'Ҳайдовчи ${formatPrice(amount)} сўм қайтимни ҳамёнингизга '
-          'ўтказмоқчи. Тасдиқлайсизми?',
+          'ТІР°Р№РґРѕРІС‡Рё ${formatPrice(amount)} СЃСћРј Т›Р°Р№С‚РёРјРЅРё ТіР°РјС‘РЅРёРЅРіРёР·РіР° '
+          'СћС‚РєР°Р·РјРѕТ›С‡Рё. РўР°СЃРґРёТ›Р»Р°Р№СЃРёР·РјРё?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
-            child: const Text('Нақд керак'),
+            child: const Text('РќР°Т›Рґ РєРµСЂР°Рє'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, 'confirm'),
-            child: const Text('Тасдиқлайман'),
+            child: const Text('РўР°СЃРґРёТ›Р»Р°Р№РјР°РЅ'),
           ),
         ],
       ),
@@ -452,7 +452,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
+          content: Text('${formatPrice(amount)} СЃСћРј ТіР°РјС‘РЅРёРЅРіРёР·РіР° Т›СћС€РёР»РґРё'),
           backgroundColor: Colors.green,
         ));
       } else {

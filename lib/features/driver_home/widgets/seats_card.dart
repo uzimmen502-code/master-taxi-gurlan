@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// Бўш ўрин миқдори картаси — +/- тугмалари билан.
+/// Р‘СћС€ СћСЂРёРЅ РјРёТ›РґРѕСЂРё РєР°СЂС‚Р°СЃРё вЂ” +/- С‚СѓРіРјР°Р»Р°СЂРё Р±РёР»Р°РЅ.
 class SeatsCard extends StatelessWidget {
   const SeatsCard({
     super.key,
@@ -29,13 +29,13 @@ class SeatsCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: isFull ? _red.withOpacity(0.4) : _green.withOpacity(0.3)),
+            color: isFull ? _red.withValues(alpha: 0.4) : _green.withValues(alpha: 0.3)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
       ),
       child: Row(children: [
-        Text(isFull ? '🚫' : '💺', style: const TextStyle(fontSize: 28)),
+        Text(isFull ? 'рџљ«' : 'рџ’є', style: const TextStyle(fontSize: 28)),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -43,15 +43,15 @@ class SeatsCard extends StatelessWidget {
             children: [
               Text(
                 isFull
-                    ? 'БЎШ ЖОЙ ҚОЛМАДИ — ҲАРАКАТ БОШЛАНГ!'
-                    : '$seatsLeft та жой бўш',
+                    ? 'Р‘РЋРЁ Р–РћР™ ТљРћР›РњРђР”Р вЂ” ТІРђР РђРљРђРў Р‘РћРЁР›РђРќР“!'
+                    : '$seatsLeft С‚Р° Р¶РѕР№ Р±СћС€',
                 style: TextStyle(
                   fontSize: AppText.bodyMedium,
                   fontWeight: FontWeight.bold,
                   color: isFull ? _red : _green,
                 ),
               ),
-              Text('Жами: $totalSeats та ўрин',
+              Text('Р–Р°РјРё: $totalSeats С‚Р° СћСЂРёРЅ',
                   style: TextStyle(
                       fontSize: AppText.labelSmall,
                       color: Colors.grey.shade500)),
@@ -84,7 +84,7 @@ class SeatsCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: [
                   BoxShadow(
-                      color: _green.withOpacity(0.3),
+                      color: _green.withValues(alpha: 0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 2)),
                 ],

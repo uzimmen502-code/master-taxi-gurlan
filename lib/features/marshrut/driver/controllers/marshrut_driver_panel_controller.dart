@@ -83,7 +83,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   String? _errorMessage;
   String? _info;
   String? _pendingDialogTripId;
-  bool _isDialogOpen = false;
+  bool isDialogOpen = false;
   VoidCallback? onStopRingtone;
   VoidCallback? onEndStopApproaching;
   void Function(String tripId)? onPassengerOrderCancelled;
@@ -109,10 +109,6 @@ class MarshrutDriverPanelController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get info => _info;
   String? get pendingDialogTripId => _pendingDialogTripId;
-  bool get isDialogOpen => _isDialogOpen;
-  set isDialogOpen(bool value) {
-    _isDialogOpen = value;
-  }
   bool get hasRequests => _requests.isNotEmpty;
   bool get hasAcceptedTrips => _acceptedTrips.isNotEmpty;
   bool _initDone = false;
@@ -586,7 +582,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       }
       if (list.isNotEmpty &&
           _pendingDialogTripId == null &&
-          !_isDialogOpen) {
+          !isDialogOpen) {
         final first = list.first;
         _pendingDialogTripId = first.id;
         unawaited(
@@ -670,8 +666,10 @@ class MarshrutDriverPanelController extends ChangeNotifier {
         if (!kIsWeb) {
           try {
             final pos = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 6),
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.medium,
+                timeLimit: Duration(seconds: 6),
+              ),
             );
             lat = pos.latitude;
             lng = pos.longitude;
@@ -1019,7 +1017,7 @@ class MarshrutDriverPanelController extends ChangeNotifier {
       final list =
           await _rides.getPendingForDriver(driverId, taxiType: 'marshrut');
       if (_disposed || list.isEmpty) return;
-      if (_pendingDialogTripId == null && !_isDialogOpen) {
+      if (_pendingDialogTripId == null && !isDialogOpen) {
         _requests = list;
         _pendingDialogTripId = list.first.id;
         _safeNotify();

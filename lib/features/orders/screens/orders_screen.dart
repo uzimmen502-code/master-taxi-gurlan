@@ -55,10 +55,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.home_outlined),
-          tooltip: 'Бош саҳифа',
+          tooltip: 'Р‘РѕС€ СЃР°ТіРёС„Р°',
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('Буюртмалар'),
+        title: const Text('Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ'),
         centerTitle: true,
       ),
       body: Column(
@@ -82,7 +82,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             child: CircularProgressIndicator());
                       }
                       if (snap.hasError) {
-                        return Center(child: Text('Хатолик: ${snap.error}'));
+                        return Center(child: Text('РҐР°С‚РѕР»РёРє: ${snap.error}'));
                       }
                       final all = snap.data ?? const <OrderModel>[];
                       final filtered = all.where((o) {
@@ -129,9 +129,9 @@ class _SegmentToggle extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       child: Row(
         children: [
-          _seg(context, label: '📌 Фаол', selected: showActive,
+          _seg(context, label: 'рџ“Њ Р¤Р°РѕР»', selected: showActive,
               onTap: () => onChanged(true)),
-          _seg(context, label: '✅ Тугаган', selected: !showActive,
+          _seg(context, label: 'вњ… РўСѓРіР°РіР°РЅ', selected: !showActive,
               onTap: () => onChanged(false)),
         ],
       ),
@@ -152,7 +152,7 @@ class _SegmentToggle extends StatelessWidget {
             color: selected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: selected
-                ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)]
                 : null,
           ),
           alignment: Alignment.center,
@@ -191,8 +191,8 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             showActive
-                ? 'Фаол буюртмалар йўқ'
-                : 'Тугаган буюртмалар йўқ',
+                ? 'Р¤Р°РѕР» Р±СѓСЋСЂС‚РјР°Р»Р°СЂ Р№СћТ›'
+                : 'РўСѓРіР°РіР°РЅ Р±СѓСЋСЂС‚РјР°Р»Р°СЂ Р№СћТ›',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
           ),
         ],

@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../models/trip_request.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Карта ҳолати:
-/// normal    — оддий, яшил Қабул / қизил Рад фаол.
-/// reserving — бу ҳайдовчи банд қилган: 10 сония таймер + Қабул/Рад.
-/// waiting   — бошқа банд қилган: сариқ "Кутиб туринг" (пассив).
+/// РљР°СЂС‚Р° ТіРѕР»Р°С‚Рё:
+/// normal    вЂ” РѕРґРґРёР№, СЏС€РёР» ТљР°Р±СѓР» / Т›РёР·РёР» Р Р°Рґ С„Р°РѕР».
+/// reserving вЂ” Р±Сѓ ТіР°Р№РґРѕРІС‡Рё Р±Р°РЅРґ Т›РёР»РіР°РЅ: 10 СЃРѕРЅРёСЏ С‚Р°Р№РјРµСЂ + ТљР°Р±СѓР»/Р Р°Рґ.
+/// waiting   вЂ” Р±РѕС€Т›Р° Р±Р°РЅРґ Т›РёР»РіР°РЅ: СЃР°СЂРёТ› "РљСѓС‚РёР± С‚СѓСЂРёРЅРі" (РїР°СЃСЃРёРІ).
 enum TripCardMode { normal, reserving, waiting }
 
-/// "Янги буюртмалар" рўйхатидаги битта карта.
+/// "РЇРЅРіРё Р±СѓСЋСЂС‚РјР°Р»Р°СЂ" СЂСћР№С…Р°С‚РёРґР°РіРё Р±РёС‚С‚Р° РєР°СЂС‚Р°.
 class TripRequestCard extends StatelessWidget {
   const TripRequestCard({
     super.key,
@@ -35,9 +35,9 @@ class TripRequestCard extends StatelessWidget {
   String _genderLabel() {
     switch (ride.userGender) {
       case 'female':
-        return '👩 Аёл';
+        return 'рџ‘© РђС‘Р»';
       case 'male':
-        return '👨 Эркак';
+        return 'рџ‘Ё Р­СЂРєР°Рє';
       default:
         return '';
     }
@@ -58,7 +58,7 @@ class TripRequestCard extends StatelessWidget {
 
     final subParts = <String>[
       if (gender.isNotEmpty) gender,
-      if (age != null) '$age ёш',
+      if (age != null) '$age С‘С€',
     ];
 
     final isWaiting = mode == TripCardMode.waiting;
@@ -74,16 +74,16 @@ class TripRequestCard extends StatelessWidget {
           border: mode == TripCardMode.reserving
               ? Border.all(color: _green, width: 1.5)
               : secs <= 30
-                  ? Border.all(color: _red.withOpacity(0.4), width: 1.5)
+                  ? Border.all(color: _red.withValues(alpha: 0.4), width: 1.5)
                   : Border.all(color: Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Йўловчи маълумоти ───
+            // в”Ђв”Ђв”Ђ Р™СћР»РѕРІС‡Рё РјР°СЉР»СѓРјРѕС‚Рё в”Ђв”Ђв”Ђ
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -98,7 +98,7 @@ class TripRequestCard extends StatelessWidget {
                       if (subParts.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(subParts.join('  ·  '),
+                          child: Text(subParts.join('  В·  '),
                               style: TextStyle(
                                   fontSize: AppText.labelSmall,
                                   color: Colors.grey.shade600)),
@@ -117,7 +117,7 @@ class TripRequestCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (ride.distanceKm > 0)
-                      Text('${ride.distanceKm.toStringAsFixed(1)} км',
+                      Text('${ride.distanceKm.toStringAsFixed(1)} РєРј',
                           style: const TextStyle(
                               fontSize: AppText.bodyMedium,
                               fontWeight: FontWeight.bold,
@@ -127,11 +127,11 @@ class TripRequestCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                          color: timerColor.withOpacity(0.1),
+                          color: timerColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border:
-                              Border.all(color: timerColor.withOpacity(0.3))),
-                      child: Text('⏱ $m:${s.toString().padLeft(2, '0')}',
+                              Border.all(color: timerColor.withValues(alpha: 0.3))),
+                      child: Text('вЏ± $m:${s.toString().padLeft(2, '0')}',
                           style: TextStyle(
                               fontSize: AppText.labelSmall,
                               fontWeight: FontWeight.bold,
@@ -149,7 +149,7 @@ class TripRequestCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     ride.to.isNotEmpty
-                        ? '${ride.from} → ${ride.to}'
+                        ? '${ride.from} в†’ ${ride.to}'
                         : ride.from,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -169,17 +169,17 @@ class TripRequestCard extends StatelessWidget {
   }
 
   Widget _buildActions() {
-    // "Кутиб туринг" — пассив сариқ.
+    // "РљСѓС‚РёР± С‚СѓСЂРёРЅРі" вЂ” РїР°СЃСЃРёРІ СЃР°СЂРёТ›.
     if (mode == TripCardMode.waiting) {
       return Container(
         height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _amber.withOpacity(0.15),
+          color: _amber.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: _amber, width: 1.5),
         ),
-        child: const Text('⏳ Кутиб туринг',
+        child: const Text('вЏі РљСѓС‚РёР± С‚СѓСЂРёРЅРі',
             style: TextStyle(
                 fontSize: AppText.bodyMedium,
                 fontWeight: FontWeight.bold,
@@ -187,7 +187,7 @@ class TripRequestCard extends StatelessWidget {
       );
     }
 
-    // Банд қилинган — таймер + Қабул/Рад.
+    // Р‘Р°РЅРґ Т›РёР»РёРЅРіР°РЅ вЂ” С‚Р°Р№РјРµСЂ + ТљР°Р±СѓР»/Р Р°Рґ.
     if (mode == TripCardMode.reserving) {
       return Column(
         children: [
@@ -196,11 +196,11 @@ class TripRequestCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: _green.withOpacity(0.08),
+              color: _green.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              'Гаплашиб Қабул/Рад қилишингиз учун $reserveSecsLeft сония',
+              'Р“Р°РїР»Р°С€РёР± ТљР°Р±СѓР»/Р Р°Рґ Т›РёР»РёС€РёРЅРіРёР· СѓС‡СѓРЅ $reserveSecsLeft СЃРѕРЅРёСЏ',
               textAlign: TextAlign.center,
               style: const TextStyle(
                   fontSize: AppText.labelSmall,
@@ -211,24 +211,24 @@ class TripRequestCard extends StatelessWidget {
           Row(children: [
             Expanded(
               child: _ActionButton(
-                  label: 'Рад', color: _red, filled: false, onTap: onReject),
+                  label: 'Р Р°Рґ', color: _red, filled: false, onTap: onReject),
             ),
             const SizedBox(width: 10),
             Expanded(
               flex: 2,
               child: _ActionButton(
-                  label: 'Қабул', color: _green, filled: true, onTap: onAccept),
+                  label: 'ТљР°Р±СѓР»', color: _green, filled: true, onTap: onAccept),
             ),
           ]),
         ],
       );
     }
 
-    // Оддий.
+    // РћРґРґРёР№.
     return Row(children: [
       Expanded(
         child: _ActionButton(
-          label: 'Рад',
+          label: 'Р Р°Рґ',
           color: _red,
           filled: false,
           onTap: disabled ? null : onReject,
@@ -238,7 +238,7 @@ class TripRequestCard extends StatelessWidget {
       Expanded(
         flex: 2,
         child: _ActionButton(
-          label: 'Қўнғироқ',
+          label: 'ТљСћРЅТ“РёСЂРѕТ›',
           icon: Icons.phone,
           color: _green,
           filled: true,

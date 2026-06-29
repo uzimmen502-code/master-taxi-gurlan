@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/gurlan_places.dart';
 
-/// Гурлан МФЙ танлаш учун универсал input. Driver register, driver schedule
-/// каби driver flow'ларида қайта ишлатилади. Passenger томонида соддароқ
-/// `MfyDropdown` бор — у бошқача (yagona text field билан).
+/// Р“СѓСЂР»Р°РЅ РњР¤Р™ С‚Р°РЅР»Р°С€ СѓС‡СѓРЅ СѓРЅРёРІРµСЂСЃР°Р» input. Driver register, driver schedule
+/// РєР°Р±Рё driver flow'Р»Р°СЂРёРґР° Т›Р°Р№С‚Р° РёС€Р»Р°С‚РёР»Р°РґРё. Passenger С‚РѕРјРѕРЅРёРґР° СЃРѕРґРґР°СЂРѕТ›
+/// `MfyDropdown` Р±РѕСЂ вЂ” Сѓ Р±РѕС€Т›Р°С‡Р° (yagona text field Р±РёР»Р°РЅ).
 class MfyField extends StatelessWidget {
   const MfyField({
     super.key,
@@ -38,10 +38,10 @@ class MfyField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: ctrl.text.isNotEmpty
-                  ? iconColor.withOpacity(0.4)
+                  ? iconColor.withValues(alpha: 0.4)
                   : Colors.grey.shade200),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
           ],
         ),
         child: TextField(
@@ -75,7 +75,7 @@ class MfyField extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.grey.shade200),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6)
+              BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6)
             ],
           ),
           child: Column(

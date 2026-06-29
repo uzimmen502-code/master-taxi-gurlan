@@ -16,7 +16,7 @@ import '../../../repositories/inventory_repository.dart';
 import '../../bread/services/bread_image_storage.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Маҳсулoт менежери — нон, таом каталог (`food_catalog` + расмлар), қўшимча маҳсулотлар.
+/// РњР°ТіСЃСѓР»oС‚ РјРµРЅРµР¶РµСЂРё вЂ” РЅРѕРЅ, С‚Р°РѕРј РєР°С‚Р°Р»РѕРі (`food_catalog` + СЂР°СЃРјР»Р°СЂ), Т›СћС€РёРјС‡Р° РјР°ТіСЃСѓР»РѕС‚Р»Р°СЂ.
 class ProductsManagerScreen extends StatefulWidget {
   const ProductsManagerScreen({super.key});
 
@@ -55,9 +55,9 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
   @override
   Widget build(BuildContext context) {
     final tabs = <Tab>[
-      const Tab(text: '🫓 Нoн'),
-      if (_enableFoodTab) const Tab(text: '🍽 Таом'),
-      const Tab(text: '🌿 Қўшимчa'),
+      const Tab(text: 'рџ«“ РќoРЅ'),
+      if (_enableFoodTab) const Tab(text: 'рџЌЅ РўР°РѕРј'),
+      const Tab(text: 'рџЊї ТљСћС€РёРјС‡a'),
     ];
     final tabViews = <Widget>[
       const _BreadProductsTab(),
@@ -103,19 +103,19 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
               offset: const Offset(0, 2)),
         ],
       ),
       child: Row(children: [
-        const Text('📦 Маҳсулoтлaр',
+        const Text('рџ“¦ РњР°ТіСЃСѓР»oС‚Р»aСЂ',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
         ElevatedButton.icon(
             onPressed: _openAdd,
             icon: const Icon(Icons.add),
-            label: const Text('Янги мaҳсулoт'),
+            label: const Text('РЇРЅРіРё РјaТіСЃСѓР»oС‚'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -139,9 +139,9 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // BREAD TAB
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 class _BreadProductsTab extends StatelessWidget {
   const _BreadProductsTab();
@@ -159,8 +159,8 @@ class _BreadProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.error_outline,
             color: Colors.red,
-            title: 'Хатoлик',
-            msg: 'Юклaб бўлмaди: ${snap.error}',
+            title: 'РҐР°С‚oР»РёРє',
+            msg: 'Р®РєР»aР± Р±СћР»РјaРґРё: ${snap.error}',
           );
         }
         final items = snap.data ?? const <BreadProduct>[];
@@ -168,8 +168,8 @@ class _BreadProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.inventory_2_outlined,
             color: Colors.grey,
-            title: 'Нoн қўшилмaгaн',
-            msg: 'Юқoри ўнгдaги "+ Янги мaҳсулoт" тугмaсини бoсинг.',
+            title: 'РќoРЅ Т›СћС€РёР»РјaРіaРЅ',
+            msg: 'Р®Т›oСЂРё СћРЅРіРґaРіРё "+ РЇРЅРіРё РјaТіСЃСѓР»oС‚" С‚СѓРіРјaСЃРёРЅРё Р±oСЃРёРЅРі.',
           );
         }
         return LayoutBuilder(builder: (lctx, constraints) {
@@ -200,15 +200,15 @@ class _BreadCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ўчиришни тaсдиқлaнг'),
-        content: Text('"${item.name}" нoнини ўчиришни хoҳлaйcизми?'),
+        title: const Text('РЋС‡РёСЂРёС€РЅРё С‚aСЃРґРёТ›Р»aРЅРі'),
+        content: Text('"${item.name}" РЅoРЅРёРЅРё СћС‡РёСЂРёС€РЅРё С…oТіР»aР№cРёР·РјРё?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекoр')),
+              child: const Text('Р‘РµРєoСЂ')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Ўчириш', style: TextStyle(color: Colors.red))),
+              child: const Text('РЋС‡РёСЂРёС€', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -221,12 +221,12 @@ class _BreadCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: AppColors.button,
-            content: Text('🗑 "${item.name}" ўчирилди')),
+            content: Text('рџ—‘ "${item.name}" СћС‡РёСЂРёР»РґРё')),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     }
   }
@@ -240,12 +240,12 @@ class _BreadCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: Colors.blue,
-            content: Text('🔄 "${item.name}" сoтилгaн = 0')),
+            content: Text('рџ”„ "${item.name}" СЃoС‚РёР»РіaРЅ = 0')),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     }
   }
@@ -263,17 +263,17 @@ class _BreadCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
-        border: Border.all(color: typeColor.withOpacity(0.15)),
+        border: Border.all(color: typeColor.withValues(alpha: 0.15)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(
           height: 110,
           decoration: BoxDecoration(
-            color: typeColor.withOpacity(0.06),
+            color: typeColor.withValues(alpha: 0.06),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Center(child: _image()),
@@ -295,7 +295,7 @@ class _BreadCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: typeColor.withOpacity(0.1),
+                    color: typeColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(item.type,
@@ -307,7 +307,7 @@ class _BreadCard extends StatelessWidget {
               ]),
               const SizedBox(height: 6),
               if (item.price != null && item.price! > 0)
-                Text('${item.price} сўм',
+                Text('${item.price} СЃСћРј',
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -319,7 +319,7 @@ class _BreadCard extends StatelessWidget {
                 IconButton(
                   onPressed: () => _resetSold(context),
                   icon: const Icon(Icons.refresh, size: 18),
-                  tooltip: 'Сoтилгaн = 0',
+                  tooltip: 'РЎoС‚РёР»РіaРЅ = 0',
                   color: Colors.blue.shade600,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -335,7 +335,7 @@ class _BreadCard extends StatelessWidget {
                   onPressed: () => _delete(context),
                   icon: Icon(Icons.delete_outline,
                       size: 18, color: Colors.red.shade400),
-                  tooltip: 'Ўчириш',
+                  tooltip: 'РЋС‡РёСЂРёС€',
                   visualDensity: VisualDensity.compact,
                 ),
               ]),
@@ -376,7 +376,7 @@ class _BreadCard extends StatelessWidget {
 
   Widget _stockBar() {
     if (item.totalStock <= 0) {
-      return Text('Лимитсиз',
+      return Text('Р›РёРјРёС‚СЃРёР·',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500));
     }
     final ratio = (item.soldToday / item.totalStock).clamp(0.0, 1.0);
@@ -390,7 +390,7 @@ class _BreadCard extends StatelessWidget {
         Text('${item.soldToday} / ${item.totalStock}',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
         const Spacer(),
-        Text('Қoлди: ${item.remaining}',
+        Text('ТљoР»РґРё: ${item.remaining}',
             style: TextStyle(
                 fontSize: 11, color: color, fontWeight: FontWeight.bold)),
       ]),
@@ -408,9 +408,9 @@ class _BreadCard extends StatelessWidget {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
-// FOOD CATALOG TAB (Firestore `food_catalog`, расм + нарх / захира)
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+// FOOD CATALOG TAB (Firestore `food_catalog`, СЂР°СЃРј + РЅР°СЂС… / Р·Р°С…РёСЂР°)
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 class _FoodProductsTab extends StatelessWidget {
   const _FoodProductsTab();
@@ -430,7 +430,7 @@ class _FoodProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.error_outline,
             color: Colors.red,
-            title: 'Хатoлик',
+            title: 'РҐР°С‚oР»РёРє',
             msg: 'food_catalog: ${snap.error}',
           );
         }
@@ -446,14 +446,14 @@ class _FoodProductsTab extends StatelessWidget {
                       size: 48, color: Colors.grey.shade400),
                   const SizedBox(height: 14),
                   const Text(
-                    'Таом маҳсулотлари Firestoreʼда йўқ.',
+                    'РўР°РѕРј РјР°ТіСЃСѓР»РѕС‚Р»Р°СЂРё FirestoreКјРґР° Р№СћТ›.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Bir martalik Cloud Function \'seedFoodCatalog\' ni chaqing '
-                    'yoki konsoldan \'food_catalog\' ga ҳужжат қўшинг.',
+                    'yoki konsoldan \'food_catalog\' ga ТіСѓР¶Р¶Р°С‚ Т›СћС€РёРЅРі.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                   ),
@@ -549,7 +549,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: Colors.orange,
-              content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
+              content: Text('Р¤Р°Р№Р» СћТ›РёР»РјР°РґРё вЂ” РєРёС‡РёРєСЂРѕТ› JPG/PNG С‚Р°РЅР»Р°РЅРі.'),
             ),
           );
         }
@@ -561,7 +561,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: Colors.orange,
-              content: Text('Расм 2 MB дан кичик бўлсин.'),
+              content: Text('Р Р°СЃРј 2 MB РґР°РЅ РєРёС‡РёРє Р±СћР»СЃРёРЅ.'),
             ),
           );
         }
@@ -594,13 +594,13 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
+          content: Text('Р Р°СЃРј СЋРєР»Р°РЅРґРё'),
         ),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red, content: Text('Хатo: $e')),
+          SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚o: $e')),
         );
       }
     } finally {
@@ -620,7 +620,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Нарх сақланди'),
+          content: Text('РќР°СЂС… СЃР°Т›Р»Р°РЅРґРё'),
         ),
       );
     } catch (e) {
@@ -642,13 +642,13 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.blue,
-          content: Text('🔄 "${widget.product.name}" — сотилган = 0'),
+          content: Text('рџ”„ "${widget.product.name}" вЂ” СЃРѕС‚РёР»РіР°РЅ = 0'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     }
   }
@@ -739,7 +739,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${p.name} · ${p.category}',
+                  '${p.name} В· ${p.category}',
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.bold),
                   maxLines: 2,
@@ -761,7 +761,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
                           contentPadding:
                               EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           border: OutlineInputBorder(),
-                          suffixText: 'сўм',
+                          suffixText: 'СЃСћРј',
                         ),
                         style: const TextStyle(fontSize: 13),
                       ),
@@ -785,12 +785,12 @@ class _FoodProductCardState extends State<_FoodProductCard> {
                       child: OutlinedButton.icon(
                         onPressed: _editStockDoc,
                         icon: const Icon(Icons.inventory_2, size: 16),
-                        label: const Text('Захира',
+                        label: const Text('Р—Р°С…РёСЂР°',
                             style: TextStyle(fontSize: 11)),
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Сотилган = 0',
+                      tooltip: 'РЎРѕС‚РёР»РіР°РЅ = 0',
                       onPressed: _resetSold,
                       icon: Icon(Icons.refresh,
                           size: 20, color: Colors.blue.shade700),
@@ -804,7 +804,7 @@ class _FoodProductCardState extends State<_FoodProductCard> {
                   child: FilledButton.icon(
                     onPressed: _openEditor,
                     icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Таҳрир'),
+                    label: const Text('РўР°ТіСЂРёСЂ'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -926,7 +926,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
+            content: Text('Р¤Р°Р№Р» СћТ›РёР»РјР°РґРё вЂ” РєРёС‡РёРєСЂРѕТ› JPG/PNG С‚Р°РЅР»Р°РЅРі.'),
           ),
         );
         return;
@@ -937,7 +937,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Расм 2 MB дан кичик бўлсин.'),
+            content: Text('Р Р°СЃРј 2 MB РґР°РЅ РєРёС‡РёРє Р±СћР»СЃРёРЅ.'),
           ),
         );
         return;
@@ -953,7 +953,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатo: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚o: $e')),
       );
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -965,7 +965,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            backgroundColor: Colors.red, content: Text('Ном бўш бўла олмайди')),
+            backgroundColor: Colors.red, content: Text('РќРѕРј Р±СћС€ Р±СћР»Р° РѕР»РјР°Р№РґРё')),
       );
       return;
     }
@@ -984,9 +984,9 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
           .set({
         'id': product.id,
         'name': name,
-        'emoji': _emoji.text.trim().isEmpty ? '🍽' : _emoji.text.trim(),
+        'emoji': _emoji.text.trim().isEmpty ? 'рџЌЅ' : _emoji.text.trim(),
         'price': price,
-        'unit': _unit.text.trim().isEmpty ? 'кг' : _unit.text.trim(),
+        'unit': _unit.text.trim().isEmpty ? 'РєРі' : _unit.text.trim(),
         'minQty': minQty,
         'step': step,
         'category': _category.text.trim(),
@@ -1006,13 +1006,13 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🍽 "$name" сақланди'),
+          content: Text('рџЌЅ "$name" СЃР°Т›Р»Р°РЅРґРё'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатo: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚o: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1023,7 +1023,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
   Widget build(BuildContext context) {
     final dialogW = (MediaQuery.sizeOf(context).width - 48).clamp(320.0, 620.0);
     return AlertDialog(
-      title: Text('🍽 ${product.name}'),
+      title: Text('рџЌЅ ${product.name}'),
       content: SizedBox(
         width: dialogW,
         child: SingleChildScrollView(
@@ -1041,13 +1041,13 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.photo_library_outlined),
-                label: Text(_uploading ? 'Юкланмоқда...' : 'Расм танлаш'),
+                label: Text(_uploading ? 'Р®РєР»Р°РЅРјРѕТ›РґР°...' : 'Р Р°СЃРј С‚Р°РЅР»Р°С€'),
               ),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
                     flex: 3,
-                    child: _field(_name, 'Ном',
+                    child: _field(_name, 'РќРѕРј',
                         icon: Icons.short_text, maxLen: 80)),
                 const SizedBox(width: 10),
                 Expanded(
@@ -1057,7 +1057,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
               const SizedBox(height: 10),
               Row(children: [
                 Expanded(
-                  child: _field(_price, 'Нарх',
+                  child: _field(_price, 'РќР°СЂС…',
                       icon: Icons.attach_money,
                       keyboard: TextInputType.number,
                       digits: true,
@@ -1065,47 +1065,47 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: _field(_unit, 'Бирлик',
+                    child: _field(_unit, 'Р‘РёСЂР»РёРє',
                         icon: Icons.straighten, maxLen: 20)),
               ]),
               const SizedBox(height: 10),
               Row(children: [
                 Expanded(
-                    child: _field(_minQty, 'Минимум',
+                    child: _field(_minQty, 'РњРёРЅРёРјСѓРј',
                         icon: Icons.exposure,
                         keyboard: const TextInputType.numberWithOptions(
                             decimal: true),
                         maxLen: 8)),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: _field(_step, 'Қадам',
+                    child: _field(_step, 'ТљР°РґР°Рј',
                         icon: Icons.add,
                         keyboard: const TextInputType.numberWithOptions(
                             decimal: true),
                         maxLen: 8)),
                 const SizedBox(width: 10),
                 Expanded(
-                    child: _field(_totalStock, 'Захира',
+                    child: _field(_totalStock, 'Р—Р°С…РёСЂР°',
                         icon: Icons.inventory_2,
                         keyboard: TextInputType.number,
                         digits: true,
-                        helper: '0 = лимитсиз',
+                        helper: '0 = Р»РёРјРёС‚СЃРёР·',
                         maxLen: 6)),
               ]),
               if (_soldToday > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text('Бугун сотилган: $_soldToday',
+                  child: Text('Р‘СѓРіСѓРЅ СЃРѕС‚РёР»РіР°РЅ: $_soldToday',
                       style:
                           TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                 ),
               const SizedBox(height: 10),
-              _field(_category, 'Категория', icon: Icons.category, maxLen: 40),
+              _field(_category, 'РљР°С‚РµРіРѕСЂРёСЏ', icon: Icons.category, maxLen: 40),
               const SizedBox(height: 10),
-              _field(_desc, 'Тавсиф',
+              _field(_desc, 'РўР°РІСЃРёС„',
                   icon: Icons.notes, maxLen: 300, maxLines: 3),
               const SizedBox(height: 10),
-              _field(_imageUrl, 'Расм URL',
+              _field(_imageUrl, 'Р Р°СЃРј URL',
                   icon: Icons.link, maxLen: 4096, maxLines: 2),
             ],
           ),
@@ -1114,7 +1114,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Бекор'),
+          child: const Text('Р‘РµРєРѕСЂ'),
         ),
         ElevatedButton.icon(
           onPressed: _busy ? null : _save,
@@ -1124,7 +1124,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save, size: 16),
-          label: const Text('Сақлаш'),
+          label: const Text('РЎР°Т›Р»Р°С€'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -1162,7 +1162,7 @@ Widget _foodImagePreview(
       } else {
         child = Center(
           child: Text(
-            fallbackEmoji.trim().isEmpty ? '🍽' : fallbackEmoji.trim(),
+            fallbackEmoji.trim().isEmpty ? 'рџЌЅ' : fallbackEmoji.trim(),
             style: const TextStyle(fontSize: 56),
           ),
         );
@@ -1228,7 +1228,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Захира манфий бўла олмайди'),
+          content: Text('Р—Р°С…РёСЂР° РјР°РЅС„РёР№ Р±СћР»Р° РѕР»РјР°Р№РґРё'),
         ),
       );
       return;
@@ -1245,13 +1245,13 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🍱 "${widget.product.name}" захираси сақланди'),
+          content: Text('рџЌ± "${widget.product.name}" Р·Р°С…РёСЂР°СЃРё СЃР°Т›Р»Р°РЅРґРё'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1263,7 +1263,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
     final sold = widget.existing?.soldToday ?? 0;
     final dialogW = (MediaQuery.sizeOf(context).width - 48).clamp(280.0, 420.0);
     return AlertDialog(
-      title: Text('🍱 ${widget.product.name}'),
+      title: Text('рџЌ± ${widget.product.name}'),
       content: SizedBox(
         width: dialogW,
         child: SingleChildScrollView(
@@ -1272,12 +1272,12 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Нарх ва ном каталогда (код). Бу ерда фақат Firestore '
-                '`food_inventory/${widget.product.inventoryId}` захираси.',
+                'РќР°СЂС… РІР° РЅРѕРј РєР°С‚Р°Р»РѕРіРґР° (РєРѕРґ). Р‘Сѓ РµСЂРґР° С„Р°Т›Р°С‚ Firestore '
+                '`food_inventory/${widget.product.inventoryId}` Р·Р°С…РёСЂР°СЃРё.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 14),
-              Text('Бугун сотилган (кг)',
+              Text('Р‘СѓРіСѓРЅ СЃРѕС‚РёР»РіР°РЅ (РєРі)',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1291,12 +1291,12 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
               const SizedBox(height: 14),
               _field(
                 _totalStock,
-                'Жами захира (кг)',
+                'Р–Р°РјРё Р·Р°С…РёСЂР° (РєРі)',
                 icon: Icons.inventory_2,
                 keyboard: TextInputType.number,
                 digits: true,
                 maxLen: 6,
-                helper: '0 = лимитсиз (иловада текширилмайди)',
+                helper: '0 = Р»РёРјРёС‚СЃРёР· (РёР»РѕРІР°РґР° С‚РµРєС€РёСЂРёР»РјР°Р№РґРё)',
               ),
             ],
           ),
@@ -1305,7 +1305,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Бекoр'),
+          child: const Text('Р‘РµРєoСЂ'),
         ),
         ElevatedButton.icon(
           onPressed: _busy ? null : _save,
@@ -1315,7 +1315,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save, size: 16),
-          label: const Text('Сaқлaш'),
+          label: const Text('РЎaТ›Р»aС€'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -1326,9 +1326,9 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // EXTRAS TAB
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 class _ExtraProductsTab extends StatelessWidget {
   const _ExtraProductsTab();
@@ -1346,8 +1346,8 @@ class _ExtraProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.error_outline,
             color: Colors.red,
-            title: 'Хатoлик',
-            msg: 'Юклaб бўлмaди: ${snap.error}',
+            title: 'РҐР°С‚oР»РёРє',
+            msg: 'Р®РєР»aР± Р±СћР»РјaРґРё: ${snap.error}',
           );
         }
         final items = snap.data ?? const <BreadExtraProduct>[];
@@ -1355,8 +1355,8 @@ class _ExtraProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.local_drink_outlined,
             color: Colors.grey,
-            title: 'Қўшимчa маҳсулoт йоq',
-            msg: 'Юқoри ўнгдaги "+ Янги мaҳсулoт" тугмaсини бoсинг.',
+            title: 'ТљСћС€РёРјС‡a РјР°ТіСЃСѓР»oС‚ Р№Рѕq',
+            msg: 'Р®Т›oСЂРё СћРЅРіРґaРіРё "+ РЇРЅРіРё РјaТіСЃСѓР»oС‚" С‚СѓРіРјaСЃРёРЅРё Р±oСЃРёРЅРі.',
           );
         }
         return LayoutBuilder(builder: (lctx, constraints) {
@@ -1387,15 +1387,15 @@ class _ExtraCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ўчириш?'),
-        content: Text('"${item.name}" мaҳсулoтини ўчиришни хoҳлaйcизми?'),
+        title: const Text('РЋС‡РёСЂРёС€?'),
+        content: Text('"${item.name}" РјaТіСЃСѓР»oС‚РёРЅРё СћС‡РёСЂРёС€РЅРё С…oТіР»aР№cРёР·РјРё?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекoр')),
+              child: const Text('Р‘РµРєoСЂ')),
           TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Ўчириш', style: TextStyle(color: Colors.red))),
+              child: const Text('РЋС‡РёСЂРёС€', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -1406,12 +1406,12 @@ class _ExtraCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: AppColors.button,
-            content: Text('🗑 "${item.name}" ўчирилди')),
+            content: Text('рџ—‘ "${item.name}" СћС‡РёСЂРёР»РґРё')),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     }
   }
@@ -1423,12 +1423,12 @@ class _ExtraCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: Colors.blue,
-            content: Text('🔄 "${item.name}" сoтилгaн = 0')),
+            content: Text('рџ”„ "${item.name}" СЃoС‚РёР»РіaРЅ = 0')),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     }
   }
@@ -1441,7 +1441,7 @@ class _ExtraCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -1468,7 +1468,7 @@ class _ExtraCard extends StatelessWidget {
                     color: Colors.teal.shade50,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text('ёпиш',
+                  child: Text('С‘РїРёС€',
                       style: TextStyle(
                           fontSize: 10,
                           color: Colors.teal.shade800,
@@ -1483,7 +1483,7 @@ class _ExtraCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                    '🎁 ${item.bonusThreshold}+→${item.bonusQty}×${item.bonusPercent}%',
+                    'рџЋЃ ${item.bonusThreshold}+в†’${item.bonusQty}Г—${item.bonusPercent}%',
                     style: TextStyle(
                         fontSize: 10,
                         color: Colors.amber.shade800,
@@ -1492,7 +1492,7 @@ class _ExtraCard extends StatelessWidget {
           ]),
           const SizedBox(height: 4),
           Row(children: [
-            Text('${item.price} сўм',
+            Text('${item.price} СЃСћРј',
                 style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1508,7 +1508,7 @@ class _ExtraCard extends StatelessWidget {
             IconButton(
               onPressed: () => _resetSold(context),
               icon: const Icon(Icons.refresh, size: 18),
-              tooltip: 'Сoтилгaн = 0',
+              tooltip: 'РЎoС‚РёР»РіaРЅ = 0',
               color: Colors.blue.shade600,
               visualDensity: VisualDensity.compact,
             ),
@@ -1524,7 +1524,7 @@ class _ExtraCard extends StatelessWidget {
               onPressed: () => _delete(context),
               icon: Icon(Icons.delete_outline,
                   size: 18, color: Colors.red.shade400),
-              tooltip: 'Ўчириш',
+              tooltip: 'РЋС‡РёСЂРёС€',
               visualDensity: VisualDensity.compact,
             ),
           ]),
@@ -1535,7 +1535,7 @@ class _ExtraCard extends StatelessWidget {
 
   Widget _stockBar() {
     if (item.totalStock <= 0) {
-      return Text('Лимитсиз',
+      return Text('Р›РёРјРёС‚СЃРёР·',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500));
     }
     final ratio = (item.soldToday / item.totalStock).clamp(0.0, 1.0);
@@ -1549,7 +1549,7 @@ class _ExtraCard extends StatelessWidget {
         Text('${item.soldToday} / ${item.totalStock} ${item.unitRu}',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
         const Spacer(),
-        Text('Қoлди: ${item.remaining}',
+        Text('ТљoР»РґРё: ${item.remaining}',
             style: TextStyle(
                 fontSize: 11, color: color, fontWeight: FontWeight.bold)),
       ]),
@@ -1567,9 +1567,9 @@ class _ExtraCard extends StatelessWidget {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // EDITORS (Modal Dialogs)
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 Future<void> _openBreadEditor(
     BuildContext context, BreadProduct? existing) async {
@@ -1613,9 +1613,9 @@ Future<void> _openFoodEditor(
   final product = FoodProduct(
     id: newId,
     name: '',
-    emoji: '🍽',
+    emoji: 'рџЌЅ',
     price: 0,
-    unit: 'кг',
+    unit: 'РєРі',
     minQty: 0.5,
     step: 0.5,
     category: '',
@@ -1640,8 +1640,8 @@ class _BreadEditorDialog extends StatefulWidget {
 }
 
 class _BreadEditorDialogState extends State<_BreadEditorDialog> {
-  /// Вебда `TextField`га жуда узун `data:image…base64` тушса layout/рендер синаб қолади
-  /// (диалог «бўш» кулранг блок сифатида кўринади).
+  /// Р’РµР±РґР° `TextField`РіР° Р¶СѓРґР° СѓР·СѓРЅ `data:imageвЂ¦base64` С‚СѓС€СЃР° layout/СЂРµРЅРґРµСЂ СЃРёРЅР°Р± Т›РѕР»Р°РґРё
+  /// (РґРёР°Р»РѕРі В«Р±СћС€В» РєСѓР»СЂР°РЅРі Р±Р»РѕРє СЃРёС„Р°С‚РёРґР° РєСћСЂРёРЅР°РґРё).
   static const int _maxImageUrlCharsInTextField = 8000;
 
   late final TextEditingController _name;
@@ -1659,7 +1659,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
   bool _pickImageInProgress = false;
   String? _storageDocId;
 
-  /// `imageUrl` жуда узун бўлса TextField ўрнида сақланади (Firestore/эски base64).
+  /// `imageUrl` Р¶СѓРґР° СѓР·СѓРЅ Р±СћР»СЃР° TextField СћСЂРЅРёРґР° СЃР°Т›Р»Р°РЅР°РґРё (Firestore/СЌСЃРєРё base64).
   String? _stashedOversizedImageUrl;
 
   @override
@@ -1678,7 +1678,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
     final e = widget.existing;
     _name = TextEditingController(text: e?.name ?? '');
     _price = TextEditingController(text: (e?.price ?? 0).toString());
-    _emoji = TextEditingController(text: e?.emoji ?? '🫓');
+    _emoji = TextEditingController(text: e?.emoji ?? 'рџ«“');
     final initialImg = e?.imageUrl ?? '';
     if (initialImg.length > _maxImageUrlCharsInTextField) {
       _stashedOversizedImageUrl = initialImg;
@@ -1691,15 +1691,15 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
     _category = TextEditingController(text: e?.category ?? '');
     _unit = TextEditingController(
         text:
-            (e?.unit ?? 'дона').trim().isEmpty ? 'дона' : (e?.unit ?? 'дона'));
+            (e?.unit ?? 'РґРѕРЅР°').trim().isEmpty ? 'РґРѕРЅР°' : (e?.unit ?? 'РґРѕРЅР°'));
     _flourG =
         TextEditingController(text: e?.flourG != null ? '${e!.flourG}' : '');
     _milkMl =
         TextEditingController(text: e?.milkMl != null ? '${e!.milkMl}' : '');
-    final t = e?.type ?? 'тайёр';
-    if (t == 'ёпиш') {
+    final t = e?.type ?? 'С‚Р°Р№С‘СЂ';
+    if (t == 'С‘РїРёС€') {
       _type = 'yopish';
-    } else if (t == 'той') {
+    } else if (t == 'С‚РѕР№') {
       _type = 'toy';
     } else {
       _type = 'tayyor';
@@ -1731,7 +1731,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         const SnackBar(
           backgroundColor: Colors.orange,
           content: Text(
-              'Ички ID топилмади — диалогни ёпиб, «Янги нон»ни қайта очинг.'),
+              'РС‡РєРё ID С‚РѕРїРёР»РјР°РґРё вЂ” РґРёР°Р»РѕРіРЅРё С‘РїРёР±, В«РЇРЅРіРё РЅРѕРЅВ»РЅРё Т›Р°Р№С‚Р° РѕС‡РёРЅРі.'),
         ),
       );
       return;
@@ -1747,7 +1747,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           )
           .timeout(
             const Duration(minutes: 3),
-            onTimeout: () => throw TimeoutException('Файл танлаш (3 дақ)'),
+            onTimeout: () => throw TimeoutException('Р¤Р°Р№Р» С‚Р°РЅР»Р°С€ (3 РґР°Т›)'),
           );
 
       if (res == null || res.files.isEmpty) return;
@@ -1760,13 +1760,13 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           const SnackBar(
             backgroundColor: Colors.orange,
             content: Text(
-                'Файл ўқилмади — катта расм ёки браузер чегараси. Кичикроқ JPG танланг.'),
+                'Р¤Р°Р№Р» СћТ›РёР»РјР°РґРё вЂ” РєР°С‚С‚Р° СЂР°СЃРј С‘РєРё Р±СЂР°СѓР·РµСЂ С‡РµРіР°СЂР°СЃРё. РљРёС‡РёРєСЂРѕТ› JPG С‚Р°РЅР»Р°РЅРі.'),
           ),
         );
         return;
       }
 
-      /// Firebase Storage (Firestore ҳужжати енгил — фақат HTTPS URL).
+      /// Firebase Storage (Firestore ТіСѓР¶Р¶Р°С‚Рё РµРЅРіРёР» вЂ” С„Р°Т›Р°С‚ HTTPS URL).
       const maxBytes = 2 * 1024 * 1024;
       if (bytes.length > maxBytes) {
         if (!mounted) return;
@@ -1774,7 +1774,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           const SnackBar(
             backgroundColor: Colors.orange,
             content: Text(
-                'Расм 2 MB дан кичик бўлсин. Сифатни пасайтириб қайта танланг.'),
+                'Р Р°СЃРј 2 MB РґР°РЅ РєРёС‡РёРє Р±СћР»СЃРёРЅ. РЎРёС„Р°С‚РЅРё РїР°СЃР°Р№С‚РёСЂРёР± Т›Р°Р№С‚Р° С‚Р°РЅР»Р°РЅРі.'),
           ),
         );
         return;
@@ -1813,7 +1813,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
               const SnackBar(
                 backgroundColor: AppColors.button,
                 content:
-                    Text('Расм сақланди — фойдаланувчи иловасида кўринади'),
+                    Text('Р Р°СЃРј СЃР°Т›Р»Р°РЅРґРё вЂ” С„РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РёР»РѕРІР°СЃРёРґР° РєСћСЂРёРЅР°РґРё'),
               ),
             );
           }
@@ -1822,7 +1822,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 backgroundColor: Colors.orange,
-                content: Text('Firestore ёзилмади — «Сақлаш»ни босинг: $e'),
+                content: Text('Firestore С‘Р·РёР»РјР°РґРё вЂ” В«РЎР°Т›Р»Р°С€В»РЅРё Р±РѕСЃРёРЅРі: $e'),
               ),
             );
           }
@@ -1832,7 +1832,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           const SnackBar(
             backgroundColor: Colors.blueGrey,
             content: Text(
-              'Расм тайёр. Каталогга ёзиш учун «Сақлаш»ни босинг.',
+              'Р Р°СЃРј С‚Р°Р№С‘СЂ. РљР°С‚Р°Р»РѕРіРіР° С‘Р·РёС€ СѓС‡СѓРЅ В«РЎР°Т›Р»Р°С€В»РЅРё Р±РѕСЃРёРЅРі.',
             ),
           ),
         );
@@ -1842,7 +1842,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
-            content: Text('Вақт тугади: $e'),
+            content: Text('Р’Р°Т›С‚ С‚СѓРіР°РґРё: $e'),
           ),
         );
       }
@@ -1851,7 +1851,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.red,
-            content: Text('Расм танлаш: $e'),
+            content: Text('Р Р°СЃРј С‚Р°РЅР»Р°С€: $e'),
           ),
         );
       }
@@ -1864,7 +1864,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
     if (_name.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            backgroundColor: Colors.red, content: Text('Нoм бўш бўла олмaйди')),
+            backgroundColor: Colors.red, content: Text('РќoРј Р±СћС€ Р±СћР»Р° РѕР»РјaР№РґРё')),
       );
       return;
     }
@@ -1878,7 +1878,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         const SnackBar(
           backgroundColor: Colors.orange,
           content: Text(
-              'Қўлда киритилган base64 расм жуда катта — «Расм танлаш» орқали юкланг ёки URL қисқартиринг.'),
+              'ТљСћР»РґР° РєРёСЂРёС‚РёР»РіР°РЅ base64 СЂР°СЃРј Р¶СѓРґР° РєР°С‚С‚Р° вЂ” В«Р Р°СЃРј С‚Р°РЅР»Р°С€В» РѕСЂТ›Р°Р»Рё СЋРєР»Р°РЅРі С‘РєРё URL Т›РёСЃТ›Р°СЂС‚РёСЂРёРЅРі.'),
         ),
       );
       return;
@@ -1892,11 +1892,11 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
             name: _name.text.trim(),
             type: _type,
             price: int.tryParse(_price.text) ?? 0,
-            emoji: _emoji.text.trim().isEmpty ? '🫓' : _emoji.text.trim(),
+            emoji: _emoji.text.trim().isEmpty ? 'рџ«“' : _emoji.text.trim(),
             imageUrl: img,
             description: _desc.text.trim(),
             category: _category.text.trim(),
-            unit: _unit.text.trim().isEmpty ? 'дона' : _unit.text.trim(),
+            unit: _unit.text.trim().isEmpty ? 'РґРѕРЅР°' : _unit.text.trim(),
             flourG: (_type == 'yopish' || _type == 'toy') ? flour : null,
             milkMl: (_type == 'yopish' || _type == 'toy') ? milk : null,
             totalStock: int.tryParse(_totalStock.text) ?? 0,
@@ -1907,12 +1907,12 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         SnackBar(
             backgroundColor: AppColors.button,
             content: Text(
-                '${widget.existing == null ? "Янги нoн" : "Нoн янгилaнди"}: ${_name.text}')),
+                '${widget.existing == null ? "РЇРЅРіРё РЅoРЅ" : "РќoРЅ СЏРЅРіРёР»aРЅРґРё"}: ${_name.text}')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1926,7 +1926,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
     return AlertDialog(
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
-      title: Text(widget.existing == null ? '🫓 Янги нoн' : '🫓 Нoнни tahrir'),
+      title: Text(widget.existing == null ? 'рџ«“ РЇРЅРіРё РЅoРЅ' : 'рџ«“ РќoРЅРЅРё tahrir'),
       content: SizedBox(
         width: dialogW,
         child: SingleChildScrollView(
@@ -1950,9 +1950,9 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Расм эски усулда (Firestore ичида) жуда узун сақланган — '
-                                'веб форма чиқиши учун URL майдони бўш. «Расм танлаш» билан '
-                                'Storage га юклаб янгиланг ёки «Сақлаш» билан ном/нархни сақланг.',
+                                'Р Р°СЃРј СЌСЃРєРё СѓСЃСѓР»РґР° (Firestore РёС‡РёРґР°) Р¶СѓРґР° СѓР·СѓРЅ СЃР°Т›Р»Р°РЅРіР°РЅ вЂ” '
+                                'РІРµР± С„РѕСЂРјР° С‡РёТ›РёС€Рё СѓС‡СѓРЅ URL РјР°Р№РґРѕРЅРё Р±СћС€. В«Р Р°СЃРј С‚Р°РЅР»Р°С€В» Р±РёР»Р°РЅ '
+                                'Storage РіР° СЋРєР»Р°Р± СЏРЅРіРёР»Р°РЅРі С‘РєРё В«РЎР°Т›Р»Р°С€В» Р±РёР»Р°РЅ РЅРѕРј/РЅР°СЂС…РЅРё СЃР°Т›Р»Р°РЅРі.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.35,
@@ -1965,11 +1965,11 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                       ),
                     ),
                   ),
-                _field(_name, 'Нoм', icon: Icons.short_text, maxLen: 50),
+                _field(_name, 'РќoРј', icon: Icons.short_text, maxLen: 50),
                 const SizedBox(height: 10),
                 _typeSelector(),
                 const SizedBox(height: 10),
-                _field(_price, 'Нaрх (сўм)',
+                _field(_price, 'РќaСЂС… (СЃСћРј)',
                     icon: Icons.attach_money,
                     keyboard: TextInputType.number,
                     digits: true,
@@ -1982,30 +1982,30 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: _field(_totalStock, 'Жaми зaхирa',
+                    child: _field(_totalStock, 'Р–aРјРё Р·aС…РёСЂa',
                         icon: Icons.inventory_2,
                         keyboard: TextInputType.number,
                         digits: true,
                         maxLen: 5,
-                        helper: '0 = лимитсиз'),
+                        helper: '0 = Р»РёРјРёС‚СЃРёР·'),
                   ),
                 ]),
                 const SizedBox(height: 10),
-                _field(_desc, 'Тавсиф',
+                _field(_desc, 'РўР°РІСЃРёС„',
                     icon: Icons.notes, maxLen: 500, maxLines: 3),
                 const SizedBox(height: 10),
-                _field(_category, 'Категория (мас. Кичик / Ўртача)',
+                _field(_category, 'РљР°С‚РµРіРѕСЂРёСЏ (РјР°СЃ. РљРёС‡РёРє / РЋСЂС‚Р°С‡Р°)',
                     icon: Icons.category, maxLen: 40),
                 const SizedBox(height: 10),
-                _field(_unit, 'Ўлчов бирлиги',
+                _field(_unit, 'РЋР»С‡РѕРІ Р±РёСЂР»РёРіРё',
                     icon: Icons.straighten,
                     maxLen: 20,
-                    helper: 'дона, кг, л …'),
+                    helper: 'РґРѕРЅР°, РєРі, Р» вЂ¦'),
                 if (showFlourMilk) ...[
                   const SizedBox(height: 10),
                   Row(children: [
                     Expanded(
-                      child: _field(_flourG, 'Ун (г) — ихтиёрий',
+                      child: _field(_flourG, 'РЈРЅ (Рі) вЂ” РёС…С‚РёС‘СЂРёР№',
                           icon: Icons.grass,
                           keyboard: TextInputType.number,
                           digits: true,
@@ -2013,7 +2013,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: _field(_milkMl, 'Сут (мл) — ихтиёрий',
+                      child: _field(_milkMl, 'РЎСѓС‚ (РјР») вЂ” РёС…С‚РёС‘СЂРёР№',
                           icon: Icons.local_drink,
                           keyboard: TextInputType.number,
                           digits: true,
@@ -2022,7 +2022,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                   ]),
                 ],
                 const SizedBox(height: 10),
-                Text('Расм',
+                Text('Р Р°СЃРј',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -2044,8 +2044,8 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                         : const Icon(Icons.photo_library_outlined, size: 20),
                     label: Text(
                       _pickImageInProgress
-                          ? 'Юкланмоқда...'
-                          : 'Расм танлаш (Storage, ≤2 MB)',
+                          ? 'Р®РєР»Р°РЅРјРѕТ›РґР°...'
+                          : 'Р Р°СЃРј С‚Р°РЅР»Р°С€ (Storage, в‰¤2 MB)',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -2059,11 +2059,11 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Танланган файл Firebase Storage га юкланади; HTTPS URL ёки қўлда base64 ҳам мумкин.',
+                  'РўР°РЅР»Р°РЅРіР°РЅ С„Р°Р№Р» Firebase Storage РіР° СЋРєР»Р°РЅР°РґРё; HTTPS URL С‘РєРё Т›СћР»РґР° base64 ТіР°Рј РјСѓРјРєРёРЅ.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
                 const SizedBox(height: 6),
-                _field(_imageUrl, 'Расм URL (авто тўлдирилади ёки қўлда)',
+                _field(_imageUrl, 'Р Р°СЃРј URL (Р°РІС‚Рѕ С‚СћР»РґРёСЂРёР»Р°РґРё С‘РєРё Т›СћР»РґР°)',
                     icon: Icons.link, maxLen: 4096, maxLines: 2),
               ]),
         ),
@@ -2071,7 +2071,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
       actions: [
         TextButton(
             onPressed: _busy ? null : () => Navigator.pop(context),
-            child: const Text('Бекoр')),
+            child: const Text('Р‘РµРєoСЂ')),
         ElevatedButton.icon(
           onPressed: _busy ? null : _save,
           icon: _busy
@@ -2080,7 +2080,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save, size: 16),
-          label: const Text('Сaқлaш'),
+          label: const Text('РЎaТ›Р»aС€'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -2110,8 +2110,8 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
             ),
             child: Center(
               child: Text(
-                'Preview чекланган (жуда узун base64).\n'
-                '«Расм танлаш» — Storage URL тавсия.',
+                'Preview С‡РµРєР»Р°РЅРіР°РЅ (Р¶СѓРґР° СѓР·СѓРЅ base64).\n'
+                'В«Р Р°СЃРј С‚Р°РЅР»Р°С€В» вЂ” Storage URL С‚Р°РІСЃРёСЏ.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
@@ -2136,7 +2136,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => Center(
                   child: Text(
-                    _emoji.text.trim().isEmpty ? '🫓' : _emoji.text.trim(),
+                    _emoji.text.trim().isEmpty ? 'рџ«“' : _emoji.text.trim(),
                     style: const TextStyle(fontSize: 48),
                   ),
                 ),
@@ -2171,7 +2171,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                 },
                 errorBuilder: (_, __, ___) => Center(
                   child: Text(
-                    _emoji.text.trim().isEmpty ? '🫓' : _emoji.text.trim(),
+                    _emoji.text.trim().isEmpty ? 'рџ«“' : _emoji.text.trim(),
                     style: const TextStyle(fontSize: 48),
                   ),
                 ),
@@ -2189,7 +2189,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           ),
           child: Center(
             child: Text(
-              _emoji.text.trim().isEmpty ? '🫓' : _emoji.text.trim(),
+              _emoji.text.trim().isEmpty ? 'рџ«“' : _emoji.text.trim(),
               style: const TextStyle(fontSize: 56),
             ),
           ),
@@ -2200,12 +2200,12 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
 
   Widget _typeSelector() {
     final options = [
-      ('tayyor', 'Тaйёр', Icons.shopping_basket),
-      ('yopish', 'Ёпиш (ХА)', Icons.local_fire_department),
-      ('toy', 'Тўй', Icons.celebration),
+      ('tayyor', 'РўaР№С‘СЂ', Icons.shopping_basket),
+      ('yopish', 'РЃРїРёС€ (РҐРђ)', Icons.local_fire_department),
+      ('toy', 'РўСћР№', Icons.celebration),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Тури', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      Text('РўСѓСЂРё', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
       const SizedBox(height: 4),
       Wrap(spacing: 6, children: [
         for (final o in options)
@@ -2217,7 +2217,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
             ]),
             selected: _type == o.$1,
             onSelected: (_) => setState(() => _type = o.$1),
-            selectedColor: AppColors.primary.withOpacity(0.15),
+            selectedColor: AppColors.primary.withValues(alpha: 0.15),
           ),
       ]),
     ]);
@@ -2298,7 +2298,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.orange,
-          content: Text('Аввал маҳсулотни сақланг, кейин расм юкланг.'),
+          content: Text('РђРІРІР°Р» РјР°ТіСЃСѓР»РѕС‚РЅРё СЃР°Т›Р»Р°РЅРі, РєРµР№РёРЅ СЂР°СЃРј СЋРєР»Р°РЅРі.'),
         ),
       );
       return;
@@ -2322,7 +2322,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
+            content: Text('Р¤Р°Р№Р» СћТ›РёР»РјР°РґРё вЂ” РєРёС‡РёРєСЂРѕТ› JPG/PNG С‚Р°РЅР»Р°РЅРі.'),
           ),
         );
         return;
@@ -2333,7 +2333,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
-            content: Text('Расм 2 MB дан кичик бўлсин.'),
+            content: Text('Р Р°СЃРј 2 MB РґР°РЅ РєРёС‡РёРє Р±СћР»СЃРёРЅ.'),
           ),
         );
         return;
@@ -2366,13 +2366,13 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
+          content: Text('Р Р°СЃРј СЋРєР»Р°РЅРґРё'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Расм: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('Р Р°СЃРј: $e')),
       );
     } finally {
       if (mounted) setState(() => _uploadingImage = false);
@@ -2383,7 +2383,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
     if (_name.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            backgroundColor: Colors.red, content: Text('Нoм бўш бўла олмaйди')),
+            backgroundColor: Colors.red, content: Text('РќoРј Р±СћС€ Р±СћР»Р° РѕР»РјaР№РґРё')),
       );
       return;
     }
@@ -2410,12 +2410,12 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
         SnackBar(
             backgroundColor: AppColors.button,
             content: Text(
-                '${widget.existing == null ? "Янги мaҳсулoт" : "Янгилaнди"}: ${_name.text}')),
+                '${widget.existing == null ? "РЇРЅРіРё РјaТіСЃСѓР»oС‚" : "РЇРЅРіРёР»aРЅРґРё"}: ${_name.text}')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2426,14 +2426,14 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-          widget.existing == null ? '🌿 Янги қўшимчa' : '🌿 Қўшимчaни tahrir'),
+          widget.existing == null ? 'рџЊї РЇРЅРіРё Т›СћС€РёРјС‡a' : 'рџЊї ТљСћС€РёРјС‡aРЅРё tahrir'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500, minWidth: 320),
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             _foodImagePreview(
               _imageUrl,
-              _emoji.text.trim().isEmpty ? '🌿' : _emoji.text.trim(),
+              _emoji.text.trim().isEmpty ? 'рџЊї' : _emoji.text.trim(),
               height: 150,
             ),
             const SizedBox(height: 10),
@@ -2449,31 +2449,31 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.photo_library_outlined, size: 18),
-                label: Text(_uploadingImage ? 'Юкланмоқда...' : 'Расм танлаш'),
+                label: Text(_uploadingImage ? 'Р®РєР»Р°РЅРјРѕТ›РґР°...' : 'Р Р°СЃРј С‚Р°РЅР»Р°С€'),
               ),
             ),
             const SizedBox(height: 10),
-            _field(_name, 'Нoм', icon: Icons.short_text, maxLen: 50),
+            _field(_name, 'РќoРј', icon: Icons.short_text, maxLen: 50),
             const SizedBox(height: 10),
             Row(children: [
               Expanded(
-                child: _field(_emoji, 'Emoji (ихтиёрий)',
+                child: _field(_emoji, 'Emoji (РёС…С‚РёС‘СЂРёР№)',
                     icon: Icons.emoji_emotions_outlined, maxLen: 8),
               ),
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,
-                child: _field(_caption, 'Изоҳ (масалан 2г/нон)',
+                child: _field(_caption, 'РР·РѕТі (РјР°СЃР°Р»Р°РЅ 2Рі/РЅРѕРЅ)',
                     icon: Icons.notes, maxLen: 80),
               ),
             ]),
             const SizedBox(height: 10),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Ёпиш нони билан',
+              title: const Text('РЃРїРёС€ РЅРѕРЅРё Р±РёР»Р°РЅ',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
               subtitle: Text(
-                'Фақат саватда ёпиш нони бўлса кўринади; макс. = ёпиш нони сони',
+                'Р¤Р°Т›Р°С‚ СЃР°РІР°С‚РґР° С‘РїРёС€ РЅРѕРЅРё Р±СћР»СЃР° РєСћСЂРёРЅР°РґРё; РјР°РєСЃ. = С‘РїРёС€ РЅРѕРЅРё СЃРѕРЅРё',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
               ),
               value: _tieToYopishBread,
@@ -2483,7 +2483,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
             Row(children: [
               Expanded(
                 flex: 2,
-                child: _field(_price, 'Нaрх (сўм)',
+                child: _field(_price, 'РќaСЂС… (СЃСћРј)',
                     icon: Icons.attach_money,
                     keyboard: TextInputType.number,
                     digits: true,
@@ -2493,14 +2493,14 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
               Expanded(child: _unitSelector()),
             ]),
             const SizedBox(height: 10),
-            _field(_totalStock, 'Жaми зaхирa',
+            _field(_totalStock, 'Р–aРјРё Р·aС…РёСЂa',
                 icon: Icons.inventory_2,
                 keyboard: TextInputType.number,
                 digits: true,
                 maxLen: 5,
-                helper: '0 = лимитсиз'),
+                helper: '0 = Р»РёРјРёС‚СЃРёР·'),
             const SizedBox(height: 10),
-            _field(_imageUrl, 'Расм URL',
+            _field(_imageUrl, 'Р Р°СЃРј URL',
                 icon: Icons.link, maxLen: 4096, maxLines: 2),
             const SizedBox(height: 14),
             Container(
@@ -2515,11 +2515,11 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
                   children: [
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('🎁 Чегирмa бонуси',
+                      title: const Text('рџЋЃ Р§РµРіРёСЂРјa Р±РѕРЅСѓСЃРё',
                           style: TextStyle(
                               fontSize: 13, fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                          'Мaсaлaн: 3 та сoтиб oлгaнга 1 тaси 50% арзoнгa',
+                          'РњaСЃaР»aРЅ: 3 С‚Р° СЃoС‚РёР± oР»РіaРЅРіР° 1 С‚aСЃРё 50% Р°СЂР·oРЅРіa',
                           style: TextStyle(
                               fontSize: 11, color: Colors.grey.shade700)),
                       value: _bonusEnabled,
@@ -2529,21 +2529,21 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
                       const SizedBox(height: 6),
                       Row(children: [
                         Expanded(
-                          child: _field(_bonusThreshold, 'Чегaрa',
+                          child: _field(_bonusThreshold, 'Р§РµРіaСЂa',
                               icon: Icons.filter_alt,
                               keyboard: TextInputType.number,
                               digits: true,
                               maxLen: 3,
-                              helper: 'Қaнчa тaдaн'),
+                              helper: 'ТљaРЅС‡a С‚aРґaРЅ'),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: _field(_bonusQty, 'Мик-р',
+                          child: _field(_bonusQty, 'РњРёРє-СЂ',
                               icon: Icons.numbers,
                               keyboard: TextInputType.number,
                               digits: true,
                               maxLen: 3,
-                              helper: 'Нечa тaси'),
+                              helper: 'РќРµС‡a С‚aСЃРё'),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -2552,7 +2552,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
                               keyboard: TextInputType.number,
                               digits: true,
                               maxLen: 3,
-                              helper: 'Aрзoнлик'),
+                              helper: 'AСЂР·oРЅР»РёРє'),
                         ),
                       ]),
                     ],
@@ -2564,7 +2564,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
       actions: [
         TextButton(
             onPressed: _busy ? null : () => Navigator.pop(context),
-            child: const Text('Бекoр')),
+            child: const Text('Р‘РµРєoСЂ')),
         ElevatedButton.icon(
           onPressed: _busy ? null : _save,
           icon: _busy
@@ -2573,7 +2573,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.save, size: 16),
-          label: const Text('Сaқлaш'),
+          label: const Text('РЎaТ›Р»aС€'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -2585,17 +2585,17 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
 
   Widget _unitSelector() {
     return DropdownButtonFormField<String>(
-      value: _unit,
+      initialValue: _unit,
       decoration: InputDecoration(
-        labelText: 'Бирлик',
+        labelText: 'Р‘РёСЂР»РёРє',
         prefixIcon: const Icon(Icons.straighten, size: 18),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       items: const [
-        DropdownMenuItem(value: 'dona', child: Text('🔢 Дoнa')),
-        DropdownMenuItem(value: 'kg', child: Text('⚖️ Кг')),
-        DropdownMenuItem(value: 'l', child: Text('🧴 Литр')),
+        DropdownMenuItem(value: 'dona', child: Text('рџ”ў Р”oРЅa')),
+        DropdownMenuItem(value: 'kg', child: Text('вљ–пёЏ РљРі')),
+        DropdownMenuItem(value: 'l', child: Text('рџ§ґ Р›РёС‚СЂ')),
       ],
       onChanged: (v) {
         if (v != null) setState(() => _unit = v);
@@ -2604,9 +2604,9 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // SHARED
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 Widget _field(
   TextEditingController ctrl,
@@ -2649,7 +2649,7 @@ Widget _empty({
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, size: 40, color: color),

@@ -423,7 +423,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<ProcurementProduct>(
-          value: _product,
+          initialValue: _product,
           decoration: InputDecoration(
             labelText: _l('courier_product_field'),
             border: OutlineInputBorder(),

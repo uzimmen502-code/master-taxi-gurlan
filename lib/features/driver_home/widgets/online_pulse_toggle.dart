@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// Онлайн toggle — пульсация анимацияли.
+/// РћРЅР»Р°Р№РЅ toggle вЂ” РїСѓР»СЊСЃР°С†РёСЏ Р°РЅРёРјР°С†РёСЏР»Рё.
 class OnlinePulseToggle extends StatefulWidget {
   const OnlinePulseToggle({
     super.key,
@@ -52,11 +52,11 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: isOnline
-                  ? _green.withOpacity(0.4)
+                  ? _green.withValues(alpha: 0.4)
                   : Colors.grey.shade300,
               width: 1.5),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
           ],
         ),
         child: Row(children: [
@@ -66,7 +66,7 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                  color: (isOnline ? _green : Colors.grey).withOpacity(
+                  color: (isOnline ? _green : Colors.grey).withValues(alpha: 
                       isOnline ? _pulseAnim.value * 0.3 : 0.1),
                   shape: BoxShape.circle),
               child: Center(
@@ -87,15 +87,15 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
+                Text(isOnline ? 'рџџў РћРЅР»Р°Р№РЅ' : 'вљ« РћС„С„Р»Р°Р№РЅ',
                     style: TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold,
                         color: isOnline ? _green : Colors.grey.shade600)),
                 Text(
                     isOnline
-                        ? 'Буюртмалар қабул қилинмоқда'
-                        : 'Буюртмалар тўхтатилган',
+                        ? 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ Т›Р°Р±СѓР» Т›РёР»РёРЅРјРѕТ›РґР°'
+                        : 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ С‚СћС…С‚Р°С‚РёР»РіР°РЅ',
                     style: TextStyle(
                         fontSize: AppText.labelSmall,
                         color: Colors.grey.shade500)),

@@ -14,9 +14,9 @@ import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../../profile/screens/address_edit_screen.dart';
 import '../controllers/food_controller.dart';
 
-/// Таом сават bottom-sheet — нон каби битта ойнада: сават + манзил/телефон +
-/// битта "Буюртма бериш" tugmasi. Coordinata профилдан (AddressGate орқали)
-/// кафолатланади, кейин Cloud Function буюртмага қўшади.
+/// РўР°РѕРј СЃР°РІР°С‚ bottom-sheet вЂ” РЅРѕРЅ РєР°Р±Рё Р±РёС‚С‚Р° РѕР№РЅР°РґР°: СЃР°РІР°С‚ + РјР°РЅР·РёР»/С‚РµР»РµС„РѕРЅ +
+/// Р±РёС‚С‚Р° "Р‘СѓСЋСЂС‚РјР° Р±РµСЂРёС€" tugmasi. Coordinata РїСЂРѕС„РёР»РґР°РЅ (AddressGate РѕСЂТ›Р°Р»Рё)
+/// РєР°С„РѕР»Р°С‚Р»Р°РЅР°РґРё, РєРµР№РёРЅ Cloud Function Р±СѓСЋСЂС‚РјР°РіР° Т›СћС€Р°РґРё.
 class FoodCartSheet extends StatefulWidget {
   const FoodCartSheet({super.key});
 
@@ -112,7 +112,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
       return _showError(loc.translate('bread_error_phone_invalid'));
     }
 
-    // Манзил кафолати — курьер координатани профилдан олиши учун.
+    // РњР°РЅР·РёР» РєР°С„РѕР»Р°С‚Рё вЂ” РєСѓСЂСЊРµСЂ РєРѕРѕСЂРґРёРЅР°С‚Р°РЅРё РїСЂРѕС„РёР»РґР°РЅ РѕР»РёС€Рё СѓС‡СѓРЅ.
     final uid = phoneDigits(phone);
     final userRepo = context.read<UserRepository>();
     var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
@@ -228,7 +228,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ─── Сават рўйхати ───
+                // в”Ђв”Ђв”Ђ РЎР°РІР°С‚ СЂСћР№С…Р°С‚Рё в”Ђв”Ђв”Ђ
                 ...cartEntries.map((entry) {
                   FoodProduct? p;
                   for (final e in c.products) {
@@ -289,13 +289,13 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                   );
                 }),
                 const SizedBox(height: 8),
-                // ─── Жами ───
+                // в”Ђв”Ђв”Ђ Р–Р°РјРё в”Ђв”Ђв”Ђ
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F8E9),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _green.withOpacity(0.3)),
+                    border: Border.all(color: _green.withValues(alpha: 0.3)),
                   ),
                   child: Column(children: [
                     Row(children: [
@@ -318,7 +318,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                   ]),
                 ),
                 const SizedBox(height: 16),
-                // ─── Контакт ───
+                // в”Ђв”Ђв”Ђ РљРѕРЅС‚Р°РєС‚ в”Ђв”Ђв”Ђ
                 Text(loc.translate('bread_cart_contact_section'),
                     style: const TextStyle(
                         fontSize: AppText.bodyLarge,

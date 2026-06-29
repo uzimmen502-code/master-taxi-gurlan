@@ -323,9 +323,9 @@ class BreadController extends ChangeNotifier {
 
   int get yopishTotalCount {
     int c = 0;
-    cart.forEach((id, count) {
+    cart.forEach((id, qty) {
       final p = _findProduct(id);
-      if (p != null && p.isYopish) c += count;
+      if (p != null && p.isYopish) c += qty;
     });
     return c;
   }
@@ -349,13 +349,13 @@ class BreadController extends ChangeNotifier {
 
   int get breadTotal {
     int total = 0;
-    cart.forEach((id, count) {
+    cart.forEach((id, qty) {
       final p = _findProduct(id);
       if (p == null) return;
-      final basePrice = productPrice(p) * count;
+      final basePrice = productPrice(p) * qty;
       if (p.isYopish || p.isToy) {
         final choice = flourMilkChoice[id] ?? 'ours';
-        total += choice == 'ours' ? basePrice + flourMilkCost(p, count) : basePrice;
+        total += choice == 'ours' ? basePrice + flourMilkCost(p, qty) : basePrice;
       } else {
         total += basePrice;
       }
@@ -572,7 +572,7 @@ class BreadController extends ChangeNotifier {
     final list = <StockChange>[];
 
     // 1. Тайёр нонлар (бакердан) — firestoreId бўлса инвентаризацияланади.
-    cart.forEach((id, count) {
+    cart.forEach((id, qty) {
       final p = _findProduct(id);
       if (p == null) return;
       if (!p.isReady) return; // йопиш/той учун inventory йўқ
@@ -581,7 +581,7 @@ class BreadController extends ChangeNotifier {
       list.add(StockChange(
         kind: InventoryKind.bread,
         id: fid,
-        qty: count,
+        qty: qty,
         label: p.name,
       ));
     });
@@ -610,14 +610,14 @@ class BreadController extends ChangeNotifier {
     double? deliveryLng,
   }) async {
     final items = <Map<String, dynamic>>[];
-    cart.forEach((id, count) {
+    cart.forEach((id, qty) {
       final p = _findProduct(id);
       if (p == null) return;
       final choice = flourMilkChoice[id] ?? 'ours';
       final unit = productPrice(p);
-      final baseLineTotal = unit * count;
+      final baseLineTotal = unit * qty;
       final fmCost = (p.isYopish || p.isToy) && choice == 'ours'
-          ? flourMilkCost(p, count)
+          ? flourMilkCost(p, qty)
           : 0;
       final lineTotal = (p.isYopish || p.isToy) && choice == 'ours'
           ? baseLineTotal + fmCost
@@ -626,7 +626,7 @@ class BreadController extends ChangeNotifier {
         'id': id,
         if (p.emoji.trim().isNotEmpty) 'emoji': p.emoji.trim(),
         'name': p.name,
-        'count': count,
+        'count': qty,
         'type': p.type,
         'flourMilk': (p.isYopish || p.isToy) ? choice : 'none',
         'price': unit,

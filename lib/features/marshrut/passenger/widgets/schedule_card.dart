@@ -7,7 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 
 /// Qidiruv natijasidagi bitta marshrut haydovchisi kartochkasi.
 ///
-/// "ЧАҚИРИШ" tugmasi bosilganda [onCall] chaqiriladi.
+/// "Р§РђТљРР РРЁ" tugmasi bosilganda [onCall] chaqiriladi.
 class ScheduleCard extends StatelessWidget {
   const ScheduleCard({
     super.key,
@@ -43,7 +43,7 @@ class ScheduleCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -52,7 +52,7 @@ class ScheduleCard extends StatelessWidget {
         Row(children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: _blue.withOpacity(0.1),
+            backgroundColor: _blue.withValues(alpha: 0.1),
             child: Text(firstChar,
                 style: TextStyle(
                     fontSize: AppText.titleMedium,
@@ -66,7 +66,7 @@ class ScheduleCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold)),
-            Text('🚗 ${s.car} · ${s.plate}',
+            Text('рџљ— ${s.car} В· ${s.plate}',
                 style: TextStyle(
                     fontSize: AppText.bodySmall,
                     color: Colors.grey.shade500)),
@@ -75,9 +75,9 @@ class ScheduleCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: etaColor.withOpacity(0.1),
+                color: etaColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: etaColor.withOpacity(0.3)),
+                border: Border.all(color: etaColor.withValues(alpha: 0.3)),
               ),
               child: Text(
                 context.tr('marshrut_eta_arrival').replaceAll('{n}', '$eta'),
@@ -97,7 +97,7 @@ class ScheduleCard extends StatelessWidget {
           const SizedBox(width: 4),
           Expanded(
               child: Text(
-            '${s.from} → ${s.to}',
+            '${s.from} в†’ ${s.to}',
             style: TextStyle(
                 fontSize: AppText.bodySmall, color: Colors.grey.shade600),
             maxLines: 1,
@@ -114,8 +114,8 @@ class ScheduleCard extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                     color: s.seatsLeft > 0
-                        ? _green.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1),
+                        ? _green.withValues(alpha: 0.1)
+                        : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8)),
                 child: Text(
                   context
@@ -133,10 +133,10 @@ class ScheduleCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
+                      color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8)),
                   child: Text(
-                      '💰 ${context.tr('price_sum_short').replaceAll('{price}', '${s.price}')}',
+                      'рџ’° ${context.tr('price_sum_short').replaceAll('{price}', '${s.price}')}',
                       style: const TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w600,

@@ -80,7 +80,7 @@ class _SearchingViewState extends State<_SearchingView> {
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         await c.cancelByUser();
-        if (mounted) Navigator.of(context).pop();
+        if (context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
         backgroundColor: AppColors.scaffold,
@@ -93,7 +93,7 @@ class _SearchingViewState extends State<_SearchingView> {
             icon: const Icon(Icons.close),
             onPressed: () async {
               await c.cancelByUser();
-              if (mounted) Navigator.pop(context);
+              if (context.mounted) Navigator.pop(context);
             },
           ),
         ),
@@ -117,9 +117,9 @@ class _SearchingViewState extends State<_SearchingView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // Sections
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _statusBanner(SearchingController c) {
     return Container(
       color: _blue,
@@ -246,9 +246,9 @@ class _SearchingViewState extends State<_SearchingView> {
     ]);
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // Side-effects
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
@@ -298,7 +298,7 @@ class _DriverTile extends StatelessWidget {
     Color bg = Colors.white;
     Color border = Colors.transparent;
     if (isPending) {
-      bg = const Color(0xFFE3F2FD); // light blue — yuborildi
+      bg = const Color(0xFFE3F2FD); // light blue вЂ” yuborildi
       border = AppColors.primary;
     } else if (isRejected) {
       bg = Colors.grey.shade200;
@@ -313,13 +313,13 @@ class _DriverTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: border, width: 1.5),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
       ),
       child: Opacity(
         opacity: (disabled && !isPending) ? 0.45 : 1.0,
         child: Row(children: [
-          Text(isPending ? '⏳' : '🚕',
+          Text(isPending ? 'вЏі' : 'рџљ•',
               style: const TextStyle(fontSize: 24)),
           const SizedBox(width: 10),
           Expanded(
@@ -330,7 +330,7 @@ class _DriverTile extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.bold)),
                 Text(
-                  '${d.car} · ${d.plate}',
+                  '${d.car} В· ${d.plate}',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade600),
                 ),
@@ -355,7 +355,7 @@ class _DriverTile extends StatelessWidget {
             children: [
               Text(
                 driver.distanceKm > 0
-                    ? '${driver.distanceKm.toStringAsFixed(1)} км'
+                    ? '${driver.distanceKm.toStringAsFixed(1)} РєРј'
                     : context.tr('no_gps_short'),
                 style:
                     TextStyle(fontSize: 12, color: Colors.grey.shade600),

@@ -24,7 +24,7 @@ import '../widgets/bread_product_card.dart';
 
 
 
-/// Нон буюртма экрани — `Provider` орқали [BreadController].
+/// РќРѕРЅ Р±СѓСЋСЂС‚РјР° СЌРєСЂР°РЅРё вЂ” `Provider` РѕСЂТ›Р°Р»Рё [BreadController].
 
 class BreadScreen extends StatelessWidget {
 
@@ -162,7 +162,7 @@ class _BreadViewState extends State<_BreadView> {
 
         final p = c.allProducts.firstWhere((p) => p.id == id);
 
-        parts.add('${p.name} × $count');
+        parts.add('${p.name} Г— $count');
 
       } catch (_) {}
 
@@ -172,7 +172,7 @@ class _BreadViewState extends State<_BreadView> {
 
       final q = c.extraProductsCart[p.id] ?? 0;
 
-      if (q > 1e-9) parts.add('${p.name} × ${p.qtyCaptionNum(q)}');
+      if (q > 1e-9) parts.add('${p.name} Г— ${p.qtyCaptionNum(q)}');
 
     }
 
@@ -342,7 +342,7 @@ class _BreadViewState extends State<_BreadView> {
 
                     BoxShadow(
 
-                        color: Colors.black.withOpacity(0.15),
+                        color: Colors.black.withValues(alpha: 0.15),
 
                         blurRadius: 8),
 
@@ -384,7 +384,7 @@ class _BreadViewState extends State<_BreadView> {
 
                       decoration: BoxDecoration(
 
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
 
                         borderRadius: BorderRadius.circular(8),
 
@@ -450,7 +450,7 @@ class _BreadViewState extends State<_BreadView> {
 
                       BoxShadow(
 
-                          color: _primary.withOpacity(0.4),
+                          color: _primary.withValues(alpha: 0.4),
 
                           blurRadius: 10,
 
@@ -502,7 +502,7 @@ class _BreadViewState extends State<_BreadView> {
 
                       decoration: BoxDecoration(
 
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
 
                           borderRadius: BorderRadius.circular(10)),
 

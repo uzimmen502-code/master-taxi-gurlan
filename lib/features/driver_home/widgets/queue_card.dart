@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/queue_entry.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Навбат рўйхати — позиция + кейинги маршрут.
+/// РќР°РІР±Р°С‚ СЂСћР№С…Р°С‚Рё вЂ” РїРѕР·РёС†РёСЏ + РєРµР№РёРЅРіРё РјР°СЂС€СЂСѓС‚.
 class QueueCard extends StatelessWidget {
   const QueueCard({
     super.key,
@@ -26,30 +26,30 @@ class QueueCard extends StatelessWidget {
     if (queueList.isNotEmpty) {
       final first = queueList.first;
       if (first.to.isNotEmpty) {
-        nextRoute = '${first.to} → ${first.from}';
+        nextRoute = '${first.to} в†’ ${first.from}';
       }
     }
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _blue.withOpacity(0.2)),
+        border: Border.all(color: _blue.withValues(alpha: 0.2)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
           decoration: BoxDecoration(
-            color: _blue.withOpacity(0.06),
+            color: _blue.withValues(alpha: 0.06),
             borderRadius:
                 const BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: Row(children: [
             const Icon(Icons.queue, color: _blue, size: 18),
             const SizedBox(width: 8),
-            const Text('📋 Навбат тизими',
+            const Text('рџ“‹ РќР°РІР±Р°С‚ С‚РёР·РёРјРё',
                 style: TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold)),
@@ -64,8 +64,8 @@ class QueueCard extends StatelessWidget {
                 ),
                 child: Text(
                   myPosition == 1
-                      ? '🥇 Сиз биринчисиз!'
-                      : '$myPosition-навбат',
+                      ? 'рџҐ‡ РЎРёР· Р±РёСЂРёРЅС‡РёСЃРёР·!'
+                      : '$myPosition-РЅР°РІР±Р°С‚',
                   style: const TextStyle(
                       fontSize: AppText.labelSmall,
                       color: Colors.white,
@@ -85,7 +85,7 @@ class QueueCard extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isMe ? _green.withOpacity(0.06) : Colors.transparent,
+                color: isMe ? _green.withValues(alpha: 0.06) : Colors.transparent,
                 border: i < queueList.length - 1
                     ? Border(
                         bottom: BorderSide(color: Colors.grey.shade100))
@@ -118,7 +118,7 @@ class QueueCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isMe ? '${q.driverName} (Сиз)' : q.driverName,
+                          isMe ? '${q.driverName} (РЎРёР·)' : q.driverName,
                           style: TextStyle(
                               fontSize: AppText.bodyMedium,
                               fontWeight: isMe
@@ -126,7 +126,7 @@ class QueueCard extends StatelessWidget {
                                   : FontWeight.normal,
                               color: isMe ? _green : Colors.black87),
                         ),
-                        Text('${q.from} → ${q.to}',
+                        Text('${q.from} в†’ ${q.to}',
                             style: TextStyle(
                                 fontSize: AppText.labelSmall,
                                 color: Colors.grey.shade500),
@@ -139,11 +139,11 @@ class QueueCard extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: q.seatsLeft > 0
-                        ? _green.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1),
+                        ? _green.withValues(alpha: 0.1)
+                        : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('💺 ${q.seatsLeft}',
+                  child: Text('рџ’є ${q.seatsLeft}',
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w600,
@@ -159,7 +159,7 @@ class QueueCard extends StatelessWidget {
             child: Row(children: [
               const Icon(Icons.swap_horiz, color: _orange, size: 16),
               const SizedBox(width: 6),
-              Text('Кейинги маршрут: $nextRoute',
+              Text('РљРµР№РёРЅРіРё РјР°СЂС€СЂСѓС‚: $nextRoute',
                   style: const TextStyle(
                       fontSize: AppText.bodySmall,
                       color: _orange,

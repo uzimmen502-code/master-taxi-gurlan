@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -192,6 +192,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       return;
     }
 
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       await context.read<UserRepository>().saveAddress(
@@ -266,13 +267,13 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4)),
               ],
               border: Border.all(
                 color: (_lat != null && _lng != null)
-                    ? _green.withOpacity(0.3)
+                    ? _green.withValues(alpha: 0.3)
                     : Colors.orange.shade300,
                 width: 1.2,
               ),
@@ -345,7 +346,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, 4)),
               ],
@@ -485,7 +486,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: fg.withOpacity(0.4)),
+        border: Border.all(color: fg.withValues(alpha: 0.4)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.check_circle, size: 11, color: fg),

@@ -100,7 +100,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
     if (c.skipReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-            '${context.trMsg(c.skipReason!)} — ${context.tr('searching_next_in_queue')}'),
+            '${context.trMsg(c.skipReason!)} вЂ” ${context.tr('searching_next_in_queue')}'),
         backgroundColor: Colors.orange,
         duration: const Duration(milliseconds: 1500),
       ));
@@ -137,9 +137,9 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('🚌 ${trip.driverName}'),
-            Text('📞 ${trip.driverPhone}'),
-            Text('🚗 ${trip.driverCar}'),
+            Text('рџљЊ ${trip.driverName}'),
+            Text('рџ“ћ ${trip.driverPhone}'),
+            Text('рџљ— ${trip.driverCar}'),
           ],
         ),
         actions: [
@@ -219,7 +219,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) await _onCancel();
       },
       child: Scaffold(
@@ -257,7 +257,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                       child: CircularProgressIndicator(
                         value: c.secondsLeft / c.timeoutSec,
                         strokeWidth: 8,
-                        backgroundColor: _color.withOpacity(0.2),
+                        backgroundColor: _color.withValues(alpha: 0.2),
                         valueColor: AlwaysStoppedAnimation(_color),
                       ),
                     ),
@@ -283,7 +283,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                     ),
                   const SizedBox(height: 24),
                   Text(
-                      '${c.pickupMfy}${c.pickupAddr.isNotEmpty ? ", ${c.pickupAddr}" : ""}\n→ ${c.dropoffMfy}',
+                      '${c.pickupMfy}${c.pickupAddr.isNotEmpty ? ", ${c.pickupAddr}" : ""}\nв†’ ${c.dropoffMfy}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: AppText.bodyMedium,
@@ -348,20 +348,20 @@ class _DriverCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 3)),
         ],
       ),
       child: Column(children: [
-        const Text('🚐', style: TextStyle(fontSize: 36)),
+        const Text('рџљђ', style: TextStyle(fontSize: 36)),
         const SizedBox(height: 8),
         Text(driver.driverName,
             style: const TextStyle(
                 fontSize: AppText.titleMedium,
                 fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text('${driver.car} • ${driver.plate}',
+        Text('${driver.car} вЂў ${driver.plate}',
             style: TextStyle(
                 fontSize: AppText.bodyMedium,
                 color: Colors.grey.shade700)),
@@ -369,7 +369,7 @@ class _DriverCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

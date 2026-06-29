@@ -560,7 +560,7 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<AdKind>(
-              value: _kind,
+              initialValue: _kind,
               decoration: const InputDecoration(labelText: 'Тури'),
               items: [
                 for (final kind in AdKind.values)
@@ -609,7 +609,7 @@ class _JobAdEditDialogState extends State<_JobAdEditDialog> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               decoration: const InputDecoration(labelText: 'Статус'),
               items: const [
                 DropdownMenuItem(value: 'pending', child: Text('Кутилмоқда')),

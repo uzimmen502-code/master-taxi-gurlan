@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/analytics/time_series.dart';
 
-/// Кенг тренд графиги — кунлик/соатлик чизиқли қатор.
+/// РљРµРЅРі С‚СЂРµРЅРґ РіСЂР°С„РёРіРё вЂ” РєСѓРЅР»РёРє/СЃРѕР°С‚Р»РёРє С‡РёР·РёТ›Р»Рё Т›Р°С‚РѕСЂ.
 class TrendChart extends StatelessWidget {
   const TrendChart({
     super.key,
@@ -20,10 +20,10 @@ class TrendChart extends StatelessWidget {
   final Color color;
   final double height;
 
-  /// `true` бўлса X ёрлиқлар "Душ, Сеш, ..." — акс ҳолда "DD.MM" ёки `HH:00`.
+  /// `true` Р±СћР»СЃР° X С‘СЂР»РёТ›Р»Р°СЂ "Р”СѓС€, РЎРµС€, ..." вЂ” Р°РєСЃ ТіРѕР»РґР° "DD.MM" С‘РєРё `HH:00`.
   final bool useWeekday;
 
-  /// Y кўрсаткичини форматлаш (мас. сум).
+  /// Y РєСћСЂСЃР°С‚РєРёС‡РёРЅРё С„РѕСЂРјР°С‚Р»Р°С€ (РјР°СЃ. СЃСѓРј).
   final String Function(double)? formatValue;
 
   @override
@@ -32,7 +32,7 @@ class TrendChart extends StatelessWidget {
       return SizedBox(
         height: height,
         child: Center(
-          child: Text('Маълумот йўқ',
+          child: Text('РњР°СЉР»СѓРјРѕС‚ Р№СћТ›',
               style: TextStyle(color: Colors.grey.shade400)),
         ),
       );
@@ -123,7 +123,7 @@ class TrendChart extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [color.withOpacity(0.22), color.withOpacity(0.02)],
+                  colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.02)],
                 ),
               ),
             ),

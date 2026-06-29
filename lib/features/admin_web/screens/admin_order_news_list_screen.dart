@@ -7,7 +7,7 @@ import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
 import '../services/admin_news_read_service.dart';
 
-/// Admin — mijozga yuborilgan buyurtma status xabarlari (`admin_news`).
+/// Admin вЂ” mijozga yuborilgan buyurtma status xabarlari (`admin_news`).
 class AdminOrderNewsListScreen extends StatefulWidget {
   const AdminOrderNewsListScreen({super.key});
 
@@ -31,19 +31,19 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
   String _statusLabel(String s) {
     switch (s) {
       case 'new':
-        return 'Юборилди';
+        return 'Р®Р±РѕСЂРёР»РґРё';
       case 'accepted':
-        return 'Қабул';
+        return 'ТљР°Р±СѓР»';
       case 'ready':
-        return 'Тайёр';
+        return 'РўР°Р№С‘СЂ';
       case 'in_delivery':
-        return 'Йўлда';
+        return 'Р™СћР»РґР°';
       case 'delivered':
-        return 'Етказилди';
+        return 'Р•С‚РєР°Р·РёР»РґРё';
       case 'rejected':
-        return 'Рад';
+        return 'Р Р°Рґ';
       default:
-        return s.isEmpty ? '—' : s;
+        return s.isEmpty ? 'вЂ”' : s;
     }
   }
 
@@ -72,7 +72,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               }
               if (snap.hasError) {
                 return Center(
-                  child: Text('Хатолик: ${snap.error}',
+                  child: Text('РҐР°С‚РѕР»РёРє: ${snap.error}',
                       style: const TextStyle(color: Colors.red)),
                 );
               }
@@ -85,14 +85,14 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                       Icon(Icons.inbox_outlined,
                           size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
-                      Text('Буюртма хabarlar йўқ',
+                      Text('Р‘СѓСЋСЂС‚РјР° С…abarlar Р№СћТ›',
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: Colors.grey.shade700)),
                       const SizedBox(height: 6),
                       Text(
-                        'Buyurtma yuborilganda yoki status o‘zgarganda shu yerda ko‘rinadi',
+                        'Buyurtma yuborilganda yoki status oвЂzgarganda shu yerda koвЂrinadi',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey.shade500),
@@ -116,7 +116,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -128,7 +128,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: _orange.withOpacity(0.12),
+              color: _orange.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.sms_outlined, color: _orange),
@@ -139,7 +139,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '📋 Буюртма хабар',
+                  'рџ“‹ Р‘СѓСЋСЂС‚РјР° С…Р°Р±Р°СЂ',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 2),
@@ -157,13 +157,13 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
 
   Widget _filterBar() {
     const filters = [
-      ('all', 'Барчasi'),
-      ('new', 'Юборилди'),
-      ('accepted', 'Қабул'),
-      ('ready', 'Тайёр'),
-      ('in_delivery', 'Йўлда'),
-      ('delivered', 'Етказилди'),
-      ('rejected', 'Рад'),
+      ('all', 'Р‘Р°СЂС‡asi'),
+      ('new', 'Р®Р±РѕСЂРёР»РґРё'),
+      ('accepted', 'ТљР°Р±СѓР»'),
+      ('ready', 'РўР°Р№С‘СЂ'),
+      ('in_delivery', 'Р™СћР»РґР°'),
+      ('delivered', 'Р•С‚РєР°Р·РёР»РґРё'),
+      ('rejected', 'Р Р°Рґ'),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -177,7 +177,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               label: Text(f.$2),
               selected: _statusFilter == f.$1,
               onSelected: (_) => setState(() => _statusFilter = f.$1),
-              selectedColor: _orange.withOpacity(0.15),
+              selectedColor: _orange.withValues(alpha: 0.15),
               labelStyle: TextStyle(
                 color: _statusFilter == f.$1 ? _orange : Colors.grey.shade700,
                 fontWeight:
@@ -240,14 +240,14 @@ class _OrderNewsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final typeLabel =
-        item.orderType == 'food' ? '🍽 Тайёр овқат' : '🍞 Нон буюртма';
+        item.orderType == 'food' ? 'рџЌЅ РўР°Р№С‘СЂ РѕРІТ›Р°С‚' : 'рџЌћ РќРѕРЅ Р±СѓСЋСЂС‚РјР°';
     final status = statusLabel(item.orderStatus);
-  final phone = item.targetUserId.isNotEmpty ? item.targetUserId : '—';
+  final phone = item.targetUserId.isNotEmpty ? item.targetUserId : 'вЂ”';
     final orderId = item.orderId.isNotEmpty
         ? (item.orderId.length > 10
-            ? '${item.orderId.substring(0, 10)}…'
+            ? '${item.orderId.substring(0, 10)}вЂ¦'
             : item.orderId)
-        : '—';
+        : 'вЂ”';
 
     return Container(
       decoration: BoxDecoration(
@@ -255,12 +255,12 @@ class _OrderNewsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: _orange.withOpacity(0.2)),
+        border: Border.all(color: _orange.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -268,7 +268,7 @@ class _OrderNewsCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _orange.withOpacity(0.08),
+              color: _orange.withValues(alpha: 0.08),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(12)),
             ),
@@ -278,7 +278,7 @@ class _OrderNewsCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _orange.withOpacity(0.15),
+                    color: _orange.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -327,10 +327,10 @@ class _OrderNewsCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text('📱 $phone',
+                  Text('рџ“± $phone',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
-                  Text('🆔 $orderId',
+                  Text('рџ†” $orderId',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
                 ],
@@ -355,7 +355,7 @@ class _OrderNewsCard extends StatelessWidget {
                 const Spacer(),
                 if (item.priority > 0)
                   Text(
-                    '⭐ ${item.priority}',
+                    'в­ђ ${item.priority}',
                     style: TextStyle(
                       fontSize: 10,
                       color: Colors.amber.shade800,

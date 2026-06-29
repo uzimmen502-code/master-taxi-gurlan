@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class MfyService {
@@ -17,9 +18,9 @@ class MfyService {
           return MapEntry(k, List<String>.from(v));
         }));
       });
-      print('МФЙ маълумотлари юкланди. ${_mfyData!.values.first.values.first.length} та МФЙ бор');
+      debugPrint('МФЙ маълумотлари юкланди. ${_mfyData!.values.first.values.first.length} та МФЙ бор');
     } catch (e) {
-      print('МФЙ маълумотларини юклашда хатолик: $e');
+      debugPrint('МФЙ маълумотларини юклашда хатолик: $e');
     }
   }
 

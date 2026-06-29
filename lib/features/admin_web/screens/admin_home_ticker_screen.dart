@@ -77,7 +77,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: value,
+                initialValue: value,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
@@ -741,7 +741,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _audience,
+                initialValue: _audience,
                 decoration: const InputDecoration(
                   labelText: 'Кимлар кўради',
                   border: OutlineInputBorder(),

@@ -21,11 +21,11 @@ class TripCard extends StatelessWidget {
   String _emojiFor(String taxiType) {
     switch (taxiType) {
       case 'marshrut':
-        return '🚐';
+        return 'рџљђ';
       case 'intercity':
-        return '🚌';
+        return 'рџљЊ';
       default:
-        return '🚕';
+        return 'рџљ•';
     }
   }
 
@@ -51,7 +51,7 @@ class TripCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
         border: Border.all(color: Colors.grey.shade100),
       ),
@@ -63,7 +63,7 @@ class TripCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                trip.from.isEmpty ? 'Йўналиш' : '${trip.from} → ${trip.to}',
+                trip.from.isEmpty ? 'Р™СћРЅР°Р»РёС€' : '${trip.from} в†’ ${trip.to}',
                 style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600),
                 maxLines: 1,
@@ -72,8 +72,8 @@ class TripCard extends StatelessWidget {
               if (personName.isNotEmpty)
                 Text(
                   isDriver
-                      ? '📞 $personName'
-                      : '🚗 $personName${carInfo.isNotEmpty ? " · $carInfo" : ""}',
+                      ? 'рџ“ћ $personName'
+                      : 'рџљ— $personName${carInfo.isNotEmpty ? " В· $carInfo" : ""}',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade500),
                 ),
@@ -82,7 +82,7 @@ class TripCard extends StatelessWidget {
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(
-            '${formatPrice(trip.fare)} сўм',
+            '${formatPrice(trip.fare)} СЃСћРј',
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

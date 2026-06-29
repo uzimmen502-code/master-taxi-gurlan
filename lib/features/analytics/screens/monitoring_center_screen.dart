@@ -15,14 +15,14 @@ import 'admin_orders_screen.dart';
 import 'daily_report_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Monitoring & Analytics Center — эски `AdminScreen` ўрнига.
+/// Monitoring & Analytics Center вЂ” СЌСЃРєРё `AdminScreen` СћСЂРЅРёРіР°.
 ///
-/// `embedded: true` — Web админ панели контексти. AppBar яратилмaйди
-/// (sidebar ўрнини босaди), Navigator.pop() ўрнига SnackBar холос.
+/// `embedded: true` вЂ” Web Р°РґРјРёРЅ РїР°РЅРµР»Рё РєРѕРЅС‚РµРєСЃС‚Рё. AppBar СЏСЂР°С‚РёР»РјaР№РґРё
+/// (sidebar СћСЂРЅРёРЅРё Р±РѕСЃaРґРё), Navigator.pop() СћСЂРЅРёРіР° SnackBar С…РѕР»РѕСЃ.
 class MonitoringCenterScreen extends StatelessWidget {
   const MonitoringCenterScreen({super.key, this.embedded = false});
 
-  /// `true` — Web админ shell ичидa жoйлaштирилгaн.
+  /// `true` вЂ” Web Р°РґРјРёРЅ shell РёС‡РёРґa Р¶oР№Р»aС€С‚РёСЂРёР»РіaРЅ.
   final bool embedded;
 
   @override
@@ -30,9 +30,9 @@ class MonitoringCenterScreen extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (ctx) => AnalyticsController(
         repo: ctx.read<AnalyticsRepository>(),
-        // main.dart'дa allaqachon yaratilган DailyReportService'ни ishlатаmiз —
-        // bu yerda yangi instans yaratish — `ensureToday()` мexanizmini
-        // dublikat qилади (Timer'lar дublikat).
+        // main.dart'Рґa allaqachon yaratilРіР°РЅ DailyReportService'РЅРё ishlР°С‚Р°miР· вЂ”
+        // bu yerda yangi instans yaratish вЂ” `ensureToday()` Рјexanizmini
+        // dublikat qРёР»Р°РґРё (Timer'lar Рґublikat).
         reportService: ctx.read<DailyReportService>(),
       ),
       child: _MonitoringView(embedded: embedded),
@@ -61,16 +61,16 @@ class _MonitoringViewState extends State<_MonitoringView>
     _checkAdmin();
   }
 
-  /// **Xavfsiz default — agar tekshiruv muvaffaqiyatsiz bo'lsa, KIRMAYDI.**
+  /// **Xavfsiz default вЂ” agar tekshiruv muvaffaqiyatsiz bo'lsa, KIRMAYDI.**
   ///
-  /// Tekshiruv 2 bosqichда:
-  ///   1. SharedPreferences'дa local `user_role == 'admin'` (tezroq UX)
-  ///   2. Firestore'даги `users/{uid}.role == 'admin'` (haqiqiy tasdiq)
+  /// Tekshiruv 2 bosqichРґР°:
+  ///   1. SharedPreferences'Рґa local `user_role == 'admin'` (tezroq UX)
+  ///   2. Firestore'РґР°РіРё `users/{uid}.role == 'admin'` (haqiqiy tasdiq)
   ///
-  /// Birinchisi false bo'lsa — Firestore'ga ham bormaydi (tezda chiqaradi).
-  /// Ikkilamchisi xatolik bersa — false (xavfsiz default).
+  /// Birinchisi false bo'lsa вЂ” Firestore'ga ham bormaydi (tezda chiqaradi).
+  /// Ikkilamchisi xatolik bersa вЂ” false (xavfsiz default).
   Future<void> _checkAdmin() async {
-    // Web admin shell: PIN login allaqachon — Firestore role qayta tekshirish
+    // Web admin shell: PIN login allaqachon вЂ” Firestore role qayta tekshirish
     // Monitoring Center'ni bo'sh qoldiradi (AdminService Phone Auth talab qiladi).
     if (widget.embedded) {
       if (!mounted) return;
@@ -98,11 +98,11 @@ class _MonitoringViewState extends State<_MonitoringView>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             backgroundColor: Colors.red,
-            content: Text('⛔ Сизда админ панелга кириш ҳуқуқи йўқ'),
+            content: Text('в›” РЎРёР·РґР° Р°РґРјРёРЅ РїР°РЅРµР»РіР° РєРёСЂРёС€ ТіСѓТ›СѓТ›Рё Р№СћТ›'),
           ),
         );
-        // Web admin shell ичида pop() — ишлaмaйди (root экран). Faqat
-        // mobile'да pop qilamiz.
+        // Web admin shell РёС‡РёРґР° pop() вЂ” РёС€Р»aРјaР№РґРё (root СЌРєСЂР°РЅ). Faqat
+        // mobile'РґР° pop qilamiz.
         if (!widget.embedded && Navigator.canPop(context)) {
           Navigator.of(context).pop();
         }
@@ -126,7 +126,7 @@ class _MonitoringViewState extends State<_MonitoringView>
     final c = context.watch<AnalyticsController>();
     final actions = [
       IconButton(
-        tooltip: 'Буюртмалар',
+        tooltip: 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ',
         icon: const Icon(Icons.receipt_long),
         onPressed: () => Navigator.push(
           context,
@@ -134,7 +134,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         ),
       ),
       IconButton(
-        tooltip: 'Янги хабар юбориш',
+        tooltip: 'РЇРЅРіРё С…Р°Р±Р°СЂ СЋР±РѕСЂРёС€',
         icon: const Icon(Icons.campaign),
         onPressed: () => Navigator.push(
           context,
@@ -143,7 +143,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         ),
       ),
       IconButton(
-        tooltip: 'Кундалик ҳисобот',
+        tooltip: 'РљСѓРЅРґР°Р»РёРє ТіРёСЃРѕР±РѕС‚',
         icon: const Icon(Icons.assessment_outlined),
         onPressed: () => Navigator.push(
           context,
@@ -156,7 +156,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         ),
       ),
       IconButton(
-        tooltip: 'Барча таҳлилни янгилаш',
+        tooltip: 'Р‘Р°СЂС‡Р° С‚Р°ТіР»РёР»РЅРё СЏРЅРіРёР»Р°С€',
         icon: const Icon(Icons.refresh),
         onPressed: () => c.refreshAll(),
       ),
@@ -172,11 +172,11 @@ class _MonitoringViewState extends State<_MonitoringView>
           widget.embedded ? Colors.grey.shade600 : Colors.white70,
       labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
       tabs: const [
-        Tab(text: '📊 Dashboard'),
-        Tab(text: '👥 Фойдаланувчи'),
-        Tab(text: '🚖 Ҳайдовчи'),
-        Tab(text: '💰 Молия'),
-        Tab(text: '⚙️ Операция'),
+        Tab(text: 'рџ“Љ Dashboard'),
+        Tab(text: 'рџ‘Ґ Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡Рё'),
+        Tab(text: 'рџљ– ТІР°Р№РґРѕРІС‡Рё'),
+        Tab(text: 'рџ’° РњРѕР»РёСЏ'),
+        Tab(text: 'вљ™пёЏ РћРїРµСЂР°С†РёСЏ'),
       ],
     );
 
@@ -192,7 +192,7 @@ class _MonitoringViewState extends State<_MonitoringView>
     );
 
     if (widget.embedded) {
-      // Web shell ичида — AppBar ўрнига кенг кoнтейнер.
+      // Web shell РёС‡РёРґР° вЂ” AppBar СћСЂРЅРёРіР° РєРµРЅРі РєoРЅС‚РµР№РЅРµСЂ.
       return Column(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -200,14 +200,14 @@ class _MonitoringViewState extends State<_MonitoringView>
             color: Colors.white,
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 4,
                   offset: const Offset(0, 2)),
             ],
           ),
           child: Row(children: [
             const Text(
-              '📊 Monitoring Center',
+              'рџ“Љ Monitoring Center',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const Spacer(),
@@ -234,7 +234,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('📊 Monitoring Center',
+        title: const Text('рџ“Љ Monitoring Center',
             style: TextStyle(fontWeight: FontWeight.bold)),
         actions: actions,
         bottom: tabBar,
@@ -244,8 +244,8 @@ class _MonitoringViewState extends State<_MonitoringView>
   }
 }
 
-/// Жуда кенг экранлaрдa контентни марказлaштирaди (тaшқaри 1400px-дaн
-/// кaттa бўлсa — Center билaн ўрaйди).
+/// Р–СѓРґР° РєРµРЅРі СЌРєСЂР°РЅР»aСЂРґa РєРѕРЅС‚РµРЅС‚РЅРё РјР°СЂРєР°Р·Р»aС€С‚РёСЂaРґРё (С‚aС€Т›aСЂРё 1400px-РґaРЅ
+/// РєaС‚С‚a Р±СћР»СЃa вЂ” Center Р±РёР»aРЅ СћСЂaР№РґРё).
 class _ResponsiveContentWrap extends StatelessWidget {
   const _ResponsiveContentWrap({required this.child});
   final Widget child;

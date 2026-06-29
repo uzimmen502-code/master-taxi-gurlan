@@ -143,13 +143,13 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       final est = base + (perKm * 3);
       if (mounted) {
         setState(() {
-          _estimatedPriceText = '${formatPrice(est)}+ сўм';
+          _estimatedPriceText = '${formatPrice(est)}+ СЃСћРј';
         });
       }
     } catch (_) {}
   }
 
-  // ─── Autocomplete ─────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђ Autocomplete в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   void _onFromChanged(String q) {
     _debounce?.cancel();
@@ -167,7 +167,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     });
   }
 
-  // ─── Actions ──────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђ Actions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   Future<void> _onGpsTap() async {
     final addr = await context.read<LocalTaxiController>().getCurrentAddress();
@@ -348,7 +348,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     );
   }
 
-  // ─── Saved places ─────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђ Saved places в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   Future<void> _onAddPlace() async {
     final addr = await Navigator.push<String>(
@@ -387,6 +387,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       ),
     );
     if (name == null || name.isEmpty) return;
+    if (!mounted) return;
     await context
         .read<LocalTaxiController>()
         .addSavedPlace(SavedPlace(name: name, address: addr));
@@ -416,16 +417,16 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     await context.read<LocalTaxiController>().removeSavedPlaceByName(name);
   }
 
-  // ─── Ҳайдовчи режими (ИЧКИ панель) ─────────────────────────────────
+  // в”Ђв”Ђв”Ђ ТІР°Р№РґРѕРІС‡Рё СЂРµР¶РёРјРё (РР§РљР РїР°РЅРµР»СЊ) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   //
-  // Маҳаллий такси ҳайдовчи режими шу илованинг ўзида юритилади (ташқи
-  // `master_taxi_driver` иловаси кераксиз):
+  // РњР°ТіР°Р»Р»РёР№ С‚Р°РєСЃРё ТіР°Р№РґРѕРІС‡Рё СЂРµР¶РёРјРё С€Сѓ РёР»РѕРІР°РЅРёРЅРі СћР·РёРґР° СЋСЂРёС‚РёР»Р°РґРё (С‚Р°С€Т›Рё
+  // `master_taxi_driver` РёР»РѕРІР°СЃРё РєРµСЂР°РєСЃРёР·):
   //
-  //   1. Профил тўлдирилганлигини текширамиз (`user_phone` 9+ рақам).
-  //   2. Авто маълумотларини профилдан оламиз (модель / ранг / рақам).
-  //   3. Ҳайдовчи тасдиқланмаган бўлса — ариза юборамиз / авто-тасдиқ.
-  //   4. Тасдиқлангандан сўнг ички `DriverHomeScreen`'ни очамиз
-  //      (веб — қўлланмайди, фақат мобил).
+  //   1. РџСЂРѕС„РёР» С‚СћР»РґРёСЂРёР»РіР°РЅР»РёРіРёРЅРё С‚РµРєС€РёСЂР°РјРёР· (`user_phone` 9+ СЂР°Т›Р°Рј).
+  //   2. РђРІС‚Рѕ РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРёРЅРё РїСЂРѕС„РёР»РґР°РЅ РѕР»Р°РјРёР· (РјРѕРґРµР»СЊ / СЂР°РЅРі / СЂР°Т›Р°Рј).
+  //   3. ТІР°Р№РґРѕРІС‡Рё С‚Р°СЃРґРёТ›Р»Р°РЅРјР°РіР°РЅ Р±СћР»СЃР° вЂ” Р°СЂРёР·Р° СЋР±РѕСЂР°РјРёР· / Р°РІС‚Рѕ-С‚Р°СЃРґРёТ›.
+  //   4. РўР°СЃРґРёТ›Р»Р°РЅРіР°РЅРґР°РЅ СЃСћРЅРі РёС‡РєРё `DriverHomeScreen`'РЅРё РѕС‡Р°РјРёР·
+  //      (РІРµР± вЂ” Т›СћР»Р»Р°РЅРјР°Р№РґРё, С„Р°Т›Р°С‚ РјРѕР±РёР»).
   Future<void> _onDriverTap() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
@@ -471,6 +472,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     final carSeats = int.tryParse(carFromProfile['carSeats'] ?? '') ?? 0;
     if (carSeats > 0) await prefs.setInt('car_seats', carSeats);
 
+    if (!mounted) return;
     final driverRepo = context.read<DriverRepository>();
     final approved = await driverRepo.isApprovedForTaxi(
       uid: uid,
@@ -480,7 +482,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 
     if ((prefs.getString('user_role') ?? '') != 'driver') {
       final name = prefs.getString('user_name') ?? '';
-      final car = '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
+      final car = '$carModel${carColor.isEmpty ? '' : ' В· $carColor'}';
       try {
         if (!mounted) return;
         if (!approved) {
@@ -495,6 +497,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           if (!mounted) return;
           if (submitResult.autoApproved) {
             await prefs.setString('user_role', 'driver');
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               backgroundColor: AppColors.button,
               behavior: SnackBarBehavior.floating,
@@ -538,8 +541,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       }
     }
 
-    // ─── Ҳайдовчи панели (ИЧКИ) ─────────────────────────────────────
-    // Веб GPS/реал-вақтни тўлиқ қўлламайди — фақат мобилда.
+    // в”Ђв”Ђв”Ђ ТІР°Р№РґРѕРІС‡Рё РїР°РЅРµР»Рё (РР§РљР) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // Р’РµР± GPS/СЂРµР°Р»-РІР°Т›С‚РЅРё С‚СћР»РёТ› Т›СћР»Р»Р°РјР°Р№РґРё вЂ” С„Р°Т›Р°С‚ РјРѕР±РёР»РґР°.
     if (kIsWeb) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -566,7 +569,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     }
   }
 
-  // ─── Build ────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђ Build в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   @override
   Widget build(BuildContext context) {
@@ -665,7 +668,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                  color: _heroStart.withOpacity(0.4),
+                                  color: _heroStart.withValues(alpha: 0.4),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4))
                             ],
@@ -692,7 +695,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                                   const SizedBox(width: 8),
                                   Text(
                                       _isSearching
-                                          ? 'Қидирилмоқда...'
+                                          ? 'ТљРёРґРёСЂРёР»РјРѕТ›РґР°...'
                                           : loc.translate('search_driver'),
                                       style: const TextStyle(
                                           fontSize: AppText.bodyLarge,
@@ -714,9 +717,9 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Helpers / inline widgets
-// ─────────────────────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 class _HeroCard extends StatelessWidget {
   const _HeroCard({
@@ -839,9 +842,9 @@ class _HeroCard extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
         const SizedBox(width: 12),
@@ -859,7 +862,7 @@ class _HeroCard extends StatelessWidget {
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   fontSize: AppText.bodyMedium),
               border: InputBorder.none,
               isDense: true,
@@ -880,7 +883,7 @@ class _HeroCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)
+          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)
         ],
       ),
       child: ListView.separated(
@@ -920,11 +923,11 @@ class _SavedPlacesSection extends StatelessWidget {
 
   IconData _iconFor(String name) {
     final l = name.toLowerCase();
-    if (l.contains('уй')) return Icons.home;
-    if (l.contains('иш')) return Icons.work;
-    if (l.contains('дўкон') || l.contains('бозор')) return Icons.store;
-    if (l.contains('мактаб')) return Icons.school;
-    if (l.contains('касалхона') || l.contains('шифо')) {
+    if (l.contains('СѓР№')) return Icons.home;
+    if (l.contains('РёС€')) return Icons.work;
+    if (l.contains('РґСћРєРѕРЅ') || l.contains('Р±РѕР·РѕСЂ')) return Icons.store;
+    if (l.contains('РјР°РєС‚Р°Р±')) return Icons.school;
+    if (l.contains('РєР°СЃР°Р»С…РѕРЅР°') || l.contains('С€РёС„Рѕ')) {
       return Icons.local_hospital;
     }
     return Icons.place;
@@ -932,11 +935,11 @@ class _SavedPlacesSection extends StatelessWidget {
 
   Color _colorFor(String name) {
     final l = name.toLowerCase();
-    if (l.contains('уй')) return Colors.blue;
-    if (l.contains('иш')) return Colors.orange;
-    if (l.contains('дўкон') || l.contains('бозор')) return Colors.purple;
-    if (l.contains('мактаб')) return Colors.red;
-    if (l.contains('касалхона')) return Colors.teal;
+    if (l.contains('СѓР№')) return Colors.blue;
+    if (l.contains('РёС€')) return Colors.orange;
+    if (l.contains('РґСћРєРѕРЅ') || l.contains('Р±РѕР·РѕСЂ')) return Colors.purple;
+    if (l.contains('РјР°РєС‚Р°Р±')) return Colors.red;
+    if (l.contains('РєР°СЃР°Р»С…РѕРЅР°')) return Colors.teal;
     return Colors.grey.shade600;
   }
 
@@ -957,9 +960,9 @@ class _SavedPlacesSection extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: _green.withOpacity(0.1),
+              color: _green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: _green.withOpacity(0.3)),
+              border: Border.all(color: _green.withValues(alpha: 0.3)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.add, size: 12, color: AppColors.primary),
@@ -1007,7 +1010,7 @@ class _SavedPlacesSection extends StatelessWidget {
                         border: Border.all(color: Colors.grey.shade200),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 4)
                         ],
                       ),

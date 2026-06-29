@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// Саватда қўшимча маҳсулот учун `[-] count [+]` қатори (қадам: дона 1, кг/л 0.5).
+/// РЎР°РІР°С‚РґР° Т›СћС€РёРјС‡Р° РјР°ТіСЃСѓР»РѕС‚ СѓС‡СѓРЅ `[-] count [+]` Т›Р°С‚РѕСЂРё (Т›Р°РґР°Рј: РґРѕРЅР° 1, РєРі/Р» 0.5).
 class ExtrasCountItem extends StatelessWidget {
   const ExtrasCountItem({
     super.key,
@@ -100,10 +100,10 @@ class ExtrasCountItem extends StatelessWidget {
         width: 28,
         height: 28,
         decoration: BoxDecoration(
-          color: enabled ? _green.withOpacity(0.1) : Colors.grey.shade100,
+          color: enabled ? _green.withValues(alpha: 0.1) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-              color: enabled ? _green.withOpacity(0.3) : Colors.grey.shade200),
+              color: enabled ? _green.withValues(alpha: 0.3) : Colors.grey.shade200),
         ),
         child: Icon(icon,
             size: 14, color: enabled ? _green : Colors.grey.shade400),

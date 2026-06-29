@@ -256,8 +256,10 @@ class IntercityDriverPanelController extends ChangeNotifier {
               perm != LocationPermission.deniedForever &&
               await Geolocator.isLocationServiceEnabled()) {
             final pos = await Geolocator.getCurrentPosition(
-              desiredAccuracy: LocationAccuracy.medium,
-              timeLimit: const Duration(seconds: 8),
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.medium,
+                timeLimit: Duration(seconds: 8),
+              ),
             );
             driverLat = pos.latitude;
             driverLng = pos.longitude;

@@ -107,6 +107,7 @@ class _DriverRegisterMarshrutViewState
         if (fromMfy.isNotEmpty && toMfy.isNotEmpty) {
           final existing =
               await repo.getRouteCoordinates(fromMfy, toMfy);
+          if (!mounted) return;
           if (existing == null) {
             await _showCoordinatePickerIfNeeded(
               context,
@@ -352,7 +353,7 @@ class _DriverRegisterMarshrutViewState
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
           ],
         ),
         child: Row(
@@ -405,7 +406,7 @@ class _DriverRegisterMarshrutViewState
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _color.withOpacity(0.2)),
+            border: Border.all(color: _color.withValues(alpha: 0.2)),
           ),
           child: Row(children: [
             const Icon(Icons.radio_button_unchecked,
@@ -426,7 +427,7 @@ class _DriverRegisterMarshrutViewState
   }
 
   Widget _priceSection(MarshrutRegisterController c) {
-    final titleWidget = _sectionTitle('Бир ўрин нархи');
+    final titleWidget = _sectionTitle('Р‘РёСЂ СћСЂРёРЅ РЅР°СЂС…Рё');
 
     if (c.priceLoading) {
       return Column(
@@ -465,7 +466,7 @@ class _DriverRegisterMarshrutViewState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${formatPrice(c.existingRoutePrice ?? 0)} сўм',
+                        '${formatPrice(c.existingRoutePrice ?? 0)} СЃСћРј',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -473,7 +474,7 @@ class _DriverRegisterMarshrutViewState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Бу йўналиш нархи белгиланган — фақат админ ўзгартиради',
+                        'Р‘Сѓ Р№СћРЅР°Р»РёС€ РЅР°СЂС…Рё Р±РµР»РіРёР»Р°РЅРіР°РЅ вЂ” С„Р°Т›Р°С‚ Р°РґРјРёРЅ СћР·РіР°СЂС‚РёСЂР°РґРё',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -495,8 +496,8 @@ class _DriverRegisterMarshrutViewState
         titleWidget,
         const SizedBox(height: 4),
         Text(
-          'Сиз бу йўналишда биринчи ҳайдовчисиз — бир ўрин нархини белгиланг. '
-          'Кейинги ҳайдовчилар учун шу нарх амал қилади.',
+          'РЎРёР· Р±Сѓ Р№СћРЅР°Р»РёС€РґР° Р±РёСЂРёРЅС‡Рё ТіР°Р№РґРѕРІС‡РёСЃРёР· вЂ” Р±РёСЂ СћСЂРёРЅ РЅР°СЂС…РёРЅРё Р±РµР»РіРёР»Р°РЅРі. '
+          'РљРµР№РёРЅРіРё ТіР°Р№РґРѕРІС‡РёР»Р°СЂ СѓС‡СѓРЅ С€Сѓ РЅР°СЂС… Р°РјР°Р» Т›РёР»Р°РґРё.',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
         ),
         const SizedBox(height: 8),
@@ -505,7 +506,7 @@ class _DriverRegisterMarshrutViewState
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+              BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
             ],
           ),
           child: TextField(
@@ -513,9 +514,9 @@ class _DriverRegisterMarshrutViewState
             keyboardType: TextInputType.number,
             onChanged: (v) => c.setPriceInput(int.tryParse(v.trim())),
             decoration: InputDecoration(
-              hintText: 'Масалан: 6000',
+              hintText: 'РњР°СЃР°Р»Р°РЅ: 6000',
               prefixIcon: const Icon(Icons.payments_outlined, color: _color),
-              suffixText: 'сўм',
+              suffixText: 'СЃСћРј',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -535,16 +536,16 @@ class _DriverRegisterMarshrutViewState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _color.withOpacity(0.06),
+        color: _color.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _color.withOpacity(0.2)),
+        border: Border.all(color: _color.withValues(alpha: 0.2)),
       ),
       child: Row(children: [
         const Icon(Icons.route, color: _color, size: 16),
         const SizedBox(width: 8),
         Expanded(
             child: Text(
-          stops.join(' → '),
+          stops.join(' в†’ '),
           style: const TextStyle(
               fontSize: AppText.labelSmall,
               color: _color,
@@ -641,7 +642,7 @@ class _Banner extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(children: [
-        const Text('🚐', style: TextStyle(fontSize: 32)),
+        const Text('рџљђ', style: TextStyle(fontSize: 32)),
         const SizedBox(width: 12),
         Expanded(
             child:
@@ -656,50 +657,10 @@ class _Banner extends StatelessWidget {
                 ? context.tr('marshrut_update_your_data')
                 : context.tr('marshrut_register_once_hint'),
             style:
-                TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
+                TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
           ),
         ])),
       ]),
-    );
-  }
-}
-
-class _PlainField extends StatelessWidget {
-  const _PlainField({
-    required this.ctrl,
-    required this.hint,
-    this.onChanged,
-  });
-
-  final TextEditingController ctrl;
-  final String hint;
-  final ValueChanged<String>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
-        ],
-      ),
-      child: TextField(
-        controller: ctrl,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
     );
   }
 }

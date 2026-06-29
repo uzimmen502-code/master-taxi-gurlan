@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/driver_session.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Юқори: салом + исм + автомобиль маълумотлари + профил тугмаси.
+/// Р®Т›РѕСЂРё: СЃР°Р»РѕРј + РёСЃРј + Р°РІС‚РѕРјРѕР±РёР»СЊ РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё + РїСЂРѕС„РёР» С‚СѓРіРјР°СЃРё.
 class DriverHeroCard extends StatelessWidget {
   const DriverHeroCard({
     super.key,
@@ -28,7 +28,7 @@ class DriverHeroCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: _green.withOpacity(0.3),
+              color: _green.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4)),
         ],
@@ -36,9 +36,9 @@ class DriverHeroCard extends StatelessWidget {
       child: Row(children: [
         CircleAvatar(
           radius: 28,
-          backgroundColor: Colors.white.withOpacity(0.2),
+          backgroundColor: Colors.white.withValues(alpha: 0.2),
           child: Text(
-            session.name.isNotEmpty ? session.name[0] : 'Д',
+            session.name.isNotEmpty ? session.name[0] : 'Р”',
             style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -59,7 +59,7 @@ class DriverHeroCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: Colors.white)),
               if (session.carModel.isNotEmpty)
-                Text('🚗 ${session.carModel} · ${session.carPlate}',
+                Text('рџљ— ${session.carModel} В· ${session.carPlate}',
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
                         color: Colors.white70)),
@@ -71,7 +71,7 @@ class DriverHeroCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.person, color: Colors.white, size: 20),
           ),

@@ -32,7 +32,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: primaryColor.withOpacity(0.35)),
+            border: Border.all(color: primaryColor.withValues(alpha: 0.35)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,7 +68,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         )
                       : const Icon(Icons.route, size: 18),
@@ -110,7 +110,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                           height: 22,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.12),
+                            color: primaryColor.withValues(alpha: 0.12),
                             shape: BoxShape.circle,
                           ),
                           child: Text(
@@ -174,7 +174,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                     label: Text(context.tr('intercity_pickup_route_start_nav')),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: primaryColor,
-                      side: BorderSide(color: primaryColor.withOpacity(0.5)),
+                      side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
                     ),
                   ),
                 ),

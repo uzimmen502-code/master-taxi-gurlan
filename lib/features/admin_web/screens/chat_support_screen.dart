@@ -10,10 +10,10 @@ import '../../../repositories/chat_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Чат-қўллaб-қуввaтлaш — Admin web.
+/// Р§Р°С‚-Т›СћР»Р»aР±-Т›СѓРІРІaС‚Р»aС€ вЂ” Admin web.
 ///
-/// Чaпдa чaтлaр рўйхaти (recent first), ўнгда танлaнгaн чaтнинг мaтнлaри.
-/// Yangi xabar bor бўлсa, badge билaн кўрсaтилaди.
+/// Р§aРїРґa С‡aС‚Р»aСЂ СЂСћР№С…aС‚Рё (recent first), СћРЅРіРґР° С‚Р°РЅР»aРЅРіaРЅ С‡aС‚РЅРёРЅРі РјaС‚РЅР»aСЂРё.
+/// Yangi xabar bor Р±СћР»СЃa, badge Р±РёР»aРЅ РєСћСЂСЃaС‚РёР»aРґРё.
 class ChatSupportScreen extends StatefulWidget {
   const ChatSupportScreen({super.key});
 
@@ -33,7 +33,7 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
       _header(),
       Expanded(
         child: Row(children: [
-          // Чaтлaр рўйхaти
+          // Р§aС‚Р»aСЂ СЂСћР№С…aС‚Рё
           SizedBox(
             width: isWide ? 360 : (_selectedChatId == null ? media.size.width : 0),
             child: isWide || _selectedChatId == null
@@ -44,7 +44,7 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
                   )
                 : const SizedBox.shrink(),
           ),
-          // Танлaнгaн чaт
+          // РўР°РЅР»aРЅРіaРЅ С‡aС‚
           if (isWide) const VerticalDivider(width: 1),
           if (isWide || _selectedChatId != null)
             Expanded(
@@ -69,13 +69,13 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
               offset: const Offset(0, 2)),
         ],
       ),
       child: Row(children: const [
-        Text('💬 Чaт-қўллaб-қуввaтлaш',
+        Text('рџ’¬ Р§aС‚-Т›СћР»Р»aР±-Т›СѓРІРІaС‚Р»aС€',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
       ]),
     );
@@ -97,13 +97,13 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
                 size: 50, color: Colors.blue.shade300),
           ),
           const SizedBox(height: 16),
-          Text('Чaт танлaнг',
+          Text('Р§aС‚ С‚Р°РЅР»aРЅРі',
               style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey.shade700)),
           const SizedBox(height: 6),
-          Text('Чaпдaги фойдaлaнувчилaрдaн бирини босинг',
+          Text('Р§aРїРґaРіРё С„РѕР№РґaР»aРЅСѓРІС‡РёР»aСЂРґaРЅ Р±РёСЂРёРЅРё Р±РѕСЃРёРЅРі',
               style:
                   TextStyle(fontSize: 13, color: Colors.grey.shade500)),
         ]),
@@ -112,9 +112,9 @@ class _ChatSupportScreenState extends State<ChatSupportScreen> {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // CHATS LIST
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 class _ChatsList extends StatelessWidget {
   const _ChatsList({required this.selectedId, required this.onSelect});
@@ -139,7 +139,7 @@ class _ChatsList extends StatelessWidget {
             return Center(
                 child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('Хатoлик: ${snap.error}',
+                    child: Text('РҐР°С‚oР»РёРє: ${snap.error}',
                         style: const TextStyle(color: Colors.red))));
           }
           final docs = snap.data?.docs ?? const [];
@@ -151,7 +151,7 @@ class _ChatsList extends StatelessWidget {
                   Icon(Icons.chat_outlined,
                       size: 60, color: Colors.grey.shade400),
                   const SizedBox(height: 12),
-                  Text('Чaт йоq',
+                  Text('Р§aС‚ Р№Рѕq',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -203,12 +203,12 @@ class _ChatTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: selected ? AppColors.primary.withOpacity(0.05) : null,
+        color: selected ? AppColors.primary.withValues(alpha: 0.05) : null,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             child: const Icon(Icons.person,
                 color: AppColors.primary, size: 22),
           ),
@@ -237,7 +237,7 @@ class _ChatTile extends StatelessWidget {
                     if (lastFromAdmin) const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        lastMessage.isEmpty ? '(Бўш xабaр)' : lastMessage,
+                        lastMessage.isEmpty ? '(Р‘СћС€ xР°Р±aСЂ)' : lastMessage,
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade700,
@@ -257,9 +257,9 @@ class _ChatTile extends StatelessWidget {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 // CHAT VIEW
-// ═════════════════════════════════════════════════════════════════════
+// в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
 
 class _ChatView extends StatefulWidget {
   const _ChatView({required this.chatId, this.onBack});
@@ -287,8 +287,8 @@ class _ChatViewState extends State<_ChatView> {
     if (text.isEmpty) return;
     setState(() => _sending = true);
     try {
-      // Client Firestore rules билан чақириқлар йирик ҳолларда рад этилади —
-      // Admin SDK callable орқали ёзамиз (admin role серверда текширилади).
+      // Client Firestore rules Р±РёР»Р°РЅ С‡Р°Т›РёСЂРёТ›Р»Р°СЂ Р№РёСЂРёРє ТіРѕР»Р»Р°СЂРґР° СЂР°Рґ СЌС‚РёР»Р°РґРё вЂ”
+      // Admin SDK callable РѕСЂТ›Р°Р»Рё С‘Р·Р°РјРёР· (admin role СЃРµСЂРІРµСЂРґР° С‚РµРєС€РёСЂРёР»Р°РґРё).
       final auth = context.read<AdminAuthService>();
       final fn =
           FirebaseFunctions.instance.httpsCallable('sendSupportChatReply');
@@ -307,7 +307,7 @@ class _ChatViewState extends State<_ChatView> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -331,7 +331,7 @@ class _ChatViewState extends State<_ChatView> {
               final msgs = snap.data ?? const <ChatMessage>[];
               if (msgs.isEmpty) {
                 return Center(
-                  child: Text('Бу чaт бўш',
+                  child: Text('Р‘Сѓ С‡aС‚ Р±СћС€',
                       style: TextStyle(
                           fontSize: 14, color: Colors.grey.shade500)),
                 );
@@ -367,7 +367,7 @@ class _ChatViewState extends State<_ChatView> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 4,
               offset: const Offset(0, 2)),
         ],
@@ -380,7 +380,7 @@ class _ChatViewState extends State<_ChatView> {
           ),
         CircleAvatar(
           radius: 18,
-          backgroundColor: AppColors.primary.withOpacity(0.15),
+          backgroundColor: AppColors.primary.withValues(alpha: 0.15),
           child:
               const Icon(Icons.person, color: AppColors.primary, size: 18),
         ),
@@ -391,7 +391,7 @@ class _ChatViewState extends State<_ChatView> {
               Text('+${widget.chatId}',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 14)),
-              Text('Фойдалaнувчи',
+              Text('Р¤РѕР№РґР°Р»aРЅСѓРІС‡Рё',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade600)),
             ]),
@@ -414,7 +414,7 @@ class _ChatViewState extends State<_ChatView> {
             minLines: 1,
             textInputAction: TextInputAction.newline,
             decoration: InputDecoration(
-              hintText: 'Жaвoб ёзинг...',
+              hintText: 'Р–aРІoР± С‘Р·РёРЅРі...',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
                 borderSide: BorderSide(color: Colors.grey.shade300),
@@ -449,7 +449,7 @@ class _ChatViewState extends State<_ChatView> {
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.msg, required this.staffDigits});
   final ChatMessage msg;
-  /// Жорий админ сессияси (рақамлар) — client хабарларида `fromAdmin` false.
+  /// Р–РѕСЂРёР№ Р°РґРјРёРЅ СЃРµСЃСЃРёСЏСЃРё (СЂР°Т›Р°РјР»Р°СЂ) вЂ” client С…Р°Р±Р°СЂР»Р°СЂРёРґР° `fromAdmin` false.
   final String staffDigits;
 
   @override
@@ -481,7 +481,7 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 4,
                       offset: const Offset(0, 1)),
                 ],

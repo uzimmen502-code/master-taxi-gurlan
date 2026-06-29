@@ -43,11 +43,8 @@ import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const _bg = Color(0xFFF6FAF2);
-const _cardBorder = Color(0xFFC8DDB8);
-const _sectionLabel = Color(0xFF7A9070);
 const _headerBorder = Color(0xFFD4E8C4);
 const _titleDark = Color(0xFF1A3A20);
-const _primaryGreen = Color(0xFF2E7D32);
 const _brandGreen = Color(0xFF36A63A);
 const _inactiveTab = Color(0xFF9AB090);
 

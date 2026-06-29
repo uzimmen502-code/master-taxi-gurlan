@@ -28,12 +28,12 @@ import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Профил — аватар, манзил, фойдаланувчи маълумотлари, роль панеллари.
-/// Сотиш, хабарлар, чат, кошелёк — бош экран пастида (HomeBottomBar).
+/// РџСЂРѕС„РёР» вЂ” Р°РІР°С‚Р°СЂ, РјР°РЅР·РёР», С„РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё, СЂРѕР»СЊ РїР°РЅРµР»Р»Р°СЂРё.
+/// РЎРѕС‚РёС€, С…Р°Р±Р°СЂР»Р°СЂ, С‡Р°С‚, РєРѕС€РµР»С‘Рє вЂ” Р±РѕС€ СЌРєСЂР°РЅ РїР°СЃС‚РёРґР° (HomeBottomBar).
 ///
-/// Эски "Сафарлар тарихи" ва "Буюртмалар тарихи" — олиб ташланди.
-/// Маълумот сақланиб қолади, лекин шу йерда кўрсатилмайди (профил —
-/// "сервислар маркази", тарихни ўз модулдан кўрилади).
+/// Р­СЃРєРё "РЎР°С„Р°СЂР»Р°СЂ С‚Р°СЂРёС…Рё" РІР° "Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ С‚Р°СЂРёС…Рё" вЂ” РѕР»РёР± С‚Р°С€Р»Р°РЅРґРё.
+/// РњР°СЉР»СѓРјРѕС‚ СЃР°Т›Р»Р°РЅРёР± Т›РѕР»Р°РґРё, Р»РµРєРёРЅ С€Сѓ Р№РµСЂРґР° РєСћСЂСЃР°С‚РёР»РјР°Р№РґРё (РїСЂРѕС„РёР» вЂ”
+/// "СЃРµСЂРІРёСЃР»Р°СЂ РјР°СЂРєР°Р·Рё", С‚Р°СЂРёС…РЅРё СћР· РјРѕРґСѓР»РґР°РЅ РєСћСЂРёР»Р°РґРё).
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     super.key,
@@ -207,9 +207,9 @@ class _ProfileViewState extends State<_ProfileView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // HEADER
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _header(ProfileController c, AppLocalizations loc) {
     return Container(
       color: _green,
@@ -257,7 +257,7 @@ class _ProfileViewState extends State<_ProfileView> {
             ]),
           ),
           const SizedBox(height: 10),
-          Text('${_honorific(c, loc)} ${c.name.isEmpty ? '—' : c.name}',
+          Text('${_honorific(c, loc)} ${c.name.isEmpty ? 'вЂ”' : c.name}',
               style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -268,7 +268,7 @@ class _ProfileViewState extends State<_ProfileView> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(_roleLabel(context, c.role, loc),
@@ -321,15 +321,15 @@ class _ProfileViewState extends State<_ProfileView> {
     if (result != null) {
       c.applyAddress(result);
     } else {
-      // Foydalanuvchi back tugmasини босди — лекин Firestore'да аввaлги
-      // ҳолат ўзгaрган бўлиши мумкин (бошқа окимдан AddressGate сақлаган).
+      // Foydalanuvchi back tugmasРёРЅРё Р±РѕСЃРґРё вЂ” Р»РµРєРёРЅ Firestore'РґР° Р°РІРІaР»РіРё
+      // ТіРѕР»Р°С‚ СћР·РіaСЂРіР°РЅ Р±СћР»РёС€Рё РјСѓРјРєРёРЅ (Р±РѕС€Т›Р° РѕРєРёРјРґР°РЅ AddressGate СЃР°Т›Р»Р°РіР°РЅ).
       await c.reloadAddressFromPrefs();
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // 4 КАРТА
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // 4 РљРђР РўРђ
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _cards(ProfileController c, AppLocalizations loc) {
     return Transform.translate(
       offset: const Offset(0, -20),
@@ -344,7 +344,7 @@ class _ProfileViewState extends State<_ProfileView> {
                 ? loc.translate('profile_address_not_entered')
                 : c.addressDisplay,
             onTap: () async {
-              // Yangi route — alohida widget tree, shu sababli mavjud
+              // Yangi route вЂ” alohida widget tree, shu sababli mavjud
               // `ProfileController` instance'ni qo'lda forward qilamiz, aks holda
               // UserInfoScreen `context.read<ProfileController>()` topa olmaydi.
               final controller = context.read<ProfileController>();
@@ -386,7 +386,7 @@ class _ProfileViewState extends State<_ProfileView> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 10,
                   offset: const Offset(0, 3)),
             ],
@@ -396,7 +396,7 @@ class _ProfileViewState extends State<_ProfileView> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 22),
@@ -469,9 +469,9 @@ class _ProfileViewState extends State<_ProfileView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // DIALOGS
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   void _showImagePicker(ProfileController c, AppLocalizations loc) {
     showModalBottomSheet(
       context: context,
@@ -730,7 +730,7 @@ class _ProfileViewState extends State<_ProfileView> {
     if (!mounted || confirmed != true) return;
 
     if (entered != _rolePin) {
-      _snack('Нотўғри PIN', isError: true);
+      _snack('РќРѕС‚СћТ“СЂРё PIN', isError: true);
       return;
     }
 
@@ -749,7 +749,7 @@ class _ProfileViewState extends State<_ProfileView> {
     }
     await c.load();
     if (!mounted) return;
-    _snack('Роль ўзгартирилди: ${_roleLabel(context, c.role, loc)}');
+    _snack('Р РѕР»СЊ СћР·РіР°СЂС‚РёСЂРёР»РґРё: ${_roleLabel(context, c.role, loc)}');
   }
 
   void _snack(String msg, {bool isError = false}) {
@@ -1018,7 +1018,7 @@ class _CarInfoSection extends StatelessWidget {
                     decoration: fieldDecoration(
                       ctx,
                       labelKey: 'car_seats_label',
-                      hint: '1–$maxSeats',
+                      hint: '1вЂ“$maxSeats',
                     ),
                     onChanged: (_) => setLocal(() {
                       clampSeatsToModel(modelCtrl.text.trim());

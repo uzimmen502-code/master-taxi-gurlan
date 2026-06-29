@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
 
-/// Йўлкира ҳисоблаш диалоги — масофа, кутиш, коэффициентлар.
+/// Р™СћР»РєРёСЂР° ТіРёСЃРѕР±Р»Р°С€ РґРёР°Р»РѕРіРё вЂ” РјР°СЃРѕС„Р°, РєСѓС‚РёС€, РєРѕСЌС„С„РёС†РёРµРЅС‚Р»Р°СЂ.
 ///
-/// Қайтариш: `(fare, cashPaid)` ёки `null` (бекор қилинди).
+/// ТљР°Р№С‚Р°СЂРёС€: `(fare, cashPaid)` С‘РєРё `null` (Р±РµРєРѕСЂ Т›РёР»РёРЅРґРё).
 Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
     BuildContext context) {
   return showDialog<({int fare, int cashPaid})>(
@@ -81,13 +81,13 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       title: const Row(children: [
         Icon(Icons.calculate, color: _blue, size: 24),
         SizedBox(width: 8),
-        Text('Йўлкира ҳисоблаш'),
+        Text('Р™СћР»РєРёСЂР° ТіРёСЃРѕР±Р»Р°С€'),
       ]),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Align(
             alignment: Alignment.centerLeft,
-            child: Text('📍 Масофа (км)',
+            child: Text('рџ“Ќ РњР°СЃРѕС„Р° (РєРј)',
                 style: TextStyle(
                     fontSize: AppText.bodySmall,
                     fontWeight: FontWeight.w600)),
@@ -111,7 +111,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
           ]),
           const Align(
             alignment: Alignment.centerLeft,
-            child: Text('⏳ Кутиш (дақ)',
+            child: Text('вЏі РљСѓС‚РёС€ (РґР°Т›)',
                 style: TextStyle(
                     fontSize: AppText.bodySmall,
                     fontWeight: FontWeight.w600)),
@@ -128,20 +128,20 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                         setState(() => _waitMins = v.round()))),
             SizedBox(
                 width: 50,
-                child: Text('$_waitMins дақ',
+                child: Text('$_waitMins РґР°Т›',
                     textAlign: TextAlign.center,
                     style:
                         const TextStyle(fontWeight: FontWeight.bold))),
           ]),
           const Divider(height: 16),
           Wrap(spacing: 6, runSpacing: 6, children: [
-            _coefChip('🌙 Тунги', _isNight,
+            _coefChip('рџЊ™ РўСѓРЅРіРё', _isNight,
                 (v) => setState(() => _isNight = v)),
-            _coefChip('🚨 Шошилинч', _isUrgent,
+            _coefChip('рџљЁ РЁРѕС€РёР»РёРЅС‡', _isUrgent,
                 (v) => setState(() => _isUrgent = v)),
-            _coefChip('🎉 Байрам', _isHoliday,
+            _coefChip('рџЋ‰ Р‘Р°Р№СЂР°Рј', _isHoliday,
                 (v) => setState(() => _isHoliday = v)),
-            _coefChip('🌧 Ёмғир', _isRainy,
+            _coefChip('рџЊ§ РЃРјТ“РёСЂ', _isRainy,
                 (v) => setState(() => _isRainy = v)),
           ]),
           const Divider(height: 20),
@@ -151,13 +151,13 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             decoration: BoxDecoration(
                 color: const Color(0xFFE8F5E9),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _green.withOpacity(0.3))),
+                border: Border.all(color: _green.withValues(alpha: 0.3))),
             child: Column(children: [
-              const Text('💰 Йўлкира',
+              const Text('рџ’° Р™СћР»РєРёСЂР°',
                   style: TextStyle(
                       fontSize: AppText.bodyMedium, color: Colors.grey)),
               const SizedBox(height: 4),
-              Text('${FareCalculator.format(fare)} сўм',
+              Text('${FareCalculator.format(fare)} СЃСћРј',
                   style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -169,7 +169,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             controller: _cashPaidCtrl,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-              labelText: 'Мижоз берган нақд (сўм)',
+              labelText: 'РњРёР¶РѕР· Р±РµСЂРіР°РЅ РЅР°Т›Рґ (СЃСћРј)',
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -180,7 +180,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Орқага',
+            child: const Text('РћСЂТ›Р°РіР°',
                 style: TextStyle(color: Colors.grey))),
         ElevatedButton.icon(
           onPressed: () {
@@ -190,7 +190,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             Navigator.of(context).pop((fare: fare, cashPaid: paid));
           },
           icon: const Icon(Icons.check_circle, size: 18),
-          label: const Text('ЯКУНЛАШ'),
+          label: const Text('РЇРљРЈРќР›РђРЁ'),
           style: ElevatedButton.styleFrom(
               backgroundColor: _green,
               foregroundColor: Colors.white,

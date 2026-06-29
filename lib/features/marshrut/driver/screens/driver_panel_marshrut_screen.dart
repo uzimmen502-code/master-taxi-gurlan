@@ -82,7 +82,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   String? _lastPassengerCancelSnackTripId;
   VoidCallback? _closeRequestDialog;
   final FlutterRingtonePlayer _ringtonePlayer = FlutterRingtonePlayer();
-  bool _shiftEnded = false;
+  final bool _shiftEnded = false;
   bool _autoScheduleOpened = false;
   MarshrutDriverPanelController? _panelCtrl;
 
@@ -354,7 +354,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
         },
       );
     } finally {
-      await tripSub?.cancel();
+      await tripSub.cancel();
       _closeRequestDialog = null;
       _openRequestDialogTripId = null;
       _stopRingtone();
@@ -517,7 +517,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
 
   Future<void> _openStartSchedule(MarshrutDriverPanelController c) async {
     await c.refreshProfileInfo();
-    if (!context.mounted) return;
+    if (!mounted) return;
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -544,20 +544,20 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
 
   Future<void> _openSmenaInfo(MarshrutDriverPanelController c) async {
     await c.refreshProfileInfo();
-    if (!context.mounted) return;
+    if (!mounted) return;
     await showMarshrutSmenaInfoSheet(
       context,
       controller: c,
       onEditProfile: () async {
         if (!await ensureCarInfoViaProfile(context)) return;
-        if (!context.mounted) return;
+        if (!mounted) return;
         await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => const DriverRegisterMarshrutScreen(),
           ),
         );
-        if (!context.mounted) return;
+        if (!mounted) return;
         await c.checkTodaySchedule();
         await c.refreshProfileInfo();
       },

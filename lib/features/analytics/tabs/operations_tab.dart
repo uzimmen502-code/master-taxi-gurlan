@@ -14,10 +14,10 @@ import '../widgets/section_card.dart';
 import '../widgets/top_list.dart';
 import '../widgets/trend_chart.dart';
 
-/// 5-таб: Операциялар таҳлили + жонли админ панели.
+/// 5-С‚Р°Р±: РћРїРµСЂР°С†РёСЏР»Р°СЂ С‚Р°ТіР»РёР»Рё + Р¶РѕРЅР»Рё Р°РґРјРёРЅ РїР°РЅРµР»Рё.
 ///
-/// Чуқур таҳлилни кўрсатади ва эски админ амалларига (driver_requests,
-/// prices, products) йўналтирувчи карталар тақдим этади.
+/// Р§СѓТ›СѓСЂ С‚Р°ТіР»РёР»РЅРё РєСћСЂСЃР°С‚Р°РґРё РІР° СЌСЃРєРё Р°РґРјРёРЅ Р°РјР°Р»Р»Р°СЂРёРіР° (driver_requests,
+/// prices, products) Р№СћРЅР°Р»С‚РёСЂСѓРІС‡Рё РєР°СЂС‚Р°Р»Р°СЂ С‚Р°Т›РґРёРј СЌС‚Р°РґРё.
 class OperationsTab extends StatefulWidget {
   const OperationsTab({super.key});
 
@@ -48,7 +48,7 @@ class _OperationsTabState extends State<OperationsTab>
     final o = c.operationsAnalytics;
     if (o == null) {
       return Center(
-          child: Text(c.operationsError ?? 'Маълумот юклаб бўлмади',
+          child: Text(c.operationsError ?? 'РњР°СЉР»СѓРјРѕС‚ СЋРєР»Р°Р± Р±СћР»РјР°РґРё',
               style: const TextStyle(color: Colors.red)));
     }
 
@@ -64,8 +64,8 @@ class _OperationsTabState extends State<OperationsTab>
           _liveCount(),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Соатлик буюртма heatmap',
-            icon: '🕐',
+            title: 'РЎРѕР°С‚Р»РёРє Р±СѓСЋСЂС‚РјР° heatmap',
+            icon: 'рџ•ђ',
             subtitle:
                 'Eng band: ${o.peakHour.toString().padLeft(2, '0')}:00',
             child: HourlyBarChart(
@@ -74,16 +74,16 @@ class _OperationsTabState extends State<OperationsTab>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Соатлик сафар heatmap',
-            icon: '🕐',
+            title: 'РЎРѕР°С‚Р»РёРє СЃР°С„Р°СЂ heatmap',
+            icon: 'рџ•ђ',
             child: HourlyBarChart(
                 series: o.tripsHourlyHeatmap,
                 color: AppColors.primary),
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: '30 кунлик буюртма + сафар тренди',
-            icon: '📈',
+            title: '30 РєСѓРЅР»РёРє Р±СѓСЋСЂС‚РјР° + СЃР°С„Р°СЂ С‚СЂРµРЅРґРё',
+            icon: 'рџ“€',
             child: Column(children: [
               TrendChart(
                   series: o.ordersDailyTrend,
@@ -102,8 +102,8 @@ class _OperationsTabState extends State<OperationsTab>
             children: [
               Expanded(
                 child: SectionCard(
-                  title: 'Буюртма статуси',
-                  icon: '📦',
+                  title: 'Р‘СѓСЋСЂС‚РјР° СЃС‚Р°С‚СѓСЃРё',
+                  icon: 'рџ“¦',
                   child:
                       DonutChart(breakdown: o.ordersByStatus, size: 130),
                 ),
@@ -111,8 +111,8 @@ class _OperationsTabState extends State<OperationsTab>
               const SizedBox(width: 10),
               Expanded(
                 child: SectionCard(
-                  title: 'Сафар статуси',
-                  icon: '🚗',
+                  title: 'РЎР°С„Р°СЂ СЃС‚Р°С‚СѓСЃРё',
+                  icon: 'рџљ—',
                   child: DonutChart(breakdown: o.tripsByStatus, size: 130),
                 ),
               ),
@@ -124,16 +124,16 @@ class _OperationsTabState extends State<OperationsTab>
             children: [
               Expanded(
                 child: SectionCard(
-                  title: 'Буюртма тури',
-                  icon: '🧩',
+                  title: 'Р‘СѓСЋСЂС‚РјР° С‚СѓСЂРё',
+                  icon: 'рџ§©',
                   child: DonutChart(breakdown: o.ordersByType, size: 130),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: SectionCard(
-                  title: 'Такси тури',
-                  icon: '🚕',
+                  title: 'РўР°РєСЃРё С‚СѓСЂРё',
+                  icon: 'рџљ•',
                   child:
                       DonutChart(breakdown: o.tripsByTaxiType, size: 130),
                 ),
@@ -143,8 +143,8 @@ class _OperationsTabState extends State<OperationsTab>
           if (o.rejectReasons.segments.isNotEmpty) ...[
             const SizedBox(height: 12),
             SectionCard(
-              title: 'Рад этиш сабаблари',
-              icon: '🚫',
+              title: 'Р Р°Рґ СЌС‚РёС€ СЃР°Р±Р°Р±Р»Р°СЂРё',
+              icon: 'рџљ«',
               child: DonutChart(breakdown: o.rejectReasons, size: 170),
             ),
           ],
@@ -154,8 +154,8 @@ class _OperationsTabState extends State<OperationsTab>
             children: [
               Expanded(
                 child: SectionCard(
-                  title: 'Топ маҳсулот',
-                  icon: '🏆',
+                  title: 'РўРѕРї РјР°ТіСЃСѓР»РѕС‚',
+                  icon: 'рџЏ†',
                   child: TopList(
                     items: o.topOrderProducts,
                     color: AppColors.primary,
@@ -166,8 +166,8 @@ class _OperationsTabState extends State<OperationsTab>
               const SizedBox(width: 10),
               Expanded(
                 child: SectionCard(
-                  title: 'Топ маршрут',
-                  icon: '🛣',
+                  title: 'РўРѕРї РјР°СЂС€СЂСѓС‚',
+                  icon: 'рџ›Ј',
                   child: TopList(
                     items: o.topTripRoutes,
                     color: AppColors.primary,
@@ -179,29 +179,29 @@ class _OperationsTabState extends State<OperationsTab>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Эффективлик',
-            icon: '⚙️',
+            title: 'Р­С„С„РµРєС‚РёРІР»РёРє',
+            icon: 'вљ™пёЏ',
             child: Column(children: [
               MetricRow(
-                  icon: '⏱',
-                  label: 'Буюртма қабул вақти',
+                  icon: 'вЏ±',
+                  label: 'Р‘СѓСЋСЂС‚РјР° Т›Р°Р±СѓР» РІР°Т›С‚Рё',
                   value:
-                      '${o.avgOrderFulfillmentMinutes.toStringAsFixed(1)} дақ'),
+                      '${o.avgOrderFulfillmentMinutes.toStringAsFixed(1)} РґР°Т›'),
               MetricRow(
-                  icon: '🚗',
-                  label: 'Сафар якунлаш вақти',
+                  icon: 'рџљ—',
+                  label: 'РЎР°С„Р°СЂ СЏРєСѓРЅР»Р°С€ РІР°Т›С‚Рё',
                   value:
-                      '${o.avgTripCompletionMinutes.toStringAsFixed(1)} дақ'),
+                      '${o.avgTripCompletionMinutes.toStringAsFixed(1)} РґР°Т›'),
               MetricRow(
-                  icon: '❌',
-                  label: 'Бекор қилиш даражаси',
+                  icon: 'вќЊ',
+                  label: 'Р‘РµРєРѕСЂ Т›РёР»РёС€ РґР°СЂР°Р¶Р°СЃРё',
                   value: '${o.cancellationRate.toStringAsFixed(1)}%',
                   valueColor: o.cancellationRate > 15
                       ? const Color(0xFFB71C1C)
                       : null),
               MetricRow(
-                  icon: '🕐',
-                  label: 'Eng band соат',
+                  icon: 'рџ•ђ',
+                  label: 'Eng band СЃРѕР°С‚',
                   value: '${o.peakHour.toString().padLeft(2, '0')}:00'),
             ]),
           ),
@@ -212,32 +212,32 @@ class _OperationsTabState extends State<OperationsTab>
 
   Widget _operationsKpis(OperationsAnalytics o) {
     return SectionCard(
-      title: 'Операция KPIлари',
-      icon: '⚙️',
+      title: 'РћРїРµСЂР°С†РёСЏ KPIР»Р°СЂРё',
+      icon: 'вљ™пёЏ',
       child: KpiGrid(
         aspectRatio: 1.45,
         accent: AppColors.primary,
         kpis: [
           KpiValue(
-              label: 'Бугунги буюртмалар',
+              label: 'Р‘СѓРіСѓРЅРіРё Р±СѓСЋСЂС‚РјР°Р»Р°СЂ',
               value: o.todayOrders,
-              unit: 'та',
-              icon: '📦'),
+              unit: 'С‚Р°',
+              icon: 'рџ“¦'),
           KpiValue(
-              label: 'Бугунги сафарлар',
+              label: 'Р‘СѓРіСѓРЅРіРё СЃР°С„Р°СЂР»Р°СЂ',
               value: o.todayTrips,
-              unit: 'та',
-              icon: '🛣'),
+              unit: 'С‚Р°',
+              icon: 'рџ›Ј'),
           KpiValue(
-              label: 'Фаол буюртма',
+              label: 'Р¤Р°РѕР» Р±СѓСЋСЂС‚РјР°',
               value: o.activeOrders,
-              unit: 'та',
-              icon: '⏳'),
+              unit: 'С‚Р°',
+              icon: 'вЏі'),
           KpiValue(
-              label: 'Фаол сафар',
+              label: 'Р¤Р°РѕР» СЃР°С„Р°СЂ',
               value: o.activeTrips,
-              unit: 'та',
-              icon: '🚗'),
+              unit: 'С‚Р°',
+              icon: 'рџљ—'),
         ],
       ),
     );
@@ -257,20 +257,20 @@ class _OperationsTabState extends State<OperationsTab>
           decoration: BoxDecoration(
             color: const Color(0xFFFFF3E0),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
           ),
           child: Row(children: [
             const Icon(Icons.notifications_active,
                 color: AppColors.primary, size: 22),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('$n та ҳайдовчи аризаси кутмоқда',
+              child: Text('$n С‚Р° ТіР°Р№РґРѕРІС‡Рё Р°СЂРёР·Р°СЃРё РєСѓС‚РјРѕТ›РґР°',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary)),
             ),
-            // Аризаларни кўриш — pending_drivers экранига
-            // (улар Cloud Functions/Repository орқали ҳал қилинади).
+            // РђСЂРёР·Р°Р»Р°СЂРЅРё РєСћСЂРёС€ вЂ” pending_drivers СЌРєСЂР°РЅРёРіР°
+            // (СѓР»Р°СЂ Cloud Functions/Repository РѕСЂТ›Р°Р»Рё ТіР°Р» Т›РёР»РёРЅР°РґРё).
             const Icon(Icons.chevron_right, color: AppColors.primary),
           ]),
         );

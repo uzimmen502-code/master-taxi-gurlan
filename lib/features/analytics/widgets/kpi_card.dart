@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
 
-/// Битта KPI кадрни кўрсатувчи карта — асосий рақам + delta тенглик.
+/// Р‘РёС‚С‚Р° KPI РєР°РґСЂРЅРё РєСћСЂСЃР°С‚СѓРІС‡Рё РєР°СЂС‚Р° вЂ” Р°СЃРѕСЃРёР№ СЂР°Т›Р°Рј + delta С‚РµРЅРіР»РёРє.
 class KpiCard extends StatelessWidget {
   const KpiCard({
     super.key,
@@ -30,9 +30,9 @@ class KpiCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: clr.withOpacity(0.15)),
+        border: Border.all(color: clr.withValues(alpha: 0.15)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -101,7 +101,7 @@ class KpiCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'аввалгидан',
+                'Р°РІРІР°Р»РіРёРґР°РЅ',
                 style: TextStyle(
                     fontSize: 10, color: Colors.grey.shade500),
               ),

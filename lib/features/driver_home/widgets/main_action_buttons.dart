@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// "ИШНИ БОШЛАШ" ва "ИШНИ ТУГАТИШ" тугмалари.
+/// "РРЁРќР Р‘РћРЁР›РђРЁ" РІР° "РРЁРќР РўРЈР“РђРўРРЁ" С‚СѓРіРјР°Р»Р°СЂРё.
 class MainActionButtons extends StatelessWidget {
   const MainActionButtons({
     super.key,
@@ -33,7 +33,7 @@ class MainActionButtons extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                  color: _green.withOpacity(0.35),
+                  color: _green.withValues(alpha: 0.35),
                   blurRadius: 10,
                   offset: const Offset(0, 4)),
             ],
@@ -42,7 +42,7 @@ class MainActionButtons extends StatelessWidget {
             Icon(isOnline ? Icons.check_circle : Icons.play_circle_fill,
                 color: Colors.white, size: 28),
             const SizedBox(height: 6),
-            Text(isOnline ? 'ИШ БОШЛАНДИ' : 'ИШНИ БОШЛАШ',
+            Text(isOnline ? 'РРЁ Р‘РћРЁР›РђРќР”Р' : 'РРЁРќР Р‘РћРЁР›РђРЁ',
                 style: const TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,
@@ -65,7 +65,7 @@ class MainActionButtons extends StatelessWidget {
             boxShadow: hasScheduleToday
                 ? [
                     BoxShadow(
-                        color: _red.withOpacity(0.35),
+                        color: _red.withValues(alpha: 0.35),
                         blurRadius: 10,
                         offset: const Offset(0, 4)),
                   ]
@@ -76,7 +76,7 @@ class MainActionButtons extends StatelessWidget {
                 color: hasScheduleToday ? Colors.white : Colors.grey.shade600,
                 size: 28),
             const SizedBox(height: 6),
-            Text(isOnline ? 'ИШНИ ТУГАТИШ' : 'ИШ ТУГАДИ',
+            Text(isOnline ? 'РРЁРќР РўРЈР“РђРўРРЁ' : 'РРЁ РўРЈР“РђР”Р',
                 style: TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,

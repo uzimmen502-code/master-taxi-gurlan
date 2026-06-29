@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Аналитика бўлимини ўров — сарлавҳа + контент.
+/// РђРЅР°Р»РёС‚РёРєР° Р±СћР»РёРјРёРЅРё СћСЂРѕРІ вЂ” СЃР°СЂР»Р°РІТіР° + РєРѕРЅС‚РµРЅС‚.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -25,7 +25,7 @@ class SectionCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8),
         ],
       ),
       child: Column(

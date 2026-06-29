@@ -17,15 +17,15 @@ import 'extras_count_item.dart';
 String _extraLineSubtitle(BreadExtraProduct p) {
   final price = formatPrice(p.price);
   final cap = p.caption.trim();
-  if (cap.isNotEmpty) return '$cap — $price сўм';
+  if (cap.isNotEmpty) return '$cap вЂ” $price СЃСћРј';
   final q = p.qty;
   if (q != null && '$q'.trim().isNotEmpty) {
-    return '${p.qty} ${p.unitRu} — $price сўм';
+    return '${p.qty} ${p.unitRu} вЂ” $price СЃСћРј';
   }
-  return '${p.unitRu} — $price сўм';
+  return '${p.unitRu} вЂ” $price СЃСћРј';
 }
 
-/// Сават bottom sheet — буюртмани якунлаш ва юбориш.
+/// РЎР°РІР°С‚ bottom sheet вЂ” Р±СѓСЋСЂС‚РјР°РЅРё СЏРєСѓРЅР»Р°С€ РІР° СЋР±РѕСЂРёС€.
 class BreadCartSheet extends StatefulWidget {
   const BreadCartSheet({super.key});
 
@@ -422,7 +422,7 @@ class _BreadCartSheetState extends State<BreadCartSheet> {
   }
 }
 
-// ─── Сават ичидаги маҳсулот тили + ун/сут танлови ───────────────────
+// в”Ђв”Ђв”Ђ РЎР°РІР°С‚ РёС‡РёРґР°РіРё РјР°ТіСЃСѓР»РѕС‚ С‚РёР»Рё + СѓРЅ/СЃСѓС‚ С‚Р°РЅР»РѕРІРё в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 class _CartItemTile extends StatelessWidget {
   const _CartItemTile({
     required this.product,
@@ -461,7 +461,7 @@ class _CartItemTile extends StatelessWidget {
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.w600)),
           ),
-          Text('× $count',
+          Text('Г— $count',
               style: TextStyle(
                   fontSize: AppText.bodyLarge,
                   fontWeight: FontWeight.bold,
@@ -536,7 +536,7 @@ class _FlourMilkInfo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-          color: _green.withOpacity(0.06),
+          color: _green.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8)),
       child: Row(children: [
         Expanded(
@@ -562,7 +562,7 @@ class _FlourMilkInfo extends StatelessWidget {
   }
 }
 
-// ─── Нархлар хулосаси + кошелёк ──────────────────────────────────────
+// в”Ђв”Ђв”Ђ РќР°СЂС…Р»Р°СЂ С…СѓР»РѕСЃР°СЃРё + РєРѕС€РµР»С‘Рє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 class _PriceSummary extends StatelessWidget {
   const _PriceSummary();
 
@@ -576,7 +576,7 @@ class _PriceSummary extends StatelessWidget {
                   style: TextStyle(
                       fontSize: AppText.bodySmall,
                       color: color ?? Colors.grey.shade700))),
-          Text('$val сўм',
+          Text('$val СЃСћРј',
               style: TextStyle(
                   fontSize: AppText.bodySmall,
                   fontWeight: FontWeight.w600,
@@ -593,7 +593,7 @@ class _PriceSummary extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF1F8E9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _green.withOpacity(0.3)),
+        border: Border.all(color: _green.withValues(alpha: 0.3)),
       ),
       child: Column(children: [
         ...c.cart.entries.map((entry) {
@@ -601,7 +601,7 @@ class _PriceSummary extends StatelessWidget {
               .firstWhere((p) => p.id == entry.key, orElse: () => _empty);
           if (p.id == 0) return const SizedBox.shrink();
           return _summaryRow(
-              '${p.emoji} ${p.name} × ${entry.value}',
+              '${p.emoji} ${p.name} Г— ${entry.value}',
               formatPrice(c.productPrice(p) * entry.value));
         }),
         ...c.cart.entries.map((entry) {
@@ -651,7 +651,7 @@ class _PriceSummary extends StatelessWidget {
                   fontSize: AppText.titleSmall, fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('${formatPrice(c.grandTotal)} сўм',
+            child: Text('${formatPrice(c.grandTotal)} СЃСћРј',
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

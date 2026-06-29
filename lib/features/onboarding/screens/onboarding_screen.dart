@@ -45,12 +45,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _otpCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
 
-  // Manzil maydonlari — onboarding'ning 4-sahifasida shu yerda to'liq
+  // Manzil maydonlari вЂ” onboarding'ning 4-sahifasida shu yerda to'liq
   // to'ldiriladi. Profilga keyin qaytib to'ldirish KERAK EMAS.
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
-  final _districtCtrl = TextEditingController(text: 'Гурлан');
+  final _districtCtrl = TextEditingController(text: 'Р“СѓСЂР»Р°РЅ');
   final _noteCtrl = TextEditingController();
 
   bool _isLoading = false;
@@ -153,7 +153,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         final sent = await c.requestAdminCode(raw);
         if (!mounted) return;
         if (!sent) {
-          _showError(c.otpError ?? 'Код сўрови юборилмади');
+          _showError(c.otpError ?? 'РљРѕРґ СЃСћСЂРѕРІРё СЋР±РѕСЂРёР»РјР°РґРё');
           return;
         }
         c.advance();
@@ -293,9 +293,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // PROGRESS + FOOTER
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _progressBar(int currentPage) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
@@ -371,15 +371,15 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // PAGES
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _page1(AppLocalizations loc) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('👋', style: TextStyle(fontSize: 48)),
+            const Text('рџ‘‹', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(loc.translate('onboarding_welcome'),
                 style: const TextStyle(
@@ -410,7 +410,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📱', style: TextStyle(fontSize: 48)),
+          const Text('рџ“±', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 12),
           Text(
             loc.translate('onboarding_phone'),
@@ -478,7 +478,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('🔐', style: TextStyle(fontSize: 48)),
+          const Text('рџ”ђ', style: TextStyle(fontSize: 48)),
           const SizedBox(height: 12),
           Text(
             loc.translate('ob_otp_title'),
@@ -488,8 +488,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
           const SizedBox(height: 6),
           Text(
             c.isAdminCodeReady
-                ? 'Админ код тайёр — киритинг ёки автоматик тўлдирилади'
-                : 'Админ код яратmoqda... (${_phoneCtrl.text})',
+                ? 'РђРґРјРёРЅ РєРѕРґ С‚Р°Р№С‘СЂ вЂ” РєРёСЂРёС‚РёРЅРі С‘РєРё Р°РІС‚РѕРјР°С‚РёРє С‚СћР»РґРёСЂРёР»Р°РґРё'
+                : 'РђРґРјРёРЅ РєРѕРґ СЏСЂР°С‚moqda... (${_phoneCtrl.text})',
             style: TextStyle(
                 fontSize: 14,
                 color: Colors.white.withValues(alpha: 0.8)),
@@ -497,7 +497,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           if (c.isAdminCodeReady && c.generatedAdminCode != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Код: ${c.generatedAdminCode}',
+              'РљРѕРґ: ${c.generatedAdminCode}',
               style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -513,7 +513,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 3)),
               ],
@@ -565,8 +565,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 const SizedBox(height: 8),
                 Text(
                   c.isSendingOtp
-                      ? 'Сўров юборилмоқда...'
-                      : 'Админ код кутилмоқда...',
+                      ? 'РЎСћСЂРѕРІ СЋР±РѕСЂРёР»РјРѕТ›РґР°...'
+                      : 'РђРґРјРёРЅ РєРѕРґ РєСѓС‚РёР»РјРѕТ›РґР°...',
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ]),
@@ -595,7 +595,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               margin: const EdgeInsets.only(top: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade900.withOpacity(0.7),
+                color: Colors.red.shade900.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -622,7 +622,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   },
             icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
             label: const Text(
-              'Қайта сўров юбориш',
+              'ТљР°Р№С‚Р° СЃСћСЂРѕРІ СЋР±РѕСЂРёС€',
               style: TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ),
@@ -637,7 +637,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('🙍', style: TextStyle(fontSize: 48)),
+            const Text('рџ™Ќ', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(loc.translate('onboarding_gender'),
                 style: const TextStyle(
@@ -652,11 +652,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
             Row(children: [
               Expanded(
                   child: _genderCard(
-                      c, 'male', '👨', loc.translate('gender_male'))),
+                      c, 'male', 'рџ‘Ё', loc.translate('gender_male'))),
               const SizedBox(width: 14),
               Expanded(
                   child: _genderCard(
-                      c, 'female', '👩', loc.translate('gender_female'))),
+                      c, 'female', 'рџ‘©', loc.translate('gender_female'))),
             ]),
           ],
         ),
@@ -668,7 +668,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('🎂', style: TextStyle(fontSize: 48)),
+            const Text('рџЋ‚', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(loc.translate('ob_birth_title'),
                 style: const TextStyle(
@@ -719,8 +719,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
         ),
       );
 
-  /// **Manzil sahifasi** — onboarding'ning ГСП + qo'lda to'lдiriladigan toliq
-  /// shakli. AddressEditScreen bilan bir xil maydonlar — buyurtmalardan keyin
+  /// **Manzil sahifasi** вЂ” onboarding'ning Р“РЎРџ + qo'lda to'lРґiriladigan toliq
+  /// shakli. AddressEditScreen bilan bir xil maydonlar вЂ” buyurtmalardan keyin
   /// qayta to'ldirish KERAK EMAS.
   Widget _pageAddress(AppLocalizations loc, OnboardingController c) {
     final gpsRequired = c.isGpsRequiredForPhone(_phoneCtrl.text);
@@ -729,7 +729,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📍', style: TextStyle(fontSize: 40)),
+          const Text('рџ“Ќ', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 8),
           Text(loc.translate('ob_address_title'),
               style: const TextStyle(
@@ -746,22 +746,22 @@ class _OnboardingViewState extends State<_OnboardingView> {
           ),
           const SizedBox(height: 14),
 
-          // GPS блоки.
+          // GPS Р±Р»РѕРєРё.
           if (gpsRequired) ...[
             _gpsCard(c, loc),
             const SizedBox(height: 12),
           ],
 
-          // Қўлдa тўлдириш — МФЙ, кўча, уй.
+          // ТљСћР»Рґa С‚СћР»РґРёСЂРёС€ вЂ” РњР¤Р™, РєСћС‡Р°, СѓР№.
           _manualCard(loc),
         ],
       ),
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // GPS CARD
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _gpsCard(OnboardingController c, AppLocalizations loc) {
     final hasGps = c.hasGps;
     return Container(
@@ -804,7 +804,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               const Icon(Icons.adjust, size: 11, color: Colors.grey),
               const SizedBox(width: 4),
               Text(
-                'Аниқлик: ±${c.accuracy!.toStringAsFixed(0)} м',
+                'РђРЅРёТ›Р»РёРє: В±${c.accuracy!.toStringAsFixed(0)} Рј',
                 style: TextStyle(
                   fontSize: 11,
                   color: c.hasLowAccuracyGps
@@ -826,7 +826,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           if (c.hasLowAccuracyGps) ...[
             const SizedBox(height: 4),
             Text(
-              'Паст аниқлик (±${c.accuracy!.toStringAsFixed(0)} м). Очиқ жойда қайта урининг.',
+              'РџР°СЃС‚ Р°РЅРёТ›Р»РёРє (В±${c.accuracy!.toStringAsFixed(0)} Рј). РћС‡РёТ› Р¶РѕР№РґР° Т›Р°Р№С‚Р° СѓСЂРёРЅРёРЅРі.',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.orange.shade800,
@@ -843,7 +843,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           ] else if (c.geoHint != null && c.geoHint!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Атроф (маълумот): ${c.geoHint}',
+              'РђС‚СЂРѕС„ (РјР°СЉР»СѓРјРѕС‚): ${c.geoHint}',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.grey.shade700,
@@ -931,9 +931,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // MANUAL CARD (МФЙ, кўча, уй, туман, изоҳ)
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // MANUAL CARD (РњР¤Р™, РєСћС‡Р°, СѓР№, С‚СѓРјР°РЅ, РёР·РѕТі)
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _manualCard(AppLocalizations loc) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -953,21 +953,21 @@ class _OnboardingViewState extends State<_OnboardingView> {
           ctrl: _mfyCtrl,
           label: '${loc.translate('ob_mfy_label')} *',
           icon: Icons.location_city,
-          hint: 'Масалан: «Бахт» МФЙ',
+          hint: 'РњР°СЃР°Р»Р°РЅ: В«Р‘Р°С…С‚В» РњР¤Р™',
         ),
         const SizedBox(height: 10),
         _manualField(
           ctrl: _streetCtrl,
-          label: 'Кўча / гузар *',
+          label: 'РљСћС‡Р° / РіСѓР·Р°СЂ *',
           icon: Icons.signpost,
-          hint: 'Кўча / гузар номи',
+          hint: 'РљСћС‡Р° / РіСѓР·Р°СЂ РЅРѕРјРё',
         ),
         const SizedBox(height: 10),
         Row(children: [
           Expanded(
             child: _manualField(
               ctrl: _houseCtrl,
-              label: 'Уй № *',
+              label: 'РЈР№ в„– *',
               icon: Icons.home,
               hint: '12',
             ),
@@ -977,18 +977,18 @@ class _OnboardingViewState extends State<_OnboardingView> {
             flex: 2,
             child: _manualField(
               ctrl: _districtCtrl,
-              label: 'Туман',
+              label: 'РўСѓРјР°РЅ',
               icon: Icons.map,
-              hint: 'Гурлан',
+              hint: 'Р“СѓСЂР»Р°РЅ',
             ),
           ),
         ]),
         const SizedBox(height: 10),
         _manualField(
           ctrl: _noteCtrl,
-          label: 'Қўшимча (ихтиёрий)',
+          label: 'ТљСћС€РёРјС‡Р° (РёС…С‚РёС‘СЂРёР№)',
           icon: Icons.notes,
-          hint: 'Подъезд, қават, ориентир...',
+          hint: 'РџРѕРґСЉРµР·Рґ, Т›Р°РІР°С‚, РѕСЂРёРµРЅС‚РёСЂ...',
           maxLines: 2,
         ),
       ]),
@@ -1025,9 +1025,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   // SMALL WIDGETS
-  // ────────────────────────────────────────────────────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
   Widget _field({
     required TextEditingController controller,
     required String hint,
@@ -1070,7 +1070,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(children: [
-          const Text('🤲', style: TextStyle(fontSize: 18)),
+          const Text('рџ¤І', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(text,

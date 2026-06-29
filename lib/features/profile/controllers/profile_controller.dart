@@ -239,7 +239,7 @@ class ProfileController extends ChangeNotifier {
       final uid = canonicalPhoneId(phone);
       final list = await _tripsRepo.completedByDriver(uid);
       trips = list;
-      driverEarnings = list.fold<int>(0, (sum, t) => sum + t.fare);
+      driverEarnings = list.fold<int>(0, (acc, t) => acc + t.fare);
     } catch (_) {
       // log qilinishi mumkin
     } finally {

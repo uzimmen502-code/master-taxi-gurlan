@@ -579,6 +579,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       if (await IntercityDriverResume.openPanelIfActive(context, driverId: uid)) {
         return;
       }
+      if (!mounted) return;
       final started = await showDriverCarInfoDialog(
         context: context,
         taxiType: 'intercity',
@@ -622,7 +623,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
 
     final name = prefs.getString('user_name') ?? '';
     final car =
-        '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
+        '$carModel${carColor.isEmpty ? '' : ' В· $carColor'}';
 
     try {
       final submitResult = await driverRepo.submitDriverApplication(
@@ -639,6 +640,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       if (!mounted) return;
       if (submitResult.autoApproved) {
         await prefs.setString('user_role', 'driver');
+        if (!mounted) return;
         _showSnack(
           context.tr('intercity_driver_mode_activated'),
           AppColors.primaryDark,
@@ -764,7 +766,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                   children: [
                     Text(
                       '${c.selectedFromLocation ?? ''}'
-                      ' → '
+                      ' в†’ '
                       '${c.selectedToLocation ?? ''}',
                       style: const TextStyle(
                         color: Colors.white,
@@ -776,8 +778,8 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     ),
                     Text(
                       c.isSearching
-                          ? 'Қидирилмоқда...'
-                          : '${c.rides.length} та рейс топилди',
+                          ? 'ТљРёРґРёСЂРёР»РјРѕТ›РґР°...'
+                          : '${c.rides.length} С‚Р° СЂРµР№СЃ С‚РѕРїРёР»РґРё',
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 13,
@@ -808,7 +810,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Рейс топилмади',
+                            'Р РµР№СЃ С‚РѕРїРёР»РјР°РґРё',
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 16,
@@ -818,7 +820,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                           TextButton.icon(
                             onPressed: c.resetSearch,
                             icon: const Icon(Icons.refresh),
-                            label: const Text('Қайта қидириш'),
+                            label: const Text('ТљР°Р№С‚Р° Т›РёРґРёСЂРёС€'),
                           ),
                         ],
                       ),
@@ -842,7 +844,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     );
   }
 
-  // ───────────────────── Search form ─────────────────────
+  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ Search form в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
   Widget _buildSearchForm(
       IntercityTaxiController c, DateTime today, DateTime tomorrow) {
@@ -875,7 +877,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                 avatar: Icon(Icons.history, size: 16, color: Colors.grey.shade700),
                 label: Text(
                   '${IntercityPlaces.displayForLocale(_lastRouteFrom!, locale)}'
-                  ' → '
+                  ' в†’ '
                   '${IntercityPlaces.displayForLocale(_lastRouteTo!, locale)}',
                   style: const TextStyle(fontSize: 12),
                   maxLines: 1,
@@ -952,7 +954,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     formatPickDateLabel(
                       today,
                       yearSuffix:
-                          _currentLocale.languageCode == 'ru' ? ' г.' : ' y',
+                          _currentLocale.languageCode == 'ru' ? ' Рі.' : ' y',
                     ),
                     c.isToday,
                     () => c.setIsToday(true))),
@@ -963,7 +965,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                     formatPickDateLabel(
                       tomorrow,
                       yearSuffix:
-                          _currentLocale.languageCode == 'ru' ? ' г.' : ' y',
+                          _currentLocale.languageCode == 'ru' ? ' Рі.' : ' y',
                     ),
                     !c.isToday,
                     () => c.setIsToday(false))),
@@ -996,13 +998,13 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
           boxShadow: sel
               ? [
                   BoxShadow(
-                      color: IntercityColors.primary.withOpacity(0.3),
+                      color: IntercityColors.primary.withValues(alpha: 0.3),
                       blurRadius: 6,
                       offset: const Offset(0, 2))
                 ]
               : [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.04), blurRadius: 6)
+                      color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
                 ],
         ),
         child: Row(
@@ -1036,9 +1038,9 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
 
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 // Inline widgets
-// ─────────────────────────────────────────────────────────────────────
+// в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 class _RouteCard extends StatelessWidget {
   const _RouteCard({
@@ -1097,7 +1099,7 @@ class _RouteCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: IntercityColors.primary.withOpacity(0.08),
+              color: IntercityColors.primary.withValues(alpha: 0.08),
               blurRadius: 16,
               offset: const Offset(0, 4))
         ],
@@ -1183,7 +1185,7 @@ class _SearchButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-                color: IntercityColors.primary.withOpacity(0.35),
+                color: IntercityColors.primary.withValues(alpha: 0.35),
                 blurRadius: 12,
                 offset: const Offset(0, 4))
           ],

@@ -5,7 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/bread_extra_product.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// `extra_products` — қўшимча масаллиқлар / маҳсулотлар рўйхатидаги картаси.
+/// `extra_products` вЂ” Т›СћС€РёРјС‡Р° РјР°СЃР°Р»Р»РёТ›Р»Р°СЂ / РјР°ТіСЃСѓР»РѕС‚Р»Р°СЂ СЂСћР№С…Р°С‚РёРґР°РіРё РєР°СЂС‚Р°СЃРё.
 class BreadExtraProductCard extends StatelessWidget {
   const BreadExtraProductCard({
     super.key,
@@ -33,7 +33,7 @@ class BreadExtraProductCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
       ),
       child: Row(children: [
@@ -85,10 +85,10 @@ class BreadExtraProductCard extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                    color: AppColors.primary.withOpacity(0.3)),
+                    color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: Row(children: [
                 const Icon(Icons.check, size: 16, color: AppColors.primary),
@@ -125,7 +125,7 @@ class BreadExtraProductCard extends StatelessWidget {
 
 Widget _imageTile(BreadExtraProduct product, bool isSoldOut) {
   final imageUrl = product.imageUrl.trim();
-  final fallbackEmoji = isSoldOut ? '🚫' : product.displayEmoji;
+  final fallbackEmoji = isSoldOut ? 'рџљ«' : product.displayEmoji;
   final bg = isSoldOut ? Colors.grey.shade200 : const Color(0xFFFFF3E0);
 
   return Container(
@@ -158,7 +158,7 @@ Widget _imageTile(BreadExtraProduct product, bool isSoldOut) {
                 Container(
                   color: Colors.black.withValues(alpha: 0.45),
                   child: const Center(
-                    child: Text('🚫', style: TextStyle(fontSize: 22)),
+                    child: Text('рџљ«', style: TextStyle(fontSize: 22)),
                   ),
                 ),
             ],
@@ -169,10 +169,10 @@ Widget _imageTile(BreadExtraProduct product, bool isSoldOut) {
 String _cardSubtitle(BreadExtraProduct product) {
   final price = formatPrice(product.price);
   final cap = product.caption.trim();
-  if (cap.isNotEmpty) return '$cap · $price сўм/${product.unitRu}';
+  if (cap.isNotEmpty) return '$cap В· $price СЃСћРј/${product.unitRu}';
   final q = product.qty;
   if (q != null && '$q'.trim().isNotEmpty) {
-    return '${product.qty} ${product.unitRu} · $price сўм';
+    return '${product.qty} ${product.unitRu} В· $price СЃСћРј';
   }
-  return '$price сўм/${product.unitRu}';
+  return '$price СЃСћРј/${product.unitRu}';
 }

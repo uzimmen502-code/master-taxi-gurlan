@@ -367,11 +367,11 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         ],
       ),
     );
-    if (choice == null || !mounted) return;
+    if (choice == null || !context.mounted) return;
     try {
       if (choice == 'confirm') {
         await SettlementService.confirmSettlement(settlementId: settlementId);
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
           backgroundColor: Colors.green,
@@ -383,7 +383,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         );
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Settlement: $e'),
         backgroundColor: Colors.red,
@@ -478,9 +478,9 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                   await _showSettlementDialog(
                       context, settlementId, settlementAmount);
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 await _showRatingDialog(context, data);
-                if (mounted) Navigator.of(context).pop();
+                if (context.mounted) Navigator.of(context).pop();
               });
             }
           }

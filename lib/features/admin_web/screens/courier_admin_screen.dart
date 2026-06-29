@@ -489,9 +489,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
       final routePath = fallbackPath;
       final initPos = _stableInitialPosition
           ?? _computeInitialPosition(c);
-      if (_stableInitialPosition == null) {
-        _stableInitialPosition = initPos;
-      }
+      _stableInitialPosition ??= initPos;
 
       return GoogleMap(
         key: ValueKey(widget.candidate?.id ?? 'no_candidate'),
@@ -549,7 +547,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
                     '$titlePrefix · ${c.directionLabel} · ${c.stops.length} та · '
                     '${c.distanceKm.toStringAsFixed(1)} км · ~${c.durationMin} дақ'
                     '${c.hasGoogleDirections ? ' · Google' : ' · тахмин'}'
-                    '${widget.route != null && widget.route!.isActive ? ' · ${progressIndex}/${c.stops.length}' : ''}',
+                    '${widget.route != null && widget.route!.isActive ? ' · $progressIndex/${c.stops.length}' : ''}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),

@@ -42,7 +42,7 @@ class DriverClientStats {
   String get loyaltyLabel {
     if (isVip) return 'VIP мижоз';
     if (isLoyal) return 'Доимий мижоз';
-    if (bookingCount > 1) return '${bookingCount}-сафар';
+    if (bookingCount > 1) return '$bookingCount-сафар';
     return '';
   }
 

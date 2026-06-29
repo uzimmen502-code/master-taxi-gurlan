@@ -226,6 +226,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
       _err = null;
     });
 
+    if (!mounted) return;
     final repo = context.read<IntercityBookingsRepository>();
     try {
       await repo.updatePickup(

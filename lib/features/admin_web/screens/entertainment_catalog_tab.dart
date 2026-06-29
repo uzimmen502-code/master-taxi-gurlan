@@ -42,6 +42,7 @@ class _EntertainmentCatalogTabState extends State<EntertainmentCatalogTab> {
       return;
     }
 
+    if (!mounted) return;
     final title = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -62,6 +63,7 @@ class _EntertainmentCatalogTabState extends State<EntertainmentCatalogTab> {
     );
     if (title == null || title.isEmpty) return;
 
+    if (!mounted) return;
     try {
       final repo = context.read<EntertainmentRepository>();
       final id = DateTime.now().millisecondsSinceEpoch.toString();

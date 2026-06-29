@@ -4,7 +4,7 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Driver panelidagi pending buyurtma karta'i — qisqacha ma'lumot va "КЎРИШ" tugmasi.
+/// Driver panelidagi pending buyurtma karta'i вЂ” qisqacha ma'lumot va "РљРЋР РРЁ" tugmasi.
 class RideRequestCard extends StatelessWidget {
   const RideRequestCard({
     super.key,
@@ -26,24 +26,24 @@ class RideRequestCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
         ],
       ),
       child: Row(children: [
         Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('📍 ${ride.pickupMfy}',
+          Text('рџ“Ќ ${ride.pickupMfy}',
               style: const TextStyle(
                   fontSize: AppText.bodyMedium, fontWeight: FontWeight.bold)),
           if (ride.fromAddr.isNotEmpty)
-            Text('🏠 ${ride.fromAddr}',
+            Text('рџЏ  ${ride.fromAddr}',
                 style: TextStyle(
                     fontSize: AppText.labelSmall,
                     color: Colors.grey.shade500)),
-          Text('🏁 ${ride.dropoffMfy}',
+          Text('рџЏЃ ${ride.dropoffMfy}',
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade500)),
-          Text('📞 ${ride.userPhone}',
+          Text('рџ“ћ ${ride.userPhone}',
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade400)),
         ])),

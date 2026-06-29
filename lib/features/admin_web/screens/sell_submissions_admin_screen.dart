@@ -1081,19 +1081,23 @@ class _ForwardDialogState extends State<_ForwardDialog> {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
-              RadioListTile<String>(
-                title: const Text('Barcha foydalanuvchilar'),
-                subtitle: const Text('Xabarlar bo\'limida ko\'rinadi'),
-                value: 'all',
+              RadioGroup<String>(
                 groupValue: _audience,
                 onChanged: (v) => setState(() => _audience = v ?? 'all'),
-              ),
-              RadioListTile<String>(
-                title: const Text('Tanlangan telefonlar'),
-                subtitle: const Text('Vergul bilan ajrating'),
-                value: 'selected',
-                groupValue: _audience,
-                onChanged: (v) => setState(() => _audience = v ?? 'selected'),
+                child: Column(
+                  children: const [
+                    RadioListTile<String>(
+                      title: Text('Barcha foydalanuvchilar'),
+                      subtitle: Text('Xabarlar bo\'limida ko\'rinadi'),
+                      value: 'all',
+                    ),
+                    RadioListTile<String>(
+                      title: Text('Tanlangan telefonlar'),
+                      subtitle: Text('Vergul bilan ajrating'),
+                      value: 'selected',
+                    ),
+                  ],
+                ),
               ),
               if (_audience == 'selected') ...[
                 const SizedBox(height: 8),

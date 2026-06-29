@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Marshrut driver panelidagi katta online toggle — switch + navbat o'rni.
+/// Marshrut driver panelidagi katta online toggle вЂ” switch + navbat o'rni.
 class OnlineToggleTile extends StatelessWidget {
   const OnlineToggleTile({
     super.key,
@@ -29,7 +29,7 @@ class OnlineToggleTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color:
-                  isOnline ? color.withOpacity(0.4) : Colors.grey.shade300,
+                  isOnline ? color.withValues(alpha: 0.4) : Colors.grey.shade300,
               width: 1.5),
         ),
         child: Row(children: [
@@ -37,7 +37,7 @@ class OnlineToggleTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-                color: (isOnline ? color : Colors.grey).withOpacity(0.15),
+                color: (isOnline ? color : Colors.grey).withValues(alpha: 0.15),
                 shape: BoxShape.circle),
             child: Icon(
                 isOnline ? Icons.wifi : Icons.wifi_off,
@@ -57,8 +57,8 @@ class OnlineToggleTile extends StatelessWidget {
                     color: isOnline ? color : Colors.grey.shade600)),
             Text(
               isOnline
-                  ? 'Навбат: $queuePosition-ўрин'
-                  : 'Буюртмалар тўхтатилган',
+                  ? 'РќР°РІР±Р°С‚: $queuePosition-СћСЂРёРЅ'
+                  : 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ С‚СћС…С‚Р°С‚РёР»РіР°РЅ',
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade500),
             ),

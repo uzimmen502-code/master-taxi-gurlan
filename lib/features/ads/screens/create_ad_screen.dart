@@ -41,11 +41,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   Future<void> _checkLimit() async {
     final uid = await _ownerId();
-    if (!mounted || uid.isEmpty) {
+    if (!mounted) return;
+    if (uid.isEmpty) {
       Navigator.pop(context);
       return;
     }
-    if (!mounted) return;
     final can = await context.read<AdsRepository>().canCreateAd(uid);
     if (!mounted) return;
     if (!can) {
@@ -148,6 +148,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       return;
     }
 
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final repo = context.read<AdsRepository>();

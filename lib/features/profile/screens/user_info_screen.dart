@@ -9,10 +9,10 @@ import '../widgets/language_settings_tile.dart';
 import 'address_edit_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Фойдаланувчи маълумотлари — исм/жинс/роль/манзил.
+/// Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё вЂ” РёСЃРј/Р¶РёРЅСЃ/СЂРѕР»СЊ/РјР°РЅР·РёР».
 ///
-/// Profile экранидан "Фойдаланувчи маълумотлари" картаси орқали очилади.
-/// Эски ProfileScreen'нинг info section'и бу йерга кўчирилди.
+/// Profile СЌРєСЂР°РЅРёРґР°РЅ "Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё" РєР°СЂС‚Р°СЃРё РѕСЂТ›Р°Р»Рё РѕС‡РёР»Р°РґРё.
+/// Р­СЃРєРё ProfileScreen'РЅРёРЅРі info section'Рё Р±Сѓ Р№РµСЂРіР° РєСћС‡РёСЂРёР»РґРё.
 class UserInfoScreen extends StatefulWidget {
   const UserInfoScreen({super.key});
 
@@ -155,8 +155,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               onPressed: () => setState(() => _editing = true),
             )
           else ...[
-            // Edit режимида иккита текстли тугма — экранда тор бўлиб қолмасин
-            // деб иконкалaштирилди (бутун жой эгaллaмaйди).
+            // Edit СЂРµР¶РёРјРёРґР° РёРєРєРёС‚Р° С‚РµРєСЃС‚Р»Рё С‚СѓРіРјР° вЂ” СЌРєСЂР°РЅРґР° С‚РѕСЂ Р±СћР»РёР± Т›РѕР»РјР°СЃРёРЅ
+            // РґРµР± РёРєРѕРЅРєР°Р»aС€С‚РёСЂРёР»РґРё (Р±СѓС‚СѓРЅ Р¶РѕР№ СЌРіaР»Р»aРјaР№РґРё).
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white70),
               tooltip: loc.translate('cancel'),
@@ -190,7 +190,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.07),
+                  color: Colors.black.withValues(alpha: 0.07),
                   blurRadius: 12,
                   offset: const Offset(0, 4)),
             ],
@@ -202,7 +202,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               child: _editing
                   ? _input(_nameCtrl, loc.translate('enter_name'),
                       TextInputType.name)
-                  : Text(c.name.isEmpty ? '—' : c.name,
+                  : Text(c.name.isEmpty ? 'вЂ”' : c.name,
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w500)),
             ),
@@ -219,7 +219,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
                       ],
                     )
-                  : Text(c.phone.isEmpty ? '—' : c.phone,
+                  : Text(c.phone.isEmpty ? 'вЂ”' : c.phone,
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w500)),
             ),

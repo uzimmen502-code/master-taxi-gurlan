@@ -8,7 +8,7 @@ import '../controllers/analytics_controller.dart';
 import '../widgets/kpi_grid.dart';
 import '../widgets/section_card.dart';
 
-/// 1-таб: Бутун ҳолатнинг бирлашган KPI кесими.
+/// 1-С‚Р°Р±: Р‘СѓС‚СѓРЅ ТіРѕР»Р°С‚РЅРёРЅРі Р±РёСЂР»Р°С€РіР°РЅ KPI РєРµСЃРёРјРё.
 class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
 
@@ -41,7 +41,7 @@ class _DashboardTabState extends State<DashboardTab>
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(c.kpiError ?? 'Маълумот юклаб бўлмади',
+          child: Text(c.kpiError ?? 'РњР°СЉР»СѓРјРѕС‚ СЋРєР»Р°Р± Р±СћР»РјР°РґРё',
               style: const TextStyle(color: Colors.red)),
         ),
       );
@@ -57,10 +57,10 @@ class _DashboardTabState extends State<DashboardTab>
           _liveBanner(kpi),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Асосий KPI',
-            icon: '📊',
+            title: 'РђСЃРѕСЃРёР№ KPI',
+            icon: 'рџ“Љ',
             subtitle:
-                'Бугун ${DateFormat('dd.MM.yyyy').format(DateTime.now())}',
+                'Р‘СѓРіСѓРЅ ${DateFormat('dd.MM.yyyy').format(DateTime.now())}',
             child: KpiGrid(
               aspectRatio: 1.55,
               kpis: [
@@ -73,8 +73,8 @@ class _DashboardTabState extends State<DashboardTab>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Фойдаланувчилар',
-            icon: '👥',
+            title: 'Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡РёР»Р°СЂ',
+            icon: 'рџ‘Ґ',
             child: KpiGrid(
               aspectRatio: 1.55,
               accent: AppColors.primary,
@@ -82,22 +82,22 @@ class _DashboardTabState extends State<DashboardTab>
                 kpi.usersKpi,
                 kpi.activeUsersKpi,
                 KpiValue(
-                    label: 'Блок',
+                    label: 'Р‘Р»РѕРє',
                     value: kpi.blockedUsers,
-                    unit: 'та',
-                    icon: '🚫'),
+                    unit: 'С‚Р°',
+                    icon: 'рџљ«'),
                 KpiValue(
-                    label: 'Кутаётган payout',
+                    label: 'РљСѓС‚Р°С‘С‚РіР°РЅ payout',
                     value: kpi.pendingPayouts,
-                    unit: 'та',
-                    icon: '💸'),
+                    unit: 'С‚Р°',
+                    icon: 'рџ’ё'),
               ],
             ),
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Ҳайдовчилар',
-            icon: '🚖',
+            title: 'ТІР°Р№РґРѕРІС‡РёР»Р°СЂ',
+            icon: 'рџљ–',
             child: KpiGrid(
               aspectRatio: 1.55,
               accent: AppColors.primaryDark,
@@ -135,9 +135,9 @@ class _DashboardTabState extends State<DashboardTab>
         const SizedBox(width: 12),
         Expanded(
           child: Wrap(spacing: 16, runSpacing: 4, children: [
-            _live('Онлайн ҳайдовчи', kpi.onlineDrivers, '🟢'),
-            _live('Фаол сафарлар (hozir)', kpi.activeTrips, '🚗'),
-            _live('Кутаётган буюртма', kpi.pendingOrders, '📦'),
+            _live('РћРЅР»Р°Р№РЅ ТіР°Р№РґРѕРІС‡Рё', kpi.onlineDrivers, 'рџџў'),
+            _live('Р¤Р°РѕР» СЃР°С„Р°СЂР»Р°СЂ (hozir)', kpi.activeTrips, 'рџљ—'),
+            _live('РљСѓС‚Р°С‘С‚РіР°РЅ Р±СѓСЋСЂС‚РјР°', kpi.pendingOrders, 'рџ“¦'),
           ]),
         ),
       ]),
@@ -158,7 +158,7 @@ class _DashboardTabState extends State<DashboardTab>
       const SizedBox(width: 4),
       Text(label,
           style: TextStyle(
-              color: Colors.white.withOpacity(0.85), fontSize: 11)),
+              color: Colors.white.withValues(alpha: 0.85), fontSize: 11)),
     ]);
   }
 
@@ -166,20 +166,20 @@ class _DashboardTabState extends State<DashboardTab>
     final fmt = NumberFormat.decimalPattern('en');
     final revToday = fmt.format(kpi.todayRevenue);
     return SectionCard(
-      title: 'Кундалик пулс',
-      icon: '💓',
-      subtitle: 'Сўнгги 24 соат',
+      title: 'РљСѓРЅРґР°Р»РёРє РїСѓР»СЃ',
+      icon: 'рџ’“',
+      subtitle: 'РЎСћРЅРіРіРё 24 СЃРѕР°С‚',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _pulseLine(
-            '📦 Бугунги тушум', '$revToday сўм', AppColors.primary),
+            'рџ“¦ Р‘СѓРіСѓРЅРіРё С‚СѓС€СѓРј', '$revToday СЃСћРј', AppColors.primary),
         _pulseLine(
-            '🛒 Бугунги буюртмалар',
-            '${kpi.todayOrders} та',
+            'рџ›’ Р‘СѓРіСѓРЅРіРё Р±СѓСЋСЂС‚РјР°Р»Р°СЂ',
+            '${kpi.todayOrders} С‚Р°',
             AppColors.primary),
-        _pulseLine('🛣 Бугунги сафарлар', '${kpi.todayTrips} та',
+        _pulseLine('рџ›Ј Р‘СѓРіСѓРЅРіРё СЃР°С„Р°СЂР»Р°СЂ', '${kpi.todayTrips} С‚Р°',
             AppColors.primary),
         _pulseLine(
-            '🆕 Янги фойдаланувчи', '${kpi.newUsersToday} та',
+            'рџ†• РЇРЅРіРё С„РѕР№РґР°Р»Р°РЅСѓРІС‡Рё', '${kpi.newUsersToday} С‚Р°',
             AppColors.primary),
       ]),
     );
@@ -190,9 +190,9 @@ class _DashboardTabState extends State<DashboardTab>
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.07),
+        color: color.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Row(children: [
         Expanded(

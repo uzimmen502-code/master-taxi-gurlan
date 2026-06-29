@@ -1,5 +1,5 @@
 // Админ entry — faqat `main_admin.dart` (web) орқали compile бўлади.
-// ignore: avoid_web_libraries_in_flutter
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -655,25 +655,6 @@ class _Sidebar extends StatelessWidget {
       default:
         return null;
     }
-  }
-
-  Stream<int> _sumStreams(Stream<int> a, Stream<int> b) {
-    return Stream.multi((controller) {
-      var av = 0;
-      var bv = 0;
-      final sa = a.listen((v) {
-        av = v;
-        controller.add(av + bv);
-      }, onError: controller.addError);
-      final sb = b.listen((v) {
-        bv = v;
-        controller.add(av + bv);
-      }, onError: controller.addError);
-      controller.onCancel = () async {
-        await sa.cancel();
-        await sb.cancel();
-      };
-    });
   }
 
   Widget _sidebarBadge({required Stream<int> stream}) {

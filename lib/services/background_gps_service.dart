@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
@@ -103,9 +102,7 @@ void onStart(ServiceInstance service) async {
   final driverId = phone.replaceAll(RegExp(r'[^\d]'), '');
 
   if (driverId.isEmpty) {
-    service is AndroidServiceInstance
-        ? (service as AndroidServiceInstance).stopSelf()
-        : null;
+    if (service is AndroidServiceInstance) service.stopSelf();
     return;
   }
 
@@ -123,8 +120,10 @@ void onStart(ServiceInstance service) async {
 
     try {
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
       );
 
       await db.collection('drivers').doc(driverId).update({

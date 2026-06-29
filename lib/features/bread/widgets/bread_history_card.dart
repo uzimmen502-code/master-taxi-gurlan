@@ -5,7 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
 
-/// Тарих рўйхатидаги битта буюртма картаси.
+/// РўР°СЂРёС… СЂСћР№С…Р°С‚РёРґР°РіРё Р±РёС‚С‚Р° Р±СѓСЋСЂС‚РјР° РєР°СЂС‚Р°СЃРё.
 class BreadHistoryCard extends StatelessWidget {
   const BreadHistoryCard({super.key, required this.order});
 
@@ -59,18 +59,18 @@ class BreadHistoryCard extends StatelessWidget {
         border: Border(
             left: BorderSide(color: _statusColor(order.status), width: 4)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('🫓', style: TextStyle(fontSize: 18)),
+          const Text('рџ«“', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               order.items
                   .take(2)
-                  .map((i) => '${i.name} × ${i.count}')
+                  .map((i) => '${i.name} Г— ${i.count}')
                   .join(', '),
               style:
                   const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -81,7 +81,7 @@ class BreadHistoryCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: _statusColor(order.status).withOpacity(0.1),
+              color: _statusColor(order.status).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(_statusLabel(context, order.status),
@@ -106,7 +106,7 @@ class BreadHistoryCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${formatPrice(order.total)} сўм',
+            '${formatPrice(order.total)} СЃСћРј',
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

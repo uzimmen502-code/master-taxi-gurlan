@@ -6,7 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/bread_product.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Нон каталогидаги бирор маҳсулот картаси (Ёпиш/Тайёр/Той).
+/// РќРѕРЅ РєР°С‚Р°Р»РѕРіРёРґР°РіРё Р±РёСЂРѕСЂ РјР°ТіСЃСѓР»РѕС‚ РєР°СЂС‚Р°СЃРё (РЃРїРёС€/РўР°Р№С‘СЂ/РўРѕР№).
 class BreadProductCard extends StatefulWidget {
   const BreadProductCard({
     super.key,
@@ -59,7 +59,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
         Expanded(child: Stack(children: [
           Container(
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(0.08),
+              color: accentColor.withValues(alpha: 0.08),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
             ),
@@ -110,7 +110,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                     color: Colors.deepOrange.shade700,
                     borderRadius: BorderRadius.circular(6)),
                 child: const Text(
-                  'Тайёр',
+                  'РўР°Р№С‘СЂ',
                   style: TextStyle(
                     fontSize: AppText.labelTiny,
                     color: Colors.white,
@@ -165,14 +165,14 @@ class _BreadProductCardState extends State<BreadProductCard> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.1),
+                      color: accentColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6)),
                   child: Text(
                     product.isYopish
-                        ? 'Ёпиш хизмати'
+                        ? 'РЃРїРёС€ С…РёР·РјР°С‚Рё'
                         : product.isToy
-                            ? 'Тўй нони'
-                            : 'Тайёр',
+                            ? 'РўСћР№ РЅРѕРЅРё'
+                            : 'РўР°Р№С‘СЂ',
                     style: TextStyle(
                       fontSize: AppText.labelTiny,
                       color: accentColor,
@@ -182,7 +182,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 ),
                 if (!product.isYopish && !product.isToy) ...[
                   const SizedBox(height: 2),
-                  Text('${formatPrice(widget.price)} сўм',
+                  Text('${formatPrice(widget.price)} СЃСћРј',
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
@@ -255,7 +255,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
     return Center(child: Text(product.emoji, style: const TextStyle(fontSize: 42)));
   }
 
-  /// `https://...` ёки `//host/...` — бошқа схемаларда `null` (эмодзи).
+  /// `https://...` С‘РєРё `//host/...` вЂ” Р±РѕС€Т›Р° СЃС…РµРјР°Р»Р°СЂРґР° `null` (СЌРјРѕРґР·Рё).
   static String? _networkImageUrl(String raw) {
     var u = raw.trim();
     if (u.isEmpty) return null;
@@ -294,12 +294,12 @@ class _BreadProductCardState extends State<BreadProductCard> {
             height: 28,
             decoration: BoxDecoration(
                 color: canIncrement
-                    ? accent.withOpacity(0.1)
+                    ? accent.withValues(alpha: 0.1)
                     : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                     color: canIncrement
-                        ? accent.withOpacity(0.3)
+                        ? accent.withValues(alpha: 0.3)
                         : Colors.grey.shade300)),
             child: Icon(Icons.add,
                 size: 14, color: canIncrement ? accent : Colors.grey)),

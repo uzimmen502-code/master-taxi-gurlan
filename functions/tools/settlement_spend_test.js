@@ -56,8 +56,25 @@ async function applyBonus(delta, idempotencyKey, fundingAccount, kind) {
   });
 }
 
+// Batch varianti: bonusBalance increment + ledger ko'zgusi AYNI batch'da.
+async function applyBonusBatch(delta, idempotencyKey, fundingAccount, kind) {
+  const batch = db.batch();
+  batch.set(db.collection('users').doc(PASS), {
+    bonusBalance: admin.firestore.FieldValue.increment(delta),
+  }, { merge: true });
+  ledger.commitBonusInBatch(batch, db, {
+    uid: PASS, delta, kind, idempotencyKey, fundingAccount,
+    refType: 'test', refId: idempotencyKey, meta: {},
+    postedBy: 'test', postedRole: 'test',
+  });
+  await batch.commit();
+}
+
 async function cleanup(clearingBefore, cashBefore, passUserExisted) {
-  for (const id of ['bonus:credit_test_1', 'bonus:spend_test_1', 'bonus:payout_test_1']) {
+  for (const id of [
+    'bonus:credit_test_1', 'bonus:spend_test_1', 'bonus:payout_test_1',
+    'bonus:batch_credit_1', 'bonus:batch_spend_1',
+  ]) {
     await db.collection(ledger.COL_JOURNAL).doc(id).delete().catch(() => {});
   }
   await db.collection(ledger.COL_ACCOUNTS).doc(pcAcc).delete().catch(() => {});
@@ -118,6 +135,16 @@ async function main() {
     check('payout → bonus 0', (await bonusOf()) === 0);
     check('payout → admin_cash -30000',
         (await balanceOf('admin_cash')) === cashBefore.balance - 30000);
+
+    // 5) batch credit 40000 (commitBonusInBatch)
+    await applyBonusBatch(40000, 'batch_credit_1', 'admin_clearing', 'order_courier_submit');
+    check('batch credit → pc 40000', (await balanceOf(pcAcc)) === 40000);
+    check('batch credit → bonus 40000', (await bonusOf()) === 40000);
+
+    // 6) batch spend 40000 → pc 0
+    await applyBonusBatch(-40000, 'batch_spend_1', 'admin_clearing', 'order_courier_submit');
+    check('batch spend → pc 0', (await balanceOf(pcAcc)) === 0);
+    check('batch spend → bonus 0', (await bonusOf()) === 0);
 
     // invariant: pc == bonus
     check('invariant pc == bonus', (await balanceOf(pcAcc)) === (await bonusOf()));

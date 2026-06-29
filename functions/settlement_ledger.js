@@ -357,6 +357,55 @@ function commitBonusInTx(tx, ctx, input = {}) {
   return { idempotent: false, pcBalance: pcNext };
 }
 
+/**
+ * WriteBatch varianti — o'qishsiz, ATOMAR (increment orqali). Batch ichida
+ * read bo'lmaydi, shuning uchun balanslar FieldValue.increment bilan
+ * yangilanadi (bonusBalance ham aynan shunday — sinxron qoladi).
+ * Idempotentlik: chaqiruvchi tomonda guard (masalan order status) bo'lishi
+ * kutiladi; journal id `bonus:{key}` qayta yozilishi mumkin.
+ */
+function commitBonusInBatch(batch, db, input = {}) {
+  const {
+    uid, delta, kind, idempotencyKey, fundingAccount = 'admin_clearing',
+    refType = '', refId = '', meta = {},
+    postedBy = 'system', postedRole = 'system',
+  } = input;
+  if (!uid) throw new Error('commitBonusBatch: uid required');
+  if (!idempotencyKey) throw new Error('commitBonusBatch: idempotencyKey required');
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error('commitBonusBatch: delta must be non-zero integer');
+  }
+  if (!accountTypeOf(fundingAccount)) {
+    throw new Error(`commitBonusBatch: unknown funding "${fundingAccount}"`);
+  }
+  const pcId = passengerCreditAccount(uid);
+  const pcRef = db.collection(COL_ACCOUNTS).doc(pcId);
+  const fundRef = db.collection(COL_ACCOUNTS).doc(fundingAccount);
+  const jRef = db.collection(COL_JOURNAL).doc(`bonus:${idempotencyKey}`);
+  const amount = Math.abs(delta);
+  const credit = delta > 0;
+  const legs = credit
+    ? [{ account: fundingAccount, dr: amount }, { account: pcId, cr: amount }]
+    : [{ account: pcId, dr: amount }, { account: fundingAccount, cr: amount }];
+  const pcInc = credit ? amount : -amount;
+  const fundInc = naturalDelta(
+      fundingAccount, credit ? amount : 0, credit ? 0 : amount);
+  const ts = admin.firestore.FieldValue.serverTimestamp();
+  const inc = admin.firestore.FieldValue.increment;
+  batch.set(jRef, {
+    ts, kind, idempotencyKey, refType, refId, postedBy, postedRole,
+    amount, legs, meta, status: 'posted',
+  });
+  batch.set(pcRef, {
+    type: 'liability', ownerUid: uid, balance: inc(pcInc), updatedAt: ts,
+  }, { merge: true });
+  batch.set(fundRef, {
+    type: accountTypeOf(fundingAccount),
+    ownerUid: ownerUidOf(fundingAccount),
+    balance: inc(fundInc), updatedAt: ts,
+  }, { merge: true });
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Float sozlamalari va zona siyosati (settings/settlement).
 // To'liq dizayn: docs/settlement_ledger_v1_uz.md (8-bo'lim)
@@ -492,6 +541,7 @@ module.exports = {
   postEntry,
   prepareBonusInTx,
   commitBonusInTx,
+  commitBonusInBatch,
   getConfig,
   floatZone,
   settlementEnabled,

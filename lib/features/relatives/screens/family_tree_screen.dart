@@ -5,6 +5,7 @@ import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
+import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
 import '../services/tree_service.dart';
 import 'family_tree_view.dart';
@@ -30,6 +31,7 @@ class FamilyTreeScreen extends StatefulWidget {
 class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   static const _accent = Color(0xFF6A4C93);
   final _repo = TreeRepository();
+  final _relRepo = RelativesRepository();
 
   @override
   Widget build(BuildContext context) {
@@ -75,38 +77,59 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   Widget _tree() {
+    // Daraxt ikki manba birlashmasidan quriladi:
+    //  - shaxsiy relatives/people (foydalanuvchi qo'lda tuzgan bog'lanishlar)
+    //  - tree_persons komponenti (ulangan qarindoshlar + "Men" tuguni)
     return StreamBuilder<({String componentId, String personId})>(
       stream: _repo.watchMyTreeMeta(widget.userId),
       builder: (context, metaSnap) {
         final componentId = metaSnap.data?.componentId ?? '';
-        if (metaSnap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return StreamBuilder<List<TreePerson>>(
-          stream: _repo.watchComponent(componentId),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final nodes = snap.data ?? const <TreePerson>[];
-            final byId = {for (final n in nodes) n.id: n};
-            final people = nodes
-                .map((n) => n.toRelativePerson())
-                .toList(growable: false);
-            final dupGroups = _findDuplicates(nodes);
-            return Column(
-              children: [
-                if (dupGroups.isNotEmpty) _dupBar(dupGroups),
-                Expanded(
-                  child: FamilyTreeView(
-                    people: people,
-                    onTap: (RelativePerson p) {
-                      final node = byId[p.id];
-                      if (node != null) _onNodeTap(node);
-                    },
-                  ),
-                ),
-              ],
+        return StreamBuilder<List<RelativePerson>>(
+          stream: _relRepo.watchPeople(widget.userId),
+          builder: (context, personalSnap) {
+            return StreamBuilder<List<TreePerson>>(
+              stream: _repo.watchComponent(componentId),
+              builder: (context, compSnap) {
+                final personal =
+                    personalSnap.data ?? const <RelativePerson>[];
+                final comp = compSnap.data ?? const <TreePerson>[];
+                if (personalSnap.connectionState == ConnectionState.waiting &&
+                    compSnap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                // Birlashma: avval komponent, keyin shaxsiy (qirralar
+                // shaxsiy yozuvdan ustun — foydalanuvchi tahriri eng dolzarb).
+                final renderById = <String, RelativePerson>{};
+                for (final n in comp) {
+                  renderById[n.id] = n.toRelativePerson();
+                }
+                for (final p in personal) {
+                  renderById[p.id] = p;
+                }
+                final people = renderById.values.toList(growable: false);
+                final compById = {for (final n in comp) n.id: n};
+                final dupGroups = _findDuplicates(comp);
+
+                return Column(
+                  children: [
+                    if (dupGroups.isNotEmpty) _dupBar(dupGroups),
+                    Expanded(
+                      child: FamilyTreeView(
+                        people: people,
+                        onTap: (RelativePerson p) {
+                          final node = compById[p.id];
+                          if (node != null) {
+                            _onNodeTap(node);
+                          } else if (widget.onEditOwnNode != null) {
+                            widget.onEditOwnNode!(p.id);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );

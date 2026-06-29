@@ -57,7 +57,7 @@ class CirclesHubScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _CircleCard(
             emoji: '❤️',
-            title: 'Танишув ва турмуш ўртоғи',
+            title: 'Танишув, мулоқат ва оила қуриш',
             subtitle: 'Профил + модерация + хавфсиз танишув',
             color: const Color(0xFFE5446D),
             onTap: () => Navigator.push(
@@ -126,4 +126,3 @@ class _CircleCard extends StatelessWidget {
     );
   }
 }
-

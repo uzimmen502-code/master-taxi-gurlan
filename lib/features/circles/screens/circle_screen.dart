@@ -62,8 +62,9 @@ class _CircleScreenState extends State<CircleScreen> {
   // ─────────────────────────── Actions ───────────────────────────
 
   Future<void> _leave(Circle c) async {
-    final ok = await _confirm('Давradан чиқиш',
-        '«${c.title}» даврасидан чиқасизми?', 'Чиқаман', danger: true);
+    final ok = await _confirm(
+        'Давradан чиқиш', '«${c.title}» даврасидан чиқасизми?', 'Чиқаман',
+        danger: true);
     if (ok != true) return;
     await _repo.leaveCircle(circleId: widget.circleId, userId: widget.phone);
     if (mounted) Navigator.pop(context);
@@ -74,37 +75,41 @@ class _CircleScreenState extends State<CircleScreen> {
     required String targetId,
   }) async {
     final reasonCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Шикоят'),
-        content: TextField(
-          controller: reasonCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Сабаби (масалан: танимайман / нотўғри маълумот)',
-            border: OutlineInputBorder(),
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Шикоят'),
+          content: TextField(
+            controller: reasonCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              hintText: 'Сабаби (масалан: танимайман / нотўғри маълумот)',
+              border: OutlineInputBorder(),
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Бекор')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Юбориш')),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Бекор')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Юбориш')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _repo.report(
-      circleId: widget.circleId,
-      targetType: targetType,
-      targetId: targetId,
-      reporterId: widget.phone,
-      reason: reasonCtrl.text.trim(),
-    );
-    if (mounted) _snack('Шикоят юборилди.');
+      );
+      if (ok != true) return;
+      await _repo.report(
+        circleId: widget.circleId,
+        targetType: targetType,
+        targetId: targetId,
+        reporterId: widget.phone,
+        reason: reasonCtrl.text.trim(),
+      );
+      if (mounted) _snack('Шикоят юборилди.');
+    } finally {
+      reasonCtrl.dispose();
+    }
   }
 
   Future<void> _sendPost() async {
@@ -153,83 +158,88 @@ class _CircleScreenState extends State<CircleScreen> {
     final placeCtrl = TextEditingController();
     DateTime? picked;
 
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Учрашув қўшиш'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Сарлавҳа *', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: placeCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Жой', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.event),
-                  label: Text(picked == null
-                      ? 'Сана ва вақтни танланг'
-                      : _fmtTime(picked)),
-                  onPressed: () async {
-                    final d = await showDatePicker(
-                      context: ctx,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime.now()
-                          .subtract(const Duration(days: 1)),
-                      lastDate:
-                          DateTime.now().add(const Duration(days: 365 * 2)),
-                    );
-                    if (d == null) return;
-                    if (!ctx.mounted) return;
-                    final t = await showTimePicker(
-                        context: ctx, initialTime: TimeOfDay.now());
-                    setLocal(() {
-                      picked = DateTime(
-                          d.year, d.month, d.day, t?.hour ?? 0, t?.minute ?? 0);
-                    });
-                  },
-                ),
-              ],
+    try {
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            title: const Text('Учрашув қўшиш'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Сарлавҳа *', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: placeCtrl,
+                    decoration: const InputDecoration(
+                        labelText: 'Жой', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.event),
+                    label: Text(picked == null
+                        ? 'Сана ва вақтни танланг'
+                        : _fmtTime(picked)),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: ctx,
+                        initialDate: DateTime.now(),
+                        firstDate:
+                            DateTime.now().subtract(const Duration(days: 1)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 2)),
+                      );
+                      if (d == null) return;
+                      if (!ctx.mounted) return;
+                      final t = await showTimePicker(
+                          context: ctx, initialTime: TimeOfDay.now());
+                      setLocal(() {
+                        picked = DateTime(d.year, d.month, d.day, t?.hour ?? 0,
+                            t?.minute ?? 0);
+                      });
+                    },
+                  ),
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Бекор')),
+              ElevatedButton(
+                onPressed: () {
+                  if (titleCtrl.text.trim().isEmpty) return;
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Сақлаш'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Бекор')),
-            ElevatedButton(
-              onPressed: () {
-                if (titleCtrl.text.trim().isEmpty) return;
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('Сақлаш'),
-            ),
-          ],
         ),
-      ),
-    );
+      );
 
-    if (saved != true) return;
-    await _repo.createEvent(
-      circleId: widget.circleId,
-      event: CircleEvent(
-        id: '',
-        title: titleCtrl.text.trim(),
-        place: placeCtrl.text.trim(),
-        createdBy: widget.phone,
-        createdByName: _myName,
-        dateTime: picked,
-        attendees: {widget.phone: 'yes'},
-      ),
-    );
+      if (saved != true) return;
+      await _repo.createEvent(
+        circleId: widget.circleId,
+        event: CircleEvent(
+          id: '',
+          title: titleCtrl.text.trim(),
+          place: placeCtrl.text.trim(),
+          createdBy: widget.phone,
+          createdByName: _myName,
+          dateTime: picked,
+          attendees: {widget.phone: 'yes'},
+        ),
+      );
+    } finally {
+      titleCtrl.dispose();
+      placeCtrl.dispose();
+    }
   }
 
   Future<void> _addPhoto() async {
@@ -427,8 +437,8 @@ class _CircleScreenState extends State<CircleScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  style:
-                      IconButton.styleFrom(backgroundColor: CircleScreen._accent),
+                  style: IconButton.styleFrom(
+                      backgroundColor: CircleScreen._accent),
                   onPressed: _sending ? null : _sendPost,
                   icon: const Icon(Icons.send, color: Colors.white),
                 ),
@@ -463,8 +473,7 @@ class _CircleScreenState extends State<CircleScreen> {
                   icon: const Icon(Icons.more_horiz, size: 18),
                   onSelected: (v) {
                     if (v == 'delete') {
-                      _repo.deletePost(
-                          circleId: widget.circleId, postId: p.id);
+                      _repo.deletePost(circleId: widget.circleId, postId: p.id);
                     } else if (v == 'report') {
                       _report(targetType: 'post', targetId: p.id);
                     }
@@ -627,8 +636,7 @@ class _CircleScreenState extends State<CircleScreen> {
               }
               return GridView.builder(
                 padding: const EdgeInsets.all(12),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
@@ -660,8 +668,7 @@ class _CircleScreenState extends State<CircleScreen> {
                       child: SizedBox(
                           width: 18,
                           height: 18,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2)))),
+                          child: CircularProgressIndicator(strokeWidth: 2)))),
           errorBuilder: (c, e, s) => Container(
               color: Colors.grey.shade200,
               child: const Icon(Icons.broken_image, color: Colors.grey)),
@@ -755,8 +762,8 @@ class _CircleScreenState extends State<CircleScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  style:
-                      IconButton.styleFrom(backgroundColor: CircleScreen._accent),
+                  style: IconButton.styleFrom(
+                      backgroundColor: CircleScreen._accent),
                   onPressed: _chatSending ? null : _sendChat,
                   icon: const Icon(Icons.send, color: Colors.white),
                 ),
@@ -775,8 +782,8 @@ class _CircleScreenState extends State<CircleScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 3),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.74),
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
         decoration: BoxDecoration(
           color: isMe
               ? CircleScreen._accent.withValues(alpha: 0.9)

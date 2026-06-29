@@ -3,10 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
 import 'family_tree_view.dart';
+import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
 
 /// 👨‍👩‍👧 Qarindoshlarim — shaxsiy ro'yxat + tug'ilgan kunlar.
@@ -62,6 +64,32 @@ class _RelativesScreenState extends State<RelativesScreen> {
     );
   }
 
+  Future<void> _addEvent() async {
+    final phone = _phone;
+    if (phone == null || phone.length < 12) {
+      _snack('Аввал профилда телефонни тасдиқланг.');
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            RelativeEventFormScreen(userId: phone, allPeople: _people),
+      ),
+    );
+  }
+
+  Future<void> _editEvent(RelativeEvent e) async {
+    final phone = _phone!;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RelativeEventFormScreen(
+            userId: phone, existing: e, allPeople: _people),
+      ),
+    );
+  }
+
   Future<void> _delete(RelativePerson p) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -102,12 +130,19 @@ class _RelativesScreenState extends State<RelativesScreen> {
           title: const Text('Қариндошларим'),
           backgroundColor: RelativesScreen._accent,
           foregroundColor: Colors.white,
+          actions: [
+            IconButton(
+              tooltip: 'Сана / учрашув қўшиш',
+              icon: const Icon(Icons.event_available_outlined),
+              onPressed: _addEvent,
+            ),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             indicatorColor: Colors.white,
             tabs: [
               Tab(text: 'Рўйхат'),
-              Tab(text: '🎂 Туғилган кунлар'),
+              Tab(text: '📅 Саналар'),
               Tab(text: '🌳 Насаб дарахти'),
             ],
           ),
@@ -132,7 +167,7 @@ class _RelativesScreenState extends State<RelativesScreen> {
                   return TabBarView(
                     children: [
                       _listTab(people),
-                      _birthdaysTab(_repo.upcomingBirthdays(people)),
+                      _datesTab(people),
                       FamilyTreeView(people: people, onTap: _edit),
                     ],
                   );
@@ -188,29 +223,84 @@ class _RelativesScreenState extends State<RelativesScreen> {
     );
   }
 
-  Widget _birthdaysTab(List<RelativePerson> people) {
-    if (people.isEmpty) {
-      return _empty('Туғилган санаси киритилган қариндош йўқ.');
+  /// 📅 Туғилган кунлар (авто) + махсус саналар — бирлашган, кун бўйича тартибли.
+  Widget _datesTab(List<RelativePerson> people) {
+    final phone = _phone;
+    if (phone == null) {
+      return const Center(child: CircularProgressIndicator());
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-      itemCount: people.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) {
-        final p = people[i];
-        final days = p.daysUntilBirthday ?? 0;
-        final nb = p.nextBirthday;
-        final turning = (p.age ?? 0) + (days == 0 ? 0 : 1);
-        return ListTile(
-          leading: _avatar(p),
-          title: Text(p.fullName,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(nb == null
-              ? ''
-              : '${_fmtDay(nb)} · $turning ёшга тўлади'),
-          trailing: _daysBadge(days),
+    return StreamBuilder<List<RelativeEvent>>(
+      stream: _repo.watchEvents(phone),
+      builder: (context, snap) {
+        final events = _repo.upcomingEvents(snap.data ?? const []);
+        final items = _buildReminders(people, events)
+          ..sort((a, b) => a.days.compareTo(b.days));
+        if (items.isEmpty) {
+          return _empty('Ҳали сана йўқ.\n⊕ тугмаси орқали учрашув ёки '
+              'муҳим сана қўшинг.');
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (_, i) => _reminderTile(items[i]),
         );
       },
+    );
+  }
+
+  List<_Reminder> _buildReminders(
+      List<RelativePerson> people, List<RelativeEvent> events) {
+    final byId = {for (final p in people) p.id: p};
+    final out = <_Reminder>[];
+
+    for (final p in people) {
+      final days = p.daysUntilBirthday;
+      if (days == null) continue;
+      final nb = p.nextBirthday;
+      final turning = (p.age ?? 0) + (days == 0 ? 0 : 1);
+      out.add(_Reminder(
+        days: days,
+        leading: _avatar(p),
+        title: '🎂 ${p.fullName}',
+        subtitle: nb == null ? '' : '${_fmtDay(nb)} · $turning ёшга тўлади',
+        onTap: () => _edit(p),
+      ));
+    }
+
+    for (final e in events) {
+      final names = e.personIds
+          .map((id) => byId[id]?.fullName)
+          .whereType<String>()
+          .join(', ');
+      final sub = [
+        _fmtDay(e.nextOccurrence),
+        if (e.repeatYearly) 'ҳар йили',
+        if (e.place.isNotEmpty) e.place,
+        if (names.isNotEmpty) names,
+      ].join(' · ');
+      out.add(_Reminder(
+        days: e.daysUntil,
+        leading: CircleAvatar(
+          backgroundColor: RelativesScreen._accent.withValues(alpha: 0.15),
+          child: Text(e.type.emoji, style: const TextStyle(fontSize: 18)),
+        ),
+        title: e.title,
+        subtitle: sub,
+        onTap: () => _editEvent(e),
+      ));
+    }
+    return out;
+  }
+
+  Widget _reminderTile(_Reminder r) {
+    return ListTile(
+      leading: r.leading,
+      title:
+          Text(r.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: r.subtitle.isEmpty ? null : Text(r.subtitle),
+      trailing: _daysBadge(r.days),
+      onTap: r.onTap,
     );
   }
 
@@ -279,4 +369,21 @@ class _RelativesScreenState extends State<RelativesScreen> {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(t.day)}.${two(t.month)}';
   }
+}
+
+/// "Саналар" табидаги бирлашган элемент (туғилган кун ёки махсус сана).
+class _Reminder {
+  _Reminder({
+    required this.days,
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final int days;
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 }

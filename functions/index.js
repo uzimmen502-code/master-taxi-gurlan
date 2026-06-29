@@ -8947,36 +8947,296 @@ exports.ensureMyTree = functions.https.onCall(async (data, context) => {
   return { ok: true, componentId, personId: selfId, migrated };
 });
 
-/// relatives/people o'zgarsa — global tree_persons'ni sinxron tutadi (Faza 1).
+/// Merge'dan keyin eski id → omon qolgan id (tree_redirects).
+async function resolveTreeRedirect(id) {
+  if (!id) return id;
+  const r = await db.collection('tree_redirects').doc(id).get();
+  return r.exists ? (r.data().to || id) : id;
+}
+
+/// relatives/people o'zgarsa — global tree_persons'ni sinxron tutadi.
+/// Merge bo'lgan tugunlar uchun redirect orqali omon qolgan tugunga yoziladi.
 exports.onRelativePersonWrite = functions.firestore
   .document('relatives/{uid}/people/{pid}')
   .onWrite(async (change, context) => {
     const uid = context.params.uid;
     const pid = context.params.pid;
-    const treeRef = db.collection('tree_persons').doc(pid);
 
     if (!change.after.exists) {
-      // O'chirildi — faqat egasiniki (claim qilinmagan) bo'lsa o'chiramiz.
-      const cur = await treeRef.get();
+      // O'chirildi. Agar merge qilingan bo'lsa (redirect bor) — omon qolgan
+      // tugunga tegmaymiz. Aks holda egasiniki (claim'siz) bo'lsa o'chiramiz.
+      const redir = await db.collection('tree_redirects').doc(pid).get();
+      if (redir.exists) return null;
+      const cur = await db.collection('tree_persons').doc(pid).get();
       if (cur.exists && !cur.data().claimedBy) {
-        await treeRef.delete();
+        await db.collection('tree_persons').doc(pid).delete();
       }
       return null;
     }
 
-    const userSnap = await db.collection('users').doc(uid).get();
-    const u = userSnap.data() || {};
-    const componentId = u.treeComponentId || treeComponentIdFor(uid);
-    if (!u.treeComponentId) {
-      await db.collection('users').doc(uid)
-        .set({ treeComponentId: componentId }, { merge: true });
-    }
+    const data = change.after.data() || {};
+    const targetId = await resolveTreeRedirect(pid);
+    const fatherId = await resolveTreeRedirect(data.fatherId || null);
+    const motherId = await resolveTreeRedirect(data.motherId || null);
+    const spouseId = await resolveTreeRedirect(data.spouseId || null);
 
-    await treeRef.set({
-      ...treeNodeFromRelative(change.after.data() || {}),
+    const node = {
+      ...treeNodeFromRelative(data),
+      fatherId,
+      motherId,
+      spouseId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (targetId === pid) {
+      // Oddiy egalik tuguni — komponent/egani belgilaymiz.
+      const userSnap = await db.collection('users').doc(uid).get();
+      const u = userSnap.data() || {};
+      const componentId = u.treeComponentId || treeComponentIdFor(uid);
+      if (!u.treeComponentId) {
+        await db.collection('users').doc(uid)
+          .set({ treeComponentId: componentId }, { merge: true });
+      }
+      node.ownerUid = uid;
+      node.componentId = componentId;
+    }
+    // Redirect holatida: egalik/komponent/claim'ga tegmaymiz (omon qolgan
+    // tugun boshqa foydalanuvchiniki bo'lishi mumkin).
+
+    await db.collection('tree_persons').doc(targetId).set(node, { merge: true });
+    return null;
+  });
+
+/// Foydalanuvchi uchun komponent + "Men" tugunini ta'minlash (inline, idempotent).
+async function ensureTreeForUid(uid) {
+  const userRef = db.collection('users').doc(uid);
+  const snap = await userRef.get();
+  const u = snap.data() || {};
+  const componentId = u.treeComponentId || treeComponentIdFor(uid);
+  const updates = {};
+  if (!u.treeComponentId) updates.treeComponentId = componentId;
+  let selfId = u.treePersonId || null;
+  if (!selfId) {
+    const selfRef = db.collection('tree_persons').doc();
+    selfId = selfRef.id;
+    await selfRef.set({
+      fullName: String(u.name || u.fullName || u.displayName || 'Мен'),
+      photoUrl: String(u.photoUrl || u.avatar || ''),
+      photoPath: '',
+      gender: String(u.gender || ''),
+      birthDate: u.birthDate || null,
+      fatherId: null,
+      motherId: null,
+      spouseId: null,
+      claimedBy: uid,
       ownerUid: uid,
       componentId,
+      createdBy: uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    updates.treePersonId = selfId;
+  }
+  if (Object.keys(updates).length) await userRef.set(updates, { merge: true });
+  return { componentId, selfId };
+}
+
+/// Daraxt tugunini telefon raqamiga ulash taklifi (taklif → qabul).
+exports.sendTreeLinkInvite = functions.https.onCall(async (data, context) => {
+  const fromUid = datingCallerUid(context);
+  const nodeId = String(data.nodeId || '');
+  const toPhone = canonicalUid(String(data.toPhone || ''));
+  if (!nodeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'nodeId required');
+  }
+  if (!toPhone || toPhone.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'telefon notogri');
+  }
+  if (toPhone === fromUid) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'ozingizni ulay olmaysiz');
+  }
+
+  const nodeSnap = await db.collection('tree_persons').doc(nodeId).get();
+  if (!nodeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'tugun yoq');
+  }
+  const node = nodeSnap.data();
+  if (node.ownerUid !== fromUid) {
+    throw new functions.https.HttpsError('permission-denied', 'sizniki emas');
+  }
+  if (node.claimedBy) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'allaqachon ulangan');
+  }
+
+  const fromUserSnap = await db.collection('users').doc(fromUid).get();
+  const fu = fromUserSnap.data() || {};
+  const fromComponentId = fu.treeComponentId || treeComponentIdFor(fromUid);
+
+  const dup = await db.collection('tree_link_invites')
+    .where('fromNodeId', '==', nodeId)
+    .where('toUid', '==', toPhone)
+    .where('status', '==', 'pending')
+    .limit(1).get();
+  if (!dup.empty) return { ok: true, alreadySent: true };
+
+  await db.collection('tree_link_invites').add({
+    fromUid,
+    fromComponentId,
+    fromNodeId: nodeId,
+    fromName: String(fu.name || fu.fullName || fu.displayName || ''),
+    nodeName: String(node.fullName || ''),
+    toPhone,
+    toUid: toPhone,
+    status: 'pending',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+/// Ulash taklifiga javob (qabul → komponentlar birlashadi, tugunlar merge).
+exports.respondTreeLinkInvite =
+  functions.https.onCall(async (data, context) => {
+    const uid = datingCallerUid(context);
+    const inviteId = String(data.inviteId || '');
+    const accept = data.accept === true;
+    if (!inviteId) {
+      throw new functions.https.HttpsError(
+        'invalid-argument', 'inviteId required');
+    }
+    const invRef = db.collection('tree_link_invites').doc(inviteId);
+    const invSnap = await invRef.get();
+    if (!invSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'topilmadi');
+    }
+    const inv = invSnap.data();
+    if (inv.toUid !== uid) {
+      throw new functions.https.HttpsError('permission-denied', 'sizniki emas');
+    }
+    if (inv.status !== 'pending') {
+      return { ok: true, status: inv.status };
+    }
+
+    if (!accept) {
+      await invRef.set({
+        status: 'declined',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return { ok: true, status: 'declined' };
+    }
+
+    // Qabul qiluvchi daraxtini ta'minlaymiz.
+    const me = await ensureTreeForUid(uid);
+    const meComp = me.componentId;
+    const survivorId = me.selfId; // omon qoladigan tugun (qabul qiluvchi "Men")
+    const target = inv.fromComponentId; // omon qoladigan komponent (taklifchi)
+    const victimId = inv.fromNodeId; // taklifchidagi placeholder
+
+    const victimSnap = await db.collection('tree_persons').doc(victimId).get();
+    const survivorSnap =
+      await db.collection('tree_persons').doc(survivorId).get();
+    if (!victimSnap.exists || !survivorSnap.exists) {
+      throw new functions.https.HttpsError('failed-precondition', 'tugun yoq');
+    }
+    const victim = victimSnap.data();
+    const survivor = survivorSnap.data();
+
+    let batch = db.batch();
+    let ops = 0;
+    const flush = async () => {
+      if (ops > 0) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    };
+
+    // Survivor: identity/link to'ldirish + komponent target + claim.
+    batch.set(db.collection('tree_persons').doc(survivorId), {
+      componentId: target,
+      claimedBy: uid,
+      fatherId: survivor.fatherId || victim.fatherId || null,
+      motherId: survivor.motherId || victim.motherId || null,
+      spouseId: survivor.spouseId || victim.spouseId || null,
+      photoUrl: survivor.photoUrl || victim.photoUrl || '',
+      birthDate: survivor.birthDate || victim.birthDate || null,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
-    return null;
+    ops++;
+
+    // Redirect: victimId → survivorId (mirror trigger uchun).
+    batch.set(db.collection('tree_redirects').doc(victimId), {
+      to: survivorId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    ops++;
+
+    // Qabul qiluvchi komponenti → target (survivor yuqorida).
+    if (meComp !== target) {
+      const toNodes = await db.collection('tree_persons')
+        .where('componentId', '==', meComp).get();
+      for (const d of toNodes.docs) {
+        if (d.id === survivorId) continue;
+        const dd = d.data();
+        const upd = {
+          componentId: target,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        if (dd.fatherId === victimId) upd.fatherId = survivorId;
+        if (dd.motherId === victimId) upd.motherId = survivorId;
+        if (dd.spouseId === victimId) upd.spouseId = survivorId;
+        batch.set(d.ref, upd, { merge: true });
+        ops++;
+        if (ops >= 400) await flush();
+      }
+    }
+
+    // Target (taklifchi) komponentidagi victim refs → survivor.
+    const fromNodes = await db.collection('tree_persons')
+      .where('componentId', '==', target).get();
+    for (const d of fromNodes.docs) {
+      const dd = d.data();
+      const upd = {};
+      if (dd.fatherId === victimId) upd.fatherId = survivorId;
+      if (dd.motherId === victimId) upd.motherId = survivorId;
+      if (dd.spouseId === victimId) upd.spouseId = survivorId;
+      if (Object.keys(upd).length) {
+        upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        batch.set(d.ref, upd, { merge: true });
+        ops++;
+        if (ops >= 400) await flush();
+      }
+    }
+
+    // Victim tugunini o'chiramiz (redirect orqali resurrect bo'lmaydi).
+    batch.delete(db.collection('tree_persons').doc(victimId));
+    ops++;
+    await flush();
+
+    // Users: qabul qiluvchi komponenti → target.
+    if (meComp !== target) {
+      const us = await db.collection('users')
+        .where('treeComponentId', '==', meComp).get();
+      let b2 = db.batch();
+      let o2 = 0;
+      for (const d of us.docs) {
+        b2.set(d.ref, { treeComponentId: target }, { merge: true });
+        o2++;
+        if (o2 >= 400) {
+          await b2.commit();
+          b2 = db.batch();
+          o2 = 0;
+        }
+      }
+      if (o2 > 0) await b2.commit();
+    }
+
+    await invRef.set({
+      status: 'accepted',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      mergedInto: survivorId,
+    }, { merge: true });
+
+    return { ok: true, status: 'accepted', componentId: target, personId: survivorId };
   });

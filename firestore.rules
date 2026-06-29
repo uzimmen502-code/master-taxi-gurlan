@@ -1438,6 +1438,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Ulash takliflari — faqat tegishli taraflar o'qiydi; yozish faqat CF.
+    match /tree_link_invites/{id} {
+      allow read: if isAuth()
+          && (resource.data.fromUid == userDocIdFromPhoneToken()
+              || resource.data.toUid == userDocIdFromPhoneToken()
+              || isAdmin());
+      allow write: if false;
+    }
+
+    // Merge redirectlari (eski id → omon qolgan id) — CF yozadi.
+    match /tree_redirects/{id} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
     // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).
     match /relatives/{userId}/people/{personId} {
       allow read, write: if isOwner(userId);

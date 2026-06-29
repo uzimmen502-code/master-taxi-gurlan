@@ -11,7 +11,7 @@ import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
 import '../services/tree_service.dart';
-import 'family_tree_view.dart';
+import 'family_tree_screen.dart';
 import 'relative_album_screen.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
@@ -75,6 +75,13 @@ class _RelativesScreenState extends State<RelativesScreen> {
             RelativeFormScreen(userId: phone, existing: p, allPeople: _people),
       ),
     );
+  }
+
+  /// Nasab daraxtidan o'z qarindoshini id bo'yicha tahrirlash.
+  void _editById(String nodeId) {
+    final match = _people.where((p) => p.id == nodeId);
+    if (match.isEmpty) return;
+    _edit(match.first);
   }
 
   Future<void> _addEvent() async {
@@ -191,7 +198,10 @@ class _RelativesScreenState extends State<RelativesScreen> {
                     children: [
                       _listTab(people),
                       _datesTab(people),
-                      FamilyTreeView(people: people, onTap: _edit),
+                      FamilyTreeScreen(
+                        userId: phone,
+                        onEditOwnNode: _editById,
+                      ),
                     ],
                   );
                 },

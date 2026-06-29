@@ -1769,6 +1769,20 @@ exports.placeOrderWithWallet = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
     }
 
+    // Ledger ko'zgusi READ fazasi — inventory reads va yozuvlardan OLDIN.
+    let bonusCtxDebit = null;
+    let bonusCtxCredit = null;
+    if (walletDebit > 0) {
+      bonusCtxDebit = await settlementLedger.prepareBonusInTx(t, db, uid, {
+        idempotencyKey: `${idempotencyKey}_debit`,
+      });
+    }
+    if (changeCredit > 0) {
+      bonusCtxCredit = await settlementLedger.prepareBonusInTx(t, db, uid, {
+        idempotencyKey: `${idempotencyKey}_credit`,
+      });
+    }
+
     const invKeys = Object.keys(agg);
     const invSnaps = {};
     for (let i = 0; i < invKeys.length; i += 1) {
@@ -1896,6 +1910,30 @@ exports.placeOrderWithWallet = functions.https.onCall(async (data, context) => {
     }
 
     t.set(orderRef, orderPayload);
+
+    // Ledger ko'zgusi WRITE fazasi.
+    if (bonusCtxDebit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxDebit, {
+        delta: -walletDebit,
+        kind: 'purchase_debit',
+        refType: 'order',
+        refId: orderRef.id,
+        meta: { module, orderTotal },
+        postedBy: uid,
+        postedRole: 'client',
+      });
+    }
+    if (bonusCtxCredit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxCredit, {
+        delta: changeCredit,
+        kind: 'change_accrued',
+        refType: 'order',
+        refId: orderRef.id,
+        meta: { module, orderTotal, cashPaid },
+        postedBy: uid,
+        postedRole: 'client',
+      });
+    }
 
     const out = {
       ok: true,
@@ -2592,133 +2630,198 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   }
 
   const module = od.type === 'food' ? 'food' : 'bread';
-  const batch = db.batch();
-  for (let i = 0; i < normalized.length; i += 1) {
-    const lineRef = ref.collection('payment_lines').doc();
-    batch.set(lineRef, normalized[i]);
+  const customerUid = customerRef.id;
+
+  // WriteBatch → runTransaction: ledger ko'zgusi va idempotentlik uchun.
+  // TOCTOU: bonusBalance batch ichida o'qilmaydi — txn garantiya beradi.
+  const idempotencyKey = `courier_submit_${orderId}`;
+  const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
+  const idemExisting = await idemRef.get();
+  if (idemExisting.exists) {
+    const cached = idemExisting.data() || {};
+    const newBal = (await customerRef.get()).data()?.bonusBalance ?? 0;
+    return { ok: true, duplicate: true, newBalance: newBal, customerId: customerUid };
   }
-  const orderPatch = {
-    paymentStatus: 'paid',
-    paymentMethod: resolvePaymentMethod(normalized),
-    paidAmount: paidSum,
-    paidByCourierId: courierId,
-    paidAt: admin.firestore.FieldValue.serverTimestamp(),
-    paidLat: Number.isFinite(lat) ? lat : null,
-    paidLng: Number.isFinite(lng) ? lng : null,
-    customerConfirmed: true,
-    customerConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
-    cashPaid: paidSum,
-    fulfillmentStatus: 'completed',
-    status: 'delivered',
-    completedAt: admin.firestore.FieldValue.serverTimestamp(),
-    deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
-    courierId: od.courierId || courierId,
-    statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  };
-  if (changeCredit > 0) {
-    orderPatch.changeCredited = changeCredit;
-  }
-  if (walletSum > 0) {
-    orderPatch.balanceApplied = walletSum;
-  }
-  batch.update(ref, orderPatch);
-  batch.set(ref.collection('payment_events').doc(), {
-    action: 'courier_submit_payment',
-    actorType: 'courier',
-    actorId: courierId,
-    payload: { lines: normalized, paidSum, changeCredit },
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-    at: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  batch.set(ref.collection('payment_events').doc(), {
-    action: 'courier_completed',
-    actorType: 'courier',
-    actorId: courierId,
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-    at: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  for (let i = 0; i < normalized.length; i += 1) {
-    const line = normalized[i];
-    const kind = String(line.kind || '');
-    const amount = parseInt(String(line.amount || 0), 10);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const ledgerRef = customerRef.collection('wallet_ledger').doc();
-    if (kind === 'product') {
-      batch.set(ledgerRef, {
-        type: 'order_payment_product',
-        amount,
-        module,
-        refType: 'order',
-        refId: orderId,
-        meta: {
-          productCode: line.productCode || '',
-          productLabel: line.productLabel || '',
-          qty: line.qty,
-          unit: line.unit,
-          unitPrice: line.unitPrice,
-          debitCredit: 'none',
-          note: 'in_kind_payment',
-          pending: false,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'courier_submit',
+
+  await db.runTransaction(async (t) => {
+    // ── READ fazasi ──────────────────────────────────────────────────
+    const idemSnap = await t.get(idemRef);
+    if (idemSnap.exists) return;
+
+    const freshCustomer = await t.get(customerRef);
+    const prevBalance = parseInt(
+        String(freshCustomer.exists ? (freshCustomer.data()?.bonusBalance ?? 0) : 0), 10) || 0;
+    if (walletSum > 0 && prevBalance < walletSum) {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          `insufficient_balance: balance ${prevBalance}, required ${walletSum}`);
+    }
+    const nextBalance = prevBalance - walletSum + changeCredit;
+
+    // Ledger ko'zgusi READ.
+    let bonusCtxDebit = null;
+    let bonusCtxCredit = null;
+    if (walletSum > 0) {
+      bonusCtxDebit = await settlementLedger.prepareBonusInTx(t, db, customerUid, {
+        idempotencyKey: `${idempotencyKey}_debit`,
       });
-    } else if (kind !== 'wallet') {
-      batch.set(ledgerRef, {
-        type: kind === 'card' ? 'order_payment_card' : 'order_payment_cash',
-        amount: 0,
+    }
+    if (changeCredit > 0) {
+      bonusCtxCredit = await settlementLedger.prepareBonusInTx(t, db, customerUid, {
+        idempotencyKey: `${idempotencyKey}_credit`,
+      });
+    }
+
+    // ── WRITE fazasi ─────────────────────────────────────────────────
+    for (let i = 0; i < normalized.length; i += 1) {
+      t.set(ref.collection('payment_lines').doc(), normalized[i]);
+    }
+
+    const orderPatch = {
+      paymentStatus: 'paid',
+      paymentMethod: resolvePaymentMethod(normalized),
+      paidAmount: paidSum,
+      paidByCourierId: courierId,
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+      paidLat: Number.isFinite(lat) ? lat : null,
+      paidLng: Number.isFinite(lng) ? lng : null,
+      customerConfirmed: true,
+      customerConfirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+      cashPaid: paidSum,
+      fulfillmentStatus: 'completed',
+      status: 'delivered',
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+      courierId: od.courierId || courierId,
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(changeCredit > 0 ? { changeCredited: changeCredit } : {}),
+      ...(walletSum > 0 ? { balanceApplied: walletSum } : {}),
+    };
+    t.update(ref, orderPatch);
+    t.set(ref.collection('payment_events').doc(), {
+      action: 'courier_submit_payment',
+      actorType: 'courier',
+      actorId: courierId,
+      payload: { lines: normalized, paidSum, changeCredit },
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    t.set(ref.collection('payment_events').doc(), {
+      action: 'courier_completed',
+      actorType: 'courier',
+      actorId: courierId,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    for (let i = 0; i < normalized.length; i += 1) {
+      const line = normalized[i];
+      const kind = String(line.kind || '');
+      const amount = parseInt(String(line.amount || 0), 10);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const ledgerRef = customerRef.collection('wallet_ledger').doc();
+      if (kind === 'product') {
+        t.set(ledgerRef, {
+          type: 'order_payment_product',
+          amount,
+          module,
+          refType: 'order',
+          refId: orderId,
+          meta: {
+            productCode: line.productCode || '',
+            productLabel: line.productLabel || '',
+            qty: line.qty,
+            unit: line.unit,
+            unitPrice: line.unitPrice,
+            debitCredit: 'none',
+            note: 'in_kind_payment',
+            pending: false,
+          },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: 'courier_submit',
+        });
+      } else if (kind !== 'wallet') {
+        t.set(ledgerRef, {
+          type: kind === 'card' ? 'order_payment_card' : 'order_payment_cash',
+          amount: 0,
+          module,
+          refType: 'order',
+          refId: orderId,
+          meta: {
+            paidAmount: amount,
+            debitCredit: 'debit',
+            note: `${kind} тўлов тасдиқланди`,
+          },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: 'courier_submit',
+        });
+      }
+    }
+
+    if (walletSum > 0 || changeCredit > 0) {
+      t.set(customerRef, {
+        bonusBalance: nextBalance,
+        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+    if (walletSum > 0) {
+      t.set(customerRef.collection('wallet_ledger').doc(), {
+        type: 'purchase_debit',
+        amount: -walletSum,
         module,
         refType: 'order',
         refId: orderId,
-        meta: {
-          paidAmount: amount,
-          debitCredit: 'debit',
-          note: `${kind} тўлов тасдиқланди`,
-        },
+        meta: { orderTotal },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: 'courier_submit',
       });
     }
-  }
-  if (walletSum > 0) {
-    batch.update(customerRef, {
-      bonusBalance: admin.firestore.FieldValue.increment(-walletSum),
-      balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    const walletDebitRef = customerRef.collection('wallet_ledger').doc();
-    batch.set(walletDebitRef, {
-      type: 'purchase_debit',
-      amount: -walletSum,
-      module,
-      refType: 'order',
-      refId: orderId,
-      meta: { orderTotal },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: 'courier_submit',
-    });
-  }
-  if (changeCredit > 0) {
-    batch.update(customerRef, {
-      bonusBalance: admin.firestore.FieldValue.increment(changeCredit),
-      balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    const ledgerRef = customerRef.collection('wallet_ledger').doc();
-    batch.set(ledgerRef, {
-      type: 'change_accrued',
-      amount: changeCredit,
-      module,
-      refType: 'order',
-      refId: orderId,
-      meta: { orderTotal, paidSum: totalSubmitted },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: 'courier_submit',
-    });
-  }
-  await batch.commit();
+    if (changeCredit > 0) {
+      t.set(customerRef.collection('wallet_ledger').doc(), {
+        type: 'change_accrued',
+        amount: changeCredit,
+        module,
+        refType: 'order',
+        refId: orderId,
+        meta: { orderTotal, paidSum: totalSubmitted },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'courier_submit',
+      });
+    }
 
-  const customerUid = customerRef.id;
+    // Ledger ko'zgusi WRITE.
+    if (bonusCtxDebit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxDebit, {
+        delta: -walletSum,
+        kind: 'purchase_debit',
+        refType: 'order',
+        refId: orderId,
+        meta: { module, orderTotal },
+        postedBy: courierId,
+        postedRole: 'courier',
+      });
+    }
+    if (bonusCtxCredit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxCredit, {
+        delta: changeCredit,
+        kind: 'change_accrued',
+        refType: 'order',
+        refId: orderId,
+        meta: { module, orderTotal, paidSum: totalSubmitted },
+        postedBy: courierId,
+        postedRole: 'courier',
+      });
+    }
+
+    t.set(idemRef, {
+      type: 'courierSubmitPayment',
+      result: { ok: true, customerId: customerUid },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
   let cashSum = 0;
   let cardSum = 0;
   const productLines = [];
@@ -2896,15 +2999,32 @@ exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, c
       throw new functions.https.HttpsError('not-found', 'customer user not found');
     }
 
+    const prevBalance = parseInt(
+        String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
+    if (walletGiven > 0 && prevBalance < walletGiven) {
+      throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
+    }
+    const nextBalance = prevBalance - walletGiven + changeCredit;
+
+    // Ledger ko'zgusi READ fazasi.
+    const icoIdempKey = `courier_order_pay_${orderId}`;
+    let bonusCtxDebit = null;
+    let bonusCtxCredit = null;
     if (walletGiven > 0) {
-      const prevBalance = parseInt(String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
-      if (prevBalance < walletGiven) {
-        throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
-      }
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(-walletGiven),
+      bonusCtxDebit = await settlementLedger.prepareBonusInTx(
+          t, db, customerRef.id, { idempotencyKey: `${icoIdempKey}_debit` });
+    }
+    if (changeCredit > 0) {
+      bonusCtxCredit = await settlementLedger.prepareBonusInTx(
+          t, db, customerRef.id, { idempotencyKey: `${icoIdempKey}_credit` });
+    }
+
+    // ── WRITE fazasi ────────────────────────────────────────────────
+    if (walletGiven > 0) {
+      t.set(customerRef, {
+        bonusBalance: nextBalance + (changeCredit > 0 ? -changeCredit : 0),
         balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       t.set(customerRef.collection('wallet_ledger').doc(), {
         type: 'purchase_debit',
         amount: -walletGiven,
@@ -2918,10 +3038,10 @@ exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, c
     }
 
     if (changeCredit > 0) {
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(changeCredit),
+      t.set(customerRef, {
+        bonusBalance: nextBalance,
         balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      }, { merge: true });
       t.set(customerRef.collection('wallet_ledger').doc(), {
         type: 'change_accrued',
         amount: changeCredit,
@@ -2944,8 +3064,29 @@ exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, c
       changeCredit,
     });
 
-    const afterSnap = await t.get(customerRef);
-    const newBalance = parseInt(String(afterSnap.data()?.bonusBalance ?? 0), 10) || 0;
+    // Ledger ko'zgusi WRITE.
+    if (bonusCtxDebit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxDebit, {
+        delta: -walletGiven,
+        kind: 'purchase_debit',
+        refType: 'courier_order',
+        refId: orderId,
+        meta: { module: 'courier_order', orderTotal: total },
+        postedBy: courierUid,
+        postedRole: 'courier',
+      });
+    }
+    if (bonusCtxCredit) {
+      settlementLedger.commitBonusInTx(t, bonusCtxCredit, {
+        delta: changeCredit,
+        kind: 'change_accrued',
+        refType: 'courier_order',
+        refId: orderId,
+        meta: { module: 'courier_order', orderTotal: total, paidSum: paid },
+        postedBy: courierUid,
+        postedRole: 'courier',
+      });
+    }
 
     txnResult = {
       ok: true,
@@ -2953,7 +3094,7 @@ exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, c
       total,
       paid,
       changeCredit,
-      newBalance,
+      newBalance: nextBalance,
       customerUid: customerRef.id,
       description: String(od.description || ''),
     };
@@ -3357,6 +3498,11 @@ exports.grantBirthdayBonus = functions.https.onCall(async (data, context) => {
     const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
     const next = prev + amount;
 
+    // Ledger ko'zgusi READ fazasi.
+    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
+      idempotencyKey: idemKey,
+    });
+
     t.set(claimRef, {
       year,
       amount,
@@ -3380,6 +3526,18 @@ exports.grantBirthdayBonus = functions.https.onCall(async (data, context) => {
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+
+    // Ledger ko'zgusi WRITE fazasi — Dr admin_clearing / Cr passenger_credit.
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
+      delta: amount,
+      kind: 'birthday_bonus',
+      refType: 'birthday_bonus',
+      refId: String(year),
+      meta: { module: 'loyalty', year, note: 'Birthday bonus' },
+      postedBy: adminUid,
+      postedRole: 'admin',
+    });
+
     const result = { ok: true, credited: amount, year, uid };
     t.set(idemRef, {
       type: 'grantBirthdayBonus',

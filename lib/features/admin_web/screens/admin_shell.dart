@@ -25,6 +25,7 @@ import 'jobs_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
+import 'dating_moderation_screen.dart';
 import 'courier_orders_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_management_screen.dart';
@@ -99,6 +100,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Иш топ',
       icon: Icons.work_history,
       description: 'Эълонларни тасдиқлаш',
+    ),
+    _AdminSection(
+      label: '❤️ Танишув',
+      icon: Icons.favorite,
+      description: 'Профил модерацияси ва шикоятлар',
     ),
     _AdminSection(
       label: 'Хабарлaр',
@@ -297,6 +303,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Иш топ') {
       return const JobsModerationScreen();
+    }
+    if (section.label == '❤️ Танишув') {
+      return const DatingModerationScreen();
     }
     if (section.label == 'Сотиш таклифлари') {
       return const SellSubmissionsAdminScreen();
@@ -549,6 +558,13 @@ class _Sidebar extends StatelessWidget {
         return db
             .collection('ads')
             .where('status', isEqualTo: 'pending')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case '❤️ Танишув':
+        return db
+            .collection('dating_profiles')
+            .where('status', isEqualTo: 'pending')
+            .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
       case 'Хабарлaр':

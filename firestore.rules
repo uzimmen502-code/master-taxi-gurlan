@@ -1366,6 +1366,57 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // ── Tanishuv (Dating) ──────────────────────────────────────────
+    // Profil yozuvlari faqat Cloud Functions orqali (saveDatingProfile /
+    // adminModerateDatingProfile). O'qish: tasdiqlangan profil, egasi yoki admin.
+    match /dating_profiles/{uid} {
+      allow read: if isAuth()
+          && (resource.data.status == 'approved'
+              || isOwner(uid)
+              || isAdmin());
+      allow write: if false;
+    }
+
+    // Qiziqishlar — yozuv CF orqali; o'qish faqat tegishli taraflar.
+    match /dating_interests/{interestId} {
+      allow read: if isAuth()
+          && (resource.data.fromId == userDocIdFromPhoneToken()
+              || resource.data.toId == userDocIdFromPhoneToken()
+              || isAdmin());
+      allow write: if false;
+    }
+
+    // Match — yaratish CF orqali; o'qish faqat ishtirokchilar.
+    // Yangilash: ishtirokchi faqat lastMessage/lastMessageAt patch qila oladi.
+    match /dating_matches/{matchId} {
+      allow read: if isAuth()
+          && (userDocIdFromPhoneToken() in resource.data.users || isAdmin());
+      allow update: if isAuth()
+          && userDocIdFromPhoneToken() in resource.data.users
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastMessage', 'lastMessageAt']);
+      allow create, delete: if false;
+
+      // Chat — faqat match ishtirokchilari.
+      match /messages/{msgId} {
+        allow read: if isAuth()
+            && userDocIdFromPhoneToken() in
+               get(/databases/$(database)/documents/dating_matches/$(matchId)).data.users;
+        allow create: if isAuth()
+            && request.resource.data.senderId == userDocIdFromPhoneToken()
+            && userDocIdFromPhoneToken() in
+               get(/databases/$(database)/documents/dating_matches/$(matchId)).data.users
+            && request.resource.data.text is string
+            && request.resource.data.text.size() <= 2000;
+        allow update, delete: if false;
+      }
+    }
+
+    // Bloklash — har kim o'z ro'yxatini boshqaradi.
+    match /dating_blocks/{uid}/list/{targetId} {
+      allow read, write: if isOwner(uid);
+    }
+
     // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).
     match /relatives/{userId}/people/{personId} {
       allow read, write: if isOwner(userId);

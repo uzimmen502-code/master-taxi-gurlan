@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../dating/screens/dating_home_screen.dart';
 import '../../relatives/screens/relatives_screen.dart';
 import '../utils/circle_type_spec.dart';
 import 'circles_list_screen.dart';
@@ -53,10 +54,17 @@ class CirclesHubScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const RelativesScreen()),
             ),
           ),
-          const SizedBox(height: 18),
-          const _SoonHeader(),
-          const SizedBox(height: 8),
-          const _SoonCard(emoji: '❤️', title: 'Танишув ва мулоқот'),
+          const SizedBox(height: 12),
+          _CircleCard(
+            emoji: '❤️',
+            title: 'Танишув ва турмуш ўртоғи',
+            subtitle: 'Профил + модерация + хавфсиз танишув',
+            color: const Color(0xFFE5446D),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DatingHomeScreen()),
+            ),
+          ),
         ],
       ),
     );
@@ -119,40 +127,3 @@ class _CircleCard extends StatelessWidget {
   }
 }
 
-class _SoonHeader extends StatelessWidget {
-  const _SoonHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text('Тез орада',
-        style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade500));
-  }
-}
-
-class _SoonCard extends StatelessWidget {
-  const _SoonCard({required this.emoji, required this.title});
-
-  final String emoji;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.55,
-      child: Card(
-        elevation: 0,
-        color: Colors.grey.shade100,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        child: ListTile(
-          leading: Text(emoji, style: const TextStyle(fontSize: 22)),
-          title: Text(title,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          trailing: const Icon(Icons.lock_clock, size: 18, color: Colors.grey),
-        ),
-      ),
-    );
-  }
-}

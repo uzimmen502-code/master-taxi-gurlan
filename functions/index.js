@@ -8609,3 +8609,248 @@ exports.settlementDeferredWatch = functions.pubsub
       console.log(`settlementDeferredWatch: ${n} timed-out deferred debt(s)`);
       return null;
     });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TANISHUV / TURMUSH O'RTOG'I IZLASH (Dating)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function datingCallerUid(context) {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 12) {
+    throw new functions.https.HttpsError('unauthenticated', 'Phone token required');
+  }
+  return uid;
+}
+
+function datingMatchId(a, b) {
+  return [a, b].sort().join('__');
+}
+
+/** Foydalanuvchi dating profilini saqlash → status pending (admin tasdiqlaydi). */
+exports.saveDatingProfile = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const gender = String(data.gender || '');
+  if (!['male', 'female'].includes(gender)) {
+    throw new functions.https.HttpsError('invalid-argument', 'gender male/female');
+  }
+  const displayName = String(data.displayName || '').trim().slice(0, 60);
+  if (displayName.length < 2) {
+    throw new functions.https.HttpsError('invalid-argument', 'displayName required');
+  }
+  const birthYear = parseInt(String(data.birthYear ?? 0), 10);
+  const nowYear = new Date().getFullYear();
+  if (!Number.isFinite(birthYear) ||
+      birthYear < nowYear - 80 || birthYear > nowYear - 18) {
+    throw new functions.https.HttpsError('invalid-argument', '18+ va realistik yosh');
+  }
+  const photosIn = Array.isArray(data.photos) ? data.photos : [];
+  const photos = photosIn
+    .filter((p) => p && typeof p.url === 'string')
+    .slice(0, 6)
+    .map((p) => ({ url: String(p.url), path: String(p.path || '') }));
+  if (photos.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'Kamida 1 ta real foto');
+  }
+
+  const ref = db.collection('dating_profiles').doc(uid);
+  const prev = await ref.get();
+  await ref.set({
+    userId: uid,
+    displayName,
+    gender,
+    birthYear,
+    about: String(data.about || '').trim().slice(0, 1000),
+    city: String(data.city || '').trim().slice(0, 80),
+    maritalStatus: String(data.maritalStatus || '').slice(0, 20),
+    education: String(data.education || '').trim().slice(0, 120),
+    job: String(data.job || '').trim().slice(0, 120),
+    photos,
+    status: 'pending',
+    rejectionReason: '',
+    active: prev.exists ? (prev.data().active !== false) : true,
+    lastActive: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...(prev.exists
+      ? {}
+      : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+  }, { merge: true });
+  return { ok: true, status: 'pending' };
+});
+
+/** Dating profilni faollashtirish/pauza (statusga tegmaydi). */
+exports.setDatingActive = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const active = data.active === true;
+  const ref = db.collection('dating_profiles').doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Profil yoq');
+  }
+  await ref.set({
+    active,
+    lastActive: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, active };
+});
+
+/** Admin: dating profil moderatsiyasi (approve/reject/block). */
+exports.adminModerateDatingProfile =
+  functions.https.onCall(async (data, context) => {
+    const adminUid = await requireCallerRoles(
+      context, ['admin', 'superadmin', 'dispatcher'], 'Admin role required');
+    const userId = canonicalUid(String(data.userId || ''));
+    const action = String(data.action || '');
+    if (!['approve', 'reject', 'block'].includes(action)) {
+      throw new functions.https.HttpsError('invalid-argument', 'bad action');
+    }
+    const reason = String(data.reason || '').slice(0, 300);
+    const statusMap = { approve: 'approved', reject: 'rejected', block: 'blocked' };
+    const ref = db.collection('dating_profiles').doc(userId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Profil topilmadi');
+    }
+    await ref.set({
+      status: statusMap[action],
+      rejectionReason: action === 'approve' ? '' : reason,
+      moderatedBy: adminUid,
+      moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(action === 'block' ? { active: false } : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, status: statusMap[action] };
+  });
+
+/** Qiziqish bildirish — o'zaro (mutual) bo'lsa avtomatik match. */
+exports.sendDatingInterest = functions.https.onCall(async (data, context) => {
+  const fromId = datingCallerUid(context);
+  const toId = canonicalUid(String(data.toUserId || ''));
+  if (!toId || toId === fromId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bad target');
+  }
+
+  const [meSnap, toSnap] = await Promise.all([
+    db.collection('dating_profiles').doc(fromId).get(),
+    db.collection('dating_profiles').doc(toId).get(),
+  ]);
+  if (!meSnap.exists || meSnap.data().status !== 'approved') {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Profilingiz tasdiqlanmagan');
+  }
+  if (!toSnap.exists || toSnap.data().status !== 'approved' ||
+      toSnap.data().active === false) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Profil mavjud emas');
+  }
+  if (meSnap.data().gender === toSnap.data().gender) {
+    throw new functions.https.HttpsError('failed-precondition', 'Mos kelmaydi');
+  }
+
+  const [b1, b2] = await Promise.all([
+    db.collection('dating_blocks').doc(fromId).collection('list').doc(toId).get(),
+    db.collection('dating_blocks').doc(toId).collection('list').doc(fromId).get(),
+  ]);
+  if (b1.exists || b2.exists) {
+    throw new functions.https.HttpsError('permission-denied', 'Bloklangan');
+  }
+
+  const mId = datingMatchId(fromId, toId);
+  const matchRef = db.collection('dating_matches').doc(mId);
+  const matchSnap = await matchRef.get();
+  if (matchSnap.exists) {
+    return { ok: true, matched: true, matchId: mId };
+  }
+
+  const myName = String(meSnap.data().displayName || '');
+  const toName = String(toSnap.data().displayName || '');
+
+  // Teskari yo'nalishda pending interest bormi? → avto-match.
+  const reverseQ = await db.collection('dating_interests')
+    .where('fromId', '==', toId)
+    .where('toId', '==', fromId)
+    .where('status', '==', 'pending')
+    .limit(1).get();
+  if (!reverseQ.empty) {
+    const batch = db.batch();
+    batch.update(reverseQ.docs[0].ref, {
+      status: 'accepted',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.set(matchRef, {
+      users: [fromId, toId],
+      userNames: { [fromId]: myName, [toId]: toName },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessage: '',
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+    return { ok: true, matched: true, matchId: mId };
+  }
+
+  const dupQ = await db.collection('dating_interests')
+    .where('fromId', '==', fromId)
+    .where('toId', '==', toId)
+    .where('status', '==', 'pending')
+    .limit(1).get();
+  if (!dupQ.empty) {
+    return { ok: true, matched: false, alreadySent: true };
+  }
+
+  await db.collection('dating_interests').add({
+    fromId, toId,
+    fromName: myName,
+    toName,
+    status: 'pending',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, matched: false };
+});
+
+/** Qiziqishga javob (qabul/rad). Qabul → match yaratiladi. */
+exports.respondDatingInterest = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const interestId = String(data.interestId || '');
+  const accept = data.accept === true;
+  if (!interestId) {
+    throw new functions.https.HttpsError('invalid-argument', 'interestId required');
+  }
+  const ref = db.collection('dating_interests').doc(interestId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Topilmadi');
+    }
+    const d = snap.data();
+    if (d.toId !== uid) {
+      throw new functions.https.HttpsError('permission-denied', 'Sizniki emas');
+    }
+    if (d.status !== 'pending') {
+      return { ok: true, status: d.status };
+    }
+    if (!accept) {
+      tx.update(ref, {
+        status: 'declined',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return { ok: true, status: 'declined' };
+    }
+    const mId = datingMatchId(d.fromId, d.toId);
+    const matchRef = db.collection('dating_matches').doc(mId);
+    tx.update(ref, {
+      status: 'accepted',
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.set(matchRef, {
+      users: [d.fromId, d.toId],
+      userNames: { [d.fromId]: d.fromName || '', [d.toId]: d.toName || '' },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessage: '',
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true, status: 'accepted', matchId: mId };
+  });
+});

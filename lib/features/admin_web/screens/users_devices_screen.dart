@@ -954,20 +954,28 @@ class _UserRoleActions extends StatefulWidget {
 }
 
 class _UserRoleActionsState extends State<_UserRoleActions> {
-  static const _blue = AppColors.primary;
   final _roleService = AdminRoleService();
   bool _busy = false;
+
+  static const Map<String, String> _roleLabels = {
+    'admin': 'Admin',
+    'finance': 'Finance',
+    'auditor': 'Auditor',
+    'user': 'Oddiy',
+  };
 
   Future<void> _setRole(String role) async {
     final auth = context.read<AdminAuthService>();
     final adminPhone = auth.phone ?? '';
     if (adminPhone.isEmpty) return;
 
-    final isGrant = role == 'admin';
-    final title = isGrant ? 'Admin rolini berish' : 'Admin rolini olib tashlash';
-    final body = isGrant
-        ? '${widget.phone} рақамига admin roli berilsinmi?'
-        : '${widget.phone} admin roli olib tashlansinmi?';
+    final label = _roleLabels[role] ?? role;
+    final isRemove = role == 'user';
+    final title = isRemove ? 'Rolni olib tashlash' : '$label roli';
+    final body = isRemove
+        ? '${widget.phone} dan rol olib tashlanib, oddiy '
+            'foydalanuvchi qilinsinmi?'
+        : '${widget.phone} рақамига $label roli berilsinmi?';
 
     final ok = await showDialog<bool>(
       context: context,
@@ -981,7 +989,7 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isGrant ? 'Berish' : 'Olib tashlash'),
+            child: Text(isRemove ? 'Olib tashlash' : 'Berish'),
           ),
         ],
       ),
@@ -1002,9 +1010,9 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         backgroundColor: err == null ? AppColors.primary : Colors.red,
         content: Text(
           err ??
-              (isGrant
-                  ? '✅ Admin roli berildi: ${widget.phone}'
-                  : '✅ Admin roli olib tashlandi: ${widget.phone}'),
+              (isRemove
+                  ? '✅ Rol olib tashlandi: ${widget.phone}'
+                  : '✅ $label roli berildi: ${widget.phone}'),
         ),
       ),
     );
@@ -1012,47 +1020,52 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = widget.currentRole == 'admin';
+    final role = widget.currentRole;
 
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _busy || isAdmin ? null : () => _setRole('admin'),
-              icon: const Icon(Icons.admin_panel_settings, size: 18),
-              label: const Text('Admin qilish', style: TextStyle(fontSize: 12)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _blue,
-                side: BorderSide(color: _blue.withValues(alpha: 0.5)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _busy || !isAdmin ? null : () => _setRole('user'),
+          _roleBtn('admin', Icons.admin_panel_settings, AppColors.primary, role),
+          _roleBtn('finance', Icons.account_balance, Colors.teal, role),
+          _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
+          if (role != 'user')
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _setRole('user'),
               icon: const Icon(Icons.person_off_outlined, size: 18),
-              label: const Text(
-                'Adminni olib tashlash',
-                style: TextStyle(fontSize: 12),
-              ),
+              label: const Text('Rolni olib tashlash',
+                  style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red.shade700,
                 side: BorderSide(color: Colors.red.shade200),
               ),
             ),
-          ),
-          if (_busy) ...[
-            const SizedBox(width: 8),
+          if (_busy)
             const SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-          ],
         ],
+      ),
+    );
+  }
+
+  Widget _roleBtn(String role, IconData icon, Color color, String current) {
+    final active = current == role;
+    final label = _roleLabels[role] ?? role;
+    return OutlinedButton.icon(
+      onPressed: _busy || active ? null : () => _setRole(role),
+      icon: Icon(icon, size: 18),
+      label: Text(active ? '$label ✓' : label,
+          style: const TextStyle(fontSize: 12)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        backgroundColor: active ? color.withValues(alpha: 0.08) : null,
+        side: BorderSide(color: color.withValues(alpha: active ? 0.9 : 0.5)),
       ),
     );
   }

@@ -30,7 +30,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -48,13 +48,16 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
           color: Colors.white,
           child: TabBar(
             controller: _tabCtrl,
+            isScrollable: true,
             labelColor: AppColors.primaryDark,
             unselectedLabelColor: Colors.grey,
             indicatorColor: AppColors.primary,
             tabs: const [
               Tab(text: 'Driver Float'),
               Tab(text: 'Settlements'),
-              Tab(text: 'Журнал'),
+              Tab(text: 'Аудит журнали'),
+              Tab(text: 'Давр қулфи'),
+              Tab(text: 'Истиснолар'),
             ],
           ),
         ),
@@ -65,6 +68,8 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
               _FloatTab(),
               _SettlementsTab(),
               _JournalTab(),
+              _ClosingTab(),
+              _ExceptionsTab(),
             ],
           ),
         ),
@@ -564,6 +569,10 @@ class _JournalTab extends StatelessWidget {
               return dr > 0 ? 'Dr $acc ${formatPrice(dr)}'
                   : 'Cr $acc ${formatPrice(cr)}';
             }).join('  ·  ');
+            final role = (d['postedRole'] ?? '').toString();
+            final by = (d['postedBy'] ?? '').toString();
+            final refType = (d['refType'] ?? '').toString();
+            final ts = _fmtTs(d['ts']);
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
@@ -580,8 +589,11 @@ class _JournalTab extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(kind,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(kind,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                       Text('${formatPrice(amount)} сўм',
                           style: const TextStyle(
                               color: AppColors.primaryDark,
@@ -591,6 +603,21 @@ class _JournalTab extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(legStr,
                       style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (ts.isNotEmpty) _auditChip(Icons.schedule, ts),
+                      if (role.isNotEmpty)
+                        _auditChip(Icons.badge_outlined, role),
+                      if (by.isNotEmpty)
+                        _auditChip(Icons.person_outline, by),
+                      if (refType.isNotEmpty)
+                        _auditChip(Icons.link, refType),
+                    ],
+                  ),
                 ],
               ),
             );
@@ -601,7 +628,328 @@ class _JournalTab extends StatelessWidget {
   }
 }
 
+// ════════════════════════════════════════════════════════════
+// ДАВР ҚУЛФИ (Daily Closing — period_closings)
+// ════════════════════════════════════════════════════════════
+class _ClosingTab extends StatefulWidget {
+  const _ClosingTab();
+
+  @override
+  State<_ClosingTab> createState() => _ClosingTabState();
+}
+
+class _ClosingTabState extends State<_ClosingTab> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _busy ? null : _closeDialog,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.lock_clock),
+                  label: const Text('Давр қулфлаш'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryDark,
+                      foregroundColor: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('period_closings')
+                .orderBy('periodId', descending: true)
+                .limit(120)
+                .snapshots(),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) return _err('${snap.error}');
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return _empty('Қулфланган давр йўқ',
+                    'Кунлик ҳисоб-китобни қулфлаш учун юқоридаги тугмани босинг');
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.all(12),
+                itemCount: docs.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _closingRow(docs[i].data()),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _closingRow(Map<String, dynamic> d) {
+    final periodId = (d['periodId'] ?? '').toString();
+    final t = Map<String, dynamic>.from((d['totals'] as Map?) ?? {});
+    final ok = t['balanced'] == true &&
+        t['identityOk'] == true &&
+        t['projectionOk'] == true;
+    final entries = ((t['periodEntryCount'] as num?) ?? 0).toInt();
+    final periodDr = ((t['periodDr'] as num?) ?? 0).toInt();
+    final closedAt = _fmtTs(d['closedAt']);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(ok ? Icons.verified : Icons.warning,
+                  color: ok ? Colors.green : Colors.red, size: 20),
+              const SizedBox(width: 8),
+              Text(periodId,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15)),
+              const Spacer(),
+              const Icon(Icons.lock, size: 14, color: Colors.grey),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _auditChip(Icons.receipt_long, '$entries ёзув'),
+              _auditChip(Icons.swap_vert, '${formatPrice(periodDr)} оборот'),
+              _auditChip(ok ? Icons.check : Icons.error_outline,
+                  ok ? 'мувозанат ✓' : 'муаммо!'),
+              if (closedAt.isNotEmpty) _auditChip(Icons.schedule, closedAt),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _closeDialog() async {
+    final today = DateTime.now().toUtc();
+    final dateCtrl = TextEditingController(
+        text: '${today.year.toString().padLeft(4, '0')}-'
+            '${today.month.toString().padLeft(2, '0')}-'
+            '${today.day.toString().padLeft(2, '0')}');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Давр қулфлаш'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+                'Кун (UTC) қулфланади ва ушбу давр учун снапшот сақланади. '
+                'Журнал ўзгармас — қулф фақат аудит/ҳисобот учун.',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: dateCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Сана (YYYY-MM-DD)',
+                  border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Бекор')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Қулфлаш')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final periodId = dateCtrl.text.trim();
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(periodId)) {
+      _snack('Сана YYYY-MM-DD форматида бўлсин', isError: true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('closePeriod')
+          .call({'periodId': periodId});
+      final m = Map<String, dynamic>.from(res.data as Map);
+      if (!mounted) return;
+      if (m['alreadyClosed'] == true) {
+        _snack('$periodId аллақачон қулфланган');
+      } else {
+        _snack('$periodId қулфланди ✓');
+      }
+    } on FirebaseFunctionsException catch (e) {
+      _snack('Хатoлик: ${e.message ?? e.code}', isError: true);
+    } catch (e) {
+      _snack('Хатoлик: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _snack(String msg, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? Colors.red : Colors.green,
+    ));
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// ИСТИСНОЛАР (ledger_exceptions)
+// ════════════════════════════════════════════════════════════
+class _ExceptionsTab extends StatelessWidget {
+  const _ExceptionsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('ledger_exceptions')
+          .orderBy('detectedAt', descending: true)
+          .limit(200)
+          .snapshots(),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) return _err('${snap.error}');
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return _empty('Истисно йўқ', 'Камомад/низо/сверка хатолари шу ерда');
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) {
+            final d = docs[i].data();
+            final type = (d['type'] ?? '').toString();
+            final driverUid = (d['driverUid'] ?? '').toString();
+            final bal = ((d['balance'] as num?) ?? 0).toInt();
+            final resolved = d['resolved'] == true;
+            final detectedAt = _fmtTs(d['detectedAt']);
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor:
+                        (resolved ? Colors.green : Colors.red).withValues(alpha: 0.15),
+                    child: Icon(
+                        resolved ? Icons.check : Icons.report_problem_outlined,
+                        color: resolved ? Colors.green : Colors.red),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_exceptionLabel(type),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold)),
+                        if (driverUid.isNotEmpty)
+                          Text('+$driverUid  ·  ${formatPrice(bal)} сўм',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey)),
+                        if (detectedAt.isNotEmpty)
+                          Text(detectedAt,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: (resolved ? Colors.green : Colors.orange)
+                            .withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: Text(resolved ? 'Ҳал қилинган' : 'Очиқ',
+                        style: TextStyle(
+                            color: resolved ? Colors.green : Colors.orange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+String _exceptionLabel(String type) {
+  switch (type) {
+    case 'deferred_timeout':
+      return 'Кечиктирилган қарз муддати ўтди';
+    default:
+      return type.isEmpty ? 'Истисно' : type;
+  }
+}
+
 // ── Umumiy yordamchilar ──
+String _fmtTs(dynamic v) {
+  if (v is Timestamp) {
+    final dt = v.toDate();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)} '
+        '${two(dt.hour)}:${two(dt.minute)}';
+  }
+  return '';
+}
+
+Widget _auditChip(IconData icon, String text) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.grey.shade600),
+          const SizedBox(width: 4),
+          Text(text,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+        ],
+      ),
+    );
+
 Widget _err(String msg) => Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

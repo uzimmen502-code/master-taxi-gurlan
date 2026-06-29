@@ -4947,7 +4947,7 @@ exports.setUserRoleByAdmin = functions.https.onCall(async (data, context) => {
   }
 
   const role = String(data.role || 'user').trim();
-  const allowedForAdmin = ['user', 'admin'];
+  const allowedForAdmin = ['user', 'admin', 'finance', 'auditor'];
   if (!allowedForAdmin.includes(role)) {
     throw new functions.https.HttpsError('invalid-argument', 'Rol ruxsat etilmagan');
   }
@@ -7735,6 +7735,89 @@ exports.reconcileLedger = functions.https.onCall(async (data, context) => {
       'Finance/audit role required',
   );
   return settlementLedger.reconcile(db);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Settlement Ledger — Daily Closing (Qadam 6).
+//   closePeriod — kunlik davr qulfi. `period_closings/{YYYY-MM-DD}` ga
+//   davr (UTC kun) yozuvlari + global reconcile snapshotini yozadi va
+//   `locked: true` qiladi. Idempotent: davr qulflangan bo'lsa qayta hisoblamaydi.
+//   journal_entries — o'zgarmas, shuning uchun qulf faqat snapshot/audit uchun.
+// To'liq dizayn: docs/settlement_ledger_v1_uz.md (13-bo'lim)
+// ─────────────────────────────────────────────────────────────────────
+exports.closePeriod = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+
+  const periodId = String((data && data.periodId) || '').trim() ||
+      new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(periodId)) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'periodId YYYY-MM-DD bo\'lsin');
+  }
+
+  const ref = db.collection('period_closings').doc(periodId);
+  const existing = await ref.get();
+  if (existing.exists && (existing.data() || {}).locked) {
+    return {
+      ok: true, alreadyClosed: true, periodId,
+      totals: (existing.data() || {}).totals || {},
+    };
+  }
+
+  const from = new Date(`${periodId}T00:00:00.000Z`);
+  const to = new Date(from.getTime() + 24 * 3600 * 1000);
+  const fromTs = admin.firestore.Timestamp.fromDate(from);
+  const toTs = admin.firestore.Timestamp.fromDate(to);
+
+  // Global invariant snapshot (Σ=0, identity, proeksiya).
+  const rec = await settlementLedger.reconcile(db);
+
+  // Davr ichidagi yozuvlar (ts oralig'i [from, to)).
+  const jSnap = await db.collection('journal_entries')
+      .where('ts', '>=', fromTs)
+      .where('ts', '<', toTs)
+      .get();
+  let periodDr = 0;
+  let periodCr = 0;
+  const kinds = {};
+  jSnap.forEach((d) => {
+    const x = d.data() || {};
+    for (const l of (x.legs || [])) {
+      periodDr += l.dr || 0;
+      periodCr += l.cr || 0;
+    }
+    const k = x.kind || 'unknown';
+    kinds[k] = (kinds[k] || 0) + 1;
+  });
+
+  const totals = {
+    periodEntryCount: jSnap.size,
+    periodDr,
+    periodCr,
+    periodBalanced: periodDr === periodCr,
+    kinds,
+    globalAssets: rec.assets,
+    globalLiabilities: rec.liabilities,
+    globalEntryCount: rec.entryCount,
+    globalAccountCount: rec.accountCount,
+    balanced: rec.balanced,
+    identityOk: rec.identityOk,
+    projectionOk: rec.projectionOk,
+    mismatchCount: (rec.mismatches || []).length,
+  };
+
+  await ref.set({
+    periodId,
+    from: fromTs,
+    to: toTs,
+    closedBy: callerUid,
+    closedAt: admin.firestore.FieldValue.serverTimestamp(),
+    locked: true,
+    totals,
+  }, { merge: true });
+
+  return { ok: true, periodId, locked: true, totals };
 });
 
 // ─────────────────────────────────────────────────────────────────────

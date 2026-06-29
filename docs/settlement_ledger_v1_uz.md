@@ -212,7 +212,14 @@ Finance Center
    placeOrderWithWallet, grantBirthdayBonus, courierSubmitPayment,
    courierSubmitCourierOrderPayment, courierFinalizeCollection — ledger
    ко'згуси prepare/commitBonusInTx + commitBonusInBatch орқали; reconcile яшил).
-6. **Finance Center** — RBAC (finance/auditor) + Daily Closing + Audit Trail.
+6. **Finance Center** — RBAC (finance/auditor) + Daily Closing + Audit Trail. ✅
+   - RBAC: `isFinanceReader()` (admin/superadmin/finance/auditor) + ledger
+     коллекциялари CF-only ёзув; V1'да оддий `admin` ҳам кўради.
+   - Daily Closing: `closePeriod` CF (idempotent, кунлик `period_closings/{YYYY-MM-DD}`
+     — давр оборотлари + global reconcile снапшоти, `locked`) + Finance Center
+     "Давр қулфи" таби.
+   - Audit Trail: журнал таби `ts`/`postedBy`/`postedRole`/`refType` кўрсатади;
+     "Истиснолар" таби `ledger_exceptions` (deferred камомад) ни кўрсатади.
 
 ## 15. Келажак (V2+)
 

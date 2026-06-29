@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +9,7 @@ import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
+import '../services/relative_reminder_scheduler.dart';
 import 'family_tree_view.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
@@ -24,8 +27,10 @@ class RelativesScreen extends StatefulWidget {
 class _RelativesScreenState extends State<RelativesScreen> {
   final _repo = RelativesRepository();
   final _photo = RelativePhotoStorage();
+  final _scheduler = RelativeReminderScheduler();
   String? _phone;
   List<RelativePerson> _people = const [];
+  String? _reminderSig;
 
   @override
   void initState() {
@@ -233,6 +238,7 @@ class _RelativesScreenState extends State<RelativesScreen> {
       stream: _repo.watchEvents(phone),
       builder: (context, snap) {
         final events = _repo.upcomingEvents(snap.data ?? const []);
+        _syncReminders(people, events);
         final items = _buildReminders(people, events)
           ..sort((a, b) => a.days.compareTo(b.days));
         if (items.isEmpty) {
@@ -247,6 +253,20 @@ class _RelativesScreenState extends State<RelativesScreen> {
         );
       },
     );
+  }
+
+  /// OS eslatmalarini (qayta) rejalashtirish — faqat ma'lumot o'zgarganda.
+  void _syncReminders(
+      List<RelativePerson> people, List<RelativeEvent> events) {
+    final sig = [
+      ...people
+          .where((p) => p.birthDate != null)
+          .map((p) => 'b${p.id}:${p.daysUntilBirthday}'),
+      ...events.map((e) => 'e${e.id}:${e.daysUntil}'),
+    ].join('|');
+    if (sig == _reminderSig) return;
+    _reminderSig = sig;
+    unawaited(_scheduler.sync(people: people, events: events));
   }
 
   List<_Reminder> _buildReminders(

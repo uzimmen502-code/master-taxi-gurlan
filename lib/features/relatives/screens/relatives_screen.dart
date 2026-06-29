@@ -6,6 +6,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
+import 'family_tree_view.dart';
 import 'relative_form_screen.dart';
 
 /// 👨‍👩‍👧 Qarindoshlarim — shaxsiy ro'yxat + tug'ilgan kunlar.
@@ -22,6 +23,7 @@ class _RelativesScreenState extends State<RelativesScreen> {
   final _repo = RelativesRepository();
   final _photo = RelativePhotoStorage();
   String? _phone;
+  List<RelativePerson> _people = const [];
 
   @override
   void initState() {
@@ -43,7 +45,9 @@ class _RelativesScreenState extends State<RelativesScreen> {
     }
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => RelativeFormScreen(userId: phone)),
+      MaterialPageRoute(
+        builder: (_) => RelativeFormScreen(userId: phone, allPeople: _people),
+      ),
     );
   }
 
@@ -52,7 +56,8 @@ class _RelativesScreenState extends State<RelativesScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RelativeFormScreen(userId: phone, existing: p),
+        builder: (_) =>
+            RelativeFormScreen(userId: phone, existing: p, allPeople: _people),
       ),
     );
   }
@@ -90,7 +95,7 @@ class _RelativesScreenState extends State<RelativesScreen> {
   Widget build(BuildContext context) {
     final phone = _phone;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F4F8),
         appBar: AppBar(
@@ -98,10 +103,12 @@ class _RelativesScreenState extends State<RelativesScreen> {
           backgroundColor: RelativesScreen._accent,
           foregroundColor: Colors.white,
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: Colors.white,
             tabs: [
               Tab(text: 'Рўйхат'),
               Tab(text: '🎂 Туғилган кунлар'),
+              Tab(text: '🌳 Насаб дарахти'),
             ],
           ),
         ),
@@ -121,10 +128,12 @@ class _RelativesScreenState extends State<RelativesScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   final people = snap.data ?? const <RelativePerson>[];
+                  _people = people;
                   return TabBarView(
                     children: [
                       _listTab(people),
                       _birthdaysTab(_repo.upcomingBirthdays(people)),
+                      FamilyTreeView(people: people, onTap: _edit),
                     ],
                   );
                 },

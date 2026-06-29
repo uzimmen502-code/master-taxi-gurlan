@@ -15,6 +15,9 @@ class RelativePerson {
     this.relationDegree = '',
     this.side = '',
     this.notes = '',
+    this.fatherId,
+    this.motherId,
+    this.spouseId,
     this.createdAt,
   });
 
@@ -29,6 +32,12 @@ class RelativePerson {
   final String relationDegree; // erkin matn (masalan: amaki, xola)
   final String side; // 'paternal' | 'maternal' | ''
   final String notes;
+
+  /// Nasab daraxti bog'lanishlari (xuddi shu foydalanuvchi ro'yxatidagi personId).
+  final String? fatherId;
+  final String? motherId;
+  final String? spouseId;
+
   final DateTime? createdAt;
 
   /// Keyingi tug'ilgan kun sanasi (bugundan boshlab).
@@ -75,6 +84,9 @@ class RelativePerson {
       relationDegree: (d['relationDegree'] ?? '') as String,
       side: (d['side'] ?? '') as String,
       notes: (d['notes'] ?? '') as String,
+      fatherId: d['fatherId'] as String?,
+      motherId: d['motherId'] as String?,
+      spouseId: d['spouseId'] as String?,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -90,6 +102,9 @@ class RelativePerson {
         'relationDegree': relationDegree,
         'side': side,
         'notes': notes,
+        'fatherId': fatherId,
+        'motherId': motherId,
+        'spouseId': spouseId,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }

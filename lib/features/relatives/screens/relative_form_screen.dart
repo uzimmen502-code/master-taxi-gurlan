@@ -11,10 +11,14 @@ class RelativeFormScreen extends StatefulWidget {
     super.key,
     required this.userId,
     this.existing,
+    this.allPeople = const [],
   });
 
   final String userId;
   final RelativePerson? existing;
+
+  /// Nasab bog'lanishi (ota/ona/turmush o'rtog'i) dropdownlari uchun.
+  final List<RelativePerson> allPeople;
 
   static const _accent = Color(0xFF6A4C93);
 
@@ -37,6 +41,9 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
   String _side = '';
   String _photoUrl = '';
   String _photoPath = '';
+  String? _fatherId;
+  String? _motherId;
+  String? _spouseId;
   bool _busy = false;
 
   @override
@@ -54,6 +61,9 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
       _side = e.side;
       _photoUrl = e.photoUrl;
       _photoPath = e.photoPath;
+      _fatherId = e.fatherId;
+      _motherId = e.motherId;
+      _spouseId = e.spouseId;
     }
   }
 
@@ -117,6 +127,9 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
         relationDegree: _degreeCtrl.text.trim(),
         side: _side,
         notes: _notesCtrl.text.trim(),
+        fatherId: _fatherId,
+        motherId: _motherId,
+        spouseId: _spouseId,
       );
       if (widget.existing == null) {
         await _repo.addPerson(widget.userId, person);
@@ -199,6 +212,25 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
           ),
           const SizedBox(height: 12),
           _field(_notesCtrl, 'Изоҳ', Icons.notes_outlined, maxLines: 3),
+          if (_others.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Text('🌳 Насаб боғланиши',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: RelativeFormScreen._accent)),
+            ),
+            _relativeDropdown('Отаси', _fatherId,
+                (v) => setState(() => _fatherId = v)),
+            const SizedBox(height: 12),
+            _relativeDropdown('Онаси', _motherId,
+                (v) => setState(() => _motherId = v)),
+            const SizedBox(height: 12),
+            _relativeDropdown('Турмуш ўртоғи', _spouseId,
+                (v) => setState(() => _spouseId = v)),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             height: 52,
@@ -265,6 +297,43 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
                   DropdownMenuItem(value: e.key, child: Text(e.value)))
               .toList(),
           onChanged: (v) => onChanged(v ?? ''),
+        ),
+      ),
+    );
+  }
+
+  /// O'zidan boshqa qarindoshlar (bog'lanish dropdownlari uchun).
+  List<RelativePerson> get _others {
+    final selfId = widget.existing?.id;
+    return widget.allPeople.where((p) => p.id != selfId).toList();
+  }
+
+  Widget _relativeDropdown(
+    String label,
+    String? value,
+    ValueChanged<String?> onChanged,
+  ) {
+    final exists = value != null && _others.any((p) => p.id == value);
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.account_tree_outlined),
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          value: exists ? value : null,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+                value: null, child: Text('— йўқ —')),
+            ..._others.map((p) => DropdownMenuItem<String?>(
+                  value: p.id,
+                  child: Text(p.fullName, overflow: TextOverflow.ellipsis),
+                )),
+          ],
+          onChanged: onChanged,
         ),
       ),
     );

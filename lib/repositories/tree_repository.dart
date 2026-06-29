@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/tree_history_entry.dart';
 import '../models/tree_link_invite.dart';
 import '../models/tree_person.dart';
 
@@ -51,5 +52,20 @@ class TreeRepository {
         .limit(100)
         .snapshots()
         .map((s) => s.docs.map(TreeLinkInvite.fromDoc).toList(growable: false));
+  }
+
+  /// Komponent tarixi (audit + undo).
+  Stream<List<TreeHistoryEntry>> watchHistory(String componentId) {
+    if (componentId.isEmpty) {
+      return Stream.value(const <TreeHistoryEntry>[]);
+    }
+    return _db
+        .collection('tree_history')
+        .where('componentId', isEqualTo: componentId)
+        .orderBy('createdAt', descending: true)
+        .limit(100)
+        .snapshots()
+        .map((s) =>
+            s.docs.map(TreeHistoryEntry.fromDoc).toList(growable: false));
   }
 }

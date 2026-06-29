@@ -1453,6 +1453,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Daraxt tarixi (audit + undo) — komponent a'zolari o'qiydi; CF yozadi.
+    match /tree_history/{id} {
+      allow read: if isAuth()
+          && (resource.data.componentId == myTreeComponent() || isAdmin());
+      allow write: if false;
+    }
+
     // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).
     match /relatives/{userId}/people/{personId} {
       allow read, write: if isOwner(userId);

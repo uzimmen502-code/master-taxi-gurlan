@@ -13,6 +13,7 @@ import '../services/relative_reminder_scheduler.dart';
 import '../services/tree_service.dart';
 import 'family_tree_screen.dart';
 import 'relative_album_screen.dart';
+import 'tree_history_screen.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
 
@@ -82,6 +83,13 @@ class _RelativesScreenState extends State<RelativesScreen> {
     final match = _people.where((p) => p.id == nodeId);
     if (match.isEmpty) return;
     _edit(match.first);
+  }
+
+  void _openHistory(String phone) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TreeHistoryScreen(userId: phone)),
+    );
   }
 
   Future<void> _addEvent() async {
@@ -161,6 +169,11 @@ class _RelativesScreenState extends State<RelativesScreen> {
           backgroundColor: RelativesScreen._accent,
           foregroundColor: Colors.white,
           actions: [
+            IconButton(
+              tooltip: 'Дарахт тарихи',
+              icon: const Icon(Icons.history),
+              onPressed: phone == null ? null : () => _openHistory(phone),
+            ),
             IconButton(
               tooltip: 'Сана / учрашув қўшиш',
               icon: const Icon(Icons.event_available_outlined),

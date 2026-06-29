@@ -62,6 +62,14 @@
       ]
     },
     {
+      "collectionGroup": "tree_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "componentId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "schedules",
       "queryScope": "COLLECTION",
       "fields": [

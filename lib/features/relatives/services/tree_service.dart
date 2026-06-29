@@ -49,4 +49,12 @@ class TreeService {
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  /// Tarixdagi amalni qaytarish (Undo). { ok }
+  static Future<Map<String, dynamic>> undoOperation(String historyId) async {
+    final res = await _fn.httpsCallable('undoTreeOperation').call({
+      'historyId': historyId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
 }

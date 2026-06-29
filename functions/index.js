@@ -8879,6 +8879,27 @@ function treeNodeFromRelative(d) {
   };
 }
 
+/// Server maydonlarini (createdAt/updatedAt) snapshotdan olib tashlash.
+function stripServerFields(d) {
+  const out = { ...(d || {}) };
+  delete out.createdAt;
+  delete out.updatedAt;
+  return out;
+}
+
+/// tree_history yozuvi (audit + undo payload).
+async function writeTreeHistory(entry) {
+  await db.collection('tree_history').add({
+    type: entry.type,
+    componentId: entry.componentId || '',
+    actorUid: entry.actorUid || '',
+    summary: entry.summary || '',
+    data: entry.data || {},
+    undone: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
 /// Illa kirishda: komponent + "Men" tuguni + mavjud qarindoshlarni migratsiya.
 /// Idempotent — qayta chaqirsa zarar yo'q.
 exports.ensureMyTree = functions.https.onCall(async (data, context) => {
@@ -9142,6 +9163,21 @@ exports.respondTreeLinkInvite =
     const victim = victimSnap.data();
     const survivor = survivorSnap.data();
 
+    // Undo uchun snapshot.
+    const survivorBefore = {
+      componentId: survivor.componentId || meComp,
+      claimedBy: survivor.claimedBy || null,
+      fatherId: survivor.fatherId || null,
+      motherId: survivor.motherId || null,
+      spouseId: survivor.spouseId || null,
+      photoUrl: survivor.photoUrl || '',
+      birthDate: survivor.birthDate || null,
+    };
+    const toRestamped = []; // meComp → target ko'chgan tugunlar (survivor ham)
+    const toRefChanges = []; // toNodes ichida victim → survivor o'zgargan refs
+    const targetReferrers = []; // target ichida victim → survivor o'zgargan refs
+    const usersRestamped = [];
+
     let batch = db.batch();
     let ops = 0;
     const flush = async () => {
@@ -9164,6 +9200,7 @@ exports.respondTreeLinkInvite =
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     ops++;
+    if (meComp !== target) toRestamped.push(survivorId);
 
     // Redirect: victimId → survivorId (mirror trigger uchun).
     batch.set(db.collection('tree_redirects').doc(victimId), {
@@ -9183,9 +9220,12 @@ exports.respondTreeLinkInvite =
           componentId: target,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
-        if (dd.fatherId === victimId) upd.fatherId = survivorId;
-        if (dd.motherId === victimId) upd.motherId = survivorId;
-        if (dd.spouseId === victimId) upd.spouseId = survivorId;
+        const fields = [];
+        if (dd.fatherId === victimId) { upd.fatherId = survivorId; fields.push('fatherId'); }
+        if (dd.motherId === victimId) { upd.motherId = survivorId; fields.push('motherId'); }
+        if (dd.spouseId === victimId) { upd.spouseId = survivorId; fields.push('spouseId'); }
+        if (fields.length) toRefChanges.push({ id: d.id, fields });
+        toRestamped.push(d.id);
         batch.set(d.ref, upd, { merge: true });
         ops++;
         if (ops >= 400) await flush();
@@ -9198,10 +9238,12 @@ exports.respondTreeLinkInvite =
     for (const d of fromNodes.docs) {
       const dd = d.data();
       const upd = {};
-      if (dd.fatherId === victimId) upd.fatherId = survivorId;
-      if (dd.motherId === victimId) upd.motherId = survivorId;
-      if (dd.spouseId === victimId) upd.spouseId = survivorId;
-      if (Object.keys(upd).length) {
+      const fields = [];
+      if (dd.fatherId === victimId) { upd.fatherId = survivorId; fields.push('fatherId'); }
+      if (dd.motherId === victimId) { upd.motherId = survivorId; fields.push('motherId'); }
+      if (dd.spouseId === victimId) { upd.spouseId = survivorId; fields.push('spouseId'); }
+      if (fields.length) {
+        targetReferrers.push({ id: d.id, fields });
         upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
         batch.set(d.ref, upd, { merge: true });
         ops++;
@@ -9221,6 +9263,7 @@ exports.respondTreeLinkInvite =
       let b2 = db.batch();
       let o2 = 0;
       for (const d of us.docs) {
+        usersRestamped.push(d.id);
         b2.set(d.ref, { treeComponentId: target }, { merge: true });
         o2++;
         if (o2 >= 400) {
@@ -9237,6 +9280,26 @@ exports.respondTreeLinkInvite =
       respondedAt: admin.firestore.FieldValue.serverTimestamp(),
       mergedInto: survivorId,
     }, { merge: true });
+
+    await writeTreeHistory({
+      type: 'link',
+      componentId: target,
+      actorUid: uid,
+      summary: `«${inv.nodeName || victim.fullName || ''}» дарахтга уланди`,
+      data: {
+        inviteId,
+        victimId,
+        survivorId,
+        meComp,
+        target,
+        victimNode: stripServerFields(victim),
+        survivorBefore,
+        toRestamped,
+        toRefChanges,
+        targetReferrers,
+        usersRestamped,
+      },
+    });
 
     return { ok: true, status: 'accepted', componentId: target, personId: survivorId };
   });
@@ -9273,6 +9336,17 @@ exports.mergeTreePersons = functions.https.onCall(async (data, context) => {
   const clean = (x) => (x && x !== keepId && x !== mergeId) ? x : null;
   const pick = (a, b) => clean(a) || clean(b) || null;
 
+  // Undo uchun snapshot.
+  const keepBefore = {
+    fatherId: keep.fatherId || null,
+    motherId: keep.motherId || null,
+    spouseId: keep.spouseId || null,
+    photoUrl: keep.photoUrl || '',
+    birthDate: keep.birthDate || null,
+    claimedBy: keep.claimedBy || null,
+  };
+  const referrers = [];
+
   let batch = db.batch();
   let ops = 0;
   const flush = async () => {
@@ -9306,10 +9380,12 @@ exports.mergeTreePersons = functions.https.onCall(async (data, context) => {
     if (d.id === mergeId || d.id === keepId) continue;
     const dd = d.data();
     const upd = {};
-    if (dd.fatherId === mergeId) upd.fatherId = keepId;
-    if (dd.motherId === mergeId) upd.motherId = keepId;
-    if (dd.spouseId === mergeId) upd.spouseId = keepId;
-    if (Object.keys(upd).length) {
+    const fields = [];
+    if (dd.fatherId === mergeId) { upd.fatherId = keepId; fields.push('fatherId'); }
+    if (dd.motherId === mergeId) { upd.motherId = keepId; fields.push('motherId'); }
+    if (dd.spouseId === mergeId) { upd.spouseId = keepId; fields.push('spouseId'); }
+    if (fields.length) {
+      referrers.push({ id: d.id, fields });
       upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
       batch.set(d.ref, upd, { merge: true });
       ops++;
@@ -9328,5 +9404,170 @@ exports.mergeTreePersons = functions.https.onCall(async (data, context) => {
   ops++;
   await flush();
 
+  await writeTreeHistory({
+    type: 'merge',
+    componentId: myComp,
+    actorUid: uid,
+    summary: `«${keep.fullName || merge.fullName}» — такрорлар бирлаштирилди`,
+    data: {
+      keepId,
+      mergeId,
+      keepBefore,
+      mergedNode: stripServerFields(merge),
+      referrers,
+      claimUid: merge.claimedBy || null,
+    },
+  });
+
   return { ok: true, keepId };
+});
+
+/// Tarixdagi amalni qaytarish (Undo) — merge va link uchun (Faza 4).
+exports.undoTreeOperation = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const historyId = String(data.historyId || '');
+  if (!historyId) {
+    throw new functions.https.HttpsError('invalid-argument', 'historyId');
+  }
+  const hRef = db.collection('tree_history').doc(historyId);
+  const hSnap = await hRef.get();
+  if (!hSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'topilmadi');
+  }
+  const h = hSnap.data();
+  if (h.undone) return { ok: true, alreadyUndone: true };
+
+  // Ruxsat: shu komponent a'zosi yoki admin.
+  const userSnap = await db.collection('users').doc(uid).get();
+  const myComp = (userSnap.data() || {}).treeComponentId || '';
+  if (myComp !== h.componentId) {
+    throw new functions.https.HttpsError('permission-denied', 'komponent emas');
+  }
+
+  const d = h.data || {};
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async () => {
+    if (ops > 0) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  };
+  const bump = () => {
+    ops++;
+    return ops >= 400 ? flush() : Promise.resolve();
+  };
+
+  if (h.type === 'merge') {
+    // mergeId tugunini tiklash.
+    batch.set(db.collection('tree_persons').doc(d.mergeId), {
+      ...stripServerFields(d.mergedNode || {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await bump();
+    batch.delete(db.collection('tree_redirects').doc(d.mergeId));
+    await bump();
+    // referrerlarni mergeId'ga qaytarish.
+    for (const r of (d.referrers || [])) {
+      const upd = {};
+      for (const f of r.fields) upd[f] = d.mergeId;
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(db.collection('tree_persons').doc(r.id), upd, { merge: true });
+      await bump();
+    }
+    // keep maydonlarini avvalgi holatga.
+    batch.set(db.collection('tree_persons').doc(d.keepId), {
+      fatherId: d.keepBefore.fatherId || null,
+      motherId: d.keepBefore.motherId || null,
+      spouseId: d.keepBefore.spouseId || null,
+      photoUrl: d.keepBefore.photoUrl || '',
+      birthDate: d.keepBefore.birthDate || null,
+      claimedBy: d.keepBefore.claimedBy || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await bump();
+    if (d.claimUid) {
+      batch.set(db.collection('users').doc(d.claimUid),
+        { treePersonId: d.mergeId }, { merge: true });
+      await bump();
+    }
+    await flush();
+  } else if (h.type === 'link') {
+    // victim tugunini tiklash.
+    batch.set(db.collection('tree_persons').doc(d.victimId), {
+      ...stripServerFields(d.victimNode || {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await bump();
+    batch.delete(db.collection('tree_redirects').doc(d.victimId));
+    await bump();
+    // target ichidagi referrerlarni victim'ga qaytarish.
+    for (const r of (d.targetReferrers || [])) {
+      const upd = {};
+      for (const f of r.fields) upd[f] = d.victimId;
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(db.collection('tree_persons').doc(r.id), upd, { merge: true });
+      await bump();
+    }
+    // toRefChanges'ni victim'ga qaytarish.
+    for (const r of (d.toRefChanges || [])) {
+      const upd = {};
+      for (const f of r.fields) upd[f] = d.victimId;
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(db.collection('tree_persons').doc(r.id), upd, { merge: true });
+      await bump();
+    }
+    // survivor'ni avvalgi komponent/holatga.
+    batch.set(db.collection('tree_persons').doc(d.survivorId), {
+      componentId: d.survivorBefore.componentId || d.meComp,
+      claimedBy: d.survivorBefore.claimedBy || null,
+      fatherId: d.survivorBefore.fatherId || null,
+      motherId: d.survivorBefore.motherId || null,
+      spouseId: d.survivorBefore.spouseId || null,
+      photoUrl: d.survivorBefore.photoUrl || '',
+      birthDate: d.survivorBefore.birthDate || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await bump();
+    // toRestamped tugunlarni meComp'ga qaytarish (survivor allaqachon yuqorida).
+    for (const id of (d.toRestamped || [])) {
+      if (id === d.survivorId) continue;
+      batch.set(db.collection('tree_persons').doc(id),
+        { componentId: d.meComp, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true });
+      await bump();
+    }
+    await flush();
+    // usersRestamped'ni meComp'ga qaytarish.
+    let b2 = db.batch();
+    let o2 = 0;
+    for (const id of (d.usersRestamped || [])) {
+      b2.set(db.collection('users').doc(id),
+        { treeComponentId: d.meComp }, { merge: true });
+      o2++;
+      if (o2 >= 400) {
+        await b2.commit();
+        b2 = db.batch();
+        o2 = 0;
+      }
+    }
+    if (o2 > 0) await b2.commit();
+    // taklifni bekor qilamiz (qayta yuborish mumkin).
+    if (d.inviteId) {
+      await db.collection('tree_link_invites').doc(d.inviteId).set(
+        { status: 'undone' }, { merge: true });
+    }
+  } else {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'bu amal qaytarib bolmaydi');
+  }
+
+  await hRef.set({
+    undone: true,
+    undoneAt: admin.firestore.FieldValue.serverTimestamp(),
+    undoneBy: uid,
+  }, { merge: true });
+
+  return { ok: true };
 });

@@ -37,4 +37,16 @@ class TreeService {
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
+
+  /// Komponent ichida ikki tugunni birlashtirish (dedup). { ok, keepId }
+  static Future<Map<String, dynamic>> mergeTreePersons({
+    required String keepId,
+    required String mergeId,
+  }) async {
+    final res = await _fn.httpsCallable('mergeTreePersons').call({
+      'keepId': keepId,
+      'mergeId': mergeId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
 }

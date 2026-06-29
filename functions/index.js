@@ -9240,3 +9240,93 @@ exports.respondTreeLinkInvite =
 
     return { ok: true, status: 'accepted', componentId: target, personId: survivorId };
   });
+
+/// Komponent ichida ikki tugunni birlashtirish (dedup, Faza 3).
+/// mergeId → keepId; barcha refs qayta yo'naltiriladi, redirect yoziladi.
+exports.mergeTreePersons = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const keepId = String(data.keepId || '');
+  const mergeId = String(data.mergeId || '');
+  if (!keepId || !mergeId || keepId === mergeId) {
+    throw new functions.https.HttpsError('invalid-argument', 'keepId/mergeId');
+  }
+
+  const keepSnap = await db.collection('tree_persons').doc(keepId).get();
+  const mergeSnap = await db.collection('tree_persons').doc(mergeId).get();
+  if (!keepSnap.exists || !mergeSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'tugun yoq');
+  }
+  const keep = keepSnap.data();
+  const merge = mergeSnap.data();
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  const myComp = (userSnap.data() || {}).treeComponentId || '';
+  if (!myComp || keep.componentId !== myComp || merge.componentId !== myComp) {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'bir komponentda emas');
+  }
+  if (keep.claimedBy && merge.claimedBy && keep.claimedBy !== merge.claimedBy) {
+    throw new functions.https.HttpsError('failed-precondition',
+      'ikkalasi ham hisobga ulangan — birlashtirib bolmaydi');
+  }
+
+  const clean = (x) => (x && x !== keepId && x !== mergeId) ? x : null;
+  const pick = (a, b) => clean(a) || clean(b) || null;
+
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async () => {
+    if (ops > 0) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  };
+
+  batch.set(db.collection('tree_persons').doc(keepId), {
+    fatherId: pick(keep.fatherId, merge.fatherId),
+    motherId: pick(keep.motherId, merge.motherId),
+    spouseId: pick(keep.spouseId, merge.spouseId),
+    photoUrl: keep.photoUrl || merge.photoUrl || '',
+    birthDate: keep.birthDate || merge.birthDate || null,
+    claimedBy: keep.claimedBy || merge.claimedBy || null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  ops++;
+
+  batch.set(db.collection('tree_redirects').doc(mergeId), {
+    to: keepId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  ops++;
+
+  const comp = await db.collection('tree_persons')
+    .where('componentId', '==', myComp).get();
+  for (const d of comp.docs) {
+    if (d.id === mergeId || d.id === keepId) continue;
+    const dd = d.data();
+    const upd = {};
+    if (dd.fatherId === mergeId) upd.fatherId = keepId;
+    if (dd.motherId === mergeId) upd.motherId = keepId;
+    if (dd.spouseId === mergeId) upd.spouseId = keepId;
+    if (Object.keys(upd).length) {
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(d.ref, upd, { merge: true });
+      ops++;
+      if (ops >= 400) await flush();
+    }
+  }
+
+  // mergeId hisobga ulangan bo'lsa — o'sha foydalanuvchi treePersonId'sini ko'chir.
+  if (merge.claimedBy) {
+    batch.set(db.collection('users').doc(merge.claimedBy),
+      { treePersonId: keepId }, { merge: true });
+    ops++;
+  }
+
+  batch.delete(db.collection('tree_persons').doc(mergeId));
+  ops++;
+  await flush();
+
+  return { ok: true, keepId };
+});

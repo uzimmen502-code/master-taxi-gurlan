@@ -93,17 +93,158 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             final people = nodes
                 .map((n) => n.toRelativePerson())
                 .toList(growable: false);
-            return FamilyTreeView(
-              people: people,
-              onTap: (RelativePerson p) {
-                final node = byId[p.id];
-                if (node != null) _onNodeTap(node);
-              },
+            final dupGroups = _findDuplicates(nodes);
+            return Column(
+              children: [
+                if (dupGroups.isNotEmpty) _dupBar(dupGroups),
+                Expanded(
+                  child: FamilyTreeView(
+                    people: people,
+                    onTap: (RelativePerson p) {
+                      final node = byId[p.id];
+                      if (node != null) _onNodeTap(node);
+                    },
+                  ),
+                ),
+              ],
             );
           },
         );
       },
     );
+  }
+
+  String _normName(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Bir xil nomli (>=2) tugunlar — ehtimoliy takrorlar.
+  List<List<TreePerson>> _findDuplicates(List<TreePerson> nodes) {
+    final byName = <String, List<TreePerson>>{};
+    for (final n in nodes) {
+      final key = _normName(n.fullName);
+      if (key.isEmpty) continue;
+      byName.putIfAbsent(key, () => []).add(n);
+    }
+    return byName.values
+        .where((g) => g.length > 1)
+        .toList(growable: false);
+  }
+
+  Widget _dupBar(List<List<TreePerson>> groups) {
+    final count = groups.fold<int>(0, (a, g) => a + g.length);
+    return Material(
+      color: const Color(0xFFFFF3E0),
+      child: InkWell(
+        onTap: () => _openDedup(groups),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.merge_type, color: Color(0xFFE67E22)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '$count та эҳтимолий такрор топилди — бирлаштириш учун босинг',
+                  style: const TextStyle(
+                      color: Color(0xFFB9650F), fontWeight: FontWeight.w600),
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFFE67E22)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openDedup(List<List<TreePerson>> groups) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(8),
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Эҳтимолий такрорлар',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'Бир хил исмли тугунлар. Айни одам бўлса — «Бирлаштириш».',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final g in groups)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('«${g.first.fullName}» — ${g.length} та',
+                          style:
+                              const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      for (final n in g)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person_outline, size: 18),
+                              const SizedBox(width: 6),
+                              Expanded(child: Text(n.fullName)),
+                              if (n.isClaimed)
+                                const Text('✓ уланган',
+                                    style: TextStyle(
+                                        color: Colors.green, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE67E22),
+                              foregroundColor: Colors.white),
+                          onPressed: () => _mergeGroup(ctx, g),
+                          icon: const Icon(Icons.merge_type, size: 18),
+                          label: const Text('Бирлаштириш'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mergeGroup(BuildContext sheetCtx, List<TreePerson> group) async {
+    Navigator.pop(sheetCtx);
+    // Saqlanadigan tugun: hisobga ulangani, bo'lmasa birinchisi.
+    final keep = group.firstWhere((n) => n.isClaimed, orElse: () => group.first);
+    final others = group.where((n) => n.id != keep.id).toList();
+    var done = 0;
+    try {
+      for (final m in others) {
+        await TreeService.mergeTreePersons(keepId: keep.id, mergeId: m.id);
+        done++;
+      }
+      _snack('$done та тугун «${keep.fullName}» билан бирлаштирилди.');
+    } on FirebaseFunctionsException catch (e) {
+      _snack(firebaseFunctionsUserMessage(e));
+    } catch (e) {
+      _snack('Хатолик ($done бажарилди): $e');
+    }
   }
 
   void _onNodeTap(TreePerson node) {

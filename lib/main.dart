@@ -56,10 +56,13 @@ import 'features/ads/repositories/ads_repository.dart';
 import 'features/ads/services/ads_storage_service.dart';
 import 'core/l10n/locale_notifier.dart';
 import 'core/passenger_cancel_rules_holder.dart';
+import 'core/utils/firestore_crash_guard.dart';
 import 'utils/locale_utils.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
+  installFirestoreCrashGuard();
 
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,

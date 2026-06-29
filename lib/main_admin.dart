@@ -44,12 +44,15 @@ import 'repositories/rides_repository.dart';
 import 'repositories/user_repository.dart';
 import 'core/passenger_cancel_rules_holder.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/firestore_crash_guard.dart';
 import 'services/admin_service.dart';
 import 'services/daily_report_service.dart';
 import 'services/procurement_prices_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
+  installFirestoreCrashGuard();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );

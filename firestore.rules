@@ -1376,6 +1376,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // Qarindosh fotoalbomi — SHAXSIY. Faqat egasi.
+    match /relatives/{userId}/people/{personId}/photos/{photoId} {
+      allow read, write: if isOwner(userId);
+    }
+
     match /requests/{id} {
       allow read, create, update: if true;
       allow delete: if false;

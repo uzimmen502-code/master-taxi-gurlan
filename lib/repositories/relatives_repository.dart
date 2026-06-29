@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/relative_event.dart';
 import '../models/relative_person.dart';
+import '../models/relative_photo.dart';
 
 /// Foydalanuvchining shaxsiy qarindoshlar ro'yxati — `relatives/{userId}/people`.
 class RelativesRepository {
@@ -86,5 +87,31 @@ class RelativesRepository {
 
   Future<void> deleteEvent(String userId, String eventId) async {
     await _events(userId).doc(eventId).delete();
+  }
+
+  // ─── Fotoalbom (har bir qarindosh uchun) ──────────────────────────────
+
+  CollectionReference<Map<String, dynamic>> _album(
+          String userId, String personId) =>
+      _people(userId).doc(personId).collection('photos');
+
+  Stream<List<RelativePhoto>> watchAlbum(String userId, String personId) {
+    return _album(userId, personId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(RelativePhoto.fromDoc).toList(growable: false));
+  }
+
+  Future<void> addAlbumPhoto(
+      String userId, String personId, RelativePhoto photo) async {
+    await _album(userId, personId).add({
+      ...photo.toMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteAlbumPhoto(
+      String userId, String personId, String photoId) async {
+    await _album(userId, personId).doc(photoId).delete();
   }
 }

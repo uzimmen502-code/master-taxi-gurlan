@@ -11,6 +11,7 @@ import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
 import 'family_tree_view.dart';
+import 'relative_album_screen.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
 
@@ -91,6 +92,16 @@ class _RelativesScreenState extends State<RelativesScreen> {
       MaterialPageRoute(
         builder: (_) => RelativeEventFormScreen(
             userId: phone, existing: e, allPeople: _people),
+      ),
+    );
+  }
+
+  Future<void> _openAlbum(RelativePerson p) async {
+    final phone = _phone!;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RelativeAlbumScreen(userId: phone, person: p),
       ),
     );
   }
@@ -215,10 +226,12 @@ class _RelativesScreenState extends State<RelativesScreen> {
             ),
           PopupMenuButton<String>(
             onSelected: (v) {
+              if (v == 'album') _openAlbum(p);
               if (v == 'edit') _edit(p);
               if (v == 'delete') _delete(p);
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'album', child: Text('📷 Альбом')),
               PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
               PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
             ],

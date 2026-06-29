@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'class_circles_screen.dart';
+import '../../relatives/screens/relatives_screen.dart';
+import '../utils/circle_type_spec.dart';
+import 'circles_list_screen.dart';
 
-/// "Mening yaqinlarim" hubi. MVP — faqat Sinfdoshlar faol; qolganlari "tez orada".
+/// "Mening yaqinlarim" hubi. Faol: Sinfdosh/Kursdosh/Hamkasb (umumiy dvigatel).
+/// Qarindosh + Tanishuv — alohida modul (tez orada).
 class CirclesHubScreen extends StatelessWidget {
   const CirclesHubScreen({super.key});
 
@@ -10,6 +13,11 @@ class CirclesHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final specs = [
+      CircleTypeSpec.classmates,
+      CircleTypeSpec.coursemates,
+      CircleTypeSpec.colleagues,
+    ];
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
@@ -20,22 +28,34 @@ class CirclesHubScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          for (final spec in specs) ...[
+            _CircleCard(
+              emoji: spec.emoji,
+              title: spec.title,
+              subtitle: spec.subtitle,
+              color: _accent,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CirclesListScreen(spec: spec),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           _CircleCard(
-            emoji: '🎓',
-            title: 'Синфдошларим',
-            subtitle: 'Мактаб + битирган йил бўйича давра',
+            emoji: '👨‍👩‍👧',
+            title: 'Қариндошларим',
+            subtitle: 'Шахсий рўйхат + туғилган кун эслатмаси',
             color: _accent,
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ClassCirclesScreen()),
+              MaterialPageRoute(builder: (_) => const RelativesScreen()),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           const _SoonHeader(),
           const SizedBox(height: 8),
-          const _SoonCard(emoji: '👨‍👩‍👧', title: 'Қариндошларим'),
-          const _SoonCard(emoji: '🎓', title: 'Курсдошларим'),
-          const _SoonCard(emoji: '💼', title: 'Ҳамкасбларим'),
           const _SoonCard(emoji: '❤️', title: 'Танишув ва мулоқот'),
         ],
       ),

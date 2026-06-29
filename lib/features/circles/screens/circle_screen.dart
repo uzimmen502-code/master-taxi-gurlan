@@ -345,9 +345,7 @@ class _CircleScreenState extends State<CircleScreen> {
   Widget _memberTile(CircleMember m) {
     final isMe = m.userId == widget.phone;
     final subtitle = [
-      if (m.classLabel.isNotEmpty) '${m.classLabel}-синф',
-      if (m.currentCity.isNotEmpty) m.currentCity,
-      if (m.currentJob.isNotEmpty) m.currentJob,
+      ...m.extraValues,
       if (m.phoneVisible && m.phone.isNotEmpty) '📞 ${m.phone}',
     ].join(' · ');
     return ListTile(

@@ -1274,9 +1274,9 @@ service cloud.firestore {
       // Metadata (maktab/yil/sanoq) maxfiy emas — qidiruv/taklif uchun authed o'qiydi.
       allow read: if isAuth();
 
-      // Yaratish — avto-qo'shilish: faqat classmates, yaratuvchi owner, sanoq=1.
+      // Yaratish — avto-qo'shilish: umumiy dvigatel tiplari, yaratuvchi owner, sanoq=1.
       allow create: if isAuth()
-          && request.resource.data.type == 'classmates'
+          && request.resource.data.type in ['classmates', 'coursemates', 'colleagues']
           && request.resource.data.ownerId == circleUserId()
           && request.resource.data.memberCount == 1;
 
@@ -1364,6 +1364,11 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow create: if isAuth();
       allow read, update, delete: if isAdmin();
+    }
+
+    // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).
+    match /relatives/{userId}/people/{personId} {
+      allow read, write: if isOwner(userId);
     }
 
     match /requests/{id} {

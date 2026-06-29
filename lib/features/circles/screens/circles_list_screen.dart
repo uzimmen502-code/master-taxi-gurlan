@@ -4,20 +4,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/circle.dart';
 import '../../../repositories/circles_repository.dart';
+import '../utils/circle_type_spec.dart';
+import 'circle_profile_form_screen.dart';
 import 'circle_screen.dart';
-import 'class_profile_form_screen.dart';
 
-/// "Синфдош давраларим" — foydalanuvchi a'zo bo'lgan sinf davralari + topish/yaratish.
-class ClassCirclesScreen extends StatefulWidget {
-  const ClassCirclesScreen({super.key});
+/// Universal "Davralarim" ro'yxati — tip bo'yicha filtrlangan (`spec`).
+class CirclesListScreen extends StatefulWidget {
+  const CirclesListScreen({super.key, required this.spec});
+
+  final CircleTypeSpec spec;
 
   static const accent = Color(0xFF6A4C93);
 
   @override
-  State<ClassCirclesScreen> createState() => _ClassCirclesScreenState();
+  State<CirclesListScreen> createState() => _CirclesListScreenState();
 }
 
-class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
+class _CirclesListScreenState extends State<CirclesListScreen> {
   final _repo = CirclesRepository();
   String? _phone;
 
@@ -43,7 +46,10 @@ class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
     }
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ClassProfileFormScreen(phone: phone)),
+      MaterialPageRoute(
+        builder: (_) =>
+            CircleProfileFormScreen(spec: widget.spec, phone: phone),
+      ),
     );
   }
 
@@ -53,12 +59,12 @@ class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
-        title: const Text('Синфдошларим'),
-        backgroundColor: ClassCirclesScreen.accent,
+        title: Text(widget.spec.title),
+        backgroundColor: CirclesListScreen.accent,
         foregroundColor: Colors.white,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: ClassCirclesScreen.accent,
+        backgroundColor: CirclesListScreen.accent,
         foregroundColor: Colors.white,
         onPressed: _openForm,
         icon: const Icon(Icons.add),
@@ -73,17 +79,18 @@ class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final ids = snap.data ?? const <String>[];
-                if (ids.isEmpty) {
-                  return _empty();
-                }
+                if (ids.isEmpty) return _empty();
                 return FutureBuilder<List<Circle>>(
                   future: _loadCircles(ids),
                   builder: (context, cs) {
-                    final circles = cs.data ?? const <Circle>[];
+                    final circles = (cs.data ?? const <Circle>[])
+                        .where((c) => c.type == widget.spec.type)
+                        .toList();
                     if (cs.connectionState == ConnectionState.waiting &&
                         circles.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
+                    if (circles.isEmpty) return _empty();
                     return ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
                       itemCount: circles.length,
@@ -105,12 +112,12 @@ class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: Color(0x226A4C93),
-          child: Text('🎓', style: TextStyle(fontSize: 20)),
+        leading: CircleAvatar(
+          backgroundColor: const Color(0x226A4C93),
+          child: Text(widget.spec.emoji, style: const TextStyle(fontSize: 20)),
         ),
-        title: Text(c.title,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            Text(c.title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('${c.memberCount} аъзо'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.push(
@@ -130,11 +137,10 @@ class _ClassCirclesScreenState extends State<ClassCirclesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🎓', style: TextStyle(fontSize: 48)),
+            Text(widget.spec.emoji, style: const TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(
-              'Ҳали синф даврасига қўшилмагансиз.\n'
-              'Мактаб ва битирган йилни киритиб, давранга қўшилинг.',
+              'Ҳали даврага қўшилмагансиз.\n«Давра топиш / яратиш» орқали қўшилинг.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),

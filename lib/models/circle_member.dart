@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// `circles/{circleId}/members/{userId}` — userId = `canonicalPhoneId` (998...).
 ///
+/// `extra` — tipga xos ixtiyoriy profil maydonlari (classLabel, position, ...).
 /// Maxfiylik: telefon DEFAULT yashirin. `phoneVisible=false` bo'lsa `phone`
-/// umuman yozilmaydi (faqat egasining shaxsiy profilida qoladi). Egasi
-/// "ko'rsatish"ni yoqsa, repository telefonni shu hujjatga yozadi.
+/// umuman yozilmaydi.
 class CircleMember {
   const CircleMember({
     required this.userId,
@@ -12,10 +12,7 @@ class CircleMember {
     this.role = 'member',
     this.status = 'active',
     this.photoPath = '',
-    this.classLabel = '',
-    this.currentCity = '',
-    this.currentJob = '',
-    this.subgroupId,
+    this.extra = const {},
     this.phone = '',
     this.phoneVisible = false,
   });
@@ -30,10 +27,9 @@ class CircleMember {
   final String status;
 
   final String photoPath;
-  final String classLabel;
-  final String currentCity;
-  final String currentJob;
-  final String? subgroupId;
+
+  /// Tipga xos profil qiymatlari (key → value), faqat to'ldirilganlari.
+  final Map<String, String> extra;
 
   /// Faqat phoneVisible=true bo'lsa to'ldiriladi.
   final String phone;
@@ -41,18 +37,21 @@ class CircleMember {
 
   bool get isOwner => role == 'owner';
 
+  /// Bo'sh bo'lmagan extra qiymatlar (ko'rsatish uchun).
+  List<String> get extraValues =>
+      extra.values.where((v) => v.trim().isNotEmpty).toList(growable: false);
+
   factory CircleMember.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
+    final rawExtra = (d['extra'] as Map?) ?? const {};
     return CircleMember(
       userId: doc.id,
       fullName: (d['fullName'] ?? '') as String,
       role: (d['role'] ?? 'member') as String,
       status: (d['status'] ?? 'active') as String,
       photoPath: (d['photoPath'] ?? '') as String,
-      classLabel: (d['classLabel'] ?? '') as String,
-      currentCity: (d['currentCity'] ?? '') as String,
-      currentJob: (d['currentJob'] ?? '') as String,
-      subgroupId: d['subgroupId'] as String?,
+      extra: rawExtra
+          .map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
       phone: (d['phone'] ?? '') as String,
       phoneVisible: d['phoneVisible'] == true,
     );
@@ -61,16 +60,17 @@ class CircleMember {
   /// Members hujjatiga yoziladigan maydonlar. Telefon faqat ko'rinadigan
   /// bo'lsa kiritiladi (maxfiylik).
   Map<String, dynamic> toWriteMap({String? overrideRole}) {
+    final cleanExtra = <String, String>{};
+    extra.forEach((k, v) {
+      if (v.trim().isNotEmpty) cleanExtra[k] = v.trim();
+    });
     return {
       'userId': userId,
       'fullName': fullName,
       'role': overrideRole ?? role,
       'status': status,
       'photoPath': photoPath,
-      'classLabel': classLabel,
-      'currentCity': currentCity,
-      'currentJob': currentJob,
-      if (subgroupId != null) 'subgroupId': subgroupId,
+      'extra': cleanExtra,
       'phoneVisible': phoneVisible,
       'phone': phoneVisible ? phone : '',
       'updatedAt': FieldValue.serverTimestamp(),

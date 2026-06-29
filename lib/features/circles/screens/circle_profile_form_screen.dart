@@ -5,37 +5,43 @@ import 'package:flutter/services.dart';
 import '../../../models/circle.dart';
 import '../../../models/circle_member.dart';
 import '../../../repositories/circles_repository.dart';
+import '../utils/circle_type_spec.dart';
 import 'circle_screen.dart';
 
-/// Sinf profili + avto-qo'shilish formasi.
-///
-/// Maktab + yil kiritiladi → mavjud davra bo'lsa taklif qilinadi, so'ng
-/// qo'shiladi (yoki yangi yaratiladi). Telefon DEFAULT yashirin.
-class ClassProfileFormScreen extends StatefulWidget {
-  const ClassProfileFormScreen({super.key, required this.phone});
+/// Universal profil + avto-qo'shilish formasi (tipga bog'liq `spec`).
+class CircleProfileFormScreen extends StatefulWidget {
+  const CircleProfileFormScreen({
+    super.key,
+    required this.spec,
+    required this.phone,
+  });
 
+  final CircleTypeSpec spec;
   final String phone;
 
   static const _accent = Color(0xFF6A4C93);
 
   @override
-  State<ClassProfileFormScreen> createState() => _ClassProfileFormScreenState();
+  State<CircleProfileFormScreen> createState() =>
+      _CircleProfileFormScreenState();
 }
 
-class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
+class _CircleProfileFormScreenState extends State<CircleProfileFormScreen> {
   final _repo = CirclesRepository();
   final _nameCtrl = TextEditingController();
-  final _schoolCtrl = TextEditingController();
-  final _yearCtrl = TextEditingController();
-  final _classCtrl = TextEditingController();
-  final _cityCtrl = TextEditingController();
-  final _jobCtrl = TextEditingController();
+  final _ctrls = <String, TextEditingController>{};
   bool _phoneVisible = false;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
+    for (final f in [
+      ...widget.spec.identityFields,
+      ...widget.spec.profileFields
+    ]) {
+      _ctrls[f.key] = TextEditingController();
+    }
     _prefillName();
   }
 
@@ -55,34 +61,41 @@ class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _schoolCtrl.dispose();
-    _yearCtrl.dispose();
-    _classCtrl.dispose();
-    _cityCtrl.dispose();
-    _jobCtrl.dispose();
+    for (final c in _ctrls.values) {
+      c.dispose();
+    }
     super.dispose();
+  }
+
+  Map<String, String> _inputs() {
+    final m = <String, String>{};
+    _ctrls.forEach((k, c) => m[k] = c.text.trim());
+    return m;
   }
 
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
-    final school = _schoolCtrl.text.trim();
-    final year = int.tryParse(_yearCtrl.text.trim());
-    final nowYear = DateTime.now().year;
     if (name.isEmpty) {
       _snack('Исм-фамилияни киритинг.');
       return;
     }
-    if (school.isEmpty) {
-      _snack('Мактабни киритинг.');
-      return;
-    }
-    if (year == null || year < 1950 || year > nowYear + 1) {
-      _snack('Битирган йилни тўғри киритинг (масалан: 2008).');
-      return;
+    for (final f in widget.spec.identityFields) {
+      final val = _ctrls[f.key]!.text.trim();
+      if (f.required && val.isEmpty) {
+        _snack('«${f.label.replaceAll(' *', '')}» ни киритинг.');
+        return;
+      }
+      if (f.number && val.isNotEmpty) {
+        final n = int.tryParse(val);
+        if (n == null || n < 1900 || n > DateTime.now().year + 1) {
+          _snack('«${f.label.replaceAll(' *', '')}» ни тўғри киритинг.');
+          return;
+        }
+      }
     }
 
-    // Mavjud davra taklifi (deterministik ID bo'yicha).
-    final existing = await _repo.suggestClassCircle(school, year);
+    final inputs = _inputs();
+    final existing = await _repo.suggestCircle(spec: widget.spec, inputs: inputs);
     if (!mounted) return;
     if (existing != null) {
       final ok = await _confirmJoin(existing);
@@ -91,18 +104,20 @@ class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
 
     setState(() => _busy = true);
     try {
+      final extra = <String, String>{};
+      for (final f in widget.spec.profileFields) {
+        extra[f.key] = _ctrls[f.key]!.text.trim();
+      }
       final member = CircleMember(
         userId: widget.phone,
         fullName: name,
-        classLabel: _classCtrl.text.trim(),
-        currentCity: _cityCtrl.text.trim(),
-        currentJob: _jobCtrl.text.trim(),
+        extra: extra,
         phone: widget.phone,
         phoneVisible: _phoneVisible,
       );
-      final circle = await _repo.joinOrCreateClassCircle(
-        school: school,
-        year: year,
+      final circle = await _repo.joinOrCreateCircle(
+        spec: widget.spec,
+        inputs: inputs,
         member: member,
       );
       if (!mounted) return;
@@ -124,21 +139,17 @@ class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Мавжуд давра топилди'),
-        content: Text(
-          '«${c.title}» — ${c.memberCount} аъзо.\n'
-          'Шу даврага қўшиласизми?',
-        ),
+        content: Text('«${c.title}» — ${c.memberCount} аъзо.\n'
+            'Шу даврага қўшиласизми?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Йўқ')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: ClassProfileFormScreen._accent,
-              foregroundColor: Colors.white,
-            ),
+                backgroundColor: CircleProfileFormScreen._accent,
+                foregroundColor: Colors.white),
             child: const Text('Ҳа, қўшиламан'),
           ),
         ],
@@ -152,30 +163,24 @@ class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final fields = [...widget.spec.identityFields, ...widget.spec.profileFields];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Синф профили'),
-        backgroundColor: ClassProfileFormScreen._accent,
+        title: Text(widget.spec.title),
+        backgroundColor: CircleProfileFormScreen._accent,
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _field(_nameCtrl, 'Исм-фамилия *', Icons.person_outline),
-          _field(_schoolCtrl, 'Мактаб * (масалан: 1-мактаб)',
-              Icons.school_outlined),
-          _field(_yearCtrl, 'Битирган йил * (масалан: 2008)',
-              Icons.event_outlined,
-              number: true),
-          _field(_classCtrl, 'Синф (ихтиёрий, масалан: А)',
-              Icons.class_outlined),
-          _field(_cityCtrl, 'Ҳозирги шаҳар (ихтиёрий)',
-              Icons.location_city_outlined),
-          _field(_jobCtrl, 'Иш жойи (ихтиёрий)', Icons.work_outline),
+          for (final f in fields)
+            _field(_ctrls[f.key]!, f.label, Icons.edit_outlined,
+                number: f.number),
           const SizedBox(height: 8),
           SwitchListTile(
             value: _phoneVisible,
-            activeThumbColor: ClassProfileFormScreen._accent,
+            activeThumbColor: CircleProfileFormScreen._accent,
             contentPadding: EdgeInsets.zero,
             title: const Text('Телефонимни давра аъзоларига кўрсатиш'),
             subtitle: Text(
@@ -192,16 +197,14 @@ class _ClassProfileFormScreenState extends State<ClassProfileFormScreen> {
             child: ElevatedButton(
               onPressed: _busy ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: ClassProfileFormScreen._accent,
-                foregroundColor: Colors.white,
-              ),
+                  backgroundColor: CircleProfileFormScreen._accent,
+                  foregroundColor: Colors.white),
               child: _busy
                   ? const SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
+                          strokeWidth: 2, color: Colors.white))
                   : const Text('Давранга қўшилиш'),
             ),
           ),

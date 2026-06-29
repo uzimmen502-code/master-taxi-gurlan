@@ -45,6 +45,18 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    // Qarindosh fotosi — shaxsiy. Yozish/o'chirish faqat egasi (userId = phone),
+    // o'qish download URL bilan (rasm sirli emas, faqat egasiga ko'rinadi amalda).
+    match /relatives/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+          && request.auth.token.phone_number.replace('\\+', '') == userId
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+          && request.auth.token.phone_number.replace('\\+', '') == userId;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

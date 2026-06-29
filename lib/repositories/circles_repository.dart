@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../features/circles/utils/school_normalizer.dart';
+import '../features/circles/utils/circle_type_spec.dart';
 import '../models/circle.dart';
 import '../models/circle_chat_message.dart';
 import '../models/circle_event.dart';
@@ -24,17 +24,17 @@ class CirclesRepository {
   CollectionReference<Map<String, dynamic>> get _circles =>
       _db.collection('circles');
 
-  String classCircleId(String school, int year) =>
-      SchoolNormalizer.classCircleId(school, year);
-
   Future<Circle?> getCircle(String circleId) async {
     final snap = await _circles.doc(circleId).get();
     return snap.exists ? Circle.fromDoc(snap) : null;
   }
 
   /// Avto-qo'shilishdan oldin "mavjud davra taklifi" — deterministik ID bo'yicha.
-  Future<Circle?> suggestClassCircle(String school, int year) {
-    return getCircle(classCircleId(school, year));
+  Future<Circle?> suggestCircle({
+    required CircleTypeSpec spec,
+    required Map<String, String> inputs,
+  }) {
+    return getCircle(spec.buildKey(inputs));
   }
 
   Stream<Circle?> watchCircle(String circleId) {
@@ -44,15 +44,15 @@ class CirclesRepository {
         .map((s) => s.exists ? Circle.fromDoc(s) : null);
   }
 
-  /// Sinf davrasiga avto-qo'shilish (yoki yaratish). Atomik tranzaksiya:
-  /// davrani yaratadi/topadi + a'zolikni yozadi + memberCount'ni yangilaydi.
-  Future<Circle> joinOrCreateClassCircle({
-    required String school,
-    required int year,
+  /// Davraga avto-qo'shilish (yoki yaratish). Tipga bog'liq kalit/sarlavha/meta
+  /// `CircleTypeSpec` orqali keladi — bitta dvigatel barcha tiplarni qo'llaydi.
+  /// Atomik tranzaksiya: davrani yaratadi/topadi + a'zolik + memberCount.
+  Future<Circle> joinOrCreateCircle({
+    required CircleTypeSpec spec,
+    required Map<String, String> inputs,
     required CircleMember member,
   }) async {
-    final id = classCircleId(school, year);
-    final normKey = SchoolNormalizer.normalizeKey(school);
+    final id = spec.buildKey(inputs);
     final circleRef = _circles.doc(id);
     final memberRef = circleRef.collection('members').doc(member.userId);
 
@@ -64,10 +64,10 @@ class CirclesRepository {
       if (circleIsNew) {
         final circle = Circle(
           id: id,
-          type: CircleType.classmates,
-          title: '${school.trim()}, $year',
-          normKey: normKey,
-          meta: {'school': school.trim(), 'year': year},
+          type: spec.type,
+          title: spec.buildTitle(inputs),
+          normKey: id,
+          meta: spec.buildMeta(inputs),
           ownerId: member.userId,
         );
         final map = circle.toCreateMap();

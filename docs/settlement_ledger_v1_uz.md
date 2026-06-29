@@ -207,7 +207,11 @@ Finance Center
 2. **Driver Float** — topUp/return + зона сиёсати.
 3. **Трип settlement** — open/confirm (онлайн) + йўловчи тасдиқ UI.
 4. **Deferred** — offline-lite + headroom gate + блок/қарз/таймер.
-5. **spendCredit** — мавжуд wallet тўловларини двигателга улаш.
+5. **spendCredit** — мавжуд wallet тўловларини двигателга улаш. ✅ (барча
+   бонус оқимлари: creditChange, creditSupplier, debitForOrder, confirmPayout,
+   placeOrderWithWallet, grantBirthdayBonus, courierSubmitPayment,
+   courierSubmitCourierOrderPayment, courierFinalizeCollection — ledger
+   ко'згуси prepare/commitBonusInTx + commitBonusInBatch орқали; reconcile яшил).
 6. **Finance Center** — RBAC (finance/auditor) + Daily Closing + Audit Trail.
 
 ## 15. Келажак (V2+)

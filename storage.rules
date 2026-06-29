@@ -34,6 +34,17 @@ service firebase.storage {
           && request.auth.token.phone_number.replace('\\+', '') == ownerId;
     }
 
+    // Davra (Mening yaqinlarim) fotoalbomi. O'qish — download URL bilan hammaga;
+    // yozish — authed, faqat .jpg, ≤8MB. A'zolik Firestore qatlamida tekshiriladi.
+    match /circles/{circleId}/album/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+          && fileName.matches('.*\\.jpg')
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

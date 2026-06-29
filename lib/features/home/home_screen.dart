@@ -32,6 +32,7 @@ import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_offer_screen.dart';
+import '../circles/screens/circles_hub_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
@@ -438,6 +439,8 @@ class _HomeViewState extends State<_HomeView> {
                                   onCarWash: _showTezKundaSnack,
                                   onTire: _showTezKundaSnack,
                                   onOilChange: _showTezKundaSnack,
+                                  onCircles: () =>
+                                      _push(const CirclesHubScreen()),
                                 ),
                                 const SizedBox(height: 16),
                                 FeaturedProductsSection(
@@ -514,6 +517,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
     required this.onCarWash,
     required this.onTire,
     required this.onOilChange,
+    required this.onCircles,
   });
 
   final VoidCallback onLocal;
@@ -528,6 +532,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
   final VoidCallback onCarWash;
   final VoidCallback onTire;
   final VoidCallback onOilChange;
+  final VoidCallback onCircles;
 
   @override
   State<_UnifiedServicesGrid> createState() => _UnifiedServicesGridState();
@@ -576,6 +581,8 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           'Avto Shina', widget.onTire),
       _GridItemData('assets/images/services/service_oil_change.png',
           'Moy almashtirish', widget.onOilChange),
+      _GridItemData(null, 'Mening yaqinlarim', widget.onCircles,
+          icon: Icons.diversity_3),
     ];
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);
@@ -667,10 +674,11 @@ class _PageDots extends StatelessWidget {
 }
 
 class _GridItemData {
-  const _GridItemData(this.image, this.label, this.onTap);
-  final String image;
+  const _GridItemData(this.image, this.label, this.onTap, {this.icon});
+  final String? image;
   final String label;
   final VoidCallback onTap;
+  final IconData? icon;
 }
 
 class _GridTile extends StatefulWidget {
@@ -713,10 +721,13 @@ class _GridTileState extends State<_GridTile> {
               SizedBox(
                 width: iconSize,
                 height: iconSize,
-                child: Image.asset(
-                  widget.data.image,
-                  fit: BoxFit.contain,
-                ),
+                child: widget.data.icon != null
+                    ? Icon(widget.data.icon,
+                        size: iconSize * 0.74, color: _brandGreen)
+                    : Image.asset(
+                        widget.data.image!,
+                        fit: BoxFit.contain,
+                      ),
               ),
               const SizedBox(height: 4),
               Text(

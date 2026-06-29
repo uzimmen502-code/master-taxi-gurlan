@@ -1253,6 +1253,119 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ══════════════════════════════════════
+    // MENING YAQINLARIM — Circle (Davra) dvigateli (MVP: sinfdoshlar)
+    // ══════════════════════════════════════
+    function circleUserId() {
+      return userDocIdFromPhoneToken();
+    }
+    function isCircleMember(circleId) {
+      let uid = circleUserId();
+      return uid != ''
+          && exists(/databases/$(database)/documents/circles/$(circleId)/members/$(uid));
+    }
+    function isCircleOwner(circleId) {
+      let uid = circleUserId();
+      return uid != ''
+          && get(/databases/$(database)/documents/circles/$(circleId)).data.ownerId == uid;
+    }
+
+    match /circles/{circleId} {
+      // Metadata (maktab/yil/sanoq) maxfiy emas — qidiruv/taklif uchun authed o'qiydi.
+      allow read: if isAuth();
+
+      // Yaratish — avto-qo'shilish: faqat classmates, yaratuvchi owner, sanoq=1.
+      allow create: if isAuth()
+          && request.resource.data.type == 'classmates'
+          && request.resource.data.ownerId == circleUserId()
+          && request.resource.data.memberCount == 1;
+
+      // Yangilash: owner meta'ni; har qanday a'zo faqat sanoq/vaqtni (join/leave).
+      allow update: if isAuth() && (
+            isCircleOwner(circleId)
+            || request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['memberCount', 'updatedAt', 'subgroupsEnabled'])
+          );
+
+      allow delete: if isCircleOwner(circleId) || isAdmin();
+
+      // ── A'zolar (userId = canonicalPhoneId) ──
+      match /members/{memberId} {
+        allow read: if memberId == circleUserId()
+            || isCircleMember(circleId)
+            || isAdmin();
+        // Faqat o'zini yozadi (avto-qo'shilish / profil yangilash).
+        allow create, update: if memberId == circleUserId()
+            && request.resource.data.userId == memberId;
+        allow delete: if memberId == circleUserId()
+            || isCircleOwner(circleId)
+            || isAdmin();
+      }
+
+      // ── Lenta / e'lon ──
+      match /posts/{postId} {
+        allow read: if isCircleMember(circleId) || isAdmin();
+        allow create: if isCircleMember(circleId)
+            && request.resource.data.authorId == circleUserId();
+        allow update: if resource.data.authorId == circleUserId()
+            || isCircleOwner(circleId);
+        allow delete: if resource.data.authorId == circleUserId()
+            || isCircleOwner(circleId)
+            || isAdmin();
+      }
+
+      // ── Uchrashuvlar (RSVP: attendees) ──
+      match /events/{eventId} {
+        allow read: if isCircleMember(circleId) || isAdmin();
+        allow create: if isCircleMember(circleId)
+            && request.resource.data.createdBy == circleUserId();
+        // Yaratuvchi/owner — to'liq; har qanday a'zo — faqat o'z RSVP'sini.
+        allow update: if isCircleMember(circleId) && (
+              resource.data.createdBy == circleUserId()
+              || isCircleOwner(circleId)
+              || request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['attendees'])
+            );
+        allow delete: if resource.data.createdBy == circleUserId()
+            || isCircleOwner(circleId)
+            || isAdmin();
+      }
+
+      // ── Fotoalbom ──
+      match /album/{photoId} {
+        allow read: if isCircleMember(circleId) || isAdmin();
+        allow create: if isCircleMember(circleId)
+            && request.resource.data.uploaderId == circleUserId();
+        allow update: if false;
+        allow delete: if resource.data.uploaderId == circleUserId()
+            || isCircleOwner(circleId)
+            || isAdmin();
+      }
+
+      // ── Guruh chat ──
+      match /chat/{msgId} {
+        allow read: if isCircleMember(circleId) || isAdmin();
+        allow create: if isCircleMember(circleId)
+            && request.resource.data.senderId == circleUserId();
+        allow update: if false;
+        allow delete: if resource.data.senderId == circleUserId()
+            || isCircleOwner(circleId)
+            || isAdmin();
+      }
+
+      // ── Kichik-guruhlar (sinf) — keyingi faza uchun rezerv ──
+      match /subgroups/{subId} {
+        allow read: if isCircleMember(circleId) || isAdmin();
+        allow write: if isCircleOwner(circleId) || isAdmin();
+      }
+    }
+
+    // Shikoyatlar — har qanday authed yaratadi; faqat admin ko'radi/hal qiladi.
+    match /reports/{reportId} {
+      allow create: if isAuth();
+      allow read, update, delete: if isAdmin();
+    }
+
     match /requests/{id} {
       allow read, create, update: if true;
       allow delete: if false;

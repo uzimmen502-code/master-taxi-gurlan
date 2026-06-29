@@ -9558,6 +9558,38 @@ exports.undoTreeOperation = functions.https.onCall(async (data, context) => {
       await db.collection('tree_link_invites').doc(d.inviteId).set(
         { status: 'undone' }, { merge: true });
     }
+  } else if (h.type === 'edit') {
+    // Tahrirni avvalgi qiymatlarga qaytarish.
+    const before = d.before || {};
+    batch.set(db.collection('tree_persons').doc(d.nodeId), {
+      ...before,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await bump();
+    // Egasining relatives/people'siga ham qaytarish.
+    if (d.ownerUid) {
+      const relRef = db.collection('relatives').doc(d.ownerUid)
+        .collection('people').doc(d.nodeId);
+      const relSnap = await relRef.get();
+      if (relSnap.exists) {
+        batch.set(relRef, {
+          ...before,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        await bump();
+      }
+    }
+    await flush();
+  } else if (h.type === 'create') {
+    // Yaratilgan tugunni o'chirish.
+    batch.delete(db.collection('tree_persons').doc(d.nodeId));
+    await bump();
+    if (d.ownerUid) {
+      batch.delete(db.collection('relatives').doc(d.ownerUid)
+        .collection('people').doc(d.nodeId));
+      await bump();
+    }
+    await flush();
   } else {
     throw new functions.https.HttpsError(
       'failed-precondition', 'bu amal qaytarib bolmaydi');
@@ -9570,4 +9602,116 @@ exports.undoTreeOperation = functions.https.onCall(async (data, context) => {
   }, { merge: true });
 
   return { ok: true };
+});
+
+/// Daraxt tugunini yaratish/tahrirlash (umumiy tahrir, Faza 5).
+/// tree_persons — struktura uchun yagona manba; egasining relatives/people'si
+/// ham sinxron tutiladi (mirror bilan zid kelmasligi uchun).
+exports.saveTreeNode = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const me = await ensureTreeForUid(uid);
+  const myComp = me.componentId;
+
+  const nodeId = String(data.nodeId || '');
+  const norm = (x) => {
+    const s = String(x || '');
+    return s && s !== nodeId ? s : null;
+  };
+  const fields = {
+    fullName: String(data.fullName || '').trim(),
+    gender: String(data.gender || ''),
+    photoUrl: String(data.photoUrl || ''),
+    photoPath: String(data.photoPath || ''),
+    birthDate: (data.birthDateMs != null && data.birthDateMs !== '')
+      ? admin.firestore.Timestamp.fromMillis(Number(data.birthDateMs))
+      : null,
+    fatherId: norm(data.fatherId),
+    motherId: norm(data.motherId),
+    spouseId: norm(data.spouseId),
+  };
+  if (!fields.fullName) {
+    throw new functions.https.HttpsError('invalid-argument', 'ism kerak');
+  }
+
+  // YARATISH
+  if (!nodeId) {
+    const ref = db.collection('tree_persons').doc();
+    await ref.set({
+      ...fields,
+      claimedBy: null,
+      ownerUid: uid,
+      componentId: myComp,
+      createdBy: uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    // Yaratuvchining ro'yxatida ham ko'rinsin.
+    await db.collection('relatives').doc(uid).collection('people').doc(ref.id)
+      .set({
+        ...fields,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    await writeTreeHistory({
+      type: 'create',
+      componentId: myComp,
+      actorUid: uid,
+      summary: `«${fields.fullName}» қўшилди`,
+      data: { nodeId: ref.id, ownerUid: uid },
+    });
+    return { ok: true, nodeId: ref.id };
+  }
+
+  // TAHRIRLASH
+  const ref = db.collection('tree_persons').doc(nodeId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'tugun yoq');
+  }
+  const node = snap.data();
+  const allowed = node.componentId === myComp
+    || node.ownerUid === uid
+    || node.claimedBy === uid;
+  if (!allowed) {
+    throw new functions.https.HttpsError('permission-denied', 'ruxsat yoq');
+  }
+
+  const before = {
+    fullName: node.fullName || '',
+    gender: node.gender || '',
+    photoUrl: node.photoUrl || '',
+    photoPath: node.photoPath || '',
+    birthDate: node.birthDate || null,
+    fatherId: node.fatherId || null,
+    motherId: node.motherId || null,
+    spouseId: node.spouseId || null,
+  };
+
+  await ref.set({
+    ...fields,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  // Egasining relatives/people'si bo'lsa — sinxron (clobber bo'lmasligi uchun).
+  if (node.ownerUid) {
+    const relRef = db.collection('relatives').doc(node.ownerUid)
+      .collection('people').doc(nodeId);
+    const relSnap = await relRef.get();
+    if (relSnap.exists) {
+      await relRef.set({
+        ...fields,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }
+
+  await writeTreeHistory({
+    type: 'edit',
+    componentId: node.componentId || myComp,
+    actorUid: uid,
+    summary: `«${fields.fullName}» таҳрирланди`,
+    data: { nodeId, ownerUid: node.ownerUid || null, before },
+  });
+
+  return { ok: true, nodeId };
 });

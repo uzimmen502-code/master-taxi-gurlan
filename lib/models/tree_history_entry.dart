@@ -20,7 +20,9 @@ class TreeHistoryEntry {
   final bool undone;
   final DateTime? createdAt;
 
-  bool get canUndo => !undone && (type == 'link' || type == 'merge');
+  static const _undoable = {'link', 'merge', 'edit', 'create'};
+
+  bool get canUndo => !undone && _undoable.contains(type);
 
   String get typeLabel {
     switch (type) {
@@ -28,6 +30,10 @@ class TreeHistoryEntry {
         return '🔗 Улаш';
       case 'merge':
         return '🔁 Бирлаштириш';
+      case 'edit':
+        return '✏️ Таҳрир';
+      case 'create':
+        return '➕ Қўшилди';
       default:
         return type;
     }

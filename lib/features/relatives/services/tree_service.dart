@@ -50,6 +50,33 @@ class TreeService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// Daraxt tugunini yaratish/tahrirlash (umumiy tahrir). { ok, nodeId }
+  /// [nodeId] bo'sh bo'lsa — yangi tugun yaratiladi.
+  static Future<Map<String, dynamic>> saveNode({
+    String nodeId = '',
+    required String fullName,
+    String gender = '',
+    String photoUrl = '',
+    String photoPath = '',
+    DateTime? birthDate,
+    String? fatherId,
+    String? motherId,
+    String? spouseId,
+  }) async {
+    final res = await _fn.httpsCallable('saveTreeNode').call({
+      'nodeId': nodeId,
+      'fullName': fullName,
+      'gender': gender,
+      'photoUrl': photoUrl,
+      'photoPath': photoPath,
+      'birthDateMs': birthDate?.millisecondsSinceEpoch,
+      'fatherId': fatherId,
+      'motherId': motherId,
+      'spouseId': spouseId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   /// Tarixdagi amalni qaytarish (Undo). { ok }
   static Future<Map<String, dynamic>> undoOperation(String historyId) async {
     final res = await _fn.httpsCallable('undoTreeOperation').call({

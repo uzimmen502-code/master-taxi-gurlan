@@ -9,6 +9,7 @@ import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
 import '../services/tree_service.dart';
 import 'family_tree_view.dart';
+import 'tree_node_edit_screen.dart';
 
 /// 🌳 Nasab daraxti — global komponentdan o'qiydi (ulangan oila tarmog'i),
 /// tugunni telefon orqali ulash + kelgan takliflar.
@@ -32,6 +33,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   static const _accent = Color(0xFF6A4C93);
   final _repo = TreeRepository();
   final _relRepo = RelativesRepository();
+
+  /// Eng so'nggi komponent tugunlari (tahrirlash dropdownlari uchun).
+  List<TreePerson> _comp = const [];
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +114,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                 final people = renderById.values.toList(growable: false);
                 final compById = {for (final n in comp) n.id: n};
                 final dupGroups = _findDuplicates(comp);
+                _comp = comp;
 
                 return Column(
                   children: [
@@ -296,6 +301,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   : (isMine ? const Text('Сизнинг рўйхатингиз') : null),
             ),
             const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.account_tree_outlined, color: _accent),
+              title: const Text('Таҳрирлаш (умумий тармоқ)'),
+              subtitle: const Text('Исм, сана, ота/она/турмуш ўртоғи'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _editNode(node);
+              },
+            ),
             if (isMine && !isSelf && !node.isClaimed)
               ListTile(
                 leading: const Icon(Icons.link, color: _accent),
@@ -308,20 +322,28 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               ),
             if (isMine && widget.onEditOwnNode != null)
               ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Таҳрирлаш'),
+                leading: const Icon(Icons.edit_note_outlined),
+                title: const Text('Шахсий маълумотлар'),
+                subtitle: const Text('Телефон, манзил, изоҳ, фотоальбом'),
                 onTap: () {
                   Navigator.pop(ctx);
                   widget.onEditOwnNode!(node.id);
                 },
               ),
-            if (!isMine && !node.isClaimed)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Бу тугун бошқа аъзоники — кўриш учун.',
-                    style: TextStyle(color: Colors.grey)),
-              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _editNode(TreePerson node) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TreeNodeEditScreen(
+          userId: widget.userId,
+          componentNodes: _comp,
+          existing: node,
         ),
       ),
     );

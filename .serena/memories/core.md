@@ -1,6 +1,6 @@
-# master_taxi_gurlan (brand: AVA Gurlan)
+# ava_gurlan (brand: AVA Gurlan)
 
-Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bread) with Firebase backend. Brand name shown is "AVA Gurlan"; pubspec `name: master_taxi_gurlan` is a technical id and must NOT change.
+Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bread) with Firebase backend. Brand name shown is "AVA Gurlan"; pubspec `name: ava_gurlan` (renamed from `master_taxi_gurlan` 2026-06). NOTE: the Windows folder is still `C:\projects\master_taxi_gurlan` and Serena project_name stays `master_taxi_gurlan`; Android applicationId is `uz.ava.gurlan`.
 
 ## Source map
 - `lib/` — Flutter app (Dart)

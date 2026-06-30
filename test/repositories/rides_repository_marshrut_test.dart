@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:master_taxi_gurlan/repositories/rides_repository.dart';
+import 'package:ava_gurlan/repositories/rides_repository.dart';
 
 void main() {
   group('RidesRepository.normalizeMarshrutPhone', () {

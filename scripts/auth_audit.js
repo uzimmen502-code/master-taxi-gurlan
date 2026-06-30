@@ -2,7 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const PROJECTS = [
-  { name: 'master_taxi_gurlan',  pkg: 'uz.ava.gurlan'  },
+  { name: 'ava_gurlan',  pkg: 'uz.ava.gurlan'  },
 ];
 
 const ROOT = path.join(__dirname, '..');

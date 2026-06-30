@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:master_taxi_gurlan/core/passenger_cancel_block_rules.dart';
-import 'package:master_taxi_gurlan/core/passenger_cancel_rules_holder.dart';
+import 'package:ava_gurlan/core/passenger_cancel_block_rules.dart';
+import 'package:ava_gurlan/core/passenger_cancel_rules_holder.dart';
 
 void main() {
   setUpAll(() {

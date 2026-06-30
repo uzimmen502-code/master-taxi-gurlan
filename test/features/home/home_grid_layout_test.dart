@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:master_taxi_gurlan/features/home/home_grid_layout.dart';
-import 'package:master_taxi_gurlan/features/home/home_modules_catalog.dart';
-import 'package:master_taxi_gurlan/models/home_module.dart';
+import 'package:ava_gurlan/features/home/home_grid_layout.dart';
+import 'package:ava_gurlan/features/home/home_modules_catalog.dart';
+import 'package:ava_gurlan/models/home_module.dart';
 
 void main() {
   group('HomeGridLayout.buildLayout', () {

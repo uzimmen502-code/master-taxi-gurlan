@@ -1,0 +1,40 @@
+---
+description: Serena MCP doimiy yordamchi sifatida ishlatish qoidalari
+alwaysApply: true
+---
+
+# Serena — doimiy kod yordamchisi
+
+Serena MCP serveri `~/.cursor/mcp.json` da `--context ide --project C:/projects/master_taxi_gurlan`
+bilan ishga tushiriladi, shuning uchun loyiha **avtomatik faollashadi**.
+
+## Qoidalar
+
+- Foydalanuvchidan Serena'ni "faollashtirishni" SO'RAMA. U startda avtomatik faol.
+- Agar Serena tool'lari (masalan `find_symbol`, `get_symbols_overview`,
+  `search_for_pattern`, `find_referencing_symbols`) ishlamasa: bir marta
+  `activate_project` (`master_taxi_gurlan`) ni jimgina chaqir va davom et —
+  foydalanuvchiga yuk qilma.
+- Yangi sessiyada kod ustida ish boshlashdan oldin `core` xotirasini o'qi (graf
+  ildizi), undan kerakli domen/modul xotirasiga o't: `cloud_functions`,
+  `firestore_schema`, `settlement_ledger`, `modules/taxi`, `modules/commerce`,
+  `modules/social`, `modules/admin_panel`, `modules/jobs_ads_entertainment`,
+  `modules/foundation`, hamda `conventions`, `tech_stack`, `suggested_commands`,
+  `task_completion`, `memory_maintenance`.
+- CF qidirishda `index.js` ni varaqlama — `mem:cloud_functions` dan nomni top,
+  keyin `^exports.NOM` ni grep qilib o'sha funksiyaga sakra.
+- Kodni qidirish/o'qishda semantik tool'larni afzal ko'r (butun fayllarni
+  ko'r-ko'rona o'qishdan ko'ra symbol/reference qidiruvi).
+
+## Xotirani yangilab turish qoidasi (MAJBURIY)
+
+- **Yangi modul yoki yangi Cloud Function qo'shilsa** → tegishli xotirani darhol
+  yangila: yangi CF → `cloud_functions`; yangi collection/index/rule →
+  `firestore_schema`; yangi/o'zgargan modul → mos `modules/*`; kerak bo'lsa
+  `core` dagi havolani qo'sh. Foydalanuvchi so'ramasa ham o'zing qil.
+- **Biror narsa eskirsa** (masalan collection nomi o'zgarsa, CF o'chirilsa,
+  oqim o'zgarsa) → OGOH bo'l: ish davomida xotira bilan kod o'rtasida nomuvofiqlik
+  sezsang, kodni manba (source of truth) deb ol, eski xotira yozuvini tuzat va
+  bajarilishi shart bo'lgan boshqa ishlarni ham amalga oshir.
+- O'zgartirishlar mexanik bo'lsa (deprecation migratsiyalari va h.k.) line-level
+  detallarni yozma — faqat barqaror, qayta kashf qilish qiyin bo'lgan faktlarni saqla.

@@ -27,7 +27,8 @@ class RelativesScreen extends StatefulWidget {
   State<RelativesScreen> createState() => _RelativesScreenState();
 }
 
-class _RelativesScreenState extends State<RelativesScreen> {
+class _RelativesScreenState extends State<RelativesScreen>
+    with SingleTickerProviderStateMixin {
   final _repo = RelativesRepository();
   final _photo = RelativePhotoStorage();
   final _scheduler = RelativeReminderScheduler();
@@ -35,10 +36,26 @@ class _RelativesScreenState extends State<RelativesScreen> {
   List<RelativePerson> _people = const [];
   String? _reminderSig;
 
+  late final TabController _tab;
+
+  /// Tartib: 0 = Ro'yxat, 1 = Nasab daraxti, 2 = Sanalar.
+  static const int _treeTabIndex = 1;
+
   @override
   void initState() {
     super.initState();
+    _tab = TabController(length: 3, vsync: this)
+      ..addListener(() {
+        // FAB faqat kerakli tabda ko'rinishi uchun qayta chizamiz.
+        if (mounted) setState(() {});
+      });
     _loadPhone();
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPhone() async {
@@ -160,66 +177,75 @@ class _RelativesScreenState extends State<RelativesScreen> {
   @override
   Widget build(BuildContext context) {
     final phone = _phone;
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F4F8),
-        appBar: AppBar(
-          title: const Text('Қариндошларим'),
-          backgroundColor: RelativesScreen._accent,
-          foregroundColor: Colors.white,
-          actions: [
-            IconButton(
-              tooltip: 'Дарахт тарихи',
-              icon: const Icon(Icons.history),
-              onPressed: phone == null ? null : () => _openHistory(phone),
-            ),
-            IconButton(
-              tooltip: 'Сана / учрашув қўшиш',
-              icon: const Icon(Icons.event_available_outlined),
-              onPressed: _addEvent,
-            ),
-          ],
-          bottom: const TabBar(
-            isScrollable: true,
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(text: 'Рўйхат'),
-              Tab(text: '📅 Саналар'),
-              Tab(text: '🌳 Насаб дарахти'),
-            ],
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F4F8),
+      appBar: AppBar(
+        title: const Text('Қариндошларим'),
+        backgroundColor: RelativesScreen._accent,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Дарахт тарихи',
+            icon: const Icon(Icons.history),
+            onPressed: phone == null ? null : () => _openHistory(phone),
           ),
+          IconButton(
+            tooltip: 'Сана / учрашув қўшиш',
+            icon: const Icon(Icons.event_available_outlined),
+            onPressed: _addEvent,
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tab,
+          isScrollable: true,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withValues(alpha: 0.7),
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
+          tabs: const [
+            Tab(text: 'Рўйхат'),
+            Tab(text: '🌳 Насаб дарахти'),
+            Tab(text: '📅 Саналар'),
+          ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: RelativesScreen._accent,
-          foregroundColor: Colors.white,
-          onPressed: _add,
-          icon: const Icon(Icons.person_add_alt),
-          label: const Text('Қариндош'),
-        ),
-        body: phone == null
-            ? const Center(child: CircularProgressIndicator())
-            : StreamBuilder<List<RelativePerson>>(
-                stream: _repo.watchPeople(phone),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final people = snap.data ?? const <RelativePerson>[];
-                  _people = people;
-                  return TabBarView(
-                    children: [
-                      _listTab(people),
-                      _datesTab(people),
-                      FamilyTreeScreen(
-                        userId: phone,
-                        onEditOwnNode: _editById,
-                      ),
-                    ],
-                  );
-                },
-              ),
       ),
+      // FAB ("Қариндош") nasab daraxti tabida ko'rinmaydi — daraxt ro'yxatdan
+      // quriladi, bu yerda qo'shish chalkashtiradi.
+      floatingActionButton: _tab.index == _treeTabIndex
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: RelativesScreen._accent,
+              foregroundColor: Colors.white,
+              onPressed: _add,
+              icon: const Icon(Icons.person_add_alt),
+              label: const Text('Қариндош'),
+            ),
+      body: phone == null
+          ? const Center(child: CircularProgressIndicator())
+          : StreamBuilder<List<RelativePerson>>(
+              stream: _repo.watchPeople(phone),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final people = snap.data ?? const <RelativePerson>[];
+                _people = people;
+                return TabBarView(
+                  controller: _tab,
+                  children: [
+                    _listTab(people),
+                    FamilyTreeScreen(
+                      userId: phone,
+                      onEditOwnNode: _editById,
+                    ),
+                    _datesTab(people),
+                  ],
+                );
+              },
+            ),
     );
   }
 

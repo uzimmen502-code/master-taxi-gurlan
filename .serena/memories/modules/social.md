@@ -6,6 +6,7 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 ## Circles (generic engine: classmates/coursemates/colleagues)
 - `features/circles/` — `circle_screen.dart` (tabs: members/feed/events/album/chat), repo + controller. Firestore `circles/{id}` + subcollections members/posts/events/album/chat/subgroups (see schema). type ∈ classmates|coursemates|colleagues.
 - Pure Firestore (NO cloud functions); writes guarded by rules (self-write members, member-scoped). Auto-join logic for class circle by school+grad-year.
+- "My circles" list uses `collectionGroup('members') where userId == self` (`watchMyCircleIds`). CRITICAL: collectionGroup queries are NOT authorized by the nested `match /circles/{id}/members/{mid}` rule — they REQUIRE a top-level recursive rule `match /{path=**}/members/{memberId} { allow read: if resource.data.userId == circleUserId(); }`. Without it the list is empty (PERMISSION_DENIED) so circles look like they "disappear" after leaving the screen, even though membership persists. circleUserId() = phone digits from `request.auth.token.phone_number`.
 - GOTCHA: dialogs must dispose TextEditingController in try/finally (leak fixed in `_report`/`_createEvent`).
 
 ## Relatives (private, V1)

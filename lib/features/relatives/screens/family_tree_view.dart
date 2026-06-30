@@ -50,10 +50,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   String _sig = '';
 
   final _transform = TransformationController();
-  late final AnimationController _anim = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  );
+  late final AnimationController _anim;
   Animation<Matrix4>? _matrixAnim;
 
   Size _viewport = Size.zero;
@@ -63,6 +60,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   @override
   void initState() {
     super.initState();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
     _build();
   }
 
@@ -178,16 +179,32 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       return null;
     }
 
+    // Birlik qaysi ota-onaga ulanishini tanlash: HAR IKKALA ota-onasi daraxtda
+    // bo'lgan a'zo ustun (qon-farzand o'z ota-onasi yonida tursin, uylanib
+    // kelgan tomonga emas).
+    int parentScore(RelativePerson m) =>
+        (has(m.fatherId) ? 1 : 0) + (has(m.motherId) ? 1 : 0);
+
     for (final unit in _units) {
+      RelativePerson? best;
+      _Unit? bestPu;
+      var bestScore = -1;
       for (final m in unit.members) {
         final pid = primaryParentId(m);
         if (pid == null) continue;
         final pu = _unitOf[pid];
         if (pu == null || identical(pu, unit)) continue;
-        unit.parent = pu;
-        unit.anchorId = m.id;
-        pu.children.add(unit);
-        break;
+        final sc = parentScore(m);
+        if (sc > bestScore) {
+          best = m;
+          bestPu = pu;
+          bestScore = sc;
+        }
+      }
+      if (best != null) {
+        unit.parent = bestPu;
+        unit.anchorId = best.id;
+        bestPu!.children.add(unit);
       }
     }
 
@@ -214,41 +231,87 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       });
     }
 
-    final roots = _units.where((u) => u.parent == null).toList();
+    // ---- Tidy-tree joylashuv (kontur asosida — ustma-ustlik bo'lmaydi) ----
+    // Har bir shoxobchaning chap/o'ng kontu`ri (avlod bo'yicha chekka qirralar)
+    // kuzatilib, qo'shni shoxobcha bilan to'qnashsa butun shoxobcha o'ngga
+    // suriladi. Bu ixtiyoriy daraxt uchun ustma-ustlikni butunlay bartaraf etadi.
+    final placed = <_Unit>{};
 
-    // ---- Tidy-tree joylashuv (x), avlod (gen) chuqurlikdan ----
-    final visited = <_Unit>{};
-    double cursor = 0;
+    void contour(_Unit u, bool left, Map<int, double> out) {
+      final half = _unitWidth(u) / 2;
+      final edge = left ? u.centerX - half : u.centerX + half;
+      final d = u.gen;
+      final cur = out[d];
+      if (cur == null) {
+        out[d] = edge;
+      } else {
+        out[d] = left ? math.min(cur, edge) : math.max(cur, edge);
+      }
+      for (final c in u.children) {
+        contour(c, left, out);
+      }
+    }
 
-    double layout(_Unit u, int depth) {
-      if (!visited.add(u)) return u.centerX; // sikldan himoya
+    void shift(_Unit u, double dx) {
+      u.centerX += dx;
+      for (final c in u.children) {
+        shift(c, dx);
+      }
+    }
+
+    // `block` — allaqachon joylashtirilgan shoxobchalar(ning) o'ng konturi.
+    double packInto(_Unit u, Map<int, double> block, double gap) {
+      final lc = <int, double>{};
+      contour(u, true, lc);
+      var need = 0.0;
+      lc.forEach((d, leftEdge) {
+        final rc = block[d];
+        if (rc != null) {
+          final s = rc + gap - leftEdge;
+          if (s > need) need = s;
+        }
+      });
+      if (need > 0) shift(u, need);
+      final rcm = <int, double>{};
+      contour(u, false, rcm);
+      rcm.forEach((d, e) {
+        final cur = block[d];
+        block[d] = (cur == null) ? e : math.max(cur, e);
+      });
+      return need;
+    }
+
+    void layoutSub(_Unit u, int depth) {
+      if (!placed.add(u)) return; // sikldan himoya
       u.gen = depth;
       if (u.children.isEmpty) {
-        final w = _unitWidth(u);
-        u.centerX = cursor + w / 2;
-        cursor += w + _siblingGap;
-      } else {
-        var minC = double.infinity;
-        var maxC = -double.infinity;
-        for (final c in u.children) {
-          final cx = layout(c, depth + 1);
-          minC = math.min(minC, cx);
-          maxC = math.max(maxC, cx);
-        }
-        u.centerX = (minC + maxC) / 2;
-        final half = _unitWidth(u) / 2;
-        cursor = math.max(cursor, u.centerX + half + _siblingGap);
+        u.centerX = _unitWidth(u) / 2;
+        return;
       }
-      return u.centerX;
+      final right = <int, double>{};
+      for (final c in u.children) {
+        layoutSub(c, depth + 1);
+        packInto(c, right, _siblingGap);
+      }
+      u.centerX = (u.children.first.centerX + u.children.last.centerX) / 2;
     }
 
+    final roots = _units.where((u) => u.parent == null).toList()
+      ..sort((a, b) {
+        final c = a.members.first.fullName.compareTo(b.members.first.fullName);
+        return c != 0 ? c : a.members.first.id.compareTo(b.members.first.id);
+      });
+
+    final rootBlock = <int, double>{};
     for (final r in roots) {
-      layout(r, 0);
-      cursor += _rootGap;
+      layoutSub(r, 0);
+      packInto(r, rootBlock, _rootGap);
     }
-    // Sikl tufayli joylashmay qolganlar (kam ehtimol) — alohida ildiz sifatida.
+    // Sikl tufayli joylashmay qolganlar (kam ehtimol) — o'ng tomonga qo'shamiz.
     for (final u in _units) {
-      if (!visited.contains(u)) layout(u, 0);
+      if (placed.contains(u)) continue;
+      layoutSub(u, 0);
+      packInto(u, rootBlock, _rootGap);
     }
 
     // ---- Kartochka to'rtburchaklarini hisoblash + normalizatsiya ----
@@ -375,7 +438,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
 
   void _animateTo(Matrix4 target) {
     _matrixAnim = Matrix4Tween(begin: _transform.value, end: target)
-        .animate(CurvedAnimation(parent: _anim, curve: Curves.easeInOut));
+        .animate(CurvedAnimation(parent: _anim, curve: Curves.easeOutCubic));
     void tick() {
       _transform.value = _matrixAnim!.value;
       if (!_anim.isAnimating) {
@@ -433,6 +496,19 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _animateTo(m);
   }
 
+  /// Bitta bosishda: daraxtni qurilma kengligiga moslaydi (kenglik bo'yicha
+  /// to'ldiradi, tepaga tekislaydi — qolgani vertikal surishda ko'rinadi).
+  void _fitWidth() {
+    if (_viewport.isEmpty || _contentSize.isEmpty) return;
+    final scale =
+        (_viewport.width / _contentSize.width).clamp(_minScale, _maxScale);
+    final tx = (_viewport.width - _contentSize.width * scale) / 2;
+    final m = Matrix4.identity()
+      ..translateByDouble(tx, 0, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+    _animateTo(m);
+  }
+
   // ---- UI ----
 
   @override
@@ -455,33 +531,42 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
               Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
+                  onTap: _fitWidth,
                   onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
                   onDoubleTap: _handleDoubleTap,
                   child: InteractiveViewer(
                     transformationController: _transform,
                     constrained: false,
-                    boundaryMargin: const EdgeInsets.all(1200),
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    // Cheksiz chegara — erkin, silliq surish (rubber-band yo'q).
+                    boundaryMargin: const EdgeInsets.all(double.infinity),
                     minScale: _minScale,
                     maxScale: _maxScale,
-                    child: SizedBox(
-                      width: _contentSize.width,
-                      height: _contentSize.height,
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _EdgePainter(_segments, _sig.hashCode),
+                    child: RepaintBoundary(
+                      child: SizedBox(
+                        width: _contentSize.width,
+                        height: _contentSize.height,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: RepaintBoundary(
+                                child: CustomPaint(
+                                  painter:
+                                      _EdgePainter(_segments, _sig.hashCode),
+                                ),
+                              ),
                             ),
-                          ),
-                          for (final entry in _rectOf.entries)
-                            Positioned(
-                              left: entry.value.left,
-                              top: entry.value.top,
-                              width: _cardW,
-                              height: _cardH,
-                              child: _card(_byId[entry.key]!),
-                            ),
-                        ],
+                            for (final entry in _rectOf.entries)
+                              Positioned(
+                                left: entry.value.left,
+                                top: entry.value.top,
+                                width: _cardW,
+                                height: _cardH,
+                                child: _card(_byId[entry.key]!),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -508,7 +593,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '☝ Сурилади · 🤏 Кенгайтиринг · 👆👆 Якинлаштириш',
+                      '👆 Мослаш · ☝ Сурилади · 🤏 Кенгайтириш · 👆👆 Зум',
                       style:
                           TextStyle(fontSize: 11, color: Colors.grey.shade700),
                     ),

@@ -1279,6 +1279,14 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/circles/$(circleId)).data.ownerId == uid;
     }
 
+    // collectionGroup('members') so'rovi (watchMyCircleIds: a'zo bo'lgan
+    // davralarimni topish) FAQAT rekursiv wildcard orqali avtorizatsiya bo'ladi —
+    // ichki `/circles/{id}/members/{mid}` qoidasi collectionGroup'ga tatbiq
+    // etilmaydi. Faqat o'z a'zolik hujjatlarini (userId == o'zim) o'qishga ruxsat.
+    match /{path=**}/members/{memberId} {
+      allow read: if resource.data.userId == circleUserId();
+    }
+
     match /circles/{circleId} {
       // Metadata (maktab/yil/sanoq) maxfiy emas — qidiruv/taklif uchun authed o'qiydi.
       allow read: if isAuth();

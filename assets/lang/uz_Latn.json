@@ -1,5 +1,5 @@
 {
-  "app_name": "Master Taxi Gurlan",
+  "app_name": "AVA Gurlan",
 
   "ok": "OK",
   "cancel": "Bekor qilish",
@@ -638,14 +638,6 @@
   "gps_timeout_msg": "GPS javob bermadi. Ochiq joyga chiqib qayta urinib ko'ring.",
   "gps_lookup_failed_msg": "GPS aniqlanmadi. Ochiq joyga chiqib qayta urinib ko'ring.",
   "driver_mode_subtitle": "Ilk marotaba — avtomobilingiz haqida qisqa ma'lumot kiriting",
-  "local_driver_app_title": "Mahalliy haydovchi ilovasi",
-  "install_driver_app_body": "Haydovchi rejimini boshlash uchun Master Taxi Driver ilovasi telefoningizga o'rnatilishi kerak.",
-  "install_driver_step1_title": "APK faylni yuklab oling",
-  "install_driver_step1_sub": "Brauzerda yuklash boshlanadi",
-  "install_driver_step2_title": "Ilovani o'rnating",
-  "install_driver_step2_sub": "«Noma'lum manbalardan» o'rnatishga ruxsat bering",
-  "install_driver_step3_title": "Qaytib «Haydovchi» tugmasini bosing",
-  "install_driver_step3_sub": "Ilova avtomatik ochilib, ma'lumotlar to'ldiriladi",
   "download_apk": "APK yuklab olish",
   "select_from_mfy": "Qayerdan MFY ni tanlang",
   "select_to_mfy": "Qayerga MFY ni tanlang",

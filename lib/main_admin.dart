@@ -125,7 +125,7 @@ class AdminWebApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Master Taxi Gurlan — Admin',
+        title: 'AVA Gurlan — Admin',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.adminWeb,
         home: const _AuthGate(),

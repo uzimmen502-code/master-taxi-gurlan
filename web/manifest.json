@@ -1,11 +1,11 @@
 {
-    "name": "master_taxi_gurlan",
-    "short_name": "master_taxi_gurlan",
+    "name": "AVA Gurlan",
+    "short_name": "AVA Gurlan",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E65100",
     "theme_color": "#E65100",
-    "description": "Master Taxi Gurlan — фойдаланувчи иловаси",
+    "description": "AVA Gurlan — фойдаланувчи иловаси",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -239,7 +239,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
                 subtitle: const Text(
-                  'Master Taxi харид қилиши мумкин — оператор боғланади',
+                  'AVA Gurlan харид қилиши мумкин — оператор боғланади',
                   style: TextStyle(fontSize: 12),
                 ),
                 controlAffinity: ListTileControlAffinity.leading,

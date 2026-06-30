@@ -3,8 +3,6 @@ const path = require('path');
 
 const PROJECTS = [
   { name: 'master_taxi_gurlan',  pkg: 'com.example.master_taxi_gurlan'  },
-  { name: 'master_taxi_driver',  pkg: 'com.example.master_taxi_gurlan_driver' },
-  { name: 'master_taxi_courier', pkg: 'com.example.master_taxi_courier' },
 ];
 
 const ROOT = path.join(__dirname, '..');
@@ -99,8 +97,8 @@ console.log('📋 PRODUCTION CHECKLIST (qo\'lda tekshirish):');
 console.log('═'.repeat(60));
 const checklist = [
   'Firebase Console → Auth → Sign-in method → Phone → ENABLED',
-  'Har 3 app uchun SHA-1 Firebase Console\'da ro\'yxatdan o\'tgan',
-  'Har 3 app uchun SHA-256 Firebase Console\'da ro\'yxatdan o\'tgan',
+  'App uchun SHA-1 Firebase Console\'da ro\'yxatdan o\'tgan',
+  'App uchun SHA-256 Firebase Console\'da ro\'yxatdan o\'tgan',
   'Google Cloud → APIs → Identity Toolkit API → ENABLED',
   'Google Cloud → APIs → SafetyNet API → ENABLED',
   'Google Cloud → APIs → Play Integrity API → ENABLED',

@@ -456,7 +456,7 @@ class _Sidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Master Taxi',
+                Text('AVA Gurlan',
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,

@@ -28,7 +28,7 @@ class BackgroundGpsService {
         autoStart:       false,
         isForegroundMode: true,
         notificationChannelId: 'gps_channel',
-        initialNotificationTitle: 'Master Taxi',
+        initialNotificationTitle: 'AVA Gurlan',
         initialNotificationContent: '🟢 GPS фаол — йўловчиларга кўринасиз',
         foregroundServiceNotificationId: 888,
       ),
@@ -135,7 +135,7 @@ void onStart(ServiceInstance service) async {
       // Notification янгилаш
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(
-          title: 'Master Taxi',
+          title: 'AVA Gurlan',
           content: '🟢 GPS фаол — ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}',
         );
       }

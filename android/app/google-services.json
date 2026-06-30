@@ -7,47 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:67136747215:android:8a6f08754d1b8558e7e9ba",
-        "android_client_info": {
-          "package_name": "com.example.master_taxi_courier"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyANkG7oj7uWAc06euZne8fv3YjJmt_pyR4"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:67136747215:android:0de8f5dae585a5b6e7e9ba",
         "android_client_info": {
           "package_name": "com.example.master_taxi_gurlan"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyANkG7oj7uWAc06euZne8fv3YjJmt_pyR4"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:67136747215:android:488317b889a7142ee7e9ba",
-        "android_client_info": {
-          "package_name": "com.example.master_taxi_gurlan_driver"
         }
       },
       "oauth_client": [],

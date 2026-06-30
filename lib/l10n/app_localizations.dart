@@ -53,7 +53,7 @@ class AppLocalizations {
   // ===== DEFAULT МАТНЛАР (файл бўлмаса ишлатилади) =====
   static const Map<String, String> _defaultStrings = {
     // Асосий
-    'app_name': 'Master Taxi Gurlan',
+    'app_name': 'AVA Gurlan',
     'ok': 'OK',
     'cancel': 'Бекор қилиш',
     'save': 'Сақлаш',

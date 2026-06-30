@@ -228,7 +228,7 @@ class _MyAppState extends State<MyApp> {
             localeResolutionCallback: LocaleUtils.localeResolutionCallback,
             navigatorKey: MyApp.navigatorKey,
             debugShowCheckedModeBanner: false,
-            title: 'Master Taxi',
+            title: 'AVA Gurlan',
             theme: AppTheme.light,
             home: !widget.languageSelected
                 ? const LanguageSelectScreen()

@@ -1,5 +1,5 @@
 {
-  "app_name": "Мастер Такси Гурлан",
+  "app_name": "AVA Gurlan",
 
   "ok": "ОК",
   "cancel": "Отмена",
@@ -638,14 +638,6 @@
   "gps_timeout_msg": "GPS не ответил. Выйдите на открытое место и попробуйте снова.",
   "gps_lookup_failed_msg": "GPS не определён. Выйдите на открытое место и попробуйте снова.",
   "driver_mode_subtitle": "В первый раз — кратко укажите данные автомобиля",
-  "local_driver_app_title": "Приложение местного водителя",
-  "install_driver_app_body": "Для режима водителя установите приложение Master Taxi Driver.",
-  "install_driver_step1_title": "Скачайте APK",
-  "install_driver_step1_sub": "Загрузка начнётся в браузере",
-  "install_driver_step2_title": "Установите приложение",
-  "install_driver_step2_sub": "Разрешите установку из неизвестных источников",
-  "install_driver_step3_title": "Снова нажмите «Водитель»",
-  "install_driver_step3_sub": "Приложение откроется и заполнит данные",
   "download_apk": "Скачать APK",
   "select_from_mfy": "Выберите МФЙ «Откуда»",
   "select_to_mfy": "Выберите МФЙ «Куда»",

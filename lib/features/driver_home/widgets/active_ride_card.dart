@@ -49,7 +49,7 @@ class ActiveRideCard extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: onComplete,
             icon: const Icon(Icons.check_circle, size: 18),
-            label: const Text('РЎРђР¤РђР РќР ЯКУНЛАШ'),
+            label: const Text('САФАРНИ ЯКУНЛАШ'),
             style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
                 foregroundColor: Colors.white,

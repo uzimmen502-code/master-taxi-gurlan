@@ -7,7 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 
 /// Qidiruv natijasidagi bitta marshrut haydovchisi kartochkasi.
 ///
-/// "Р§РђТљРР РРЁ" tugmasi bosilganda [onCall] chaqiriladi.
+/// "ЧАҚИРИШ" tugmasi bosilganda [onCall] chaqiriladi.
 class ScheduleCard extends StatelessWidget {
   const ScheduleCard({
     super.key,

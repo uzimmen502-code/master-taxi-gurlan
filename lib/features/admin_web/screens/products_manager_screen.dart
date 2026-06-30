@@ -1731,7 +1731,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         const SnackBar(
           backgroundColor: Colors.orange,
           content: Text(
-              'РС‡РєРё ID топилмади — диалогни ёпиб, «Янги нон»ни қайта очинг.'),
+              'Ички ID топилмади — диалогни ёпиб, «Янги нон»ни қайта очинг.'),
         ),
       );
       return;

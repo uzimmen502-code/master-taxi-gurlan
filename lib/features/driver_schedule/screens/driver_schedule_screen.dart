@@ -219,7 +219,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('РС€РіР° чиқиш'),
+        title: const Text('Ишга чиқиш'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -242,14 +242,14 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             children: [
               _HeaderCard(controller: c),
               const SizedBox(height: 10),
-              // Р™РЋРќРђР›РРЁ — фақат marshrut/intercity учун. Маҳаллий такси
+              // ЙЎНАЛИШ — фақат marshrut/intercity учун. Маҳаллий такси
               // (alone) мижоз буюртмаси бўйича ишлайди, ўз йўналишини
               // белгиламайди — шунинг учун бу бўлим кўрсатилмайди.
               if (!c.isAlone) ...[
                 Row(children: [
                   const Icon(Icons.route, color: AppColors.primary, size: 20),
                   const SizedBox(width: 8),
-                  const Text('Р™РЋРќРђР›РРЁ',
+                  const Text('ЙЎНАЛИШ',
                       style: TextStyle(
                           fontSize: AppText.titleSmall,
                           fontWeight: FontWeight.bold,
@@ -306,7 +306,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 ],
               ],
               if (c.isAlone) ...[
-                _sectionTitle('🕐 РС€ вақти'),
+                _sectionTitle('🕐 Иш вақти'),
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(
@@ -333,7 +333,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline, size: 22),
                   label: Text(
-                    c.isSaving ? 'Сақланмоқда...' : 'РРЁР“Рђ Р§РТљРРЁРќР РўРђРЎР”РТљР›РђР™РњРђРќ',
+                    c.isSaving ? 'Сақланмоқда...' : 'ИШГА ЧИҚИШНИ ТАСДИҚЛАЙМАН',
                     style: const TextStyle(
                         fontSize: 14, fontWeight: FontWeight.bold),
                   ),
@@ -347,7 +347,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
               ),
               const SizedBox(height: 12),
               Center(
-                  child: Text('РС€ санаси ярим тунда автоматик ёпилади',
+                  child: Text('Иш санаси ярим тунда автоматик ёпилади',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade400))),
             ],
@@ -539,7 +539,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: BorderRadius.circular(8)),
-          child: Text('РРҐРўРРЃР РР™',
+          child: Text('ИХТИЁРИЙ',
               style: TextStyle(
                   fontSize: AppText.labelTiny,
                   color: Colors.grey.shade600,

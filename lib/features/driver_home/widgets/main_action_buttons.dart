@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// "РРЁРќР БОШЛАШ" ва "РРЁРќР РўРЈР“РђРўРРЁ" тугмалари.
+/// "ИШНИ БОШЛАШ" ва "ИШНИ ТУГАТИШ" тугмалари.
 class MainActionButtons extends StatelessWidget {
   const MainActionButtons({
     super.key,
@@ -42,7 +42,7 @@ class MainActionButtons extends StatelessWidget {
             Icon(isOnline ? Icons.check_circle : Icons.play_circle_fill,
                 color: Colors.white, size: 28),
             const SizedBox(height: 6),
-            Text(isOnline ? 'РРЁ Р‘РћРЁР›РђРќР”Р' : 'РРЁРќР БОШЛАШ',
+            Text(isOnline ? 'ИШ БОШЛАНДИ' : 'ИШНИ БОШЛАШ',
                 style: const TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,
@@ -76,7 +76,7 @@ class MainActionButtons extends StatelessWidget {
                 color: hasScheduleToday ? Colors.white : Colors.grey.shade600,
                 size: 28),
             const SizedBox(height: 6),
-            Text(isOnline ? 'РРЁРќР РўРЈР“РђРўРРЁ' : 'РРЁ РўРЈР“РђР”Р',
+            Text(isOnline ? 'ИШНИ ТУГАТИШ' : 'ИШ ТУГАДИ',
                 style: TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,

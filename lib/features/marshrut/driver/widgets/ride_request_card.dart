@@ -4,7 +4,7 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Driver panelidagi pending buyurtma karta'i — qisqacha ma'lumot va "РљРЋР РРЁ" tugmasi.
+/// Driver panelidagi pending buyurtma karta'i — qisqacha ma'lumot va "КЎРИШ" tugmasi.
 class RideRequestCard extends StatelessWidget {
   const RideRequestCard({
     super.key,

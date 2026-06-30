@@ -319,7 +319,7 @@ class _ResetTaxiDriversRegistryTileState
               )
             : TextButton(
                 onPressed: _runReset,
-                child: const Text('РС€РіР° тушириш'),
+                child: const Text('Ишга тушириш'),
               ),
       ),
     );

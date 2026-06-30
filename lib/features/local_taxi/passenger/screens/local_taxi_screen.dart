@@ -417,7 +417,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     await context.read<LocalTaxiController>().removeSavedPlaceByName(name);
   }
 
-  // ─── Ҳайдовчи режими (РР§РљР панель) ─────────────────────────────────
+  // ─── Ҳайдовчи режими (ИЧКИ панель) ─────────────────────────────────
   //
   // Маҳаллий такси ҳайдовчи режими шу илованинг ўзида юритилади (ташқи
   // `master_taxi_driver` иловаси кераксиз):
@@ -541,7 +541,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       }
     }
 
-    // ─── Ҳайдовчи панели (РР§РљР) ─────────────────────────────────────
+    // ─── Ҳайдовчи панели (ИЧКИ) ─────────────────────────────────────
     // Веб GPS/реал-вақтни тўлиқ қўлламайди — фақат мобилда.
     if (kIsWeb) {
       if (!mounted) return;

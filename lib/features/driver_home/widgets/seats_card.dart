@@ -43,7 +43,7 @@ class SeatsCard extends StatelessWidget {
             children: [
               Text(
                 isFull
-                    ? 'БЎШ ЖОЙ ТљРћР›РњРђР”Р — ҲАРАКАТ БОШЛАНГ!'
+                    ? 'БЎШ ЖОЙ ҚОЛМАДИ — ҲАРАКАТ БОШЛАНГ!'
                     : '$seatsLeft та жой бўш',
                 style: TextStyle(
                   fontSize: AppText.bodyMedium,

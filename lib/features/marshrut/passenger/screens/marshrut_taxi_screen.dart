@@ -34,7 +34,7 @@ import 'marshrut_waiting_screen.dart';
 /// Yo'lovchi marshrut taksi qidirayotgan ekran.
 ///
 /// Ko'rsatadi: MFY tanlash, qidiruv, natijalar (GPS faqat masofa filtri uchun, banner yo'q).
-/// natijalar ro'yxati va "Р§РђТљРР РРЁ" tugmasi marshrut waiting flow'iga ulaydi.
+/// natijalar ro'yxati va "ЧАҚИРИШ" tugmasi marshrut waiting flow'iga ulaydi.
 class MarshrutTaxiScreen extends StatelessWidget {
   const MarshrutTaxiScreen({super.key});
 

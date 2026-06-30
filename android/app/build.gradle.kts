@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.master_taxi_gurlan"
+    namespace = "uz.ava.gurlan"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -36,7 +36,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.master_taxi_gurlan"
+        applicationId = "uz.ava.gurlan"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

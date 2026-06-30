@@ -1,4 +1,4 @@
-package com.example.master_taxi_gurlan
+package uz.ava.gurlan
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -5,7 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
 
-/// РўР°СЂРёС… СЂСћР№С…Р°С‚РёРґР°РіРё Р±РёС‚С‚Р° Р±СѓСЋСЂС‚РјР° РєР°СЂС‚Р°СЃРё.
+/// Тарих рўйхатидаги битта буюртма картаси.
 class BreadHistoryCard extends StatelessWidget {
   const BreadHistoryCard({super.key, required this.order});
 
@@ -64,13 +64,13 @@ class BreadHistoryCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Text('рџ«“', style: TextStyle(fontSize: 18)),
+          const Text('🫓', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               order.items
                   .take(2)
-                  .map((i) => '${i.name} Г— ${i.count}')
+                  .map((i) => '${i.name} × ${i.count}')
                   .join(', '),
               style:
                   const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
@@ -106,7 +106,7 @@ class BreadHistoryCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${formatPrice(order.total)} СЃСћРј',
+            '${formatPrice(order.total)} сўм',
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

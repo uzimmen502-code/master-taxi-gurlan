@@ -5,9 +5,9 @@ import '../../../../utils/gurlan_places.dart';
 
 /// MFY tanlash uchun matn maydoni + suggestions dropdown.
 ///
-/// `value` вЂ” joriy tanlangan MFY (placeholder o'rniga ko'rsatiladi).
-/// `show` вЂ” dropdown ko'rinishini boshqaradigan bayroq.
-/// [recentPlaces] вЂ” SharedPreferences dan oxirgi MFY lar (tavsiya).
+/// `value` — joriy tanlangan MFY (placeholder o'rniga ko'rsatiladi).
+/// `show` — dropdown ko'rinishini boshqaradigan bayroq.
+/// [recentPlaces] — SharedPreferences dan oxirgi MFY lar (tavsiya).
 class MfyDropdown extends StatelessWidget {
   const MfyDropdown({
     super.key,

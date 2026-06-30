@@ -66,7 +66,7 @@ class ScheduleCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold)),
-            Text('рџљ— ${s.car} В· ${s.plate}',
+            Text('🚗 ${s.car} · ${s.plate}',
                 style: TextStyle(
                     fontSize: AppText.bodySmall,
                     color: Colors.grey.shade500)),
@@ -97,7 +97,7 @@ class ScheduleCard extends StatelessWidget {
           const SizedBox(width: 4),
           Expanded(
               child: Text(
-            '${s.from} в†’ ${s.to}',
+            '${s.from} → ${s.to}',
             style: TextStyle(
                 fontSize: AppText.bodySmall, color: Colors.grey.shade600),
             maxLines: 1,
@@ -136,7 +136,7 @@ class ScheduleCard extends StatelessWidget {
                       color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8)),
                   child: Text(
-                      'рџ’° ${context.tr('price_sum_short').replaceAll('{price}', '${s.price}')}',
+                      '💰 ${context.tr('price_sum_short').replaceAll('{price}', '${s.price}')}',
                       style: const TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w600,

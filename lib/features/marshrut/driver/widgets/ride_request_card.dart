@@ -4,7 +4,7 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Driver panelidagi pending buyurtma karta'i вЂ” qisqacha ma'lumot va "РљРЋР РРЁ" tugmasi.
+/// Driver panelidagi pending buyurtma karta'i — qisqacha ma'lumot va "РљРЋР РРЁ" tugmasi.
 class RideRequestCard extends StatelessWidget {
   const RideRequestCard({
     super.key,
@@ -32,18 +32,18 @@ class RideRequestCard extends StatelessWidget {
       child: Row(children: [
         Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('рџ“Ќ ${ride.pickupMfy}',
+          Text('📍 ${ride.pickupMfy}',
               style: const TextStyle(
                   fontSize: AppText.bodyMedium, fontWeight: FontWeight.bold)),
           if (ride.fromAddr.isNotEmpty)
-            Text('рџЏ  ${ride.fromAddr}',
+            Text('🏠 ${ride.fromAddr}',
                 style: TextStyle(
                     fontSize: AppText.labelSmall,
                     color: Colors.grey.shade500)),
-          Text('рџЏЃ ${ride.dropoffMfy}',
+          Text('🏁 ${ride.dropoffMfy}',
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade500)),
-          Text('рџ“ћ ${ride.userPhone}',
+          Text('📞 ${ride.userPhone}',
               style: TextStyle(
                   fontSize: AppText.labelSmall, color: Colors.grey.shade400)),
         ])),

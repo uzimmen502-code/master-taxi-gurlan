@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// Р‘СћС€ СћСЂРёРЅ РјРёТ›РґРѕСЂРё РєР°СЂС‚Р°СЃРё вЂ” +/- С‚СѓРіРјР°Р»Р°СЂРё Р±РёР»Р°РЅ.
+/// Бўш ўрин миқдори картаси — +/- тугмалари билан.
 class SeatsCard extends StatelessWidget {
   const SeatsCard({
     super.key,
@@ -35,7 +35,7 @@ class SeatsCard extends StatelessWidget {
         ],
       ),
       child: Row(children: [
-        Text(isFull ? 'рџљ«' : 'рџ’є', style: const TextStyle(fontSize: 28)),
+        Text(isFull ? '🚫' : '💺', style: const TextStyle(fontSize: 28)),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -43,15 +43,15 @@ class SeatsCard extends StatelessWidget {
             children: [
               Text(
                 isFull
-                    ? 'Р‘РЋРЁ Р–РћР™ ТљРћР›РњРђР”Р вЂ” ТІРђР РђРљРђРў Р‘РћРЁР›РђРќР“!'
-                    : '$seatsLeft С‚Р° Р¶РѕР№ Р±СћС€',
+                    ? 'БЎШ ЖОЙ ТљРћР›РњРђР”Р — ҲАРАКАТ БОШЛАНГ!'
+                    : '$seatsLeft та жой бўш',
                 style: TextStyle(
                   fontSize: AppText.bodyMedium,
                   fontWeight: FontWeight.bold,
                   color: isFull ? _red : _green,
                 ),
               ),
-              Text('Р–Р°РјРё: $totalSeats С‚Р° СћСЂРёРЅ',
+              Text('Жами: $totalSeats та ўрин',
                   style: TextStyle(
                       fontSize: AppText.labelSmall,
                       color: Colors.grey.shade500)),

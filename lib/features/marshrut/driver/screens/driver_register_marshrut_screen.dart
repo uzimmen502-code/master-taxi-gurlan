@@ -427,7 +427,7 @@ class _DriverRegisterMarshrutViewState
   }
 
   Widget _priceSection(MarshrutRegisterController c) {
-    final titleWidget = _sectionTitle('Р‘РёСЂ СћСЂРёРЅ РЅР°СЂС…Рё');
+    final titleWidget = _sectionTitle('Бир ўрин нархи');
 
     if (c.priceLoading) {
       return Column(
@@ -466,7 +466,7 @@ class _DriverRegisterMarshrutViewState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${formatPrice(c.existingRoutePrice ?? 0)} СЃСћРј',
+                        '${formatPrice(c.existingRoutePrice ?? 0)} сўм',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -474,7 +474,7 @@ class _DriverRegisterMarshrutViewState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Р‘Сѓ Р№СћРЅР°Р»РёС€ РЅР°СЂС…Рё Р±РµР»РіРёР»Р°РЅРіР°РЅ вЂ” С„Р°Т›Р°С‚ Р°РґРјРёРЅ СћР·РіР°СЂС‚РёСЂР°РґРё',
+                        'Бу йўналиш нархи белгиланган — фақат админ ўзгартиради',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -496,8 +496,8 @@ class _DriverRegisterMarshrutViewState
         titleWidget,
         const SizedBox(height: 4),
         Text(
-          'РЎРёР· Р±Сѓ Р№СћРЅР°Р»РёС€РґР° Р±РёСЂРёРЅС‡Рё ТіР°Р№РґРѕРІС‡РёСЃРёР· вЂ” Р±РёСЂ СћСЂРёРЅ РЅР°СЂС…РёРЅРё Р±РµР»РіРёР»Р°РЅРі. '
-          'РљРµР№РёРЅРіРё ТіР°Р№РґРѕРІС‡РёР»Р°СЂ СѓС‡СѓРЅ С€Сѓ РЅР°СЂС… Р°РјР°Р» Т›РёР»Р°РґРё.',
+          'Сиз бу йўналишда биринчи ҳайдовчисиз — бир ўрин нархини белгиланг. '
+          'Кейинги ҳайдовчилар учун шу нарх амал қилади.',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
         ),
         const SizedBox(height: 8),
@@ -514,9 +514,9 @@ class _DriverRegisterMarshrutViewState
             keyboardType: TextInputType.number,
             onChanged: (v) => c.setPriceInput(int.tryParse(v.trim())),
             decoration: InputDecoration(
-              hintText: 'РњР°СЃР°Р»Р°РЅ: 6000',
+              hintText: 'Масалан: 6000',
               prefixIcon: const Icon(Icons.payments_outlined, color: _color),
-              suffixText: 'СЃСћРј',
+              suffixText: 'сўм',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -545,7 +545,7 @@ class _DriverRegisterMarshrutViewState
         const SizedBox(width: 8),
         Expanded(
             child: Text(
-          stops.join(' в†’ '),
+          stops.join(' → '),
           style: const TextStyle(
               fontSize: AppText.labelSmall,
               color: _color,
@@ -642,7 +642,7 @@ class _Banner extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(children: [
-        const Text('рџљђ', style: TextStyle(fontSize: 32)),
+        const Text('🚐', style: TextStyle(fontSize: 32)),
         const SizedBox(width: 12),
         Expanded(
             child:

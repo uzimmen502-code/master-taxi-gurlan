@@ -117,9 +117,9 @@ class _SearchingViewState extends State<_SearchingView> {
     );
   }
 
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ────────────────────────────────────────────────────────────────────
   // Sections
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ────────────────────────────────────────────────────────────────────
   Widget _statusBanner(SearchingController c) {
     return Container(
       color: _blue,
@@ -246,9 +246,9 @@ class _SearchingViewState extends State<_SearchingView> {
     ]);
   }
 
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ────────────────────────────────────────────────────────────────────
   // Side-effects
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ────────────────────────────────────────────────────────────────────
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
@@ -298,7 +298,7 @@ class _DriverTile extends StatelessWidget {
     Color bg = Colors.white;
     Color border = Colors.transparent;
     if (isPending) {
-      bg = const Color(0xFFE3F2FD); // light blue вЂ” yuborildi
+      bg = const Color(0xFFE3F2FD); // light blue — yuborildi
       border = AppColors.primary;
     } else if (isRejected) {
       bg = Colors.grey.shade200;
@@ -319,7 +319,7 @@ class _DriverTile extends StatelessWidget {
       child: Opacity(
         opacity: (disabled && !isPending) ? 0.45 : 1.0,
         child: Row(children: [
-          Text(isPending ? 'вЏі' : 'рџљ•',
+          Text(isPending ? 'вЏі' : '🚕',
               style: const TextStyle(fontSize: 24)),
           const SizedBox(width: 10),
           Expanded(
@@ -330,7 +330,7 @@ class _DriverTile extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.bold)),
                 Text(
-                  '${d.car} В· ${d.plate}',
+                  '${d.car} · ${d.plate}',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade600),
                 ),
@@ -355,7 +355,7 @@ class _DriverTile extends StatelessWidget {
             children: [
               Text(
                 driver.distanceKm > 0
-                    ? '${driver.distanceKm.toStringAsFixed(1)} РєРј'
+                    ? '${driver.distanceKm.toStringAsFixed(1)} км'
                     : context.tr('no_gps_short'),
                 style:
                     TextStyle(fontSize: 12, color: Colors.grey.shade600),

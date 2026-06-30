@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 
-/// Bugungi marshrut karta'i вЂ” qaerdan-qayerga, to'xtash chiplari, o'rinlar
-/// ko'rsatkichi РІР° Р№СћРЅР°Р»РёС€РЅРё СћР·РіР°СЂС‚РёСЂРёС€ С‚СѓРіРјР°СЃРё.
+/// Bugungi marshrut karta'i — qaerdan-qayerga, to'xtash chiplari, o'rinlar
+/// ko'rsatkichi ва йўналишни ўзгартириш тугмаси.
 class RouteCard extends StatelessWidget {
   const RouteCard({
     super.key,
@@ -31,7 +31,7 @@ class RouteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final from = stops.isNotEmpty ? stops.first : '';
     final to = stops.isNotEmpty ? stops.last : '';
-    final routeText = direction == 'forward' ? '$from в†’ $to' : '$to в†’ $from';
+    final routeText = direction == 'forward' ? '$from → $to' : '$to → $from';
 
     return Container(
       decoration: BoxDecoration(
@@ -74,8 +74,8 @@ class RouteCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       seatsLeft == 0
-                          ? 'рџљ« Р‘СћС€ Р¶РѕР№ Р№СћТ›'
-                          : 'рџ’є $seatsLeft С‚Р° Р±СћС€ Р¶РѕР№',
+                          ? '🚫 Бўш жой йўқ'
+                          : '💺 $seatsLeft та бўш жой',
                       style: TextStyle(
                           fontSize: AppText.bodyMedium,
                           fontWeight: FontWeight.bold,

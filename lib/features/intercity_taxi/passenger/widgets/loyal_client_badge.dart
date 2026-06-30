@@ -4,17 +4,17 @@ import '../../../../core/theme/app_theme.dart';
 
 import '../../../../models/driver_client_stats.dart';
 
-/// **В«Р”РѕРёРјРёР№ РјРёР¶РѕР·В»** badge вЂ” bron sheet'РЅРёРЅРі С‚РµРїР°СЃРёРіР° Р¶РѕР№Р»Р°С€Р°РґРё.
+/// **«Доимий мижоз»** badge — bron sheet'нинг тепасига жойлашади.
 ///
-/// `stats == null` С‘РєРё `bookingCount == 0` Р±СћР»СЃР° hech РЅР°СЂСЃР° РєСћСЂСЃР°С‚РёР»РјР°Р№РґРё
-/// (Р±РёСЂРёРЅС‡Рё РјР°СЂС‚Р° Р±СЂРѕРЅ Т›РёР»Р°С‘С‚РіР°РЅ РјРёР¶РѕР·).
+/// `stats == null` ёки `bookingCount == 0` бўлса hech нарса кўрсатилмайди
+/// (биринчи марта брон қилаётган мижоз).
 class LoyalClientBadge extends StatelessWidget {
   const LoyalClientBadge({super.key, required this.stats, this.compact = false});
 
   final DriverClientStats? stats;
 
-  /// `true` вЂ” РєРёС‡РєРёРЅР° (ride РєР°СЂС‚РѕС‡РєР°СЃРёРґР°).
-  /// `false` вЂ” РєР°С‚С‚Р° (bron sheet'РґР° С‚РµРїР°РґР°).
+  /// `true` — кичкина (ride карточкасида).
+  /// `false` — катта (bron sheet'да тепада).
   final bool compact;
 
   @override
@@ -71,7 +71,7 @@ class LoyalClientBadge extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: palette.fg)),
             Text(
-                '${context.tr('booking_count_label').replaceAll('{n}', '${s.bookingCount}')} В· ${_formatPrice(s.totalSpent)} ${context.tr('sum')}',
+                '${context.tr('booking_count_label').replaceAll('{n}', '${s.bookingCount}')} · ${_formatPrice(s.totalSpent)} ${context.tr('sum')}',
                 style: TextStyle(
                     fontSize: 10, color: palette.fg.withValues(alpha: 0.8))),
           ],

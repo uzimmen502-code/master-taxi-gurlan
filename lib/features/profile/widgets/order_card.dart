@@ -12,8 +12,8 @@ class OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFood = order.type == 'food';
-    final emoji = isFood ? 'рџЌЅпёЏ' : 'рџ«“';
-    final title = isFood ? 'РћРІТ›Р°С‚ Р±СѓСЋСЂС‚РјР°' : 'РќРѕРЅ Р±СѓСЋСЂС‚РјР°';
+    final emoji = isFood ? '🍽️' : '🫓';
+    final title = isFood ? 'Овқат буюртма' : 'Нон буюртма';
     final color = isFood ? AppColors.primary : AppColors.primary;
 
     final dt = order.createdAt;
@@ -46,32 +46,32 @@ class OrderCard extends StatelessWidget {
         const SizedBox(height: 8),
         ...order.items.take(3).map((it) {
           final qtyStr =
-              it.qty != null ? '${it.qty.toString()} ${it.unit}' : 'Г— ${it.count}';
+              it.qty != null ? '${it.qty.toString()} ${it.unit}' : '× ${it.count}';
           return Padding(
             padding: const EdgeInsets.only(bottom: 2),
-            child: Text('вЂў ${it.name}  $qtyStr',
+            child: Text('• ${it.name}  $qtyStr',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
           );
         }),
         if (order.items.length > 3)
-          Text('... РІР° СЏРЅР° ${order.items.length - 3} С‚Р°',
+          Text('... ва яна ${order.items.length - 3} та',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         const SizedBox(height: 8),
         if (order.deliveryTime.isNotEmpty)
           _BadgeBox(
-            text: 'рџ•ђ РўР°С…РјРёРЅРёР№ РІР°Т›С‚: ${order.deliveryTime}',
+            text: '🕐 Тахминий вақт: ${order.deliveryTime}',
             color: AppColors.primary,
           ),
         if (order.rejectReason.isNotEmpty)
           _BadgeBox(
-            text: 'вќЊ ${order.rejectReason}',
+            text: '❌ ${order.rejectReason}',
             color: Colors.red,
           ),
         Row(children: [
           Text(formatPrice(order.total),
               style: TextStyle(
                   fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-          Text(' СЃСћРј',
+          Text(' сўм',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
         ]),
       ]),
@@ -84,10 +84,10 @@ class _StatusChip extends StatelessWidget {
   final String status;
 
   static const _map = <String, ({String label, Color color})>{
-    'new': (label: 'рџ”µ РЇРЅРіРё', color: AppColors.primary),
-    'accepted': (label: 'рџџЎ ТљР°Р±СѓР»', color: AppColors.primaryMid),
-    'ready': (label: 'рџџ  РўР°Р№С‘СЂ', color: AppColors.warning),
-    'delivered': (label: 'рџџў Р•С‚РєР°Р·РёР»РґРё', color: AppColors.primary),
+    'new': (label: '🔵 Янги', color: AppColors.primary),
+    'accepted': (label: '🟡 Қабул', color: AppColors.primaryMid),
+    'ready': (label: '🟠 Тайёр', color: AppColors.warning),
+    'delivered': (label: '🟢 Етказилди', color: AppColors.primary),
   };
 
   @override

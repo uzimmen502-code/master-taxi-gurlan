@@ -100,7 +100,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
     if (c.skipReason != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
-            '${context.trMsg(c.skipReason!)} вЂ” ${context.tr('searching_next_in_queue')}'),
+            '${context.trMsg(c.skipReason!)} — ${context.tr('searching_next_in_queue')}'),
         backgroundColor: Colors.orange,
         duration: const Duration(milliseconds: 1500),
       ));
@@ -137,9 +137,9 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('рџљЊ ${trip.driverName}'),
-            Text('рџ“ћ ${trip.driverPhone}'),
-            Text('рџљ— ${trip.driverCar}'),
+            Text('🚌 ${trip.driverName}'),
+            Text('📞 ${trip.driverPhone}'),
+            Text('🚗 ${trip.driverCar}'),
           ],
         ),
         actions: [
@@ -283,7 +283,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                     ),
                   const SizedBox(height: 24),
                   Text(
-                      '${c.pickupMfy}${c.pickupAddr.isNotEmpty ? ", ${c.pickupAddr}" : ""}\nв†’ ${c.dropoffMfy}',
+                      '${c.pickupMfy}${c.pickupAddr.isNotEmpty ? ", ${c.pickupAddr}" : ""}\n→ ${c.dropoffMfy}',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: AppText.bodyMedium,
@@ -354,14 +354,14 @@ class _DriverCard extends StatelessWidget {
         ],
       ),
       child: Column(children: [
-        const Text('рџљђ', style: TextStyle(fontSize: 36)),
+        const Text('🚐', style: TextStyle(fontSize: 36)),
         const SizedBox(height: 8),
         Text(driver.driverName,
             style: const TextStyle(
                 fontSize: AppText.titleMedium,
                 fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text('${driver.car} вЂў ${driver.plate}',
+        Text('${driver.car} • ${driver.plate}',
             style: TextStyle(
                 fontSize: AppText.bodyMedium,
                 color: Colors.grey.shade700)),

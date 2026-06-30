@@ -6,7 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/bread_product.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// РќРѕРЅ РєР°С‚Р°Р»РѕРіРёРґР°РіРё Р±РёСЂРѕСЂ РјР°ТіСЃСѓР»РѕС‚ РєР°СЂС‚Р°СЃРё (РЃРїРёС€/РўР°Р№С‘СЂ/РўРѕР№).
+/// Нон каталогидаги бирор маҳсулот картаси (Ёпиш/Тайёр/Той).
 class BreadProductCard extends StatefulWidget {
   const BreadProductCard({
     super.key,
@@ -110,7 +110,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                     color: Colors.deepOrange.shade700,
                     borderRadius: BorderRadius.circular(6)),
                 child: const Text(
-                  'РўР°Р№С‘СЂ',
+                  'Тайёр',
                   style: TextStyle(
                     fontSize: AppText.labelTiny,
                     color: Colors.white,
@@ -169,10 +169,10 @@ class _BreadProductCardState extends State<BreadProductCard> {
                       borderRadius: BorderRadius.circular(6)),
                   child: Text(
                     product.isYopish
-                        ? 'РЃРїРёС€ С…РёР·РјР°С‚Рё'
+                        ? 'Ёпиш хизмати'
                         : product.isToy
-                            ? 'РўСћР№ РЅРѕРЅРё'
-                            : 'РўР°Р№С‘СЂ',
+                            ? 'Тўй нони'
+                            : 'Тайёр',
                     style: TextStyle(
                       fontSize: AppText.labelTiny,
                       color: accentColor,
@@ -182,7 +182,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 ),
                 if (!product.isYopish && !product.isToy) ...[
                   const SizedBox(height: 2),
-                  Text('${formatPrice(widget.price)} СЃСћРј',
+                  Text('${formatPrice(widget.price)} сўм',
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
@@ -255,7 +255,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
     return Center(child: Text(product.emoji, style: const TextStyle(fontSize: 42)));
   }
 
-  /// `https://...` С‘РєРё `//host/...` вЂ” Р±РѕС€Т›Р° СЃС…РµРјР°Р»Р°СЂРґР° `null` (СЌРјРѕРґР·Рё).
+  /// `https://...` ёки `//host/...` — бошқа схемаларда `null` (эмодзи).
   static String? _networkImageUrl(String raw) {
     var u = raw.trim();
     if (u.isEmpty) return null;

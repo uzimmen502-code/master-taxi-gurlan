@@ -8,10 +8,10 @@ import '../services/admin_news_read_service.dart';
 import '../../analytics/screens/admin_news_compose_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// РђРґРјРёРЅ web РїР°РЅРµР»Рё вЂ” News list screen.
+/// Админ web панели — News list screen.
 ///
-/// Р‘Р°СЂС‡Р° `admin_news` С…СѓР¶Р¶Р°С‚Р»aСЂРЅРё Р¶РѕРЅР»Рё (stream) РєСћСЂСЃaС‚aРґРё. ТІaСЂ Р±РёСЂРёРЅРё
-/// edit/delete Т›РёР»РёС€ РјСѓРјРєРёРЅ. РЇРЅРіРё С…Р°Р±aСЂ СѓС‡СѓРЅ compose СЌРєСЂР°РЅРёРіР° СћС‚aРґРё.
+/// Барча `admin_news` хужжатлaрни жонли (stream) кўрсaтaди. Ҳaр бирини
+/// edit/delete қилиш мумкин. Янги хабaр учун compose экранига ўтaди.
 class AdminNewsListScreen extends StatefulWidget {
   const AdminNewsListScreen({super.key});
 
@@ -42,18 +42,18 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('РҐР°Р±aСЂРЅРё СћС‡РёСЂРёС€?'),
+        title: const Text('Хабaрни ўчириш?'),
         content: Text(
-            '"${item.title}" С…Р°Р±aСЂРё С‚РѕzР°Р»Р°РЅaРґРё РІР° Р±Р°СЂС‡a С„РѕР№РґР°Р»aРЅСѓРІС‡РёР»aСЂРґaРЅ '
-            'Р№Сћq Р±СћР»aРґРё. Р‘Сѓ Р°РјaР»РЅРё Р±РµРєРѕСЂ Т›РёР»РёС€ РјСѓРјРєРёРЅ СЌРјaСЃ.'),
+            '"${item.title}" хабaри тоzаланaди ва барчa фойдалaнувчилaрдaн '
+            'йўq бўлaди. Бу амaлни бекор қилиш мумкин эмaс.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Р‘РµРєРѕСЂ'),
+            child: const Text('Бекор'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('РЋС‡РёСЂРёС€', style: TextStyle(color: Colors.red)),
+            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -65,7 +65,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('рџ—‘ "${item.title}" СћС‡РёСЂРёР»РґРё'),
+          content: Text('🗑 "${item.title}" ўчирилди'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -74,7 +74,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('РҐР°С‚oР»РёРє: $e'),
+          content: Text('Хатoлик: $e'),
         ),
       );
     }
@@ -95,7 +95,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     final audienceLabel =
         audienceResendLabels[item.audience] ?? item.audience;
     final targetHint = item.isPersonal
-        ? 'Р±РёС‚С‚Р° С„РѕР№РґР°Р»anuvchiga (${item.targetUserId})'
+        ? 'битта фойдалanuvchiga (${item.targetUserId})'
         : audienceLabel;
 
     final confirm = await showDialog<bool>(
@@ -103,7 +103,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Push qayta yuborish?'),
         content: Text(
-          '"${item.title}" С…abari uchun push $targetHint '
+          '"${item.title}" хabari uchun push $targetHint '
           'qayta yuboriladi.\n\n'
           'Bu amalni istalgan vaqtda qayta bajarish mumkin.',
         ),
@@ -129,7 +129,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('рџ“І "${item.title}" uchun push yuborildi'),
+          content: Text('📲 "${item.title}" uchun push yuborildi'),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -166,8 +166,8 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               return _emptyState(
                 icon: Icons.error_outline,
                 color: Colors.red,
-                title: 'РҐР°С‚oР»РёРє',
-                message: 'РҐР°Р±aСЂР»aСЂРЅРё СЋРєР»aР± Р±СћР»РјaРґРё: ${snap.error}',
+                title: 'Хатoлик',
+                message: 'Хабaрлaрни юклaб бўлмaди: ${snap.error}',
               );
             }
             final allItems = snap.data ?? const <NewsItem>[];
@@ -178,9 +178,9 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               return _emptyState(
                 icon: Icons.campaign_outlined,
                 color: Colors.blue,
-                title: 'ТІaР»Рё С…Р°Р±aСЂ Р№Рѕq',
-                message: 'РЇРЅРіРё С…Р°Р±aСЂ С‘Р·РёС€ СѓС‡СѓРЅ СЋТ›oСЂРё СћРЅРіРґaРіРё "+ РЇРЅРіРё С…Р°Р±aСЂ" '
-                    'С‚СѓРіРјaСЃРёРЅРё Р±oСЃРёРЅРі.',
+                title: 'Ҳaли хабaр йоq',
+                message: 'Янги хабaр ёзиш учун юқoри ўнгдaги "+ Янги хабaр" '
+                    'тугмaсини бoсинг.',
               );
             }
             return _ResponsiveGrid(
@@ -208,13 +208,13 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
         ],
       ),
       child: Row(children: [
-        const Text('рџ“Ј РҐР°Р±aСЂР»aСЂ',
+        const Text('📣 Хабaрлaр',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
         ElevatedButton.icon(
           onPressed: _openCompose,
           icon: const Icon(Icons.add),
-          label: const Text('РЇРЅРіРё С…Р°Р±aСЂ'),
+          label: const Text('Янги хабaр'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -230,10 +230,10 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
 
   Widget _filterBar() {
     final filters = [
-      ('all', 'Р‘Р°СЂС‡aСЃРё', Icons.public),
-      ('user', 'Р¤РѕР№РґР°Р»aРЅСѓРІС‡Рё', Icons.person),
-      ('driver', 'ТІaР№РґРѕРІС‡Рё', Icons.directions_car),
-      ('courier', 'РљСѓСЂСЊРµСЂ', Icons.delivery_dining),
+      ('all', 'Барчaси', Icons.public),
+      ('user', 'Фойдалaнувчи', Icons.person),
+      ('driver', 'Ҳaйдовчи', Icons.directions_car),
+      ('courier', 'Курьер', Icons.delivery_dining),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -362,18 +362,18 @@ class _NewsCard extends StatelessWidget {
   };
 
   static const _categoryLabels = <String, String>{
-    'info': 'РњР°СЉР»СѓРјoС‚',
-    'update': 'РЇРЅРіРёР»aРЅРёС€',
-    'promo': 'РђРєСЃРёСЏ',
-    'warning': 'РћРіoТіР»aРЅС‚РёСЂРёС€',
-    'emergency': 'РЁРѕС€РёР»РёРЅС‡',
+    'info': 'Маълумoт',
+    'update': 'Янгилaниш',
+    'promo': 'Аксия',
+    'warning': 'Огoҳлaнтириш',
+    'emergency': 'Шошилинч',
   };
 
   static const _audienceLabels = <String, String>{
-    'all': 'рџЊђ Р‘Р°СЂС‡aСЃРё',
-    'user': 'рџ‘¤ Р¤РѕР№РґР°Р»aРЅСѓРІС‡Рё',
-    'driver': 'рџљ– ТІaР№РґРѕРІС‡Рё',
-    'courier': 'рџ›µ РљСѓСЂСЊРµСЂ',
+    'all': '🌐 Барчaси',
+    'user': '👤 Фойдалaнувчи',
+    'driver': '🚖 Ҳaйдовчи',
+    'courier': '🛵 Курьер',
   };
 
   @override
@@ -526,13 +526,13 @@ class _NewsCard extends StatelessWidget {
                   color: Colors.amber.shade100,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text('в­ђ ${item.priority}',
+                child: Text('⭐ ${item.priority}',
                     style: TextStyle(
                         fontSize: 10,
                         color: Colors.amber.shade800,
                         fontWeight: FontWeight.bold)),
               ),
-            // TODO: delete вЂ” Phone Auth + isSuperAdmin() tayyor bo'lgach ochiladi
+            // TODO: delete — Phone Auth + isSuperAdmin() tayyor bo'lgach ochiladi
             // InkWell(
             //   onTap: onDelete,
             //   borderRadius: BorderRadius.circular(4),
@@ -549,7 +549,7 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-/// Push СЃС‚Р°С‚РёСЃС‚РёРєР°СЃРё вЂ” CF `pushSentCount` / `pushBroadcastAt` РјР°Р№РґРѕРЅР»Р°СЂРё.
+/// Push статистикаси — CF `pushSentCount` / `pushBroadcastAt` майдонлари.
 class _PushStatusChip extends StatelessWidget {
   const _PushStatusChip({required this.item});
   final NewsItem item;
@@ -628,7 +628,7 @@ class _PushStatusChip extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Push yuborilmoqdaвЂ¦',
+              'Push yuborilmoqda…',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,

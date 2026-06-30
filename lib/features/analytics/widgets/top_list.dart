@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/analytics/top_entity.dart';
 
-/// Top-N СЂСћР№С…Р°С‚Рё вЂ” РіРѕСЂРёР·РѕРЅС‚Р°Р» proportion РїРѕР»РѕСЃР°Р»Р°СЂ Р±РёР»Р°РЅ.
+/// Top-N рўйхати — горизонтал proportion полосалар билан.
 class TopList extends StatelessWidget {
   const TopList({
     super.key,
@@ -26,7 +26,7 @@ class TopList extends StatelessWidget {
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(8),
-        child: Text('РњР°СЉР»СѓРјРѕС‚ Р№СћТ›',
+        child: Text('Маълумот йўқ',
             style: TextStyle(color: Colors.grey.shade400)),
       );
     }

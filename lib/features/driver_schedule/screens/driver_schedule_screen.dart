@@ -31,7 +31,7 @@ class DriverScheduleScreen extends StatelessWidget {
   final String driverPhone;
   final String driverCar;
   final String driverPlate;
-  /// РџР°РЅРµР»СЊРґР°РЅ В«Т›Р°Р№С‚РёС€ СЂРµР№СЃРёВ» вЂ” РјР°СЂС€СЂСѓС‚ РѕР»РґРёРЅРґР°РЅ С‚СћР»РґРёСЂРёР»Р°РґРё.
+  /// Панельдан «қайтиш рейси» — маршрут олдиндан тўлдирилади.
   final List<String>? initialRouteStops;
   final bool initialRouteReversed;
   final int? initialSeats;
@@ -219,7 +219,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('РС€РіР° С‡РёТ›РёС€'),
+        title: const Text('РС€РіР° чиқиш'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -242,9 +242,9 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             children: [
               _HeaderCard(controller: c),
               const SizedBox(height: 10),
-              // Р™РЋРќРђР›РРЁ вЂ” С„Р°Т›Р°С‚ marshrut/intercity СѓС‡СѓРЅ. РњР°ТіР°Р»Р»РёР№ С‚Р°РєСЃРё
-              // (alone) РјРёР¶РѕР· Р±СѓСЋСЂС‚РјР°СЃРё Р±СћР№РёС‡Р° РёС€Р»Р°Р№РґРё, СћР· Р№СћРЅР°Р»РёС€РёРЅРё
-              // Р±РµР»РіРёР»Р°РјР°Р№РґРё вЂ” С€СѓРЅРёРЅРі СѓС‡СѓРЅ Р±Сѓ Р±СћР»РёРј РєСћСЂСЃР°С‚РёР»РјР°Р№РґРё.
+              // Р™РЋРќРђР›РРЁ — фақат marshrut/intercity учун. Маҳаллий такси
+              // (alone) мижоз буюртмаси бўйича ишлайди, ўз йўналишини
+              // белгиламайди — шунинг учун бу бўлим кўрсатилмайди.
               if (!c.isAlone) ...[
                 Row(children: [
                   const Icon(Icons.route, color: AppColors.primary, size: 20),
@@ -266,7 +266,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                   Row(children: [
                     Expanded(
                       child: _dayChip(
-                        label: 'Р‘РЈР“РЈРќ',
+                        label: 'БУГУН',
                         selected: !c.departureIsTomorrow,
                         onTap: () => c.setDepartureIsTomorrow(false),
                       ),
@@ -274,7 +274,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _dayChip(
-                        label: 'Р­Р РўРђР“Рђ',
+                        label: 'ЭРТАГА',
                         selected: c.departureIsTomorrow,
                         onTap: () => c.setDepartureIsTomorrow(true),
                       ),
@@ -284,7 +284,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                   Row(children: [
                     Expanded(
                       child: _compactTimeCard(
-                        'Р–СћРЅР°С€',
+                        'Жўнаш',
                         _fmt(c.departureTime),
                         () => _pickDeparture(c),
                       ),
@@ -294,7 +294,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                       flex: 2,
                       child: _textField(
                         ctrl: _priceCtrl,
-                        hint: 'РќР°СЂС… (СЃСћРј)',
+                        hint: 'Нарх (сўм)',
                         icon: Icons.payments_outlined,
                         inputType: TextInputType.number,
                         formatters: [FilteringTextInputFormatter.digitsOnly],
@@ -306,15 +306,15 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 ],
               ],
               if (c.isAlone) ...[
-                _sectionTitle('рџ•ђ РС€ РІР°Т›С‚Рё'),
+                _sectionTitle('🕐 РС€ вақти'),
                 const SizedBox(height: 8),
                 Row(children: [
                   Expanded(
-                      child: _timeCard('Р‘РѕС€Р»Р°РЅРёС€', _fmt(c.startTime),
+                      child: _timeCard('Бошланиш', _fmt(c.startTime),
                           () => _pickTime(isStart: true))),
                   const SizedBox(width: 12),
                   Expanded(
-                      child: _timeCard('РўСѓРіР°С€', _fmt(c.endTime),
+                      child: _timeCard('Тугаш', _fmt(c.endTime),
                           () => _pickTime(isStart: false))),
                 ]),
                 const SizedBox(height: 20),
@@ -333,7 +333,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline, size: 22),
                   label: Text(
-                    c.isSaving ? 'РЎР°Т›Р»Р°РЅРјРѕТ›РґР°...' : 'РРЁР“Рђ Р§РТљРРЁРќР РўРђРЎР”РТљР›РђР™РњРђРќ',
+                    c.isSaving ? 'Сақланмоқда...' : 'РРЁР“Рђ Р§РТљРРЁРќР РўРђРЎР”РТљР›РђР™РњРђРќ',
                     style: const TextStyle(
                         fontSize: 14, fontWeight: FontWeight.bold),
                   ),
@@ -347,7 +347,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
               ),
               const SizedBox(height: 12),
               Center(
-                  child: Text('РС€ СЃР°РЅР°СЃРё СЏСЂРёРј С‚СѓРЅРґР° Р°РІС‚РѕРјР°С‚РёРє С‘РїРёР»Р°РґРё',
+                  child: Text('РС€ санаси ярим тунда автоматик ёпилади',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade400))),
             ],
@@ -370,7 +370,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 }
               : null,
           icon: const Icon(Icons.swap_horiz, size: 20),
-          label: const Text('Р™СћРЅР°Р»РёС€РЅРё РѕСЂТ›Р°РіР° Т›Р°Р№С‚Р°СЂРёС€'),
+          label: const Text('Йўналишни орқага қайтариш'),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.primary,
             side: const BorderSide(color: AppColors.primary),
@@ -379,11 +379,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
         ),
       ),
       const SizedBox(height: 10),
-      _stopLabel('рџ“Ќ ТљР°РµСЂРґР°РЅ', required: true),
+      _stopLabel('📍 Қаердан', required: true),
       const SizedBox(height: 4),
       _addressField(
         ctrl: _fromAddrCtrl,
-        hint: 'РЁР°ТіР°СЂ С‘РєРё С‚СѓРјР°РЅ',
+        hint: 'Шаҳар ёки туман',
         icon: Icons.trip_origin,
         iconColor: AppColors.primary,
         onChanged: _onFromAddrChanged,
@@ -394,9 +394,9 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
         }, () => setState(() => _fromAddrSug = const [])),
       const SizedBox(height: 8),
       Row(children: [
-        _stopLabel('рџ”µ РћСЂР°Р»РёТ› С‚СћС…С‚Р°С€', required: false),
+        _stopLabel('🔵 Оралиқ тўхташ', required: false),
         const Spacer(),
-        Text('РёС…С‚РёС‘СЂРёР№',
+        Text('ихтиёрий',
             style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
       ]),
       const SizedBox(height: 4),
@@ -416,7 +416,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           )),
       _addressField(
         ctrl: _midSearchCtrl,
-        hint: '+ РћСЂР°Р»РёТ› С€Р°ТіР°СЂ Т›СћС€РёС€',
+        hint: '+ Оралиқ шаҳар қўшиш',
         icon: Icons.add_location_alt_outlined,
         iconColor: Colors.blueGrey,
         onChanged: (q) {
@@ -446,11 +446,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           () => setState(() => _showMidSug = false),
         ),
       const SizedBox(height: 8),
-      _stopLabel('рџЏЃ ТљР°РµСЂРіР°', required: true),
+      _stopLabel('🏁 Қаерга', required: true),
       const SizedBox(height: 4),
       _addressField(
         ctrl: _toAddrCtrl,
-        hint: 'РЁР°ТіР°СЂ С‘РєРё С‚СѓРјР°РЅ',
+        hint: 'Шаҳар ёки туман',
         icon: Icons.flag,
         iconColor: Colors.red,
         onChanged: _onToAddrChanged,
@@ -503,11 +503,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
 
   Widget _buildMarshrutStops(DriverScheduleController c) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _stopLabel('рџ“Ќ Р‘РѕС€Р»Р°РЅРіРёС‡ РЅСѓТ›С‚Р°', required: true),
+      _stopLabel('📍 Бошлангич нуқта', required: true),
       const SizedBox(height: 6),
       MfyField(
         ctrl: _fromSearchCtrl,
-        hint: 'РњР¤Р™ С‚Р°РЅР»Р°РЅРі...',
+        hint: 'МФЙ танланг...',
         iconColor: AppColors.primary,
         showSug: _showFromSug,
         query: _fromQuery,
@@ -532,7 +532,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       ),
       const SizedBox(height: 16),
       Row(children: [
-        _stopLabel('рџ”µ РћСЂР°Р»РёТ› С‚СћС…С‚Р°С€ РЅСѓТ›С‚Р°Р»Р°СЂРё', required: false),
+        _stopLabel('🔵 Оралиқ тўхташ нуқталари', required: false),
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -575,7 +575,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       }),
       MfyField(
         ctrl: _midSearchCtrl,
-        hint: '+ РћСЂР°Р»РёТ› РЅСѓТ›С‚Р° Т›СћС€РёС€...',
+        hint: '+ Оралиқ нуқта қўшиш...',
         iconColor: Colors.blueGrey,
         showSug: _showMidSug,
         query: _midQuery,
@@ -607,11 +607,11 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
         },
       ),
       const SizedBox(height: 16),
-      _stopLabel('рџЏЃ РћС…РёСЂРіРё РЅСѓТ›С‚Р°', required: true),
+      _stopLabel('🏁 Охирги нуқта', required: true),
       const SizedBox(height: 6),
       MfyField(
         ctrl: _toSearchCtrl,
-        hint: 'РњР¤Р™ С‚Р°РЅР»Р°РЅРі...',
+        hint: 'МФЙ танланг...',
         iconColor: Colors.red,
         showSug: _showToSug,
         query: _toQuery,
@@ -647,7 +647,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             const Icon(Icons.route, color: AppColors.primary, size: 16),
             const SizedBox(width: 8),
             Expanded(
-                child: Text(c.allStops.join(' в†’ '),
+                child: Text(c.allStops.join(' → '),
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
                         color: AppColors.primary,
@@ -877,22 +877,22 @@ class _HeaderCard extends StatelessWidget {
   String _emoji() {
     switch (controller.taxiType) {
       case 'marshrut':
-        return 'рџљђ';
+        return '🚐';
       case 'intercity':
-        return 'рџљЊ';
+        return '🚌';
       default:
-        return 'рџљ•';
+        return '🚕';
     }
   }
 
   String _label() {
     switch (controller.taxiType) {
       case 'marshrut':
-        return 'РњР°СЂС€СЂСѓС‚ С‚Р°РєСЃРё';
+        return 'Маршрут такси';
       case 'intercity':
-        return 'РЁР°ТіР°СЂР»Р°СЂР°СЂРѕ С‚Р°РєСЃРё';
+        return 'Шаҳарлараро такси';
       default:
-        return 'РњР°ТіР°Р»Р»РёР№ С‚Р°РєСЃРё';
+        return 'Маҳаллий такси';
     }
   }
 
@@ -914,7 +914,7 @@ class _HeaderCard extends StatelessWidget {
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: AppColors.primary)),
-          Text('${controller.driverCar} В· ${controller.driverPlate}',
+          Text('${controller.driverCar} · ${controller.driverPlate}',
               style:
                   TextStyle(fontSize: 11, color: Colors.grey.shade500)),
         ]),
@@ -944,7 +944,7 @@ class _SeatsCard extends StatelessWidget {
                 offset: const Offset(0, 2))
           ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('рџ’є Р‘СћС€ СћСЂРёРЅР»Р°СЂ СЃРѕРЅРё (РјР°РєСЃРёРјСѓРј ${c.maxSeats})',
+        Text('💺 Бўш ўринлар сони (максимум ${c.maxSeats})',
             style:
                 const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(height: 14),
@@ -975,7 +975,7 @@ class _SeatsCard extends StatelessWidget {
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary)),
-            Text('СћСЂРёРЅ',
+            Text('ўрин',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ]),
           const SizedBox(width: 24),

@@ -24,7 +24,7 @@ import '../widgets/bread_product_card.dart';
 
 
 
-/// РќРѕРЅ Р±СѓСЋСЂС‚РјР° СЌРєСЂР°РЅРё вЂ” `Provider` РѕСЂТ›Р°Р»Рё [BreadController].
+/// Нон буюртма экрани — `Provider` орқали [BreadController].
 
 class BreadScreen extends StatelessWidget {
 
@@ -162,7 +162,7 @@ class _BreadViewState extends State<_BreadView> {
 
         final p = c.allProducts.firstWhere((p) => p.id == id);
 
-        parts.add('${p.name} Г— $count');
+        parts.add('${p.name} × $count');
 
       } catch (_) {}
 
@@ -172,7 +172,7 @@ class _BreadViewState extends State<_BreadView> {
 
       final q = c.extraProductsCart[p.id] ?? 0;
 
-      if (q > 1e-9) parts.add('${p.name} Г— ${p.qtyCaptionNum(q)}');
+      if (q > 1e-9) parts.add('${p.name} × ${p.qtyCaptionNum(q)}');
 
     }
 

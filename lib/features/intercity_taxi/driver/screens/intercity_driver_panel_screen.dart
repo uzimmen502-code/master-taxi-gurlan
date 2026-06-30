@@ -313,7 +313,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         Text(route,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('рџ•ђ ${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:00'),
+        Text('🕐 ${context.tr('departure')}: ${hour.toString().padLeft(2, '0')}:00'),
         Text(
             total > 0
                 ? context
@@ -456,26 +456,26 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('рџ‘¤ ${context.trMsg(b.userName)} вЂў ${b.userPhone}',
+        Text('👤 ${context.trMsg(b.userName)} • ${b.userPhone}',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         const SizedBox(height: 4),
         if (b.userGender.isNotEmpty)
           _infoRow(
-            b.userGender == 'female' ? 'рџ‘©' : 'рџ‘Ё',
+            b.userGender == 'female' ? '👩' : '👨',
             context.tr(b.userGender == 'female'
                 ? 'gender_female' : 'gender_male'),
           ),
         if (age != null)
           _infoRow(
-            'рџЋ‚',
+            '🎂',
             '$age ${context.tr('age_years')}',
           ),
         if (b.passengers > 1)
           _infoRow(
-            'рџ’є',
+            '💺',
             '${b.passengers} ${context.tr('passengers')}',
           ),
-        Text('рџ“Ќ $pickup', style: const TextStyle(fontSize: 12)),
+        Text('📍 $pickup', style: const TextStyle(fontSize: 12)),
         if (b.hasPickupGps) ...[
           const SizedBox(height: 6),
           Container(
@@ -503,9 +503,9 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           ),
         ],
         if (b.dropoffNote.isNotEmpty)
-          Text('рџЏЃ ${b.dropoffNote}', style: const TextStyle(fontSize: 12)),
+          Text('🏁 ${b.dropoffNote}', style: const TextStyle(fontSize: 12)),
         Text(
-            'вњ… ${_statusLabel(b.status)} вЂў рџ’° ${formatPrice(b.totalAmount)} ${context.tr('sum')} вЂў #${b.shortRef}',
+            '✅ ${_statusLabel(b.status)} • 💰 ${formatPrice(b.totalAmount)} ${context.tr('sum')} • #${b.shortRef}',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
         const SizedBox(height: 8),
         Row(children: [
@@ -522,7 +522,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 label: b.pickupAddress,
               ),
               icon: const Icon(Icons.map, size: 16),
-              label: const Text('рџ“Ќ GPS'),
+              label: const Text('📍 GPS'),
             ),
           const Spacer(),
           TextButton(
@@ -605,7 +605,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
       );
 }
 
-/// РљСѓС‚РёР»РјРѕТ›РґР°РіРё Р±СЂРѕРЅ вЂ” РґРёР°Р»РѕРі Р№СћТ›РѕР»СЃР° ТіР°Рј В«ТљР°Р±СѓР»В» РѕС‡РёТ› Т›РѕР»Р°РґРё.
+/// Кутилмоқдаги брон — диалог йўқолса ҳам «Қабул» очиқ қолади.
 class _PendingBookingCard extends StatelessWidget {
   const _PendingBookingCard({
     required this.booking,

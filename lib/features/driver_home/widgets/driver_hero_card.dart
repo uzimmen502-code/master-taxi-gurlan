@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/driver_session.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Р®Т›РѕСЂРё: СЃР°Р»РѕРј + РёСЃРј + Р°РІС‚РѕРјРѕР±РёР»СЊ РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё + РїСЂРѕС„РёР» С‚СѓРіРјР°СЃРё.
+/// Юқори: салом + исм + автомобиль маълумотлари + профил тугмаси.
 class DriverHeroCard extends StatelessWidget {
   const DriverHeroCard({
     super.key,
@@ -38,7 +38,7 @@ class DriverHeroCard extends StatelessWidget {
           radius: 28,
           backgroundColor: Colors.white.withValues(alpha: 0.2),
           child: Text(
-            session.name.isNotEmpty ? session.name[0] : 'Р”',
+            session.name.isNotEmpty ? session.name[0] : 'Д',
             style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -59,7 +59,7 @@ class DriverHeroCard extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: Colors.white)),
               if (session.carModel.isNotEmpty)
-                Text('рџљ— ${session.carModel} В· ${session.carPlate}',
+                Text('🚗 ${session.carModel} · ${session.carPlate}',
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
                         color: Colors.white70)),

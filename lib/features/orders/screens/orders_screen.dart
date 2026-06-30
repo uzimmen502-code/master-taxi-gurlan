@@ -55,10 +55,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.home_outlined),
-          tooltip: 'Р‘РѕС€ СЃР°ТіРёС„Р°',
+          tooltip: 'Бош саҳифа',
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: const Text('Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ'),
+        title: const Text('Буюртмалар'),
         centerTitle: true,
       ),
       body: Column(
@@ -82,7 +82,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             child: CircularProgressIndicator());
                       }
                       if (snap.hasError) {
-                        return Center(child: Text('РҐР°С‚РѕР»РёРє: ${snap.error}'));
+                        return Center(child: Text('Хатолик: ${snap.error}'));
                       }
                       final all = snap.data ?? const <OrderModel>[];
                       final filtered = all.where((o) {
@@ -129,9 +129,9 @@ class _SegmentToggle extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       child: Row(
         children: [
-          _seg(context, label: 'рџ“Њ Р¤Р°РѕР»', selected: showActive,
+          _seg(context, label: '📌 Фаол', selected: showActive,
               onTap: () => onChanged(true)),
-          _seg(context, label: 'вњ… РўСѓРіР°РіР°РЅ', selected: !showActive,
+          _seg(context, label: '✅ Тугаган', selected: !showActive,
               onTap: () => onChanged(false)),
         ],
       ),
@@ -191,8 +191,8 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             showActive
-                ? 'Р¤Р°РѕР» Р±СѓСЋСЂС‚РјР°Р»Р°СЂ Р№СћТ›'
-                : 'РўСѓРіР°РіР°РЅ Р±СѓСЋСЂС‚РјР°Р»Р°СЂ Р№СћТ›',
+                ? 'Фаол буюртмалар йўқ'
+                : 'Тугаган буюртмалар йўқ',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
           ),
         ],

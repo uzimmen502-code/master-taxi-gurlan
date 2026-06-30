@@ -5,7 +5,7 @@ import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 
-/// Р­СЉР»РѕРЅР»Р°СЂ (mini-OLX) СЂСћР№С…Р°С‚РёРґР°РіРё Р±РёСЂ РєР°СЂС‚Р°.
+/// Эълонлар (mini-OLX) рўйхатидаги бир карта.
 class AdCard extends StatelessWidget {
   const AdCard({
     super.key,
@@ -36,7 +36,7 @@ class AdCard extends StatelessWidget {
     } catch (_) {
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(
-        content: Text('РўРµР»РµС„РѕРЅ: ${ad.authorPhone}'),
+        content: Text('Телефон: ${ad.authorPhone}'),
         backgroundColor: _kindColor,
         behavior: SnackBarBehavior.floating,
         shape:
@@ -84,7 +84,7 @@ class AdCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: Colors.red.shade50,
                     borderRadius: BorderRadius.circular(6)),
-                child: const Text('рџљЁ РЁРѕС€РёР»РёРЅС‡',
+                child: const Text('🚨 Шошилинч',
                     style: TextStyle(
                         fontSize: AppText.labelTiny,
                         fontWeight: FontWeight.w700,
@@ -134,7 +134,7 @@ class AdCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                'рџ’° ${ad.priceText}',
+                '💰 ${ad.priceText}',
                 style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w700,
@@ -152,7 +152,7 @@ class AdCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    ad.address.isEmpty ? 'РњР°РЅР·РёР» РєСћСЂСЃР°С‚РёР»РјР°РіР°РЅ' : ad.address,
+                    ad.address.isEmpty ? 'Манзил кўрсатилмаган' : ad.address,
                     style: TextStyle(
                         fontSize: AppText.labelSmall,
                         color: ad.address.isEmpty
@@ -180,7 +180,7 @@ class AdCard extends StatelessWidget {
                     Icon(Icons.call, color: Colors.white, size: 8),
                     SizedBox(width: 3),
                     Text(
-                      'ТљСћРЅТ“РёСЂРѕТ›',
+                      'Қўнғироқ',
                       style: TextStyle(
                           fontSize: AppText.labelTiny,
                           fontWeight: FontWeight.bold,

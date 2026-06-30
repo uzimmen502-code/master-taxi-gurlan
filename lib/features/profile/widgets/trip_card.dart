@@ -21,11 +21,11 @@ class TripCard extends StatelessWidget {
   String _emojiFor(String taxiType) {
     switch (taxiType) {
       case 'marshrut':
-        return 'рџљђ';
+        return '🚐';
       case 'intercity':
-        return 'рџљЊ';
+        return '🚌';
       default:
-        return 'рџљ•';
+        return '🚕';
     }
   }
 
@@ -63,7 +63,7 @@ class TripCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                trip.from.isEmpty ? 'Р™СћРЅР°Р»РёС€' : '${trip.from} в†’ ${trip.to}',
+                trip.from.isEmpty ? 'Йўналиш' : '${trip.from} → ${trip.to}',
                 style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600),
                 maxLines: 1,
@@ -72,8 +72,8 @@ class TripCard extends StatelessWidget {
               if (personName.isNotEmpty)
                 Text(
                   isDriver
-                      ? 'рџ“ћ $personName'
-                      : 'рџљ— $personName${carInfo.isNotEmpty ? " В· $carInfo" : ""}',
+                      ? '📞 $personName'
+                      : '🚗 $personName${carInfo.isNotEmpty ? " · $carInfo" : ""}',
                   style: TextStyle(
                       fontSize: 11, color: Colors.grey.shade500),
                 ),
@@ -82,7 +82,7 @@ class TripCard extends StatelessWidget {
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(
-            '${formatPrice(trip.fare)} СЃСћРј',
+            '${formatPrice(trip.fare)} сўм',
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

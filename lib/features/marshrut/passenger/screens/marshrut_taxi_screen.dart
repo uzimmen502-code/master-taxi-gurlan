@@ -119,7 +119,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   }
 
   void _refreshPrice(MarshrutSearchController c) {
-    // Yo'nalish narxi вЂ” haydovchi belgilagan flat narx (schedule.price).
+    // Yo'nalish narxi — haydovchi belgilagan flat narx (schedule.price).
     // Navbat tartibidagi birinchi mos reysning narxini ko'rsatamiz.
     int? price;
     for (final r in c.results) {
@@ -399,7 +399,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
 
       final name = prefs.getString('user_name') ?? '';
       final car =
-          '$carModel${carColor.isEmpty ? '' : ' В· $carColor'}';
+          '$carModel${carColor.isEmpty ? '' : ' · $carColor'}';
       try {
         final submitResult = await driverRepo.submitDriverApplication(
           uid: userId,
@@ -549,7 +549,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     return Scaffold(
       backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
-        title: Text('рџљђ ${context.tr('marshrut_taxi')}',
+        title: Text('🚐 ${context.tr('marshrut_taxi')}',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -584,7 +584,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                       ],
                       Text(
                           _isSubmitting
-                              ? 'Р®РєР»Р°РЅРјРѕТ›РґР°...'
+                              ? 'Юкланмоқда...'
                               : context.tr('become_driver'),
                           style: TextStyle(
                               fontSize: 13,
@@ -687,7 +687,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     if (!c.searched) {
       return Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Text('рџљђ', style: TextStyle(fontSize: 64)),
+        const Text('🚐', style: TextStyle(fontSize: 64)),
         const SizedBox(height: 12),
         Text(context.tr('marshrut_select_mfy_and_search'),
             style: TextStyle(
@@ -767,7 +767,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('рџљђ ${c.results.length} ${context.tr('cars_found')}',
+            Text('🚐 ${c.results.length} ${context.tr('cars_found')}',
                 style: const TextStyle(
                     fontSize: AppText.bodyLarge, fontWeight: FontWeight.bold)),
             if (_pricePerSeat != null && _pricePerSeat! > 0) ...[
@@ -943,7 +943,7 @@ class _SearchPanel extends StatelessWidget {
   }
 }
 
-/// Qayerdan в†” Qayerga вЂ” gorizontal pill, В«QayergaВ» qatori markazida.
+/// Qayerdan ↔ Qayerga — gorizontal pill, «Qayerga» qatori markazida.
 class _SwapDirectionPill extends StatelessWidget {
   const _SwapDirectionPill({required this.onTap});
 

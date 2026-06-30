@@ -8,7 +8,7 @@ import '../controllers/analytics_controller.dart';
 import '../widgets/metric_row.dart';
 import '../widgets/section_card.dart';
 
-/// РљСѓРЅРґР°Р»РёРє ТіРёСЃРѕР±РѕС‚ СЌРєСЂР°РЅРё вЂ” Р±СѓРіСѓРЅРіРё ТіРёСЃРѕР±РѕС‚ + 30 РєСѓРЅР»РёРє Р°СЂС…РёРІ.
+/// Кундалик ҳисобот экрани — бугунги ҳисобот + 30 кунлик архив.
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
 
@@ -32,13 +32,13 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     final c = context.watch<AnalyticsController>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('рџ“Љ РљСѓРЅРґР°Р»РёРє ТіРёСЃРѕР±РѕС‚'),
+        title: const Text('📊 Кундалик ҳисобот'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'ТљР°Р№С‚Р°-СЏСЃР°С€',
+            tooltip: 'Қайта-ясаш',
             onPressed: c.reportsLoading
                 ? null
                 : () async {
@@ -47,7 +47,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                     if (!mounted) return;
                     messenger.showSnackBar(
                       const SnackBar(
-                          content: Text('вњ… ТІРёСЃРѕР±РѕС‚ Т›Р°Р№С‚Р° СЏСЂР°С‚РёР»РґРё')),
+                          content: Text('✅ Ҳисобот қайта яратилди')),
                     );
                   },
           ),
@@ -68,7 +68,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   if (c.historicalReports.isNotEmpty) ...[
                     const Padding(
                       padding: EdgeInsets.fromLTRB(4, 8, 4, 8),
-                      child: Text('рџ—‚ РўР°СЂРёС…РёР№ ТіРёСЃРѕР±РѕС‚Р»Р°СЂ',
+                      child: Text('🗂 Тарихий ҳисоботлар',
                           style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
                     ),
@@ -86,23 +86,23 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
   Widget _todayCard(DailyReport r) {
     final formatted = DateFormat('dd MMMM yyyy', 'uz').format(
             DateTime.tryParse(r.dateKey) ?? DateTime.now())
-        // Р‘РѕС€РёРґР° intl uz Р»РѕРєaР»Рё Р№СћТ› Р±СћР»СЃР° fallback
-        .replaceAll('January', 'РЇРЅРІР°СЂ')
-        .replaceAll('February', 'Р¤РµРІСЂР°Р»')
-        .replaceAll('March', 'РњР°СЂС‚')
-        .replaceAll('April', 'РђРїСЂРµР»')
-        .replaceAll('May', 'РњР°Р№')
+        // Бошида intl uz локaли йўқ бўлса fallback
+        .replaceAll('January', 'Январ')
+        .replaceAll('February', 'Феврал')
+        .replaceAll('March', 'Март')
+        .replaceAll('April', 'Апрел')
+        .replaceAll('May', 'Май')
         .replaceAll('June', 'РСЋРЅ')
         .replaceAll('July', 'РСЋР»')
-        .replaceAll('August', 'РђРІРіСѓСЃС‚')
-        .replaceAll('September', 'РЎРµРЅС‚СЏР±СЂ')
-        .replaceAll('October', 'РћРєС‚СЏР±СЂ')
-        .replaceAll('November', 'РќРѕСЏР±СЂ')
-        .replaceAll('December', 'Р”РµРєР°Р±СЂ');
+        .replaceAll('August', 'Август')
+        .replaceAll('September', 'Сентябр')
+        .replaceAll('October', 'Октябр')
+        .replaceAll('November', 'Ноябр')
+        .replaceAll('December', 'Декабр');
     return SectionCard(
-      title: 'рџ“… Р‘СѓРіСѓРЅРіРё ТіРёСЃРѕР±РѕС‚',
-      icon: 'рџ“Љ',
-      subtitle: '$formatted В· ${DateFormat('HH:mm').format(r.generatedAt)}',
+      title: '📅 Бугунги ҳисобот',
+      icon: '📊',
+      subtitle: '$formatted · ${DateFormat('HH:mm').format(r.generatedAt)}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -130,113 +130,113 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          _section('рџ‘Ґ Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡РёР»Р°СЂ', [
-            MetricRow(label: 'Р–Р°РјРё', value: '${r.totalUsers} С‚Р°'),
-            MetricRow(label: 'Р‘СѓРіСѓРЅРіРё СЏРЅРіРё', value: '${r.newUsersToday} С‚Р°'),
-            MetricRow(label: 'Р‘СѓРіСѓРЅ С„Р°РѕР»', value: '${r.activeUsersToday} С‚Р°'),
+          _section('👥 Фойдаланувчилар', [
+            MetricRow(label: 'Жами', value: '${r.totalUsers} та'),
+            MetricRow(label: 'Бугунги янги', value: '${r.newUsersToday} та'),
+            MetricRow(label: 'Бугун фаол', value: '${r.activeUsersToday} та'),
             MetricRow(
-                label: 'Р‘Р»РѕРє',
-                value: '${r.blockedUsers} С‚Р°',
+                label: 'Блок',
+                value: '${r.blockedUsers} та',
                 valueColor: r.blockedUsers > 0
                     ? const Color(0xFFB71C1C)
                     : null),
           ]),
-          _section('рџљ– ТІР°Р№РґРѕРІС‡РёР»Р°СЂ', [
-            MetricRow(label: 'Р–Р°РјРё', value: '${r.totalDrivers} С‚Р°'),
-            MetricRow(label: 'ТІРѕР·РёСЂ РѕРЅР»Р°Р№РЅ', value: '${r.onlineDriversNow} С‚Р°'),
+          _section('🚖 Ҳайдовчилар', [
+            MetricRow(label: 'Жами', value: '${r.totalDrivers} та'),
+            MetricRow(label: 'Ҳозир онлайн', value: '${r.onlineDriversNow} та'),
             MetricRow(
-                label: 'Р‘СѓРіСѓРЅРіРё С„Р°РѕР»',
-                value: '${r.activeDriversToday} С‚Р°'),
+                label: 'Бугунги фаол',
+                value: '${r.activeDriversToday} та'),
           ]),
-          _section('рџ“¦ Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ', [
-            MetricRow(label: 'Р–Р°РјРё', value: '${r.todayOrdersTotal} С‚Р°'),
+          _section('📦 Буюртмалар', [
+            MetricRow(label: 'Жами', value: '${r.todayOrdersTotal} та'),
             ...r.todayOrdersByStatus.entries.map(
-                (e) => MetricRow(label: e.key, value: '${e.value} С‚Р°')),
+                (e) => MetricRow(label: e.key, value: '${e.value} та')),
             ...r.todayOrdersByType.entries.map(
-                (e) => MetricRow(label: e.key, value: '${e.value} С‚Р°')),
+                (e) => MetricRow(label: e.key, value: '${e.value} та')),
             if (r.todayRejectReasons.isNotEmpty) ...[
               const Padding(
                 padding: EdgeInsets.only(top: 6, bottom: 2),
-                child: Text('Р Р°Рґ СЃР°Р±Р°Р±Р»Р°СЂРё:',
+                child: Text('Рад сабаблари:',
                     style: TextStyle(
                         fontSize: 12,
                         color: Color(0xFFB71C1C),
                         fontWeight: FontWeight.w600)),
               ),
               ...r.todayRejectReasons.entries.map(
-                  (e) => MetricRow(label: e.key, value: '${e.value} С‚Р°')),
+                  (e) => MetricRow(label: e.key, value: '${e.value} та')),
             ],
           ]),
-          _section('рџ›Ј РЎР°С„Р°СЂР»Р°СЂ', [
-            MetricRow(label: 'Р–Р°РјРё', value: '${r.todayTripsTotal} С‚Р°'),
+          _section('🛣 Сафарлар', [
+            MetricRow(label: 'Жами', value: '${r.todayTripsTotal} та'),
             ...r.todayTripsByStatus.entries.map(
-                (e) => MetricRow(label: e.key, value: '${e.value} С‚Р°')),
+                (e) => MetricRow(label: e.key, value: '${e.value} та')),
             ...r.todayTripsByTaxiType.entries.map(
-                (e) => MetricRow(label: e.key, value: '${e.value} С‚Р°')),
+                (e) => MetricRow(label: e.key, value: '${e.value} та')),
           ]),
-          _section('рџ’° РњРѕР»РёСЏ', [
+          _section('💰 Молия', [
             MetricRow(
-                icon: 'рџ’µ',
-                label: 'Р‘СѓРіСѓРЅРіРё С‚СѓС€СѓРј',
-                value: '${_money.format(r.todayRevenue)} СЃСћРј',
+                icon: '💵',
+                label: 'Бугунги тушум',
+                value: '${_money.format(r.todayRevenue)} сўм',
                 valueColor: AppColors.primary),
             MetricRow(
-                label: 'ТІР°С„С‚Р°Р»РёРє С‚СѓС€СѓРј',
-                value: '${_money.format(r.weekRevenue)} СЃСћРј'),
+                label: 'Ҳафталик тушум',
+                value: '${_money.format(r.weekRevenue)} сўм'),
             MetricRow(
-                label: 'РћР№Р»РёРє С‚СѓС€СѓРј',
-                value: '${_money.format(r.monthRevenue)} СЃСћРј'),
+                label: 'Ойлик тушум',
+                value: '${_money.format(r.monthRevenue)} сўм'),
             MetricRow(
-                label: 'РЋСЂС‚Р°С‡Р° Р±СѓСЋСЂС‚РјР° Т›РёР№РјР°С‚Рё',
-                value: '${_money.format(r.avgOrderValue.toInt())} СЃСћРј'),
+                label: 'Ўртача буюртма қиймати',
+                value: '${_money.format(r.avgOrderValue.toInt())} сўм'),
             MetricRow(
-                label: 'РЋСЂС‚Р°С‡Р° СЃР°С„Р°СЂ Т›РёР№РјР°С‚Рё',
-                value: '${_money.format(r.avgTripValue.toInt())} СЃСћРј'),
+                label: 'Ўртача сафар қиймати',
+                value: '${_money.format(r.avgTripValue.toInt())} сўм'),
             MetricRow(
-                label: 'ТљР°Р№С‚Р°СЂРёР»РіР°РЅ Т›РѕР»РґРёТ›',
-                value: '${_money.format(r.todayCashChange)} СЃСћРј'),
+                label: 'Қайтарилган қолдиқ',
+                value: '${_money.format(r.todayCashChange)} сўм'),
             MetricRow(
-                label: 'РљРѕС€РµР»С‘РєРґР°РіРё РїСѓР»',
-                value: '${_money.format(r.totalWalletBalance)} СЃСћРј'),
+                label: 'Кошелёкдаги пул',
+                value: '${_money.format(r.totalWalletBalance)} сўм'),
             MetricRow(
-                label: 'РљСѓС‚Р°С‘С‚РіР°РЅ payout',
+                label: 'Кутаётган payout',
                 value:
-                    '${r.pendingPayouts} С‚Р° В· ${_money.format(r.pendingPayoutsAmount)} СЃСћРј',
+                    '${r.pendingPayouts} та · ${_money.format(r.pendingPayoutsAmount)} сўм',
                 valueColor: r.pendingPayouts > 0
                     ? AppColors.primary
                     : null),
           ]),
-          _section('вљ™пёЏ Р­С„С„РµРєС‚РёРІР»РёРє', [
+          _section('⚙️ Эффективлик', [
             MetricRow(
-                label: 'Eng band СЃРѕР°С‚',
+                label: 'Eng band соат',
                 value: '${r.peakHour.toString().padLeft(2, '0')}:00'),
             MetricRow(
-                label: 'Р‘РµРєРѕСЂ Т›РёР»РёС€',
+                label: 'Бекор қилиш',
                 value: '${r.cancellationRate.toStringAsFixed(1)}%',
                 valueColor: r.cancellationRate > 15
                     ? const Color(0xFFB71C1C)
                     : null),
           ]),
           if (r.topProducts.isNotEmpty)
-            _section('рџЏ† РўРѕРї РјР°ТіСЃСѓР»РѕС‚Р»Р°СЂ', [
+            _section('🏆 Топ маҳсулотлар', [
               for (final p in r.topProducts)
                 MetricRow(
                     label: p['label']?.toString() ?? '',
-                    value: '${p['value']} С‚Р°'),
+                    value: '${p['value']} та'),
             ]),
           if (r.topRoutes.isNotEmpty)
-            _section('рџ›Ј РўРѕРї РјР°СЂС€СЂСѓС‚Р»Р°СЂ', [
+            _section('🛣 Топ маршрутлар', [
               for (final p in r.topRoutes)
                 MetricRow(
                     label: p['label']?.toString() ?? '',
-                    value: '${p['value']} С‚Р°'),
+                    value: '${p['value']} та'),
             ]),
           if (r.topDrivers.isNotEmpty)
-            _section('рџҐ‡ РўРѕРї ТіР°Р№РґРѕРІС‡РёР»Р°СЂ (СЃР°С„Р°СЂ)', [
+            _section('🥇 Топ ҳайдовчилар (сафар)', [
               for (final p in r.topDrivers)
                 MetricRow(
                     label: p['label']?.toString() ?? '',
-                    value: '${p['value']} С‚Р°'),
+                    value: '${p['value']} та'),
             ]),
         ],
       ),
@@ -245,16 +245,16 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
   Widget _emptyToday(bool loading) {
     return SectionCard(
-      title: 'рџ“… Р‘СѓРіСѓРЅРіРё ТіРёСЃРѕР±РѕС‚',
-      icon: 'рџ“Љ',
+      title: '📅 Бугунги ҳисобот',
+      icon: '📊',
       child: Column(children: [
         Icon(Icons.assessment_outlined,
             size: 48, color: Colors.grey.shade300),
         const SizedBox(height: 8),
         Text(
           loading
-              ? 'Р®РєР»Р°РЅРјРѕТ›РґР°...'
-              : 'Р‘СѓРіСѓРЅРіРё ТіРёСЃРѕР±РѕС‚ ТіР°Р»Рё С‚Р°Р№С‘СЂ СЌРјР°СЃ.\nРЎРѕР°С‚ 20:00 РґР°РЅ РєРµР№РёРЅ С‘РєРё "ТљР°Р№С‚Р°-СЏСЃР°С€" С‚СѓРіРјР°СЃРё РѕСЂТ›Р°Р»Рё.',
+              ? 'Юкланмоқда...'
+              : 'Бугунги ҳисобот ҳали тайёр эмас.\nСоат 20:00 дан кейин ёки "Қайта-ясаш" тугмаси орқали.',
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
         ),
@@ -291,7 +291,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
               Text(
-                '${r.todayOrdersTotal} Р±СѓСЋСЂС‚РјР° В· ${r.todayTripsTotal} СЃР°С„Р°СЂ В· ${_money.format(r.todayRevenue)} СЃСћРј',
+                '${r.todayOrdersTotal} буюртма · ${r.todayTripsTotal} сафар · ${_money.format(r.todayRevenue)} сўм',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],

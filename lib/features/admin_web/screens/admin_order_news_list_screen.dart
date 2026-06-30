@@ -7,7 +7,7 @@ import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
 import '../services/admin_news_read_service.dart';
 
-/// Admin вЂ” mijozga yuborilgan buyurtma status xabarlari (`admin_news`).
+/// Admin — mijozga yuborilgan buyurtma status xabarlari (`admin_news`).
 class AdminOrderNewsListScreen extends StatefulWidget {
   const AdminOrderNewsListScreen({super.key});
 
@@ -31,19 +31,19 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
   String _statusLabel(String s) {
     switch (s) {
       case 'new':
-        return 'Р®Р±РѕСЂРёР»РґРё';
+        return 'Юборилди';
       case 'accepted':
-        return 'ТљР°Р±СѓР»';
+        return 'Қабул';
       case 'ready':
-        return 'РўР°Р№С‘СЂ';
+        return 'Тайёр';
       case 'in_delivery':
-        return 'Р™СћР»РґР°';
+        return 'Йўлда';
       case 'delivered':
-        return 'Р•С‚РєР°Р·РёР»РґРё';
+        return 'Етказилди';
       case 'rejected':
-        return 'Р Р°Рґ';
+        return 'Рад';
       default:
-        return s.isEmpty ? 'вЂ”' : s;
+        return s.isEmpty ? '—' : s;
     }
   }
 
@@ -72,7 +72,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               }
               if (snap.hasError) {
                 return Center(
-                  child: Text('РҐР°С‚РѕР»РёРє: ${snap.error}',
+                  child: Text('Хатолик: ${snap.error}',
                       style: const TextStyle(color: Colors.red)),
                 );
               }
@@ -85,7 +85,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
                       Icon(Icons.inbox_outlined,
                           size: 48, color: Colors.grey.shade400),
                       const SizedBox(height: 12),
-                      Text('Р‘СѓСЋСЂС‚РјР° С…abarlar Р№СћТ›',
+                      Text('Буюртма хabarlar йўқ',
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -139,7 +139,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'рџ“‹ Р‘СѓСЋСЂС‚РјР° С…Р°Р±Р°СЂ',
+                  '📋 Буюртма хабар',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 2),
@@ -157,13 +157,13 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
 
   Widget _filterBar() {
     const filters = [
-      ('all', 'Р‘Р°СЂС‡asi'),
-      ('new', 'Р®Р±РѕСЂРёР»РґРё'),
-      ('accepted', 'ТљР°Р±СѓР»'),
-      ('ready', 'РўР°Р№С‘СЂ'),
-      ('in_delivery', 'Р™СћР»РґР°'),
-      ('delivered', 'Р•С‚РєР°Р·РёР»РґРё'),
-      ('rejected', 'Р Р°Рґ'),
+      ('all', 'Барчasi'),
+      ('new', 'Юборилди'),
+      ('accepted', 'Қабул'),
+      ('ready', 'Тайёр'),
+      ('in_delivery', 'Йўлда'),
+      ('delivered', 'Етказилди'),
+      ('rejected', 'Рад'),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -240,14 +240,14 @@ class _OrderNewsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final typeLabel =
-        item.orderType == 'food' ? 'рџЌЅ РўР°Р№С‘СЂ РѕРІТ›Р°С‚' : 'рџЌћ РќРѕРЅ Р±СѓСЋСЂС‚РјР°';
+        item.orderType == 'food' ? '🍽 Тайёр овқат' : '🍞 Нон буюртма';
     final status = statusLabel(item.orderStatus);
-  final phone = item.targetUserId.isNotEmpty ? item.targetUserId : 'вЂ”';
+  final phone = item.targetUserId.isNotEmpty ? item.targetUserId : '—';
     final orderId = item.orderId.isNotEmpty
         ? (item.orderId.length > 10
-            ? '${item.orderId.substring(0, 10)}вЂ¦'
+            ? '${item.orderId.substring(0, 10)}…'
             : item.orderId)
-        : 'вЂ”';
+        : '—';
 
     return Container(
       decoration: BoxDecoration(
@@ -327,10 +327,10 @@ class _OrderNewsCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text('рџ“± $phone',
+                  Text('📱 $phone',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
-                  Text('рџ†” $orderId',
+                  Text('🆔 $orderId',
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade600)),
                 ],
@@ -355,7 +355,7 @@ class _OrderNewsCard extends StatelessWidget {
                 const Spacer(),
                 if (item.priority > 0)
                   Text(
-                    'в­ђ ${item.priority}',
+                    '⭐ ${item.priority}',
                     style: TextStyle(
                       fontSize: 10,
                       color: Colors.amber.shade800,

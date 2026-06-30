@@ -8,7 +8,7 @@ import '../controllers/analytics_controller.dart';
 import '../widgets/kpi_grid.dart';
 import '../widgets/section_card.dart';
 
-/// 1-С‚Р°Р±: Р‘СѓС‚СѓРЅ ТіРѕР»Р°С‚РЅРёРЅРі Р±РёСЂР»Р°С€РіР°РЅ KPI РєРµСЃРёРјРё.
+/// 1-таб: Бутун ҳолатнинг бирлашган KPI кесими.
 class DashboardTab extends StatefulWidget {
   const DashboardTab({super.key});
 
@@ -41,7 +41,7 @@ class _DashboardTabState extends State<DashboardTab>
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(c.kpiError ?? 'РњР°СЉР»СѓРјРѕС‚ СЋРєР»Р°Р± Р±СћР»РјР°РґРё',
+          child: Text(c.kpiError ?? 'Маълумот юклаб бўлмади',
               style: const TextStyle(color: Colors.red)),
         ),
       );
@@ -57,10 +57,10 @@ class _DashboardTabState extends State<DashboardTab>
           _liveBanner(kpi),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'РђСЃРѕСЃРёР№ KPI',
-            icon: 'рџ“Љ',
+            title: 'Асосий KPI',
+            icon: '📊',
             subtitle:
-                'Р‘СѓРіСѓРЅ ${DateFormat('dd.MM.yyyy').format(DateTime.now())}',
+                'Бугун ${DateFormat('dd.MM.yyyy').format(DateTime.now())}',
             child: KpiGrid(
               aspectRatio: 1.55,
               kpis: [
@@ -73,8 +73,8 @@ class _DashboardTabState extends State<DashboardTab>
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡РёР»Р°СЂ',
-            icon: 'рџ‘Ґ',
+            title: 'Фойдаланувчилар',
+            icon: '👥',
             child: KpiGrid(
               aspectRatio: 1.55,
               accent: AppColors.primary,
@@ -82,22 +82,22 @@ class _DashboardTabState extends State<DashboardTab>
                 kpi.usersKpi,
                 kpi.activeUsersKpi,
                 KpiValue(
-                    label: 'Р‘Р»РѕРє',
+                    label: 'Блок',
                     value: kpi.blockedUsers,
-                    unit: 'С‚Р°',
-                    icon: 'рџљ«'),
+                    unit: 'та',
+                    icon: '🚫'),
                 KpiValue(
-                    label: 'РљСѓС‚Р°С‘С‚РіР°РЅ payout',
+                    label: 'Кутаётган payout',
                     value: kpi.pendingPayouts,
-                    unit: 'С‚Р°',
-                    icon: 'рџ’ё'),
+                    unit: 'та',
+                    icon: '💸'),
               ],
             ),
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'ТІР°Р№РґРѕРІС‡РёР»Р°СЂ',
-            icon: 'рџљ–',
+            title: 'Ҳайдовчилар',
+            icon: '🚖',
             child: KpiGrid(
               aspectRatio: 1.55,
               accent: AppColors.primaryDark,
@@ -135,9 +135,9 @@ class _DashboardTabState extends State<DashboardTab>
         const SizedBox(width: 12),
         Expanded(
           child: Wrap(spacing: 16, runSpacing: 4, children: [
-            _live('РћРЅР»Р°Р№РЅ ТіР°Р№РґРѕРІС‡Рё', kpi.onlineDrivers, 'рџџў'),
-            _live('Р¤Р°РѕР» СЃР°С„Р°СЂР»Р°СЂ (hozir)', kpi.activeTrips, 'рџљ—'),
-            _live('РљСѓС‚Р°С‘С‚РіР°РЅ Р±СѓСЋСЂС‚РјР°', kpi.pendingOrders, 'рџ“¦'),
+            _live('Онлайн ҳайдовчи', kpi.onlineDrivers, '🟢'),
+            _live('Фаол сафарлар (hozir)', kpi.activeTrips, '🚗'),
+            _live('Кутаётган буюртма', kpi.pendingOrders, '📦'),
           ]),
         ),
       ]),
@@ -166,20 +166,20 @@ class _DashboardTabState extends State<DashboardTab>
     final fmt = NumberFormat.decimalPattern('en');
     final revToday = fmt.format(kpi.todayRevenue);
     return SectionCard(
-      title: 'РљСѓРЅРґР°Р»РёРє РїСѓР»СЃ',
-      icon: 'рџ’“',
-      subtitle: 'РЎСћРЅРіРіРё 24 СЃРѕР°С‚',
+      title: 'Кундалик пулс',
+      icon: '💓',
+      subtitle: 'Сўнгги 24 соат',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _pulseLine(
-            'рџ“¦ Р‘СѓРіСѓРЅРіРё С‚СѓС€СѓРј', '$revToday СЃСћРј', AppColors.primary),
+            '📦 Бугунги тушум', '$revToday сўм', AppColors.primary),
         _pulseLine(
-            'рџ›’ Р‘СѓРіСѓРЅРіРё Р±СѓСЋСЂС‚РјР°Р»Р°СЂ',
-            '${kpi.todayOrders} С‚Р°',
+            '🛒 Бугунги буюртмалар',
+            '${kpi.todayOrders} та',
             AppColors.primary),
-        _pulseLine('рџ›Ј Р‘СѓРіСѓРЅРіРё СЃР°С„Р°СЂР»Р°СЂ', '${kpi.todayTrips} С‚Р°',
+        _pulseLine('🛣 Бугунги сафарлар', '${kpi.todayTrips} та',
             AppColors.primary),
         _pulseLine(
-            'рџ†• РЇРЅРіРё С„РѕР№РґР°Р»Р°РЅСѓРІС‡Рё', '${kpi.newUsersToday} С‚Р°',
+            '🆕 Янги фойдаланувчи', '${kpi.newUsersToday} та',
             AppColors.primary),
       ]),
     );

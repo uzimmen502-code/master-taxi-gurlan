@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/gurlan_places.dart';
 
-/// Р“СѓСЂР»Р°РЅ РњР¤Р™ С‚Р°РЅР»Р°С€ СѓС‡СѓРЅ СѓРЅРёРІРµСЂСЃР°Р» input. Driver register, driver schedule
-/// РєР°Р±Рё driver flow'Р»Р°СЂРёРґР° Т›Р°Р№С‚Р° РёС€Р»Р°С‚РёР»Р°РґРё. Passenger С‚РѕРјРѕРЅРёРґР° СЃРѕРґРґР°СЂРѕТ›
-/// `MfyDropdown` Р±РѕСЂ вЂ” Сѓ Р±РѕС€Т›Р°С‡Р° (yagona text field Р±РёР»Р°РЅ).
+/// Гурлан МФЙ танлаш учун универсал input. Driver register, driver schedule
+/// каби driver flow'ларида қайта ишлатилади. Passenger томонида соддароқ
+/// `MfyDropdown` бор — у бошқача (yagona text field билан).
 class MfyField extends StatelessWidget {
   const MfyField({
     super.key,

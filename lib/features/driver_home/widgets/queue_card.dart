@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/queue_entry.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// РќР°РІР±Р°С‚ СЂСћР№С…Р°С‚Рё вЂ” РїРѕР·РёС†РёСЏ + РєРµР№РёРЅРіРё РјР°СЂС€СЂСѓС‚.
+/// Навбат рўйхати — позиция + кейинги маршрут.
 class QueueCard extends StatelessWidget {
   const QueueCard({
     super.key,
@@ -26,7 +26,7 @@ class QueueCard extends StatelessWidget {
     if (queueList.isNotEmpty) {
       final first = queueList.first;
       if (first.to.isNotEmpty) {
-        nextRoute = '${first.to} в†’ ${first.from}';
+        nextRoute = '${first.to} → ${first.from}';
       }
     }
     return Container(
@@ -49,7 +49,7 @@ class QueueCard extends StatelessWidget {
           child: Row(children: [
             const Icon(Icons.queue, color: _blue, size: 18),
             const SizedBox(width: 8),
-            const Text('рџ“‹ РќР°РІР±Р°С‚ С‚РёР·РёРјРё',
+            const Text('📋 Навбат тизими',
                 style: TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold)),
@@ -64,8 +64,8 @@ class QueueCard extends StatelessWidget {
                 ),
                 child: Text(
                   myPosition == 1
-                      ? 'рџҐ‡ РЎРёР· Р±РёСЂРёРЅС‡РёСЃРёР·!'
-                      : '$myPosition-РЅР°РІР±Р°С‚',
+                      ? '🥇 Сиз биринчисиз!'
+                      : '$myPosition-навбат',
                   style: const TextStyle(
                       fontSize: AppText.labelSmall,
                       color: Colors.white,
@@ -118,7 +118,7 @@ class QueueCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isMe ? '${q.driverName} (РЎРёР·)' : q.driverName,
+                          isMe ? '${q.driverName} (Сиз)' : q.driverName,
                           style: TextStyle(
                               fontSize: AppText.bodyMedium,
                               fontWeight: isMe
@@ -126,7 +126,7 @@ class QueueCard extends StatelessWidget {
                                   : FontWeight.normal,
                               color: isMe ? _green : Colors.black87),
                         ),
-                        Text('${q.from} в†’ ${q.to}',
+                        Text('${q.from} → ${q.to}',
                             style: TextStyle(
                                 fontSize: AppText.labelSmall,
                                 color: Colors.grey.shade500),
@@ -143,7 +143,7 @@ class QueueCard extends StatelessWidget {
                         : Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('рџ’є ${q.seatsLeft}',
+                  child: Text('💺 ${q.seatsLeft}',
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w600,
@@ -159,7 +159,7 @@ class QueueCard extends StatelessWidget {
             child: Row(children: [
               const Icon(Icons.swap_horiz, color: _orange, size: 16),
               const SizedBox(width: 6),
-              Text('РљРµР№РёРЅРіРё РјР°СЂС€СЂСѓС‚: $nextRoute',
+              Text('Кейинги маршрут: $nextRoute',
                   style: const TextStyle(
                       fontSize: AppText.bodySmall,
                       color: _orange,

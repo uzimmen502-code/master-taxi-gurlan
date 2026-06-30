@@ -9,10 +9,10 @@ import '../widgets/language_settings_tile.dart';
 import 'address_edit_screen.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё вЂ” РёСЃРј/Р¶РёРЅСЃ/СЂРѕР»СЊ/РјР°РЅР·РёР».
+/// Фойдаланувчи маълумотлари — исм/жинс/роль/манзил.
 ///
-/// Profile СЌРєСЂР°РЅРёРґР°РЅ "Р¤РѕР№РґР°Р»Р°РЅСѓРІС‡Рё РјР°СЉР»СѓРјРѕС‚Р»Р°СЂРё" РєР°СЂС‚Р°СЃРё РѕСЂТ›Р°Р»Рё РѕС‡РёР»Р°РґРё.
-/// Р­СЃРєРё ProfileScreen'РЅРёРЅРі info section'Рё Р±Сѓ Р№РµСЂРіР° РєСћС‡РёСЂРёР»РґРё.
+/// Profile экранидан "Фойдаланувчи маълумотлари" картаси орқали очилади.
+/// Эски ProfileScreen'нинг info section'и бу йерга кўчирилди.
 class UserInfoScreen extends StatefulWidget {
   const UserInfoScreen({super.key});
 
@@ -155,8 +155,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               onPressed: () => setState(() => _editing = true),
             )
           else ...[
-            // Edit СЂРµР¶РёРјРёРґР° РёРєРєРёС‚Р° С‚РµРєСЃС‚Р»Рё С‚СѓРіРјР° вЂ” СЌРєСЂР°РЅРґР° С‚РѕСЂ Р±СћР»РёР± Т›РѕР»РјР°СЃРёРЅ
-            // РґРµР± РёРєРѕРЅРєР°Р»aС€С‚РёСЂРёР»РґРё (Р±СѓС‚СѓРЅ Р¶РѕР№ СЌРіaР»Р»aРјaР№РґРё).
+            // Edit режимида иккита текстли тугма — экранда тор бўлиб қолмасин
+            // деб иконкалaштирилди (бутун жой эгaллaмaйди).
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white70),
               tooltip: loc.translate('cancel'),
@@ -202,7 +202,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               child: _editing
                   ? _input(_nameCtrl, loc.translate('enter_name'),
                       TextInputType.name)
-                  : Text(c.name.isEmpty ? 'вЂ”' : c.name,
+                  : Text(c.name.isEmpty ? '—' : c.name,
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w500)),
             ),
@@ -219,7 +219,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
                       ],
                     )
-                  : Text(c.phone.isEmpty ? 'вЂ”' : c.phone,
+                  : Text(c.phone.isEmpty ? '—' : c.phone,
                       style: const TextStyle(
                           fontSize: 15, fontWeight: FontWeight.w500)),
             ),

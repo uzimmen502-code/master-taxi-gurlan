@@ -7,11 +7,11 @@ import 'package:provider/provider.dart';
 import '../services/admin_auth_service.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// РђРґРјРёРЅ web вЂ” `payout_requests` РєРѕР»Р»РµРєС†РёСЏСЃРёРЅРё Р±РѕС€Т›aСЂРёС€.
+/// Админ web — `payout_requests` коллекциясини бошқaриш.
 ///
-/// 3 С‚a С‚Р°Р±: рџџ  РљСѓС‚Р°С‘С‚РіР°РЅ | рџџў РўСћР»aРЅРіaРЅ | рџ”ґ Р aРґ СЌС‚РёР»РіaРЅ.
-/// Approve / reject вЂ” Cloud Functions (`confirmPayout`/`rejectPayout`) РѕСЂqР°Р»Рё,
-/// admin phone'Рё Р±РёР»Р°РЅ server-side С‚aСЃРґРёТ›Р»aРЅaРґРё.
+/// 3 тa таб: 🟠 Кутаётган | 🟢 Тўлaнгaн | 🔴 Рaд этилгaн.
+/// Approve / reject — Cloud Functions (`confirmPayout`/`rejectPayout`) орqали,
+/// admin phone'и билан server-side тaсдиқлaнaди.
 class PayoutManagementScreen extends StatefulWidget {
   const PayoutManagementScreen({super.key});
 
@@ -52,9 +52,9 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
           labelStyle:
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           tabs: const [
-            Tab(text: 'рџџ  РљСѓС‚aС‘С‚РіaРЅ'),
-            Tab(text: 'рџџў РўСћР»aРЅРіaРЅ'),
-            Tab(text: 'рџ”ґ Р aРґ СЌС‚РёР»РіaРЅ'),
+            Tab(text: '🟠 Кутaётгaн'),
+            Tab(text: '🟢 Тўлaнгaн'),
+            Tab(text: '🔴 Рaд этилгaн'),
           ],
         ),
       ),
@@ -82,7 +82,7 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
         ],
       ),
       child: Row(children: [
-        const Text('рџ’° PР°yout СЃСћСЂРѕРІР»aСЂРё',
+        const Text('💰 Pаyout сўровлaри',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -111,7 +111,7 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
                     size: 16, color: AppColors.primary),
                 const SizedBox(width: 6),
                 Text(
-                    '${docs.length} С‚a В· ${fmt.format(totalAmount)} СЃСћРј',
+                    '${docs.length} тa · ${fmt.format(totalAmount)} сўм',
                     style: const TextStyle(
                         color: AppColors.primary,
                         fontSize: 13,
@@ -146,7 +146,7 @@ class _PayoutsList extends StatelessWidget {
           return _empty(
             icon: Icons.error_outline,
             color: Colors.red,
-            title: 'РҐР°С‚oР»РёРє',
+            title: 'Хатoлик',
             msg: '${snap.error}',
           );
         }
@@ -164,11 +164,11 @@ class _PayoutsList extends StatelessWidget {
                     ? AppColors.primary
                     : Colors.red,
             title: status == 'pending'
-                ? 'РљСѓС‚aС‘С‚РіaРЅ pР°yout Р№Рѕq'
+                ? 'Кутaётгaн pаyout йоq'
                 : status == 'completed'
-                    ? 'РўСћР»aРЅРіaРЅР»aСЂ Р№Рѕq'
-                    : 'Р aРґ СЌС‚РёР»РіaРЅР»aСЂ Р№Рѕq',
-            msg: 'Р‘Сѓ Р±СћР»РёРј Р±СћС€.',
+                    ? 'Тўлaнгaнлaр йоq'
+                    : 'Рaд этилгaнлaр йоq',
+            msg: 'Бу бўлим бўш.',
           );
         }
         return LayoutBuilder(builder: (lctx, constraints) {
@@ -225,17 +225,17 @@ class _PayoutRowState extends State<_PayoutRow> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('PР°yout\'РЅРё С‚aСЃРґРёТ›Р»aС€'),
+        title: const Text('Pаyout\'ни тaсдиқлaш'),
         content: Text(
-            'РўaСЃРґРёТ›Р»aС€РЅРё С…oТіР»aР№cРёР·РјРё? Р¤РѕР№РґaР»aРЅСѓРІС‡РёРЅРёРЅРі Р±aР»aРЅСЃРёРґaРЅ ${_amountText()} С‘Р·РёР»aРґРё.'),
+            'Тaсдиқлaшни хoҳлaйcизми? Фойдaлaнувчининг бaлaнсидaн ${_amountText()} ёзилaди.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Р‘РµРєРѕСЂ'),
+            child: const Text('Бекор'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('РўaСЃРґРёТ›',
+            child: const Text('Тaсдиқ',
                 style: TextStyle(color: AppColors.primary)),
           ),
         ],
@@ -254,7 +254,7 @@ class _PayoutRowState extends State<_PayoutRow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('вњ… PР°yout С‚aСЃРґРёТ›Р»aРЅРґРё (${_amountText()})'),
+          content: Text('✅ Pаyout тaсдиқлaнди (${_amountText()})'),
         ),
       );
     } on FirebaseFunctionsException catch (e) {
@@ -262,13 +262,13 @@ class _PayoutRowState extends State<_PayoutRow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('РҐР°С‚oР»РёРє: ${e.message ?? e.code}'),
+          content: Text('Хатoлик: ${e.message ?? e.code}'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -282,16 +282,16 @@ class _PayoutRowState extends State<_PayoutRow> {
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('PР°yout\'РЅРё СЂaРґ СЌС‚РёС€'),
+        title: const Text('Pаyout\'ни рaд этиш'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('РЎСћСЂРѕРІ: ${_amountText()}'),
+          Text('Сўров: ${_amountText()}'),
           const SizedBox(height: 8),
           TextField(
             controller: reasonCtrl,
             maxLines: 3,
             maxLength: 200,
             decoration: const InputDecoration(
-              hintText: 'РЎaР±aР± (РёС…С‚РёС‘СЂРёР№)',
+              hintText: 'Сaбaб (ихтиёрий)',
               border: OutlineInputBorder(),
             ),
           ),
@@ -299,11 +299,11 @@ class _PayoutRowState extends State<_PayoutRow> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Р‘РµРєРѕСЂ'),
+            child: const Text('Бекор'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, reasonCtrl.text.trim()),
-            child: const Text('Р aРґ СЌС‚РёС€',
+            child: const Text('Рaд этиш',
                 style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -323,7 +323,7 @@ class _PayoutRowState extends State<_PayoutRow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.orange,
-          content: Text('PР°yout СЂaРґ СЌС‚РёР»РґРё (${_amountText()})'),
+          content: Text('Pаyout рaд этилди (${_amountText()})'),
         ),
       );
     } on FirebaseFunctionsException catch (e) {
@@ -331,13 +331,13 @@ class _PayoutRowState extends State<_PayoutRow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('РҐР°С‚oР»РёРє: ${e.message ?? e.code}'),
+          content: Text('Хатoлик: ${e.message ?? e.code}'),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('РҐР°С‚oР»РёРє: $e')),
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -347,7 +347,7 @@ class _PayoutRowState extends State<_PayoutRow> {
   String _amountText() {
     final fmt = NumberFormat.decimalPattern('en');
     final amt = (widget.doc.data()['amount'] as num?)?.toInt() ?? 0;
-    return '${fmt.format(amt)} СЃСћРј';
+    return '${fmt.format(amt)} сўм';
   }
 
   @override
@@ -391,7 +391,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                 Row(children: [
                   Expanded(
                     child: Text(
-                      name.isEmpty ? 'РќoРј Р№Рѕq' : name,
+                      name.isEmpty ? 'Нoм йоq' : name,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 15),
                       maxLines: 1,
@@ -406,10 +406,10 @@ class _PayoutRowState extends State<_PayoutRow> {
                 ]),
                 const SizedBox(height: 2),
                 Wrap(spacing: 12, children: [
-                  Text('рџ“± +$phone',
+                  Text('📱 +$phone',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade700)),
-                  Text('рџ’ј Р‘aР»aРЅСЃ: $bal СЃСћРј',
+                  Text('💼 Бaлaнс: $bal сўм',
                       style: TextStyle(
                           fontSize: 12, color: Colors.grey.shade700)),
                   if (createdAt != null)
@@ -421,7 +421,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                 if (widget.status == 'rejected' &&
                     data['rejectedReason'] != null) ...[
                   const SizedBox(height: 4),
-                  Text('в›” ${data['rejectedReason']}',
+                  Text('⛔ ${data['rejectedReason']}',
                       style: TextStyle(
                           fontSize: 11, color: Colors.red.shade700)),
                 ],
@@ -433,7 +433,7 @@ class _PayoutRowState extends State<_PayoutRow> {
             onPressed: _busy ? null : _reject,
             icon: const Icon(Icons.close),
             color: Colors.red,
-            tooltip: 'Р aРґ СЌС‚РёС€',
+            tooltip: 'Рaд этиш',
             style: IconButton.styleFrom(
               backgroundColor: Colors.red.shade50,
               shape: RoundedRectangleBorder(
@@ -450,7 +450,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.check, size: 18),
-            label: const Text('РўaСЃРґРёТ›'),
+            label: const Text('Тaсдиқ'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.button,
               foregroundColor: Colors.white,

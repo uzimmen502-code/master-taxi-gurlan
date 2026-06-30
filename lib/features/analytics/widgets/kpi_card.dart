@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
 
-/// Р‘РёС‚С‚Р° KPI РєР°РґСЂРЅРё РєСћСЂСЃР°С‚СѓРІС‡Рё РєР°СЂС‚Р° вЂ” Р°СЃРѕСЃРёР№ СЂР°Т›Р°Рј + delta С‚РµРЅРіР»РёРє.
+/// Битта KPI кадрни кўрсатувчи карта — асосий рақам + delta тенглик.
 class KpiCard extends StatelessWidget {
   const KpiCard({
     super.key,
@@ -101,7 +101,7 @@ class KpiCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'Р°РІРІР°Р»РіРёРґР°РЅ',
+                'аввалгидан',
                 style: TextStyle(
                     fontSize: 10, color: Colors.grey.shade500),
               ),

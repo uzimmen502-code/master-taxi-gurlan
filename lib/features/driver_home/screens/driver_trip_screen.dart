@@ -13,12 +13,12 @@ import '../../../services/google_directions_service.dart';
 import '../../../services/polyline_decoder.dart';
 import '../../../utils/fare_calculator.dart';
 
-/// ТІР°Р№РґРѕРІС‡Рё СЃР°С„Р°СЂ СЌРєСЂР°РЅРё вЂ” Р№СћР»РѕРІС‡Рё Т›Р°Р±СѓР» Т›РёР»РёРЅРіР°РЅРґР°РЅ РєРµР№РёРЅ.
+/// Ҳайдовчи сафар экрани — йўловчи қабул қилингандан кейин.
 ///
-/// РРєРєРё С„Р°Р·Р°:
-///   1. [_Phase.pick]      вЂ” РјР°РЅР·РёР»РЅРё С…Р°СЂРёС‚Р°РґР° Р±РµР»РіРёР»Р°С€ + РјР°СЂС€СЂСѓС‚ РјР°СЃРѕС„Р°СЃРё.
-///   2. [_Phase.navigating] вЂ” Р¶РѕРЅР»Рё GPS РєСѓР·Р°С‚СѓРІ, Р±РѕСЃРёР± СћС‚РёР»РіР°РЅ РјР°СЃРѕС„Р°РіР° Т›Р°СЂР°Р±
-///      Р№СћР»РєРёСЂР° РІР° "Т›РѕР»РіР°РЅ РјР°СЃРѕС„Р°" СЂРµР°Р» РІР°Т›С‚РґР° СЏРЅРіРёР»Р°РЅР°РґРё.
+/// РРєРєРё фаза:
+///   1. [_Phase.pick]      — манзилни харитада белгилаш + маршрут масофаси.
+///   2. [_Phase.navigating] — жонли GPS кузатув, босиб ўтилган масофага қараб
+///      йўлкира ва "қолган масофа" реал вақтда янгиланади.
 enum _Phase { pick, navigating }
 
 class DriverTripScreen extends StatefulWidget {
@@ -31,10 +31,10 @@ class DriverTripScreen extends StatefulWidget {
 
   final TripRequest ride;
 
-  /// РЎР°С„Р°СЂ СЏРєСѓРЅР»Р°РЅРіР°С‡ С‡Р°Т›РёСЂРёР»Р°РґРё вЂ” `(fare)` СѓР·Р°С‚РёР»Р°РґРё.
+  /// Сафар якунлангач чақирилади — `(fare)` узатилади.
   final void Function(int fare) onFinish;
 
-  /// РЎР°С„Р°СЂ С‚СѓРіР°С‚РёР»РјР°СЃРґР°РЅ С‡РёТ›РёР»РіР°РЅРґР° вЂ” Р±Р°РЅРґР»РёРєРЅРё Р±РµРєРѕСЂ Т›РёР»РёС€ СѓС‡СѓРЅ.
+  /// Сафар тугатилмасдан чиқилганда — бандликни бекор қилиш учун.
   final VoidCallback onCancel;
 
   @override
@@ -48,23 +48,23 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   final _directionsService = GoogleDirectionsService();
   final _polylineDecoder = const PolylineDecoder();
 
-  /// Р™СћР»РѕРІС‡Рё Р¶РѕР№Р»Р°С€СѓРІРё (Р±РѕС€Р»Р°РЅРёС€ РЅСѓТ›С‚Р°СЃРё).
+  /// Йўловчи жойлашуви (бошланиш нуқтаси).
   late final LatLng _origin;
 
-  /// ТІР°Р№РґРѕРІС‡Рё С‚Р°РЅР»Р°РіР°РЅ РјР°РЅР·РёР» (С‚СѓРіР°С€ РЅСѓТ›С‚Р°СЃРё).
+  /// Ҳайдовчи танлаган манзил (тугаш нуқтаси).
   LatLng? _destination;
 
-  /// РњР°СЂС€СЂСѓС‚ С‡РёР·РёТ“Рё (Google Directions polyline).
+  /// Маршрут чизиғи (Google Directions polyline).
   final Set<Polyline> _polylines = {};
 
-  /// Google РјР°СЂС€СЂСѓС‚ РјР°СЃРѕС„Р°СЃРё (РєРј) вЂ” РЅР°РІРёРіР°С†РёСЏ Р±РѕС€Р»Р°РЅРіР°РЅРґР° Т›РѕС‚РёСЂРёР»Р°РґРё.
+  /// Google маршрут масофаси (км) — навигация бошланганда қотирилади.
   double? _routeKm;
   bool _calculating = false;
   String? _calcError;
 
   _Phase _phase = _Phase.pick;
 
-  /// Р–РѕРЅР»Рё РєСѓР·Р°С‚СѓРІ.
+  /// Жонли кузатув.
   StreamSubscription<Position>? _posSub;
   LatLng? _lastPos;
   double _drivenKm = 0;
@@ -90,7 +90,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     super.dispose();
   }
 
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ 1-С„Р°Р·Р°: РјР°РЅР·РёР» С‚Р°РЅР»Р°С€ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ─────────────────── 1-фаза: манзил танлаш ───────────────────
   void _onMapTap(LatLng latLng) {
     if (_phase != _Phase.pick) return;
     setState(() {
@@ -102,7 +102,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     _calculateRoute();
   }
 
-  /// Р™СћР»РѕРІС‡Рё в†’ РјР°РЅР·РёР»: Google Directions РѕСЂТ›Р°Р»Рё Р№СћР» РјР°СЃРѕС„Р°СЃРё РІР° С‡РёР·РёТ“Рё.
+  /// Йўловчи → манзил: Google Directions орқали йўл масофаси ва чизиғи.
   Future<void> _calculateRoute() async {
     final dest = _destination;
     if (dest == null) return;
@@ -148,12 +148,12 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
       if (!mounted) return;
       setState(() {
         _calculating = false;
-        _calcError = 'РњР°СЃРѕС„Р°РЅРё ТіРёСЃРѕР±Р»Р°Р± Р±СћР»РјР°РґРё. ТљР°Р№С‚Р° СѓСЂРёРЅРёР± РєСћСЂРёРЅРі.';
+        _calcError = 'Масофани ҳисоблаб бўлмади. Қайта уриниб кўринг.';
       });
     }
   }
 
-  // в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ 2-С„Р°Р·Р°: РЅР°РІРёРіР°С†РёСЏ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+  // ─────────────────── 2-фаза: навигация ───────────────────
   Future<void> _startNavigation() async {
     if (_routeKm == null) return;
     setState(() {
@@ -214,7 +214,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
         markerId: const MarkerId('origin'),
         position: _origin,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-        infoWindow: const InfoWindow(title: 'Р™СћР»РѕРІС‡Рё'),
+        infoWindow: const InfoWindow(title: 'Йўловчи'),
       ),
     };
     if (_destination != null) {
@@ -222,7 +222,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
         markerId: const MarkerId('destination'),
         position: _destination!,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: const InfoWindow(title: 'РњР°РЅР·РёР»'),
+        infoWindow: const InfoWindow(title: 'Манзил'),
       ));
     }
     return set;
@@ -278,7 +278,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               onTap: _onMapTap,
             ),
 
-            // в”Ђв”Ђв”Ђ Р‘РѕС€Р»Р°РЅТ“РёС‡ РЅР°СЂС… Р±РµР»РіРёСЃРё вЂ” С„Р°Т›Р°С‚ 1-С„Р°Р·Р°РґР° в”Ђв”Ђв”Ђ
+            // ─── Бошланғич нарх белгиси — фақат 1-фазада ───
             if (!navigating)
               Positioned(
                 left: 16,
@@ -297,10 +297,10 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Р‘РѕС€Р»Р°РЅТ“РёС‡',
+                      const Text('Бошланғич',
                           style:
                               TextStyle(color: Colors.white70, fontSize: 12)),
-                      Text('${formatPrice(baseFare)} СЃСћРј',
+                      Text('${formatPrice(baseFare)} сўм',
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 26,
@@ -310,7 +310,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                 ),
               ),
 
-            // в”Ђв”Ђв”Ђ РџР°СЃС‚РєРё РїР°РЅРµР»СЊ в”Ђв”Ђв”Ђ
+            // ─── Пастки панель ───
             Positioned(
               left: 0,
               right: 0,
@@ -331,7 +331,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     );
   }
 
-  // 1-С„Р°Р·Р° РїР°СЃС‚РєРё РїР°РЅРµР»Рё.
+  // 1-фаза пастки панели.
   Widget _buildPickPanel() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -343,7 +343,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Р™СћР»РѕРІС‡Рё Р±РѕСЂР°РґРёРіР°РЅ РјР°РЅР·РёР»РЅРё С…Р°СЂРёС‚Р°РґР° Р±РµР»РіРёР»Р°РЅРі',
+                'Йўловчи борадиган манзилни харитада белгиланг',
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
               ),
             ),
@@ -355,7 +355,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2)),
             SizedBox(width: 12),
-            Text('РњР°СЃРѕС„Р° ТіРёСЃРѕР±Р»Р°РЅРјРѕТ›РґР°...'),
+            Text('Масофа ҳисобланмоқда...'),
           ]),
         ] else if (_calcError != null) ...[
           Row(children: [
@@ -366,7 +366,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                   style: TextStyle(color: Colors.red.shade700)),
             ),
             TextButton(
-                onPressed: _calculateRoute, child: const Text('ТљР°Р№С‚Р°')),
+                onPressed: _calculateRoute, child: const Text('Қайта')),
           ]),
         ] else if (_routeKm != null) ...[
           Row(
@@ -375,7 +375,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'РњР°РЅР·РёР»РіР° вЂ” ${_routeKm!.toStringAsFixed(1)} РєРј',
+                  'Манзилга — ${_routeKm!.toStringAsFixed(1)} км',
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold),
                 ),
@@ -386,7 +386,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                   _polylines.clear();
                   _routeKm = null;
                 }),
-                child: const Text('РЋР·РіР°СЂС‚РёСЂРёС€'),
+                child: const Text('Ўзгартириш'),
               ),
             ],
           ),
@@ -400,7 +400,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               icon: const Icon(Icons.navigation),
-              label: const Text('РќР°РІРёРіР°С†РёСЏРЅРё Р±РѕС€Р»Р°С€'),
+              label: const Text('Навигацияни бошлаш'),
             ),
           ),
         ],
@@ -408,7 +408,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     );
   }
 
-  // 2-С„Р°Р·Р° РїР°СЃС‚РєРё РїР°РЅРµР»Рё.
+  // 2-фаза пастки панели.
   Widget _buildNavPanel() {
     final remaining =
         _routeKm == null ? 0.0 : (_routeKm! - _drivenKm).clamp(0.0, _routeKm!);
@@ -423,8 +423,8 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
           Expanded(
             child: Text(
               _arrived
-                  ? 'Р•С‚РёР± РєРµР»РґРёРЅРіРёР·'
-                  : 'РњР°РЅР·РёР»РіР° вЂ” ${remaining.toStringAsFixed(1)} РєРј Т›РѕР»РґРё',
+                  ? 'Етиб келдингиз'
+                  : 'Манзилга — ${remaining.toStringAsFixed(1)} км қолди',
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -440,10 +440,10 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Р–РѕСЂРёР№ Р№СћР»РєРёСЂР° (${_drivenKm.toStringAsFixed(1)} РєРј)',
+                  Text('Жорий йўлкира (${_drivenKm.toStringAsFixed(1)} км)',
                       style: TextStyle(
                           fontSize: 13, color: Colors.grey.shade600)),
-                  Text('${formatPrice(_liveFare)} СЃСћРј',
+                  Text('${formatPrice(_liveFare)} сўм',
                       style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -465,7 +465,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
                       height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Text('РЇРєСѓРЅР»Р°С€',
+                  : const Text('Якунлаш',
                       style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
@@ -478,18 +478,18 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('РЎР°С„Р°СЂРґР°РЅ С‡РёТ›РёС€'),
+        title: const Text('Сафардан чиқиш'),
         content: const Text(
-            'РЎР°С„Р°СЂ ТіР°Р»Рё СЏРєСѓРЅР»Р°РЅРјР°РґРё. Р§РёТ›СЃР°РЅРіРёР·, Р±СѓСЋСЂС‚РјР° Р±РµРєРѕСЂ Т›РёР»РёРЅР°РґРё. '
-            'Р§РёТ›РёС€РЅРё С…РѕТіР»Р°Р№СЃРёР·РјРё?'),
+            'Сафар ҳали якунланмади. Чиқсангиз, буюртма бекор қилинади. '
+            'Чиқишни хоҳлайсизми?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Р™СћТ›'),
+            child: const Text('Йўқ'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ТІР°, С‡РёТ›РёС€',
+            child: const Text('Ҳа, чиқиш',
                 style: TextStyle(color: Color(0xFFB71C1C))),
           ),
         ],

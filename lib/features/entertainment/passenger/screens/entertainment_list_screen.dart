@@ -8,7 +8,7 @@ import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../services/entertainment_cache_service.dart';
 import 'entertainment_player_screen.dart';
 
-/// Р™СћР»РѕРІС‡Рё вЂ” ТіР°Р№РґРѕРІС‡Рё С‚Р°РЅР»Р°РіР°РЅ С„РёР»СЊРјР»Р°СЂ СЂСћР№С…Р°С‚Рё (B variant).
+/// Йўловчи — ҳайдовчи танлаган фильмлар рўйхати (B variant).
 class EntertainmentListScreen extends StatefulWidget {
   const EntertainmentListScreen({
     super.key,
@@ -83,7 +83,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
     }
   }
 
-  /// WiвЂ‘Fi'da oldindan yuklab olish в†’ safarda internetsiz tomosha.
+  /// Wi‑Fi'da oldindan yuklab olish → safarda internetsiz tomosha.
   Future<void> _downloadVideo(EntertainmentVideo video) async {
     if (_downloading.contains(video.id)) return;
     setState(() => _downloading.add(video.id));
@@ -97,13 +97,13 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
         setState(() => _cached.add(video.id));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Р®РєР»Р°Р± Р±СћР»РјР°РґРё. WiвЂ‘Fi РЅРё С‚РµРєС€РёСЂРёРЅРі.')),
+          const SnackBar(content: Text('Юклаб бўлмади. Wi‑Fi ни текширинг.')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('РҐР°С‚Рѕ: $e')),
+          SnackBar(content: Text('Хато: $e')),
         );
       }
     } finally {
@@ -134,7 +134,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
     return Scaffold(
       backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
-        title: const Text('рџЋ¬ РЎР°С„Р°СЂ РєРёРЅРѕС‚РµР°С‚СЂРё'),
+        title: const Text('🎬 Сафар кинотеатри'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -147,8 +147,8 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          '${widget.driverName} Р±Сѓ СЂРµР№СЃ СѓС‡СѓРЅ С„РёР»СЊРј С‚Р°РЅР»Р°РјР°РіР°РЅ.\n'
-                          'РљРµР№РёРЅСЂРѕТ› СѓСЂРёРЅРёР± РєСћСЂРёРЅРі С‘РєРё ТіР°Р№РґРѕРІС‡РёРіР° РјСѓСЂРѕР¶Р°Р°С‚ Т›РёР»РёРЅРі.',
+                          '${widget.driverName} бу рейс учун фильм танламаган.\n'
+                          'Кейинроқ уриниб кўринг ёки ҳайдовчига мурожаат қилинг.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey.shade700),
                         ),
@@ -164,7 +164,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
-                            'WiвЂ‘Fi РґР° С„РёР»СЊРјРЅРё СЋРєР»Р°Р± РѕР»РёРЅРі, СЃР°С„Р°СЂРґР° РёРЅС‚РµСЂРЅРµС‚СЃРёР· С‚РѕРјРѕС€Р° Т›РёР»РёРЅРі.',
+                            'Wi‑Fi да фильмни юклаб олинг, сафарда интернетсиз томоша қилинг.',
                             style: TextStyle(fontSize: 12, height: 1.35),
                           ),
                         ),
@@ -191,8 +191,8 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                 [
                                   if (v.durationLabel.isNotEmpty)
                                     v.durationLabel,
-                                  cached ? 'РћС„Р»Р°Р№РЅ С‚Р°Р№С‘СЂ' : 'РћРЅР»Р°Р№РЅ РєСћСЂРёР»Р°РґРё',
-                                ].join(' В· '),
+                                  cached ? 'Офлайн тайёр' : 'Онлайн кўрилади',
+                                ].join(' · '),
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -208,7 +208,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                         : IconButton(
                                             icon: const Icon(
                                                 Icons.download_outlined),
-                                            tooltip: 'WiвЂ‘Fi РґР° СЋРєР»Р°Р± РѕР»РёС€',
+                                            tooltip: 'Wi‑Fi да юклаб олиш',
                                             onPressed: () => _downloadVideo(v),
                                           ),
                                   const Icon(Icons.play_circle_fill),

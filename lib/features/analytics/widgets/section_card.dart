@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// РђРЅР°Р»РёС‚РёРєР° Р±СћР»РёРјРёРЅРё СћСЂРѕРІ вЂ” СЃР°СЂР»Р°РІТіР° + РєРѕРЅС‚РµРЅС‚.
+/// Аналитика бўлимини ўров — сарлавҳа + контент.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 
-/// РћРЅР»Р°Р№РЅ toggle вЂ” РїСѓР»СЊСЃР°С†РёСЏ Р°РЅРёРјР°С†РёСЏР»Рё.
+/// Онлайн toggle — пульсация анимацияли.
 class OnlinePulseToggle extends StatefulWidget {
   const OnlinePulseToggle({
     super.key,
@@ -87,15 +87,15 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(isOnline ? 'рџџў РћРЅР»Р°Р№РЅ' : 'вљ« РћС„С„Р»Р°Р№РЅ',
+                Text(isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
                     style: TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold,
                         color: isOnline ? _green : Colors.grey.shade600)),
                 Text(
                     isOnline
-                        ? 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ Т›Р°Р±СѓР» Т›РёР»РёРЅРјРѕТ›РґР°'
-                        : 'Р‘СѓСЋСЂС‚РјР°Р»Р°СЂ С‚СћС…С‚Р°С‚РёР»РіР°РЅ',
+                        ? 'Буюртмалар қабул қилинмоқда'
+                        : 'Буюртмалар тўхтатилган',
                     style: TextStyle(
                         fontSize: AppText.labelSmall,
                         color: Colors.grey.shade500)),

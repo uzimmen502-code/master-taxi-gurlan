@@ -68,6 +68,10 @@ functions/service-account.json
 # Local archives
 *.rar
 functions/firebase
+
+# Adashib tushgan / log fayllar (root)
+/flutter
+/log.txt
 .dart_tool/ 
 build/ 
 pubspec.lock 

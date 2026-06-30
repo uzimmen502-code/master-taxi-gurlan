@@ -13,7 +13,7 @@ Chop etish sahifasi (QR + yo'riqnoma): `https://master-taxi-gurlan.web.app/downl
 ## APKni tayyorlash
 
 ```powershell
-cd c:\projects\master_taxi_gurlan
+cd c:\projects\ava_gurlan
 flutter build apk --release
 copy build\app\outputs\flutter-apk\app-release.apk web\downloads\master-taxi-gurlan-driver.apk
 ```

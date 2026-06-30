@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Serena — doimiy kod yordamchisi
 
-Serena MCP serveri `~/.cursor/mcp.json` da `--context ide --project C:/projects/master_taxi_gurlan`
+Serena MCP serveri `~/.cursor/mcp.json` da `--context ide --project C:/projects/ava_gurlan`
 bilan ishga tushiriladi, shuning uchun loyiha **avtomatik faollashadi**.
 
 ## Qoidalar
@@ -13,7 +13,7 @@ bilan ishga tushiriladi, shuning uchun loyiha **avtomatik faollashadi**.
 - Foydalanuvchidan Serena'ni "faollashtirishni" SO'RAMA. U startda avtomatik faol.
 - Agar Serena tool'lari (masalan `find_symbol`, `get_symbols_overview`,
   `search_for_pattern`, `find_referencing_symbols`) ishlamasa: bir marta
-  `activate_project` (`master_taxi_gurlan`) ni jimgina chaqir va davom et —
+  `activate_project` (`ava_gurlan`) ni jimgina chaqir va davom et —
   foydalanuvchiga yuk qilma.
 - Yangi sessiyada kod ustida ish boshlashdan oldin `core` xotirasini o'qi (graf
   ildizi), undan kerakli domen/modul xotirasiga o't: `cloud_functions`,

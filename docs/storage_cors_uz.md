@@ -46,7 +46,7 @@ gsutil cors set cors.json gs://master-taxi-gurlan.firebasestorage.app 2>/dev/nul
 
 ```powershell
 gcloud auth login
-cd C:\projects\master_taxi_gurlan
+cd C:\projects\ava_gurlan
 powershell -ExecutionPolicy Bypass -File .\scripts\apply_storage_cors.ps1
 ```
 
@@ -57,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\apply_storage_cors.ps1
 Лойиҳа ildizida:
 
 ```powershell
-cd C:\projects\master_taxi_gurlan
+cd C:\projects\ava_gurlan
 firebase login
 firebase deploy --only storage
 ```

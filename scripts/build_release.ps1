@@ -1,5 +1,5 @@
 # Master Taxi Gurlan — Release Build Script
-# Run from: C:\projects\master_taxi_gurlan
+# Run from: C:\projects\ava_gurlan
 
 param(
   [switch]$SkipClean,
@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectDir = "C:\projects\master_taxi_gurlan"
+$ProjectDir = "C:\projects\ava_gurlan"
 $ApkSource  = "$ProjectDir\build\app\outputs\flutter-apk\app-release.apk"
 $ApkDest    = "$ProjectDir\web\downloads\master-taxi-gurlan.apk"
 

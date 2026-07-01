@@ -1511,8 +1511,11 @@ service cloud.firestore {
 
     match /relatives/{userId}/people/{personId} {
       allow read: if isOwner(userId);
+      // isSelf maydoni klient yozuvida bo'lmasa ham yangi qarindosh ruxsat —
+      // `field != true` yo'q maydon uchun false berishi mumkin (audit regressiyasi).
       allow create: if isOwner(userId)
-          && request.resource.data.isSelf != true;
+          && (!('isSelf' in request.resource.data)
+              || request.resource.data.isSelf != true);
       allow update: if isOwner(userId)
           && (!request.resource.data.keys().hasAny(['isSelf'])
               || request.resource.data.isSelf == resource.data.isSelf);

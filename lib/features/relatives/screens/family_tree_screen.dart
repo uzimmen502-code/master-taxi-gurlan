@@ -2,12 +2,14 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
 import '../services/tree_service.dart';
+import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_view.dart';
 import 'tree_node_edit_screen.dart';
 
@@ -36,6 +38,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   /// Eng so'nggi komponent tugunlari (tahrirlash dropdownlari uchun).
   List<TreePerson> _comp = const [];
+  Map<String, RelativePerson> _personalById = const {};
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +59,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         return Material(
           color: _accent.withValues(alpha: 0.10),
           child: InkWell(
-            onTap: () => _openInvites(invites),
+            onTap: () => showTreeLinkInvitesSheet(context, widget.userId),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
@@ -97,6 +100,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                 final personal =
                     personalSnap.data ?? const <RelativePerson>[];
                 final comp = compSnap.data ?? const <TreePerson>[];
+                _personalById = {for (final p in personal) p.id: p};
                 if (personalSnap.connectionState == ConnectionState.waiting &&
                     compSnap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -349,39 +353,50 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     );
   }
 
+  String _invitePhoneInitial(TreePerson node) {
+    final listed = _personalById[node.id]?.phone.trim() ?? '';
+    if (listed.isNotEmpty) return phoneForCall(listed);
+    return '+998';
+  }
+
   Future<void> _sendInvite(TreePerson node) async {
-    final ctrl = TextEditingController(text: '+998');
-    final phone = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('«${node.fullName}» ни улаш'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                'Қариндошингизнинг иловадаги телефон рақамини киритинг. '
-                'У қабул қилса, дарахтларингиз бирлашади.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Телефон',
-                border: OutlineInputBorder(),
+    final ctrl = TextEditingController(text: _invitePhoneInitial(node));
+    String? phone;
+    try {
+      phone = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('«${node.fullName}» ни улаш'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                  'Қариндошингизнинг иловадаги телефон рақамини киритинг. '
+                  'У қабул қилса, дарахтларингиз бирлашади.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Телефон',
+                  border: OutlineInputBorder(),
+                ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('Бекор')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Юбориш'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Бекор')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Юбориш'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      ctrl.dispose();
+    }
     if (phone == null || phone.isEmpty) return;
     try {
       final res =
@@ -390,80 +405,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       _snack(res['alreadySent'] == true
           ? 'Таклиф аввал юборилган.'
           : 'Таклиф юборилди.');
-    } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
-    } catch (e) {
-      _snack('Хатолик: $e');
-    }
-  }
-
-  void _openInvites(List<TreeLinkInvite> invites) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.all(8),
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Улаш таклифлари',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            for (final inv in invites)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${inv.fromName.isEmpty ? "Фойдаланувчи" : inv.fromName} '
-                        'сизни «${inv.nodeName}» сифатида ўз дарахтига улашни '
-                        'таклиф қилмоқда.',
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () => _respond(ctx, inv, false),
-                            child: const Text('Рад этиш'),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: _accent,
-                                foregroundColor: Colors.white),
-                            onPressed: () => _respond(ctx, inv, true),
-                            child: const Text('Қабул қилиш'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _respond(
-      BuildContext sheetCtx, TreeLinkInvite inv, bool accept) async {
-    Navigator.pop(sheetCtx);
-    try {
-      final res = await TreeService.respondLinkInvite(
-          inviteId: inv.id, accept: accept);
-      if (!mounted) return;
-      if (res['status'] == 'accepted') {
-        _snack('🎉 Дарахтлар бирлашди!');
-      } else {
-        _snack('Таклиф рад этилди.');
-      }
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
     } catch (e) {

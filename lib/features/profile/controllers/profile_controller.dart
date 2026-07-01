@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../intercity_taxi/driver/intercity_driver_resume.dart';
+import '../../../models/user_model.dart';
 import '../../../models/order_model.dart';
 import '../../../models/trip_model.dart';
 import '../../../models/user_address.dart';
@@ -23,7 +25,9 @@ import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
 import '../../../services/location_service.dart';
+import '../../../services/profile_photo_storage.dart';
 import '../../../services/user_role_sync.dart';
+import '../../relatives/services/tree_service.dart';
 
 /// ProfileScreen uchun butun holatni boshqaradigan ChangeNotifier.
 ///
@@ -52,6 +56,7 @@ class ProfileController extends ChangeNotifier {
   final LocationService _locationService;
   final _fingerprintService = DeviceFingerprintService();
   final _bindingRepo = DeviceBindingRepository();
+  final _profilePhoto = ProfilePhotoStorage();
 
   final ImagePicker _picker = ImagePicker();
 
@@ -69,6 +74,9 @@ class ProfileController extends ChangeNotifier {
   UserAddress structuredAddress = const UserAddress();
 
   String? imagePath;
+  String photoUrl = '';
+  String _photoPath = '';
+  bool _photoSyncing = false;
 
   // Mashina ma'lumotlari
   String _carModel = '';
@@ -191,6 +199,12 @@ class ProfileController extends ChangeNotifier {
       if (address.isEmpty && user.addressLegacy.isNotEmpty) {
         address = user.addressLegacy;
       }
+      photoUrl = user.photoUrl;
+      _photoPath = user.photoPath;
+      if (photoUrl.isNotEmpty && imagePath == null) {
+        notifyListeners();
+      }
+      unawaited(_migrateLocalPhotoIfNeeded(uid, user));
       var firestoreRole = user.role;
       if (role == 'courier' && firestoreRole.trim() != 'courier') {
         try {
@@ -611,12 +625,42 @@ class ProfileController extends ChangeNotifier {
   Future<void> pickImage(ImageSource source) async {
     final file = await _picker.pickImage(source: source, imageQuality: 80);
     if (file == null) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final saved = await File(file.path).copy('${dir.path}/profile.jpg');
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('profile_image', saved.path);
-    imagePath = saved.path;
+    final uid = canonicalPhoneId(phone);
+    if (uid.length < 12) {
+      errorMessage = 'Аввал телефонни тасдиқланг';
+      notifyListeners();
+      return;
+    }
+    _photoSyncing = true;
     notifyListeners();
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final saved = await File(file.path).copy('${dir.path}/profile.jpg');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image', saved.path);
+      imagePath = saved.path;
+
+      final uploaded = await _profilePhoto.upload(userId: uid, image: file);
+      final oldPath = _photoPath;
+      await _userRepo.updatePhoto(
+        uid: uid,
+        photoUrl: uploaded.url,
+        photoPath: uploaded.path,
+      );
+      photoUrl = uploaded.url;
+      _photoPath = uploaded.path;
+      if (oldPath.isNotEmpty && oldPath != uploaded.path) {
+        unawaited(_profilePhoto.deleteByPath(oldPath));
+      }
+      unawaited(TreeService.ensureMyTree().catchError((_) => <String, dynamic>{}));
+      notifyListeners();
+    } catch (e) {
+      errorMessage = 'Расм юклашда хатолик: $e';
+      notifyListeners();
+    } finally {
+      _photoSyncing = false;
+      notifyListeners();
+    }
   }
 
   Future<void> deleteImage() async {
@@ -627,7 +671,51 @@ class ProfileController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('profile_image');
     imagePath = null;
+
+    final uid = canonicalPhoneId(phone);
+    if (uid.length >= 12) {
+      try {
+        final oldPath = _photoPath;
+        await _userRepo.updatePhoto(uid: uid, photoUrl: '');
+        photoUrl = '';
+        _photoPath = '';
+        if (oldPath.isNotEmpty) {
+          unawaited(_profilePhoto.deleteByPath(oldPath));
+        }
+        unawaited(TreeService.ensureMyTree().catchError((_) => <String, dynamic>{}));
+      } catch (_) {}
+    }
     notifyListeners();
+  }
+
+  /// Eski APK: faqat lokal saqlangan rasmni bir marta serverga yuklash.
+  Future<void> _migrateLocalPhotoIfNeeded(String uid, UserModel user) async {
+    if (_photoSyncing || uid.length < 12) return;
+    if (user.photoUrl.isNotEmpty) return;
+    final path = imagePath;
+    if (path == null || path.isEmpty) return;
+    final f = File(path);
+    if (!await f.exists()) return;
+    _photoSyncing = true;
+    try {
+      final uploaded = await _profilePhoto.upload(
+        userId: uid,
+        image: XFile(path),
+      );
+      await _userRepo.updatePhoto(
+        uid: uid,
+        photoUrl: uploaded.url,
+        photoPath: uploaded.path,
+      );
+      photoUrl = uploaded.url;
+      _photoPath = uploaded.path;
+      unawaited(TreeService.ensureMyTree().catchError((_) => <String, dynamic>{}));
+      notifyListeners();
+    } catch (_) {
+      // Silent — keyingi ochilishda qayta uriniladi.
+    } finally {
+      _photoSyncing = false;
+    }
   }
 
   Future<void> _changePhone(String newPhone) async {

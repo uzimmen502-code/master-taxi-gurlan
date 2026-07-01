@@ -11,6 +11,8 @@ import '../../../repositories/relatives_repository.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
 import '../services/tree_service.dart';
+import '../widgets/tree_link_invite_indicator.dart';
+import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_screen.dart';
 import 'relative_album_screen.dart';
 import 'tree_history_screen.dart';
@@ -188,6 +190,11 @@ class _RelativesScreenState extends State<RelativesScreen>
         backgroundColor: RelativesScreen._accent,
         foregroundColor: Colors.white,
         actions: [
+          if (phone != null)
+            TreeLinkInviteIconButton(
+              userId: phone,
+              onTap: () => showTreeLinkInvitesSheet(context, phone),
+            ),
           IconButton(
             tooltip: 'Дарахт тарихи',
             icon: const Icon(Icons.history),
@@ -209,10 +216,19 @@ class _RelativesScreenState extends State<RelativesScreen>
           labelStyle:
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
-          tabs: const [
-            Tab(text: 'Рўйхат'),
-            Tab(text: '🌳 Насаб дарахти'),
-            Tab(text: '📅 Саналар'),
+          tabs: [
+            const Tab(text: 'Рўйхат'),
+            if (phone == null)
+              const Tab(text: '🌳 Насаб дарахти')
+            else
+              Tab(
+                child: TreeLinkInviteCount(
+                  userId: phone,
+                  builder: (_, count) =>
+                      treeLinkInviteTabLabel('🌳 Насаб дарахти', count),
+                ),
+              ),
+            const Tab(text: '📅 Саналар'),
           ],
         ),
       ),

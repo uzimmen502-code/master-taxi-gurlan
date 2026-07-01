@@ -229,17 +229,7 @@ class _ProfileViewState extends State<_ProfileView> {
                   border: Border.all(color: Colors.white, width: 3),
                 ),
                 child: ClipOval(
-                  child: c.imagePath != null
-                      ? Image.file(File(c.imagePath!), fit: BoxFit.cover)
-                      : Center(
-                          child: Text(
-                            c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
-                            style: const TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: _green),
-                          ),
-                        ),
+                  child: _headerAvatar(c),
                 ),
               ),
               Positioned(
@@ -276,6 +266,25 @@ class _ProfileViewState extends State<_ProfileView> {
             ),
           ),
         ]),
+      ),
+    );
+  }
+
+  Widget _headerAvatar(ProfileController c) {
+    if (c.imagePath != null) {
+      final f = File(c.imagePath!);
+      if (f.existsSync()) {
+        return Image.file(f, fit: BoxFit.cover);
+      }
+    }
+    if (c.photoUrl.isNotEmpty) {
+      return Image.network(c.photoUrl, fit: BoxFit.cover);
+    }
+    return Center(
+      child: Text(
+        c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
+        style: const TextStyle(
+            fontSize: 36, fontWeight: FontWeight.bold, color: _green),
       ),
     );
   }

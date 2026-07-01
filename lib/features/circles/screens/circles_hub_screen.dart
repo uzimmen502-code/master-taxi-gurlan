@@ -1,16 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../dating/screens/dating_home_screen.dart';
+import '../../relatives/widgets/tree_link_invite_indicator.dart';
 import '../../relatives/screens/relatives_screen.dart';
 import '../utils/circle_type_spec.dart';
 import 'circles_list_screen.dart';
 
 /// "Mening yaqinlarim" hubi. Faol: Sinfdosh/Kursdosh/Hamkasb (umumiy dvigatel).
 /// Qarindosh + Tanishuv — alohida modul (tez orada).
-class CirclesHubScreen extends StatelessWidget {
+class CirclesHubScreen extends StatefulWidget {
   const CirclesHubScreen({super.key});
 
   static const _accent = Color(0xFF6A4C93);
+
+  @override
+  State<CirclesHubScreen> createState() => _CirclesHubScreenState();
+}
+
+class _CirclesHubScreenState extends State<CirclesHubScreen> {
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    if (mounted) setState(() => _userId = uid.length >= 12 ? uid : null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,11 +41,12 @@ class CirclesHubScreen extends StatelessWidget {
       CircleTypeSpec.coursemates,
       CircleTypeSpec.colleagues,
     ];
+    final uid = _userId;
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
         title: const Text('Менинг яқинларим'),
-        backgroundColor: _accent,
+        backgroundColor: CirclesHubScreen._accent,
         foregroundColor: Colors.white,
       ),
       body: ListView(
@@ -34,7 +57,7 @@ class CirclesHubScreen extends StatelessWidget {
               emoji: spec.emoji,
               title: spec.title,
               subtitle: spec.subtitle,
-              color: _accent,
+              color: CirclesHubScreen._accent,
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -48,7 +71,40 @@ class CirclesHubScreen extends StatelessWidget {
             emoji: '👨‍👩‍👧',
             title: 'Қариндошларим',
             subtitle: 'Шахсий рўйхат + туғилган кун эслатмаси',
-            color: _accent,
+            color: CirclesHubScreen._accent,
+            trailing: uid == null
+                ? null
+                : TreeLinkInviteCount(
+                    userId: uid,
+                    builder: (_, count) {
+                      if (count <= 0) {
+                        return const Icon(Icons.chevron_right, color: Colors.grey);
+                      }
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF9800),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$count таклиф',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right, color: Colors.grey),
+                        ],
+                      );
+                    },
+                  ),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const RelativesScreen()),
@@ -78,6 +134,7 @@ class _CircleCard extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.onTap,
+    this.trailing,
   });
 
   final String emoji;
@@ -85,6 +142,7 @@ class _CircleCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +176,7 @@ class _CircleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              trailing ?? const Icon(Icons.chevron_right, color: Colors.grey),
             ],
           ),
         ),

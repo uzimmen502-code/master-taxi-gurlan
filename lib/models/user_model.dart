@@ -18,6 +18,11 @@ class UserModel {
 
   final int bonusBalance;
 
+  /// Profil rasmi (Storage URL) — «Мен» qarindosh yozuvi bilan sinxron.
+  final String photoUrl;
+
+  final String photoPath;
+
   /// Умумий янгиликларни охирги марта ўқиган вақт.
   final DateTime? lastNewsReadAt;
 
@@ -37,6 +42,8 @@ class UserModel {
     this.address = const UserAddress(),
     this.addressLegacy = '',
     this.bonusBalance = 0,
+    this.photoUrl = '',
+    this.photoPath = '',
     this.lastNewsReadAt,
     this.lastOrderNewsReadAt,
     this.lastMessagesReadAt,
@@ -67,6 +74,8 @@ class UserModel {
           ? (d['address'] as String)
           : (d['legacyAddress'] ?? '') as String,
       bonusBalance: (d['bonusBalance'] as num?)?.toInt() ?? 0,
+      photoUrl: (d['photoUrl'] ?? d['avatar'] ?? '') as String,
+      photoPath: (d['photoPath'] ?? '') as String,
       lastNewsReadAt: (d['lastNewsReadAt'] as Timestamp?)?.toDate(),
       lastOrderNewsReadAt: (d['lastOrderNewsReadAt'] as Timestamp?)?.toDate(),
       lastMessagesReadAt: (d['lastMessagesReadAt'] as Timestamp?)?.toDate(),

@@ -336,6 +336,26 @@ class UserRepository {
     }, SetOptions(merge: true));
   }
 
+  /// Профил расми — Storage URL (Qarindoshlar «Мен» bilan sinxron).
+  Future<void> updatePhoto({
+    required String uid,
+    required String photoUrl,
+    String photoPath = '',
+  }) async {
+    if (uid.isEmpty) return;
+    final id = canonicalPhoneId(uid);
+    final patch = <String, Object?>{
+      'photoUrl': photoUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (photoPath.isNotEmpty) {
+      patch['photoPath'] = photoPath;
+    } else if (photoUrl.isEmpty) {
+      patch['photoPath'] = FieldValue.delete();
+    }
+    await _col.doc(id).set(patch, SetOptions(merge: true));
+  }
+
   /// Профил маълумотларини бирваракай янгилаш.
   Future<void> updateProfile({
     required String uid,

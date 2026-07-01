@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../models/relative_person.dart';
 
@@ -13,10 +15,18 @@ class FamilyTreeView extends StatefulWidget {
     super.key,
     required this.people,
     this.onTap,
+    this.immersive = false,
+    this.onExitImmersive,
   });
 
   final List<RelativePerson> people;
   final void Function(RelativePerson person)? onTap;
+
+  /// To'liq ekran rejimi — AppBar/tablar ustidan ochiladi.
+  final bool immersive;
+
+  /// Immersive rejimda bo'sh joyga ikki marta bosilganda chaqiriladi.
+  final VoidCallback? onExitImmersive;
 
   @override
   State<FamilyTreeView> createState() => _FamilyTreeViewState();
@@ -54,17 +64,32 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   Animation<Matrix4>? _matrixAnim;
 
   Size _viewport = Size.zero;
-  Offset _doubleTapPos = Offset.zero;
   bool _didInitialFit = false;
+  bool _isScaleGesture = false;
 
   @override
   void initState() {
     super.initState();
     _anim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      duration: const Duration(milliseconds: 280),
     );
+    _transform.addListener(_onTransformChanged);
     _build();
+    if (widget.immersive) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _fit(padFactor: 0.88);
+      });
+    }
+  }
+
+  void _onTransformChanged() {
+    if (_isScaleGesture) return;
+    // Foydalanuvchi qo'lda surganida animatsiya to'xtatiladi.
+    if (_anim.isAnimating) {
+      _anim.stop();
+    }
   }
 
   @override
@@ -80,6 +105,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
 
   @override
   void dispose() {
+    if (widget.immersive) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+    _transform.removeListener(_onTransformChanged);
     _anim.dispose();
     _transform.dispose();
     super.dispose();
@@ -465,22 +494,37 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _animateTo(m);
   }
 
-  void _zoomBy(double factor) {
-    final center = Offset(_viewport.width / 2, _viewport.height / 2);
-    _zoomAround(center, _scale * factor);
-  }
-
-  void _handleDoubleTap() {
-    if (_scale < 1.4) {
-      _zoomAround(_doubleTapPos, 2.0);
-    } else {
-      _fit();
+  void _onBackgroundDoubleTap() {
+    if (widget.immersive) {
+      widget.onExitImmersive?.call();
+      return;
     }
+    _openImmersive();
   }
 
-  void _fit() {
+  void _openImmersive() {
+    final nav = Navigator.of(context, rootNavigator: true);
+    nav.push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        fullscreenDialog: true,
+        transitionDuration: const Duration(milliseconds: 240),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (ctx, _, __) => FamilyTreeView(
+          people: widget.people,
+          onTap: widget.onTap,
+          immersive: true,
+          onExitImmersive: () => Navigator.of(ctx).pop(),
+        ),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+  void _fit({double padFactor = 0.9}) {
     if (_viewport.isEmpty || _contentSize.isEmpty) return;
-    const padFactor = 0.9;
     final scale = (math.min(
       _viewport.width / _contentSize.width,
       _viewport.height / _contentSize.height,
@@ -496,17 +540,63 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _animateTo(m);
   }
 
-  /// Bitta bosishda: daraxtni qurilma kengligiga moslaydi (kenglik bo'yicha
-  /// to'ldiradi, tepaga tekislaydi — qolgani vertikal surishda ko'rinadi).
-  void _fitWidth() {
-    if (_viewport.isEmpty || _contentSize.isEmpty) return;
-    final scale =
-        (_viewport.width / _contentSize.width).clamp(_minScale, _maxScale);
-    final tx = (_viewport.width - _contentSize.width * scale) / 2;
-    final m = Matrix4.identity()
-      ..translateByDouble(tx, 0, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
-    _animateTo(m);
+  Widget _buildCanvas() {
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          final delta = event.scrollDelta.dy;
+          if (delta == 0) return;
+          final factor = math.exp(-delta * 0.002);
+          _zoomAround(event.localPosition, _scale * factor);
+        }
+      },
+      child: InteractiveViewer(
+        transformationController: _transform,
+        clipBehavior: Clip.none,
+        constrained: false,
+        panEnabled: true,
+        scaleEnabled: true,
+        minScale: _minScale,
+        maxScale: _maxScale,
+        boundaryMargin: const EdgeInsets.all(double.infinity),
+        interactionEndFrictionCoefficient: 0.000009,
+        scaleFactor: 240,
+        onInteractionStart: (_) => _isScaleGesture = true,
+        onInteractionEnd: (_) => _isScaleGesture = false,
+        child: RepaintBoundary(
+          child: SizedBox(
+            width: _contentSize.width,
+            height: _contentSize.height,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onDoubleTap: _onBackgroundDoubleTap,
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _EdgePainter(_segments, _sig.hashCode),
+                    ),
+                  ),
+                ),
+                for (final entry in _rectOf.entries)
+                  Positioned(
+                    left: entry.value.left,
+                    top: entry.value.top,
+                    width: _cardW,
+                    height: _cardH,
+                    child: _card(_byId[entry.key]!),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ---- UI ----
@@ -518,90 +608,24 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        _viewport = Size(constraints.maxWidth, constraints.maxHeight);
-        if (!_didInitialFit) {
+        _viewport = widget.immersive
+            ? MediaQuery.sizeOf(context)
+            : Size(constraints.maxWidth, constraints.maxHeight);
+        if (!_didInitialFit && !widget.immersive) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_didInitialFit) _fit();
           });
         }
+        final canvas = _buildCanvas();
+        if (widget.immersive) {
+          return Scaffold(
+            backgroundColor: const Color(0xFFF5F4F8),
+            body: SafeArea(child: canvas),
+          );
+        }
         return Container(
           color: const Color(0xFFF5F4F8),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _fitWidth,
-                  onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
-                  onDoubleTap: _handleDoubleTap,
-                  child: InteractiveViewer(
-                    transformationController: _transform,
-                    constrained: false,
-                    panEnabled: true,
-                    scaleEnabled: true,
-                    // Cheksiz chegara — erkin, silliq surish (rubber-band yo'q).
-                    boundaryMargin: const EdgeInsets.all(double.infinity),
-                    minScale: _minScale,
-                    maxScale: _maxScale,
-                    child: RepaintBoundary(
-                      child: SizedBox(
-                        width: _contentSize.width,
-                        height: _contentSize.height,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: RepaintBoundary(
-                                child: CustomPaint(
-                                  painter:
-                                      _EdgePainter(_segments, _sig.hashCode),
-                                ),
-                              ),
-                            ),
-                            for (final entry in _rectOf.entries)
-                              Positioned(
-                                left: entry.value.left,
-                                top: entry.value.top,
-                                width: _cardW,
-                                height: _cardH,
-                                child: _card(_byId[entry.key]!),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: _ZoomControls(
-                  onZoomIn: () => _zoomBy(1.3),
-                  onZoomOut: () => _zoomBy(1 / 1.3),
-                  onFit: _fit,
-                ),
-              ),
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: IgnorePointer(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.82),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '👆 Мослаш · ☝ Сурилади · 🤏 Кенгайтириш · 👆👆 Зум',
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: canvas,
         );
       },
     );
@@ -729,52 +753,4 @@ class _EdgePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _EdgePainter old) =>
       old.revision != revision || old.segments.length != segments.length;
-}
-
-/// Daraxt uchun ekran boshqaruvi: kattalashtirish/kichraytirish, moslash.
-class _ZoomControls extends StatelessWidget {
-  const _ZoomControls({
-    required this.onZoomIn,
-    required this.onZoomOut,
-    required this.onFit,
-  });
-
-  final VoidCallback onZoomIn;
-  final VoidCallback onZoomOut;
-  final VoidCallback onFit;
-
-  static const _accent = Color(0xFF6A4C93);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _btn(Icons.add, 'Катталаштириш', onZoomIn),
-        const SizedBox(height: 8),
-        _btn(Icons.remove, 'Кичрайтириш', onZoomOut),
-        const SizedBox(height: 8),
-        _btn(Icons.fit_screen_outlined, 'Экранга мослаш', onFit),
-      ],
-    );
-  }
-
-  Widget _btn(IconData icon, String tooltip, VoidCallback onTap) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.white,
-        elevation: 3,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Icon(icon, color: _accent, size: 22),
-          ),
-        ),
-      ),
-    );
-  }
 }

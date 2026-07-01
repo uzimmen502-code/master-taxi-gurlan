@@ -26,6 +26,7 @@ class CourierOrder {
     this.courierName = '',
     this.createdAt,
     this.acceptedAt,
+    this.arrivedAt,
     this.deliveredAt,
   });
 
@@ -44,6 +45,7 @@ class CourierOrder {
   final String courierName;
   final DateTime? createdAt;
   final DateTime? acceptedAt;
+  final DateTime? arrivedAt;
   final DateTime? deliveredAt;
 
   bool get isActive =>
@@ -103,6 +105,7 @@ class CourierOrder {
       courierName: (d['courierName'] ?? '') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       acceptedAt: (d['acceptedAt'] as Timestamp?)?.toDate(),
+      arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
       deliveredAt: (d['deliveredAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -139,6 +142,7 @@ class CourierOrder {
     String? courierName,
     DateTime? createdAt,
     DateTime? acceptedAt,
+    DateTime? arrivedAt,
     DateTime? deliveredAt,
   }) {
     return CourierOrder(
@@ -157,6 +161,7 @@ class CourierOrder {
       courierName: courierName ?? this.courierName,
       createdAt: createdAt ?? this.createdAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,
+      arrivedAt: arrivedAt ?? this.arrivedAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
     );
   }

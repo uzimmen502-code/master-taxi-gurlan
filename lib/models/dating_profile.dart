@@ -29,6 +29,8 @@ class DatingProfile {
     this.rejectionReason = '',
     this.active = true,
     this.lastActive,
+    this.prefMinAge = 18,
+    this.prefMaxAge = 80,
   });
 
   final String userId;
@@ -45,6 +47,10 @@ class DatingProfile {
   final String rejectionReason;
   final bool active;
   final DateTime? lastActive;
+
+  /// Tavsiyada кўрсатилadigan ёш oralig‘i (фойдаланувчи танлайди).
+  final int prefMinAge;
+  final int prefMaxAge;
 
   int? get age {
     if (birthYear < 1900) return null;
@@ -75,7 +81,14 @@ class DatingProfile {
       rejectionReason: (d['rejectionReason'] ?? '') as String,
       active: (d['active'] ?? true) as bool,
       lastActive: (d['lastActive'] as Timestamp?)?.toDate(),
+      prefMinAge: _readPrefAge(d['prefMinAge'], 18),
+      prefMaxAge: _readPrefAge(d['prefMaxAge'], 80),
     );
+  }
+
+  static int _readPrefAge(Object? raw, int fallback) {
+    final n = raw is int ? raw : int.tryParse('$raw') ?? fallback;
+    return n.clamp(18, 80);
   }
 
   String get statusLabel {

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/dating_interest.dart';
@@ -25,13 +27,19 @@ class DatingRepository {
     return d.exists ? DatingProfile.fromDoc(d) : null;
   }
 
-  /// Kashfiyot — qarama-qarshi jins, tasdiqlangan, faol. Bloklar + o'zini
+  /// Tavsiya — qarama-qarshi jins, tasdiqlangan, faol. Bloklar + o'zini
   /// chiqarib tashlash mijoz tomonida.
   Stream<List<DatingProfile>> watchDiscovery({
     required String myUid,
     required String myGender,
     required Set<String> excludeIds,
+    int prefMinAge = 18,
+    int prefMaxAge = 80,
   }) {
+    final minAge = prefMinAge.clamp(18, 80);
+    final maxAge = prefMaxAge.clamp(18, 80);
+    final lo = math.min(minAge, maxAge);
+    final hi = math.max(minAge, maxAge);
     final oppositeGender = myGender == 'male' ? 'female' : 'male';
     return _profiles
         .where('gender', isEqualTo: oppositeGender)
@@ -42,7 +50,14 @@ class DatingRepository {
         .snapshots()
         .map((s) => s.docs
             .map(DatingProfile.fromDoc)
-            .where((p) => p.userId != myUid && !excludeIds.contains(p.userId))
+            .where((p) {
+              if (p.userId == myUid || excludeIds.contains(p.userId)) {
+                return false;
+              }
+              final age = p.age;
+              if (age == null) return false;
+              return age >= lo && age <= hi;
+            })
             .toList(growable: false));
   }
 

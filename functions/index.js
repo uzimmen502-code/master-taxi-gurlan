@@ -248,6 +248,11 @@ async function isDeviceBindingAutoApproveEnabled() {
   return (snap.data() || {}).deviceBindingAutoApprove === true;
 }
 
+async function isDatingAutoApproveEnabled() {
+  const snap = await db.collection('settings').doc('app').get();
+  return (snap.data() || {}).datingAutoApprove === true;
+}
+
 /** Admin yoki auto-rejim: telefon ↔ hash bog'lanishini majburan yangilash. */
 async function forceDeviceBindingLink({
   hash,
@@ -436,6 +441,23 @@ async function notifyUserInApp({
   } catch (e) {
     console.error('notifyUserInApp FCM:', e.message || e);
   }
+}
+
+/** Мижозга қўнғироқли «курьер етиб келди» огоҳлантириши (барча курьер модуллари). */
+async function notifyCourierArrivedToCustomer(customerPhone, extraData = {}) {
+  const phone = canonicalUid(customerPhone || '');
+  if (!phone || phone.length < 9) return;
+  await notifyUserInApp({
+    userId: phone,
+    title: '🔔 Курьер етиб келди',
+    body: 'Курьер манзилингизга етиб келди. Илтимос, кутиб олинг.',
+    category: 'order',
+    source: 'courier_arrived',
+    dataType: 'courier_arrived',
+    screen: 'orders',
+    extraData: { ring: '1', ...extraData },
+    channelId: 'courier_arrival_alarm',
+  });
 }
 
 async function getOrderFlowMode(field, defaultValue = 'manual') {
@@ -2424,22 +2446,12 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
     at: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // Мижозга қўнғироқли огоҳлантириш (foreground'да 7с/10с×3 ритм, фонда канал овози).
   try {
     const customerPhone = od.userPhone || od.phone || '';
-    if (customerPhone) {
-      await notifyUserInApp({
-        userId: customerPhone,
-        title: '🔔 Курьер етиб келди',
-        body: 'Курьер манзилингизга етиб келди. Илтимос, кутиб олинг.',
-        category: 'order',
-        source: 'courier_arrived',
-        dataType: 'courier_arrived',
-        screen: 'orders',
-        extraData: { orderId, ring: '1' },
-        channelId: 'courier_arrival_alarm',
-      });
-    }
+    await notifyCourierArrivedToCustomer(customerPhone, {
+      orderId,
+      module: 'orders',
+    });
   } catch (e) {
     console.error('courierMarkArrived notify:', e.message || e);
   }
@@ -2833,6 +2845,59 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   };
 });
 
+/** Курьер: `courier_orders` — манзилга етиб келди (қўнғироқли хабар). */
+exports.courierMarkCourierOrderArrived = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+
+  const orderId = String(data.orderId || '').trim();
+  const courierPhone = String(data.courierPhone || '');
+  const courierDigits = assertCourierPhone(courierPhone);
+  const caller = callerPhone(context);
+  if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  const courierUid = await resolveAuthorizedCourierUid(courierPhone);
+  if (!orderId) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+
+  const orderRef = db.collection('courier_orders').doc(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'order not found');
+  }
+  const od = orderSnap.data() || {};
+  const status = String(od.status || '');
+
+  if (canonicalUid(String(od.courierId || '')) !== canonicalUid(courierUid)) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your order');
+  }
+  if (status !== 'picked_up') {
+    throw new functions.https.HttpsError('failed-precondition', 'en route first');
+  }
+  if (od.arrivedAt) {
+    return { ok: true, idempotent: true, orderId };
+  }
+
+  await orderRef.update({
+    arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  try {
+    await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
+      orderId,
+      module: 'courier_order',
+    });
+  } catch (e) {
+    console.error('courierMarkCourierOrderArrived notify:', e.message || e);
+  }
+
+  return { ok: true, orderId };
+});
+
 /** Мижоз нақд чиқариш талаби */
 /** Kuryer: courier_orders to'lov + yetkazildi (Admin SDK, bitta transaction). */
 exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, context) => {
@@ -2901,6 +2966,9 @@ exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, c
     }
     if (status !== 'picked_up') {
       throw new functions.https.HttpsError('failed-precondition', 'picked_up first');
+    }
+    if (!od.arrivedAt) {
+      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
     }
 
     const total = courierOrderTotal(od);
@@ -4627,6 +4695,68 @@ exports.adminGetWarehouseStock = functions.https.onCall(async (data, context) =>
   }
 });
 
+/** Курьер: йиғиб оlish манзилига етиб келди — мижозга қўнғироқли хабар. */
+exports.courierMarkCollectionArrived = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const courierId = assertCourierPhone(data.courierPhone);
+    if (callerPhone(context) !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+    }
+    await resolveAuthorizedCourierUid(data.courierPhone);
+
+    const taskId = String(data.taskId || '').trim();
+    if (!taskId) {
+      throw new functions.https.HttpsError('invalid-argument', 'taskId required');
+    }
+
+    const taskRef = db.collection('collection_tasks').doc(taskId);
+    const taskSnap = await taskRef.get();
+    if (!taskSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'task not found');
+    }
+    const task = taskSnap.data() || {};
+
+    if (String(task.courierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your task');
+    }
+    if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
+      throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    if (task.arrivedAt) {
+      return { ok: true, idempotent: true, taskId };
+    }
+
+    const patch = {
+      arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (String(task.status || '') === 'assigned') {
+      patch.status = 'collecting';
+    }
+    await taskRef.update(patch);
+
+    try {
+      const customerPhone = task.customerPhone || task.customerUid || '';
+      await notifyCourierArrivedToCustomer(customerPhone, {
+        taskId,
+        module: 'collection',
+      });
+    } catch (e) {
+      console.error('courierMarkCollectionArrived notify:', e.message || e);
+    }
+
+    return { ok: true, taskId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkCollectionArrived:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkCollectionArrived failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
 /** Курьер: йиғиб олишни якунлаш — кошелёк кредити + омбор + далолатнома.
  *  Тескари иқтисод: платформа мижозга маҳсулот учун ТЎЛАЙДИ.
  */
@@ -4680,6 +4810,9 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     }
     if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
       throw new functions.https.HttpsError('failed-precondition', 'task not active');
+    }
+    if (!task.arrivedAt) {
+      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
     }
 
     const normalizedItems = [];
@@ -8655,8 +8788,14 @@ exports.saveDatingProfile = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Kamida 1 ta real foto');
   }
 
+  const myAge = nowYear - birthYear;
   const ref = db.collection('dating_profiles').doc(uid);
   const prev = await ref.get();
+  const prevData = prev.data() || {};
+  const autoApprove = await isDatingAutoApproveEnabled();
+  const status = autoApprove ? 'approved' : 'pending';
+  const defaultPrefMin = Math.max(18, myAge - 15);
+  const defaultPrefMax = Math.min(80, myAge + 15);
   await ref.set({
     userId: uid,
     displayName,
@@ -8668,16 +8807,29 @@ exports.saveDatingProfile = functions.https.onCall(async (data, context) => {
     education: String(data.education || '').trim().slice(0, 120),
     job: String(data.job || '').trim().slice(0, 120),
     photos,
-    status: 'pending',
+    status,
     rejectionReason: '',
+    ...(autoApprove
+      ? {
+        moderatedBy: 'auto',
+        moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        autoApproved: true,
+      }
+      : {}),
     active: prev.exists ? (prev.data().active !== false) : true,
+    prefMinAge: prev.exists
+      ? (Number(prevData.prefMinAge) || defaultPrefMin)
+      : defaultPrefMin,
+    prefMaxAge: prev.exists
+      ? (Number(prevData.prefMaxAge) || defaultPrefMax)
+      : defaultPrefMax,
     lastActive: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     ...(prev.exists
       ? {}
       : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
   }, { merge: true });
-  return { ok: true, status: 'pending' };
+  return { ok: true, status };
 });
 
 /** Dating profilni faollashtirish/pauza (statusga tegmaydi). */
@@ -8695,6 +8847,115 @@ exports.setDatingActive = functions.https.onCall(async (data, context) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, active };
+});
+
+/** Tavsiya ёш oralig‘i (18–80, foydalanuvchi tanlaydi). */
+exports.setDatingAgePreference = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const minAge = parseInt(String(data.minAge ?? 0), 10);
+  const maxAge = parseInt(String(data.maxAge ?? 0), 10);
+  if (!Number.isFinite(minAge) || !Number.isFinite(maxAge)) {
+    throw new functions.https.HttpsError('invalid-argument', 'yosh notogri');
+  }
+  const lo = Math.min(minAge, maxAge);
+  const hi = Math.max(minAge, maxAge);
+  if (lo < 18 || hi > 80) {
+    throw new functions.https.HttpsError(
+      'invalid-argument', 'yosh oralig\'i 18–80 oralig\'ida bo\'lishi kerak');
+  }
+  const ref = db.collection('dating_profiles').doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Profil yoq');
+  }
+  await ref.set({
+    prefMinAge: lo,
+    prefMaxAge: hi,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, prefMinAge: lo, prefMaxAge: hi };
+});
+
+async function deleteDatingSubcollection(parentRef, subName) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const snap = await parentRef.collection(subName).limit(400).get();
+    if (snap.empty) break;
+    const stats = {};
+    await batchDeleteDocs(snap.docs, stats, 'n');
+    if (snap.size < 400) break;
+  }
+}
+
+async function deleteDatingQueryDocs(buildQuery) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const snap = await buildQuery();
+    if (snap.empty) break;
+    const stats = {};
+    await batchDeleteDocs(snap.docs, stats, 'n');
+    if (snap.size < 400) break;
+  }
+}
+
+async function deleteDatingStorageForUser(uid, photos) {
+  const bucket = admin.storage().bucket();
+  const paths = new Set();
+  for (const p of photos || []) {
+    const path = String((p || {}).path || '').trim();
+    if (path) paths.add(path);
+  }
+  for (const path of paths) {
+    try {
+      await bucket.file(path).delete();
+    } catch (_) { /* noop */ }
+  }
+  try {
+    const [files] = await bucket.getFiles({ prefix: `dating/${uid}/` });
+    await Promise.all(files.map((f) => f.delete().catch(() => {})));
+  } catch (e) {
+    console.error('deleteDatingStorageForUser:', e.message || e);
+  }
+}
+
+/** Foydalanuvchi o'z tanishuv profilini butunlay o'chiradi. */
+exports.deleteDatingProfile = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const ref = db.collection('dating_profiles').doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return { ok: true, alreadyDeleted: true };
+  }
+  const profile = snap.data() || {};
+
+  await deleteDatingStorageForUser(uid, profile.photos);
+
+  await deleteDatingQueryDocs(() => db.collection('dating_interests')
+    .where('fromId', '==', uid).limit(400).get());
+  await deleteDatingQueryDocs(() => db.collection('dating_interests')
+    .where('toId', '==', uid).limit(400).get());
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const matchSnap = await db.collection('dating_matches')
+      .where('users', 'array-contains', uid)
+      .limit(40)
+      .get();
+    if (matchSnap.empty) break;
+    for (const mdoc of matchSnap.docs) {
+      await deleteDatingSubcollection(mdoc.ref, 'messages');
+      await mdoc.ref.delete();
+    }
+  }
+
+  const blockList = db.collection('dating_blocks').doc(uid).collection('list');
+  await deleteDatingQueryDocs(() => blockList.limit(400).get());
+  try {
+    await db.collection('dating_blocks').doc(uid).delete();
+  } catch (_) { /* noop */ }
+
+  await ref.delete();
+  return { ok: true };
 });
 
 /** Admin: dating profil moderatsiyasi (approve/reject/block). */
@@ -8724,6 +8985,17 @@ exports.adminModerateDatingProfile =
     }, { merge: true });
     return { ok: true, status: statusMap[action] };
   });
+
+/** Admin: tanishuv profillarini avtomatik tasdiqlash rejimi. */
+exports.adminSetDatingAutoApprove = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const enabled = data.enabled === true;
+  await db.collection('settings').doc('app').set({
+    datingAutoApprove: enabled,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, enabled };
+});
 
 /** Qiziqish bildirish — o'zaro (mutual) bo'lsa avtomatik match. */
 exports.sendDatingInterest = functions.https.onCall(async (data, context) => {
@@ -8859,6 +9131,266 @@ exports.respondDatingInterest = functions.https.onCall(async (data, context) => 
 // NASAB DARAXTI — global graf poydevori (Faza 1: migratsiya + komponent)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Qarindoshlar: telefon bo'yicha kuzatuv + ro'yxatdan o'tish xabarlari ──
+
+function isUserProfileReady(data) {
+  if (!data) return false;
+  const name = String(data.name || data.fullName || '').trim();
+  return name.length >= 2;
+}
+
+function relativeJoinAlertDocId(alertType, targetPhone) {
+  return alertType === 'new_user_welcome' ? '_welcome' : canonicalUid(targetPhone);
+}
+
+async function hasRelativeJoinAlert(ownerUid, targetPhone, alertType) {
+  const id = relativeJoinAlertDocId(alertType, targetPhone);
+  const snap = await db.collection('users').doc(ownerUid)
+    .collection('relative_join_alerts').doc(id).get();
+  return snap.exists;
+}
+
+async function markRelativeJoinAlert(ownerUid, targetPhone, alertType, extra = {}) {
+  const id = relativeJoinAlertDocId(alertType, targetPhone);
+  await db.collection('users').doc(ownerUid)
+    .collection('relative_join_alerts').doc(id).set({
+      ...extra,
+      type: alertType,
+      targetPhone: canonicalUid(targetPhone),
+      notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+}
+
+async function upsertRelativePhoneWatcher(ownerUid, personId, displayName, phone) {
+  const p = canonicalUid(phone);
+  if (!p || p.length < 12 || p === ownerUid) return;
+  const entryId = `${ownerUid}_${personId}`;
+  await db.collection('relative_phone_watchers').doc(p)
+    .collection('entries').doc(entryId).set({
+      ownerUid,
+      personId,
+      displayName: String(displayName || '').trim() || 'Қариндош',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+async function removeRelativePhoneWatcher(ownerUid, personId, phone) {
+  const p = canonicalUid(phone);
+  if (!p || p.length < 12) return;
+  const entryId = `${ownerUid}_${personId}`;
+  try {
+    await db.collection('relative_phone_watchers').doc(p)
+      .collection('entries').doc(entryId).delete();
+  } catch (_) { /* noop */ }
+}
+
+async function notifyOwnerRelativeJoined(ownerUid, displayName, phone, personId = '') {
+  if (await hasRelativeJoinAlert(ownerUid, phone, 'owner_notified')) return false;
+  const name = String(displayName || 'Қариндош').trim() || 'Қариндош';
+  await notifyUserInApp({
+    userId: ownerUid,
+    title: '👨‍👩‍👧 Қариндош иловада',
+    body: `Қариндошингиз ${name} AVA иловасига қўшилди.`,
+    category: 'info',
+    source: 'relative_registered',
+    dataType: 'relative_registered',
+    screen: 'relatives',
+    extraData: {
+      personId: personId || '',
+      registeredPhone: canonicalUid(phone),
+    },
+  });
+  await markRelativeJoinAlert(ownerUid, phone, 'owner_notified', {
+    personId,
+    displayName: name,
+  });
+  return true;
+}
+
+async function notifyNewUserRelativesWaiting(newUid) {
+  if (await hasRelativeJoinAlert(newUid, newUid, 'new_user_welcome')) return false;
+  await notifyUserInApp({
+    userId: newUid,
+    title: '👨‍👩‍👧 Қариндошлар кутмоқда',
+    body: 'Сизни Қариндошларингиз кутмоқда. Қариндошлар тугмаси орқали Насаб дарахтига уланинг.',
+    category: 'info',
+    source: 'relative_waiting',
+    dataType: 'relative_waiting',
+    screen: 'relatives',
+  });
+  await markRelativeJoinAlert(newUid, newUid, 'new_user_welcome');
+  return true;
+}
+
+async function notifyWatchersForRegisteredUser(newUid, userData) {
+  const phone = canonicalUid(userData.phone || userData.phoneDigits || newUid);
+  if (!phone || phone.length < 12) return { watchers: 0, notified: 0 };
+
+  const entriesSnap = await db.collection('relative_phone_watchers').doc(phone)
+    .collection('entries').get();
+  if (entriesSnap.empty) return { watchers: 0, notified: 0 };
+
+  let notified = 0;
+  for (const doc of entriesSnap.docs) {
+    const row = doc.data() || {};
+    const ownerUid = row.ownerUid;
+    if (!ownerUid || ownerUid === newUid) continue;
+    const name = String(row.displayName || 'Қариндош').trim() || 'Қариндош';
+    const sent = await notifyOwnerRelativeJoined(
+      ownerUid, name, phone, row.personId || '');
+    if (sent) notified++;
+  }
+
+  await notifyNewUserRelativesWaiting(newUid);
+  return { watchers: entriesSnap.size, notified };
+}
+
+async function backfillRelativePhoneWatchers(ownerUid) {
+  const peopleSnap = await db.collection('relatives').doc(ownerUid)
+    .collection('people').get();
+  for (const doc of peopleSnap.docs) {
+    const data = doc.data() || {};
+    const phone = canonicalUid(data.phone || '');
+    if (phone.length >= 12 && phone !== ownerUid) {
+      await upsertRelativePhoneWatcher(
+        ownerUid,
+        doc.id,
+        String(data.fullName || '').trim() || 'Қариндош',
+        phone);
+    }
+  }
+}
+
+async function checkOwnerRegisteredRelatives(ownerUid) {
+  const peopleSnap = await db.collection('relatives').doc(ownerUid)
+    .collection('people').get();
+  let notified = 0;
+  for (const doc of peopleSnap.docs) {
+    const data = doc.data() || {};
+    const phone = canonicalUid(data.phone || '');
+    if (!phone || phone.length < 12 || phone === ownerUid) continue;
+    if (await hasRelativeJoinAlert(ownerUid, phone, 'owner_notified')) continue;
+    const regSnap = await db.collection('users').doc(phone).get();
+    if (!regSnap.exists || !isUserProfileReady(regSnap.data())) continue;
+    const displayName = String(data.fullName || '').trim() || 'Қариндош';
+    const sent = await notifyOwnerRelativeJoined(
+      ownerUid, displayName, phone, doc.id);
+    if (sent) notified++;
+  }
+  return { notified };
+}
+
+async function syncRelativePhoneWatcherFromWrite(change, uid, pid, data) {
+  const beforeData = change.before.exists ? (change.before.data() || {}) : {};
+  const oldPhone = canonicalUid(beforeData.phone || '');
+  const newPhone = canonicalUid((data || {}).phone || '');
+  const displayName = String((data || {}).fullName || '').trim() || 'Қариндош';
+
+  if (!change.after.exists) {
+    if (oldPhone.length >= 12) {
+      await removeRelativePhoneWatcher(uid, pid, oldPhone);
+    }
+    return;
+  }
+
+  if (oldPhone.length >= 12 && oldPhone !== newPhone) {
+    await removeRelativePhoneWatcher(uid, pid, oldPhone);
+  }
+
+  if (newPhone.length >= 12 && newPhone !== uid) {
+    await upsertRelativePhoneWatcher(uid, pid, displayName, newPhone);
+    const regSnap = await db.collection('users').doc(newPhone).get();
+    if (regSnap.exists && isUserProfileReady(regSnap.data())) {
+      await notifyOwnerRelativeJoined(uid, displayName, newPhone, pid);
+    }
+  }
+}
+
+function parseBirthDateValue(raw) {
+  if (!raw) return null;
+  if (raw.toDate && typeof raw.toDate === 'function') return raw;
+  if (raw._seconds != null) {
+    return admin.firestore.Timestamp.fromMillis(raw._seconds * 1000);
+  }
+  const s = String(raw).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (Number.isNaN(d.getTime())) return null;
+  return admin.firestore.Timestamp.fromDate(d);
+}
+
+function profileAddressLine(u) {
+  const addr = u.address;
+  if (typeof addr === 'string') return addr.trim();
+  if (addr && typeof addr === 'object') {
+    return [addr.mfy, addr.street, addr.house, addr.district]
+      .map((x) => String(x || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+  return String(u.legacyAddress || '').trim();
+}
+
+function profileSelfFields(u) {
+  const name = String(u.name || u.fullName || u.displayName || 'Мен').trim() || 'Мен';
+  const phoneRaw = String(u.phone || u.phoneDigits || '').trim();
+  const phoneDigits = canonicalUid(phoneRaw);
+  return {
+    fullName: name,
+    photoUrl: String(u.photoUrl || u.avatar || ''),
+    gender: String(u.gender || ''),
+    birthDate: parseBirthDateValue(u.birthDate),
+    phone: phoneRaw || phoneDigits,
+    address: profileAddressLine(u),
+    relationDegree: 'Мен',
+    isSelf: true,
+  };
+}
+
+function profileSelfFieldsChanged(before, after) {
+  if (!before) return true;
+  const keys = [
+    'name', 'fullName', 'displayName', 'gender', 'birthDate',
+    'photoUrl', 'avatar', 'phone', 'phoneDigits', 'legacyAddress',
+  ];
+  if (keys.some((k) => String(before[k] ?? '') !== String(after[k] ?? ''))) {
+    return true;
+  }
+  return JSON.stringify(before.address || null)
+    !== JSON.stringify(after.address || null);
+}
+
+/** Profildan «Мен» yozuvini relatives/people + tree_persons bilan sinxronlash. */
+async function syncSelfRelativePerson(uid, selfId, u) {
+  if (!selfId || !u || !isUserProfileReady(u)) return;
+  const fields = profileSelfFields(u);
+  const ref = db.collection('relatives').doc(uid).collection('people').doc(selfId);
+  const snap = await ref.get();
+  const mergeData = {
+    ...fields,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (!snap.exists) {
+    mergeData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  await ref.set(mergeData, { merge: true });
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  const componentId = (userSnap.data() || {}).treeComponentId
+    || treeComponentIdFor(uid);
+  await db.collection('tree_persons').doc(selfId).set({
+    fullName: fields.fullName,
+    photoUrl: fields.photoUrl,
+    gender: fields.gender,
+    birthDate: fields.birthDate,
+    claimedBy: uid,
+    ownerUid: uid,
+    componentId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 function treeComponentIdFor(uid) {
   return `cmp_${uid}`;
 }
@@ -8936,6 +9468,8 @@ exports.ensureMyTree = functions.https.onCall(async (data, context) => {
     updates.treePersonId = selfId;
   }
 
+  await syncSelfRelativePerson(uid, selfId, u);
+
   // Backfill: relatives/{uid}/people → tree_persons/{xuddi shu id}
   const peopleSnap =
     await db.collection('relatives').doc(uid).collection('people').get();
@@ -8965,7 +9499,16 @@ exports.ensureMyTree = functions.https.onCall(async (data, context) => {
   updates.treeMigratedAt = admin.firestore.FieldValue.serverTimestamp();
   await userRef.set(updates, { merge: true });
 
-  return { ok: true, componentId, personId: selfId, migrated };
+  await backfillRelativePhoneWatchers(uid);
+  const relCheck = await checkOwnerRegisteredRelatives(uid);
+
+  return {
+    ok: true,
+    componentId,
+    personId: selfId,
+    migrated,
+    relativesRegisteredNotified: relCheck.notified,
+  };
 });
 
 /// Merge'dan keyin eski id → omon qolgan id (tree_redirects).
@@ -8982,6 +9525,9 @@ exports.onRelativePersonWrite = functions.firestore
   .onWrite(async (change, context) => {
     const uid = context.params.uid;
     const pid = context.params.pid;
+    const data = change.after.exists ? (change.after.data() || {}) : {};
+
+    await syncRelativePhoneWatcherFromWrite(change, uid, pid, data);
 
     if (!change.after.exists) {
       // O'chirildi. Agar merge qilingan bo'lsa (redirect bor) — omon qolgan
@@ -8995,7 +9541,6 @@ exports.onRelativePersonWrite = functions.firestore
       return null;
     }
 
-    const data = change.after.data() || {};
     const targetId = await resolveTreeRedirect(pid);
     const fatherId = await resolveTreeRedirect(data.fatherId || null);
     const motherId = await resolveTreeRedirect(data.motherId || null);
@@ -9028,6 +9573,30 @@ exports.onRelativePersonWrite = functions.firestore
     return null;
   });
 
+/// Yangi foydalanuvchi profilini to'ldirganda — qarindosh kuzatuvchilarga xabar.
+exports.onUserProfileReady = functions.firestore
+  .document('users/{uid}')
+  .onWrite(async (change) => {
+    const after = change.after.exists ? change.after.data() : null;
+    if (!isUserProfileReady(after)) return null;
+    const before = change.before.exists ? change.before.data() : null;
+    const uid = change.after.id;
+
+    if (!isUserProfileReady(before)) {
+      await notifyWatchersForRegisteredUser(uid, after);
+    }
+
+    if (profileSelfFieldsChanged(before, after) || !isUserProfileReady(before)) {
+      let selfId = after.treePersonId || null;
+      if (!selfId) {
+        const ensured = await ensureTreeForUid(uid);
+        selfId = ensured.selfId;
+      }
+      if (selfId) await syncSelfRelativePerson(uid, selfId, after);
+    }
+    return null;
+  });
+
 /// Foydalanuvchi uchun komponent + "Men" tugunini ta'minlash (inline, idempotent).
 async function ensureTreeForUid(uid) {
   const userRef = db.collection('users').doc(uid);
@@ -9057,6 +9626,9 @@ async function ensureTreeForUid(uid) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     updates.treePersonId = selfId;
+  }
+  if (selfId && isUserProfileReady(u)) {
+    await syncSelfRelativePerson(uid, selfId, u);
   }
   if (Object.keys(updates).length) await userRef.set(updates, { merge: true });
   return { componentId, selfId };
@@ -9714,4 +10286,668 @@ exports.saveTreeNode = functions.https.onCall(async (data, context) => {
   });
 
   return { ok: true, nodeId };
+});
+
+// ══════════════════════════════════════
+// CARPET WASH — gilam yuvish
+// ══════════════════════════════════════
+
+const CARPET_WASH_STATUSES = new Set([
+  'new',
+  'accepted',
+  'pickup_ready',
+  'pickup_in_delivery',
+  'picked_up',
+  'washing',
+  'drying',
+  'ready',
+  'return_ready',
+  'return_in_delivery',
+  'delivered',
+  'completed',
+  'cancelled',
+]);
+
+async function loadCarpetWashOrderOrThrow(orderId) {
+  const id = String(orderId || '').trim();
+  if (!id) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+  const snap = await db.collection('carpet_wash_orders').doc(id).get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'order not found');
+  }
+  return { ref: snap.ref, data: snap.data() || {}, id };
+}
+
+/** Mijoz: gilam yuvish buyurtmasi yaratish. */
+exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+
+    const carpetCount = parseInt(String(data.carpetCount || 0), 10);
+    const pickupAddress = String(data.pickupAddress || '').trim();
+    const note = String(data.note || '').trim();
+    const pickupLat = data.pickupLat != null ? Number(data.pickupLat) : null;
+    const pickupLng = data.pickupLng != null ? Number(data.pickupLng) : null;
+
+    if (!Number.isFinite(carpetCount) || carpetCount < 1 || carpetCount > 20) {
+      throw new functions.https.HttpsError('invalid-argument', 'carpetCount 1..20');
+    }
+    if (pickupAddress.length < 5) {
+      throw new functions.https.HttpsError('invalid-argument', 'pickupAddress required');
+    }
+
+    const callerUid = canonicalUid(callerPhone(context));
+    if (!callerUid || callerUid.length < 9) {
+      throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+    }
+
+    const uid9 = userUid(callerPhone(context));
+    const uid12 = callerUid;
+    let userRef = db.collection('users').doc(uid12);
+    let userSnap = await userRef.get();
+    if (!userSnap.exists && uid9 !== uid12) {
+      userRef = db.collection('users').doc(uid9);
+      userSnap = await userRef.get();
+    }
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'user not found');
+    }
+
+    const userData = userSnap.data() || {};
+    const customerPhone = canonicalUid(String(userData.phone || callerPhone(context)));
+    const customerName = String(userData.name || userData.fullName || '').trim();
+    const customerId = userRef.id;
+
+    const orderRef = db.collection('carpet_wash_orders').doc();
+    const payload = {
+      customerId,
+      customerPhone,
+      customerName,
+      pickupAddress,
+      carpetCount,
+      note,
+      priceMode: 'admin',
+      finalPrice: 0,
+      status: 'new',
+      pickupCourierId: '',
+      returnCourierId: '',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (Number.isFinite(pickupLat)) payload.pickupLat = pickupLat;
+    if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
+
+    await orderRef.set(payload);
+    return { ok: true, orderId: orderRef.id };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('placeCarpetWashOrder:', e);
+    const msg = e && e.message ? String(e.message) : 'placeCarpetWashOrder failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Admin: gilam yuvish statusini o'zgartirish. */
+exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) => {
+  try {
+    await assertAdmin(String(data.adminPhone || ''), context);
+    const orderId = String(data.orderId || '').trim();
+    const status = String(data.status || '').trim();
+    const finalPriceRaw = data.finalPrice;
+
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+    if (!CARPET_WASH_STATUSES.has(status)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
+    }
+
+    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
+    const patch = {
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (finalPriceRaw != null && finalPriceRaw !== '') {
+      const finalPrice = parseInt(String(finalPriceRaw), 10);
+      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+        patch.finalPrice = finalPrice;
+      }
+    }
+
+    if (status === 'cancelled' && od.status === 'completed') {
+      throw new functions.https.HttpsError('failed-precondition', 'already completed');
+    }
+
+    await ref.update(patch);
+    return { ok: true, orderId, status };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('adminSetCarpetWashStatus:', e);
+    const msg = e && e.message ? String(e.message) : 'adminSetCarpetWashStatus failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+async function assertCourierCaller(courierPhone, context) {
+  const courierDigits = assertCourierPhone(courierPhone);
+  const caller = callerPhone(context);
+  if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  return resolveAuthorizedCourierUid(courierPhone);
+}
+
+/** Kuryer: gilam olish vazifasini olish (pickup_ready → pickup_in_delivery). */
+exports.courierClaimCarpetPickup = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const orderRef = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(orderRef);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const cur = snap.data() || {};
+      const curStatus = String(cur.status || '');
+      const existingCourier = String(cur.pickupCourierId || '');
+
+      if (curStatus === 'pickup_in_delivery' && existingCourier === courierId) {
+        return;
+      }
+      if (curStatus !== 'pickup_ready') {
+        throw new functions.https.HttpsError('failed-precondition', 'not pickup_ready');
+      }
+      if (existingCourier && existingCourier !== courierId) {
+        throw new functions.https.HttpsError('failed-precondition', 'already claimed');
+      }
+
+      t.update(orderRef, {
+        status: 'pickup_in_delivery',
+        pickupCourierId: courierId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    return { ok: true, orderId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierClaimCarpetPickup:', e);
+    const msg = e && e.message ? String(e.message) : 'courierClaimCarpetPickup failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: gilam manzilga etib keldi (pickup yoki return) — qo'ng'iroqli xabar. */
+exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const leg = String(data.leg || 'pickup').trim().toLowerCase();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+    if (leg !== 'pickup' && leg !== 'return') {
+      throw new functions.https.HttpsError('invalid-argument', 'leg must be pickup or return');
+    }
+
+    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
+    const status = String(od.status || '');
+
+    if (leg === 'pickup') {
+      if (status !== 'pickup_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+      }
+      if (String(od.pickupCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+      }
+      if (od.pickupArrivedAt) {
+        return { ok: true, idempotent: true, orderId, leg };
+      }
+      await ref.update({
+        pickupArrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      if (status !== 'return_in_delivery') {
+        throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+      }
+      if (String(od.returnCourierId || '') !== courierId) {
+        throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+      }
+      if (od.returnArrivedAt) {
+        return { ok: true, idempotent: true, orderId, leg };
+      }
+      await ref.update({
+        returnArrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    try {
+      await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
+        orderId,
+        module: 'carpet_wash',
+        leg,
+      });
+    } catch (e) {
+      console.error('courierMarkCarpetArrived notify:', e.message || e);
+    }
+
+    return { ok: true, orderId, leg };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkCarpetArrived:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkCarpetArrived failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: gilam olib ketildi (pickup_in_delivery → picked_up). */
+exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
+    if (String(od.status || '') !== 'pickup_in_delivery') {
+      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+    }
+    if (String(od.pickupCourierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+    }
+    if (!od.pickupArrivedAt) {
+      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+    }
+
+    await ref.update({
+      status: 'picked_up',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true, orderId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkCarpetPickedUp:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkCarpetPickedUp failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: gilam qaytarish vazifasini olish (return_ready → return_in_delivery). */
+exports.courierClaimCarpetReturn = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const orderRef = db.collection('carpet_wash_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(orderRef);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const cur = snap.data() || {};
+      const curStatus = String(cur.status || '');
+      const existingCourier = String(cur.returnCourierId || '');
+
+      if (curStatus === 'return_in_delivery' && existingCourier === courierId) {
+        return;
+      }
+      if (curStatus !== 'return_ready') {
+        throw new functions.https.HttpsError('failed-precondition', 'not return_ready');
+      }
+      if (existingCourier && existingCourier !== courierId) {
+        throw new functions.https.HttpsError('failed-precondition', 'already claimed');
+      }
+
+      t.update(orderRef, {
+        status: 'return_in_delivery',
+        returnCourierId: courierId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    return { ok: true, orderId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierClaimCarpetReturn:', e);
+    const msg = e && e.message ? String(e.message) : 'courierClaimCarpetReturn failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: gilam yetkazildi (return_in_delivery → completed). */
+exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const { ref, data: od } = await loadCarpetWashOrderOrThrow(orderId);
+    if (String(od.status || '') !== 'return_in_delivery') {
+      throw new functions.https.HttpsError('failed-precondition', 'not return_in_delivery');
+    }
+    if (String(od.returnCourierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your return task');
+    }
+    if (!od.returnArrivedAt) {
+      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+    }
+
+    await ref.update({
+      status: 'completed',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true, orderId, status: 'completed' };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkCarpetDelivered:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkCarpetDelivered failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+// ══════════════════════════════════════
+// AGRO PICKUP — sut va boshqa mahsulot qabuli
+// ══════════════════════════════════════
+
+const AGRO_PICKUP_PRODUCT_TYPES = new Set(['milk']);
+
+const AGRO_PICKUP_STATUSES = new Set([
+  'new',
+  'accepted',
+  'pickup_in_delivery',
+  'picked_up',
+  'completed',
+  'cancelled',
+]);
+
+async function loadAgroPickupOrderOrThrow(orderId) {
+  const id = String(orderId || '').trim();
+  if (!id) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+  const snap = await db.collection('agro_pickup_orders').doc(id).get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'order not found');
+  }
+  return { ref: snap.ref, data: snap.data() || {}, id };
+}
+
+/** Mijoz: agro qabul buyurtmasi (sut va h.k.). */
+exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+
+    const productType = String(data.productType || 'milk').trim();
+    const literCount = Number(data.literCount);
+    const pickupAddress = String(data.pickupAddress || '').trim();
+    const note = String(data.note || '').trim();
+    const pickupLat = data.pickupLat != null ? Number(data.pickupLat) : null;
+    const pickupLng = data.pickupLng != null ? Number(data.pickupLng) : null;
+
+    if (!AGRO_PICKUP_PRODUCT_TYPES.has(productType)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid productType');
+    }
+    if (!Number.isFinite(literCount) || literCount < 1 || literCount > 500) {
+      throw new functions.https.HttpsError('invalid-argument', 'literCount 1..500');
+    }
+    if (pickupAddress.length < 5) {
+      throw new functions.https.HttpsError('invalid-argument', 'pickupAddress required');
+    }
+
+    const callerUid = canonicalUid(callerPhone(context));
+    if (!callerUid || callerUid.length < 9) {
+      throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+    }
+
+    const uid9 = userUid(callerPhone(context));
+    const uid12 = callerUid;
+    let userRef = db.collection('users').doc(uid12);
+    let userSnap = await userRef.get();
+    if (!userSnap.exists && uid9 !== uid12) {
+      userRef = db.collection('users').doc(uid9);
+      userSnap = await userRef.get();
+    }
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'user not found');
+    }
+
+    const userData = userSnap.data() || {};
+    const customerPhone = canonicalUid(String(userData.phone || callerPhone(context)));
+    const customerName = String(userData.name || userData.fullName || '').trim();
+    const customerId = userRef.id;
+
+    const orderRef = db.collection('agro_pickup_orders').doc();
+    const payload = {
+      customerId,
+      customerPhone,
+      customerName,
+      productType,
+      pickupAddress,
+      literCount,
+      note,
+      priceMode: 'admin',
+      finalPrice: 0,
+      status: 'new',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (Number.isFinite(pickupLat)) payload.pickupLat = pickupLat;
+    if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
+
+    await orderRef.set(payload);
+    return { ok: true, orderId: orderRef.id };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('placeAgroPickupOrder:', e);
+    const msg = e && e.message ? String(e.message) : 'placeAgroPickupOrder failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Admin: agro qabul statusini o'zgartirish. */
+exports.adminSetAgroPickupStatus = functions.https.onCall(async (data, context) => {
+  try {
+    await assertAdmin(String(data.adminPhone || ''), context);
+    const orderId = String(data.orderId || '').trim();
+    const status = String(data.status || '').trim();
+    const finalPriceRaw = data.finalPrice;
+
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+    if (!AGRO_PICKUP_STATUSES.has(status)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
+    }
+
+    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
+    const patch = {
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (finalPriceRaw != null && finalPriceRaw !== '') {
+      const finalPrice = parseInt(String(finalPriceRaw), 10);
+      if (Number.isFinite(finalPrice) && finalPrice >= 0) {
+        patch.finalPrice = finalPrice;
+      }
+    }
+
+    if (status === 'cancelled' && od.status === 'completed') {
+      throw new functions.https.HttpsError('failed-precondition', 'already completed');
+    }
+
+    await ref.update(patch);
+    return { ok: true, orderId, status };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('adminSetAgroPickupStatus:', e);
+    const msg = e && e.message ? String(e.message) : 'adminSetAgroPickupStatus failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: sut qabul vazifasini olish (accepted → pickup_in_delivery). */
+exports.courierClaimAgroPickup = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const orderRef = db.collection('agro_pickup_orders').doc(orderId);
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(orderRef);
+      if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'order not found');
+      }
+      const cur = snap.data() || {};
+      const curStatus = String(cur.status || '');
+      const existingCourier = String(cur.pickupCourierId || '');
+
+      if (curStatus === 'pickup_in_delivery' && existingCourier === courierId) {
+        return;
+      }
+      if (curStatus !== 'accepted') {
+        throw new functions.https.HttpsError('failed-precondition', 'not accepted');
+      }
+      if (existingCourier && existingCourier !== courierId) {
+        throw new functions.https.HttpsError('failed-precondition', 'already claimed');
+      }
+
+      t.update(orderRef, {
+        status: 'pickup_in_delivery',
+        pickupCourierId: courierId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    return { ok: true, orderId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierClaimAgroPickup:', e);
+    const msg = e && e.message ? String(e.message) : 'courierClaimAgroPickup failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: sut qabul manziliga etib keldi — qo'ng'iroqli xabar. */
+exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
+    if (String(od.status || '') !== 'pickup_in_delivery') {
+      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+    }
+    if (String(od.pickupCourierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+    }
+    if (od.arrivedAt) {
+      return { ok: true, idempotent: true, orderId };
+    }
+
+    await ref.update({
+      arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    try {
+      await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
+        orderId,
+        module: 'agro_pickup',
+        productType: String(od.productType || 'milk'),
+      });
+    } catch (e) {
+      console.error('courierMarkAgroPickupArrived notify:', e.message || e);
+    }
+
+    return { ok: true, orderId };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkAgroPickupArrived:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkAgroPickupArrived failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
+});
+
+/** Kuryer: sut olib ketildi (pickup_in_delivery → picked_up). */
+exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required');
+    }
+    const orderId = String(data.orderId || '').trim();
+    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    if (!orderId) {
+      throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+    }
+
+    const { ref, data: od } = await loadAgroPickupOrderOrThrow(orderId);
+    if (String(od.status || '') !== 'pickup_in_delivery') {
+      throw new functions.https.HttpsError('failed-precondition', 'not pickup_in_delivery');
+    }
+    if (String(od.pickupCourierId || '') !== courierId) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your pickup task');
+    }
+    if (!od.arrivedAt) {
+      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
+    }
+
+    await ref.update({
+      status: 'picked_up',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true, orderId, status: 'picked_up' };
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('courierMarkAgroPickedUp:', e);
+    const msg = e && e.message ? String(e.message) : 'courierMarkAgroPickedUp failed';
+    throw new functions.https.HttpsError('internal', msg);
+  }
 });

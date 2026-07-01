@@ -469,7 +469,7 @@ class _FoodProductsTab extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(pad, pad, pad, 80),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 340,
-                childAspectRatio: 1.05,
+                mainAxisExtent: 400,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -680,6 +680,54 @@ class _FoodProductCardState extends State<_FoodProductCard> {
     );
   }
 
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ўчиришни тасдиқланг'),
+        content: Text(
+          '"${widget.product.name}" таомини ўчиришни хоҳлайсизми?\n'
+          'Каталог ва захира ҳам ўчирилади.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Бекор'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ўчириш', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      batch.delete(
+        FirebaseFirestore.instance.collection('food_catalog').doc(widget.docId),
+      );
+      batch.delete(
+        FirebaseFirestore.instance
+            .collection('food_inventory')
+            .doc(widget.product.inventoryId),
+      );
+      await batch.commit();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text('🗑 "${widget.product.name}" ўчирилди'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Хатoлик: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
@@ -738,12 +786,33 @@ class _FoodProductCardState extends State<_FoodProductCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${p.name} · ${p.category}',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.bold),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${p.name} · ${p.category}',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Ўчириш',
+                      onPressed: _delete,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
+                      ),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 22,
+                        color: Colors.red.shade600,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Row(

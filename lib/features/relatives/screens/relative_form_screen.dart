@@ -108,28 +108,32 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
   }
 
   Future<void> _save() async {
+    final isSelf = widget.existing?.isSelf ?? false;
     final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
+    if (!isSelf && name.isEmpty) {
       _snack('Исм-фамилияни киритинг.');
       return;
     }
     setState(() => _busy = true);
     try {
+      final existing = widget.existing;
       final person = RelativePerson(
-        id: widget.existing?.id ?? '',
-        fullName: name,
-        photoUrl: _photoUrl,
-        photoPath: _photoPath,
-        phone: _phoneCtrl.text.trim(),
-        address: _addressCtrl.text.trim(),
-        birthDate: _birthDate,
-        gender: _gender,
-        relationDegree: _degreeCtrl.text.trim(),
+        id: existing?.id ?? '',
+        fullName: isSelf ? existing!.fullName : name,
+        photoUrl: isSelf ? existing!.photoUrl : _photoUrl,
+        photoPath: isSelf ? existing!.photoPath : _photoPath,
+        phone: isSelf ? existing!.phone : _phoneCtrl.text.trim(),
+        address: isSelf ? existing!.address : _addressCtrl.text.trim(),
+        birthDate: isSelf ? existing!.birthDate : _birthDate,
+        gender: isSelf ? existing!.gender : _gender,
+        relationDegree:
+            isSelf ? existing!.relationDegree : _degreeCtrl.text.trim(),
         side: _side,
         notes: _notesCtrl.text.trim(),
         fatherId: _fatherId,
         motherId: _motherId,
         spouseId: _spouseId,
+        isSelf: isSelf,
       );
       if (widget.existing == null) {
         await _repo.addPerson(widget.userId, person);
@@ -151,55 +155,96 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
+    final isSelf = widget.existing?.isSelf ?? false;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? 'Таҳрирлаш' : 'Қариндош қўшиш'),
+        title: Text(isSelf ? 'Мен' : (isEdit ? 'Таҳрирлаш' : 'Қариндош қўшиш')),
         backgroundColor: RelativeFormScreen._accent,
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Center(
-            child: GestureDetector(
-              onTap: _busy ? null : _pickPhoto,
-              child: CircleAvatar(
-                radius: 44,
-                backgroundColor: RelativeFormScreen._accent.withValues(alpha: 0.12),
+          if (isSelf)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Material(
+                color: RelativeFormScreen._accent.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'Исм, телефон, манзил ва туғилган сана профилингиздан '
+                    'автомат синхронланади. Бу ерда насаб боғланишларини '
+                    'танлашингиз мумкин.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+            ),
+          if (!isSelf)
+            Center(
+              child: GestureDetector(
+                onTap: _busy ? null : _pickPhoto,
+                child: CircleAvatar(
+                  radius: 44,
+                  backgroundColor:
+                      RelativeFormScreen._accent.withValues(alpha: 0.12),
+                  backgroundImage:
+                      _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
+                  child: _photoUrl.isEmpty
+                      ? const Icon(Icons.add_a_photo_outlined,
+                          color: RelativeFormScreen._accent)
+                      : null,
+                ),
+              ),
+            ),
+          if (!isSelf) const SizedBox(height: 16),
+          if (isSelf)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor:
+                    RelativeFormScreen._accent.withValues(alpha: 0.12),
                 backgroundImage:
                     _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
                 child: _photoUrl.isEmpty
-                    ? const Icon(Icons.add_a_photo_outlined,
-                        color: RelativeFormScreen._accent)
+                    ? const Icon(Icons.person, color: RelativeFormScreen._accent)
                     : null,
               ),
+              title: Text(_nameCtrl.text,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text([
+                if (_phoneCtrl.text.isNotEmpty) _phoneCtrl.text,
+                if (_birthDate != null) _fmtDate(_birthDate!),
+              ].join(' · ')),
             ),
-          ),
-          const SizedBox(height: 16),
-          _field(_nameCtrl, 'Исм-фамилия *', Icons.person_outline),
-          _field(_phoneCtrl, 'Телефон', Icons.phone_outlined,
-              keyboard: TextInputType.phone),
-          _field(_degreeCtrl, 'Қариндошлик даражаси (масалан: амаки)',
-              Icons.diversity_1_outlined),
-          _field(_addressCtrl, 'Манзил', Icons.location_on_outlined),
-          const SizedBox(height: 4),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.cake_outlined),
-            title: Text(_birthDate == null
-                ? 'Туғилган сана'
-                : _fmtDate(_birthDate!)),
-            trailing: const Icon(Icons.edit_calendar_outlined),
-            onTap: _pickBirthDate,
-          ),
-          const SizedBox(height: 8),
-          _dropdown(
-            'Жинс',
-            _gender,
-            const {'': 'Танланмаган', 'male': 'Эркак', 'female': 'Аёл'},
-            (v) => setState(() => _gender = v),
-          ),
-          const SizedBox(height: 12),
+          if (!isSelf) ...[
+            _field(_nameCtrl, 'Исм-фамилия *', Icons.person_outline),
+            _field(_phoneCtrl, 'Телефон', Icons.phone_outlined,
+                keyboard: TextInputType.phone),
+            _field(_degreeCtrl, 'Қариндошлик даражаси (масалан: амаки)',
+                Icons.diversity_1_outlined),
+            _field(_addressCtrl, 'Манзил', Icons.location_on_outlined),
+            const SizedBox(height: 4),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.cake_outlined),
+              title: Text(_birthDate == null
+                  ? 'Туғилган сана'
+                  : _fmtDate(_birthDate!)),
+              trailing: const Icon(Icons.edit_calendar_outlined),
+              onTap: _pickBirthDate,
+            ),
+            const SizedBox(height: 8),
+            _dropdown(
+              'Жинс',
+              _gender,
+              const {'': 'Танланмаган', 'male': 'Эркак', 'female': 'Аёл'},
+              (v) => setState(() => _gender = v),
+            ),
+            const SizedBox(height: 12),
+          ],
           _dropdown(
             'Томон',
             _side,

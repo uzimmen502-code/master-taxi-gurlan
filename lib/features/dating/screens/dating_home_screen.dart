@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +14,46 @@ import '../services/dating_service.dart';
 import 'dating_chat_screen.dart';
 import 'dating_profile_form_screen.dart';
 import 'dating_profile_view_screen.dart';
+
+/// Tab matnlari — AppBar (datingAccent) ustida bir xil oq rang.
+abstract final class _DatingTabStyle {
+  static const label = Color(0xFFFFFFFF);
+}
+
+Tab _datingTab({
+  required TabController controller,
+  required int index,
+  required String label,
+}) {
+  return Tab(
+    child: AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final selected = controller.index == index;
+        return Text(
+          label,
+          style: TextStyle(
+            color: selected
+                ? _DatingTabStyle.label
+                : _DatingTabStyle.label.withValues(alpha: 0.7),
+            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+            fontSize: selected ? 15 : 13,
+            letterSpacing: 0.15,
+            shadows: selected
+                ? const [
+                    Shadow(
+                      color: Color(0x99000000),
+                      blurRadius: 5,
+                      offset: Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+        );
+      },
+    ),
+  );
+}
 
 /// ❤️ Tanishuv — asosiy ekran. Profil holatiga qarab gate (onboarding /
 /// moderatsiya kutilmoqda / faol).
@@ -207,37 +249,62 @@ class _DatingApprovedHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 4,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF7F4F6),
-        appBar: AppBar(
-          title: const Text('Танишув'),
-          backgroundColor: datingAccent,
-          foregroundColor: Colors.white,
-          bottom: const TabBar(
-            isScrollable: true,
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(text: '🔍 Кашфиёт'),
-              Tab(text: '❤️ Қизиқишлар'),
-              Tab(text: '💬 Чатлар'),
-              Tab(text: '👤 Профил'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _DiscoveryTab(uid: uid, profile: profile, repo: repo),
-            _InterestsTab(uid: uid, repo: repo),
-            _MatchesTab(uid: uid, repo: repo),
-            _MyProfileTab(uid: uid, profile: profile),
-          ],
-        ),
+      child: Builder(
+        builder: (context) {
+          final tabCtrl = DefaultTabController.of(context);
+          return Scaffold(
+            backgroundColor: const Color(0xFFF7F4F6),
+            appBar: AppBar(
+              title: const Text('Танишув'),
+              backgroundColor: datingAccent,
+              foregroundColor: Colors.white,
+              bottom: TabBar(
+                controller: tabCtrl,
+                isScrollable: true,
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                dividerColor: Colors.transparent,
+                tabs: [
+                  _datingTab(
+                    controller: tabCtrl,
+                    index: 0,
+                    label: '🔍 Тавсия',
+                  ),
+                  _datingTab(
+                    controller: tabCtrl,
+                    index: 1,
+                    label: '❤️ Қизиқишлар',
+                  ),
+                  _datingTab(
+                    controller: tabCtrl,
+                    index: 2,
+                    label: '💬 Чатлар',
+                  ),
+                  _datingTab(
+                    controller: tabCtrl,
+                    index: 3,
+                    label: '👤 Профил',
+                  ),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              controller: tabCtrl,
+              children: [
+                _DiscoveryTab(uid: uid, profile: profile, repo: repo),
+                _InterestsTab(uid: uid, repo: repo),
+                _MatchesTab(uid: uid, repo: repo),
+                _MyProfileTab(uid: uid, profile: profile),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-// ─── Kashfiyot ────────────────────────────────────────────────────────
+// ─── Tavsiya ──────────────────────────────────────────────────────────
 class _DiscoveryTab extends StatelessWidget {
   const _DiscoveryTab(
       {required this.uid, required this.profile, required this.repo});
@@ -256,6 +323,8 @@ class _DiscoveryTab extends StatelessWidget {
             myUid: uid,
             myGender: profile.gender,
             excludeIds: blocked,
+            prefMinAge: profile.prefMinAge,
+            prefMaxAge: profile.prefMaxAge,
           ),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
@@ -264,8 +333,16 @@ class _DiscoveryTab extends StatelessWidget {
             final list = snap.data ?? const <DatingProfile>[];
             if (list.isEmpty) {
               return Center(
-                child: Text('Ҳозирча мос профил йўқ.',
-                    style: TextStyle(color: Colors.grey.shade600)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Танланган ёш оралиғида (${profile.prefMinAge}–'
+                    '${profile.prefMaxAge}) ҳозирча мос профил йўқ.\n'
+                    'Профил табида оралиқни кенайтиринг.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ),
               );
             }
             return GridView.builder(
@@ -503,12 +580,120 @@ class _MyProfileTab extends StatefulWidget {
 
 class _MyProfileTabState extends State<_MyProfileTab> {
   bool _busy = false;
+  bool _savingAge = false;
+  late RangeValues _ageRange;
+
+  @override
+  void initState() {
+    super.initState();
+    _ageRange = _rangeFromProfile(widget.profile);
+  }
+
+  @override
+  void didUpdateWidget(covariant _MyProfileTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profile.prefMinAge != widget.profile.prefMinAge ||
+        oldWidget.profile.prefMaxAge != widget.profile.prefMaxAge) {
+      _ageRange = _rangeFromProfile(widget.profile);
+    }
+  }
+
+  RangeValues _rangeFromProfile(DatingProfile p) {
+    final lo = p.prefMinAge.clamp(18, 80).toDouble();
+    final hi = p.prefMaxAge.clamp(18, 80).toDouble();
+    return RangeValues(math.min(lo, hi), math.max(lo, hi));
+  }
+
+  Future<void> _saveAgePreference() async {
+    final minAge = _ageRange.start.round();
+    final maxAge = _ageRange.end.round();
+    if (minAge == widget.profile.prefMinAge &&
+        maxAge == widget.profile.prefMaxAge) {
+      return;
+    }
+    setState(() => _savingAge = true);
+    try {
+      await DatingService.setAgePreference(minAge: minAge, maxAge: maxAge);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ёш оралиғи сақланди')),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(firebaseFunctionsUserMessage(e))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Хатолик: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingAge = false);
+    }
+  }
 
   Future<void> _toggleActive(bool v) async {
     setState(() => _busy = true);
     try {
       await DatingService.setActive(v);
     } catch (_) {
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteProfile() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Профилни ўчириш'),
+        content: const Text(
+          'Танишув профили, расмлар, қизиқишлар ва чатлар '
+          'бутунлай ўчирилади. Бу амални қайтариб бўлмайди.\n\n'
+          'Давом этасизми?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Ўчираман'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await DatingService.deleteProfile();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Профил ўчирилди')),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(firebaseFunctionsUserMessage(e))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Хатолик: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -546,10 +731,45 @@ class _MyProfileTabState extends State<_MyProfileTab> {
         SwitchListTile(
           activeThumbColor: datingAccent,
           title: const Text('Профил кўринади'),
-          subtitle: const Text('Ўчирсангиз кашфиётда чиқмайсиз'),
+          subtitle: const Text('Ўчирсангиз тавсиада чиқмайсиз'),
           value: p.active,
           onChanged: _busy ? null : _toggleActive,
         ),
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            'Тавсия ёш оралиғи: ${_ageRange.start.round()} – '
+            '${_ageRange.end.round()} ёш',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        RangeSlider(
+          values: _ageRange,
+          min: 18,
+          max: 80,
+          divisions: 62,
+          activeColor: datingAccent,
+          labels: RangeLabels(
+            '${_ageRange.start.round()}',
+            '${_ageRange.end.round()}',
+          ),
+          onChanged: _savingAge
+              ? null
+              : (v) => setState(() => _ageRange = v),
+          onChangeEnd: (_) => _saveAgePreference(),
+        ),
+        if (_savingAge)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
         const Divider(),
         ListTile(
           leading: const Icon(Icons.edit_outlined),
@@ -562,6 +782,19 @@ class _MyProfileTabState extends State<_MyProfileTab> {
                   DatingProfileFormScreen(uid: widget.uid, existing: p),
             ),
           ),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.delete_forever_outlined, color: Colors.red),
+          title: const Text(
+            'Профилни ўчириш',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Расмлар, қизиқишлар ва чатлар ҳам ўчирилади',
+          ),
+          enabled: !_busy,
+          onTap: _busy ? null : _deleteProfile,
         ),
       ],
     );

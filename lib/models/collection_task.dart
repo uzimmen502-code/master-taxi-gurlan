@@ -54,6 +54,7 @@ class CollectionTask {
     required this.totalValue,
     required this.courierId,
     required this.status,
+    this.arrivedAt,
     this.createdAt,
     this.createdBy = '',
   });
@@ -70,10 +71,13 @@ class CollectionTask {
   final int totalValue;
   final String courierId;
   final String status;
+  final DateTime? arrivedAt;
   final DateTime? createdAt;
   final String createdBy;
 
   bool get hasPickupGps => pickupLat != null && pickupLng != null;
+
+  bool get hasArrived => arrivedAt != null;
 
   bool get isActive =>
       status == 'assigned' || status == 'collecting';
@@ -120,6 +124,7 @@ class CollectionTask {
       totalValue: (d['totalValue'] as num?)?.toInt() ?? 0,
       courierId: (d['courierId'] ?? '') as String,
       status: (d['status'] ?? 'assigned') as String,
+      arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       createdBy: (d['createdBy'] ?? '') as String,
     );

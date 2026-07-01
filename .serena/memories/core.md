@@ -27,7 +27,7 @@ Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bre
 
 ## Feature module maps (files + collections + flows + gotchas per module)
 - Taxi: local + marshrut (flat route price, system queue) + intercity + driver_home/schedule: `mem:modules/taxi`
-- Commerce/delivery: food + bread + orders + courier (placeOrderPostPaid, inventory): `mem:modules/commerce`
+- Commerce/delivery: food + bread + orders + courier (placeOrderPostPaid, inventory) + carpet wash: `mem:modules/commerce`, `mem:modules/carpet_wash`
 - Social "Mening yaqinlarim": circles + relatives + dating + global family tree (F1–F5): `mem:modules/social`
 - Admin web panel + analytics (main_admin.dart, shell sections, RBAC): `mem:modules/admin_panel`
 - Jobs board + cheap-product marketplace (both `ads`) + entertainment: `mem:modules/jobs_ads_entertainment`

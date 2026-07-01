@@ -10,12 +10,15 @@ import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../services/price_service.dart';
 
-/// Yo'lovchining "haydovchi qidirish" oqimini boshqaradi.
+/// Yo'lovchining "haydovchi qidirish" oqimini boshqaradi (BROADCAST modeli).
 ///
-/// 3 ta sikl (har biri 20 soniya): 3 km → 5 km → 7 km.
+/// Yo'lovchi haydovchini QO'LDA tanlamaydi. `trips/{id}` `searching` holatida
+/// yaratiladi va radius bo'yicha kengayadi (3 km → 5 km → 7 km, har biri 30s);
+/// radius `trips.radiusKm` ga yoziladi — atrofdagi BARCHA haydovchilar shu
+/// radius ichida so'rovni ko'radi (`watchPendingTrips` + radius gate).
+/// Birinchi "Qabul" bosgan haydovchi tripni band qiladi (`reserved`, 10s),
+/// so'ng yakuniy qabul qilsa `accepted` bo'ladi (first-accept-wins).
 /// Hech kim qabul qilmasa — bo'sh ekran + cancel.
-/// Haydovchi qabul qilganda — trip status `accepted` bo'ladi, controller buni
-/// `acceptedTrip` orqali xabar beradi (UI dialog ko'rsatadi).
 class SearchingController extends ChangeNotifier {
   SearchingController({
     required RidesRepository ridesRepo,
@@ -63,17 +66,9 @@ class SearchingController extends ChangeNotifier {
   ActiveTrip? acceptedTrip;
 
   /// Бирор ҳайдовчи трипни банд қилди (reserved) — "топилди, кутилмоқда".
+  /// Шу ҳолатда радиус сикли музлатилади (ҳайдовчи 10с қарор қилмагунча
+  /// қидирув кенгаймайди ва тугатилмайди).
   bool driverReserved = false;
-
-  /// Hozir taklif yuborilgan haydovchining UID'si. Bo'sh — hech kim
-  /// tanlanmagan. UI shu ID bo'yicha tanlangan kartaga "yuborildi"
-  /// belgisini chizadi.
-  String pendingDriverId = '';
-
-  /// Oxirgi tanlangan haydovchining UID'si (driver tomonidan rad etilgan/timeout
-  /// bo'lsa, biz bilan: shu drayverni qayta tanlash mumkin emas, lekin boshqasini
-  /// tanlasa bo'ladi). UI grey-out qilish uchun ishlatadi.
-  final Set<String> rejectedByIds = <String>{};
 
   String? errorMessage;
 
@@ -151,6 +146,12 @@ class SearchingController extends ChangeNotifier {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_isDisposed) return;
+      // Ҳайдовчи трипни банд қилиб қарор кутаётганда — сиклни музлатамиз
+      // (кенгайтирмаймиз ва "топилмади" деб тугатмаймиз).
+      if (driverReserved) {
+        notifyListeners();
+        return;
+      }
       seconds--;
       if (seconds <= 0) {
         _nextCycle();
@@ -229,47 +230,10 @@ class SearchingController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    // Банд бекор қилинди — қидирув давом этади.
+    // Банд бекор қилинди (ҳайдовчи рад этди ёки таймаут) — қидирув давом этади,
+    // бошқа ҳайдовчилар трипни яна кўради.
     if (!trip.isReserved && driverReserved && !trip.isAccepted) {
       driverReserved = false;
-      notifyListeners();
-    }
-
-    // Ҳайдовчи status: rejected қилди
-    if (trip.isRejected && pendingDriverId.isNotEmpty) {
-      rejectedByIds.add(pendingDriverId);
-      pendingDriverId = '';
-      errorMessage = 'driver_rejected_pick_another';
-      notifyListeners();
-      return;
-    }
-
-    // Ҳайдовчи targetDriverId'ни бўшатди (timeout ёки рад — eski oqim)
-    if (pendingDriverId.isNotEmpty && trip.targetDriverId.isEmpty) {
-      rejectedByIds.add(pendingDriverId);
-      pendingDriverId = '';
-      errorMessage = 'driver_rejected_pick_another';
-      notifyListeners();
-    }
-  }
-
-  /// Yo'lovchi ro'yxatdan haydovchini tanlaydi — `trips/{id}.targetDriverId`
-  /// shu UID'ga set qilinadi. Driver app o'z `HomeScreen`'idagi
-  /// `TripRequestScreen`'ni avtomatik ochadi.
-  Future<void> selectDriver(NearbyDriver d) async {
-    if (_isDisposed || tripId == null) return;
-    if (pendingDriverId.isNotEmpty) return; // boshqa drayverga so'rov yuborilgan
-    if (rejectedByIds.contains(d.driver.id)) return;
-    pendingDriverId = d.driver.id;
-    notifyListeners();
-    try {
-      await _ridesRepo.targetDriver(
-        tripId: tripId!,
-        driverId: d.driver.id,
-      );
-    } catch (e) {
-      pendingDriverId = '';
-      errorMessage = 'send_to_driver_failed';
       notifyListeners();
     }
   }

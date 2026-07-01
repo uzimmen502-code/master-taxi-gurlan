@@ -146,6 +146,10 @@ class _RelativesScreenState extends State<RelativesScreen>
   }
 
   Future<void> _delete(RelativePerson p) async {
+    if (p.isSelf) {
+      _snack('«Мен» ёзувини ўчириб бўлмайди — бу сизнинг профилингиз.');
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -235,6 +239,9 @@ class _RelativesScreenState extends State<RelativesScreen>
                 _people = people;
                 return TabBarView(
                   controller: _tab,
+                  physics: _tab.index == _treeTabIndex
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
                   children: [
                     _listTab(people),
                     FamilyTreeScreen(
@@ -253,17 +260,23 @@ class _RelativesScreenState extends State<RelativesScreen>
     if (people.isEmpty) {
       return _empty('Ҳали қариндош қўшмагансиз.');
     }
+    final sorted = [...people]
+      ..sort((a, b) {
+        if (a.isSelf != b.isSelf) return a.isSelf ? -1 : 1;
+        return a.fullName.compareTo(b.fullName);
+      });
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-      itemCount: people.length,
+      itemCount: sorted.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (_, i) => _personTile(people[i]),
+      itemBuilder: (_, i) => _personTile(sorted[i]),
     );
   }
 
   Widget _personTile(RelativePerson p) {
     final sub = [
-      if (p.relationDegree.isNotEmpty) p.relationDegree,
+      if (p.isSelf) 'Мен',
+      if (p.relationDegree.isNotEmpty && !p.isSelf) p.relationDegree,
       _sideLabel(p.side),
       if (p.age != null) '${p.age} ёш',
     ].where((s) => s.isNotEmpty).join(' · ');
@@ -286,10 +299,11 @@ class _RelativesScreenState extends State<RelativesScreen>
               if (v == 'edit') _edit(p);
               if (v == 'delete') _delete(p);
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'album', child: Text('📷 Альбом')),
-              PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
-              PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'album', child: Text('📷 Альбом')),
+              const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
+              if (!p.isSelf)
+                const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
             ],
           ),
         ],

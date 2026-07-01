@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/collection_task.dart';
@@ -23,10 +24,13 @@ class CourierCollectionDetailScreen extends StatefulWidget {
 class _CourierCollectionDetailScreenState
     extends State<CourierCollectionDetailScreen> {
   late final List<TextEditingController> _qtyCtrls;
+  bool _hasArrived = false;
+  bool _markingArrived = false;
 
   @override
   void initState() {
     super.initState();
+    _hasArrived = widget.task.hasArrived;
     _qtyCtrls = [
       for (final item in widget.task.items)
         TextEditingController(text: _qtyText(item.qty)),
@@ -81,6 +85,30 @@ class _CourierCollectionDetailScreenState
     final url = widget.task.mapsUrl;
     if (url == null) return;
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _markArrived() async {
+    if (_hasArrived || _markingArrived) return;
+    setState(() => _markingArrived = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final courierPhone = prefs.getString('user_phone') ?? '';
+      await CollectionService.markCollectionArrived(
+        courierPhone: courierPhone,
+        taskId: widget.task.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _hasArrived = true;
+        _markingArrived = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _markingArrived = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _onFinalizePressed() async {
@@ -337,20 +365,48 @@ class _CourierCollectionDetailScreenState
               ],
             ),
             const SizedBox(height: 10),
-            FilledButton(
-              onPressed: _onFinalizePressed,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryDark,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            if (!_hasArrived)
+              FilledButton(
+                onPressed: _markingArrived ? null : _markArrived,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _markingArrived
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        context.tr('courier_arrived_btn'),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+              )
+            else
+              FilledButton(
+                onPressed: _onFinalizePressed,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryDark,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Йиғишни якунлаш',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-              child: const Text(
-                'Йиғишни якунлаш',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
           ],
         ),
       ),

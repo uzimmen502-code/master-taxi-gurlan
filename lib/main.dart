@@ -16,6 +16,8 @@ import 'firebase_options.dart';
 import 'l10n/app_localizations.dart';
 import 'repositories/analytics_repository.dart';
 import 'repositories/bread_repository.dart';
+import 'repositories/carpet_wash_orders_repository.dart';
+import 'repositories/agro_pickup_orders_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/collection_tasks_repository.dart';
 import 'repositories/courier_orders_repository.dart';
@@ -184,6 +186,10 @@ class _MyAppState extends State<MyApp> {
         Provider<HomeTickerRepository>(create: (_) => HomeTickerRepository()),
         Provider<SellOffersRepository>(create: (_) => SellOffersRepository()),
         Provider<BreadRepository>(create: (_) => BreadRepository()),
+        Provider<CarpetWashOrdersRepository>(
+            create: (_) => CarpetWashOrdersRepository()),
+        Provider<AgroPickupOrdersRepository>(
+            create: (_) => AgroPickupOrdersRepository()),
         Provider<JobsRepository>(create: (_) => JobsRepository()),
         Provider<TripsRepository>(create: (_) => TripsRepository()),
         Provider<DriverRepository>(create: (_) => DriverRepository()),

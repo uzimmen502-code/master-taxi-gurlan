@@ -26,7 +26,8 @@ import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
 import 'dating_moderation_screen.dart';
-import 'courier_orders_admin_screen.dart';
+import 'carpet_wash_admin_screen.dart';
+import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_management_screen.dart';
 import 'driver_applications_screen.dart';
@@ -82,9 +83,14 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Нон ва овқат буюртмалари',
     ),
     _AdminSection(
-      label: '🛵 Kuryer buyurtmalari',
-      icon: Icons.two_wheeler,
-      description: 'Kuryer buyurtmalari monitoring',
+      label: 'Gilam yuvish',
+      icon: Icons.local_laundry_service_outlined,
+      description: 'Gilam yuvish buyurtmalari',
+    ),
+    _AdminSection(
+      label: 'Sut qabul',
+      icon: Icons.water_drop_outlined,
+      description: 'Sut qabul buyurtmalari',
     ),
     _AdminSection(
       label: 'Курьер',
@@ -367,8 +373,11 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Буюртмалар') {
       return const AdminOrdersScreen(embedded: true);
     }
-    if (section.label == '🛵 Kuryer buyurtmalari') {
-      return const CourierOrdersAdminScreen();
+    if (section.label == 'Gilam yuvish') {
+      return const CarpetWashAdminScreen();
+    }
+    if (section.label == 'Sut qabul') {
+      return const AgroPickupAdminScreen();
     }
     if (section.label == 'Чат қўллaб-қуввaтлaш') {
       return const ChatSupportScreen();
@@ -548,10 +557,23 @@ class _Sidebar extends StatelessWidget {
             .where('status', isEqualTo: 'new')
             .snapshots()
             .map((s) => s.docs.length);
+      case 'Gilam yuvish':
+        return db
+            .collection('carpet_wash_orders')
+            .where('status', isEqualTo: 'new')
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Sut qabul':
+        return db
+            .collection('agro_pickup_orders')
+            .where('productType', isEqualTo: 'milk')
+            .where('status', isEqualTo: 'new')
+            .snapshots()
+            .map((s) => s.docs.length);
       case 'Курьер':
         return db
-            .collection('courier_orders')
-            .where('status', isEqualTo: 'pending')
+            .collection('orders')
+            .where('status', isEqualTo: 'ready')
             .snapshots()
             .map((s) => s.docs.length);
       case 'Иш топ':

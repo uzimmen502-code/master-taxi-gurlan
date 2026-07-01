@@ -14,6 +14,20 @@ class DatingService {
     await _fn.httpsCallable('setDatingActive').call({'active': active});
   }
 
+  static Future<void> setAgePreference({
+    required int minAge,
+    required int maxAge,
+  }) async {
+    await _fn.httpsCallable('setDatingAgePreference').call({
+      'minAge': minAge,
+      'maxAge': maxAge,
+    });
+  }
+
+  static Future<void> deleteProfile() async {
+    await _fn.httpsCallable('deleteDatingProfile').call();
+  }
+
   /// { ok, matched, matchId?, alreadySent? }
   static Future<Map<String, dynamic>> sendInterest(String toUserId) async {
     final res =
@@ -40,6 +54,16 @@ class DatingService {
       'userId': userId,
       'action': action,
       'reason': reason,
+    });
+  }
+
+  static Future<void> setAutoApprove({
+    required String adminPhone,
+    required bool enabled,
+  }) async {
+    await _fn.httpsCallable('adminSetDatingAutoApprove').call({
+      'adminPhone': adminPhone,
+      'enabled': enabled,
     });
   }
 }

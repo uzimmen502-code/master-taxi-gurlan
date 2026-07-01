@@ -774,6 +774,34 @@ service cloud.firestore {
     }
 
     // ══════════════════════════════════════
+    // CARPET WASH — gilam yuvish buyurtmalari
+    // ══════════════════════════════════════
+    match /carpet_wash_orders/{orderId} {
+      allow read: if isAuth() && (
+          isStaff()
+          || phoneDocIdsMatch(
+              phoneFromToken(),
+              phoneDigits(resource.data.customerPhone),
+          )
+      );
+      allow create, update, delete: if false;
+    }
+
+    // ══════════════════════════════════════
+    // AGRO PICKUP — sut qabul va h.k.
+    // ══════════════════════════════════════
+    match /agro_pickup_orders/{orderId} {
+      allow read: if isAuth() && (
+          isStaff()
+          || phoneDocIdsMatch(
+              phoneFromToken(),
+              phoneDigits(resource.data.customerPhone),
+          )
+      );
+      allow create, update, delete: if false;
+    }
+
+    // ══════════════════════════════════════
     // SCHEDULES — кундалик иш санаси
     // ══════════════════════════════════════
     match /schedules/{scheduleId} {
@@ -813,13 +841,13 @@ service cloud.firestore {
     match /food_catalog/{id} {
       allow read: if true;
       allow create, update: if isAdmin();
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /food_inventory/{id} {
       allow read: if true;
       allow create, update: if isAdmin();
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /procurement_products/{code} {
@@ -972,11 +1000,11 @@ service cloud.firestore {
       // Only specific safe fields allowed from client; sensitive fields (driverApprovalMode etc) — Cloud Functions only.
       allow create: if docId != 'courier'
           && !request.resource.data.keys().hasAny([
-          'driverApprovalMode', 'adminPhone', 'secret'
+          'driverApprovalMode', 'datingAutoApprove', 'adminPhone', 'secret'
         ]);
       allow update: if docId != 'courier'
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'driverApprovalMode', 'adminPhone', 'secret'
+          'driverApprovalMode', 'datingAutoApprove', 'adminPhone', 'secret'
         ]);
       allow delete: if false;
     }
@@ -1469,8 +1497,26 @@ service cloud.firestore {
     }
 
     // Qarindoshlarim — SHAXSIY (ulashilmaydi). Faqat egasi (userId = phone).
+    match /relative_phone_watchers/{phone} {
+      allow read, write: if false;
+      match /entries/{entryId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /users/{userId}/relative_join_alerts/{alertId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
     match /relatives/{userId}/people/{personId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+          && request.resource.data.isSelf != true;
+      allow update: if isOwner(userId)
+          && (!request.resource.data.keys().hasAny(['isSelf'])
+              || request.resource.data.isSelf == resource.data.isSelf);
+      allow delete: if isOwner(userId) && resource.data.isSelf != true;
     }
 
     // Qarindosh sanalari / uchrashuvlari — SHAXSIY. Faqat egasi.

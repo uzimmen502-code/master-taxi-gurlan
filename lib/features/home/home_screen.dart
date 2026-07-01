@@ -21,8 +21,11 @@ import 'widgets/home_info_ticker.dart';
 import '../orders/screens/orders_screen.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
+import '../carpet_wash/screens/carpet_wash_screen.dart';
+import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../food/screens/food_screen.dart';
-import '../courier_order/screens/courier_order_screen.dart';
+import 'screens/courier_services_hub_screen.dart';
+import '../relatives/services/tree_service.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../jobs/jobs_tabs.dart';
@@ -115,6 +118,8 @@ class _HomeViewState extends State<_HomeView> {
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
+      unawaited(TreeService.ensureMyTree().catchError(
+          (_) => <String, dynamic>{}));
     });
   }
 
@@ -376,6 +381,10 @@ class _HomeViewState extends State<_HomeView> {
                                   onNonTap: () => _openModule(
                                     HomeModulesCatalog.byId('bread'),
                                   ),
+                                  onCarpetWashTap: () =>
+                                      _push(const CarpetWashScreen()),
+                                  onMilkTap: () =>
+                                      _push(const MilkPickupScreen()),
                                   onTaomTap: () => _openModule(
                                     HomeModulesCatalog.byId('food'),
                                   ),
@@ -413,7 +422,7 @@ class _HomeViewState extends State<_HomeView> {
                                       _HomeBottomNav.needPhone(context);
                                       return;
                                     }
-                                    await _push(const CourierOrderScreen());
+                                    await _push(const CourierServicesHubScreen());
                                   },
                                   onSell: () => _openModule(
                                     HomeModulesCatalog.byId('sell'),
@@ -433,6 +442,9 @@ class _HomeViewState extends State<_HomeView> {
                                   onNon: () => _openModule(
                                     HomeModulesCatalog.byId('bread'),
                                   ),
+                                  onCarpetWash: () =>
+                                      _push(const CarpetWashScreen()),
+                                  onSut: () => _push(const MilkPickupScreen()),
                                   onCarWash: _showTezKundaSnack,
                                   onTire: _showTezKundaSnack,
                                   onOilChange: _showTezKundaSnack,
@@ -511,6 +523,8 @@ class _UnifiedServicesGrid extends StatefulWidget {
     required this.onJobAd,
     required this.onOnlineMarket,
     required this.onNon,
+    required this.onCarpetWash,
+    required this.onSut,
     required this.onCarWash,
     required this.onTire,
     required this.onOilChange,
@@ -526,6 +540,8 @@ class _UnifiedServicesGrid extends StatefulWidget {
   final VoidCallback onJobAd;
   final VoidCallback onOnlineMarket;
   final VoidCallback onNon;
+  final VoidCallback onCarpetWash;
+  final VoidCallback onSut;
   final VoidCallback onCarWash;
   final VoidCallback onTire;
   final VoidCallback onOilChange;
@@ -572,14 +588,18 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           'Onlayn BOZOR', widget.onOnlineMarket),
       _GridItemData('assets/images/services/service_bread.png',
           'Non buyurtma', widget.onNon),
-      _GridItemData('assets/images/services/service_car_wash.png',
-          'Avto yuvish', widget.onCarWash),
+      _GridItemData('assets/images/services/service_carpet_wash.png',
+          'Gilam yuvish', widget.onCarpetWash),
       _GridItemData('assets/images/services/service_tire.png',
           'Avto Shina', widget.onTire),
-      _GridItemData('assets/images/services/service_oil_change.png',
-          'Moy almashtirish', widget.onOilChange),
+      _GridItemData('assets/images/services/service_milk.png',
+          context.tr('milk_short_label'), widget.onSut),
       _GridItemData(null, 'Mening yaqinlarim', widget.onCircles,
           icon: Icons.diversity_3),
+      _GridItemData('assets/images/services/service_car_wash.png',
+          'Avto yuvish', widget.onCarWash),
+      _GridItemData('assets/images/services/service_oil_change.png',
+          'Moy almashtirish', widget.onOilChange),
     ];
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);

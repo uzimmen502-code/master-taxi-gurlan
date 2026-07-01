@@ -1,4 +1,4 @@
-# Cloud Functions Catalog (`functions/index.js`, 111 exports)
+# Cloud Functions Catalog (`functions/index.js`, 117 exports)
 
 Grep exact name with `^exports\.NAME` to jump to a function (no line numbers — they drift).
 Types: onCall = `functions.https.onCall`; trigger = `functions.firestore`; sched = `functions.pubsub.schedule`; http = `onRequest`; storage = `onObjectFinalized`.
@@ -31,12 +31,20 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 
 ## Courier / Delivery / Collection
 - courierCreateRoute / courierRecoverOrphanRoute — build/recover delivery route.
-- courierMarkPicked / courierMarkArrived — delivery step transitions.
+- courierMarkPicked / courierMarkArrived — bread/food `orders` delivery; arrived → `notifyCourierArrivedToCustomer` (ring push `courier_arrived`).
+- courierMarkCollectionArrived — collection_tasks arrived + ring; finalize requires `arrivedAt`.
+- courierMarkCourierOrderArrived — legacy `courier_orders` arrived + ring; payment requires `arrivedAt`.
 - courierGetCustomerWalletBalance — courier reads customer wallet (for payment).
 - courierSubmitPayment — order payment (cash/card/wallet/product lines).
 - courierSubmitCourierOrderPayment — payment for direct `courier_orders`.
 - onDeliveryRouteCreate / onDeliveryRouteAssign (triggers) — route side effects.
 - adminCreateCollectionTask / courierFinalizeCollection / adminGetWarehouseStock — sell-collection + `warehouse_stock`.
+
+## Carpet wash
+- placeCarpetWashOrder — customer creates `carpet_wash_orders` doc (carpetCount, pickupAddress, note).
+- adminSetCarpetWashStatus — admin status + optional finalPrice.
+- courierClaimCarpetPickup / courierMarkCarpetArrived (leg pickup|return) / courierMarkCarpetPickedUp — pickup flow; picked_up requires `pickupArrivedAt`.
+- courierClaimCarpetReturn / courierMarkCarpetDelivered — return flow; completed requires `returnArrivedAt`.
 
 ## Taxi (local + marshrut)
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
@@ -81,19 +89,28 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - onAdUpdate / onSellSubmissionUpdate / onBirthDateRequestUpdate / onDeviceChangeRequestUpdate (triggers) — moderation/request side effects.
 
 ## Dating (Tanishuv)
-- saveDatingProfile — create/edit profile → status `pending` (sets lastActive). CF-only write to `dating_profiles`.
+- saveDatingProfile — create/edit profile → `pending` yoki `settings/app.datingAutoApprove` bo'lsa darhol `approved`. CF-only write to `dating_profiles`.
+- deleteDatingProfile — owner deletes profile, Storage `dating/{uid}/`, interests, matches(+messages), blocks.
+- setDatingAgePreference — user sets prefMinAge/prefMaxAge (18–80) on `dating_profiles`.
+- adminSetDatingAutoApprove — admin toggle `datingAutoApprove` in `settings/app`.
 - setDatingActive — toggle visibility (active) + lastActive.
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.
 - respondDatingInterest — accept/decline interest → match on accept.
 
 ## Family Tree (Nasab daraxti — global graph)
-- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node).
-- onRelativePersonWrite (trigger) — mirror `relatives/{uid}/people/{pid}` → `tree_persons` (redirect-aware).
+- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify.
+- onRelativePersonWrite (trigger) — mirror `relatives/{uid}/people/{pid}` → `tree_persons` (redirect-aware); sync phone watcher index + notify owner if phone already registered.
+- onUserProfileReady (trigger `users/{uid}`) — first profile complete (`name`) → notify phone watchers (owner A) + new user B (`relative_waiting`).
 - sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link).
 - mergeTreePersons — dedup two nodes in a component (`tree_history` type=merge).
 - saveTreeNode — create/edit any component node; mirrors to owner `relatives/people` (no clobber); history type=create/edit.
 - undoTreeOperation — reverse link/merge/edit/create from `tree_history`.
+
+## Agro pickup (sut qabul)
+- placeAgroPickupOrder — customer `agro_pickup_orders` (milk literCount 1..500).
+- adminSetAgroPickupStatus — admin status + optional finalPrice.
+- courierClaimAgroPickup / courierMarkAgroPickupArrived / courierMarkAgroPickedUp — courier claim + ring on arrived.
 
 ## Entertainment
 - transcodeEntertainmentVideo (storage, onObjectFinalized) — transcode uploaded mp4 to 720p; NOT called from Flutter.

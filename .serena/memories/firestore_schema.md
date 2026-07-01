@@ -46,6 +46,9 @@ Source of truth: `firestore.rules`, `firestore.indexes.json`. Doc IDs usually ph
 - `collection_tasks/{id}` — courier pickup tasks. CF-only write.
 - `warehouse_stock/{code}` — inventory. read admin; CF-only write.
 
+## Carpet wash
+- `carpet_wash_orders/{id}` — carpet wash orders. read staff or customerPhone owner; CF-only write. Indexes: customerPhone+createdAt, status+createdAt.
+
 ## Comms / Content / Config
 - `support_chats/{uid}` (+ `/messages/{id}`) — support chat. client cannot set `fromAdmin:true`.
 - `admin_news/{id}` — broadcast. category(info|update|promo|warning|emergency),audience(all|user|driver|courier).
@@ -65,10 +68,13 @@ Source of truth: `firestore.rules`, `firestore.indexes.json`. Doc IDs usually ph
 - collection-group index on `members.userId` (for watchMyCircleIds).
 
 ## Relatives (private)
-- `relatives/{uid}/people/{id}` (+ `/photos/{id}`), `relatives/{uid}/events/{id}` — owner-only read/write. (`tree_persons` is the shared mirror.)
+- `relatives/{uid}/people/{id}` — owner CRUD; `isSelf:true` CF-only (no client create/delete); identity synced from `users` profile.
+- `relatives/{uid}/people/{id}/photos/{id}`, `relatives/{uid}/events/{id}` — owner-only. (`tree_persons` is the shared mirror.)
+- `relative_phone_watchers/{phone}/entries/{ownerUid_personId}` — CF-only reverse index (who listed this phone in relatives).
+- `users/{uid}/relative_join_alerts/{phone|_welcome}` — CF-only dedup for one-time relative join notifications.
 
 ## Dating (Tanishuv) — CF-only writes
-- `dating_profiles/{uid}` — read if status==approved | owner | admin. status,gender,active,lastActive.
+- `dating_profiles/{uid}` — read if status==approved | owner | admin. Fields incl. prefMinAge, prefMaxAge (18–80, user-set for Tavsiya filter).
 - `dating_interests/{id}` — read from/to/admin. fromId,toId,status,createdAt.
 - `dating_matches/{id}` (+ `/messages/{id}`) — read participant; update only lastMessage/lastMessageAt; messages create participant (senderId==self,text≤2000).
 - `dating_blocks/{uid}/list/{targetId}` — owner-only.

@@ -14,11 +14,12 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 - Person fields incl. fatherId/motherId/spouseId (nasab links chosen manually via "🌳 Насаб боғланиши" dropdown), relationship side (ota/ona tomon).
 - OS push for birthdays/events via flutter_local_notifications.
 - `relatives/people` is the user's PRIVATE source; mirrored to shared `tree_persons` by CF `onRelativePersonWrite`.
+- Phone in relatives list → CF maintains `relative_phone_watchers`; on new user profile or owner login (`ensureMyTree`) one-time FCM: owner «қариндош иловада», new user «қариндошлар кутмоқда» → push opens `RelativesScreen`.
 
 ## Dating (Tanishuv — MVP, CF-only writes)
 - `features/dating/screens/` incl. `dating_profile_view_screen.dart`. Firestore `dating_profiles/{uid}`, `dating_interests`, `dating_matches`(+messages), `dating_blocks/{uid}/list/{targetId}`.
 - Scope: user-defined; moderation: admin approve (status pending→approved); photos: open; interaction: interest/like; audience: opposite gender.
-- CFs: saveDatingProfile (→pending), setDatingActive, adminModerateDatingProfile, sendDatingInterest (mutual→match), respondDatingInterest. Admin UI `admin_web/screens/dating_moderation_screen.dart`.
+- CFs: saveDatingProfile, setDatingActive, setDatingAgePreference, deleteDatingProfile (profile+photos+interests+matches+blocks), adminModerateDatingProfile, ...
 - GOTCHA: report dialog disposes controller in try/finally.
 
 ## Family Tree (Nasab daraxti — GLOBAL graph, Phases F1–F5 done)

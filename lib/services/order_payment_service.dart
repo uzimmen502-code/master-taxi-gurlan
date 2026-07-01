@@ -49,6 +49,16 @@ class OrderPaymentService {
     });
   }
 
+  static Future<void> courierMarkCourierOrderArrived({
+    required String orderId,
+    required String courierPhone,
+  }) async {
+    await _fn.httpsCallable('courierMarkCourierOrderArrived').call({
+      'orderId': orderId,
+      'courierPhone': courierPhone,
+    });
+  }
+
   static Future<int?> getCustomerWalletBalance({
     required String courierPhone,
     required String customerPhone,

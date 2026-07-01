@@ -131,9 +131,9 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     await c.cancelReservation();
   }
 
-  Future<void> _onRejectRequest(TripRequest ride) async {
+  void _onRejectRequest(TripRequest ride) {
     final c = context.read<DriverHomeController>();
-    await c.rejectRide(ride);
+    c.dismissRequest(ride);
   }
 
   void _showSeatsFullDialog() {

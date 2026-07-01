@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/collection_task.dart';
-import '../../../models/courier_order.dart';
 import '../../../repositories/collection_tasks_repository.dart';
-import '../../../repositories/courier_orders_repository.dart';
 import '../../../repositories/couriers_repository.dart';
 import '../../../repositories/delivery_routes_repository.dart';
 import '../../../repositories/orders_repository.dart';
@@ -13,8 +11,9 @@ import '../widgets/courier_online_toggle.dart';
 import '../widgets/courier_order_tile.dart';
 import '../widgets/route_map_view.dart';
 import 'courier_collection_tasks_screen.dart';
+import '../../carpet_wash/screens/carpet_wash_courier_screen.dart';
+import '../../agro_pickup/screens/agro_pickup_courier_screen.dart';
 import 'courier_mfy_selection_screen.dart';
-import '../../courier_order/screens/courier_orders_list_screen.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -93,7 +92,8 @@ class _CourierViewState extends State<_CourierView> {
       ),
       body: Column(children: [
         _CollectionTasksBanner(courierUid: c.courierUid),
-        const _CourierOrdersBanner(),
+        const _CarpetWashBanner(),
+        const _AgroPickupBanner(),
         Expanded(
           child: !c.hasRoute
               ? _NoRouteView(
@@ -257,56 +257,94 @@ class _CollectionTasksBannerState extends State<_CollectionTasksBanner> {
   }
 }
 
-/// «🛵 Kuryer buyurtmalari (N ta)» — yangi courier_orders oqimi.
-class _CourierOrdersBanner extends StatelessWidget {
-  const _CourierOrdersBanner();
+/// «🧺 Gilam yuvish» — gilam olib ketish / qaytarish vazifalari.
+class _CarpetWashBanner extends StatelessWidget {
+  const _CarpetWashBanner();
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CourierOrder>>(
-      stream: context.read<CourierOrdersRepository>().watchPending(),
-      builder: (context, snap) {
-        final count = (snap.data ?? const <CourierOrder>[]).length;
-        if (count == 0) return const SizedBox.shrink();
-
-        return Material(
-          color: Colors.orange.shade50,
-          child: InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CourierOrdersListScreen(),
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.orange.shade100),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Text('🛵', style: TextStyle(fontSize: 18)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Kuryer buyurtmalari ($count ta)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade900,
-                      ),
-                    ),
-                  ),
-                  Icon(Icons.chevron_right, color: Colors.orange.shade700),
-                ],
-              ),
+    return Material(
+      color: const Color(0xFFEFEBE9),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const CarpetWashCourierScreen(),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.brown.shade100),
             ),
           ),
-        );
-      },
+          child: Row(
+            children: [
+              const Text('🧺', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  context.tr('carpet_courier_banner'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.brown.shade900,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.brown.shade700),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «🥛 Sut qabul» — sut olib ketish vazifalari.
+class _AgroPickupBanner extends StatelessWidget {
+  const _AgroPickupBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFE8F5E9),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const AgroPickupCourierScreen(),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.green.shade100),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Text('🥛', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  context.tr('agro_courier_banner'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade900,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.green.shade700),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

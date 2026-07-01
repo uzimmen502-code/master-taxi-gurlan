@@ -33,5 +33,13 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Order placement ALWA
 - `couriers/{uid}`: upsertStatus(CourierStatus{isOnline,lat,lng,fcmToken}) GPS heartbeat.
 - `collection_tasks` READ-ONLY (CF-created); `warehouse_stock` CF-only.
 - Flow: toggleOnline → GPS stream (distanceFilter20) + upsert couriers; if ready route → startRoute claim → load orders by orderIds. Per order: markPicked→markArrived→submitPayment(lines)→confirmAndAdvance (last→completeRoute). CourierPaymentSheet modes cash/card/wallet/product; auto wallet top-up for deficit; never overpays wallet.
-- CFs: courierCreateRoute, courierRecoverOrphanRoute, courierMarkPicked, courierMarkArrived, courierGetCustomerWalletBalance, courierSubmitPayment, courierSubmitCourierOrderPayment, adminCreateCollectionTask, courierFinalizeCollection, adminGetWarehouseStock.
+- Carpet/agro/collection: separate courier screens; all use «Етиб келдим» → CF arrived + `courier_arrived` ring push before next step.
+- CFs: courierCreateRoute, courierRecoverOrphanRoute, courierMarkPicked, courierMarkArrived, courierMarkCollectionArrived, courierGetCustomerWalletBalance, courierSubmitPayment, courierSubmitCourierOrderPayment, courierMarkCourierOrderArrived, adminCreateCollectionTask, courierFinalizeCollection, adminGetWarehouseStock.
 - GOTCHAS: isOrderFinalized = paid OR completed OR delivered. `_syncStuckCurrentOrderIfNeeded`/`finalizeCurrentOrderIfPaid` auto-advance paid-but-not-moved orders. recoverOrphanRoute rebuilds from orphan in_delivery unpaid orders. `_advancingRoute` guard prevents double-advance.
+
+## Customer courier entry (`features/home/screens/courier_services_hub_screen.dart`)
+- Home grid **Kuryer xizmati** → hub (NOT `CourierOrderScreen`): 3 cards → BreadScreen, FoodScreen, CarpetWashScreen. Subtitle: courier-delivered services only.
+- Legacy `courier_orders` free-form flow UI hidden (home + courier panel banner + admin section removed); code/repo kept for data.
+
+## courier_order (legacy, UI hidden)
+- `courier_orders` collection + `CourierOrderScreen` still in codebase; no home/courier/admin entry points.

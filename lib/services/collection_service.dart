@@ -44,6 +44,17 @@ class CollectionService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
+  /// Курьер: йиғиб оlish манзилига етиб келди — қўнғироқли хабар.
+  static Future<void> markCollectionArrived({
+    required String courierPhone,
+    required String taskId,
+  }) async {
+    await _fn.httpsCallable('courierMarkCollectionArrived').call({
+      'courierPhone': courierPhone,
+      'taskId': taskId,
+    });
+  }
+
   /// Админ: омбор (`warehouse_stock`) ҳолати — read-only.
   /// Қайтаради: [{ code, label, unit, quantity, updatedAt(ms or null) }].
   static Future<List<WarehouseStockItem>> getWarehouseStock({

@@ -6,10 +6,9 @@ import 'package:flutter/material.dart';
 import '../../../models/home_ticker_ad.dart';
 
 /// Bosh ekrandagi qidiruv maydoni o'rnida — aylanuvchi savol-javob matnlari.
-/// Maydon doim 53px. Matn maydonni (kenglik + balandlik) to'ldiradi:
-/// uzunligiga qarab boshlang'ich shrift tanlanadi, so'ng BoxFit.contain bilan
-/// bo'sh joyga sig'dirib kattalashtiriladi — lekin maksimal 22px, minimal 12px.
-/// Savol: kursiv (#2C2C2A). Javob: qalin bold (#412402). Fon: Amber Orange.
+/// Maydon doim 53px. Matn uzunligiga qarab shrift 12–28px oralig'ida
+/// maydonga maksimal sig'diriladi.
+/// Savol-javob matnlari — hammasi qalin (bold) va BOSH HARFLARDA.
 class HomeInfoTicker extends StatefulWidget {
   const HomeInfoTicker({super.key, required this.ads});
 
@@ -100,31 +99,38 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     );
   }
 
-  // Matn uzunligiga qarab boshlang'ich shrift (max 22, min 12).
-  // BoxFit.contain bu o'lchamdan kattalashtirib bo'sh joyni to'ldiradi,
-  // lekin RichText o'zi shu o'lchamda yozadi — natijada uzun matn kichik,
-  // qisqa matn katta bo'ladi, ikkalasi ham maydonni to'ldiradi.
-  double _baseFont(String text) {
-    final n = text.length;
-    if (n <= 25) return 22;
-    if (n <= 45) return 18;
-    if (n <= 70) return 15;
-    if (n <= 95) return 13;
-    return 12;
+  // Maydonga sig'adigan maksimal shrift (qisqa matn kattaroq).
+  static const _maxFont = 28.0;
+  static const _minFont = 12.0;
+
+  double _fitFontSize(String text, double maxWidth, double maxHeight) {
+    final upper = text.toUpperCase();
+    for (var fs = _maxFont; fs >= _minFont; fs -= 0.5) {
+      final painter = TextPainter(
+        text: TextSpan(children: [_buildSpan(upper, fs)]),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.start,
+        maxLines: 2,
+      )..layout(maxWidth: maxWidth);
+      if (!painter.didExceedMaxLines && painter.height <= maxHeight) {
+        return fs;
+      }
+    }
+    return _minFont;
   }
 
-  InlineSpan _buildSpan(String text, double fs) {
-    final qi = text.indexOf('?');
+  InlineSpan _buildSpan(String upper, double fs) {
+    final qi = upper.indexOf('?');
     final qStyle = TextStyle(
       fontSize: fs,
       height: 1.1,
-      fontStyle: FontStyle.italic,
+      fontWeight: FontWeight.w700,
       color: HomeInfoTicker._question,
     );
     final sepStyle = TextStyle(
       fontSize: fs,
       height: 1.1,
-      fontWeight: FontWeight.w500,
+      fontWeight: FontWeight.w700,
       color: HomeInfoTicker._question,
     );
     final aStyle = TextStyle(
@@ -134,12 +140,12 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
       color: HomeInfoTicker._answer,
     );
 
-    if (qi < 0 || qi >= text.length - 1) {
-      return TextSpan(text: text, style: qStyle);
+    if (qi < 0 || qi >= upper.length - 1) {
+      return TextSpan(text: upper, style: qStyle);
     }
 
-    final q = text.substring(0, qi + 1).trimRight();
-    final a = text.substring(qi + 1).trimLeft();
+    final q = upper.substring(0, qi + 1).trimRight();
+    final a = upper.substring(qi + 1).trimLeft();
 
     return TextSpan(children: [
       TextSpan(text: q, style: qStyle),
@@ -154,7 +160,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   Widget build(BuildContext context) {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
     final text = widget.ads[_index].text;
-    final fs = _baseFont(text);
+    final upper = text.toUpperCase();
     final isShort = text.length <= 25;
 
     return SizedBox(
@@ -168,9 +174,6 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
           alignment: Alignment.center,
           children: [...previous, if (current != null) current],
         ),
-        // Sariq panelning o'zi (fon bilan birga) flip bo'ladi.
-        // Balandlik 53px ga qotirilgan — matn uzunligidan qat'i nazar
-        // panel o'lchami o'zgarmaydi (FittedBox matnni shu balandlikka sig'diradi).
         child: Container(
           key: ValueKey(_index),
           height: 53,
@@ -182,17 +185,19 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
           clipBehavior: Clip.antiAlias,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return FittedBox(
-                fit: BoxFit.contain,
-                alignment: isShort ? Alignment.center : Alignment.centerLeft,
-                child: SizedBox(
-                  width: constraints.maxWidth,
-                  child: RichText(
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: isShort ? TextAlign.center : TextAlign.start,
-                    text: _buildSpan(text, fs),
-                  ),
+              final fs = _fitFontSize(
+                text,
+                constraints.maxWidth,
+                constraints.maxHeight,
+              );
+              return Align(
+                alignment:
+                    isShort ? Alignment.center : Alignment.centerLeft,
+                child: RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: isShort ? TextAlign.center : TextAlign.start,
+                  text: TextSpan(children: [_buildSpan(upper, fs)]),
                 ),
               );
             },

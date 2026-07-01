@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../models/active_trip.dart';
-import '../../../../models/nearby_driver.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
@@ -111,7 +110,7 @@ class _SearchingViewState extends State<_SearchingView> {
               text: c.to,
             ),
           const Divider(height: 1),
-          Expanded(child: _driversList(c)),
+          Expanded(child: _searchingBody(c)),
         ]),
       ),
     );
@@ -125,7 +124,18 @@ class _SearchingViewState extends State<_SearchingView> {
       color: _blue,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       child: Column(children: [
-        if (c.isSearching) ...[
+        if (c.driverReserved) ...[
+          const Icon(Icons.check_circle, color: Colors.white, size: 48),
+          const SizedBox(height: 8),
+          Text(
+            context.tr('driver_found_waiting'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold),
+          ),
+        ] else if (c.isSearching) ...[
           const CircularProgressIndicator(
               color: Colors.white, strokeWidth: 3),
           const SizedBox(height: 12),
@@ -193,57 +203,63 @@ class _SearchingViewState extends State<_SearchingView> {
     );
   }
 
-  Widget _driversList(SearchingController c) {
-    if (c.drivers.isEmpty) {
+  /// Broadcast modeli — yo'lovchi haydovchini tanlamaydi, faqat kutadi.
+  /// So'rov radius ichidagi barcha haydovchilarga avtomatik yuborilgan;
+  /// birinchi qabul qilgan haydovchi bilan bog'lanadi.
+  Widget _searchingBody(SearchingController c) {
+    if (!c.isSearching) {
       return Center(
         child: Text(
-          c.isSearching
-              ? context.tr('drivers_searching')
-              : context.tr('drivers_not_found'),
+          context.tr('drivers_not_found'),
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
       );
     }
-    return Column(children: [
-      if (c.pendingDriverId.isEmpty)
-        Container(
-          color: Colors.amber.shade50,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(children: [
-            Icon(Icons.touch_app, size: 16, color: Colors.amber.shade800),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                context.tr('select_driver_to_send'),
-                style: TextStyle(
-                    fontSize: 12, color: Colors.amber.shade900),
-              ),
+
+    if (c.driverReserved) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.directions_car,
+                color: AppColors.primary, size: 56),
+            const SizedBox(height: 14),
+            Text(
+              context.tr('driver_found_waiting'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ]),
         ),
-      Expanded(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(10),
-          itemCount: c.drivers.length,
-          itemBuilder: (_, i) {
-            final d = c.drivers[i];
-            final isPending = c.pendingDriverId == d.driver.id;
-            final isRejected = c.rejectedByIds.contains(d.driver.id);
-            final hasPendingOther =
-                c.pendingDriverId.isNotEmpty && !isPending;
-            return _DriverTile(
-              driver: d,
-              isPending: isPending,
-              isRejected: isRejected,
-              disabled: isRejected || hasPendingOther,
-              onTap: (isPending || isRejected || hasPendingOther)
-                  ? null
-                  : () => c.selectDriver(d),
-            );
-          },
-        ),
+      );
+    }
+
+    final nearby = c.drivers.length;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.podcasts, color: Colors.grey.shade400, size: 56),
+          const SizedBox(height: 14),
+          Text(
+            context.tr('searching_broadcast_hint'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+          ),
+          if (nearby > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              _fmt('nearby_drivers_count', {'n': '$nearby'}),
+              style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+        ]),
       ),
-    ]);
+    );
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -271,120 +287,6 @@ class _SearchingViewState extends State<_SearchingView> {
           tripId: trip.id,
           initialTrip: trip,
         ),
-      ),
-    );
-  }
-}
-
-class _DriverTile extends StatelessWidget {
-  const _DriverTile({
-    required this.driver,
-    this.isPending = false,
-    this.isRejected = false,
-    this.disabled = false,
-    this.onTap,
-  });
-
-  final NearbyDriver driver;
-  final bool isPending;
-  final bool isRejected;
-  final bool disabled;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final d = driver.driver;
-
-    Color bg = Colors.white;
-    Color border = Colors.transparent;
-    if (isPending) {
-      bg = const Color(0xFFE3F2FD); // light blue — yuborildi
-      border = AppColors.primary;
-    } else if (isRejected) {
-      bg = Colors.grey.shade200;
-    }
-
-    final tile = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 1.5),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
-        ],
-      ),
-      child: Opacity(
-        opacity: (disabled && !isPending) ? 0.45 : 1.0,
-        child: Row(children: [
-          Text(isPending ? 'вЏі' : '🚕',
-              style: const TextStyle(fontSize: 24)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(d.name,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold)),
-                Text(
-                  '${d.car} · ${d.plate}',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade600),
-                ),
-                if (isPending)
-                  Text(
-                    context.tr('sent_waiting_response'),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600),
-                  )
-                else if (isRejected)
-                  Text(
-                    context.tr('rejected_short'),
-                    style: TextStyle(fontSize: 11, color: Colors.red),
-                  ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                driver.distanceKm > 0
-                    ? '${driver.distanceKm.toStringAsFixed(1)} км'
-                    : context.tr('no_gps_short'),
-                style:
-                    TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 4),
-              if (!disabled && !isPending && !isRejected)
-                const Icon(Icons.send,
-                    color: AppColors.primary, size: 18),
-              if (isPending)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                ),
-            ],
-          ),
-        ]),
-      ),
-    );
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: tile,
       ),
     );
   }

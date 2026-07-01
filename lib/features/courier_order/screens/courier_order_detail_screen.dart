@@ -89,6 +89,28 @@ class _CourierOrderDetailScreenState extends State<CourierOrderDetailScreen> {
     }
   }
 
+  Future<void> _markArrived() async {
+    if (_courierPhone.length < 9) return;
+    setState(() => _busy = true);
+    try {
+      await OrderPaymentService.courierMarkCourierOrderArrived(
+        orderId: _order.id,
+        courierPhone: _courierPhone,
+      );
+      if (!mounted) return;
+      setState(() {
+        _order = _order.copyWith(arrivedAt: DateTime.now());
+        _busy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red.shade700),
+      );
+    }
+  }
+
   Future<void> _openPayment() async {
     final done = await showModalBottomSheet<bool>(
       context: context,
@@ -198,6 +220,19 @@ class _CourierOrderDetailScreenState extends State<CourierOrderDetailScreen> {
           child: Text(context.tr('courier_order_en_route_btn')),
         );
       case CourierOrderStatus.pickedUp:
+        if (_order.arrivedAt == null) {
+          return FilledButton(
+            onPressed: _markArrived,
+            style: FilledButton.styleFrom(
+              backgroundColor: _primaryGreen,
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: Text(context.tr('courier_arrived_btn')),
+          );
+        }
         return FilledButton(
           onPressed: _openPayment,
           style: FilledButton.styleFrom(

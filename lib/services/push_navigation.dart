@@ -9,6 +9,7 @@ import '../features/chat/screens/chat_screen.dart';
 import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
 import '../features/intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
+import '../features/relatives/screens/relatives_screen.dart';
 import '../l10n/app_localizations.dart';
 import '../features/jobs/screens/jobs_screen.dart';
 import '../features/local_taxi/passenger/screens/local_taxi_screen.dart';
@@ -310,6 +311,15 @@ class PushNavigation {
       return;
     }
 
+    if (screen == 'relatives' ||
+        type == 'relative_registered' ||
+        type == 'relative_waiting') {
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const RelativesScreen()),
+      );
+      return;
+    }
+
     final newsTab = _newsHubTabIndex(tab: tab, type: type);
     await nav.push(
       MaterialPageRoute(
@@ -366,6 +376,8 @@ class PushNavigation {
     } else if (type == 'identity' || type == 'general') {
       out['screen'] = 'news';
       out['tab'] = 'messages';
+    } else if (type == 'relative_registered' || type == 'relative_waiting') {
+      out['screen'] = 'relatives';
     } else if (type == 'driver_request_approved') {
       out['screen'] = 'local_taxi';
     } else if (type == 'local_trip_accepted') {

@@ -18,6 +18,7 @@ class RelativePerson {
     this.fatherId,
     this.motherId,
     this.spouseId,
+    this.isSelf = false,
     this.createdAt,
   });
 
@@ -37,6 +38,9 @@ class RelativePerson {
   final String? fatherId;
   final String? motherId;
   final String? spouseId;
+
+  /// Server tomonidan «Мен» yozuvi (profil bilan sinxron).
+  final bool isSelf;
 
   final DateTime? createdAt;
 
@@ -87,6 +91,7 @@ class RelativePerson {
       fatherId: d['fatherId'] as String?,
       motherId: d['motherId'] as String?,
       spouseId: d['spouseId'] as String?,
+      isSelf: d['isSelf'] == true,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
     );
   }

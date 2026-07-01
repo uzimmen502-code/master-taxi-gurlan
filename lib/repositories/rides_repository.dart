@@ -175,23 +175,6 @@ class RidesRepository {
     await _trips.doc(tripId).update({'radiusKm': radiusKm});
   }
 
-  /// Қидирув жараёнидa йўловчи рўйхатдан тaнлaган драйверни `trips/{id}`га
-  /// ёзамиз. Driver app `targetDriverId == self_uid AND status == searching`
-  /// тинглaгaнидaн сўнг шу ҳужжатни кўрaди ва `TripRequestScreen`'ни очaди.
-  ///
-  /// Драйвер рад этсa, ўз тарафидaн `targetDriverId=''` қилaди (ёки timeout):
-  /// йўловчи бошқа драйверни танлaб шу мaтодни яна чaқирa олaди.
-  Future<void> targetDriver({
-    required String tripId,
-    required String driverId,
-  }) async {
-    if (tripId.isEmpty || driverId.isEmpty) return;
-    await _trips.doc(tripId).update({
-      'targetDriverId': driverId,
-      'targetedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
   // ─── Local taxi (qidiruv bekor) ─────────────────────────────────────
   //
   // Faqat `taxiType != 'marshrut'` qidiruvlari. Marshrut blokiga tegishli emas.

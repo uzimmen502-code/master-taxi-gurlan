@@ -78,6 +78,11 @@ class DriverHomeController extends ChangeNotifier {
   double? _driverLat;
   double? _driverLng;
 
+  /// Бу ҳайдовчи "Рад" қилиб локал равишда яширган трип ID'лари.
+  /// Broadcast моделида рад этиш трипни ҳамма учун бекор қилмайди — фақат шу
+  /// ҳайдовчининг рўйхатидан олиб ташлайди (бошқалар кўришда давом этади).
+  final Set<String> _dismissedTripIds = <String>{};
+
   /// Стрим янги request топилганда UI диалог кўрсатиш учун —
   /// `_tripsSub` ичида берилади. View подпиёса бўлади.
   final _newRequestController = StreamController<TripRequest>.broadcast();
@@ -349,6 +354,7 @@ class DriverHomeController extends ChangeNotifier {
       final now = DateTime.now();
       final filtered = trips.where((t) {
         if (t.taxiType == 'marshrut') return false;
+        if (_dismissedTripIds.contains(t.id)) return false;
         if (t.createdAt != null) {
           final age = now.difference(t.createdAt!);
           if (age.inMinutes >= 3) return false;
@@ -552,9 +558,13 @@ class DriverHomeController extends ChangeNotifier {
     return (success: true, error: null);
   }
 
-  Future<void> rejectRide(TripRequest ride) async {
-    await _ridesRepo.rejectRide(
-        tripId: ride.id, driverId: session.driverId);
+  /// Local broadcast'да "Рад" — трипни ҳамма учун бекор қилмайди, фақат шу
+  /// ҳайдовчининг рўйхатидан локал равишда олиб ташлайди. Трип `searching`
+  /// ҳолатида қолади, бошқа ҳайдовчилар уни кўришда давом этади.
+  void dismissRequest(TripRequest ride) {
+    _dismissedTripIds.add(ride.id);
+    activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
+    notifyListeners();
   }
 
   // ─── Сафарни якунлаш ─────────────────────────────────────────────

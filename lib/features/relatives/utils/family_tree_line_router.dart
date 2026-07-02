@@ -8,15 +8,35 @@ class FamilyTreeLineRouter {
     required this.obstacles,
     required this.laneStep,
     required this.linePad,
+    this.preferShortestDirect = true,
   });
 
   final List<Rect> obstacles;
   final double laneStep;
   final double linePad;
+  /// `false` bo'lsa, to'g'ri qisqa segment ishlatilmaydi — faqat BFS yo'laklari.
+  final bool preferShortestDirect;
   final Map<int, double> _colorLanes = {};
   final Map<int, int> _laneCorridorOf = {};
 
-  static const int maxPathPoints = 21;
+  static const int maxPathPoints = 35;
+  static const double laneStepMin = 16.0;
+  static const double laneStepMax = 28.0;
+  static const double laneOverlapFactor = 0.9;
+
+  /// Koridor balandligi va yo'laklar soniga qarab bus qadami.
+  static double laneStepFor({
+    required double corridorHeight,
+    required int laneCount,
+    required double linePad,
+    double min = laneStepMin,
+    double max = laneStepMax,
+  }) {
+    final usable = corridorHeight - 2 * linePad;
+    if (usable <= 0) return min;
+    if (laneCount <= 1) return usable.clamp(min, max);
+    return (usable / laneCount).clamp(min, max);
+  }
 
   static bool segHitsRect(Offset a, Offset b, Rect r) {
     if ((a.dx - b.dx).abs() < 0.5) {
@@ -113,7 +133,9 @@ class FamilyTreeLineRouter {
     List<Rect>? obstacles,
   }) {
     final obs = obstacles ?? this.obstacles;
-    if (segmentClear(a, b, obstacles: obs)) return [a, b];
+    if (preferShortestDirect && segmentClear(a, b, obstacles: obs)) {
+      return [a, b];
+    }
 
     final candidates = collectCandidates(a, b, obs);
     final visited = <String>{ptKey(a)};
@@ -181,8 +203,10 @@ class FamilyTreeLineRouter {
     required double minX,
     required double maxX,
     List<Rect>? obstacles,
+    double? laneStep,
   }) {
     if (maxY < minY) return null;
+    final step = laneStep ?? this.laneStep;
     final obs = obstacles ?? this.obstacles;
     // Bir xil koridorda turli ranglar alohida y; boshqa koridorlarda qayta ishlatiladi.
     final corridorKey = Object.hash(
@@ -196,7 +220,7 @@ class FamilyTreeLineRouter {
         (e) =>
             e.key != laneKey &&
             _laneCorridorOf[e.key] == corridorKey &&
-            (e.value - y).abs() < laneStep * 0.9,
+            (e.value - y).abs() < step * laneOverlapFactor,
       );
       final horizClear = segmentClear(
         Offset(minX, y),
@@ -208,7 +232,7 @@ class FamilyTreeLineRouter {
         _laneCorridorOf[laneKey] = corridorKey;
         return y;
       }
-      y += laneStep;
+      y += step;
     }
     return null;
   }

@@ -25,7 +25,7 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 ## Family Tree (Nasab daraxti — GLOBAL graph, Phases F1–F5 done)
 Architecture: per-user private `relatives/people` + SHARED global `tree_persons` graph keyed by `componentId`. `users/{uid}` carries treeComponentId, treePersonId, treeMigratedAt.
 - UI: `family_tree_screen.dart` (combines personal `relatives/people` + shared component, personal precedence), `family_tree_view.dart` (CUSTOM genealogy layout, NOT graphview), `tree_history_screen.dart` (audit + undo).
-- `family_tree_view.dart`: adaptive layout — per-gen `_gapBelowGen`/`_siblingGapAtGen`/`_layoutRootGap`; overlap detect → horizontal expand; routing fail → targeted vertical/horizontal expand + full re-layout (≤30 attempts); couple child connectors use outer-frame top center; `FamilyTreeLineRouter` corridor-scoped bus lanes; visibility-graph BFS; no fallback through frames; lineage highlight 5+5.
+- `family_tree_view.dart`: slot layout + corridor Y. **Rules:** gen from `fatherId`/`motherId` per person (`_assignGenerationsFromPersonLinks`); child card always below parent; marriage outer = symbol only (stem inside padding); BFS per child to **that child's person card** (`preferShortestDirect: false`, no L-shortcut fallback); every segment validated vs person card interior.
 - Collections: tree_persons (nodes; survivorId on merge), tree_link_invites (two-sided), tree_redirects (oldId→survivor), tree_history (audit). All CF-only writes.
 - CFs by phase:
   - F1 ensureMyTree (create component+self node), onRelativePersonWrite (mirror relatives→tree_persons, redirect-aware).

@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/relative_person.dart';
+import '../utils/family_tree_corridor_validation.dart';
 import '../utils/family_tree_line_router.dart';
 import '../utils/family_tree_routing_report.dart';
 
-/// 🌳 Nasab daraxti — yangi qoidalar (2025).
-/// Er/xotin har doim yonma-yon; chiziqlar ramka atrofidan; turli rang bir qatorda emas.
+/// 🌳 Nasab daraxti — koridor qatlami + slot layout.
+/// Qoidalar: farzand doim pastda; nikoh ramkasi belgisi; chiziq odam kartasi ichidan o'tmaydi (BFS).
 class FamilyTreeView extends StatefulWidget {
   const FamilyTreeView({
     super.key,
@@ -55,23 +56,19 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   static const _lineWidth = 3.2;
   static const _outerFrameWidth = 2.4;
   static const _lineageTiers = 5;
-  /// Ramka atrofidan xavfsiz masofa (chiziq markazi emas — chetidan).
-  static const _linePad = 8.0;
-  /// Turli ranglar uchun parallel gorizontal yo'lak qadami.
-  static const _busLaneStep = 22.0;
+  /// Koridor yo'lak qadami (har bolali oila = 1 lane).
+  static const _laneStep = 22.0;
+  static const _corridorBasePad = 16.0;
   static const _sulolaMandarin = Color(0xFFFF9800);
+
+  /// Ramka atrofidan xavfsiz masofa — chiziq qalinligidan kelib chiqadi.
+  double get _linePad => _lineWidth / 2 + 6;
 
   static const double _cardW = 120;
   static const double _cardH = 100;
   static const double _spouseGap = 0;
   static const double _siblingGap = 40;
   static const _rootGap = 64.0;
-  /// Avlodlar orasidagi chiziq koridori (ko'p yo'lak sig'adi).
-  static const _rowGap = 112.0;
-  static const _maxLayoutAttempts = 30;
-  static const _expandVerticalStep = 26.0;
-  static const _expandHorizontalStep = 20.0;
-  static const _expandRootStep = 28.0;
   static const double _familyPadTop = 8;
   static const double _familyPadSide = 8;
   static const double _familyPadBottom = 10;
@@ -93,9 +90,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   int _placed = 0;
   String _sig = '';
   int _colorSeq = 0;
-  final Map<int, double> _gapBelowGen = {};
   final Map<int, double> _siblingGapAtGen = {};
+  final Map<int, double> _corridorExtraAtGen = {};
   double _layoutRootGap = _rootGap;
+  int _maxGen = 0;
 
   final _transform = TransformationController();
   late final AnimationController _fitAnim;
@@ -255,50 +253,71 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   double _familyWidth(_FamilyNode f) =>
       f.isCouple ? _cardW * 2 + _spouseGap : _cardW;
 
-  double _gapBelow(int gen) => _gapBelowGen.putIfAbsent(gen, () => _rowGap);
-
   double _siblingGapAt(int gen) =>
       _siblingGapAtGen.putIfAbsent(gen, () => _siblingGap);
 
+  double _cardRowHeight(_FamilyNode f) {
+    if (f.isCouple) {
+      return _cardH + _familyPadTop + _familyPadBottom;
+    }
+    return _cardH;
+  }
+
+  double _maxCardRowHeightAtGen(int gen) {
+    var h = _cardH;
+    for (final f in _families) {
+      if (f.gen == gen) h = math.max(h, _cardRowHeight(f));
+    }
+    return h;
+  }
+
+  int _laneCountAtGen(int gen) {
+    var count = 0;
+    for (final f in _families) {
+      if (f.gen == gen && _hasLinkedChildren(f)) count++;
+    }
+    return count;
+  }
+
+  /// Koridor balandligi: L(g) × laneStep + padding (karta qatoridan keyin).
+  double _corridorHeightAtGen(int gen) {
+    final lanes = _laneCountAtGen(gen);
+    if (lanes == 0) return 0;
+    return lanes * _laneStep +
+        2 * _linePad +
+        _corridorBasePad +
+        (_corridorExtraAtGen[gen] ?? 0);
+  }
+
+  double _yForCardRow(int gen) {
+    var y = 0.0;
+    for (var g = 0; g < gen; g++) {
+      y += _maxCardRowHeightAtGen(g) + _corridorHeightAtGen(g);
+    }
+    return y;
+  }
+
+  double _corridorTop(int gen) =>
+      _yForCardRow(gen) + _maxCardRowHeightAtGen(gen);
+
   void _resetLayoutGaps() {
-    _gapBelowGen.clear();
     _siblingGapAtGen.clear();
+    _corridorExtraAtGen.clear();
     _layoutRootGap = _rootGap;
   }
 
-  void _expandVertical(int gen, {double? amount}) {
-    _gapBelowGen[gen] = _gapBelow(gen) + (amount ?? _expandVerticalStep);
+  void _expandCorridor(int gen, {double? amount}) {
+    _corridorExtraAtGen[gen] =
+        (_corridorExtraAtGen[gen] ?? 0) + (amount ?? _laneStep);
   }
 
   void _expandHorizontal(int gen, {double? amount}) {
-    _siblingGapAtGen[gen] = _siblingGapAt(gen) + (amount ?? _expandHorizontalStep);
+    _siblingGapAtGen[gen] =
+        _siblingGapAt(gen) + (amount ?? _siblingGapAt(gen) * 0.5);
   }
 
   void _expandRoots({double? amount}) {
-    _layoutRootGap += amount ?? _expandRootStep;
-  }
-
-  void _expandForHint(_ExpandHint hint) {
-    if (hint.expandAll) {
-      final gens = <int>{
-        ..._gapBelowGen.keys,
-        if (hint.verticalGen != null) hint.verticalGen!,
-      };
-      for (final g in gens) {
-        _expandVertical(g, amount: _busLaneStep + 10);
-      }
-      final hGens = <int>{
-        ..._siblingGapAtGen.keys,
-        if (hint.horizontalGen != null) hint.horizontalGen!,
-      };
-      for (final g in hGens) {
-        _expandHorizontal(g);
-      }
-      _expandRoots();
-      return;
-    }
-    if (hint.verticalGen != null) _expandVertical(hint.verticalGen!);
-    if (hint.horizontalGen != null) _expandHorizontal(hint.horizontalGen!);
+    _layoutRootGap += amount ?? _layoutRootGap * 0.3;
   }
 
   void _resetFamilyLayout() {
@@ -307,9 +326,95 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _outerFrames.clear();
     for (final f in _families) {
       f.centerX = 0;
-      f.gen = 0;
       f.outerRect = null;
     }
+  }
+
+  /// Daraxtda ota-ona bo'lsa — majburiy bog'lash (istisno yo'q).
+  void _linkParentFamilies() {
+    for (final f in _families) {
+      if (f.parent != null) continue;
+      _FamilyNode? pf;
+      String? anchorId;
+      for (final m in f.members) {
+        final candidate = _resolveParentFamily(m);
+        if (candidate == null || identical(candidate, f)) continue;
+        if (!_hasDirectParentLink(m, candidate)) continue;
+        pf = candidate;
+        anchorId = m.id;
+        break;
+      }
+      if (pf == null) continue;
+      f.parent = pf;
+      f.anchorId = anchorId;
+      if (!pf.children.contains(f)) pf.children.add(f);
+    }
+  }
+
+  /// Har bir odam uchun gen: ota/ona bo'lsa gen = max(ota.gen)+1 (istisno yo'q).
+  void _assignGenerationsFromPersonLinks() {
+    final g = <String, int>{for (final id in _byId.keys) id: 0};
+    _maxGen = 0;
+    var changed = true;
+    for (var pass = 0; pass < _byId.length + 2 && changed; pass++) {
+      changed = false;
+      for (final p in _byId.values) {
+        var need = g[p.id]!;
+        if (_has(p.fatherId)) {
+          need = math.max(need, g[p.fatherId!]! + 1);
+        }
+        if (_has(p.motherId)) {
+          need = math.max(need, g[p.motherId!]! + 1);
+        }
+        if (need > g[p.id]!) {
+          g[p.id] = need;
+          changed = true;
+        }
+      }
+    }
+    for (final f in _families) {
+      f.gen = f.members.map((m) => g[m.id]!).fold(0, math.max);
+      _maxGen = math.max(_maxGen, f.gen);
+    }
+  }
+
+  /// Oilalar daraxtini shaxsiy ota-ona bog'lanishidan qayta qurish.
+  void _rebuildFamilyTreeFromPersonGens() {
+    for (final f in _families) {
+      f.children.clear();
+      f.parent = null;
+      f.anchorId = null;
+    }
+    for (final f in _families) {
+      _FamilyNode? bestPf;
+      var bestPg = -1;
+      RelativePerson? anchor;
+      for (final m in f.members) {
+        for (final pid in [m.fatherId, m.motherId]) {
+          if (!_has(pid)) continue;
+          final pf = _familyOf[pid!]!;
+          if (identical(pf, f)) continue;
+          if (pf.gen >= f.gen) continue;
+          if (pf.gen > bestPg) {
+            bestPg = pf.gen;
+            bestPf = pf;
+            anchor = m;
+          }
+        }
+      }
+      if (bestPf == null) continue;
+      f.parent = bestPf;
+      f.anchorId = anchor!.id;
+      if (!bestPf.children.contains(f)) bestPf.children.add(f);
+    }
+  }
+
+  _FamilyNode _rootOf(_FamilyNode f) {
+    var cur = f;
+    while (cur.parent != null) {
+      cur = cur.parent!;
+    }
+    return cur;
   }
 
   /// Ramkalar ustma-ust tushsa, qaysi avlodda zich ekanini qaytaradi.
@@ -332,28 +437,21 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   }
 
   bool _segmentsClearInterior(Iterable<_LineSeg> segs) {
-    final frames = <Rect>[
-      ..._cardRect.values,
-      for (final f in _families)
-        if (f.outerRect != null) f.outerRect!,
-    ];
-    for (final s in segs) {
-      for (final r in frames) {
-        final inner = r.deflate(0.5);
-        if (inner.width <= 0 || inner.height <= 0) continue;
-        if (FamilyTreeLineRouter.segHitsRect(s.a, s.b, inner)) return false;
-      }
+    return FamilyTreeCorridorValidation.segmentsClear(
+      segments: [for (final s in segs) (a: s.a, b: s.b)],
+      personCards: _cardRect.values.toList(),
+    );
+  }
+
+  bool _segmentClearOfPersons(Offset a, Offset b) {
+    for (final r in _cardRect.values) {
+      final inner = r.deflate(0.5);
+      if (FamilyTreeLineRouter.segHitsRect(a, b, inner)) return false;
     }
     return true;
   }
 
-  double _rowHeightFor(_FamilyNode f) {
-    final gap = _gapBelow(f.gen);
-    if (f.isCouple) {
-      return _cardH + _familyPadTop + _familyPadBottom + gap;
-    }
-    return _cardH + gap;
-  }
+  double _rowHeightFor(_FamilyNode f) => _cardRowHeight(f);
 
   void _build() {
     _sig = _signatureOf(widget.people);
@@ -423,30 +521,9 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       }
     }
 
-    int parentScore(RelativePerson m) =>
-        (_has(m.fatherId) ? 1 : 0) + (_has(m.motherId) ? 1 : 0);
-
-    for (final f in _families) {
-      RelativePerson? best;
-      _FamilyNode? bestPf;
-      var bestScore = -1;
-      for (final m in f.members) {
-        final pf = _resolveParentFamily(m);
-        if (pf == null || identical(pf, f)) continue;
-        if (!_hasDirectParentLink(m, pf)) continue;
-        final sc = parentScore(m);
-        if (sc > bestScore) {
-          best = m;
-          bestPf = pf;
-          bestScore = sc;
-        }
-      }
-      if (best != null && bestPf != null) {
-        f.parent = bestPf;
-        f.anchorId = best.id;
-        bestPf.children.add(f);
-      }
-    }
+    _linkParentFamilies();
+    _assignGenerationsFromPersonLinks();
+    _rebuildFamilyTreeFromPersonGens();
 
     for (final f in _families) {
       f.children.sort((a, b) {
@@ -459,9 +536,8 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _resetLayoutGaps();
     _assignColors();
 
-    var routingOk = false;
-    _ExpandHint? lastHint;
-    for (var attempt = 0; attempt < _maxLayoutAttempts && !routingOk; attempt++) {
+    const maxLayoutAttempts = 48;
+    for (var attempt = 0; attempt < maxLayoutAttempts; attempt++) {
       _resetFamilyLayout();
 
     final placed = <_FamilyNode>{};
@@ -489,10 +565,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       }
     }
 
-    void layoutSub(_FamilyNode f, int depth) {
+    void layoutSub(_FamilyNode f) {
       if (!placed.add(f)) return;
-      f.gen = depth;
-      rowHeights[depth] = math.max(rowHeights[depth] ?? 0, _rowHeightFor(f));
+      rowHeights[f.gen] =
+          math.max(rowHeights[f.gen] ?? 0, _cardRowHeight(f));
 
       if (f.children.isEmpty) {
         f.centerX = _familyWidth(f) / 2;
@@ -500,7 +576,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       }
       final right = <int, double>{};
       for (final c in f.children) {
-        layoutSub(c, depth + 1);
+        layoutSub(c);
         final lc = <int, double>{};
         contour(c, true, lc);
         var need = 0.0;
@@ -528,7 +604,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
 
     final rootBlock = <int, double>{};
     for (final r in roots) {
-      layoutSub(r, 0);
+      layoutSub(r);
       final lc = <int, double>{};
       contour(r, true, lc);
       var need = 0.0;
@@ -549,16 +625,14 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
     for (final f in _families) {
       if (placed.contains(f)) continue;
-      layoutSub(f, 0);
+      if (f.parent != null) {
+        layoutSub(_rootOf(f));
+      } else {
+        layoutSub(f);
+      }
     }
 
-    double yForGen(int gen) {
-      var y = 0.0;
-      for (var g = 0; g < gen; g++) {
-        y += rowHeights[g] ?? (_cardH + _gapBelow(g));
-      }
-      return y;
-    }
+    double yForGen(int gen) => _yForCardRow(gen);
 
     var minLeft = double.infinity;
     var maxRight = -double.infinity;
@@ -596,10 +670,14 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
 
     if (!minLeft.isFinite) return;
 
+    maxBottom = math.max(
+      maxBottom,
+      _yForCardRow(_maxGen) + _maxCardRowHeightAtGen(_maxGen),
+    );
+
     final overlapGen = _detectOverlapGen();
     if (overlapGen != null) {
       _expandHorizontal(overlapGen);
-      lastHint = _ExpandHint(horizontalGen: overlapGen);
       continue;
     }
 
@@ -621,36 +699,56 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     );
     _placed = _cardRect.length;
 
-    final lineResult = _buildLines();
-    routingOk = lineResult.ok;
-    lastHint = lineResult.hint ?? lastHint;
-    if (routingOk || attempt == _maxLayoutAttempts - 1) {
-      FamilyTreeView.debugRoutingReport = FamilyTreeRoutingReport(
-        routingSucceeded: routingOk,
-        segments: [
-          for (final s in _segments) (a: s.a, b: s.b),
-        ],
-        cardRects: _cardRect.values.toList(),
-        outerFrames: [
-          for (final f in _families)
-            if (f.outerRect != null) f.outerRect!,
-        ],
-        layoutRowGap: _gapBelowGen.values.fold(
-          _rowGap,
-          (a, b) => math.max(a, b),
-        ),
-        layoutSiblingGap: _siblingGapAtGen.values.fold(
-          _siblingGap,
-          (a, b) => math.max(a, b),
-        ),
-        linePad: _linePad,
-        lineWidth: _lineWidth,
-      );
+    _segments.clear();
+    _outerFrames.clear();
+    final linesOk = _buildRoutedLines();
+
+    final needsLines = _families.any(_hasLinkedChildren);
+    final routingOk = !needsLines ||
+        (linesOk &&
+            _segments.isNotEmpty &&
+            _segmentsClearInterior(_segments));
+    if (!routingOk && needsLines && attempt < maxLayoutAttempts - 1) {
+      var expandGen = 0;
+      for (final f in _families) {
+        if (_hasLinkedChildren(f)) {
+          expandGen = math.max(expandGen, f.gen);
+        }
+      }
+      _expandCorridor(expandGen);
+      if (attempt.isOdd) _expandHorizontal(expandGen);
+      continue;
     }
-    if (!routingOk) {
-      _expandForHint(lastHint ?? const _ExpandHint(expandAll: true));
-    }
-    } // layout retry
+    FamilyTreeView.debugRoutingReport = FamilyTreeRoutingReport(
+      routingSucceeded: routingOk,
+      segments: [
+        for (final s in _segments) (a: s.a, b: s.b),
+      ],
+      cardRects: _cardRect.values.toList(),
+      cardRectsById: Map<String, Rect>.from(_cardRect),
+      parentLinks: [
+        for (final p in _byId.values) ...[
+          if (_has(p.fatherId))
+            (childId: p.id, parentId: p.fatherId!),
+          if (_has(p.motherId))
+            (childId: p.id, parentId: p.motherId!),
+        ],
+      ],
+      outerFrames: [
+        for (final f in _families)
+          if (f.outerRect != null) f.outerRect!,
+      ],
+      layoutRowGap: List.generate(_maxGen + 1, _corridorHeightAtGen)
+          .fold(0.0, math.max),
+      layoutSiblingGap: _siblingGapAtGen.values.fold(
+        _siblingGap,
+        (a, b) => math.max(a, b),
+      ),
+      linePad: _linePad,
+      lineWidth: _lineWidth,
+    );
+    break;
+    } // overlap retry
   }
 
   List<double> _memberLefts(_FamilyNode f) {
@@ -713,21 +811,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
   }
 
-  _LineBuildResult _buildLines() {
+  /// Har bir farzand uchun BFS — nikoh ramkasi ichidan chiqib, farzand KARTASIGA.
+  bool _buildRoutedLines() {
     final usedKeys = <String>{};
-    final allObstacles = _lineObstacles();
-    final router = FamilyTreeLineRouter(
-      obstacles: allObstacles,
-      laneStep: _busLaneStep,
-      linePad: _linePad,
-    );
-    var ok = true;
-    _ExpandHint? hint;
-
-    void markFail(_ExpandHint h) {
-      ok = false;
-      hint ??= h;
-    }
+    var allOk = true;
 
     void addSeg(Offset a, Offset b, Color color, double width) {
       final key =
@@ -738,155 +825,80 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       _segments.add(_LineSeg(a, b, color, width));
     }
 
-    bool drawRouted(
-      Offset a,
-      Offset b,
-      Color color,
-      List<Rect> obstacles,
-      int parentGen,
-    ) {
-      final path = router.route(a, b, obstacles: obstacles);
-      if (path == null) {
-        markFail(_ExpandHint(
-          verticalGen: parentGen,
-          horizontalGen: parentGen + 1,
-        ));
+    bool addValidatedSeg(Offset a, Offset b, Color color) {
+      if (!_segmentClearOfPersons(a, b)) {
+        allOk = false;
         return false;
       }
-      for (var i = 0; i < path.length - 1; i++) {
-        if (!router.segmentClear(path[i], path[i + 1], obstacles: obstacles)) {
-          markFail(_ExpandHint(
-            verticalGen: parentGen,
-            horizontalGen: parentGen + 1,
-          ));
-          return false;
-        }
-        addSeg(path[i], path[i + 1], color, _lineWidth);
-      }
+      addSeg(a, b, color, _lineWidth);
       return true;
     }
 
-    bool drawTopConnector(
-      double cx,
-      double top,
-      Color color, {
-      Set<String> excludePersonIds = const {},
-    }) {
+    void drawTopConnector(double cx, double landY, Color color) {
       final side = math.min(_cardW * 0.2, 12.0);
-      final left = Offset(cx - side, top);
-      final right = Offset(cx + side, top);
-      final obs = _lineObstacles(excludePersonIds: excludePersonIds);
-      if (!router.segmentClear(left, right, obstacles: obs)) {
-        markFail(_ExpandHint(horizontalGen: _familyGenForPerson(excludePersonIds)));
-        return false;
-      }
-      addSeg(left, right, color, _lineWidth);
-      return true;
-    }
-
-    bool drawChildBus(
-      double exitX,
-      double exitY,
-      List<({Rect bounds, Offset topCenter, _FamilyNode fam})> targets,
-      Color color,
-      Set<String> excludePersonIds,
-      int parentGen,
-    ) {
-      if (targets.isEmpty) return true;
-
-      final parentObs = _lineObstacles(excludePersonIds: excludePersonIds);
-      final busObs = parentObs;
-      final ceiling = _childConnectorCeiling(targets.map((t) => t.bounds));
-      final floor = exitY + _linePad;
-
-      var minX = exitX;
-      var maxX = exitX;
-      for (final t in targets) {
-        minX = math.min(minX, t.topCenter.dx);
-        maxX = math.max(maxX, t.topCenter.dx);
-      }
-
-      if (ceiling <= floor + _busLaneStep) {
-        markFail(_ExpandHint(verticalGen: parentGen));
-        return false;
-      }
-
-      final preferredBusY = exitY + (ceiling - exitY) * 0.42;
-      final busY = router.allocateBusY(
-        color: color,
-        preferred: preferredBusY,
-        minY: floor,
-        maxY: ceiling - _linePad,
-        minX: minX,
-        maxX: maxX,
-        obstacles: busObs,
-      );
-      if (busY == null) {
-        markFail(_ExpandHint(
-          verticalGen: parentGen,
-          horizontalGen: parentGen + 1,
-        ));
-        return false;
-      }
-
-      if (!drawRouted(
-        Offset(exitX, exitY),
-        Offset(exitX, busY),
+      addValidatedSeg(
+        Offset(cx - side, landY),
+        Offset(cx + side, landY),
         color,
-        parentObs,
-        parentGen,
-      )) {
-        return false;
-      }
-
-      if ((maxX - minX).abs() > 0.5) {
-        if (!drawRouted(
-          Offset(minX, busY),
-          Offset(maxX, busY),
-          color,
-          busObs,
-          parentGen,
-        )) {
-          return false;
-        }
-      }
-
-      for (final t in targets) {
-        final childExclude = {
-          ...excludePersonIds,
-          ...t.fam.members.map((m) => m.id),
-        };
-        final childObs = _lineObstacles(excludePersonIds: childExclude);
-
-        if (!drawRouted(
-          Offset(t.topCenter.dx, busY),
-          t.topCenter,
-          color,
-          childObs,
-          parentGen,
-        )) {
-          return false;
-        }
-        if (!drawTopConnector(
-          t.topCenter.dx,
-          t.topCenter.dy,
-          color,
-          excludePersonIds: childExclude,
-        )) {
-          markFail(_ExpandHint(horizontalGen: t.fam.gen));
-          return false;
-        }
-      }
-      return true;
+      );
     }
 
-    final pendingFrames = <_OuterFrame>[];
+    final obstacles = [
+      for (final r in _cardRect.values) r.inflate(_linePad),
+    ];
+    final router = FamilyTreeLineRouter(
+      obstacles: obstacles,
+      laneStep: _laneStep,
+      linePad: _linePad,
+      preferShortestDirect: false,
+    );
+
+    Offset marriageInner(_FamilyNode parent) {
+      final outer = parent.outerRect!;
+      return Offset(
+        outer.center.dx,
+        outer.bottom - _familyPadBottom + _linePad,
+      );
+    }
+
+    Offset belowMarriageFrame(_FamilyNode parent) {
+      final outer = parent.outerRect!;
+      return Offset(outer.center.dx, outer.bottom + _linePad);
+    }
+
+    Offset belowSingleCard(_FamilyNode parent) {
+      final card = _cardRect[parent.members.first.id]!;
+      return Offset(card.center.dx, card.bottom + _linePad);
+    }
+
+    Offset childCardTarget(RelativePerson child) {
+      final r = _cardRect[child.id]!;
+      return Offset(r.center.dx, r.top - _linePad);
+    }
+
+    bool drawRoutedPath(
+      List<Offset> prefix,
+      List<Offset>? path,
+      Color color,
+      double endCx,
+    ) {
+      if (path == null || path.length < 2) {
+        allOk = false;
+        return false;
+      }
+      final full = [...prefix, ...path.skip(prefix.isEmpty ? 0 : 1)];
+      for (var i = 0; i < full.length - 1; i++) {
+        if (!addValidatedSeg(full[i], full[i + 1], color)) return false;
+      }
+      drawTopConnector(endCx, full.last.dy, color);
+      return true;
+    }
 
     for (final f in _families) {
       final color = f.familyColor ?? _accent;
 
       if (f.isCouple && f.outerRect != null) {
-        pendingFrames.add(_OuterFrame(f.outerRect!, color));
+        _outerFrames.add(_OuterFrame(f.outerRect!, color));
       }
 
       if (!_hasLinkedChildren(f)) continue;
@@ -894,164 +906,46 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       final linked = _directChildrenOf(f);
       if (linked.isEmpty) continue;
 
-      final parentIds = {for (final m in f.members) m.id};
+      final targets = _childConnectorTargets(linked)
+        ..sort((a, b) {
+          final ax = _cardRect[a.child.id]?.center.dx ?? 0;
+          final bx = _cardRect[b.child.id]?.center.dx ?? 0;
+          return ax.compareTo(bx);
+        });
 
-      if (f.isCouple) {
-        RelativePerson? father;
-        RelativePerson? mother;
-        for (final m in f.members) {
-          if (m.gender == 'male') {
-            father = m;
-          } else if (m.gender == 'female') {
-            mother = m;
-          }
-        }
-        father ??= f.members[0];
-        mother ??= f.members.length > 1 ? f.members[1] : null;
-
-        final bothLinked = <RelativePerson>[];
-        final fatherOnlyLinked = <RelativePerson>[];
-        final motherOnlyLinked = <RelativePerson>[];
-
-        for (final m in linked) {
-          final hasF = m.fatherId == father.id;
-          final hasM = mother != null && m.motherId == mother.id;
-          if (hasF && hasM) {
-            bothLinked.add(m);
-          } else if (hasF) {
-            fatherOnlyLinked.add(m);
-          } else if (hasM) {
-            motherOnlyLinked.add(m);
-          }
-        }
-
-        if (bothLinked.isNotEmpty && f.outerRect != null) {
-          if (!drawChildBus(
-            f.outerRect!.center.dx,
-            f.outerRect!.bottom,
-            _childConnectorTargets(bothLinked),
-            color,
-            parentIds,
-            f.gen,
-          )) {
-            _segments.clear();
-            return _LineBuildResult(ok: false, hint: hint);
-          }
-        }
-        if (fatherOnlyLinked.isNotEmpty) {
-          final card = _cardRect[father.id]!;
-          if (!drawChildBus(
-            card.center.dx,
-            card.bottom,
-            _childConnectorTargets(fatherOnlyLinked),
-            color,
-            parentIds,
-            f.gen,
-          )) {
-            _segments.clear();
-            return _LineBuildResult(ok: false, hint: hint);
-          }
-        }
-        if (mother != null && motherOnlyLinked.isNotEmpty) {
-          final card = _cardRect[mother.id]!;
-          if (!drawChildBus(
-            card.center.dx,
-            card.bottom,
-            _childConnectorTargets(motherOnlyLinked),
-            color,
-            parentIds,
-            f.gen,
-          )) {
-            _segments.clear();
-            return _LineBuildResult(ok: false, hint: hint);
-          }
-        }
+      final List<Offset> prefix;
+      final Offset routeStart;
+      if (f.isCouple && f.outerRect != null) {
+        final inner = marriageInner(f);
+        routeStart = belowMarriageFrame(f);
+        prefix = [inner, routeStart];
       } else {
-        final card = _cardRect[f.members.first.id]!;
-        if (!drawChildBus(
-          card.center.dx,
-          card.bottom,
-          _childConnectorTargets(linked),
-          color,
-          parentIds,
-          f.gen,
-        )) {
-          _segments.clear();
-          return _LineBuildResult(ok: false, hint: hint);
-        }
+        routeStart = belowSingleCard(f);
+        prefix = [routeStart];
+      }
+
+      for (final t in targets) {
+        final end = childCardTarget(t.child);
+        final path = router.route(routeStart, end, obstacles: obstacles);
+        drawRoutedPath(prefix, path, color, end.dx);
       }
     }
 
-    _outerFrames.addAll(pendingFrames);
-    if (ok && !_segmentsClearInterior(_segments)) {
-      _segments.clear();
-      return const _LineBuildResult(
-        ok: false,
-        hint: _ExpandHint(expandAll: true),
-      );
-    }
-    return _LineBuildResult(ok: ok, hint: hint);
+    return allOk;
   }
 
-  int? _familyGenForPerson(Set<String> personIds) {
-    for (final id in personIds) {
-      final fam = _familyOf[id];
-      if (fam != null) return fam.gen;
-    }
-    return null;
-  }
-
-  double _childConnectorCeiling(Iterable<Rect> childBounds) {
-    var ceiling = double.infinity;
-    for (final r in childBounds) {
-      ceiling = math.min(ceiling, r.top - _linePad - _lineWidth / 2);
-    }
-    return ceiling;
-  }
-
-  /// Har bir farzand oilasi uchun bitta ulagich (juftlik = tashqi ramka markazi).
-  List<({Rect bounds, Offset topCenter, _FamilyNode fam})>
-      _childConnectorTargets(
+  /// Har bir farzand uchun alohida ulagich — aynan shu odam kartasi.
+  List<({RelativePerson child, _FamilyNode fam})> _childConnectorTargets(
     List<RelativePerson> linked,
   ) {
-    final seen = <_FamilyNode>{};
-    final out = <({Rect bounds, Offset topCenter, _FamilyNode fam})>[];
+    final seen = <String>{};
+    final out = <({RelativePerson child, _FamilyNode fam})>[];
     for (final m in linked) {
+      if (!seen.add(m.id)) continue;
       final fam = _familyOf[m.id];
-      if (fam == null || !seen.add(fam)) continue;
-      if (fam.isCouple) {
-        final outer = fam.outerRect;
-        if (outer == null) continue;
-        out.add((
-          bounds: outer,
-          topCenter: Offset(outer.center.dx, outer.top),
-          fam: fam,
-        ));
-      } else {
-        final r = _cardRect[m.id];
-        if (r == null) continue;
-        out.add((
-          bounds: r,
-          topCenter: Offset(r.center.dx, r.top),
-          fam: fam,
-        ));
-      }
-    }
-    return out;
-  }
-
-  List<Rect> _lineObstacles({Set<String> excludePersonIds = const {}}) {
-    final pad = _lineWidth / 2 + _linePad;
-    final out = <Rect>[];
-    for (final e in _cardRect.entries) {
-      if (excludePersonIds.contains(e.key)) continue;
-      out.add(e.value.inflate(pad));
-    }
-    for (final f in _families) {
-      final outer = f.outerRect;
-      if (outer == null) continue;
-      if (f.members.every((m) => excludePersonIds.contains(m.id))) continue;
-      out.add(outer.inflate(pad));
+      if (fam == null) continue;
+      if (_cardRect[m.id] == null) continue;
+      out.add((child: m, fam: fam));
     }
     return out;
   }
@@ -1436,26 +1330,7 @@ class _FamilyNode {
   bool get isCouple => members.length == 2;
 }
 
-/// Layout kengaytirish yo'nalishi (routing/layout muvaffaqiyatsiz bo'lsa).
-class _ExpandHint {
-  const _ExpandHint({
-    this.verticalGen,
-    this.horizontalGen,
-    this.expandAll = false,
-  });
-
-  final int? verticalGen;
-  final int? horizontalGen;
-  final bool expandAll;
-}
-
-class _LineBuildResult {
-  const _LineBuildResult({required this.ok, this.hint});
-
-  final bool ok;
-  final _ExpandHint? hint;
-}
-
+/// Segment — global koordinatalarda (koridor + karta qatorlari orasida).
 class _LineSeg {
   const _LineSeg(this.a, this.b, this.color, this.width);
   final Offset a;

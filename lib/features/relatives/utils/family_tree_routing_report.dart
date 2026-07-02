@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'family_tree_line_router.dart';
+import 'family_tree_corridor_validation.dart';
 
 /// Widget testlari uchun daraht chiziq holati.
 @immutable
@@ -9,6 +9,8 @@ class FamilyTreeRoutingReport {
     required this.routingSucceeded,
     required this.segments,
     required this.cardRects,
+    required this.cardRectsById,
+    required this.parentLinks,
     required this.outerFrames,
     required this.layoutRowGap,
     required this.layoutSiblingGap,
@@ -19,38 +21,37 @@ class FamilyTreeRoutingReport {
   final bool routingSucceeded;
   final List<({Offset a, Offset b})> segments;
   final List<Rect> cardRects;
+  final Map<String, Rect> cardRectsById;
+  /// childId -> parentId (ota yoki ona)
+  final List<({String childId, String parentId})> parentLinks;
   final List<Rect> outerFrames;
   final double layoutRowGap;
   final double layoutSiblingGap;
   final double linePad;
   final double lineWidth;
 
-  List<Rect> get frameObstacles => [...cardRects, ...outerFrames];
-
-  /// Chiziq ramka ICHIDAN (ochiq interior) o'tmasligi kerak.
-  bool get allSegmentsClearOfFrames {
-    for (final s in segments) {
-      for (final r in frameObstacles) {
-        if (_segPassesInterior(s.a, s.b, r)) return false;
-      }
+  /// Farzand kartasi har doim ota-onadan pastda (istisno yo'q).
+  bool get childrenBelowParents {
+    for (final link in parentLinks) {
+      final child = cardRectsById[link.childId];
+      final parent = cardRectsById[link.parentId];
+      if (child == null || parent == null) continue;
+      if (child.top <= parent.top) return false;
     }
-    return true;
+    return parentLinks.isNotEmpty || cardRectsById.isNotEmpty;
   }
 
-  int get violations {
-    var n = 0;
-    for (final s in segments) {
-      for (final r in frameObstacles) {
-        if (_segPassesInterior(s.a, s.b, r)) n++;
-      }
-    }
-    return n;
-  }
-}
+  /// Faqat odam kartalari — nikoh ramkasi to'siq emas.
+  bool get allSegmentsClearOfFrames => FamilyTreeCorridorValidation.segmentsClear(
+        segments: segments,
+        personCards: cardRects,
+      );
 
-bool _segPassesInterior(Offset a, Offset b, Rect r) {
-  const eps = 0.5;
-  final inner = r.deflate(eps);
-  if (inner.width <= 0 || inner.height <= 0) return false;
-  return FamilyTreeLineRouter.segHitsRect(a, b, inner);
+  int get violations => violationDetails.length;
+
+  List<({Offset a, Offset b, Rect frame})> get violationDetails =>
+      FamilyTreeCorridorValidation.findViolations(
+        segments: segments,
+        personCards: cardRects,
+      );
 }

@@ -47,6 +47,25 @@ void main() {
       expect(router.pathClear(path!, obs), isTrue);
     });
 
+    test('laneStep koridor va yo\'laklar soniga moslashadi', () {
+      expect(
+        FamilyTreeLineRouter.laneStepFor(
+          corridorHeight: 100,
+          laneCount: 1,
+          linePad: 8,
+        ),
+        inInclusiveRange(16, 28),
+      );
+      expect(
+        FamilyTreeLineRouter.laneStepFor(
+          corridorHeight: 100,
+          laneCount: 5,
+          linePad: 8,
+        ),
+        closeTo(16.8, 0.5),
+      );
+    });
+
     test('yo\'l topilmasa null qaytadi (fallback yo\'q)', () {
       final obs = [
         const Rect.fromLTWH(0, 0, 500, 500),
@@ -115,6 +134,7 @@ void main() {
       expect(report.segments, isNotEmpty);
       expect(report.allSegmentsClearOfFrames, isTrue,
           reason: 'violations=${report.violations}');
+      _expectChildrenBelowParents(report);
     });
 
     testWidgets('parallel tarmoqlar — gorizontal bus ramkadan o\'tmaydi',
@@ -144,6 +164,7 @@ void main() {
 
       expect(report.routingSucceeded, isTrue);
       expect(report.allSegmentsClearOfFrames, isTrue);
+      _expectChildrenBelowParents(report);
     });
 
     testWidgets('ikki mustaqil ildiz — har ikkala tarmoq chiziqlari toza',
@@ -244,6 +265,14 @@ List<RelativePerson> _complexThreeGenerationTree() {
       motherId: 'm4',
     ),
   ];
+}
+
+void _expectChildrenBelowParents(FamilyTreeRoutingReport report) {
+  expect(
+    report.childrenBelowParents,
+    isTrue,
+    reason: 'farzand ota-onadan tepada joylashgan',
+  );
 }
 
 /// Keng yoyilgan parallel oilalar — gorizontal bus muammosi uchun.

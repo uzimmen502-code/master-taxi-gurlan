@@ -74,13 +74,22 @@ class JobsRepository {
     });
   }
 
-  /// Admin panel учун: барча эълонлар.
-  Stream<List<JobAd>> watchAllForAdmin({int limit = 300}) {
+  /// Admin panel учун: faqat Иш топ doskasi (`work|service|ad|sell`).
+  Stream<List<JobAd>> watchAllForAdmin({int limit = 500}) {
     return _ads
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
+        .map(
+          (snap) => snap.docs
+              .where(
+                (d) => JobAd.isJobsBoardType(
+                  (d.data()['type'] ?? '') as String,
+                ),
+              )
+              .map(JobAd.fromDoc)
+              .toList(growable: false),
+        );
   }
 
   /// Шикоятлар (янги юқорида).
@@ -186,28 +195,46 @@ class JobsRepository {
     String? status,
     String? title,
     String? priceText,
+    String? address,
+    DateTime? expiresAt,
+    String? adminNote,
+    String? moderatedBy,
   }) async {
     final updates = <String, dynamic>{
       'text': text,
       'isUrgent': _urgentForType(type, isUrgent),
       'type': type,
       'editedAt': FieldValue.serverTimestamp(),
+      'moderatedAt': FieldValue.serverTimestamp(),
     };
     if (status != null) updates['status'] = status;
     if (title != null) updates['title'] = title;
     if (priceText != null) updates['priceText'] = priceText;
+    if (address != null) updates['address'] = address;
+    if (expiresAt != null) {
+      updates['expiresAt'] = Timestamp.fromDate(expiresAt);
+    }
+    if (adminNote != null) updates['adminNote'] = adminNote;
+    if (moderatedBy != null && moderatedBy.isNotEmpty) {
+      updates['moderatedBy'] = moderatedBy;
+    }
     await _ads.doc(adId).update(updates);
   }
 
   Future<void> updateAdStatus({
     required String adId,
     required String status,
+    String? moderatedBy,
   }) async {
-    await _ads.doc(adId).update({
+    final updates = <String, dynamic>{
       'status': status,
       'moderatedAt': FieldValue.serverTimestamp(),
       'editedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (moderatedBy != null && moderatedBy.isNotEmpty) {
+      updates['moderatedBy'] = moderatedBy;
+    }
+    await _ads.doc(adId).update(updates);
   }
 
   /// Муаллиф ўз эълони (ўчириш).
@@ -221,10 +248,29 @@ class JobsRepository {
     await _ads.doc(adId).delete();
   }
 
-  /// Admin: эълонни ўчириш.
+  /// Admin: эълонни ўчириш (faqat jobs board).
   Future<void> deleteAdAdmin(String adId) async {
     if (adId.isEmpty) return;
+    final snap = await _ads.doc(adId).get();
+    if (!snap.exists) return;
+    final type = (snap.data()?['type'] ?? '') as String;
+    if (!JobAd.isJobsBoardType(type)) {
+      throw StateError('Bu e\'lon Ish top doskasi emas');
+    }
     await _ads.doc(adId).delete();
+  }
+
+  /// Шikoyatni hal qiling deb belgilash.
+  Future<void> resolveComplaint({
+    required String complaintId,
+    required String resolvedBy,
+  }) async {
+    if (complaintId.isEmpty || resolvedBy.isEmpty) return;
+    await _complaints.doc(complaintId).update({
+      'resolved': true,
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'resolvedBy': resolvedBy,
+    });
   }
 
   /// Эълонга шикоят.

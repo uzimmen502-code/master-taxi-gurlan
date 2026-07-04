@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'features/admin_web/screens/admin_login_screen.dart';
 import 'features/admin_web/screens/admin_shell.dart';
 import 'features/admin_web/services/admin_auth_service.dart';
+import 'features/admin_web/services/admin_jobs_service.dart';
 import 'features/admin_web/services/admin_news_read_service.dart';
 import 'firebase_options.dart';
 import 'repositories/analytics_repository.dart';
@@ -112,6 +113,7 @@ class AdminWebApp extends StatelessWidget {
         Provider<BreadRepository>(create: (_) => BreadRepository()),
         Provider<InventoryRepository>(create: (_) => InventoryRepository()),
         Provider<JobsRepository>(create: (_) => JobsRepository()),
+        Provider<AdminJobsService>(create: (_) => AdminJobsService()),
         Provider<DriverRepository>(create: (_) => DriverRepository()),
         Provider<OrdersRepository>(create: (_) => OrdersRepository()),
         Provider<QueueRepository>(create: (_) => QueueRepository()),

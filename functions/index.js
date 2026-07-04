@@ -1338,34 +1338,40 @@ exports.sendDailyOnboardingPromo = functions.pubsub
 // ══════════════════════════════════════
 
 async function assertAdmin(operatorPhone, context) {
-  // 1. Firebase Auth token must exist
   if (!context || !context.auth) {
     throw new functions.https.HttpsError(
       'unauthenticated', 'Login required');
   }
-  const uid = digits(operatorPhone);
-  if (!uid) throw new functions.https.HttpsError(
-    'invalid-argument', 'operatorPhone');
-
-  // 2. Auth token phone must match operatorPhone
   const tokenPhone = String(
     context.auth.token.phone_number || '').replace(/\D/g, '');
-  const tokenUid = String(context.auth.uid || '');
-  if (tokenPhone !== uid && tokenUid !== uid) {
+  const opDigits = digits(operatorPhone);
+  const phoneForLookup = opDigits || tokenPhone;
+  if (!phoneForLookup) {
     throw new functions.https.HttpsError(
-      'permission-denied', 'Phone mismatch');
+      'invalid-argument', 'operatorPhone');
   }
 
-  // 3. Firestore role check (unchanged)
-  return db.collection('users').doc(uid).get().then((doc) => {
-    const role = (doc.data() || {}).role || 'user';
-    if (role !== 'admin' && role !== 'superadmin'
-        && role !== 'dispatcher') {
+  if (opDigits && tokenPhone) {
+    const canonOp = canonicalUid(opDigits);
+    const canonTok = canonicalUid(tokenPhone);
+    if (canonOp !== canonTok && opDigits !== tokenPhone) {
       throw new functions.https.HttpsError(
-        'permission-denied', 'Admin only');
+        'permission-denied', 'Phone mismatch');
     }
-    return uid;
-  });
+  }
+
+  const found = await findUserDocByPhone(phoneForLookup);
+  if (!found) {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'User not found');
+  }
+  const role = (found.snap.data() || {}).role || 'user';
+  if (role !== 'admin' && role !== 'superadmin'
+      && role !== 'dispatcher') {
+    throw new functions.https.HttpsError(
+      'permission-denied', 'Admin only');
+  }
+  return found.docId;
 }
 
 async function assertAdminOrDriver(operatorPhone, context) {
@@ -4481,6 +4487,135 @@ function buildOrderStatusPatch(status) {
   }
   return data;
 }
+
+const ADMIN_JOB_AD_STATUSES = new Set([
+  'pending', 'active', 'completed', 'blocked',
+]);
+
+function isJobsBoardAdDataJs(d) {
+  const t = String((d && d.type) || '');
+  if (t === 'cheap_product') return false;
+  return ['work', 'service', 'ad', 'sell', 'announcement'].includes(t) || t === '';
+}
+
+function urgentForJobAdType(type, isUrgent) {
+  if (!isUrgent) return false;
+  const t = String(type || '');
+  return t === 'work' || t === 'ad';
+}
+
+async function getJobsBoardAdOrThrow(adId) {
+  const ref = db.collection('ads').doc(adId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Ad not found');
+  }
+  if (!isJobsBoardAdDataJs(snap.data())) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Not a jobs board ad');
+  }
+  return { ref, snap };
+}
+
+/** Admin web: Иш топ e'lonini o'chirish (Firestore rules custom token bilan ishlamaydi). */
+exports.adminDeleteJobAd = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  const { ref } = await getJobsBoardAdOrThrow(adId);
+  await ref.delete();
+  return { ok: true, adId };
+});
+
+/** Admin web: Иш топ e'lon statusi. */
+exports.adminUpdateJobAdStatus = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  const status = String(data.status || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  if (!ADMIN_JOB_AD_STATUSES.has(status)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
+  }
+  const { ref } = await getJobsBoardAdOrThrow(adId);
+  await ref.update({
+    status,
+    moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    editedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedBy: adminDocId,
+  });
+  return { ok: true, adId, status };
+});
+
+/** Admin web: Иш топ e'lonini to'liq tahrirlash. */
+exports.adminUpdateJobAd = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  const { ref, snap } = await getJobsBoardAdOrThrow(adId);
+  const existing = snap.data() || {};
+  const text = String(data.text || '').trim();
+  if (!text) {
+    throw new functions.https.HttpsError('invalid-argument', 'text required');
+  }
+  const type = String(data.type || existing.type || 'ad');
+  const patch = {
+    text,
+    type,
+    isUrgent: urgentForJobAdType(type, data.isUrgent === true),
+    title: String(data.title != null ? data.title : (existing.title || '')).trim(),
+    priceText: String(
+      data.priceText != null ? data.priceText : (existing.priceText || ''),
+    ).trim(),
+    address: String(
+      data.address != null ? data.address : (existing.address || ''),
+    ).trim(),
+    adminNote: String(
+      data.adminNote != null ? data.adminNote : (existing.adminNote || ''),
+    ).trim(),
+    editedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedBy: adminDocId,
+  };
+  const status = String(data.status || '').trim();
+  if (status && ADMIN_JOB_AD_STATUSES.has(status)) {
+    patch.status = status;
+  }
+  if (data.expiresAt) {
+    const exp = new Date(data.expiresAt);
+    if (!Number.isNaN(exp.getTime())) {
+      patch.expiresAt = admin.firestore.Timestamp.fromDate(exp);
+    }
+  }
+  await ref.update(patch);
+  return { ok: true, adId };
+});
+
+/** Admin web: shikoyatni hal qilindi deb belgilash. */
+exports.adminResolveJobComplaint = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const complaintId = String(data.complaintId || '').trim();
+  if (!complaintId) {
+    throw new functions.https.HttpsError(
+      'invalid-argument', 'complaintId required');
+  }
+  const ref = db.collection('complaints').doc(complaintId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Complaint not found');
+  }
+  await ref.update({
+    resolved: true,
+    resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    resolvedBy: adminDocId,
+  });
+  return { ok: true, complaintId };
+});
 
 const ADMIN_ORDER_STATUSES = new Set([
   'new', 'accepted', 'ready', 'in_delivery', 'delivered', 'rejected',

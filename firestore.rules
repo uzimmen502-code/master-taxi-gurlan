@@ -62,12 +62,23 @@ service cloud.firestore {
           : '';
     }
 
+    function userHasAdminRole(userId) {
+      return userId != ''
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && get(/databases/$(database)/documents/users/$(userId)).data.role
+              in ['admin', 'superadmin', 'dispatcher'];
+    }
+
     function isAdmin() {
       let uid = userDocIdFromPhoneToken();
       return uid != ''
-          && exists(/databases/$(database)/documents/users/$(uid))
-          && get(/databases/$(database)/documents/users/$(uid)).data.role
-              in ['admin', 'superadmin', 'dispatcher'];
+          && (
+            userHasAdminRole(uid)
+            || (uid.size() == 12
+                && uid[0:3] == '998'
+                && userHasAdminRole(uid[3:uid.size()]))
+            || (uid.size() == 9 && userHasAdminRole('998' + uid))
+          );
     }
 
     function isStaff() {
@@ -1549,14 +1560,32 @@ service cloud.firestore {
           && adAuthorPhoneOk(request.resource.data.authorPhone);
     }
 
+    function isJobsBoardAdData(d) {
+      let t = d.get('type', '');
+      return t != 'cheap_product'
+          && (t in ['work', 'service', 'ad', 'sell', 'announcement']
+              || t == ''
+              || !('type' in d));
+    }
+
     function adAuthorImmutable() {
       return request.resource.data.authorPhone == resource.data.authorPhone
           && request.resource.data.authorName == resource.data.authorName;
     }
 
+    function adAuthorIsCaller() {
+      return isAuth()
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               phoneDigits(resource.data.get('authorPhone', ''))
+             );
+    }
+
     function adOwnerPatchOk() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return adAuthorImmutable()
+      return isJobsBoardAdData(resource.data)
+          && adAuthorIsCaller()
+          && adAuthorImmutable()
           && changed.hasOnly([
             'text', 'title', 'priceText', 'isUrgent', 'type', 'editedAt'
           ]);
@@ -1564,14 +1593,27 @@ service cloud.firestore {
 
     function adModerationPatchOk() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return adAuthorImmutable()
-          && changed.hasOnly([
-            'text', 'title', 'priceText', 'isUrgent', 'type', 'status',
-            'editedAt', 'moderatedAt'
-          ])
-          && request.resource.data.status in [
-            'pending', 'active', 'completed', 'blocked'
-          ];
+      return isAdmin()
+          && isJobsBoardAdData(resource.data)
+          && adAuthorImmutable()
+          && (
+            changed.hasOnly([
+                  'text', 'title', 'priceText', 'isUrgent', 'type', 'status',
+                  'address', 'expiresAt', 'adminNote', 'moderatedBy',
+                  'editedAt', 'moderatedAt'
+                ])
+            || changed.hasOnly(['status', 'moderatedAt', 'editedAt'])
+            || changed.hasOnly(['status', 'moderatedAt', 'editedAt', 'moderatedBy'])
+          )
+          && (!changed.hasAny(['status'])
+              || request.resource.data.status in [
+                'pending', 'active', 'completed', 'blocked'
+              ]);
+    }
+
+    function adJobsBoardDeleteOk() {
+      return isJobsBoardAdData(resource.data)
+          && (adAuthorIsCaller() || isAdmin());
     }
 
     function isCheapProductAdData(d) {
@@ -1617,17 +1659,33 @@ service cloud.firestore {
           || adModerationPatchOk()
           || cheapProductOwnerUpdateOk()
           || cheapProductViewIncrementOk();
-      allow delete: if isAuth()
-          && isCheapProductAdData(resource.data)
-          && resource.data.ownerId == userDocIdFromPhoneToken();
+      allow delete: if adJobsBoardDeleteOk()
+          || (isAuth()
+              && isCheapProductAdData(resource.data)
+              && resource.data.ownerId == userDocIdFromPhoneToken());
+    }
+
+    function complaintCreateOk() {
+      return request.resource.data.keys().hasAll(['adId', 'reason', 'createdAt'])
+          && request.resource.data.adId is string
+          && request.resource.data.reason is string
+          && request.resource.data.get('resolved', false) == false;
+    }
+
+    function complaintAdminResolveOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAdmin()
+          && changed.hasOnly(['resolved', 'resolvedAt', 'resolvedBy'])
+          && request.resource.data.resolved == true
+          && request.resource.data.resolvedAt is timestamp
+          && request.resource.data.resolvedBy is string;
     }
 
     match /complaints/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['adId', 'reason', 'createdAt'])
-          && request.resource.data.adId is string
-          && request.resource.data.reason is string;
-      allow update, delete: if false;
+      allow read: if isAdmin();
+      allow create: if complaintCreateOk();
+      allow update: if complaintAdminResolveOk();
+      allow delete: if false;
     }
 
     // Сотиш таклифлари — фойдаланувчи юборadi; админ/оператор кўради.

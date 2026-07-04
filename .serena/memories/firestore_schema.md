@@ -60,7 +60,7 @@ Source of truth: `firestore.rules`, `firestore.indexes.json`. Doc IDs usually ph
 - `complaints/{id}` — ad complaints.
 
 ## Ads / Jobs board (single `ads` collection)
-- `ads/{id}` — DUAL: jobs/services board (`type` work|service|ad|sell) + marketplace (`type` cheap_product). read: board public, cheap_product if active|owner. Distinct Dart models: JobAd/JobsRepository vs AdModel/AdsRepository. status pending|active|completed|blocked. NO separate `jobs` collection.
+- `ads/{id}` — DUAL: jobs board (`work|service|ad|sell`, status pending|active|completed|blocked) + marketplace (`cheap_product`, active|inactive). Jobs board: owner patch + `isAdmin()` moderation (address, expiresAt, adminNote, moderatedBy); admin/owner delete. cheap_product: owner-only (admin step-5 pending). `complaints/{id}` — create public; read/update resolve admin-only.
 
 ## Circles ("Mening yaqinlarim" / Davra)
 - `circles/{id}` — group. type(classmates|coursemates|colleagues),ownerId,memberCount,subgroupsEnabled. create auth (ownerId==self,memberCount==1); delete owner/admin.

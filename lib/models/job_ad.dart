@@ -82,8 +82,23 @@ extension AdKindX on AdKind {
         return AdKind.ad;
       case 'sell':
         return AdKind.sell;
+      case 'work':
+        return AdKind.work;
       default:
         return AdKind.work;
+    }
+  }
+
+  /// `cheap_product` va boshqa turlar doskaga kirmaydi.
+  static bool isJobsBoardType(String? type) {
+    switch (type) {
+      case 'work':
+      case 'service':
+      case 'ad':
+      case 'sell':
+        return true;
+      default:
+        return false;
     }
   }
 }
@@ -106,6 +121,9 @@ class JobAd {
     this.expiresAt,
     this.createdAt,
     this.editedAt,
+    this.moderatedAt,
+    this.adminNote = '',
+    this.moderatedBy = '',
   });
 
   final String id;
@@ -130,6 +148,11 @@ class JobAd {
   final DateTime? expiresAt;
   final DateTime? createdAt;
   final DateTime? editedAt;
+  final DateTime? moderatedAt;
+  final String adminNote;
+  final String moderatedBy;
+
+  static bool isJobsBoardType(String? type) => AdKindX.isJobsBoardType(type);
 
   AdKind get kind => AdKindX.parse(type);
 
@@ -180,6 +203,19 @@ class JobAd {
     return '${diff.inDays} кун';
   }
 
+  /// Admin kartochka: muddat qoldi.
+  String get expiresLabel {
+    final exp = expiresAt;
+    if (exp == null) return 'Муддатсiz';
+    if (isExpired) return 'Муддати tugagan';
+    final days = exp.difference(DateTime.now()).inDays;
+    if (days <= 0) {
+      final hours = exp.difference(DateTime.now()).inHours;
+      return hours <= 0 ? 'Бугун tugaydi' : '$hours soat qoldi';
+    }
+    return '$days kun qoldi';
+  }
+
   factory JobAd.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     return JobAd(
@@ -196,6 +232,9 @@ class JobAd {
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       editedAt: (d['editedAt'] as Timestamp?)?.toDate(),
+      moderatedAt: (d['moderatedAt'] as Timestamp?)?.toDate(),
+      adminNote: (d['adminNote'] ?? '') as String,
+      moderatedBy: (d['moderatedBy'] ?? '') as String,
     );
   }
 }

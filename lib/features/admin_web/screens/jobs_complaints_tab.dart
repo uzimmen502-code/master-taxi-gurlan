@@ -4,10 +4,20 @@ import 'package:provider/provider.dart';
 import '../../../models/job_ad.dart';
 import '../../../models/job_complaint.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../services/admin_auth_service.dart';
+import '../services/admin_jobs_service.dart';
+import '../widgets/jobs_ad_edit_dialog.dart';
 
-/// Админ — ИШ ТОП шикоятлари.
-class JobsComplaintsTab extends StatelessWidget {
+/// Admin — ИШ ТОП shikoyatlari.
+class JobsComplaintsTab extends StatefulWidget {
   const JobsComplaintsTab({super.key});
+
+  @override
+  State<JobsComplaintsTab> createState() => _JobsComplaintsTabState();
+}
+
+class _JobsComplaintsTabState extends State<JobsComplaintsTab> {
+  bool _onlyOpen = true;
 
   @override
   Widget build(BuildContext context) {
@@ -27,17 +37,49 @@ class JobsComplaintsTab extends StatelessWidget {
             ),
           );
         }
-        final list = snap.data ?? const <JobComplaint>[];
-        if (list.isEmpty) {
-          return const Center(child: Text('Шикоятлар йўқ'));
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-          itemCount: list.length,
-          itemBuilder: (_, i) => _ComplaintCard(
-            complaint: list[i],
-            repo: repo,
-          ),
+        final all = snap.data ?? const <JobComplaint>[];
+        final list = _onlyOpen
+            ? all.where((c) => !c.resolved).toList(growable: false)
+            : all;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  ChoiceChip(
+                    label: Text('Ochiq (${all.where((c) => !c.resolved).length})'),
+                    selected: _onlyOpen,
+                    onSelected: (_) => setState(() => _onlyOpen = true),
+                  ),
+                  ChoiceChip(
+                    label: Text('Barchasi (${all.length})'),
+                    selected: !_onlyOpen,
+                    onSelected: (_) => setState(() => _onlyOpen = false),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: list.isEmpty
+                  ? Center(
+                      child: Text(
+                        _onlyOpen
+                            ? 'Ochiq shikoyatlar yo\'q'
+                            : 'Shikoyatlar yo\'q',
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                      itemCount: list.length,
+                      itemBuilder: (_, i) => _ComplaintCard(
+                        complaint: list[i],
+                        repo: repo,
+                      ),
+                    ),
+            ),
+          ],
         );
       },
     );
@@ -53,24 +95,82 @@ class _ComplaintCard extends StatelessWidget {
   final JobComplaint complaint;
   final JobsRepository repo;
 
+  Future<void> _resolve(BuildContext context) async {
+    final adminPhone =
+        context.read<AdminAuthService>().phoneDigits ?? '';
+    if (adminPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Admin telefon topilmadi'),
+        ),
+      );
+      return;
+    }
+    try {
+      await context.read<AdminJobsService>().resolveComplaint(
+            adminPhone: adminPhone,
+            complaintId: complaint.id,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Shikoyat hal qilindi deb belgilandi')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Xatolik: $e')),
+      );
+    }
+  }
+
+  Future<void> _blockAd(BuildContext context, JobAd ad) async {
+    final adminPhone =
+        context.read<AdminAuthService>().phoneDigits ?? '';
+    try {
+      await context.read<AdminJobsService>().updateAdStatus(
+            adminPhone: adminPhone,
+            adId: ad.id,
+            status: 'blocked',
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('E\'lon bloklandi')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Xatolik: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final resolved = complaint.resolved;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      color: resolved ? Colors.grey.shade50 : null,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              const Icon(Icons.report, color: Colors.orange, size: 22),
+              Icon(
+                resolved ? Icons.check_circle : Icons.report,
+                color: resolved ? Colors.green : Colors.orange,
+                size: 22,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   complaint.reason,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
+                    decoration:
+                        resolved ? TextDecoration.lineThrough : null,
                   ),
                 ),
               ),
@@ -80,13 +180,20 @@ class _ComplaintCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: Colors.black45),
                 ),
             ]),
+            if (resolved) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Hal qilindi: ${complaint.resolvedBy.isNotEmpty ? complaint.resolvedBy : "admin"}',
+                style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+              ),
+            ],
             if (complaint.reporterPhone.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text('Шикоятчи: ${complaint.reporterPhone}',
+              Text('Shikoyatchi: ${complaint.reporterPhone}',
                   style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
             ],
             const SizedBox(height: 8),
-            Text('Эълон ID: ${complaint.adId}',
+            Text('E\'lon ID: ${complaint.adId}',
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
             const SizedBox(height: 10),
             FutureBuilder<JobAd?>(
@@ -97,8 +204,14 @@ class _ComplaintCard extends StatelessWidget {
                   return const LinearProgressIndicator();
                 }
                 if (ad == null) {
-                  return const Text('Эълон ўчирилган ёки топилмади',
+                  return const Text('E\'lon o\'chirilgan yoki topilmadi',
                       style: TextStyle(color: Colors.red));
+                }
+                if (!JobAd.isJobsBoardType(ad.type)) {
+                  return const Text(
+                    'Bu Onlayn BOZOR e\'loni — Ish top moderatsiyasida emas',
+                    style: TextStyle(color: Colors.orange),
+                  );
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,31 +226,33 @@ class _ComplaintCard extends StatelessWidget {
                           fontSize: 13, color: Colors.grey.shade700),
                     ),
                     const SizedBox(height: 8),
-                    Wrap(spacing: 8, children: [
+                    Wrap(spacing: 8, runSpacing: 8, children: [
                       OutlinedButton.icon(
-                        onPressed: () => _openAd(context, ad),
-                        icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text('Эълон'),
+                        onPressed: () => showJobsAdEditDialog(
+                          context: context,
+                          ad: ad,
+                          adminPhone: context
+                                  .read<AdminAuthService>()
+                                  .phoneDigits ??
+                              '',
+                        ),
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Tahrirlash'),
                       ),
                       if (ad.status == 'active')
                         OutlinedButton.icon(
-                          onPressed: () async {
-                            await repo.updateAdStatus(
-                              adId: ad.id,
-                              status: 'blocked',
-                            );
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Эълон блокланди'),
-                              ),
-                            );
-                          },
+                          onPressed: () => _blockAd(context, ad),
                           icon: const Icon(Icons.block, size: 16),
-                          label: const Text('Блок'),
+                          label: const Text('Blok'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.red,
                           ),
+                        ),
+                      if (!resolved)
+                        ElevatedButton.icon(
+                          onPressed: () => _resolve(context),
+                          icon: const Icon(Icons.done, size: 16),
+                          label: const Text('Hal qilindi'),
                         ),
                     ]),
                   ],
@@ -146,29 +261,6 @@ class _ComplaintCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _openAd(BuildContext context, JobAd ad) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ad.titleOrText),
-        content: SingleChildScrollView(
-          child: Text(
-            '${ad.text}\n\n'
-            'Муаллиф: ${ad.authorName}\n'
-            'Тел: ${ad.authorPhone}\n'
-            'Статус: ${ad.status}',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Ёпиш'),
-          ),
-        ],
       ),
     );
   }

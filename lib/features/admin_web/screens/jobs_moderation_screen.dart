@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../services/admin_auth_service.dart';
+import '../services/admin_jobs_service.dart';
+import '../widgets/jobs_ad_edit_dialog.dart';
 import 'jobs_complaints_tab.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -58,7 +61,12 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
     );
     if (ok != true || !mounted) return;
     try {
-      await context.read<JobsRepository>().deleteAdAdmin(ad.id);
+      final adminPhone =
+          context.read<AdminAuthService>().phoneDigits ?? '';
+      await context.read<AdminJobsService>().deleteAd(
+            adminPhone: adminPhone,
+            adId: ad.id,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Эълон ўчирилди')),
@@ -86,9 +94,14 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
   }
 
   Future<void> _setStatus(JobAd ad, String status) async {
-    final repo = context.read<JobsRepository>();
+    final adminPhone =
+        context.read<AdminAuthService>().phoneDigits ?? '';
     try {
-      await repo.updateAdStatus(adId: ad.id, status: status);
+      await context.read<AdminJobsService>().updateAdStatus(
+            adminPhone: adminPhone,
+            adId: ad.id,
+            status: status,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -105,9 +118,12 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
   }
 
   Future<void> _edit(JobAd ad) async {
-    await showDialog<void>(
+    final adminPhone =
+        context.read<AdminAuthService>().phoneDigits ?? '';
+    await showJobsAdEditDialog(
       context: context,
-      builder: (_) => _JobAdEditDialog(ad: ad),
+      ad: ad,
+      adminPhone: adminPhone,
     );
   }
 
@@ -381,6 +397,29 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
             Text('Нарх: ${ad.priceText}',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
+          const SizedBox(height: 6),
+          Text(
+            'Муддат: ${ad.expiresLabel}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          if (ad.adminNote.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Admin: ${ad.adminNote}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange.shade800,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (ad.moderatedBy.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Moderator: ${ad.moderatedBy}',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 14,
@@ -472,184 +511,6 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
       const SizedBox(width: 4),
       Text(text, style: const TextStyle(color: Colors.black54)),
     ]);
-  }
-}
-
-class _JobAdEditDialog extends StatefulWidget {
-  const _JobAdEditDialog({required this.ad});
-
-  final JobAd ad;
-
-  @override
-  State<_JobAdEditDialog> createState() => _JobAdEditDialogState();
-}
-
-class _JobAdEditDialogState extends State<_JobAdEditDialog> {
-  late final TextEditingController _title;
-  late final TextEditingController _text;
-  late final TextEditingController _price;
-  late AdKind _kind;
-  late String _status;
-  late bool _urgent;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _title = TextEditingController(text: widget.ad.title);
-    _text = TextEditingController(text: widget.ad.text);
-    _price = TextEditingController(text: widget.ad.priceText);
-    _kind = widget.ad.kind;
-    _status = widget.ad.status;
-    _urgent = widget.ad.isUrgent;
-  }
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _text.dispose();
-    _price.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_text.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Асосий матн бўш бўла олмайди'),
-        ),
-      );
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await context.read<JobsRepository>().updateAd(
-            adId: widget.ad.id,
-            text: _text.text.trim(),
-            isUrgent: _urgent,
-            type: _kind.key,
-            status: _status,
-            title: _title.text.trim(),
-            priceText: _price.text.trim(),
-          );
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.button,
-          content: Text('Эълон янгиланди'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Эълонни таҳрирлаш'),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, minWidth: 360),
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<AdKind>(
-              initialValue: _kind,
-              decoration: const InputDecoration(labelText: 'Тури'),
-              items: [
-                for (final kind in AdKind.values)
-                  DropdownMenuItem(
-                    value: kind,
-                    child: Text('${kind.emoji} ${kind.label}'),
-                  ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _kind = v;
-                  if (!v.supportsUrgent) _urgent = false;
-                });
-              },
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _title,
-              maxLength: 80,
-              decoration: const InputDecoration(
-                labelText: 'Сарлавҳа',
-                border: OutlineInputBorder(),
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _text,
-              maxLines: 5,
-              maxLength: 500,
-              decoration: const InputDecoration(
-                labelText: 'Асосий матн',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _price,
-              maxLength: 60,
-              decoration: const InputDecoration(
-                labelText: 'Нарх / шартнома',
-                border: OutlineInputBorder(),
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: _status,
-              decoration: const InputDecoration(labelText: 'Статус'),
-              items: const [
-                DropdownMenuItem(value: 'pending', child: Text('Кутилмоқда')),
-                DropdownMenuItem(value: 'active', child: Text('Фаол')),
-                DropdownMenuItem(value: 'completed', child: Text('Ёпилган')),
-                DropdownMenuItem(value: 'blocked', child: Text('Блок')),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _status = v);
-              },
-            ),
-            if (_kind.supportsUrgent)
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Шошилинч'),
-                subtitle: const Text('Алоҳида «Шошилинч» табида кўринади'),
-                value: _urgent,
-                onChanged: (v) => setState(() => _urgent = v),
-              ),
-          ]),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Бекор'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _saving ? null : _save,
-          icon: _saving
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.save),
-          label: const Text('Сақлаш'),
-        ),
-      ],
-    );
   }
 }
 

@@ -117,6 +117,7 @@ class AdminAuthService extends ChangeNotifier {
         return 'Kirish tokeni olinmadi';
       }
       await _auth.signInWithCustomToken(token);
+      await _auth.currentUser?.getIdToken(true);
       final snap = await _findUserDoc(rawPhone);
       if (snap == null) {
         await _auth.signOut();
@@ -165,6 +166,7 @@ class AdminAuthService extends ChangeNotifier {
         return 'Kirish tokeni olinmadi';
       }
       await _auth.signInWithCustomToken(token);
+      await _auth.currentUser?.getIdToken(true);
       final snap = await _findUserDoc(rawPhone);
       if (snap == null) {
         await _auth.signOut();

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/l10n/language_picker_sheet.dart';
 import '../../../../core/l10n/locale_notifier.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
@@ -450,48 +451,17 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
   }
 
   Future<bool> _ensureLanguageSelected() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey('saved_language')) return true;
+    if (await LocaleUtils.hasManualLocale()) return true;
     if (!mounted) return false;
 
-    final chosen = await showModalBottomSheet<Locale>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                context.tr('language'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ListTile(
-              title: Text(context.tr('lang_uz_cyrl')),
-              onTap: () => Navigator.pop(ctx, LocaleUtils.uzCyrl),
-            ),
-            ListTile(
-              title: Text(context.tr('lang_uz_latn')),
-              onTap: () => Navigator.pop(ctx, LocaleUtils.uzLatn),
-            ),
-            ListTile(
-              title: Text(context.tr('lang_ru')),
-              onTap: () => Navigator.pop(ctx, LocaleUtils.ru),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+    final chosen = await showLanguagePickerSheet(
+      context,
+      includeFollowDevice: false,
     );
     if (chosen == null || !mounted) return false;
-    await context.read<LocaleNotifier>().setLocale(chosen);
+    final loc = chosen.locale;
+    if (loc == null) return false;
+    await context.read<LocaleNotifier>().setLocale(loc);
     return true;
   }
 

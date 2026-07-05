@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/l10n/offline_l10n.dart';
 import '../../../services/user_role_sync.dart';
 
 /// Бош экран controller'и — фойдаланувчи, интернет, бир марталик agro promo.
@@ -14,8 +15,8 @@ class HomeController extends ChangeNotifier {
     _init();
   }
 
-  // TODO: pass loc from UI layer for default display name
-  String name = 'Фойдаланувчи';
+  // UI qatlami `user_default_name` ni ko'rsatadi; bu yerda offline fallback.
+  String name = '';
   String gender = 'male';
   String phone = '';
   /// SharedPreferences `user_role` — UI учун (асл рuxсат Firestore / rules).
@@ -42,7 +43,8 @@ class HomeController extends ChangeNotifier {
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
     role = await UserRoleSync().syncToPreferences();
-    name = prefs.getString('user_name') ?? 'Фойдаланувчи'; // TODO: user_default_name via UI
+    name = prefs.getString('user_name') ??
+        await OfflineL10n.tr('user_default_name');
     gender = prefs.getString('user_gender') ?? 'male';
     phone = phoneDigits(prefs.getString('user_phone') ?? '');
     if (!_disposed) notifyListeners();

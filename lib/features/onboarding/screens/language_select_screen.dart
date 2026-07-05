@@ -15,6 +15,16 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
   Locale? _selected;
   bool _saving = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _selected = LocaleUtils.localeResolutionCallback(
+          LocaleUtils.resolveFromDevice(),
+          LocaleUtils.supportedAppLocales,
+        ) ??
+        LocaleUtils.uzCyrl;
+  }
+
   static const _options = [
     (label: "O'zbek", sub: 'Lotin yozuvi', locale: LocaleUtils.uzLatn),
     (label: 'Ўзбек', sub: 'Кирилл ёзуви', locale: LocaleUtils.uzCyrl),

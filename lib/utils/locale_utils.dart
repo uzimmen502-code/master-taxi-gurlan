@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LocaleUtils {
   static const String _savedLanguageKey = 'saved_language';
   static const String _savedScriptKey = 'saved_script';
+  static const String followDeviceSentinel = 'device';
 
   static const Locale uzCyrl =
       Locale.fromSubtags(languageCode: 'uz', scriptCode: 'Cyrl');
@@ -58,6 +59,7 @@ class LocaleUtils {
     final scriptCode = prefs.getString(_savedScriptKey);
 
     if (languageCode == null) return null;
+    if (languageCode == followDeviceSentinel) return null;
     if (languageCode == 'ru') return ru;
     if (languageCode == 'uz') {
       if (scriptCode == 'Latn') return uzLatn;
@@ -76,13 +78,40 @@ class LocaleUtils {
     }
   }
 
-  static Future<Locale> getInitialLocale() async {
+  static Future<void> saveFollowDeviceChoice() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_savedLanguageKey, followDeviceSentinel);
+    await prefs.remove(_savedScriptKey);
+  }
+
+  static Future<void> clearSavedLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_savedLanguageKey);
+    await prefs.remove(_savedScriptKey);
+  }
+
+  /// Foydalanuvchi aniq til tanlaganmi (qurilma sentinel emas).
+  static Future<bool> hasManualLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString(_savedLanguageKey);
+    if (code == null) return false;
+    return code != followDeviceSentinel;
+  }
+
+  /// Birinchi til ekrani o'tkazilganmi (qattiq til yoki qurilma sentinel).
+  static Future<bool> hasLanguageSetup() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey(_savedLanguageKey);
+  }
+
+  /// Saqlangan til yoki (saqlanmagan bo'lsa) qurilma tili — hech qachon avtomatik saqlamaydi.
+  static Future<Locale> effectiveLocale() async {
     final saved = await getSavedLocale();
     if (saved != null) return _normalize(saved);
-    final system = await getSystemLocale();
-    await saveLocale(system);
-    return system;
+    return resolveFromDevice();
   }
+
+  static Future<Locale> getInitialLocale() async => effectiveLocale();
 
   static Locale _normalize(Locale locale) {
     if (locale.languageCode == 'ru') return ru;

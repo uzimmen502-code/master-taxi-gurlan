@@ -7,16 +7,22 @@ import '../../utils/locale_utils.dart';
 
 /// Repository va push matnlari uchun kontekstsiz tarjima.
 ///
-/// Foydalanuvchi tanlagan til (`SharedPreferences`) bo'yicha `assets/lang/*.json`
-/// dan o'qiladi.
+/// Foydalanuvchi tanlagan til (`SharedPreferences`) yoki qurilma tili bo'yicha
+/// `assets/lang/*.json` dan o'qiladi.
 class OfflineL10n {
   OfflineL10n._();
 
   static Locale? _cachedLocale;
   static Map<String, String>? _strings;
 
+  /// Til o'zgarganda chaqiriladi — keyingi `tr()` yangi JSON yuklaydi.
+  static void invalidate() {
+    _cachedLocale = null;
+    _strings = null;
+  }
+
   static Future<String> tr(String key) async {
-    final locale = await LocaleUtils.getInitialLocale();
+    final locale = await LocaleUtils.effectiveLocale();
     await _ensureLoaded(locale);
     return _strings![key] ?? key;
   }

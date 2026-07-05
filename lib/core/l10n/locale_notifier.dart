@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utils/locale_utils.dart';
+import 'offline_l10n.dart';
 
 /// Ilova tili — qurilma + qo‘lda tanlov.
 class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
@@ -11,14 +11,7 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> init() async {
     WidgetsBinding.instance.addObserver(this);
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey('saved_language')) {
-      // Foydalanuvchi o'zi tanlagan — saqlanganidan o'qiymiz
-      _locale = await LocaleUtils.getInitialLocale();
-    } else {
-      // Hali tanlanmagan — qurilma tilini ishlatamiz, lekin SAQLAMAYMIZ
-      _locale = LocaleUtils.resolveFromDevice();
-    }
+    _locale = await LocaleUtils.effectiveLocale();
     notifyListeners();
   }
 
@@ -28,8 +21,7 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _applyDeviceLocaleIfNoManualOverride() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey('saved_language')) return;
+    if (await LocaleUtils.hasManualLocale()) return;
     final device = LocaleUtils.resolveFromDevice();
     if (device != _locale) {
       _locale = device;
@@ -45,6 +37,15 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
         LocaleUtils.uzCyrl;
     _locale = normalized;
     await LocaleUtils.saveLocale(normalized);
+    OfflineL10n.invalidate();
+    notifyListeners();
+  }
+
+  /// Saqlangan tilni o'chirib, qurilma tiliga qaytish.
+  Future<void> setFollowDeviceLocale() async {
+    await LocaleUtils.saveFollowDeviceChoice();
+    _locale = LocaleUtils.resolveFromDevice();
+    OfflineL10n.invalidate();
     notifyListeners();
   }
 

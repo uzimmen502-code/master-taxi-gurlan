@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../painters/calligraphic_border_painter.dart';
 import '../painters/metallic_border_highlight_painter.dart';
 
@@ -42,6 +43,7 @@ class _WalletCardState extends State<WalletCard>
   static const _outerRadius = 19.0;
   static const _innerRadius = 16.0;
   static const _borderWidth = 3.5;
+  static const _highlightStrokeWidth = 2.4 * 3;
 
   late final AnimationController _highlightCtrl;
 
@@ -125,9 +127,9 @@ class _WalletCardState extends State<WalletCard>
                           color: _gold,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text(
-                          'Faol',
-                          style: TextStyle(
+                        child: Text(
+                          context.tr('home_wallet_active'),
+                          style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: _badgeText,
@@ -200,7 +202,9 @@ class _WalletCardState extends State<WalletCard>
                               color: Colors.white,
                             ),
                             children: [
-                              const TextSpan(text: 'Oxirgi: '),
+                              TextSpan(
+                                text: context.tr('home_wallet_last_tx_prefix'),
+                              ),
                               TextSpan(
                                 text: widget.lastTxAmount,
                                 style: TextStyle(color: _txAmountColor),
@@ -292,6 +296,7 @@ class _WalletCardState extends State<WalletCard>
                               painter: MetallicBorderHighlightPainter(
                                 progress: _highlightCtrl.value,
                                 borderRadius: _outerRadius,
+                                strokeWidth: _highlightStrokeWidth,
                               ),
                             ),
                           ),

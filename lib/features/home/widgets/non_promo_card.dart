@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+
 /// Non buyurtma promo banner.
 class NonPromoCard extends StatelessWidget {
   const NonPromoCard({super.key, this.onTap});
@@ -24,9 +26,9 @@ class NonPromoCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Non buyurtma qiling',
-                style: TextStyle(
+              Text(
+                context.tr('non_promo_title'),
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: Colors.white,
@@ -34,7 +36,7 @@ class NonPromoCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                "Yangi non — 500 so'm, eshigingizga",
+                context.tr('non_promo_subtitle'),
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.6),
@@ -53,9 +55,9 @@ class NonPromoCard extends StatelessWidget {
                 color: _gold,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'Buyurtma →',
-                style: TextStyle(
+              child: Text(
+                context.tr('non_promo_cta'),
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: _badgeText,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+
 /// «Siz ham soting» — sotish moduliga yo‘naltiruvchi banner.
 class SellerCtaBanner extends StatelessWidget {
   const SellerCtaBanner({super.key, required this.onTap});
@@ -25,10 +27,10 @@ class SellerCtaBanner extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Siz ham soting',
-                  style: TextStyle(
+                  context.tr('home_seller_cta'),
+                  style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: _titleDark,

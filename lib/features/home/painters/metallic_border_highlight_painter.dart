@@ -61,14 +61,17 @@ class MetallicBorderHighlightPainter extends CustomPainter {
     final gradStart = tangent.position - norm * (length * 0.35);
     final gradEnd = tangent.position + norm * (length * 0.35);
 
+    final glowExtra = strokeWidth * (3 / 2.4);
+    final blurSigma = strokeWidth * (2.5 / 2.4);
+
     canvas.drawPath(
       segment,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth + 3
+        ..strokeWidth = strokeWidth + glowExtra
         ..strokeCap = StrokeCap.round
         ..color = Colors.white.withValues(alpha: 0.22)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma),
     );
 
     canvas.drawPath(

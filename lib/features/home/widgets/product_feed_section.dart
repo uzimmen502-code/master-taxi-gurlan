@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../models/feed_item.dart';
@@ -28,12 +29,12 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
   bool _exhausted = false;
   bool _initialLoadDone = false;
 
-  static const _tabs = <({String label, FeedSource? source})>[
-    (label: 'Barchasi', source: null),
-    (label: 'Non', source: FeedSource.bread),
-    (label: 'Taom', source: FeedSource.food),
-    (label: 'Bozor', source: FeedSource.market),
-  ];
+  List<({String label, FeedSource? source})> _tabs(BuildContext context) => [
+        (label: context.tr('all_categories'), source: null),
+        (label: context.tr('home_feed_tab_bread'), source: FeedSource.bread),
+        (label: context.tr('home_feed_tab_food'), source: FeedSource.food),
+        (label: context.tr('home_feed_tab_market'), source: FeedSource.market),
+      ];
 
   @override
   void initState() {
@@ -94,12 +95,14 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
 
   @override
   Widget build(BuildContext context) {
+    final tabs = _tabs(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Barcha mahsulotlar',
-          style: TextStyle(
+        Text(
+          context.tr('home_feed_title'),
+          style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
             color: _titleDark,
@@ -107,7 +110,7 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
         ),
         const SizedBox(height: 10),
         _FeedTabBar(
-          tabs: _tabs,
+          tabs: tabs,
           activeTab: _activeTab,
           onSelected: _onTabSelected,
         ),
@@ -124,12 +127,12 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
             ),
           )
         else if (_initialLoadDone && _items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
               child: Text(
-                'Hozircha mahsulotlar yo‘q',
-                style: TextStyle(
+                context.tr('home_feed_empty'),
+                style: const TextStyle(
                   fontSize: 12,
                   color: _sectionMuted,
                 ),
@@ -155,19 +158,26 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
           const SizedBox(height: 14),
           if (!_exhausted && !_loading)
             Center(
-              child: _LoadMoreButton(onPressed: _loadMore),
+              child: _LoadMoreButton(
+                label: context.tr('home_feed_load_more'),
+                onPressed: _loadMore,
+              ),
             )
           else if (_loading)
             Center(
-              child: _LoadMoreButton(onPressed: null, loading: true),
+              child: _LoadMoreButton(
+                label: context.tr('home_feed_load_more'),
+                onPressed: null,
+                loading: true,
+              ),
             )
           else
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
                 child: Text(
-                  'Boshqa mahsulot yo‘q',
-                  style: TextStyle(
+                  context.tr('home_feed_no_more'),
+                  style: const TextStyle(
                     fontSize: 12,
                     color: _sectionMuted,
                   ),
@@ -255,10 +265,12 @@ class _FeedTabChip extends StatelessWidget {
 
 class _LoadMoreButton extends StatelessWidget {
   const _LoadMoreButton({
+    required this.label,
     required this.onPressed,
     this.loading = false,
   });
 
+  final String label;
   final VoidCallback? onPressed;
   final bool loading;
 
@@ -294,7 +306,7 @@ class _LoadMoreButton extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Text(
-                'Yana yuklash',
+                label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -348,7 +360,10 @@ class _FeedProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priceText = '${NumberFormat('#,###').format(item.price)} so\'m';
+    final priceText = context.tr('price_sum_short').replaceAll(
+          '{price}',
+          NumberFormat('#,###').format(item.price),
+        );
 
     return Material(
       color: Colors.transparent,

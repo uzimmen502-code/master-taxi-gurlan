@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+
 /// Non / Taom / Bozor / taksi promo bannerlari — avtomatik aylantirish, nuqtasiz.
 class PromoCarousel extends StatefulWidget {
   const PromoCarousel({
@@ -66,12 +67,12 @@ class _PromoCarouselState extends State<PromoCarousel> {
 
   List<_PromoBannerData> _banners(BuildContext context) => [
       _PromoBannerData(
-        title: 'Non buyurtma',
+        title: context.tr('home_module_bread'),
         imagePath: 'assets/images/banners/banner_bread.jpg',
         onTap: widget.onNonTap,
       ),
       _PromoBannerData(
-        title: 'Gilam yuvish',
+        title: context.tr('home_module_carpet'),
         imagePath: 'assets/images/banners/banner_carpet_wash.jpg',
         onTap: widget.onCarpetWashTap,
       ),
@@ -81,28 +82,28 @@ class _PromoCarouselState extends State<PromoCarousel> {
         onTap: widget.onMilkTap,
       ),
       _PromoBannerData(
-        title: 'Taom buyurtma',
+        title: context.tr('home_module_food'),
         imagePath: 'assets/images/banners/banner_food.jpg',
         onTap: widget.onTaomTap,
       ),
       _PromoBannerData(
-        title: 'Online bozor',
+        title: context.tr('home_module_cheap_products'),
         imagePath: 'assets/images/banners/banner_market.jpg',
         onTap: widget.onBozorTap,
       ),
       _PromoBannerData(
-        title: 'Mahalliy taksi',
+        title: context.tr('home_module_local'),
         imagePath: 'assets/images/banners/banner_local_taxi.jpg',
         onTap: widget.onLocalTaxiTap,
       ),
       _PromoBannerData(
-        title: 'Marshrut taksi',
+        title: context.tr('home_module_marshrut'),
         imagePath: 'assets/images/banners/banner_marshrut.jpg',
         onTap: widget.onMarshrutTap,
         darkText: true,
       ),
       _PromoBannerData(
-        title: 'Shaharlararo',
+        title: context.tr('home_module_intercity'),
         imagePath: 'assets/images/banners/banner_intercity.jpg',
         onTap: widget.onIntercityTap,
       ),
@@ -341,7 +342,7 @@ class _CtaButton extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'Buyurtma berish →',
+              context.tr('home_promo_order_cta'),
               strutStyle: _tightStrut,
               style: TextStyle(
                 fontSize: 11,

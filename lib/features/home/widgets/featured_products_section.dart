@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../services/featured_products_service.dart';
@@ -48,7 +49,7 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Hozircha tavsiyalar yo‘q',
+              context.tr('home_featured_empty'),
               style: TextStyle(
                 fontSize: 12,
                 color: _sectionMuted.withValues(alpha: 0.9),
@@ -60,9 +61,9 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Tavsiya etamiz',
-              style: TextStyle(
+            Text(
+              context.tr('home_featured_title'),
+              style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: _titleDark,
@@ -132,8 +133,10 @@ class _FeaturedProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priceText =
-        '${NumberFormat('#,###').format(product.price)} so\'m';
+    final priceText = context.tr('price_sum_short').replaceAll(
+          '{price}',
+          NumberFormat('#,###').format(product.price),
+        );
 
     return Material(
       color: Colors.transparent,

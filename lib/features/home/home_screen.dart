@@ -71,20 +71,28 @@ double _sectionGap(BuildContext context, {required double base}) {
   return (base * scale * heightFactor).clamp(6.0, base);
 }
 
-String _formatBalance(int balance) =>
-    '${NumberFormat('#,###').format(balance)} so\'m';
+String _formatBalance(BuildContext context, int balance) =>
+    context.tr('home_amount_with_currency').replaceAll(
+      '{amount}',
+      NumberFormat('#,###').format(balance),
+    ).replaceAll('{currency}', context.tr('currency_sum'));
 
-String _lastTxAmount(WalletLedgerEntry? entry) {
+String _lastTxAmount(BuildContext context, WalletLedgerEntry? entry) {
   if (entry == null) return '—';
   final sign = entry.amount >= 0 ? '+' : '−';
-  return '$sign${NumberFormat('#,###').format(entry.amount.abs())} so\'m';
+  final amount = NumberFormat('#,###').format(entry.amount.abs());
+  return '$sign$amount ${context.tr('currency_sum')}';
 }
 
-String _todayText() {
+String _todayText(BuildContext context) {
   final now = DateTime.now();
   final d = now.day.toString().padLeft(2, '0');
   final m = now.month.toString().padLeft(2, '0');
-  return '$d.$m.${now.year} yil';
+  return context
+      .tr('home_date_today')
+      .replaceAll('{day}', d)
+      .replaceAll('{month}', m)
+      .replaceAll('{year}', '${now.year}');
 }
 
 /// Bosh ekran — yangi layout (hamyon, taksi, xizmatlar).
@@ -247,20 +255,22 @@ class _HomeViewState extends State<_HomeView> {
     await _push(screen);
   }
 
-  String _displayName(UserModel? user, HomeController home) {
+  String _displayName(BuildContext context, UserModel? user, HomeController home) {
     final name = (user?.name ?? home.name).trim();
     final phone = user?.phone.trim().isNotEmpty == true
         ? user!.phone
         : home.phone;
-    if (name.isEmpty) return phone.isNotEmpty ? phone : 'Foydalanuvchi';
-    return '$name aka';
+    if (name.isEmpty) {
+      return phone.isNotEmpty ? phone : context.tr('user_default_name');
+    }
+    return context.tr('home_display_name_aka').replaceAll('{name}', name);
   }
 
   void _showTezKundaSnack() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tez kunda'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(context.tr('home_coming_soon')),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -337,11 +347,14 @@ class _HomeViewState extends State<_HomeView> {
                                     height: _sectionGap(context, base: 10)),
                                 WalletCard(
                                   balance: _formatBalance(
-                                      user?.bonusBalance ?? 0),
-                                  lastTxAmount: _lastTxAmount(lastEntry),
-                                  displayName: _displayName(user, home),
-                                  dateText: _todayText(),
-                                  locationText: 'Gurlan, Xorazm',
+                                      context, user?.bonusBalance ?? 0),
+                                  lastTxAmount:
+                                      _lastTxAmount(context, lastEntry),
+                                  displayName:
+                                      _displayName(context, user, home),
+                                  dateText: _todayText(context),
+                                  locationText:
+                                      context.tr('home_location_gurlan'),
                                   lastTxIsCredit: lastEntry == null
                                       ? null
                                       : lastEntry.amount >= 0,
@@ -576,37 +589,37 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
   Widget build(BuildContext context) {
     final items = <_GridItemData>[
       _GridItemData('assets/images/services/service_taxi_local.png',
-          'Mahalliy TAKSI', widget.onLocal),
+          context.tr('home_module_local'), widget.onLocal),
       _GridItemData('assets/images/services/service_taxi_intercity.png',
-          'Shaharlararo TAKSI', widget.onIntercity),
+          context.tr('home_module_intercity'), widget.onIntercity),
       _GridItemData('assets/images/services/service_marshrut.png',
-          'Marshrut TAKSI', widget.onMarshrut),
+          context.tr('home_module_marshrut'), widget.onMarshrut),
       _GridItemData('assets/images/services/service_courier.png',
-          'Kuryer xizmati', widget.onCourier),
+          context.tr('home_module_courier'), widget.onCourier),
       _GridItemData('assets/images/services/service_sell.png',
           context.tr('home_module_sell'), widget.onSell),
       _GridItemData('assets/images/services/service_food.png',
-          'Taom buyurtma', widget.onFood),
+          context.tr('home_module_food'), widget.onFood),
       _GridItemData('assets/images/services/service_jobs.png',
           context.tr('home_module_jobs'), widget.onJobAd),
       _GridItemData('assets/images/services/service_market.png',
           context.tr('home_module_cheap_products'), widget.onOnlineMarket),
       _GridItemData('assets/images/services/service_bread.png',
-          'Non buyurtma', widget.onNon),
+          context.tr('home_module_bread'), widget.onNon),
       _GridItemData('assets/images/services/service_carpet_wash.png',
-          'Gilam yuvish', widget.onCarpetWash),
+          context.tr('home_module_carpet'), widget.onCarpetWash),
       _GridItemData('assets/images/services/service_relatives.png',
-          'Mening yaqinlarim', widget.onCircles),
+          context.tr('home_module_relatives'), widget.onCircles),
       _GridItemData(null, context.tr('dating_short_label'), widget.onDating,
-          emoji: '❤️'),
+          emoji: '❤️', iconScale: 0.85),
       _GridItemData('assets/images/services/service_milk.png',
           context.tr('milk_short_label'), widget.onSut),
       _GridItemData('assets/images/services/service_tire.png',
-          'Avto Shina', widget.onTire),
+          context.tr('home_module_tire'), widget.onTire),
       _GridItemData('assets/images/services/service_car_wash.png',
-          'Avto yuvish', widget.onCarWash),
+          context.tr('home_module_car_wash'), widget.onCarWash),
       _GridItemData('assets/images/services/service_oil_change.png',
-          'Moy almashtirish', widget.onOilChange),
+          context.tr('home_module_oil_change'), widget.onOilChange),
     ];
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);
@@ -699,12 +712,13 @@ class _PageDots extends StatelessWidget {
 
 class _GridItemData {
   const _GridItemData(this.image, this.label, this.onTap,
-      {this.icon, this.emoji});
+      {this.icon, this.emoji, this.iconScale = 1.0});
   final String? image;
   final String label;
   final VoidCallback onTap;
   final IconData? icon;
   final String? emoji;
+  final double iconScale;
 }
 
 class _GridTile extends StatefulWidget {
@@ -731,6 +745,7 @@ class _GridTileState extends State<_GridTile> {
   Widget build(BuildContext context) {
     final iconSize = _scaled(context, 52).clamp(44.0, 56.0);
     final labelSize = _scaled(context, 10.5).clamp(9.5, 10.5);
+    final glyphSize = iconSize * 0.74 * widget.data.iconScale;
 
     return Material(
       color: Colors.transparent,
@@ -748,13 +763,15 @@ class _GridTileState extends State<_GridTile> {
                 width: iconSize,
                 height: iconSize,
                 child: widget.data.emoji != null
-                    ? Text(
-                        widget.data.emoji!,
-                        style: TextStyle(fontSize: iconSize * 0.74),
+                    ? Center(
+                        child: Text(
+                          widget.data.emoji!,
+                          style: TextStyle(fontSize: glyphSize),
+                        ),
                       )
                     : widget.data.icon != null
                         ? Icon(widget.data.icon,
-                            size: iconSize * 0.74, color: _brandGreen)
+                            size: glyphSize, color: _brandGreen)
                         : Image.asset(
                             widget.data.image!,
                             fit: BoxFit.contain,
@@ -836,23 +853,23 @@ class _HomeBottomNav extends StatelessWidget {
             children: [
               _NavItem(
                 icon: _IconKind.home,
-                label: 'Bosh sahifa',
+                label: context.tr('bottom_home'),
                 active: true,
                 onTap: () {},
               ),
               _NavItem(
                 icon: _IconKind.package,
-                label: 'Buyurtmalar',
+                label: context.tr('bottom_orders'),
                 onTap: onOrders,
               ),
               _NavItem(
                 icon: _IconKind.wallet,
-                label: 'Hamyon',
+                label: context.tr('bottom_wallet'),
                 onTap: onWallet,
               ),
               _NavItem(
                 icon: _IconKind.user,
-                label: 'Profil',
+                label: context.tr('bottom_profile'),
                 onTap: onProfile,
               ),
             ],

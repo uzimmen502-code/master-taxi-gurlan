@@ -878,20 +878,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
             ),
           ),
         ],
-        TextButton.icon(
-          onPressed: c.isSearching
-              ? null
-              : () async {
-                  final from = c.fromMfy;
-                  final to = c.toMfy;
-                  c.setFromMfy(to);
-                  c.setToMfy(from);
-                  setState(() => _directionChanged = false);
-                  await _runSearch(c);
-                },
-          icon: const Icon(Icons.swap_vert),
-          label: Text(context.tr('swap_direction')),
-        ),
         const SizedBox(height: 8),
         if (_reminderScheduledLabel(c) != null)
           Padding(
@@ -1031,57 +1017,56 @@ class _SearchPanel extends StatelessWidget {
     final canSearch = fromMfy.isNotEmpty && toMfy.isNotEmpty;
     return Container(
       color: _MarshrutTaxiViewState._accent,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
             elevation: 2,
             shadowColor: Colors.black26,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             color: Colors.white,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-              child: Column(
+              padding: const EdgeInsets.fromLTRB(8, 2, 4, 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  MarshrutRouteField(
-                    hint: context.tr('from'),
-                    value: fromMfy,
-                    icon: Icons.trip_origin,
-                    iconColor: AppColors.primaryMid,
-                    onTap: onFromTap,
-                    onClear: onFromClear,
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Divider(
-                          color: Colors.grey.shade300,
-                          height: 1,
+                  Expanded(
+                    child: Column(
+                      children: [
+                        MarshrutRouteField(
+                          hint: context.tr('from'),
+                          value: fromMfy,
+                          icon: Icons.trip_origin,
+                          iconColor: AppColors.primaryMid,
+                          onTap: onFromTap,
+                          onClear: onFromClear,
+                          compact: true,
                         ),
-                      ),
-                      _SwapDirectionPill(onTap: onSwapDirection),
-                      Expanded(
-                        child: Divider(
-                          color: Colors.grey.shade300,
-                          height: 1,
+                        Divider(color: Colors.grey.shade300, height: 1),
+                        MarshrutRouteField(
+                          hint: context.tr('to'),
+                          value: toMfy,
+                          icon: Icons.location_on,
+                          iconColor: Colors.redAccent,
+                          onTap: onToTap,
+                          onClear: onToClear,
+                          compact: true,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  MarshrutRouteField(
-                    hint: context.tr('to'),
-                    value: toMfy,
-                    icon: Icons.location_on,
-                    iconColor: Colors.redAccent,
-                    onTap: onToTap,
-                    onClear: onToClear,
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, right: 2),
+                    child: Center(
+                      child: _SwapDirectionButton(onTap: onSwapDirection),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           MarshrutDirectionChips(
             recentRoutes: recentRoutes,
             popularRoutes: MarshrutPopularRoutes.routes,
@@ -1090,14 +1075,14 @@ class _SearchPanel extends StatelessWidget {
             onRouteSelected: onRouteSelected,
           ),
           if (isSearching) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.white24,
               color: Colors.white,
             ),
           ] else if (canSearch && onManualSearch != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -1116,35 +1101,31 @@ class _SearchPanel extends StatelessWidget {
   }
 }
 
-/// Qayerdan ↔ Qayerga — gorizontal pill, «Qayerga» qatori markazida.
-class _SwapDirectionPill extends StatelessWidget {
-  const _SwapDirectionPill({required this.onTap});
+/// Yo'nalish almashtirish — o'ng tomonda, yashil dizayn.
+class _SwapDirectionButton extends StatelessWidget {
+  const _SwapDirectionButton({required this.onTap});
 
-  static const Color _swapOrange = Color(0xFFFF8C00);
-  static const double _height = 34;
-  static const double _minWidth = 72;
+  static const double _size = 36;
 
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _swapOrange,
-      elevation: 2,
-      shadowColor: _swapOrange.withValues(alpha: 0.4),
-      borderRadius: BorderRadius.circular(_height / 2),
+      color: AppColors.primary.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(_height / 2),
+        borderRadius: BorderRadius.circular(10),
         child: Tooltip(
           message: context.tr('switch_direction'),
-          child: const SizedBox(
-            height: _height,
-            width: _minWidth,
+          child: SizedBox(
+            width: _size,
+            height: _size,
             child: Icon(
               Icons.swap_vert,
-              color: Colors.white,
-              size: 20,
+              color: AppColors.primaryDark,
+              size: 22,
             ),
           ),
         ),

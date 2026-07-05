@@ -12,6 +12,7 @@ class MarshrutRouteField extends StatelessWidget {
     required this.iconColor,
     required this.onTap,
     this.onClear,
+    this.compact = false,
   });
 
   final String hint;
@@ -20,18 +21,22 @@ class MarshrutRouteField extends StatelessWidget {
   final Color iconColor;
   final VoidCallback onTap;
   final VoidCallback? onClear;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final hasValue = value.isNotEmpty;
+    final vPad = compact ? 7.0 : 10.0;
+    final iconSize = compact ? 18.0 : 20.0;
+    final fontSize = compact ? AppText.bodySmall : AppText.bodyMedium;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 4, vertical: vPad),
         child: Row(
           children: [
-            Icon(icon, color: iconColor, size: 20),
+            Icon(icon, color: iconColor, size: iconSize),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -39,7 +44,7 @@ class MarshrutRouteField extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: AppText.bodyMedium,
+                  fontSize: fontSize,
                   fontWeight: hasValue ? FontWeight.w600 : FontWeight.normal,
                   color: hasValue ? Colors.black87 : Colors.grey.shade600,
                 ),
@@ -48,12 +53,16 @@ class MarshrutRouteField extends StatelessWidget {
             if (hasValue && onClear != null)
               IconButton(
                 onPressed: onClear,
-                icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                icon: Icon(Icons.close, size: compact ? 16 : 18, color: Colors.grey),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: BoxConstraints(
+                  minWidth: compact ? 28 : 32,
+                  minHeight: compact ? 28 : 32,
+                ),
               )
             else
-              Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+              Icon(Icons.chevron_right,
+                  color: Colors.grey.shade400, size: compact ? 18 : 20),
           ],
         ),
       ),

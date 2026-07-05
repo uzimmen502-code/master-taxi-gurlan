@@ -39,10 +39,13 @@ async function api(method, url, body) {
   console.log('Publishing release cloud.firestore...');
   const release = await api(
     'PATCH',
-    `https://firebaserules.googleapis.com/v1/projects/${projectId}/releases/cloud.firestore?updateMask=rulesetName`,
+    `https://firebaserules.googleapis.com/v1/projects/${projectId}/releases/cloud.firestore`,
     {
-      name: `projects/${projectId}/releases/cloud.firestore`,
-      rulesetName: ruleset.name,
+      release: {
+        name: `projects/${projectId}/releases/cloud.firestore`,
+        rulesetName: ruleset.name,
+      },
+      updateMask: 'rulesetName',
     },
   );
   console.log('Release OK:', release.name || 'cloud.firestore');

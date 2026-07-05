@@ -4617,6 +4617,171 @@ exports.adminResolveJobComplaint = functions.https.onCall(async (data, context) 
   return { ok: true, complaintId };
 });
 
+const ADMIN_MARKET_AD_STATUSES = new Set(['active', 'inactive']);
+
+function isMarketAdDataJs(d) {
+  return String((d && d.type) || '') === 'cheap_product';
+}
+
+async function getMarketAdOrThrow(adId) {
+  const ref = db.collection('ads').doc(adId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Ad not found');
+  }
+  if (!isMarketAdDataJs(snap.data())) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Not a market ad');
+  }
+  return { ref, snap };
+}
+
+async function deleteMarketAdStorageImages(imageUrls) {
+  const bucket = admin.storage().bucket();
+  for (const raw of imageUrls || []) {
+    try {
+      const url = String(raw || '');
+      const m = url.match(/\/o\/([^?]+)/);
+      if (!m) continue;
+      const path = decodeURIComponent(m[1]);
+      await bucket.file(path).delete();
+    } catch (_) { /* best-effort */ }
+  }
+}
+
+function marketTsToIso(v) {
+  if (!v || typeof v.toDate !== 'function') return null;
+  return v.toDate().toISOString();
+}
+
+function serializeMarketAdForAdmin(doc) {
+  const d = doc.data() || {};
+  const title = String(d.title || '');
+  return {
+    id: doc.id,
+    ownerId: String(d.ownerId || ''),
+    title,
+    titleLower: String(d.titleLower || title.toLowerCase()),
+    description: String(d.description || ''),
+    price: Number(d.price) || 0,
+    phone: String(d.phone || ''),
+    sellerName: String(d.sellerName || ''),
+    imageUrls: Array.isArray(d.imageUrls) ? d.imageUrls : [],
+    status: String(d.status || 'active'),
+    views: Number(d.views) || 0,
+    createdAt: marketTsToIso(d.createdAt),
+    updatedAt: marketTsToIso(d.updatedAt),
+    publishedAt: marketTsToIso(d.publishedAt),
+    adminNote: String(d.adminNote || ''),
+    moderatedAt: marketTsToIso(d.moderatedAt),
+    moderatedBy: String(d.moderatedBy || ''),
+  };
+}
+
+/** Admin web: Onlayn BOZOR ro'yxati (Firestore rules custom token bilan emas). */
+exports.adminListMarketAds = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const snap = await db.collection('ads')
+    .where('type', '==', 'cheap_product')
+    .limit(500)
+    .get();
+  const ads = snap.docs.map(serializeMarketAdForAdmin);
+  ads.sort((a, b) => {
+    const ap = Date.parse(a.publishedAt || a.createdAt || 0) || 0;
+    const bp = Date.parse(b.publishedAt || b.createdAt || 0) || 0;
+    return bp - ap;
+  });
+  return { ads };
+});
+
+/** Admin web: Onlayn BOZOR e'lonini o'chirish. */
+exports.adminDeleteMarketAd = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  const { ref, snap } = await getMarketAdOrThrow(adId);
+  const existing = snap.data() || {};
+  await ref.delete();
+  await deleteMarketAdStorageImages(existing.imageUrls || []);
+  return { ok: true, adId };
+});
+
+/** Admin web: Onlayn BOZOR status (active/inactive). */
+exports.adminUpdateMarketAdStatus = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  const status = String(data.status || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  if (!ADMIN_MARKET_AD_STATUSES.has(status)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
+  }
+  const { ref } = await getMarketAdOrThrow(adId);
+  const patch = {
+    status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedBy: adminDocId,
+  };
+  if (status === 'active') {
+    patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+  await ref.update(patch);
+  return { ok: true, adId, status };
+});
+
+/** Admin web: Onlayn BOZOR e'lonini tahrirlash. */
+exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const adId = String(data.adId || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  const { ref, snap } = await getMarketAdOrThrow(adId);
+  const existing = snap.data() || {};
+  const title = String(data.title != null ? data.title : (existing.title || '')).trim();
+  if (!title) {
+    throw new functions.https.HttpsError('invalid-argument', 'title required');
+  }
+  const description = String(
+    data.description != null ? data.description : (existing.description || ''),
+  ).trim();
+  const priceRaw = data.price != null ? data.price : existing.price;
+  const price = Math.max(0, Math.floor(Number(priceRaw) || 0));
+  const phone = String(
+    data.phone != null ? data.phone : (existing.phone || ''),
+  ).trim();
+  const sellerName = String(
+    data.sellerName != null ? data.sellerName : (existing.sellerName || ''),
+  ).trim();
+  const patch = {
+    title,
+    titleLower: title.toLowerCase(),
+    description,
+    price,
+    phone,
+    sellerName,
+    adminNote: String(
+      data.adminNote != null ? data.adminNote : (existing.adminNote || ''),
+    ).trim(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    moderatedBy: adminDocId,
+  };
+  const status = String(data.status || '').trim();
+  if (status && ADMIN_MARKET_AD_STATUSES.has(status)) {
+    patch.status = status;
+    if (status === 'active') {
+      patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+  }
+  await ref.update(patch);
+  return { ok: true, adId };
+});
+
 const ADMIN_ORDER_STATUSES = new Set([
   'new', 'accepted', 'ready', 'in_delivery', 'delivered', 'rejected',
 ]);
@@ -9615,7 +9780,6 @@ exports.ensureMyTree = functions.https.onCall(async (data, context) => {
     const ref = db.collection('tree_persons').doc(doc.id);
     batch.set(ref, {
       ...treeNodeFromRelative(doc.data() || {}),
-      claimedBy: null,
       ownerUid: uid,
       componentId,
       createdBy: uid,
@@ -9666,12 +9830,24 @@ exports.onRelativePersonWrite = functions.firestore
 
     if (!change.after.exists) {
       // O'chirildi. Agar merge qilingan bo'lsa (redirect bor) — omon qolgan
-      // tugunga tegmaymiz. Aks holda egasiniki (claim'siz) bo'lsa o'chiramiz.
+      // tugunga tegmaymiz. Aks holda egasining shaxsiy tugunini o'chiramiz.
       const redir = await db.collection('tree_redirects').doc(pid).get();
       if (redir.exists) return null;
       const cur = await db.collection('tree_persons').doc(pid).get();
-      if (cur.exists && !cur.data().claimedBy) {
-        await db.collection('tree_persons').doc(pid).delete();
+      if (cur.exists) {
+        const node = cur.data() || {};
+        const owner = node.ownerUid || '';
+        const claimed = node.claimedBy || null;
+        if (owner === uid && !claimed) {
+          await db.collection('tree_persons').doc(pid).delete();
+        } else if (owner === uid && claimed && claimed !== uid) {
+          // Boshqa hisobga ulangan — daraxtda qoladi, lekin shaxsiy egalik
+          // belgisini olib tashlaymiz (qayta relatives'ga ko'chmasin).
+          await db.collection('tree_persons').doc(pid).set({
+            ownerUid: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
       }
       return null;
     }
@@ -10307,6 +10483,85 @@ exports.undoTreeOperation = functions.https.onCall(async (data, context) => {
     undoneAt: admin.firestore.FieldValue.serverTimestamp(),
     undoneBy: uid,
   }, { merge: true });
+
+  return { ok: true };
+});
+
+/// Shaxsiy qarindoshni o'chirish — server (Admin SDK), subcollection + tree tozalash.
+exports.deleteRelativePerson = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  const personId = String(data.personId || '');
+  if (!personId) {
+    throw new functions.https.HttpsError('invalid-argument', 'personId required');
+  }
+
+  const ref = db.collection('relatives').doc(uid).collection('people').doc(personId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: true, alreadyDeleted: true };
+
+  const row = snap.data() || {};
+  if (row.isSelf === true) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'men yozuvini ochirish mumkin emas');
+  }
+
+  const photosSnap = await ref.collection('photos').get();
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async () => {
+    if (ops > 0) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  };
+  for (const p of photosSnap.docs) {
+    batch.delete(p.ref);
+    ops++;
+    if (ops >= 400) await flush();
+  }
+  batch.delete(ref);
+  ops++;
+  await flush();
+
+  // tree_persons — onRelativePersonWrite ham ishlaydi; bu yerda aniq tozalash.
+  const redir = await db.collection('tree_redirects').doc(personId).get();
+  if (!redir.exists) {
+    const nodeSnap = await db.collection('tree_persons').doc(personId).get();
+    if (nodeSnap.exists) {
+      const node = nodeSnap.data() || {};
+      const owner = node.ownerUid || '';
+      const claimed = node.claimedBy || null;
+      if (owner === uid && !claimed) {
+        await db.collection('tree_persons').doc(personId).delete();
+      } else if (owner === uid && claimed && claimed !== uid) {
+        await db.collection('tree_persons').doc(personId).set({
+          ownerUid: admin.firestore.FieldValue.delete(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    }
+  }
+
+  // Boshqa qarindoshlardagi osilib qolgan havolalar.
+  const peopleSnap = await db.collection('relatives').doc(uid)
+    .collection('people').get();
+  batch = db.batch();
+  ops = 0;
+  for (const doc of peopleSnap.docs) {
+    const d = doc.data() || {};
+    const upd = {};
+    if (d.fatherId === personId) upd.fatherId = null;
+    if (d.motherId === personId) upd.motherId = null;
+    if (d.spouseId === personId) upd.spouseId = null;
+    if (Object.keys(upd).length) {
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(doc.ref, upd, { merge: true });
+      ops++;
+      if (ops >= 400) await flush();
+    }
+  }
+  if (ops > 0) await batch.commit();
 
   return { ok: true };
 });

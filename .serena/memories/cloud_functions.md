@@ -99,7 +99,8 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - respondDatingInterest — accept/decline interest → match on accept.
 
 ## Family Tree (Nasab daraxti — global graph)
-- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify.
+- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify (backfill no longer wipes `claimedBy`).
+- deleteRelativePerson — owner deletes `relatives/people/{id}` (+ album photos, tree cleanup, unlinks parent/spouse refs); client list delete uses this CF.
 - onRelativePersonWrite (trigger) — mirror `relatives/{uid}/people/{pid}` → `tree_persons` (redirect-aware); sync phone watcher index + notify owner if phone already registered.
 - onUserProfileReady (trigger `users/{uid}`) — first profile complete (`name`) → notify phone watchers (owner A) + new user B (`relative_waiting`).
 - sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link).

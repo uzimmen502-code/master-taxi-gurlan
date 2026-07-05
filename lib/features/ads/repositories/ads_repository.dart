@@ -227,4 +227,17 @@ class AdsRepository {
     }
     return filtered;
   }
+
+  /// Admin web — barcha Onlayn BOZOR e'lonlari (limit 500).
+  Stream<List<AdModel>> watchAllForAdmin() {
+    return _cheapQuery().limit(500).snapshots().map((snap) {
+      final list = snap.docs.map(AdModel.fromFirestore).toList();
+      list.sort((a, b) {
+        final ap = a.publishedAt ?? a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bp = b.publishedAt ?? b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bp.compareTo(ap);
+      });
+      return list;
+    });
+  }
 }

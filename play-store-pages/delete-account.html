@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AVA Gurlan — Ҳисобни ўчириш</title>
+  <meta name="description" content="AVA Gurlan ilovasida hisob va shaxsiy ma'lumotlarni o'chirish so'rovi">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f7f4;
+      color: #1a2e1a;
+      line-height: 1.65;
+    }
+    header {
+      background: linear-gradient(135deg, #14532D 0%, #0E7A38 55%, #2E9E57 100%);
+      color: #fff;
+      padding: 32px 20px 28px;
+      text-align: center;
+    }
+    header h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    header p { margin: 0; opacity: 0.9; font-size: 0.95rem; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    }
+    h2 { font-size: 1.1rem; color: #14532D; margin: 0 0 12px; }
+    ol, ul { padding-left: 1.25rem; margin: 8px 0; }
+    li { margin-bottom: 8px; }
+    .meta { font-size: 0.85rem; color: #666; }
+    .highlight {
+      background: #e8f5e9;
+      border-left: 4px solid #0E7A38;
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+    a { color: #0E7A38; }
+    footer { text-align: center; font-size: 0.8rem; color: #888; padding: 0 16px 32px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 8px; }
+    th, td { border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; }
+    [lang="ru"] { display: none; }
+    body.show-ru [lang="uz-Cyrl"] { display: none; }
+    body.show-ru [lang="ru"] { display: block; }
+    .lang-tabs { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+    .lang-tabs a {
+      color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.5); font-size: 0.85rem;
+    }
+    .lang-tabs a:hover { background: rgba(255,255,255,.15); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AVA Gurlan</h1>
+    <p>Ҳисобни ўчириш · Удаление аккаунта</p>
+    <nav class="lang-tabs" aria-label="Til">
+      <a href="#" onclick="setLang('uz'); return false;">Ўзбекча</a>
+      <a href="#" onclick="setLang('ru'); return false;">Русский</a>
+    </nav>
+  </header>
+
+  <div class="wrap">
+    <div lang="uz-Cyrl">
+      <div class="card">
+        <p class="meta"><strong>Илова:</strong> AVA Gurlan · <strong>Ишлаб чиқарувчи:</strong> AVA Gurlan / yourmastertaxi@gmail.com</p>
+        <p>
+          Ушбу саҳифа <strong>AVA Gurlan</strong> мобил иловаси фойдаланувчилари учун
+          ҳисоб ва шaxsiy ma'lumotlarni o'chirish so'rovini yuborish tartibini tushuntiradi.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Қандай сўров юбориш керак (қадамма-қадам)</h2>
+        <ol>
+          <li><strong>AVA Gurlan</strong> иловасини очинг.</li>
+          <li>Пастки менюдан <strong>«Профил»</strong> бўлимига киринг.</li>
+          <li>Ўз телефон рақамингизни (роʻйхатдан ўтgan raqam) текширинг.</li>
+          <li>
+            <strong>yourmastertaxi@gmail.com</strong> манзилига хат юборинг ёки
+            илова ичидаги <strong>«Админ билан чат»</strong> орқали мурожаат қилинг.
+          </li>
+          <li>Хабарда қуйидагиларни ёзинг:
+            <ul>
+              <li>«Ҳисобимни ўчиришни сўрайман»</li>
+              <li>Рўйхатдан ўтgan телефон рақамингиз (+998…)</li>
+              <li>Исмингиз (агар профилда бўлса)</li>
+            </ul>
+          </li>
+          <li>24–72 соат ичида сўровингиз кўриб чиқилади ва жавоб берилади.</li>
+        </ol>
+        <div class="highlight">
+          <strong>Электрон почта:</strong>
+          <a href="mailto:yourmastertaxi@gmail.com?subject=AVA%20Gurlan%20-%20Hisobni%20o%27chirish">yourmastertaxi@gmail.com</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Қайси маълумотлар ўчирилади</h2>
+        <table>
+          <tr><th>Маълумот</th><th>Ҳолат</th></tr>
+          <tr><td>Профил (исм, телефон, манзил, жинс, туғилган сана)</td><td><strong>Ўчирилади</strong></td></tr>
+          <tr><td>Профил расми</td><td><strong>Ўчирилади</strong></td></tr>
+          <tr><td>Firebase Auth ҳисоби</td><td><strong>Ўчирилади / бекор қилинади</strong></td></tr>
+          <tr><td>Қурилма богʻланиши (device binding)</td><td><strong>Ўчирилади</strong></td></tr>
+          <tr><td>Кошелёк баланси (bonusBalance)</td><td><strong>Ўчирилади</strong> (qonuniy talablar bundan mustasno)</td></tr>
+          <tr><td>Танишув профили ва расмлар</td><td><strong>Ўчирилади</strong></td></tr>
+          <tr><td>Давра аъзолиги (shaxsiy postlar)</td><td><strong>Ўчирилади</strong> ёки anonimlashtiriladi</td></tr>
+          <tr><td>Админ билан чат хабарлари</td><td><strong>Ўчирилади</strong> (texnik loglar cheklangan muddat saqlanishi mumkin)</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Қайси маълумотлар сақланиши мумкин</h2>
+        <table>
+          <tr><th>Маълумот</th><th>Сабаб / муддат</th></tr>
+          <tr><td>Буюртма ва тўлов тарихи (такси, нон, бозор)</td><td>Бухгалтерия ва қонуний талаблар — <strong>3 йилгача</strong> (anonim yoki telefon bogʻliqligi olib tashlangan holda)</td></tr>
+          <tr><td>Ҳисоб-китоб / settlement yozuvlari</td><td>Moliyaviy audit — <strong>3 йилгача</strong></td></tr>
+          <tr><td>Хавфsizlik va firibgarlik loglari</td><td><strong>12 ойгача</strong></td></tr>
+          <tr><td>Агрегат статистика (shaxssiz)</td><td>Cheklanmagan (shaxs aniqlanmaydi)</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Муддатлар</h2>
+        <ul>
+          <li><strong>Сўров кўриб чиқиш:</strong> 24–72 соат (иш кунлари)</li>
+          <li><strong>Асосий ўчириш:</strong> tasdiqlangandan keyin 7 кун ичида</li>
+          <li><strong>Зaxира nusxalar:</strong> texnik zaxiralarda 30 кунгача, soʻng butunlay oʻchiriladi</li>
+        </ul>
+      </div>
+    </div>
+
+    <div lang="ru">
+      <div class="card">
+        <p class="meta"><strong>Приложение:</strong> AVA Gurlan · <strong>Разработчик:</strong> AVA Gurlan / yourmastertaxi@gmail.com</p>
+        <p>
+          На этой странице описано, как пользователи приложения <strong>AVA Gurlan</strong>
+          могут запросить удаление аккаунта и связанных персональных данных.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Как подать запрос (пошагово)</h2>
+        <ol>
+          <li>Откройте приложение <strong>AVA Gurlan</strong>.</li>
+          <li>Перейдите в раздел <strong>«Профиль»</strong> (нижнее меню).</li>
+          <li>Проверьте номер телефона, с которым вы зарегистрированы.</li>
+          <li>
+            Напишите на <strong>yourmastertaxi@gmail.com</strong> или обратитесь через
+            <strong>«Чат с админом»</strong> в приложении.
+          </li>
+          <li>Укажите в сообщении:
+            <ul>
+              <li>«Прошу удалить мой аккаунт»</li>
+              <li>Номер телефона (+998…)</li>
+              <li>Имя из профиля (если есть)</li>
+            </ul>
+          </li>
+          <li>Запрос рассматривается в течение <strong>24–72 часов</strong>.</li>
+        </ol>
+        <div class="highlight">
+          <strong>Email:</strong>
+          <a href="mailto:yourmastertaxi@gmail.com?subject=AVA%20Gurlan%20-%20Account%20deletion">yourmastertaxi@gmail.com</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Какие данные удаляются</h2>
+        <table>
+          <tr><th>Данные</th><th>Статус</th></tr>
+          <tr><td>Профиль (имя, телефон, адрес, пол, дата рождения)</td><td><strong>Удаляются</strong></td></tr>
+          <tr><td>Фото профиля</td><td><strong>Удаляется</strong></td></tr>
+          <tr><td>Аккаунт Firebase Auth</td><td><strong>Удаляется / деактивируется</strong></td></tr>
+          <tr><td>Привязка устройства</td><td><strong>Удаляется</strong></td></tr>
+          <tr><td>Баланс кошелька</td><td><strong>Удаляется</strong> (кроме случаев, предусмотренных законом)</td></tr>
+          <tr><td>Профиль знакомств и фото</td><td><strong>Удаляются</strong></td></tr>
+          <tr><td>Участие в кругах (личные посты)</td><td><strong>Удаляются</strong> или анонимизируются</td></tr>
+          <tr><td>Чат с админом</td><td><strong>Удаляется</strong> (тех. логи могут храниться ограниченно)</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Какие данные могут сохраняться</h2>
+        <table>
+          <tr><th>Данные</th><th>Причина / срок</th></tr>
+          <tr><td>История заказов и платежей</td><td>Бухгалтерия и закон — <strong>до 3 лет</strong> (анонимизировано)</td></tr>
+          <tr><td>Записи settlement / учёта</td><td>Финансовый аудит — <strong>до 3 лет</strong></td></tr>
+          <tr><td>Логи безопасности</td><td><strong>До 12 месяцев</strong></td></tr>
+          <tr><td>Агрегированная статистика</td><td>Без привязки к личности</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Сроки</h2>
+        <ul>
+          <li><strong>Рассмотрение запроса:</strong> 24–72 часа (рабочие дни)</li>
+          <li><strong>Основное удаление:</strong> в течение 7 дней после подтверждения</li>
+          <li><strong>Резервные копии:</strong> до 30 дней, затем полное удаление</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p>
+      <a href="privacy.html">Махфийлик сиёсати</a> ·
+      © AVA Gurlan
+    </p>
+  </footer>
+
+  <script>
+    function setLang(code) {
+      document.body.classList.toggle('show-ru', code === 'ru');
+      try { localStorage.setItem('delete_lang', code); } catch (_) {}
+    }
+    try {
+      if (localStorage.getItem('delete_lang') === 'ru') setLang('ru');
+    } catch (_) {}
+  </script>
+</body>
+</html>

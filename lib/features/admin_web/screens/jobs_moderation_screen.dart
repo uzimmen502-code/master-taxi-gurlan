@@ -206,7 +206,7 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Иш топ назорати',
+                'Иш ва хизмат доскаси — назорати',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 3),

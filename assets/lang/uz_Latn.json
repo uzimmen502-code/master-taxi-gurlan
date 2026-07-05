@@ -1,6 +1,5 @@
 {
   "app_name": "AVA Gurlan",
-
   "ok": "OK",
   "cancel": "Bekor qilish",
   "save": "Saqlash",
@@ -18,18 +17,15 @@
   "add": "Qo'shish",
   "selected": "Tanlandi",
   "order": "Buyurtma",
-
   "nav_taxi": "Taksi",
   "nav_intercity": "Sh.Taksi",
   "nav_bread": "Non",
   "nav_food": "Ovqat",
   "nav_profile": "Profil",
-
   "local_taxi": "Mahalliy taksi",
   "intercity_taxi": "Shaharlararo taksi",
   "bread_order": "Non buyurtma",
   "food_order": "Ovqat buyurtma",
-
   "from": "Qaerdan?",
   "to": "Qaerga?",
   "to_optional": "Qaerga? (ixtiyoriy)",
@@ -46,8 +42,7 @@
   "marshrut_driver_accepted": "Haydovchi qabul qildi",
   "cancel_trip": "Bekor qilish",
   "cancel_trip_confirm_title": "Safar bekor qilish",
-  "cancel_trip_confirm_body":
-    "Haydovchi yo'lda. Bekor qilsangiz blok olishingiz mumkin.",
+  "cancel_trip_confirm_body": "Haydovchi yo'lda. Bekor qilsangiz blok olishingiz mumkin.",
   "mark_route_coordinates": "Marshrut nuqtalarini belgilang",
   "mark_start_point": "Boshlang'ich nuqtani belgilang",
   "mark_end_point": "Oxirgi bekatni belgilang",
@@ -58,25 +53,17 @@
   "rate_driver": "Haydovchini baholang",
   "skip": "O'tkazib yuborish",
   "submit": "Yuborish",
-  "marshrut_cancel_after_accept_confirm":
-      "Haydovchi sizni kutmoqda. Haqiqatan bekor qilasizmi?",
-  "marshrut_cancel_warning":
-      "⚠️ Hurmatli yo'lovchi! So'nggi 10 daqiqa ichida 5 marta buyurtma bekor qilindi. Yana 2 marta bekor qilsangiz, tizim 10 daqiqaga vaqtincha foydalanishni cheklaydi. Bu boshqa yo'lovchilar va haydovchilar uchun qulaylik yaratish maqsadida joriy etilgan. Iltimos, buyurtma berishda ehtiyot bo'ling.",
-  "marshrut_block_warning":
-      "Diqqat: yana {n} marta bekor qilsangiz, {minutes} daqiqa bloklanasiz.",
-  "marshrut_block_warning_last":
-      "Diqqat: keyingi bekor qilish {minutes} daqiqa blok berishi mumkin!",
+  "marshrut_cancel_after_accept_confirm": "Haydovchi sizni kutmoqda. Haqiqatan bekor qilasizmi?",
+  "marshrut_cancel_warning": "⚠️ Hurmatli yo'lovchi! So'nggi 10 daqiqa ichida 5 marta buyurtma bekor qilindi. Yana 2 marta bekor qilsangiz, tizim 10 daqiqaga vaqtincha foydalanishni cheklaydi. Bu boshqa yo'lovchilar va haydovchilar uchun qulaylik yaratish maqsadida joriy etilgan. Iltimos, buyurtma berishda ehtiyot bo'ling.",
+  "marshrut_block_warning": "Diqqat: yana {n} marta bekor qilsangiz, {minutes} daqiqa bloklanasiz.",
+  "marshrut_block_warning_last": "Diqqat: keyingi bekor qilish {minutes} daqiqa blok berishi mumkin!",
   "marshrut_block_cleared": "Blok tugadi — endi haydovchi chaqirishingiz mumkin",
-  "marshrut_block_active_banner":
-      "🚫 Hurmatli yo'lovchi! Siz so'nggi 10 daqiqa ichida 7 marta buyurtma bekor qildingiz. Tizimdan foydalanish 10 daqiqaga vaqtincha cheklandi. Bu cheklov boshqa foydalanuvchilar uchun qulaylik yaratish hamda tizim barqarorligini saqlash maqsadida qo'llanildi. Tushunganingiz uchun rahmat!",
-  "marshrut_block_remaining_time":
-      "Qolgan vaqt: {n} daqiqa",
-  "marshrut_block_remaining_banner":
-      "Qabul qilingan safardan keyin bekor: yana {n} marta (keyin {minutes} daq blok)",
+  "marshrut_block_active_banner": "🚫 Hurmatli yo'lovchi! Siz so'nggi 10 daqiqa ichida 7 marta buyurtma bekor qildingiz. Tizimdan foydalanish 10 daqiqaga vaqtincha cheklandi. Bu cheklov boshqa foydalanuvchilar uchun qulaylik yaratish hamda tizim barqarorligini saqlash maqsadida qo'llanildi. Tushunganingiz uchun rahmat!",
+  "marshrut_block_remaining_time": "Qolgan vaqt: {n} daqiqa",
+  "marshrut_block_remaining_banner": "Qabul qilingan safardan keyin bekor: yana {n} marta (keyin {minutes} daq blok)",
   "marshrut_call_system": "Chaqirish",
   "marshrut_call_queue_hint": "7 ta haydovchi — tanlov navbatga ta'sir qilmaydi",
-  "marshrut_call_system_info_dialog":
-    "Tizim haydovchilarni navbati bo'yicha chaqiradi",
+  "marshrut_call_system_info_dialog": "Tizim haydovchilarni navbati bo'yicha chaqiradi",
   "marshrut_select_mfy_and_search": "MFY tanlab qidiring",
   "marshrut_no_drivers_match": "Mos haydovchi topilmadi",
   "marshrut_try_swap_direction": "Haydovchi teskari yo'nalishda bo'lishi mumkin",
@@ -95,8 +82,7 @@
   "marshrut_cancel_waiting": "Bekor qilish",
   "marshrut_cancel_waiting_hint": "Navbat bekor qilinadi — blok hisoblanmaydi",
   "marshrut_all_drivers_no_response_title": "Javob kelmadi",
-  "marshrut_all_drivers_no_response_body":
-      "Navbatdagi haydovchilardan javob kelmadi. Birozdan keyin qayta qidiring.",
+  "marshrut_all_drivers_no_response_body": "Navbatdagi haydovchilardan javob kelmadi. Birozdan keyin qayta qidiring.",
   "marshrut_search_again": "Qayta qidirish",
   "marshrut_offer_pending_title": "Haydovchidan javob kutilmoqda",
   "marshrut_driver_not_active": "Haydovchi hozir faol emas",
@@ -104,8 +90,7 @@
   "eta_minutes_short": "{n} daq",
   "seats_left_short": "{n} o'rin",
   "price_sum_short": "{price} so'm",
-  "marshrut_search_filter_stats":
-      "Jami {total} reys: {offline} oflayn, {full} band, {route} yo'nalish mos emas, {eligible} navbat vaqti kelmagan, {far} uzoq",
+  "marshrut_search_filter_stats": "Jami {total} reys: {offline} oflayn, {full} band, {route} yo'nalish mos emas, {eligible} navbat vaqti kelmagan, {far} uzoq",
   "marshrut_price_per_seat": "Narx: {price} so'm / o'rin",
   "marshrut_taxi_sub": "Boshqalar bilan — arzonroq",
   "gps_denied": "GPS ruxsati berilmadi",
@@ -115,7 +100,6 @@
   "switch_direction_short": "Almashtirish",
   "gps_detected": "📍 Joylashuv aniqlandi",
   "gps_error": "GPS aniqlanmadi",
-
   "searching": "Qidirilmoqda...",
   "request_sent": "So'rovnoma yuborildi",
   "waiting_driver": "Haydovchi kutilmoqda...",
@@ -136,7 +120,6 @@
   "cancel_ride": "BEKOR QILISH",
   "call": "QO'NG'IROQ",
   "driver_arrived": "✅ HAYDOVCHI KELDI!",
-
   "intercity_search": "REYSLARNI QIDIRISH",
   "today": "BUGUN",
   "tomorrow": "ERTAGA",
@@ -153,7 +136,6 @@
   "parcel": "Jo'natma",
   "parcel_accept": "Jo'natma qabul qilaman",
   "parcel_accept_hint": "Yo'lovchilar jo'natma yubora oladi",
-
   "bread": "Non buyurtma",
   "baking_service": "🔥 Yopib berish xizmati",
   "ready_breads": "✅ Tayyor nonlar",
@@ -173,7 +155,6 @@
   "milk": "Sut",
   "baking_price": "Yopish",
   "selling_price": "Sotish",
-
   "food": "Ovqat buyurtma",
   "all_categories": "Barchasi",
   "main_dishes": "Asosiy",
@@ -188,7 +169,6 @@
   "kg": "kg",
   "litre": "litr",
   "piece": "dona",
-
   "profile": "Profil",
   "my_profile": "Mening profilim",
   "name": "Ism",
@@ -208,7 +188,6 @@
   "gallery": "Galereadan",
   "camera": "Kameradan",
   "delete_photo": "Rasmni o'chirish",
-
   "driver_mode": "🚕 Haydovchi rejimi",
   "online": "🟢 Onlayn",
   "offline": "⚫ Offlayn",
@@ -225,7 +204,6 @@
   "total_trips": "📈 Jami",
   "no_requests": "Hozircha so'rovlar yo'q...",
   "enable_online": "So'rovlarni qabul qilish uchun \"Onlayn\" tugmasini bosing",
-
   "onboarding_welcome": "Xush kelibsiz!",
   "onboarding_name": "Ismingizni kiriting",
   "onboarding_phone": "Telefon raqami",
@@ -256,7 +234,6 @@
   "intercity_type_sub": "Shaharlar o'rtasida",
   "continue": "DAVOM ETISH",
   "start": "BOSHLASH 🚀",
-
   "greeting_night": "Yaxshi tun",
   "greeting_morning": "Xayrli tong",
   "greeting_day": "Xayrli kun",
@@ -265,24 +242,20 @@
   "madam": "xonim",
   "daily_dua": "Kunning duosi",
   "allah_protect": "🤲 Allohim panohida asrasin!",
-
   "no_internet": "Internet ulanishi yo'q",
   "real_tracking": "Real kuzatuv",
   "simulation": "Simulyatsiya",
-
   "enter_name": "Masalan: Akmal",
   "enter_phone": "+998 90 123 45 67",
   "enter_address": "Manzilni kiriting",
   "enter_car_model": "Masalan: Chevrolet Cobalt",
   "enter_car_color": "Masalan: Oq",
   "enter_car_plate": "Masalan: 60 A 123 AA",
-
   "bottom_news": "Xabarlar",
   "bottom_chat": "Chat",
   "bottom_wallet": "Hamyon",
   "bottom_profile": "Profil",
   "need_phone_profile": "Avval profilda telefon raqamini kiriting",
-
   "language": "Til",
   "language_subtitle": "Ilova interfeys tili",
   "lang_uz_cyrl": "O'zbek (Kirill)",
@@ -314,17 +287,14 @@
   "driver_online_status": "🟢 Online",
   "driver_offline_status": "⚫ Offline",
   "local_trip_already_active": "Faol safaringiz mavjud",
-
   "bread_non": "NON",
   "bread_yopish": "YOPISH",
   "bread_service": "xizmati",
-
   "searching_driver_title": "Haydovchi qidirilmoqda",
   "driver_found_dialog": "🚕 Haydovchi topildi!",
   "driver_approaching": "📍 Yaqinlashmoqda...",
   "driver_arrived_title": "🚗 Haydovchi yetib keldi",
-  "driver_arrived_body":
-    "Haydovchi 100 metr masofada. Iltimos, chiqib keling.",
+  "driver_arrived_body": "Haydovchi 100 metr masofada. Iltimos, chiqib keling.",
   "understood": "Tushunarli",
   "active_trip_title": "Safar",
   "trip_status_accepted": "Haydovchi yo'lda",
@@ -388,7 +358,6 @@
   "intercity_driver_request_sent": "Shaharlararo taksi haydovchisi bo'lish arizangiz admin tasdig'iga yuborildi.",
   "local_driver_apply_title": "Mahalliy taksi haydovchi arizasi",
   "save_and_continue": "Saqlab davom etish",
-
   "error_generic": "Xatolik: {error}",
   "select_route": "Iltimos, yo'nalishni tanlang",
   "search_permission_denied": "Qidiruv ruxsati yo'q",
@@ -404,7 +373,7 @@
   "booking_permission_denied": "Bronlash ruxsati yo'q. Ilovani yangilang yoki adminga murojaat qiling.",
   "booking_cancel_failed": "Bronni bekor qilishda xatolik yuz berdi. Qayta urinib ko'ring.",
   "booking_error": "Bronlashda xatolik: {value}",
-  "bookings_load_error": "Bronlarni yuklashda xato: {value}",
+  "bookings_load_error": "Bronlarni yuklashda xato",
   "pickup_accepted_title": "Haydovchi so'rovingizni qabul qildi 🚖",
   "pickup_where_question": "Sizni qayerdan olib ketsin?",
   "send_gps_location": "📍 GPS yuborish",
@@ -430,7 +399,6 @@
   "intercity_pickup_use_profile": "Profil manzilimdan",
   "intercity_enter_pickup_btn": "Manzilni kiritish",
   "booking_cancelled_snack": "Bron bekor qilindi",
-  "bookings_load_error": "Bronlarni yuklashda xato",
   "history_count": "Tarix ({n})",
   "cancel_booking_title": "Bronni bekor qilish?",
   "cancel_booking_body": "{route}\n{passengers} o'rin · {amount} {sum}\n\nHaydovchiga xabar beriladi va o'riningizni boshqaga bo'sh qiladi.",
@@ -536,7 +504,6 @@
   "show_archive": "Arxivni ko'rsatish",
   "archive_save": "Saqlash (arxiv)",
   "archive_restore": "Ro'yxatga qaytarish",
-
   "enter_car_model_brand": "Mashina markasini kiriting",
   "enter_plate": "Davlat raqamini kiriting",
   "select_start_point": "Boshlang'ich nuqtani tanlang",
@@ -627,7 +594,6 @@
   "switch_direction_btn": "YO'NALISHNI O'ZGARTIRISH",
   "queue_position_format": "Navbat: {position}-o'rin",
   "orders_stopped_offline": "Buyurtmalar to'xtatilgan",
-
   "driver_rejected_pick_another": "Haydovchi rad etdi. Boshqasini tanlang.",
   "send_to_driver_failed": "Haydovchiga yuborish muvaffaqiyatsiz tugadi",
   "max_saved_places": "Maksimum {count} ta manzil",
@@ -657,7 +623,6 @@
   "drivers_busy_try_later": "Afsus, hozir haydovchilar band. Biroz vaqtdan keyin urinib ko'ring.",
   "sec_short": "sek",
   "driver_n_of_m": "Haydovchi {current} / {total}",
-
   "ob_birth_title": "Tug'ilgan kuningiz",
   "ob_birth_hint": "Tug'ilgan kuningizda bonus va tabrik olish uchun sanani to'g'ri kiriting.",
   "ob_birth_picker": "Tug'ilgan kuningizni tanlang",
@@ -668,7 +633,6 @@
   "gender_female": "Ayol",
   "passengers_unit": "ta",
   "age_years": "yosh",
-
   "ob_phone_lock_hint": "Kod raqamni shu qurilmaga bog'laydi; boshqa raqamga o'tish admin tasdiqini talab qiladi",
   "ob_device_checking": "Qurilma tekshirilmoqda...",
   "reverify_title": "Telefonni tasdiqlang",
@@ -701,7 +665,6 @@
   "ob_birth_optional": "Hozir kiritmasangiz, keyin profildan kiritishingiz mumkin.",
   "ob_birth_calendar": "Kalendardan tanlash",
   "ob_birth_input_hint": "YYYY-MM-DD (ixtiyoriy)",
-
   "ob_otp_title": "SMS kodni kiriting",
   "ob_otp_sent": "{phone} raqamiga SMS yuborildi",
   "ob_otp_resend": "SMS-ni qayta yuborish",
@@ -720,15 +683,14 @@
   "gps_quality_medium": "O'rta",
   "gps_quality_low": "Past",
   "gps_quality_none": "Yo'q",
-
   "home_module_bread": "NON YOPISH",
   "home_module_food": "Taomlar",
-  "home_module_sell": "Sotaman",
+  "home_module_sell": "SOTISH TAKLIFI",
   "home_module_marshrut": "MARSHRUT TAXI",
   "home_module_local": "MAHALLIY TAXI",
   "home_module_intercity": "SHAHARLARARO TAXI",
-  "home_module_jobs": "ISH BOR\nXIZMAT TAKLIFI",
-  "home_module_cheap_products": "ONLAYN BOZOR + E'LON",
+  "home_module_jobs": "ISH DOSKASI",
+  "home_module_cheap_products": "ONLAYN BOZOR",
   "home_module_cheap_products_online": "ONLAYN",
   "home_module_cheap_products_subtitle": "Bepul e'lon joylashtirish va qidirish",
   "module_ads_subtitle": "Bepul e'lon joylashtirish",
@@ -737,11 +699,10 @@
   "module_intercity_subtitle": "O'zbekiston bo'ylab barcha yo'nalishlarga",
   "home_featured_elon": "E'LON",
   "home_featured_xizmat": "XIZMAT",
-  "home_featured_ish_top": "ISH TOP",
+  "home_featured_ish_top": "ISH DOSKASI",
   "home_featured_ish_bor": "ISH BOR",
   "home_featured_xizmat_taklifi": "XIZMAT TAKLIFI",
   "marshrut_accepted": "✅ {name} qabul qildi",
-
   "bread_title": "🫓 Non buyurtma",
   "bread_orders_history": "📋 Buyurtmalar tarixi",
   "bread_history_empty": "Buyurtmalar tarixi yo'q",
@@ -802,14 +763,12 @@
   "bread_wallet_payment_note": "To'lov kuryer yetkazganda amalga oshiriladi.",
   "currency_sum": "so'm",
   "bread_error_fallback": "Xatolik",
-
   "home_jobs_urgent": "🚨 SHOSHILINCH",
   "honorific_male": "Birodarim {name}",
   "honorific_female": "Opajon {name}",
   "user_default_name": "Foydalanuvchi",
   "agro_promo_body": "Bizda sut, qatiq, tuxum, guruch va boshqa mahsulotlar bilan ham hisob-kitob qilish mumkin.",
   "agro_promo_offer_extra": "🎯 Taklif: go'sht o'rniga sut, guruch, tuxum va boshqa qishloq xo'jaligi mahsulotlari bilan to'lash mumkin.",
-
   "courier_role": "🛵 Kuryer",
   "admin_role": "🔧 Admin",
   "role_superadmin": "👑 Superadmin",
@@ -834,7 +793,6 @@
   "profile_birth_date_picker_confirm": "Tanlash",
   "profile_leave_confirm": "Chiqish",
   "saved": "Saqlandi",
-
   "courier_panel_title": "🛵 Kuryer paneli",
   "courier_info_online": "🟢 Onlayn",
   "courier_info_offline": "⚫ Oflayn",
@@ -846,7 +804,6 @@
   "courier_info_orders_revived": "🔄 To'lanmagan buyurtma(lar) tiklandi",
   "courier_reys_busy": "⚠️ Reys band. Boshqasi qidirilmoqda...",
   "courier_error_generic": "Xatolik: {error}",
-
   "courier_payment_title": "To'lov · {total} {currency}",
   "courier_wallet_checking": "💼 Hamyon tekshirilmoqda…",
   "courier_wallet_balance": "💼 Hamyon qoldig'i: {amount} {currency}",
@@ -893,7 +850,6 @@
   "courier_wallet_insufficient": "Hamyon yetarli emas: {balance} / {used} {currency}",
   "courier_pay_incomplete_wallet": "To'lovni to'liq amalga oshiring. Kamomad: {short} {currency}.",
   "courier_pay_underpaid": "Kam to'lov: {sum} / {total} {currency}",
-
   "courier_status_done": "Yakunlandi",
   "courier_status_en_route": "Yo'lda",
   "courier_status_arrived": "Manzilda",
@@ -904,7 +860,6 @@
   "courier_arrived_btn": "Yetib keldim",
   "courier_pay_btn": "To'lov",
   "courier_next_order": "Keyingi buyurtma",
-
   "courier_orders_total": "📦 Jami: {count} ta buyurtma",
   "courier_progress": "✅ {current}/{total}",
   "courier_collection_tasks_banner": "📦 Qabul vazifalari ({count} ta)",
@@ -913,7 +868,6 @@
   "courier_start_work": "ISHNI BOSHLASH",
   "courier_mfy_route": "MFY tanlab marshrut yaratish",
   "courier_refresh": "YANGILASH",
-
   "courier_order_screen_title": "Kuryer buyurtma",
   "courier_order_info_card": "Buyurtma ma'lumotlari",
   "courier_order_desc_label": "Tavsif",

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,6 +39,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   String? _phone;
   List<RelativePerson> _people = const [];
   String? _reminderSig;
+  bool _deleting = false;
 
   late final TabController _tab;
 
@@ -147,9 +150,54 @@ class _RelativesScreenState extends State<RelativesScreen>
     );
   }
 
+  Future<bool> _ensureFirestoreAuth(String ownerPhone) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _snack('Сессия tugadi. Ilovadan chiqib qayta kiring.');
+      return false;
+    }
+    try {
+      await user.getIdToken(true);
+      final claims = await user.getIdTokenResult();
+      final tokenPhone =
+          canonicalPhoneId(claims.claims?['phone_number'] as String? ?? '');
+      if (tokenPhone.length >= 12 &&
+          !phonesMatch(tokenPhone, ownerPhone)) {
+        _snack(
+          'Телефон sessiyasi profil bilan mos emas. '
+          'Profildan telefonni qayta tasdiqlang.',
+        );
+        return false;
+      }
+      return true;
+    } catch (_) {
+      _snack('Сессия yangilanmadi. Qayta urinib ko\'ring.');
+      return false;
+    }
+  }
+
+  String _deleteErrorMessage(Object e) {
+    if (e is FirebaseException) {
+      return switch (e.code) {
+        'permission-denied' =>
+          'Ўчиришga ruxsat yo\'q. Telefonni profildan qayta tasdiqlang.',
+        'unavailable' =>
+          'Internet yo\'q. Ulanishni tekshirib qayta urinib ko\'ring.',
+        _ => 'Ўчиришda xato: ${e.message ?? e.code}',
+      };
+    }
+    return 'Ўчиришda xato: $e';
+  }
+
   Future<void> _delete(RelativePerson p) async {
     if (p.isSelf) {
       _snack('«Мен» ёзувини ўчириб бўлмайди — бу сизнинг профилингиз.');
+      return;
+    }
+    if (_deleting) return;
+    final phone = _phone;
+    if (phone == null || phone.length < 12) {
+      _snack('Аввал профилда телефонни тасдиқланг.');
       return;
     }
     final ok = await showDialog<bool>(
@@ -170,9 +218,19 @@ class _RelativesScreenState extends State<RelativesScreen>
         ],
       ),
     );
-    if (ok != true) return;
-    await _repo.deletePerson(_phone!, p.id);
-    if (p.photoUrl.isNotEmpty) await _photo.deleteByUrl(p.photoUrl);
+    if (ok != true || !mounted) return;
+    if (!await _ensureFirestoreAuth(phone)) return;
+
+    setState(() => _deleting = true);
+    try {
+      await _repo.deletePerson(phone, p.id);
+      if (p.photoUrl.isNotEmpty) await _photo.deleteByUrl(p.photoUrl);
+      if (mounted) _snack('«${p.fullName}» o\'chirildi.');
+    } catch (e) {
+      if (mounted) _snack(_deleteErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   void _snack(String m) {

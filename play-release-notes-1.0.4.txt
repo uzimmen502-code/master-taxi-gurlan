@@ -1,0 +1,11 @@
+O'zbek (Play Console — Release notes):
+
+• Qarindoshlarni ro'yxatdan o'chirish tuzatildi (barqaror server o'chirish)
+• Admin panel: yangi bo'lim nomlari (Ish doskasi, Onlayn bozor)
+• Ilova barqarorligi yaxshilandi
+
+Русский (ixtiyoriy):
+
+• Исправлено удаление родственников из списка
+• Обновлены названия разделов
+• Улучшена стабильность

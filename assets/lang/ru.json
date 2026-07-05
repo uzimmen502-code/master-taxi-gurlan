@@ -1,6 +1,5 @@
 {
   "app_name": "AVA Gurlan",
-
   "ok": "ОК",
   "cancel": "Отмена",
   "save": "Сохранить",
@@ -18,18 +17,15 @@
   "add": "Добавить",
   "selected": "Выбрано",
   "order": "Заказ",
-
   "nav_taxi": "Такси",
   "nav_intercity": "Межгород",
   "nav_bread": "Хлеб",
   "nav_food": "Еда",
   "nav_profile": "Профиль",
-
   "local_taxi": "Местное такси",
   "intercity_taxi": "Междугородное такси",
   "bread_order": "Заказ хлеба",
   "food_order": "Заказ еды",
-
   "from": "Откуда?",
   "to": "Куда?",
   "to_optional": "Куда? (необязательно)",
@@ -46,8 +42,7 @@
   "marshrut_driver_accepted": "Водитель принял заказ",
   "cancel_trip": "Отменить",
   "cancel_trip_confirm_title": "Отмена поездки",
-  "cancel_trip_confirm_body":
-    "Водитель уже едет. Отмена может привести к блокировке.",
+  "cancel_trip_confirm_body": "Водитель уже едет. Отмена может привести к блокировке.",
   "mark_route_coordinates": "Отметьте точки маршрута",
   "mark_start_point": "Отметьте начальную точку",
   "mark_end_point": "Отметьте конечную остановку",
@@ -58,25 +53,17 @@
   "rate_driver": "Оцените водителя",
   "skip": "Пропустить",
   "submit": "Отправить",
-  "marshrut_cancel_after_accept_confirm":
-      "Водитель вас ждёт. Вы точно хотите отменить?",
-  "marshrut_cancel_warning":
-      "⚠️ Уважаемый пассажир! За последние 10 минут было отменено 5 заказов. При отмене ещё 2 заказов система временно ограничит доступ на 10 минут. Это сделано для удобства других пассажиров и водителей. Пожалуйста, будьте внимательны при оформлении заказа.",
-  "marshrut_block_warning":
-      "Внимание: ещё {n} отмен — блок на {minutes} мин.",
-  "marshrut_block_warning_last":
-      "Внимание: следующая отмена может дать блок на {minutes} мин!",
+  "marshrut_cancel_after_accept_confirm": "Водитель вас ждёт. Вы точно хотите отменить?",
+  "marshrut_cancel_warning": "⚠️ Уважаемый пассажир! За последние 10 минут было отменено 5 заказов. При отмене ещё 2 заказов система временно ограничит доступ на 10 минут. Это сделано для удобства других пассажиров и водителей. Пожалуйста, будьте внимательны при оформлении заказа.",
+  "marshrut_block_warning": "Внимание: ещё {n} отмен — блок на {minutes} мин.",
+  "marshrut_block_warning_last": "Внимание: следующая отмена может дать блок на {minutes} мин!",
   "marshrut_block_cleared": "Блок снят — можно снова вызвать водителя",
-  "marshrut_block_active_banner":
-      "🚫 Уважаемый пассажир! За последние 10 минут вы отменили 7 заказов. Доступ к системе временно ограничен на 10 минут. Это ограничение введено для удобства других пользователей и поддержания стабильности системы. Спасибо за понимание!",
-  "marshrut_block_remaining_time":
-      "Оставшееся время: {n} минут",
-  "marshrut_block_remaining_banner":
-      "После принятия поездки: ещё {n} отмен (затем блок {minutes} мин)",
+  "marshrut_block_active_banner": "🚫 Уважаемый пассажир! За последние 10 минут вы отменили 7 заказов. Доступ к системе временно ограничен на 10 минут. Это ограничение введено для удобства других пользователей и поддержания стабильности системы. Спасибо за понимание!",
+  "marshrut_block_remaining_time": "Оставшееся время: {n} минут",
+  "marshrut_block_remaining_banner": "После принятия поездки: ещё {n} отмен (затем блок {minutes} мин)",
   "marshrut_call_system": "Вызов",
   "marshrut_call_queue_hint": "7 водителей — выбор карты не влияет на очередь",
-  "marshrut_call_system_info_dialog":
-    "Система вызывает водителей по очереди",
+  "marshrut_call_system_info_dialog": "Система вызывает водителей по очереди",
   "marshrut_select_mfy_and_search": "Выберите МФЙ и выполните поиск",
   "marshrut_no_drivers_match": "Подходящий водитель не найден",
   "marshrut_try_swap_direction": "Водитель может ехать в обратном направлении",
@@ -95,8 +82,7 @@
   "marshrut_cancel_waiting": "Отменить",
   "marshrut_cancel_waiting_hint": "Очередь отменяется — блок не начисляется",
   "marshrut_all_drivers_no_response_title": "Нет ответа",
-  "marshrut_all_drivers_no_response_body":
-      "Водители в очереди не ответили. Повторите поиск чуть позже.",
+  "marshrut_all_drivers_no_response_body": "Водители в очереди не ответили. Повторите поиск чуть позже.",
   "marshrut_search_again": "Искать снова",
   "marshrut_offer_pending_title": "Ожидание ответа водителя",
   "marshrut_driver_not_active": "Водитель сейчас не активен",
@@ -104,8 +90,7 @@
   "eta_minutes_short": "{n} мин",
   "seats_left_short": "{n} мест",
   "price_sum_short": "{price} сум",
-  "marshrut_search_filter_stats":
-      "Всего {total} рейсов: {offline} офлайн, {full} полные, {route} не по маршруту, {eligible} рано для очереди, {far} далеко",
+  "marshrut_search_filter_stats": "Всего {total} рейсов: {offline} офлайн, {full} полные, {route} не по маршруту, {eligible} рано для очереди, {far} далеко",
   "marshrut_price_per_seat": "Цена: {price} сум / место",
   "marshrut_taxi_sub": "С другими — дешевле",
   "gps_denied": "Доступ к GPS запрещён",
@@ -115,7 +100,6 @@
   "switch_direction_short": "Сменить",
   "gps_detected": "📍 Местоположение определено",
   "gps_error": "GPS не определён",
-
   "searching": "Поиск...",
   "request_sent": "Запрос отправлен",
   "waiting_driver": "Ожидание водителя...",
@@ -136,7 +120,6 @@
   "cancel_ride": "ОТМЕНИТЬ",
   "call": "ПОЗВОНИТЬ",
   "driver_arrived": "✅ ВОДИТЕЛЬ ПРИЕХАЛ!",
-
   "intercity_search": "НАЙТИ РЕЙСЫ",
   "today": "СЕГОДНЯ",
   "tomorrow": "ЗАВТРА",
@@ -153,7 +136,6 @@
   "parcel": "Посылка",
   "parcel_accept": "Принимаю посылки",
   "parcel_accept_hint": "Пассажиры могут отправлять посылки",
-
   "bread": "Заказ хлеба",
   "baking_service": "🔥 Услуга выпечки",
   "ready_breads": "✅ Готовый хлеб",
@@ -173,7 +155,6 @@
   "milk": "Молоко",
   "baking_price": "Выпечка",
   "selling_price": "Продажа",
-
   "food": "Заказ еды",
   "all_categories": "Все",
   "main_dishes": "Основные",
@@ -188,7 +169,6 @@
   "kg": "кг",
   "litre": "литр",
   "piece": "шт",
-
   "profile": "Профиль",
   "my_profile": "Мой профиль",
   "name": "Имя",
@@ -208,7 +188,6 @@
   "gallery": "Из галереи",
   "camera": "Сделать фото",
   "delete_photo": "Удалить фото",
-
   "driver_mode": "🚕 Режим водителя",
   "online": "🟢 Онлайн",
   "offline": "⚫ Оффлайн",
@@ -225,7 +204,6 @@
   "total_trips": "📈 Всего",
   "no_requests": "Пока нет запросов...",
   "enable_online": "Нажмите \"Онлайн\" для получения заказов",
-
   "onboarding_welcome": "Добро пожаловать!",
   "onboarding_name": "Введите ваше имя",
   "onboarding_phone": "Номер телефона",
@@ -256,7 +234,6 @@
   "intercity_type_sub": "Между городами",
   "continue": "ПРОДОЛЖИТЬ",
   "start": "НАЧАТЬ 🚀",
-
   "greeting_night": "Доброй ночи",
   "greeting_morning": "Доброе утро",
   "greeting_day": "Добрый день",
@@ -265,24 +242,20 @@
   "madam": "г-жа",
   "daily_dua": "Дуа дня",
   "allah_protect": "🤲 Да хранит вас Аллах!",
-
   "no_internet": "Нет подключения к интернету",
   "real_tracking": "Реальное отслеживание",
   "simulation": "Симуляция",
-
   "enter_name": "Например: Акмал",
   "enter_phone": "+998 90 123 45 67",
   "enter_address": "Введите адрес",
   "enter_car_model": "Например: Chevrolet Cobalt",
   "enter_car_color": "Например: Белый",
   "enter_car_plate": "Например: 60 A 123 AA",
-
   "bottom_news": "Новости",
   "bottom_chat": "Чат",
   "bottom_wallet": "Кошелёк",
   "bottom_profile": "Профиль",
   "need_phone_profile": "Сначала укажите телефон в профиле",
-
   "language": "Язык",
   "language_subtitle": "Язык интерфейса",
   "lang_uz_cyrl": "Узбекский (кириллица)",
@@ -314,17 +287,14 @@
   "driver_online_status": "🟢 Онлайн",
   "driver_offline_status": "⚫ Офлайн",
   "local_trip_already_active": "У вас уже есть активная поездка",
-
   "bread_non": "НОН",
   "bread_yopish": "ВЫПЕЧКА",
   "bread_service": "услуга",
-
   "searching_driver_title": "Поиск водителя",
   "driver_found_dialog": "🚕 Водитель найден!",
   "driver_approaching": "📍 Приближается...",
   "driver_arrived_title": "🚗 Водитель прибыл",
-  "driver_arrived_body":
-    "Водитель в 100 метрах. Пожалуйста, выходите.",
+  "driver_arrived_body": "Водитель в 100 метрах. Пожалуйста, выходите.",
   "understood": "Понятно",
   "active_trip_title": "Поездка",
   "trip_status_accepted": "Водитель в пути",
@@ -388,7 +358,6 @@
   "intercity_driver_request_sent": "Ваша заявка на междугороднего водителя отправлена администратору.",
   "local_driver_apply_title": "Заявка водителя местного такси",
   "save_and_continue": "Сохранить и продолжить",
-
   "error_generic": "Ошибка: {error}",
   "select_route": "Пожалуйста, выберите маршрут",
   "search_permission_denied": "Нет разрешения на поиск",
@@ -404,7 +373,7 @@
   "booking_permission_denied": "Нет разрешения на бронирование. Обновите приложение или обратитесь к администратору.",
   "booking_cancel_failed": "Ошибка при отмене брони. Попробуйте снова.",
   "booking_error": "Ошибка бронирования: {value}",
-  "bookings_load_error": "Ошибка загрузки броней: {value}",
+  "bookings_load_error": "Ошибка загрузки броней",
   "pickup_accepted_title": "Водитель принял ваш запрос 🚖",
   "pickup_where_question": "Откуда вас забрать?",
   "send_gps_location": "📍 Отправить GPS",
@@ -430,7 +399,6 @@
   "intercity_pickup_use_profile": "Из адреса профиля",
   "intercity_enter_pickup_btn": "Указать адрес",
   "booking_cancelled_snack": "Бронь отменена",
-  "bookings_load_error": "Ошибка загрузки броней",
   "history_count": "История ({n})",
   "cancel_booking_title": "Отменить бронь?",
   "cancel_booking_body": "{route}\n{passengers} мест · {amount} {sum}\n\nВодитель будет уведомлён, место освободится для других.",
@@ -536,7 +504,6 @@
   "show_archive": "Показать архив",
   "archive_save": "Сохранить (архив)",
   "archive_restore": "Вернуть в список",
-
   "enter_car_model_brand": "Введите марку автомобиля",
   "enter_plate": "Введите госномер",
   "select_start_point": "Выберите начальную точку",
@@ -627,7 +594,6 @@
   "switch_direction_btn": "СМЕНИТЬ НАПРАВЛЕНИЕ",
   "queue_position_format": "Очередь: {position}-е место",
   "orders_stopped_offline": "Заказы приостановлены",
-
   "driver_rejected_pick_another": "Водитель отклонил. Выберите другого.",
   "send_to_driver_failed": "Не удалось отправить водителю",
   "max_saved_places": "Максимум {count} адресов",
@@ -657,7 +623,6 @@
   "drivers_busy_try_later": "К сожалению, водители заняты. Попробуйте позже.",
   "sec_short": "сек",
   "driver_n_of_m": "Водитель {current} / {total}",
-
   "ob_birth_title": "Дата рождения",
   "ob_birth_hint": "Укажите дату рождения для получения бонуса и поздравления.",
   "ob_birth_picker": "Выберите дату рождения",
@@ -668,7 +633,6 @@
   "gender_female": "Женщина",
   "passengers_unit": "чел",
   "age_years": "лет",
-
   "ob_phone_lock_hint": "Код привязывает номер к этому устройству; смена номера требует подтверждения администратора.",
   "ob_device_checking": "Проверка устройства...",
   "reverify_title": "Подтвердите телефон",
@@ -701,7 +665,6 @@
   "ob_birth_optional": "Если не укажете сейчас, можно заполнить позже в профиле.",
   "ob_birth_calendar": "Выбрать из календаря",
   "ob_birth_input_hint": "ГГГГ-ММ-ДД (необязательно)",
-
   "ob_otp_title": "Введите SMS-код",
   "ob_otp_sent": "SMS отправлен на {phone}",
   "ob_otp_resend": "Отправить SMS повторно",
@@ -720,15 +683,14 @@
   "gps_quality_medium": "Средне",
   "gps_quality_low": "Низко",
   "gps_quality_none": "Нет",
-
   "home_module_bread": "ЛЕПЁШКИ",
   "home_module_food": "Еда",
-  "home_module_sell": "Продаю",
+  "home_module_sell": "ЗАЯВКА НА ПРОДАЖУ",
   "home_module_marshrut": "МАРШРУТНОЕ ТАКСИ",
   "home_module_local": "МЕСТНОЕ ТАКСИ",
   "home_module_intercity": "МЕЖГОРОДСКОЕ ТАКСИ",
-  "home_module_jobs": "ЕСТЬ РАБОТА\nПРЕДЛ. УСЛУГ",
-  "home_module_cheap_products": "ОНЛАЙН РЫНОК + ОБЪЯВЛЕНИЕ",
+  "home_module_jobs": "ДОСКА РАБОТ",
+  "home_module_cheap_products": "ОНЛАЙН РЫНОК",
   "home_module_cheap_products_online": "ОНЛАЙН",
   "home_module_cheap_products_subtitle": "Бесплатное размещение и поиск объявлений",
   "module_ads_subtitle": "Размещение объявлений бесплатно",
@@ -737,11 +699,10 @@
   "module_intercity_subtitle": "По всем направлениям Узбекистана",
   "home_featured_elon": "ОБЪЯВЛ.",
   "home_featured_xizmat": "УСЛУГИ",
-  "home_featured_ish_top": "РАБОТА",
+  "home_featured_ish_top": "ДОСКА РАБОТ",
   "home_featured_ish_bor": "ЕСТЬ РАБОТА",
   "home_featured_xizmat_taklifi": "ПРЕДЛ. УСЛУГ",
   "marshrut_accepted": "✅ {name} принял заказ",
-
   "bread_title": "🫓 Заказ лепёшек",
   "bread_orders_history": "📋 История заказов",
   "bread_history_empty": "История заказов пуста",
@@ -802,14 +763,12 @@
   "bread_wallet_payment_note": "Оплата при доставке курьером.",
   "currency_sum": "сум",
   "bread_error_fallback": "Ошибка",
-
   "home_jobs_urgent": "🚨 СРОЧНО",
   "honorific_male": "{name}",
   "honorific_female": "{name}",
   "user_default_name": "Пользователь",
   "agro_promo_body": "У нас можно расплатиться молоком, яйцами, рисом и другими продуктами.",
   "agro_promo_offer_extra": "🎯 Предложение: вместо мяса можно рассчитаться молоком, рисом, яйцами и другими продуктами.",
-
   "courier_role": "🛵 Курьер",
   "admin_role": "🔧 Админ",
   "role_superadmin": "👑 Суперадмин",
@@ -834,7 +793,6 @@
   "profile_birth_date_picker_confirm": "Выбрать",
   "profile_leave_confirm": "Выйти",
   "saved": "Сохранено",
-
   "courier_panel_title": "🛵 Панель курьера",
   "courier_info_online": "🟢 Онлайн",
   "courier_info_offline": "⚫ Офлайн",
@@ -846,7 +804,6 @@
   "courier_info_orders_revived": "🔄 Неоплаченные заказы восстановлены",
   "courier_reys_busy": "⚠️ Рейс занят. Ищем другой...",
   "courier_error_generic": "Ошибка: {error}",
-
   "courier_payment_title": "Оплата · {total} {currency}",
   "courier_wallet_checking": "💼 Проверка кошелька…",
   "courier_wallet_balance": "💼 Баланс кошелька: {amount} {currency}",
@@ -893,7 +850,6 @@
   "courier_wallet_insufficient": "Недостаточно в кошельке: {balance} / {used} {currency}",
   "courier_pay_incomplete_wallet": "Оплатите полностью. Недостача: {short} {currency}.",
   "courier_pay_underpaid": "Недоплата: {sum} / {total} {currency}",
-
   "courier_status_done": "Завершено",
   "courier_status_en_route": "В пути",
   "courier_status_arrived": "На месте",
@@ -904,7 +860,6 @@
   "courier_arrived_btn": "Прибыл",
   "courier_pay_btn": "Оплата",
   "courier_next_order": "Следующий заказ",
-
   "courier_orders_total": "📦 Всего: {count} заказов",
   "courier_progress": "✅ {current}/{total}",
   "courier_collection_tasks_banner": "📦 Задачи приёма ({count})",
@@ -913,7 +868,6 @@
   "courier_start_work": "НАЧАТЬ РАБОТУ",
   "courier_mfy_route": "Выбрать МФЙ и создать маршрут",
   "courier_refresh": "ОБНОВИТЬ",
-
   "courier_order_screen_title": "Заказ курьера",
   "courier_order_info_card": "Данные заказа",
   "courier_order_desc_label": "Описание",

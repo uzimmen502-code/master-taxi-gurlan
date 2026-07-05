@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
+import '../core/utils/firebase_functions_errors.dart';
 import '../models/relative_event.dart';
 import '../models/relative_person.dart';
 import '../models/relative_photo.dart';
@@ -46,7 +48,17 @@ class RelativesRepository {
   }
 
   Future<void> deletePerson(String userId, String personId) async {
-    await _people(userId).doc(personId).delete();
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('deleteRelativePerson')
+          .call({'personId': personId});
+    } on FirebaseFunctionsException catch (e) {
+      throw FirebaseException(
+        plugin: 'cloud_functions',
+        code: e.code,
+        message: firebaseFunctionsUserMessage(e),
+      );
+    }
   }
 
   // ─── Sanalar / uchrashuvlar (eslatmalar) ──────────────────────────────

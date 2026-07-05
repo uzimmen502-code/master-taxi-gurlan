@@ -65,6 +65,24 @@ if (Test-Path $DownloadsSrc) {
   Copy-Item -Path (Join-Path $DownloadsSrc "*") -Destination $DownloadsDst -Recurse -Force
 }
 
+$PrivacySrc = Join-Path $Root "web/privacy.html"
+if (Test-Path $PrivacySrc) {
+  Write-Host "==> Privacy policy page..." -ForegroundColor Cyan
+  Copy-Item -Path $PrivacySrc -Destination (Join-Path $Hosting "privacy.html") -Force
+  $PrivacyDir = Join-Path $Root "web/privacy"
+  if (Test-Path $PrivacyDir) {
+    $PrivacyDst = Join-Path $Hosting "privacy"
+    New-Item -ItemType Directory -Path $PrivacyDst -Force | Out-Null
+    Copy-Item -Path (Join-Path $PrivacyDir "index.html") -Destination (Join-Path $PrivacyDst "index.html") -Force
+  }
+}
+
+$DeleteAccountSrc = Join-Path $Root "web/delete-account.html"
+if (Test-Path $DeleteAccountSrc) {
+  Write-Host "==> Account deletion page..." -ForegroundColor Cyan
+  Copy-Item -Path $DeleteAccountSrc -Destination (Join-Path $Hosting "delete-account.html") -Force
+}
+
 Write-Host ""
 Write-Host "OK: $Hosting" -ForegroundColor Green
 Write-Host "  User:  /" -ForegroundColor Green

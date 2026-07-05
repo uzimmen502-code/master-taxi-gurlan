@@ -22,6 +22,7 @@ import 'identity_approvals_screen.dart';
 import 'pending_codes_screen.dart';
 import 'intercity_admin_screen.dart';
 import 'jobs_moderation_screen.dart';
+import 'market_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
@@ -103,9 +104,14 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Курьерларни бошқариш',
     ),
     _AdminSection(
-      label: 'Иш топ',
+      label: 'Иш ва хизмат доскаси',
       icon: Icons.work_history,
-      description: 'Эълонларни тасдиқлаш',
+      description: 'Иш, хизмат, эълон — модерация',
+    ),
+    _AdminSection(
+      label: 'Онлайн бозор',
+      icon: Icons.storefront_outlined,
+      description: 'Арзон маҳсулот эълонлари',
     ),
     _AdminSection(
       label: '❤️ Танишув',
@@ -128,9 +134,9 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Mijozga ketgan status xabarlari',
     ),
     _AdminSection(
-      label: 'Сотиш таклифлари',
+      label: 'Сотиш аризалари',
       icon: Icons.sell_outlined,
-      description: 'Фойдаланувчи маҳсулот таклифи',
+      description: 'Фойдаланувчи формасидан таклифлар',
     ),
     _AdminSection(
       label: 'Маҳсулoтлaр',
@@ -307,13 +313,16 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Буюртма хабар') {
       return const AdminOrderNewsListScreen();
     }
-    if (section.label == 'Иш топ') {
+    if (section.label == 'Иш ва хизмат доскаси') {
       return const JobsModerationScreen();
+    }
+    if (section.label == 'Онлайн бозор') {
+      return const MarketModerationScreen();
     }
     if (section.label == '❤️ Танишув') {
       return const DatingModerationScreen();
     }
-    if (section.label == 'Сотиш таклифлари') {
+    if (section.label == 'Сотиш аризалари') {
       return const SellSubmissionsAdminScreen();
     }
     if (section.label == 'Ҳaйдовчи aризалари') {
@@ -576,12 +585,29 @@ class _Sidebar extends StatelessWidget {
             .where('status', isEqualTo: 'ready')
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Иш топ':
+      case 'Иш ва хизмат доскаси':
         return db
             .collection('ads')
             .where('status', isEqualTo: 'pending')
             .snapshots()
-            .map((s) => s.docs.length);
+            .map((s) => s.docs.where((d) {
+                  final t = (d.data()['type'] ?? '') as String;
+                  if (t == 'cheap_product') return false;
+                  return t.isEmpty ||
+                      t == 'work' ||
+                      t == 'service' ||
+                      t == 'ad' ||
+                      t == 'sell' ||
+                      t == 'announcement';
+                }).length);
+      case 'Онлайн бозор':
+        return db
+            .collection('ads')
+            .where('type', isEqualTo: 'cheap_product')
+            .snapshots()
+            .map((s) => s.docs
+                .where((d) => (d.data()['status'] ?? '') == 'inactive')
+                .length);
       case '❤️ Танишув':
         return db
             .collection('dating_profiles')
@@ -603,7 +629,7 @@ class _Sidebar extends StatelessWidget {
               lastSeenAt: () =>
                   context.read<AdminNewsReadService>().lastOrderSeen,
             );
-      case 'Сотиш таклифлари':
+      case 'Сотиш аризалари':
         return db
             .collection('sell_submissions')
             .where('status', isEqualTo: 'pending')

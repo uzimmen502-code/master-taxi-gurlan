@@ -50,6 +50,16 @@ class TreeService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// { ok, alreadyDeleted? }
+  static Future<Map<String, dynamic>> deleteRelativePerson({
+    required String personId,
+  }) async {
+    final res = await _fn.httpsCallable('deleteRelativePerson').call({
+      'personId': personId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   /// Daraxt tugunini yaratish/tahrirlash (umumiy tahrir). { ok, nodeId }
   /// [nodeId] bo'sh bo'lsa — yangi tugun yaratiladi.
   static Future<Map<String, dynamic>> saveNode({

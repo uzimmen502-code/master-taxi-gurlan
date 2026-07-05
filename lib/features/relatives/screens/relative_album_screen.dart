@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/relative_photo.dart';
 import '../../../repositories/relatives_repository.dart';
+import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
 
 /// 📷 Qarindosh fotoalbomi — bir qarindoshga bir nechta rasm.
@@ -43,7 +45,8 @@ class _RelativeAlbumScreenState extends State<RelativeAlbumScreen> {
         );
       }
     } catch (e) {
-      _snack('Юклашда хатолик: $e');
+      _snack(RelativesL10n.trParams(
+          context, 'rel_photo_upload_error', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -53,17 +56,17 @@ class _RelativeAlbumScreenState extends State<RelativeAlbumScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Расмни ўчириш'),
-        content: const Text('Бу расмни ўчирасизми?'),
+        title: Text(ctx.tr('rel_album_delete_title')),
+        content: Text(ctx.tr('rel_album_delete_body')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Ўчираман'),
+            child: Text(ctx.tr('rel_delete_i_confirm')),
           ),
         ],
       ),
@@ -111,7 +114,9 @@ class _RelativeAlbumScreenState extends State<RelativeAlbumScreen> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: Colors.white))
             : const Icon(Icons.add_photo_alternate_outlined),
-        label: Text(_uploading ? 'Юкланмоқда...' : 'Расм қўшиш'),
+        label: Text(_uploading
+            ? context.tr('loading')
+            : context.tr('rel_album_add')),
       ),
       body: StreamBuilder<List<RelativePhoto>>(
         stream: _repo.watchAlbum(widget.userId, widget.person.id),
@@ -166,7 +171,7 @@ class _RelativeAlbumScreenState extends State<RelativeAlbumScreen> {
           children: [
             const Text('📷', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
-            Text('Ҳали расм йўқ.\nПастдаги тугма орқали расм қўшинг.',
+            Text(context.tr('rel_album_empty'),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600)),
           ],

@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/relative_person.dart';
 import '../utils/family_tree_corridor_validation.dart';
 import '../utils/family_tree_line_router.dart';
@@ -1308,8 +1309,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
             const Text('🌳', style: TextStyle(fontSize: 48)),
             const SizedBox(height: 12),
             Text(
-              'Дарахт бўш.\nҚариндошни таҳрирлаб «Отаси» ёки «Онаси»ни '
-              'белгиланг.',
+              context.tr('rel_tree_empty_hint'),
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),

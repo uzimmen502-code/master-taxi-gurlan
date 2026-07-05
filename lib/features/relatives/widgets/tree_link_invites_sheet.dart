@@ -1,9 +1,11 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../repositories/tree_repository.dart';
+import '../l10n/relatives_l10n.dart';
 import '../services/tree_service.dart';
 
 /// Daraxt ulash takliflari — pastki varaq (qabul / rad).
@@ -27,10 +29,10 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
             );
           }
           if (invites.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
+            return Padding(
+              padding: const EdgeInsets.all(24),
               child: Text(
-                'Кутилмаётган улаш таклифи йўқ.',
+                context.tr('rel_invite_empty'),
                 textAlign: TextAlign.center,
               ),
             );
@@ -39,11 +41,12 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
             shrinkWrap: true,
             padding: const EdgeInsets.all(8),
             children: [
-              const Padding(
-                padding: EdgeInsets.all(12),
+              Padding(
+                padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Улаш таклифлари',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  context.tr('rel_invite_sheet_title'),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
               for (final inv in invites)
@@ -54,9 +57,12 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${inv.fromName.isEmpty ? "Фойдаланувчи" : inv.fromName} '
-                          'сизни «${inv.nodeName}» сифатида ўз дарахтига улашни '
-                          'таклиф қилмоқда.',
+                          RelativesL10n.trParams(context, 'rel_invite_body', {
+                            'from': inv.fromName.isEmpty
+                                ? context.tr('rel_invite_from_default')
+                                : inv.fromName,
+                            'node': inv.nodeName,
+                          }),
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -65,7 +71,7 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
                             TextButton(
                               onPressed: () =>
                                   _respond(context, inv, false, accent),
-                              child: const Text('Рад этиш'),
+                              child: Text(context.tr('rel_invite_reject')),
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
@@ -75,7 +81,7 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
                               ),
                               onPressed: () =>
                                   _respond(context, inv, true, accent),
-                              child: const Text('Қабул қилиш'),
+                              child: Text(context.tr('rel_invite_accept')),
                             ),
                           ],
                         ),
@@ -102,8 +108,8 @@ Future<void> _respond(
         await TreeService.respondLinkInvite(inviteId: inv.id, accept: accept);
     if (!context.mounted) return;
     final msg = res['status'] == 'accepted'
-        ? '🎉 Дарахтлар бирлашди!'
-        : 'Таклиф рад этилди.';
+        ? context.tr('rel_invite_merged')
+        : context.tr('rel_invite_rejected');
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
   } on FirebaseFunctionsException catch (e) {
@@ -113,7 +119,11 @@ Future<void> _respond(
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Хатолик: $e')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            RelativesL10n.trParams(context, 'error_generic', {'error': '$e'})),
+      ),
+    );
   }
 }

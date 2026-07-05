@@ -2,13 +2,14 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../models/tree_person.dart';
+import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/tree_service.dart';
 
 /// Umumiy nasab tugunini yaratish/tahrirlash (Faza 5 — umumiy tahrir).
-/// tree_persons'ga yoziladi; tarmoqdagi har bir a'zo ko'radi.
 class TreeNodeEditScreen extends StatefulWidget {
   const TreeNodeEditScreen({
     super.key,
@@ -62,7 +63,6 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     super.dispose();
   }
 
-  /// O'zidan boshqa komponent tugunlari (bog'lanish dropdownlari uchun).
   List<TreePerson> get _others {
     final selfId = widget.existing?.id;
     return widget.componentNodes
@@ -83,7 +83,8 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
         _photoPath = res.path;
       });
     } catch (e) {
-      _snack('Расм юклашда хатолик: $e');
+      _snack(RelativesL10n.trParams(
+          context, 'rel_photo_upload_error', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -103,7 +104,7 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      _snack('Исм-фамилияни киритинг.');
+      _snack(context.tr('rel_name_required'));
       return;
     }
     setState(() => _busy = true);
@@ -136,7 +137,8 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
     } catch (e) {
-      _snack('Хатолик: $e');
+      _snack(RelativesL10n.trParams(
+          context, 'error_generic', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -152,7 +154,9 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     final isEdit = widget.existing != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? 'Тугунни таҳрирлаш' : 'Янги аъзо қўшиш'),
+        title: Text(isEdit
+            ? context.tr('rel_node_edit_title')
+            : context.tr('rel_node_add_title')),
         backgroundColor: TreeNodeEditScreen._accent,
         foregroundColor: Colors.white,
       ),
@@ -178,10 +182,10 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
           const SizedBox(height: 16),
           TextField(
             controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Исм-фамилия *',
-              prefixIcon: Icon(Icons.person_outline),
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: context.tr('rel_field_name'),
+              prefixIcon: const Icon(Icons.person_outline),
+              border: const OutlineInputBorder(),
               isDense: true,
             ),
           ),
@@ -189,34 +193,37 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.cake_outlined),
-            title: Text(
-                _birthDate == null ? 'Туғилган сана' : _fmtDate(_birthDate!)),
+            title: Text(_birthDate == null
+                ? context.tr('rel_field_birth')
+                : _fmtDate(_birthDate!)),
             trailing: const Icon(Icons.edit_calendar_outlined),
             onTap: _pickBirthDate,
           ),
           const SizedBox(height: 8),
           _dropdown(
-            'Жинс',
+            context.tr('rel_field_gender'),
             _gender,
-            const {'': 'Танланмаган', 'male': 'Эркак', 'female': 'Аёл'},
+            RelativesL10n.genderOptions(context),
             (v) => setState(() => _gender = v),
           ),
           const SizedBox(height: 8),
           const Divider(),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('🌳 Насаб боғланиши',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: TreeNodeEditScreen._accent)),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              context.tr('rel_tree_links_section'),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: TreeNodeEditScreen._accent),
+            ),
           ),
-          _relativeDropdown(
-              'Отаси', _fatherId, (v) => setState(() => _fatherId = v)),
+          _relativeDropdown(context.tr('rel_father'), _fatherId,
+              (v) => setState(() => _fatherId = v)),
           const SizedBox(height: 12),
-          _relativeDropdown(
-              'Онаси', _motherId, (v) => setState(() => _motherId = v)),
+          _relativeDropdown(context.tr('rel_mother'), _motherId,
+              (v) => setState(() => _motherId = v)),
           const SizedBox(height: 12),
-          _relativeDropdown('Турмуш ўртоғи', _spouseId,
+          _relativeDropdown(context.tr('rel_spouse'), _spouseId,
               (v) => setState(() => _spouseId = v)),
           const SizedBox(height: 20),
           SizedBox(
@@ -232,7 +239,7 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
                       height: 22,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Text('Сақлаш'),
+                  : Text(context.tr('save')),
             ),
           ),
         ],
@@ -290,8 +297,8 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
           value: exists ? value : null,
           isExpanded: true,
           items: [
-            const DropdownMenuItem<String?>(
-                value: null, child: Text('— йўқ —')),
+            DropdownMenuItem<String?>(
+                value: null, child: Text(context.tr('rel_link_none'))),
             ..._others.map((p) => DropdownMenuItem<String?>(
                   value: p.id,
                   child: Text(_nodeLinkLabel(p), overflow: TextOverflow.ellipsis),

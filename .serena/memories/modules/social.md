@@ -15,6 +15,7 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 - OS push for birthdays/events via flutter_local_notifications.
 - `relatives/people` is the user's PRIVATE source; mirrored to shared `tree_persons` by CF `onRelativePersonWrite`.
 - Phone in relatives list → CF maintains `relative_phone_watchers`; on new user profile or owner login (`ensureMyTree`) one-time FCM: owner «қариндош иловада», new user «қариндошлар кутмоқда» → push opens `RelativesScreen`.
+- **L10n (Phase 2 done):** all UI strings in `features/relatives/` use `context.tr('rel_*')` via `l10n_extension.dart` + `relatives/l10n/relatives_l10n.dart` helpers; ~122 keys in `assets/lang/*.json`; merge script `tools/merge_relatives_l10n.js`. Server-side history summaries / RelativeEventType.label (model) still raw where CF-generated.
 
 ## Dating (Tanishuv — MVP, CF-only writes)
 - `features/dating/screens/` incl. `dating_profile_view_screen.dart`. Firestore `dating_profiles/{uid}`, `dating_interests`, `dating_matches`(+messages), `dating_blocks/{uid}/list/{targetId}`.

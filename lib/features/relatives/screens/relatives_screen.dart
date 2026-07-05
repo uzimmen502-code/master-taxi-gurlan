@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/relative_event.dart';
@@ -16,6 +17,7 @@ import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
 import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
+import '../l10n/relatives_l10n.dart';
 import '../widgets/tree_link_invite_indicator.dart';
 import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_screen.dart';
@@ -136,7 +138,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   Future<void> _add() async {
     final phone = _phone;
     if (phone == null || phone.length < 12) {
-      _snack('Аввал профилда телефонни тасдиқланг.');
+      _snack(context.tr('rel_phone_verify'));
       return;
     }
     final candidates = await _loadLinkCandidates();
@@ -182,7 +184,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   Future<void> _addEvent() async {
     final phone = _phone;
     if (phone == null || phone.length < 12) {
-      _snack('Аввал профилда телефонни тасдиқланг.');
+      _snack(context.tr('rel_phone_verify'));
       return;
     }
     await Navigator.push(
@@ -218,7 +220,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   Future<bool> _ensureFirestoreAuth(String ownerPhone) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      _snack('Сессия tugadi. Ilovadan chiqib qayta kiring.');
+      _snack(context.tr('rel_session_expired'));
       return false;
     }
     try {
@@ -228,15 +230,12 @@ class _RelativesScreenState extends State<RelativesScreen>
           canonicalPhoneId(claims.claims?['phone_number'] as String? ?? '');
       if (tokenPhone.length >= 12 &&
           !phonesMatch(tokenPhone, ownerPhone)) {
-        _snack(
-          'Телефон sessiyasi profil bilan mos emas. '
-          'Profildan telefonni qayta tasdiqlang.',
-        );
+        _snack(context.tr('rel_session_phone_mismatch'));
         return false;
       }
       return true;
     } catch (_) {
-      _snack('Сессия yangilanmadi. Qayta urinib ko\'ring.');
+      _snack(context.tr('rel_session_refresh_failed'));
       return false;
     }
   }
@@ -244,41 +243,41 @@ class _RelativesScreenState extends State<RelativesScreen>
   String _deleteErrorMessage(Object e) {
     if (e is FirebaseException) {
       return switch (e.code) {
-        'permission-denied' =>
-          'Ўчиришga ruxsat yo\'q. Telefonni profildan qayta tasdiqlang.',
-        'unavailable' =>
-          'Internet yo\'q. Ulanishni tekshirib qayta urinib ko\'ring.',
-        _ => 'Ўчиришda xato: ${e.message ?? e.code}',
+        'permission-denied' => context.tr('rel_delete_denied'),
+        'unavailable' => context.tr('rel_delete_offline'),
+        _ => RelativesL10n.trParams(
+            context, 'rel_delete_error', {'error': e.message ?? e.code}),
       };
     }
-    return 'Ўчиришda xato: $e';
+    return RelativesL10n.trParams(context, 'rel_delete_error', {'error': '$e'});
   }
 
   Future<void> _delete(RelativePerson p) async {
     if (p.isSelf) {
-      _snack('«Мен» ёзувини ўчириб бўлмайди — бу сизнинг профилингиз.');
+      _snack(context.tr('rel_delete_self_forbidden'));
       return;
     }
     if (_deleting) return;
     final phone = _phone;
     if (phone == null || phone.length < 12) {
-      _snack('Аввал профилда телефонни тасдиқланг.');
+      _snack(context.tr('rel_phone_verify'));
       return;
     }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ўчириш'),
-        content: Text('«${p.fullName}» ни ўчирасизми?'),
+        title: Text(ctx.tr('delete')),
+        content: Text(RelativesL10n.trParams(
+            ctx, 'rel_delete_confirm_body', {'name': p.fullName})),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Ўчираман'),
+            child: Text(ctx.tr('rel_delete_i_confirm')),
           ),
         ],
       ),
@@ -290,7 +289,10 @@ class _RelativesScreenState extends State<RelativesScreen>
     try {
       await _repo.deletePerson(phone, p.id);
       if (p.photoUrl.isNotEmpty) await _photo.deleteByUrl(p.photoUrl);
-      if (mounted) _snack('«${p.fullName}» o\'chirildi.');
+      if (mounted) {
+        _snack(RelativesL10n.trParams(
+            context, 'rel_deleted', {'name': p.fullName}));
+      }
     } catch (e) {
       if (mounted) _snack(_deleteErrorMessage(e));
     } finally {
@@ -309,7 +311,7 @@ class _RelativesScreenState extends State<RelativesScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF5F4F8),
       appBar: AppBar(
-        title: const Text('Қариндошларим'),
+        title: Text(context.tr('rel_title')),
         backgroundColor: RelativesScreen._accent,
         foregroundColor: Colors.white,
         actions: [
@@ -319,12 +321,12 @@ class _RelativesScreenState extends State<RelativesScreen>
               onTap: () => showTreeLinkInvitesSheet(context, phone),
             ),
           IconButton(
-            tooltip: 'Дарахт тарихи',
+            tooltip: context.tr('rel_tooltip_history'),
             icon: const Icon(Icons.history),
             onPressed: phone == null ? null : () => _openHistory(phone),
           ),
           IconButton(
-            tooltip: 'Сана / учрашув қўшиш',
+            tooltip: context.tr('rel_tooltip_add_event'),
             icon: const Icon(Icons.event_available_outlined),
             onPressed: _addEvent,
           ),
@@ -340,18 +342,19 @@ class _RelativesScreenState extends State<RelativesScreen>
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
           tabs: [
-            const Tab(text: 'Рўйхат'),
+            Tab(text: context.tr('rel_tab_list')),
             if (phone == null)
-              const Tab(text: '🌳 Насаб дарахти')
+              Tab(text: context.tr('rel_tab_tree'))
             else
               Tab(
                 child: TreeLinkInviteCount(
                   userId: phone,
                   builder: (_, count) =>
-                      treeLinkInviteTabLabel('🌳 Насаб дарахти', count),
+                      treeLinkInviteTabLabel(
+                          context.tr('rel_tab_tree'), count),
                 ),
               ),
-            const Tab(text: '📅 Саналар'),
+            Tab(text: context.tr('rel_tab_dates')),
           ],
         ),
       ),
@@ -364,7 +367,7 @@ class _RelativesScreenState extends State<RelativesScreen>
               foregroundColor: Colors.white,
               onPressed: _add,
               icon: const Icon(Icons.person_add_alt),
-              label: const Text('Қариндош'),
+              label: Text(context.tr('rel_fab_add')),
             ),
       body: phone == null
           ? const Center(child: CircularProgressIndicator())
@@ -397,7 +400,7 @@ class _RelativesScreenState extends State<RelativesScreen>
 
   Widget _listTab(List<RelativePerson> people) {
     if (people.isEmpty) {
-      return _empty('Ҳали қариндош қўшмагансиз.');
+      return _empty(context.tr('rel_empty_list'));
     }
     final sorted = [...people]
       ..sort((a, b) {
@@ -414,10 +417,12 @@ class _RelativesScreenState extends State<RelativesScreen>
 
   Widget _personTile(RelativePerson p) {
     final sub = [
-      if (p.isSelf) 'Мен',
+      if (p.isSelf) context.tr('rel_me'),
       if (p.relationDegree.isNotEmpty && !p.isSelf) p.relationDegree,
-      _sideLabel(p.side),
-      if (p.age != null) '${p.age} ёш',
+      RelativesL10n.sideLabel(context, p.side),
+      if (p.age != null)
+        RelativesL10n.trParams(
+            context, 'rel_age_years', {'count': '${p.age}'}),
     ].where((s) => s.isNotEmpty).join(' · ');
     return ListTile(
       leading: _avatar(p),
@@ -439,10 +444,13 @@ class _RelativesScreenState extends State<RelativesScreen>
               if (v == 'delete') _delete(p);
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'album', child: Text('📷 Альбом')),
-              const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
+              PopupMenuItem(
+                  value: 'album', child: Text(context.tr('rel_menu_album'))),
+              PopupMenuItem(
+                  value: 'edit', child: Text(context.tr('edit'))),
               if (!p.isSelf)
-                const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
+                PopupMenuItem(
+                    value: 'delete', child: Text(context.tr('delete'))),
             ],
           ),
         ],
@@ -464,8 +472,7 @@ class _RelativesScreenState extends State<RelativesScreen>
         final items = _buildReminders(people, events)
           ..sort((a, b) => a.days.compareTo(b.days));
         if (items.isEmpty) {
-          return _empty('Ҳали сана йўқ.\n⊕ тугмаси орқали учрашув ёки '
-              'муҳим сана қўшинг.');
+          return _empty(context.tr('rel_empty_dates'));
         }
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
@@ -505,7 +512,12 @@ class _RelativesScreenState extends State<RelativesScreen>
         days: days,
         leading: _avatar(p),
         title: '🎂 ${p.fullName}',
-        subtitle: nb == null ? '' : '${_fmtDay(nb)} · $turning ёшга тўлади',
+        subtitle: nb == null
+            ? ''
+            : RelativesL10n.trParams(context, 'rel_birthday_subtitle', {
+                'date': _fmtDay(nb),
+                'age': '$turning',
+              }),
         onTap: () => _edit(p),
       ));
     }
@@ -517,7 +529,7 @@ class _RelativesScreenState extends State<RelativesScreen>
           .join(', ');
       final sub = [
         _fmtDay(e.nextOccurrence),
-        if (e.repeatYearly) 'ҳар йили',
+        if (e.repeatYearly) context.tr('rel_every_year'),
         if (e.place.isNotEmpty) e.place,
         if (names.isNotEmpty) names,
       ].join(' · ');
@@ -547,7 +559,10 @@ class _RelativesScreenState extends State<RelativesScreen>
   }
 
   Widget _daysBadge(int days) {
-    final label = days == 0 ? 'Бугун!' : '$days кун';
+    final label = days == 0
+        ? context.tr('rel_today')
+        : RelativesL10n.trParams(
+            context, 'rel_days_left', {'count': '$days'});
     final color = days == 0
         ? Colors.red
         : (days <= 7 ? Colors.orange : RelativesScreen._accent);
@@ -594,17 +609,6 @@ class _RelativesScreenState extends State<RelativesScreen>
         ),
       ),
     );
-  }
-
-  String _sideLabel(String side) {
-    switch (side) {
-      case 'paternal':
-        return 'Ота томон';
-      case 'maternal':
-        return 'Она томон';
-      default:
-        return '';
-    }
   }
 
   String _fmtDay(DateTime t) {

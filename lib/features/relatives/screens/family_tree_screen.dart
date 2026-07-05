@@ -1,6 +1,7 @@
-﻿import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/relative_person.dart';
@@ -8,6 +9,7 @@ import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
+import '../l10n/relatives_l10n.dart';
 import '../services/tree_export_service.dart';
 import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
@@ -15,8 +17,7 @@ import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_view.dart';
 import 'tree_node_edit_screen.dart';
 
-/// 🌳 Nasab daraxti — global komponentdan o'qiydi (ulangan oila tarmog'i),
-/// tugunni telefon orqali ulash + kelgan takliflar.
+/// 🌳 Nasab daraxti — global komponentdan o'qiydi (ulangan oila tarmog'i).
 class FamilyTreeScreen extends StatefulWidget {
   const FamilyTreeScreen({
     super.key,
@@ -25,8 +26,6 @@ class FamilyTreeScreen extends StatefulWidget {
   });
 
   final String userId;
-
-  /// O'z qarindoshini tahrirlash (relatives/people) — egasi bo'lsa.
   final void Function(String nodeId)? onEditOwnNode;
 
   @override
@@ -38,7 +37,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   final _repo = TreeRepository();
   final _relRepo = RelativesRepository();
 
-  /// Eng so'nggi komponent tugunlari (tahrirlash dropdownlari uchun).
   List<TreePerson> _comp = const [];
   Map<String, RelativePerson> _personalById = const {};
   List<RelativePerson> _exportPeople = const [];
@@ -74,7 +72,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${invites.length} та улаш таклифи бор — кўриш учун босинг',
+                      RelativesL10n.trParams(context, 'rel_invite_banner', {
+                        'count': '${invites.length}',
+                      }),
                       style: const TextStyle(
                           color: _accent, fontWeight: FontWeight.w600),
                     ),
@@ -90,9 +90,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   Widget _tree() {
-    // Daraxt ikki manba birlashmasidan quriladi:
-    //  - shaxsiy relatives/people (foydalanuvchi qo'lda tuzgan bog'lanishlar)
-    //  - tree_persons komponenti (ulangan qarindoshlar + "Men" tuguni)
     return StreamBuilder<({String componentId, String personId})>(
       stream: _repo.watchMyTreeMeta(widget.userId),
       builder: (context, metaSnap) {
@@ -167,33 +164,36 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     );
   }
 
-  Future<void> _mergeGroup(BuildContext sheetCtx, List<TreePerson> group) async {
+  Future<void> _mergeGroup(
+      BuildContext sheetCtx, List<TreePerson> group) async {
     Navigator.pop(sheetCtx);
-    final keep = group.firstWhere((n) => n.isClaimed, orElse: () => group.first);
+    final keep =
+        group.firstWhere((n) => n.isClaimed, orElse: () => group.first);
     final others = group.where((n) => n.id != keep.id).toList();
-    final bothClaimed = others.any((n) => n.isClaimed && n.claimedBy != keep.claimedBy);
+    final bothClaimed = others
+        .any((n) => n.isClaimed && n.claimedBy != keep.claimedBy);
     if (bothClaimed) {
-      _snack('Иккала тугун ҳам аккаунтга уланган — бирлаштириб бўлмайди.');
+      _snack(context.tr('rel_tree_merge_both_claimed'));
       return;
     }
     final label = duplicateGroupLabel(group);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Такрорларни бирлаштириш'),
-        content: Text(
-          '«$label» — ${group.length} та тугун.\n\n'
-          'Бу bir xil odam deb ishonchingiz komilmi?\n'
-          '«${keep.fullName}» saqlanadi, qolganlari o‘chiriladi.',
-        ),
+        title: Text(ctx.tr('rel_tree_merge_title')),
+        content: Text(RelativesL10n.trParams(ctx, 'rel_tree_merge_body', {
+          'label': label,
+          'count': '${group.length}',
+          'keep': keep.fullName,
+        })),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('no')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Бирлаштириш'),
+            child: Text(ctx.tr('rel_tree_dup_merge')),
           ),
         ],
       ),
@@ -205,15 +205,20 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         await TreeService.mergeTreePersons(keepId: keep.id, mergeId: m.id);
         done++;
       }
-      _snack('$done та тугун «${keep.fullName}» билан бирлаштирилди.');
+      _snack(RelativesL10n.trParams(context, 'rel_tree_merge_success', {
+        'count': '$done',
+        'name': keep.fullName,
+      }));
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
     } catch (e) {
-      _snack('Хатолик ($done bajarildi): $e');
+      _snack(RelativesL10n.trParams(context, 'rel_tree_merge_partial_error', {
+        'done': '$done',
+        'error': '$e',
+      }));
     }
   }
 
-  /// Daraxt ko'rinishi: nasab (ism, bog'lanish) komponentdan; shaxsiy faqat aloqa.
   RelativePerson _mergeForTreeDisplay(
     RelativePerson? personal,
     TreePerson? comp,
@@ -251,9 +256,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           children: [
             const Icon(Icons.ios_share, size: 18, color: _accent),
             const SizedBox(width: 6),
-            const Text(
-              'Экспорт:',
-              style: TextStyle(
+            Text(
+              context.tr('rel_tree_export_label'),
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: _accent,
@@ -271,7 +276,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             TextButton.icon(
               onPressed: disabled ? null : _exportPng,
               icon: const Icon(Icons.image_outlined, size: 18),
-              label: const Text('Рasm'),
+              label: Text(context.tr('rel_tree_export_image')),
               style: TextButton.styleFrom(
                 foregroundColor: _accent,
                 visualDensity: VisualDensity.compact,
@@ -306,15 +311,16 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     setState(() => _exportBusy = true);
     try {
       await action();
-      if (mounted) _snack('Ulashish oynasi ochildi.');
+      if (mounted) _snack(context.tr('rel_tree_export_share_opened'));
     } on StateError catch (e) {
       if (e.message == 'empty') {
-        _snack('Экспорт учун дарахтда киши йўқ.');
+        _snack(context.tr('rel_tree_export_empty'));
       } else {
-        _snack('Дарахт rasmini olish muvaffaqiyatsiz. Biroz kutib qayta urining.');
+        _snack(context.tr('rel_tree_export_capture_fail'));
       }
     } catch (e) {
-      _snack('Хатолик: $e');
+      _snack(RelativesL10n.trParams(
+          context, 'error_generic', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _exportBusy = false);
     }
@@ -343,7 +349,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '$count та эҳтимолий такрор топилди — бирлаштириш учун босинг',
+                  RelativesL10n.trParams(context, 'rel_tree_dup_banner', {
+                    'count': '$count',
+                  }),
                   style: const TextStyle(
                       color: Color(0xFFB9650F), fontWeight: FontWeight.w600),
                 ),
@@ -365,17 +373,17 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(8),
           children: [
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Эҳтимолий такрорлар',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(ctx.tr('rel_tree_dup_title'),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'Исм, туғилган сана ва жинс mos kelsa — bir xil odam bo‘lishi mumkin.',
-                style: TextStyle(color: Colors.grey),
+                ctx.tr('rel_tree_dup_hint'),
+                style: const TextStyle(color: Colors.grey),
               ),
             ),
             const SizedBox(height: 8),
@@ -386,9 +394,12 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${duplicateGroupLabel(g)} — ${g.length} та',
-                          style:
-                              const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                          RelativesL10n.trParams(ctx, 'rel_tree_dup_group', {
+                            'label': duplicateGroupLabel(g),
+                            'count': '${g.length}',
+                          }),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
                       for (final n in g)
                         Padding(
@@ -399,8 +410,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                               const SizedBox(width: 6),
                               Expanded(child: Text(n.fullName)),
                               if (n.isClaimed)
-                                const Text('✓ уланган',
-                                    style: TextStyle(
+                                Text(ctx.tr('rel_tree_dup_linked'),
+                                    style: const TextStyle(
                                         color: Colors.green, fontSize: 12)),
                             ],
                           ),
@@ -414,7 +425,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                               foregroundColor: Colors.white),
                           onPressed: () => _mergeGroup(ctx, g),
                           icon: const Icon(Icons.merge_type, size: 18),
-                          label: const Text('Бирлаштириш'),
+                          label: Text(ctx.tr('rel_tree_dup_merge')),
                         ),
                       ),
                     ],
@@ -426,7 +437,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       ),
     );
   }
-
 
   void _onNodeTap(TreePerson node) {
     final isMine = node.ownerUid == widget.userId;
@@ -450,14 +460,14 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               title: Text(node.fullName,
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: node.isClaimed
-                  ? const Text('✓ Аккаунтга уланган')
-                  : (isMine ? const Text('Сизнинг рўйхатингиз') : null),
+                  ? Text(ctx.tr('rel_node_claimed'))
+                  : (isMine ? Text(ctx.tr('rel_node_yours')) : null),
             ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.account_tree_outlined, color: _accent),
-              title: const Text('Таҳрирлаш (умумий тармоқ)'),
-              subtitle: const Text('Исм, сана, ота/она/турмуш ўртоғи'),
+              title: Text(ctx.tr('rel_node_edit_network')),
+              subtitle: Text(ctx.tr('rel_node_edit_sub')),
               onTap: () {
                 Navigator.pop(ctx);
                 _editNode(node);
@@ -466,8 +476,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             if (isMine && !isSelf && !node.isClaimed)
               ListTile(
                 leading: const Icon(Icons.link, color: _accent),
-                title: const Text('Аккаунтга улаш (телефон орқали)'),
-                subtitle: const Text('У қабул қилса, дарахтлар бирлашади'),
+                title: Text(ctx.tr('rel_node_link_account')),
+                subtitle: Text(ctx.tr('rel_node_link_sub')),
                 onTap: () {
                   Navigator.pop(ctx);
                   _sendInvite(node);
@@ -476,8 +486,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             if (isMine && widget.onEditOwnNode != null)
               ListTile(
                 leading: const Icon(Icons.edit_note_outlined),
-                title: const Text('Шахсий маълумотлар'),
-                subtitle: const Text('Телефон, манзил, изоҳ, фотоальбом'),
+                title: Text(ctx.tr('rel_node_personal')),
+                subtitle: Text(ctx.tr('rel_node_personal_sub')),
                 onTap: () {
                   Navigator.pop(ctx);
                   widget.onEditOwnNode!(node.id);
@@ -515,30 +525,30 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       phone = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('«${node.fullName}» ни улаш'),
+          title: Text(RelativesL10n.trParams(
+              ctx, 'rel_link_dialog_title', {'name': node.fullName})),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                  'Қариндошингизнинг иловадаги телефон рақамини киритинг. '
-                  'У қабул қилса, дарахтларингиз бирлашади.'),
+              Text(ctx.tr('rel_link_dialog_body')),
               const SizedBox(height: 12),
               TextField(
                 controller: ctrl,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Телефон',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: ctx.tr('phone'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ],
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('Бекор')),
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(ctx.tr('cancel'))),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-              child: const Text('Юбориш'),
+              child: Text(ctx.tr('rel_send')),
             ),
           ],
         ),
@@ -552,12 +562,13 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           await TreeService.sendLinkInvite(nodeId: node.id, toPhone: phone);
       if (!mounted) return;
       _snack(res['alreadySent'] == true
-          ? 'Таклиф аввал юборилган.'
-          : 'Таклиф юборилди.');
+          ? context.tr('rel_link_already_sent')
+          : context.tr('rel_link_sent'));
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
     } catch (e) {
-      _snack('Хатолик: $e');
+      _snack(RelativesL10n.trParams(
+          context, 'error_generic', {'error': '$e'}));
     }
   }
 

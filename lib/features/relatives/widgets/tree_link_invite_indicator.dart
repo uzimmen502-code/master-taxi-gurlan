@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../repositories/tree_repository.dart';
+import '../l10n/relatives_l10n.dart';
 
 /// Kutilayotgan daraxt ulash takliflari soni (real-time).
 class TreeLinkInviteCount extends StatelessWidget {
@@ -74,8 +76,9 @@ class TreeLinkInviteIconButton extends StatelessWidget {
       builder: (context, count) {
         return IconButton(
           tooltip: count > 0
-              ? '$count та улаш таклифи'
-              : 'Улаш таклифлари',
+              ? RelativesL10n.trParams(
+                  context, 'rel_invite_tooltip', {'count': '$count'})
+              : context.tr('rel_invite_tooltip_empty'),
           onPressed: count > 0 ? onTap : null,
           icon: Badge(
             isLabelVisible: count > 0,

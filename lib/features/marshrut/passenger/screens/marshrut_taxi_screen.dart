@@ -24,11 +24,19 @@ import '../../driver/screens/driver_register_marshrut_screen.dart';
 import '../../../../services/location_service.dart';
 import '../../../../services/user_role_sync.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../models/marshrut_search_filter_stats.dart';
+import '../models/marshrut_route_pair.dart';
+import '../utils/marshrut_popular_routes.dart';
+import '../utils/marshrut_filter_hint.dart';
 import '../controllers/marshrut_search_controller.dart';
 import '../services/marshrut_mfy_history.dart';
-import '../widgets/mfy_dropdown.dart';
+import '../services/marshrut_search_reminder_service.dart';
+import '../widgets/marshrut_direction_chips.dart';
+import '../widgets/marshrut_results_view_toggle.dart';
+import '../widgets/marshrut_route_field.dart';
+import '../widgets/marshrut_search_map_view.dart';
+import '../widgets/mfy_picker_sheet.dart';
 import '../widgets/schedule_card.dart';
+import '../widgets/schedule_card_skeleton.dart';
 import 'marshrut_waiting_screen.dart';
 
 /// Yo'lovchi marshrut taksi qidirayotgan ekran.
@@ -65,16 +73,15 @@ class _MarshrutTaxiView extends StatefulWidget {
 class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   static const Color _accent = AppColors.primary;
 
-  final TextEditingController _fromCtrl = TextEditingController();
-  final TextEditingController _toCtrl = TextEditingController();
-  bool _showFromDropdown = false;
-  bool _showToDropdown = false;
-  Timer? _debounce;
+  Timer? _autoSearchDebounce;
   String? _lastErrorShown;
   bool _directionChanged = false;
   bool _isSubmitting = false;
   List<String> _recentFrom = const [];
   List<String> _recentTo = const [];
+  List<MarshrutRoutePair> _recentRoutes = const [];
+  MarshrutResultsView _resultsView = MarshrutResultsView.list;
+  MarshrutSearchReminder? _pendingReminder;
   StreamSubscription<ActiveTrip>? _acceptedTripSub;
   bool _rerouteInProgress = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _approvalSub;
@@ -89,15 +96,24 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     _searchCtrl = context.read<MarshrutSearchController>();
     _searchCtrl!.addListener(_onSearchBlockUpdate);
     _loadMfyHistory();
+    _loadPendingReminder();
+  }
+
+  Future<void> _loadPendingReminder() async {
+    final reminder = await MarshrutSearchReminderService.instance.load();
+    if (!mounted) return;
+    setState(() => _pendingReminder = reminder);
   }
 
   Future<void> _loadMfyHistory() async {
     final from = await MarshrutMfyHistory.loadFrom();
     final to = await MarshrutMfyHistory.loadTo();
+    final routes = await MarshrutMfyHistory.loadRecentRoutes();
     if (!mounted) return;
     setState(() {
       _recentFrom = from;
       _recentTo = to;
+      _recentRoutes = routes;
     });
   }
 
@@ -107,6 +123,9 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     }
     if (c.toMfy.isNotEmpty) {
       await MarshrutMfyHistory.addTo(c.toMfy);
+    }
+    if (c.fromMfy.isNotEmpty && c.toMfy.isNotEmpty) {
+      await MarshrutMfyHistory.addRoute(c.fromMfy, c.toMfy);
     }
     await _loadMfyHistory();
   }
@@ -138,10 +157,8 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   void dispose() {
     _searchCtrl?.removeListener(_onSearchBlockUpdate);
     _approvalSub?.cancel();
-    _debounce?.cancel();
+    _autoSearchDebounce?.cancel();
     _acceptedTripSub?.cancel();
-    _fromCtrl.dispose();
-    _toCtrl.dispose();
     super.dispose();
   }
 
@@ -310,40 +327,186 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     }
   }
 
-  void _onFromQueryChanged(String q) {
-    setState(() => _showFromDropdown = q.length >= 2 || _recentFrom.isNotEmpty);
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(
-          () => _showFromDropdown = q.length >= 2 || _recentFrom.isNotEmpty);
-    });
-  }
-
-  void _onToQueryChanged(String q) {
-    setState(() => _showToDropdown = q.length >= 2 || _recentTo.isNotEmpty);
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(() => _showToDropdown = q.length >= 2 || _recentTo.isNotEmpty);
-    });
-  }
-
   void _swapDirection(MarshrutSearchController c) {
-    final fromVal =
-        c.fromMfy.isNotEmpty ? c.fromMfy : _fromCtrl.text.trim();
-    final toVal = c.toMfy.isNotEmpty ? c.toMfy : _toCtrl.text.trim();
+    final fromVal = c.fromMfy;
+    final toVal = c.toMfy;
     c.setFromMfy(toVal);
     c.setToMfy(fromVal);
-    _fromCtrl.text = toVal;
-    _toCtrl.text = fromVal;
     setState(() {
-      _showFromDropdown = false;
-      _showToDropdown = false;
       if (c.searched && c.results.isNotEmpty) {
         _directionChanged = true;
       }
     });
+    _scheduleAutoSearch(c);
+  }
+
+  Future<void> _openFromPicker(MarshrutSearchController c) async {
+    final picked = await showMarshrutMfyPickerSheet(
+      context,
+      title: context.tr('from'),
+      recentPlaces: _recentFrom,
+      initialQuery: c.fromMfy,
+    );
+    if (!mounted || picked == null) return;
+    c.setFromMfy(picked);
+    setState(() {});
+    _scheduleAutoSearch(c);
+  }
+
+  Future<void> _openToPicker(MarshrutSearchController c) async {
+    final picked = await showMarshrutMfyPickerSheet(
+      context,
+      title: context.tr('to'),
+      recentPlaces: _recentTo,
+      initialQuery: c.toMfy,
+    );
+    if (!mounted || picked == null) return;
+    c.setToMfy(picked);
+    setState(() {});
+    _scheduleAutoSearch(c);
+  }
+
+  void _applyRoutePair(MarshrutSearchController c, MarshrutRoutePair route) {
+    c.setFromMfy(route.from);
+    c.setToMfy(route.to);
+    setState(() => _directionChanged = false);
+    _scheduleAutoSearch(c);
+  }
+
+  void _scheduleAutoSearch(MarshrutSearchController c) {
+    _autoSearchDebounce?.cancel();
+    if (c.fromMfy.isEmpty || c.toMfy.isEmpty || c.isSearching) return;
+    if (c.fromMfy == c.toMfy) return;
+    _autoSearchDebounce = Timer(const Duration(milliseconds: 450), () async {
+      if (!mounted) return;
+      final live = context.read<MarshrutSearchController>();
+      if (live.fromMfy.isEmpty ||
+          live.toMfy.isEmpty ||
+          live.isSearching ||
+          live.fromMfy == live.toMfy) {
+        return;
+      }
+      setState(() => _directionChanged = false);
+      await live.search();
+      await _persistMfyHistory(live);
+    });
+  }
+
+  Future<void> _runSearch(MarshrutSearchController c) async {
+    setState(() => _directionChanged = false);
+    await c.search();
+    await _persistMfyHistory(c);
+    if (c.results.isNotEmpty &&
+        MarshrutSearchReminderService.instance
+            .matchesRoute(_pendingReminder, c.fromMfy, c.toMfy)) {
+      await MarshrutSearchReminderService.instance.clear();
+      if (mounted) setState(() => _pendingReminder = null);
+    }
+  }
+
+  Future<void> _scheduleSearchReminder(
+    MarshrutSearchController c,
+    Duration delay,
+  ) async {
+    if (c.fromMfy.isEmpty || c.toMfy.isEmpty) return;
+    final title = context.tr('marshrut_remind_notification_title');
+    final body = context
+        .tr('marshrut_remind_notification_body')
+        .replaceAll('{from}', c.fromMfy)
+        .replaceAll('{to}', c.toMfy);
+    await MarshrutSearchReminderService.instance.schedule(
+      fromMfy: c.fromMfy,
+      toMfy: c.toMfy,
+      delay: delay,
+      title: title,
+      body: body,
+    );
+    await _loadPendingReminder();
+    if (!mounted) return;
+    _snack(context.tr('marshrut_remind_scheduled'));
+  }
+
+  Future<void> _cancelSearchReminder() async {
+    await MarshrutSearchReminderService.instance.clear();
+    if (!mounted) return;
+    setState(() => _pendingReminder = null);
+    _snack(context.tr('marshrut_remind_cancelled'));
+  }
+
+  Future<void> _showRemindLaterSheet(MarshrutSearchController c) async {
+    final hasActive = MarshrutSearchReminderService.instance
+        .matchesRoute(_pendingReminder, c.fromMfy, c.toMfy);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.tr('marshrut_remind_later'),
+                style: const TextStyle(
+                  fontSize: AppText.titleMedium,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.tr('marshrut_remind_later_hint'),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _scheduleSearchReminder(c, const Duration(minutes: 15));
+                },
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: Text(context.tr('marshrut_remind_in_15')),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _scheduleSearchReminder(c, const Duration(minutes: 30));
+                },
+                icon: const Icon(Icons.schedule_outlined),
+                label: Text(context.tr('marshrut_remind_in_30')),
+              ),
+              if (hasActive) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _cancelSearchReminder();
+                  },
+                  child: Text(context.tr('marshrut_remind_cancel')),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _reminderScheduledLabel(MarshrutSearchController c) {
+    if (!MarshrutSearchReminderService.instance
+        .matchesRoute(_pendingReminder, c.fromMfy, c.toMfy)) {
+      return null;
+    }
+    final at = _pendingReminder!.scheduledAt;
+    final hh = at.hour.toString().padLeft(2, '0');
+    final mm = at.minute.toString().padLeft(2, '0');
+    return context
+        .tr('marshrut_remind_scheduled_at')
+        .replaceAll('{time}', '$hh:$mm');
   }
 
   Future<void> _openDriverPanel() async {
@@ -598,15 +761,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
           ),
         ],
       ),
-      body: GestureDetector(
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          setState(() {
-            _showFromDropdown = false;
-            _showToDropdown = false;
-          });
-        },
-        child: Column(children: [
+      body: Column(children: [
           if (c.isBlockActive && c.effectiveCancelCount >= 7)
             Container(
               width: double.infinity,
@@ -645,75 +800,84 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
               ),
             ),
           _SearchPanel(
-            fromCtrl: _fromCtrl,
-            toCtrl: _toCtrl,
             fromMfy: c.fromMfy,
             toMfy: c.toMfy,
-            recentFrom: _recentFrom,
-            recentTo: _recentTo,
-            showFromDropdown: _showFromDropdown,
-            showToDropdown: _showToDropdown,
+            recentRoutes: _recentRoutes,
             isSearching: c.isSearching,
-            onFromQueryChanged: _onFromQueryChanged,
-            onToQueryChanged: _onToQueryChanged,
-            onFromTap: () => setState(() => _showFromDropdown = true),
-            onToTap: () => setState(() => _showToDropdown = true),
-            onFromSelected: (v) {
-              c.setFromMfy(v);
-              _fromCtrl.text = v;
-              setState(() => _showFromDropdown = false);
+            onFromTap: () => _openFromPicker(c),
+            onToTap: () => _openToPicker(c),
+            onFromClear: () {
+              c.setFromMfy('');
+              setState(() {});
             },
-            onToSelected: (v) {
-              c.setToMfy(v);
-              _toCtrl.text = v;
-              setState(() => _showToDropdown = false);
+            onToClear: () {
+              c.setToMfy('');
+              setState(() {});
             },
+            onRouteSelected: (route) => _applyRoutePair(c, route),
             onSwapDirection: () => _swapDirection(c),
-            onSearch: c.isSearching
-                ? null
-                : () async {
-                    setState(() => _directionChanged = false);
-                    await c.search();
-                    await _persistMfyHistory(c);
-                  },
+            onManualSearch: c.isSearching ? null : () => _runSearch(c),
           ),
           Expanded(child: _buildResults(c)),
         ]),
-      ),
     );
   }
 
   Widget _buildResults(MarshrutSearchController c) {
+    if (c.isSearching && !c.searched) {
+      return const ScheduleCardSkeletonList(count: 3);
+    }
     if (!c.searched) {
       return Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         const Text('🚐', style: TextStyle(fontSize: 64)),
         const SizedBox(height: 12),
-        Text(context.tr('marshrut_select_mfy_and_search'),
-            style: TextStyle(
-                fontSize: AppText.bodyLarge, color: Colors.grey.shade400)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(context.tr('marshrut_direction_card_hint'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: AppText.bodyLarge, color: Colors.grey.shade500)),
+        ),
       ]));
     }
     if (c.results.isEmpty) {
+      final hint = marshrutHumanFilterHint(context, c.filterStats,
+          emptyResults: true);
       return Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Text('рџ”', style: TextStyle(fontSize: 48)),
+        const Text('\u{1F614}', style: TextStyle(fontSize: 48)),
         const SizedBox(height: 12),
         Text(context.tr('marshrut_no_drivers_match'),
             style: TextStyle(
-                fontSize: AppText.bodyLarge, color: Colors.grey.shade400)),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            context.tr('marshrut_try_swap_direction'),
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 13,
+                fontSize: AppText.bodyLarge, color: Colors.grey.shade600)),
+        if (hint != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Text(
+              hint,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
           ),
-        ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              context.tr('marshrut_try_swap_direction'),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
         TextButton.icon(
           onPressed: c.isSearching
               ? null
@@ -722,23 +886,28 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                   final to = c.toMfy;
                   c.setFromMfy(to);
                   c.setToMfy(from);
-                  _fromCtrl.text = to;
-                  _toCtrl.text = from;
                   setState(() => _directionChanged = false);
-                  await c.search();
+                  await _runSearch(c);
                 },
           icon: const Icon(Icons.swap_vert),
           label: Text(context.tr('swap_direction')),
         ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _filterStatsText(context, c.filterStats),
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        const SizedBox(height: 8),
+        if (_reminderScheduledLabel(c) != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              _reminderScheduledLabel(c)!,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: AppColors.primary),
+            ),
+          )
+        else
+          OutlinedButton.icon(
+            onPressed: c.isSearching ? null : () => _showRemindLaterSheet(c),
+            icon: const Icon(Icons.notifications_outlined),
+            label: Text(context.tr('marshrut_remind_later')),
           ),
-        ),
       ]));
     }
     return Column(children: [
@@ -767,9 +936,23 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('🚐 ${c.results.length} ${context.tr('cars_found')}',
-                style: const TextStyle(
-                    fontSize: AppText.bodyLarge, fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '🚐 ${c.results.length} ${context.tr('cars_found')}',
+                    style: const TextStyle(
+                      fontSize: AppText.bodyLarge,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                MarshrutResultsViewToggle(
+                  selected: _resultsView,
+                  onChanged: (v) => setState(() => _resultsView = v),
+                ),
+              ],
+            ),
             if (_pricePerSeat != null && _pricePerSeat! > 0) ...[
               const SizedBox(height: 4),
               Text(
@@ -783,10 +966,13 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                 ),
               ),
             ],
-            if (c.filterStats.hasHiddenReasons) ...[
+            if (marshrutHumanFilterHint(context, c.filterStats,
+                    emptyResults: false) !=
+                null) ...[
               const SizedBox(height: 4),
               Text(
-                _filterStatsText(context, c.filterStats),
+                marshrutHumanFilterHint(context, c.filterStats,
+                    emptyResults: false)!,
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -794,149 +980,136 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         ),
       ),
       Expanded(
-          child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-        itemCount: c.results.length,
-        itemBuilder: (_, i) => ScheduleCard(
-          result: c.results[i],
-          onCall: _onCall,
-        ),
-      )),
+        child: _resultsView == MarshrutResultsView.map
+            ? MarshrutSearchMapView(
+                userLat: c.userLat,
+                userLng: c.userLng,
+                results: c.results,
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                itemCount: c.results.length,
+                itemBuilder: (_, i) => ScheduleCard(
+                  result: c.results[i],
+                  onCall: _onCall,
+                ),
+              ),
+      ),
     ]);
-  }
-
-  String _filterStatsText(
-    BuildContext context,
-    MarshrutSearchFilterStats s,
-  ) {
-    return context.tr('marshrut_search_filter_stats').replaceAll('{total}', '${s.totalActive}').replaceAll('{offline}', '${s.offline}').replaceAll('{full}', '${s.full}').replaceAll('{route}', '${s.routeMismatch}').replaceAll('{eligible}', '${s.notYetEligible}').replaceAll('{far}', '${s.tooFar}');
   }
 }
 
 class _SearchPanel extends StatelessWidget {
   const _SearchPanel({
-    required this.fromCtrl,
-    required this.toCtrl,
     required this.fromMfy,
     required this.toMfy,
-    required this.recentFrom,
-    required this.recentTo,
-    required this.showFromDropdown,
-    required this.showToDropdown,
+    required this.recentRoutes,
     required this.isSearching,
-    required this.onFromQueryChanged,
-    required this.onToQueryChanged,
     required this.onFromTap,
     required this.onToTap,
-    required this.onFromSelected,
-    required this.onToSelected,
+    required this.onFromClear,
+    required this.onToClear,
+    required this.onRouteSelected,
     required this.onSwapDirection,
-    required this.onSearch,
+    this.onManualSearch,
   });
 
-  final TextEditingController fromCtrl;
-  final TextEditingController toCtrl;
   final String fromMfy;
   final String toMfy;
-  final List<String> recentFrom;
-  final List<String> recentTo;
-  final bool showFromDropdown;
-  final bool showToDropdown;
+  final List<MarshrutRoutePair> recentRoutes;
   final bool isSearching;
-  final ValueChanged<String> onFromQueryChanged;
-  final ValueChanged<String> onToQueryChanged;
   final VoidCallback onFromTap;
   final VoidCallback onToTap;
-  final ValueChanged<String> onFromSelected;
-  final ValueChanged<String> onToSelected;
+  final VoidCallback onFromClear;
+  final VoidCallback onToClear;
+  final ValueChanged<MarshrutRoutePair> onRouteSelected;
   final VoidCallback onSwapDirection;
-  final VoidCallback? onSearch;
+  final VoidCallback? onManualSearch;
 
   @override
   Widget build(BuildContext context) {
+    final canSearch = fromMfy.isNotEmpty && toMfy.isNotEmpty;
     return Container(
       color: _MarshrutTaxiViewState._accent,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(context.tr('from'),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white70)),
-          const SizedBox(height: 4),
-          MfyDropdown(
-            ctrl: fromCtrl,
-            hint: context.tr('mfy_select_hint'),
-            value: fromMfy,
-            show: showFromDropdown,
-            icon: Icons.circle_outlined,
-            iconColor: AppColors.primaryMid,
-            recentPlaces: recentFrom,
-            onTap: onFromTap,
-            onQueryChanged: onFromQueryChanged,
-            onSelected: onFromSelected,
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 34,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(context.tr('to'),
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white70)),
-                ),
-                _SwapDirectionPill(onTap: onSwapDirection),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          MfyDropdown(
-            ctrl: toCtrl,
-            hint: context.tr('mfy_select_hint'),
-            value: toMfy,
-            show: showToDropdown,
-            icon: Icons.location_on,
-            iconColor: Colors.redAccent,
-            recentPlaces: recentTo,
-            onTap: onToTap,
-            onQueryChanged: onToQueryChanged,
-            onSelected: onToSelected,
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: ElevatedButton.icon(
-              onPressed: onSearch,
-              icon: isSearching
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.search, size: 20),
-              label: Text(
-                  isSearching
-                      ? context.tr('searching')
-                      : context.tr('search_driver'),
-                  style: const TextStyle(
-                      fontSize: AppText.bodyLarge,
-                      fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: _MarshrutTaxiViewState._accent,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+          Material(
+            elevation: 2,
+            shadowColor: Colors.black26,
+            borderRadius: BorderRadius.circular(14),
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Column(
+                children: [
+                  MarshrutRouteField(
+                    hint: context.tr('from'),
+                    value: fromMfy,
+                    icon: Icons.trip_origin,
+                    iconColor: AppColors.primaryMid,
+                    onTap: onFromTap,
+                    onClear: onFromClear,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Divider(
+                          color: Colors.grey.shade300,
+                          height: 1,
+                        ),
+                      ),
+                      _SwapDirectionPill(onTap: onSwapDirection),
+                      Expanded(
+                        child: Divider(
+                          color: Colors.grey.shade300,
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  MarshrutRouteField(
+                    hint: context.tr('to'),
+                    value: toMfy,
+                    icon: Icons.location_on,
+                    iconColor: Colors.redAccent,
+                    onTap: onToTap,
+                    onClear: onToClear,
+                  ),
+                ],
               ),
             ),
           ),
+          const SizedBox(height: 10),
+          MarshrutDirectionChips(
+            recentRoutes: recentRoutes,
+            popularRoutes: MarshrutPopularRoutes.routes,
+            activeFrom: fromMfy.isEmpty ? null : fromMfy,
+            activeTo: toMfy.isEmpty ? null : toMfy,
+            onRouteSelected: onRouteSelected,
+          ),
+          if (isSearching) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.white24,
+              color: Colors.white,
+            ),
+          ] else if (canSearch && onManualSearch != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onManualSearch,
+                icon: const Icon(Icons.refresh, size: 16, color: Colors.white),
+                label: Text(
+                  context.tr('marshrut_search_again'),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

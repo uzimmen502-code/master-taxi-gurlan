@@ -36,6 +36,7 @@ import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_offer_screen.dart';
 import '../circles/screens/circles_hub_screen.dart';
+import '../dating/screens/dating_home_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
@@ -450,6 +451,8 @@ class _HomeViewState extends State<_HomeView> {
                                   onOilChange: _showTezKundaSnack,
                                   onCircles: () =>
                                       _push(const CirclesHubScreen()),
+                                  onDating: () =>
+                                      _push(const DatingHomeScreen()),
                                 ),
                                 const SizedBox(height: 16),
                                 FeaturedProductsSection(
@@ -529,6 +532,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
     required this.onTire,
     required this.onOilChange,
     required this.onCircles,
+    required this.onDating,
   });
 
   final VoidCallback onLocal;
@@ -546,6 +550,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
   final VoidCallback onTire;
   final VoidCallback onOilChange;
   final VoidCallback onCircles;
+  final VoidCallback onDating;
 
   @override
   State<_UnifiedServicesGrid> createState() => _UnifiedServicesGridState();
@@ -592,6 +597,8 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           'Gilam yuvish', widget.onCarpetWash),
       _GridItemData('assets/images/services/service_relatives.png',
           'Mening yaqinlarim', widget.onCircles),
+      _GridItemData(null, context.tr('dating_short_label'), widget.onDating,
+          emoji: '❤️'),
       _GridItemData('assets/images/services/service_milk.png',
           context.tr('milk_short_label'), widget.onSut),
       _GridItemData('assets/images/services/service_tire.png',
@@ -691,11 +698,13 @@ class _PageDots extends StatelessWidget {
 }
 
 class _GridItemData {
-  const _GridItemData(this.image, this.label, this.onTap, {this.icon});
+  const _GridItemData(this.image, this.label, this.onTap,
+      {this.icon, this.emoji});
   final String? image;
   final String label;
   final VoidCallback onTap;
   final IconData? icon;
+  final String? emoji;
 }
 
 class _GridTile extends StatefulWidget {
@@ -738,13 +747,18 @@ class _GridTileState extends State<_GridTile> {
               SizedBox(
                 width: iconSize,
                 height: iconSize,
-                child: widget.data.icon != null
-                    ? Icon(widget.data.icon,
-                        size: iconSize * 0.74, color: _brandGreen)
-                    : Image.asset(
-                        widget.data.image!,
-                        fit: BoxFit.contain,
-                      ),
+                child: widget.data.emoji != null
+                    ? Text(
+                        widget.data.emoji!,
+                        style: TextStyle(fontSize: iconSize * 0.74),
+                      )
+                    : widget.data.icon != null
+                        ? Icon(widget.data.icon,
+                            size: iconSize * 0.74, color: _brandGreen)
+                        : Image.asset(
+                            widget.data.image!,
+                            fit: BoxFit.contain,
+                          ),
               ),
               const SizedBox(height: 4),
               Text(

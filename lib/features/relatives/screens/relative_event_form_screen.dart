@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
+import '../l10n/relatives_l10n.dart';
 
 /// 📅 Sana / uchrashuv qo'shish-tahrirlash.
 class RelativeEventFormScreen extends StatefulWidget {
@@ -73,11 +75,11 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
-      _snack('Номини киритинг.');
+      _snack(context.tr('rel_event_title_required'));
       return;
     }
     if (_date == null) {
-      _snack('Санани танланг.');
+      _snack(context.tr('rel_event_date_required'));
       return;
     }
     setState(() => _busy = true);
@@ -99,7 +101,10 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) _snack('Хатолик: $e');
+      if (mounted) {
+        _snack(RelativesL10n.trParams(
+            context, 'error_generic', {'error': '$e'}));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -111,17 +116,18 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ўчириш'),
-        content: Text('«${e.title}» ни ўчирасизми?'),
+        title: Text(ctx.tr('delete')),
+        content: Text(RelativesL10n.trParams(
+            ctx, 'rel_delete_confirm_body', {'name': e.title})),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Йўқ')),
+              child: Text(ctx.tr('no'))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Ўчираман'),
+            child: Text(ctx.tr('rel_delete_i_confirm')),
           ),
         ],
       ),
@@ -140,7 +146,9 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
     final isEdit = widget.existing != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? 'Санани таҳрирлаш' : 'Сана / учрашув'),
+        title: Text(isEdit
+            ? context.tr('rel_event_edit_title')
+            : context.tr('rel_event_add_title')),
         backgroundColor: RelativeEventFormScreen._accent,
         foregroundColor: Colors.white,
         actions: [
@@ -154,7 +162,7 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _field(_titleCtrl, 'Номи * (масалан: Никоҳ йили)',
+          _field(_titleCtrl, context.tr('rel_event_field_title'),
               Icons.title_outlined),
           const SizedBox(height: 12),
           _typeDropdown(),
@@ -162,28 +170,34 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event_outlined),
-            title: Text(_date == null ? 'Сана *' : _fmtDate(_date!)),
+            title: Text(_date == null
+                ? context.tr('rel_event_field_date')
+                : _fmtDate(_date!)),
             trailing: const Icon(Icons.edit_calendar_outlined),
             onTap: _pickDate,
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             activeThumbColor: RelativeEventFormScreen._accent,
-            title: const Text('Ҳар йили такрорланади'),
-            subtitle: const Text('Йил саналари учун (никоҳ, хотира ва ҳ.к.)'),
+            title: Text(context.tr('rel_event_repeat')),
+            subtitle: Text(context.tr('rel_event_repeat_sub')),
             value: _repeatYearly,
             onChanged: (v) => setState(() => _repeatYearly = v),
           ),
           const SizedBox(height: 4),
-          _field(_placeCtrl, 'Жой (ихтиёрий)', Icons.location_on_outlined),
+          _field(_placeCtrl, context.tr('rel_event_place'),
+              Icons.location_on_outlined),
           const SizedBox(height: 12),
-          _field(_noteCtrl, 'Изоҳ', Icons.notes_outlined, maxLines: 3),
+          _field(_noteCtrl, context.tr('rel_field_notes'), Icons.notes_outlined,
+              maxLines: 3),
           if (widget.allPeople.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text('Боғланган қариндошлар',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: RelativeEventFormScreen._accent)),
+            Text(
+              context.tr('rel_event_linked'),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: RelativeEventFormScreen._accent),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -221,7 +235,7 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
                       height: 22,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Text('Сақлаш'),
+                  : Text(context.tr('save')),
             ),
           ),
         ],
@@ -231,10 +245,10 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
 
   Widget _typeDropdown() {
     return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Тури',
-        prefixIcon: Icon(Icons.category_outlined),
-        border: OutlineInputBorder(),
+      decoration: InputDecoration(
+        labelText: context.tr('rel_event_field_type'),
+        prefixIcon: const Icon(Icons.category_outlined),
+        border: const OutlineInputBorder(),
         isDense: true,
       ),
       child: DropdownButtonHideUnderline(
@@ -244,7 +258,7 @@ class _RelativeEventFormScreenState extends State<RelativeEventFormScreen> {
           items: RelativeEventType.values
               .map((t) => DropdownMenuItem(
                     value: t,
-                    child: Text('${t.emoji} ${t.label}'),
+                    child: Text('${t.emoji} ${t.trLabel(context)}'),
                   ))
               .toList(),
           onChanged: (v) => setState(() => _type = v ?? _type),

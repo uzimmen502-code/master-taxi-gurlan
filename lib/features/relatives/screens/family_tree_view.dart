@@ -18,6 +18,7 @@ class FamilyTreeView extends StatefulWidget {
     this.onTap,
     this.immersive = false,
     this.onExitImmersive,
+    this.exportCaptureKey,
   });
 
   /// Widget testlari uchun oxirgi muvaffaqiyatli layout hisoboti.
@@ -28,6 +29,9 @@ class FamilyTreeView extends StatefulWidget {
   final void Function(RelativePerson person)? onTap;
   final bool immersive;
   final VoidCallback? onExitImmersive;
+
+  /// PNG/PDF export uchun daraxt kanvasi.
+  final GlobalKey? exportCaptureKey;
 
   @override
   State<FamilyTreeView> createState() => _FamilyTreeViewState();
@@ -1111,6 +1115,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
           onInteractionStart: (_) => _isScaleGesture = true,
           onInteractionEnd: (_) => _isScaleGesture = false,
           child: RepaintBoundary(
+            key: widget.exportCaptureKey,
             child: SizedBox(
               width: _contentSize.width,
               height: _contentSize.height,

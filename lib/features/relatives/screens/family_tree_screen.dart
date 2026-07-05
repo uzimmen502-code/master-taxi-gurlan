@@ -8,6 +8,7 @@ import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
+import '../services/tree_export_service.dart';
 import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
 import '../widgets/tree_link_invites_sheet.dart';
@@ -40,12 +41,16 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   /// Eng so'nggi komponent tugunlari (tahrirlash dropdownlari uchun).
   List<TreePerson> _comp = const [];
   Map<String, RelativePerson> _personalById = const {};
+  List<RelativePerson> _exportPeople = const [];
+  final _treeCaptureKey = GlobalKey();
+  bool _exportBusy = false;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         _invitesBanner(),
+        _exportBar(),
         Expanded(child: _tree()),
       ],
     );
@@ -131,12 +136,14 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                         renderById.values.toList(growable: false);
                     final dupGroups = findDuplicateGroups(comp);
                     _comp = comp;
+                    _exportPeople = people;
 
                     return Column(
                       children: [
                         if (dupGroups.isNotEmpty) _dupBar(dupGroups),
                         Expanded(
                           child: FamilyTreeView(
+                            exportCaptureKey: _treeCaptureKey,
                             people: people,
                             onTap: (RelativePerson p) {
                               final node = compById[p.id];
@@ -233,6 +240,94 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       createdAt: personal.createdAt,
     );
   }
+
+  Widget _exportBar() {
+    final disabled = _exportBusy || _exportPeople.isEmpty;
+    return Material(
+      color: const Color(0xFFECEAF3),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.ios_share, size: 18, color: _accent),
+            const SizedBox(width: 6),
+            const Text(
+              'Экспорт:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _accent,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: disabled ? null : _exportGedcom,
+              icon: const Icon(Icons.description_outlined, size: 18),
+              label: const Text('GEDCOM'),
+              style: TextButton.styleFrom(
+                foregroundColor: _accent,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: disabled ? null : _exportPng,
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: const Text('Рasm'),
+              style: TextButton.styleFrom(
+                foregroundColor: _accent,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: disabled ? null : _exportPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('PDF'),
+              style: TextButton.styleFrom(
+                foregroundColor: _accent,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            if (_exportBusy)
+              const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runExport(Future<void> Function() action) async {
+    if (_exportBusy) return;
+    setState(() => _exportBusy = true);
+    try {
+      await action();
+      if (mounted) _snack('Ulashish oynasi ochildi.');
+    } on StateError catch (e) {
+      if (e.message == 'empty') {
+        _snack('Экспорт учун дарахтда киши йўқ.');
+      } else {
+        _snack('Дарахт rasmini olish muvaffaqiyatsiz. Biroz kutib qayta urining.');
+      }
+    } catch (e) {
+      _snack('Хатолик: $e');
+    } finally {
+      if (mounted) setState(() => _exportBusy = false);
+    }
+  }
+
+  Future<void> _exportGedcom() =>
+      _runExport(() => TreeExportService.shareGedcom(_exportPeople));
+
+  Future<void> _exportPng() =>
+      _runExport(() => TreeExportService.shareTreePng(_treeCaptureKey));
+
+  Future<void> _exportPdf() =>
+      _runExport(() => TreeExportService.shareTreePdf(_treeCaptureKey));
 
   Widget _dupBar(List<List<TreePerson>> groups) {
     final count = groups.fold<int>(0, (a, g) => a + g.length);

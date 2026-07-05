@@ -61,6 +61,8 @@ dependencies:
   fl_chart: ^0.69.0
   intl: ^0.20.2
   device_info_plus: ^12.4.0
+  share_plus: ^10.1.4
+  pdf: ^3.11.3
   flutter_ringtone_player: ^4.0.0
   audioplayers: ^6.1.0
   graphview: ^1.5.1

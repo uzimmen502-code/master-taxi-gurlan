@@ -1,10 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../painters/calligraphic_border_painter.dart';
+import '../painters/metallic_border_highlight_painter.dart';
 
-/// Hamyon kartasi — yashil fon + oltin ramka + aylanuvchi binaфsha gradient chegara.
+/// Hamyon kartasi — yashil fon + oltin ramka + metall yuzasi yorug'ligi.
 class WalletCard extends StatefulWidget {
   const WalletCard({
     super.key,
@@ -37,8 +36,6 @@ class _WalletCardState extends State<WalletCard>
   static const _gold = Color(0xFFF5C518);
   static const _badgeText = Color(0xFF1A5E1C);
   static const _debitTint = Color(0xFFFFCDD2);
-  static const _purple = Color(0xFF4A148C);
-  static const _purpleBright = Color(0xFFE1BEE7);
 
   static const _goldLight = Color(0xFFFFF4C2);
   static const _goldDark = Color(0xFFC9A000);
@@ -46,20 +43,20 @@ class _WalletCardState extends State<WalletCard>
   static const _innerRadius = 16.0;
   static const _borderWidth = 3.5;
 
-  late final AnimationController _orbitCtrl;
+  late final AnimationController _highlightCtrl;
 
   @override
   void initState() {
     super.initState();
-    _orbitCtrl = AnimationController(
+    _highlightCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 6),
+      duration: const Duration(milliseconds: 6500),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _orbitCtrl.dispose();
+    _highlightCtrl.dispose();
     super.dispose();
   }
 
@@ -68,44 +65,20 @@ class _WalletCardState extends State<WalletCard>
     return widget.lastTxIsCredit! ? Colors.white : _debitTint;
   }
 
-  BoxDecoration _orbitShellDecoration(double turn) {
-    return BoxDecoration(
-      borderRadius: BorderRadius.circular(_outerRadius),
-      gradient: SweepGradient(
-        center: Alignment.center,
-        transform: GradientRotation(turn * math.pi * 2),
-        colors: const [
-          Colors.transparent,
-          Colors.transparent,
-          _purple,
-          _purpleBright,
-          Colors.white,
-          _purpleBright,
-          _purple,
-          Colors.transparent,
-          Colors.transparent,
-        ],
-        stops: const [
-          0.00,
-          0.28,
-          0.36,
-          0.42,
-          0.50,
-          0.58,
-          0.64,
-          0.72,
-          1.00,
-        ],
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: _purple.withValues(alpha: 0.5),
-          blurRadius: 12,
-          spreadRadius: 0.5,
+  BoxDecoration get _shellDecoration => BoxDecoration(
+        borderRadius: BorderRadius.circular(_outerRadius),
+        border: Border.all(
+          color: _goldDark.withValues(alpha: 0.55),
+          width: 1.2,
         ),
-      ],
-    );
-  }
+        boxShadow: [
+          BoxShadow(
+            color: _gold.withValues(alpha: 0.14),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      );
 
   Widget _cardBody() {
     return ClipRRect(
@@ -288,27 +261,47 @@ class _WalletCardState extends State<WalletCard>
 
   @override
   Widget build(BuildContext context) {
+    final motionReduced = MediaQuery.of(context).disableAnimations;
+
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
         textScaler: TextScaler.noScaling,
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onHistoryTap,
-          borderRadius: BorderRadius.circular(_outerRadius),
-          child: AnimatedBuilder(
-            animation: _orbitCtrl,
-            builder: (context, child) {
-              return DecoratedBox(
-                decoration: _orbitShellDecoration(_orbitCtrl.value),
-                child: Padding(
-                  padding: const EdgeInsets.all(_borderWidth),
-                  child: child,
-                ),
-              );
-            },
-            child: _cardBody(),
+      child: RepaintBoundary(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onHistoryTap,
+            borderRadius: BorderRadius.circular(_outerRadius),
+            child: AnimatedBuilder(
+              animation: _highlightCtrl,
+              builder: (context, child) {
+                return DecoratedBox(
+                  decoration: _shellDecoration,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(_borderWidth),
+                        child: child,
+                      ),
+                      if (!motionReduced)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: MetallicBorderHighlightPainter(
+                                progress: _highlightCtrl.value,
+                                borderRadius: _outerRadius,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+              child: _cardBody(),
+            ),
           ),
         ),
       ),

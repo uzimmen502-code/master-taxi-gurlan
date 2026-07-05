@@ -99,12 +99,14 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - respondDatingInterest — accept/decline interest → match on accept.
 
 ## Family Tree (Nasab daraxti — global graph)
-- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify (backfill no longer wipes `claimedBy`).
-- deleteRelativePerson — owner deletes `relatives/people/{id}` (+ album photos, tree cleanup, unlinks parent/spouse refs); client list delete uses this CF.
+- ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify; tree backfill only fills empty tree fields (no clobber).
+- addRelativePerson — server create `relatives/people/{id}` (single id); mirror via `onRelativePersonWrite`; resolves redirect on link fields.
+- deleteRelativePerson — owner deletes `relatives/people/{id}` (+ album photos, tree cleanup, unlinks parent/spouse refs); client list delete uses this CF; rules block direct client delete.
+- onRelativePersonWrite — mirror relatives→tree_persons (redirect-aware); delete branch clears tree when unclaimed.
+- sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link); accept rewrites component `relatives` refs, removes inviter placeholder row; push via notifyUserInApp (`tree_link_invite`).
+- mergeTreePersons — dedup two nodes in a component (`tree_history` type=merge); rewrites component `relatives` refs; deletes merged private row.
 - onRelativePersonWrite (trigger) — mirror `relatives/{uid}/people/{pid}` → `tree_persons` (redirect-aware); sync phone watcher index + notify owner if phone already registered.
 - onUserProfileReady (trigger `users/{uid}`) — first profile complete (`name`) → notify phone watchers (owner A) + new user B (`relative_waiting`).
-- sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link).
-- mergeTreePersons — dedup two nodes in a component (`tree_history` type=merge).
 - saveTreeNode — create/edit any component node; mirrors to owner `relatives/people` (no clobber); history type=create/edit.
 - undoTreeOperation — reverse link/merge/edit/create from `tree_history`.
 

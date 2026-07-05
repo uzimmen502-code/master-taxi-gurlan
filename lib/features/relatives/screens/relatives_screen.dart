@@ -10,6 +10,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
+import '../../../repositories/tree_repository.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
 import '../services/tree_service.dart';
@@ -23,7 +24,17 @@ import 'relative_form_screen.dart';
 
 /// 👨‍👩‍👧 Qarindoshlarim — shaxsiy ro'yxat + tug'ilgan kunlar.
 class RelativesScreen extends StatefulWidget {
-  const RelativesScreen({super.key});
+  const RelativesScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.openTreeInvites = false,
+  });
+
+  /// 0 = Ro'yxat, 1 = Nasab daraxti, 2 = Sanalar.
+  final int initialTabIndex;
+
+  /// Push yoki birinchi kirishda ulash takliflari varaqasini ochish.
+  final bool openTreeInvites;
 
   static const _accent = Color(0xFF6A4C93);
 
@@ -34,12 +45,14 @@ class RelativesScreen extends StatefulWidget {
 class _RelativesScreenState extends State<RelativesScreen>
     with SingleTickerProviderStateMixin {
   final _repo = RelativesRepository();
+  final _treeRepo = TreeRepository();
   final _photo = RelativePhotoStorage();
   final _scheduler = RelativeReminderScheduler();
   String? _phone;
   List<RelativePerson> _people = const [];
   String? _reminderSig;
   bool _deleting = false;
+  bool _invitesPrompted = false;
 
   late final TabController _tab;
 
@@ -49,7 +62,11 @@ class _RelativesScreenState extends State<RelativesScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this)
+    _tab = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 2),
+    )
       ..addListener(() {
         // FAB faqat kerakli tabda ko'rinishi uchun qayta chizamiz.
         if (mounted) setState(() {});
@@ -72,6 +89,25 @@ class _RelativesScreenState extends State<RelativesScreen>
     if (phone.length >= 12) {
       unawaited(TreeService.ensureMyTree().catchError(
           (_) => <String, dynamic>{}));
+      _maybePromptTreeInvites(phone);
+    }
+  }
+
+  Future<void> _maybePromptTreeInvites(String phone) async {
+    if (_invitesPrompted) return;
+    _invitesPrompted = true;
+    try {
+      final invites = await _treeRepo.watchIncomingInvites(phone).first;
+      if (!mounted || invites.isEmpty) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.openTreeInvites && _tab.index != _treeTabIndex) {
+          _tab.animateTo(_treeTabIndex);
+        }
+        showTreeLinkInvitesSheet(context, phone);
+      });
+    } catch (_) {
+      /* offline yoki ruxsat — jimgina o'tkazamiz */
     }
   }
 

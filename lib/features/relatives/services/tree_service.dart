@@ -50,6 +50,40 @@ class TreeService {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// { ok, personId }
+  static Future<Map<String, dynamic>> addRelativePerson({
+    required String fullName,
+    String gender = '',
+    String photoUrl = '',
+    String photoPath = '',
+    String phone = '',
+    String address = '',
+    String relationDegree = '',
+    String side = '',
+    String notes = '',
+    DateTime? birthDate,
+    String? fatherId,
+    String? motherId,
+    String? spouseId,
+  }) async {
+    final res = await _fn.httpsCallable('addRelativePerson').call({
+      'fullName': fullName,
+      'gender': gender,
+      'photoUrl': photoUrl,
+      'photoPath': photoPath,
+      'phone': phone,
+      'address': address,
+      'relationDegree': relationDegree,
+      'side': side,
+      'notes': notes,
+      'birthDateMs': birthDate?.millisecondsSinceEpoch,
+      'fatherId': fatherId,
+      'motherId': motherId,
+      'spouseId': spouseId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   /// { ok, alreadyDeleted? }
   static Future<Map<String, dynamic>> deleteRelativePerson({
     required String personId,

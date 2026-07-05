@@ -34,4 +34,5 @@ Architecture: per-user private `relatives/people` + SHARED global `tree_persons`
   - F4 undoTreeOperation (reverse link/merge/edit/create from tree_history).
   - F5 saveTreeNode (any component member edits/creates node; mirrors to owner relatives/people WITHOUT clobbering; history create/edit).
 - Privacy: link = mutual consent (invite→accept); linked members see WHOLE shared tree; any member can edit shared network.
-- GOTCHAS: family_tree_view uses translateByDouble/scaleByDouble (Matrix4 translate/scale deprecated). Personal relatives/people takes precedence over mirror when combining. Merge logic victim→survivor must update tree_redirects to avoid mirror inconsistency.
+- Phase-1 (FamilySearch-inspired): `addRelativePerson` single-id create; tree tab display prefers component for genealogy fields; link/merge rewrite `relatives` refs + remove placeholder; invite FCM + auto sheet on RelativesScreen; rules block client delete on `relatives/people`.
+- GOTCHAS: family_tree_view uses translateByDouble/scaleByDouble (Matrix4 translate/scale deprecated). Personal relatives/people takes precedence over mirror when combining on LIST tab; TREE tab prefers component for fatherId/motherId/spouseId/name. Merge logic victim→survivor must update tree_redirects to avoid mirror inconsistency.

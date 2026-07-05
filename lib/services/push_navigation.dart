@@ -313,9 +313,16 @@ class PushNavigation {
 
     if (screen == 'relatives' ||
         type == 'relative_registered' ||
-        type == 'relative_waiting') {
+        type == 'relative_waiting' ||
+        type == 'tree_link_invite') {
+      final treeTab = tab == 'tree' || type == 'tree_link_invite';
       await nav.push(
-        MaterialPageRoute(builder: (_) => const RelativesScreen()),
+        MaterialPageRoute(
+          builder: (_) => RelativesScreen(
+            initialTabIndex: treeTab ? 1 : 0,
+            openTreeInvites: type == 'tree_link_invite',
+          ),
+        ),
       );
       return;
     }
@@ -378,6 +385,9 @@ class PushNavigation {
       out['tab'] = 'messages';
     } else if (type == 'relative_registered' || type == 'relative_waiting') {
       out['screen'] = 'relatives';
+    } else if (type == 'tree_link_invite') {
+      out['screen'] = 'relatives';
+      out['tab'] = 'tree';
     } else if (type == 'driver_request_approved') {
       out['screen'] = 'local_taxi';
     } else if (type == 'local_trip_accepted') {

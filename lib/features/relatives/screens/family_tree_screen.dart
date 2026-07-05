@@ -106,17 +106,20 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // Birlashma: avval komponent, keyin shaxsiy (qirralar
-                // shaxsiy yozuvdan ustun — foydalanuvchi tahriri eng dolzarb).
+                final compById = {for (final n in comp) n.id: n};
+                // Birlashma: komponent nasab maydonlari ustun; shaxsiy — aloqa/izoh.
                 final renderById = <String, RelativePerson>{};
-                for (final n in comp) {
-                  renderById[n.id] = n.toRelativePerson();
-                }
-                for (final p in personal) {
-                  renderById[p.id] = p;
+                final allIds = {
+                  ...comp.map((n) => n.id),
+                  ...personal.map((p) => p.id),
+                };
+                for (final id in allIds) {
+                  renderById[id] = _mergeForTreeDisplay(
+                    _personalById[id],
+                    compById[id],
+                  );
                 }
                 final people = renderById.values.toList(growable: false);
-                final compById = {for (final n in comp) n.id: n};
                 final dupGroups = _findDuplicates(comp);
                 _comp = comp;
 
@@ -148,6 +151,34 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   String _normName(String s) =>
       s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+  /// Daraxt ko'rinishi: nasab (ism, bog'lanish) komponentdan; shaxsiy faqat aloqa.
+  RelativePerson _mergeForTreeDisplay(
+    RelativePerson? personal,
+    TreePerson? comp,
+  ) {
+    if (comp == null) return personal!;
+    if (personal == null) return comp.toRelativePerson();
+    return RelativePerson(
+      id: comp.id,
+      fullName: comp.fullName.isNotEmpty ? comp.fullName : personal.fullName,
+      photoUrl:
+          comp.photoUrl.isNotEmpty ? comp.photoUrl : personal.photoUrl,
+      photoPath: personal.photoPath,
+      phone: personal.phone,
+      address: personal.address,
+      birthDate: comp.birthDate ?? personal.birthDate,
+      gender: comp.gender.isNotEmpty ? comp.gender : personal.gender,
+      relationDegree: personal.relationDegree,
+      side: personal.side,
+      notes: personal.notes,
+      fatherId: comp.fatherId ?? personal.fatherId,
+      motherId: comp.motherId ?? personal.motherId,
+      spouseId: comp.spouseId ?? personal.spouseId,
+      isSelf: personal.isSelf,
+      createdAt: personal.createdAt,
+    );
+  }
 
   /// Bir xil nomli (>=2) tugunlar — ehtimoliy takrorlar.
   List<List<TreePerson>> _findDuplicates(List<TreePerson> nodes) {

@@ -1530,7 +1530,8 @@ service cloud.firestore {
       allow update: if isOwner(userId)
           && (!request.resource.data.keys().hasAny(['isSelf'])
               || request.resource.data.isSelf == resource.data.isSelf);
-      allow delete: if isOwner(userId) && resource.data.isSelf != true;
+      // O'chirish faqat deleteRelativePerson CF orqali (Admin SDK).
+      allow delete: if false;
     }
 
     // Qarindosh sanalari / uchrashuvlari — SHAXSIY. Faqat egasi.

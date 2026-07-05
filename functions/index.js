@@ -9778,14 +9778,33 @@ exports.ensureMyTree = functions.https.onCall(async (data, context) => {
   let ops = 0;
   for (const doc of peopleSnap.docs) {
     const ref = db.collection('tree_persons').doc(doc.id);
-    batch.set(ref, {
-      ...treeNodeFromRelative(doc.data() || {}),
-      ownerUid: uid,
-      componentId,
-      createdBy: uid,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    migrated++;
+    const rel = doc.data() || {};
+    const relativeFields = treeNodeFromRelative(rel);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      batch.set(ref, {
+        ...relativeFields,
+        ownerUid: uid,
+        componentId,
+        createdBy: uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      migrated++;
+    } else {
+      const cur = existing.data() || {};
+      const patch = {};
+      for (const [k, v] of Object.entries(relativeFields)) {
+        if (v == null || v === '') continue;
+        const curVal = cur[k];
+        if (curVal == null || curVal === '') patch[k] = v;
+      }
+      if (Object.keys(patch).length) {
+        patch.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+        batch.set(ref, patch, { merge: true });
+        migrated++;
+      }
+    }
     ops++;
     if (ops >= 400) {
       await batch.commit();
@@ -9815,6 +9834,78 @@ async function resolveTreeRedirect(id) {
   if (!id) return id;
   const r = await db.collection('tree_redirects').doc(id).get();
   return r.exists ? (r.data().to || id) : id;
+}
+
+/// relatives/{uid}/people ichidagi eski id havolalarini yangi id ga o'zgartirish.
+async function rewriteRelativePersonRefs(ownerUid, fromId, toId) {
+  if (!ownerUid || !fromId || !toId || fromId === toId) return 0;
+  const peopleSnap = await db.collection('relatives').doc(ownerUid)
+    .collection('people').get();
+  let batch = db.batch();
+  let ops = 0;
+  let changed = 0;
+  const flush = async () => {
+    if (ops > 0) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  };
+  for (const doc of peopleSnap.docs) {
+    const d = doc.data() || {};
+    const upd = {};
+    if (d.fatherId === fromId) upd.fatherId = toId;
+    if (d.motherId === fromId) upd.motherId = toId;
+    if (d.spouseId === fromId) upd.spouseId = toId;
+    if (Object.keys(upd).length) {
+      upd.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      batch.set(doc.ref, upd, { merge: true });
+      ops++;
+      changed++;
+      if (ops >= 400) await flush();
+    }
+  }
+  if (ops > 0) await flush();
+  return changed;
+}
+
+/// Komponent a'zolarining shaxsiy ro'yxatlarida id almashtirish.
+async function rewriteComponentRelativeRefs(componentId, fromId, toId) {
+  if (!componentId || !fromId || !toId || fromId === toId) return 0;
+  const us = await db.collection('users')
+    .where('treeComponentId', '==', componentId).get();
+  let total = 0;
+  for (const u of us.docs) {
+    total += await rewriteRelativePersonRefs(u.id, fromId, toId);
+  }
+  return total;
+}
+
+/// relatives/people + photos subcollection o'chirish (Admin SDK).
+async function deleteRelativePersonDocAdmin(ownerUid, personId) {
+  const ref = db.collection('relatives').doc(ownerUid)
+    .collection('people').doc(personId);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  const photosSnap = await ref.collection('photos').get();
+  let batch = db.batch();
+  let ops = 0;
+  const flush = async () => {
+    if (ops > 0) {
+      await batch.commit();
+      batch = db.batch();
+      ops = 0;
+    }
+  };
+  for (const p of photosSnap.docs) {
+    batch.delete(p.ref);
+    ops++;
+    if (ops >= 400) await flush();
+  }
+  batch.delete(ref);
+  ops++;
+  await flush();
+  return true;
 }
 
 /// relatives/people o'zgarsa — global tree_persons'ni sinxron tutadi.
@@ -9945,6 +10036,52 @@ async function ensureTreeForUid(uid) {
   return { componentId, selfId };
 }
 
+/// Shaxsiy qarindosh qo'shish — bitta id (relatives → mirror tree_persons).
+exports.addRelativePerson = functions.https.onCall(async (data, context) => {
+  const uid = datingCallerUid(context);
+  await ensureTreeForUid(uid);
+
+  const fullName = String(data.fullName || '').trim();
+  if (!fullName) {
+    throw new functions.https.HttpsError('invalid-argument', 'ism kerak');
+  }
+
+  const resolveRef = async (x) => {
+    const s = String(x || '');
+    if (!s) return null;
+    return resolveTreeRedirect(s);
+  };
+
+  const birthDate = (data.birthDateMs != null && data.birthDateMs !== '')
+    ? admin.firestore.Timestamp.fromMillis(Number(data.birthDateMs))
+    : null;
+
+  const fields = {
+    fullName,
+    gender: String(data.gender || ''),
+    photoUrl: String(data.photoUrl || ''),
+    photoPath: String(data.photoPath || ''),
+    phone: String(data.phone || ''),
+    address: String(data.address || ''),
+    relationDegree: String(data.relationDegree || ''),
+    side: String(data.side || ''),
+    notes: String(data.notes || ''),
+    birthDate,
+    fatherId: await resolveRef(data.fatherId),
+    motherId: await resolveRef(data.motherId),
+    spouseId: await resolveRef(data.spouseId),
+  };
+
+  const ref = db.collection('relatives').doc(uid).collection('people').doc();
+  await ref.set({
+    ...fields,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, personId: ref.id };
+});
+
 /// Daraxt tugunini telefon raqamiga ulash taklifi (taklif → qabul).
 exports.sendTreeLinkInvite = functions.https.onCall(async (data, context) => {
   const fromUid = datingCallerUid(context);
@@ -9985,17 +10122,33 @@ exports.sendTreeLinkInvite = functions.https.onCall(async (data, context) => {
     .limit(1).get();
   if (!dup.empty) return { ok: true, alreadySent: true };
 
-  await db.collection('tree_link_invites').add({
+  const fromName = String(fu.name || fu.fullName || fu.displayName || '');
+  const nodeName = String(node.fullName || '');
+  const invRef = await db.collection('tree_link_invites').add({
     fromUid,
     fromComponentId,
     fromNodeId: nodeId,
-    fromName: String(fu.name || fu.fullName || fu.displayName || ''),
-    nodeName: String(node.fullName || ''),
+    fromName,
+    nodeName,
     toPhone,
     toUid: toPhone,
     status: 'pending',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  await notifyUserInApp({
+    userId: toPhone,
+    title: 'Насаб дарахти — улаш таклифи',
+    body: `${fromName || 'Қариндош'} сизни «${nodeName || 'қариндош'}» сифатида `
+      + 'ўз дарахтига улашни таклиф қилмоқда.',
+    category: 'info',
+    source: 'tree_link_invite',
+    dataType: 'tree_link_invite',
+    screen: 'relatives',
+    tab: 'tree',
+    extraData: { inviteId: invRef.id },
+  });
+
   return { ok: true };
 });
 
@@ -10138,6 +10291,14 @@ exports.respondTreeLinkInvite =
     batch.delete(db.collection('tree_persons').doc(victimId));
     ops++;
     await flush();
+
+    // Shaxsiy ro'yxat: havolalar survivor ga, taklifchi placeholder o'chiriladi.
+    await rewriteComponentRelativeRefs(target, victimId, survivorId);
+    if (meComp !== target) {
+      await rewriteComponentRelativeRefs(meComp, victimId, survivorId);
+    }
+    await rewriteRelativePersonRefs(inv.fromUid, victimId, survivorId);
+    await deleteRelativePersonDocAdmin(inv.fromUid, victimId);
 
     // Users: qabul qiluvchi komponenti → target.
     if (meComp !== target) {
@@ -10286,6 +10447,11 @@ exports.mergeTreePersons = functions.https.onCall(async (data, context) => {
   batch.delete(db.collection('tree_persons').doc(mergeId));
   ops++;
   await flush();
+
+  await rewriteComponentRelativeRefs(myComp, mergeId, keepId);
+  if (merge.ownerUid) {
+    await deleteRelativePersonDocAdmin(merge.ownerUid, mergeId);
+  }
 
   await writeTreeHistory({
     type: 'merge',

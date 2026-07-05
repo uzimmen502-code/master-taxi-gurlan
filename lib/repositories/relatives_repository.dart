@@ -32,11 +32,33 @@ class RelativesRepository {
   }
 
   Future<String> addPerson(String userId, RelativePerson person) async {
-    final ref = await _people(userId).add({
-      ...person.toMap(),
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-    return ref.id;
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('addRelativePerson')
+          .call({
+        'fullName': person.fullName,
+        'gender': person.gender,
+        'photoUrl': person.photoUrl,
+        'photoPath': person.photoPath,
+        'phone': person.phone,
+        'address': person.address,
+        'relationDegree': person.relationDegree,
+        'side': person.side,
+        'notes': person.notes,
+        'birthDateMs': person.birthDate?.millisecondsSinceEpoch,
+        'fatherId': person.fatherId,
+        'motherId': person.motherId,
+        'spouseId': person.spouseId,
+      });
+      final data = Map<String, dynamic>.from(res.data as Map);
+      return (data['personId'] ?? '') as String;
+    } on FirebaseFunctionsException catch (e) {
+      throw FirebaseException(
+        plugin: 'cloud_functions',
+        code: e.code,
+        message: firebaseFunctionsUserMessage(e),
+      );
+    }
   }
 
   Future<void> updatePerson(

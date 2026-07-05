@@ -54,6 +54,18 @@ class TreeRepository {
         .map((s) => s.docs.map(TreeLinkInvite.fromDoc).toList(growable: false));
   }
 
+  /// Merge redirectlari (eski id → yangi id).
+  Stream<Map<String, String>> watchRedirects() {
+    return _db.collection('tree_redirects').snapshots().map((s) {
+      final map = <String, String>{};
+      for (final d in s.docs) {
+        final to = (d.data()['to'] ?? '') as String;
+        if (to.isNotEmpty) map[d.id] = to;
+      }
+      return map;
+    });
+  }
+
   /// Komponent tarixi (audit + undo).
   Stream<List<TreeHistoryEntry>> watchHistory(String componentId) {
     if (componentId.isEmpty) {

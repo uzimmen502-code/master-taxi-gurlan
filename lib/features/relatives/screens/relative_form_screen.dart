@@ -353,6 +353,13 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
     return widget.allPeople.where((p) => p.id != selfId).toList();
   }
 
+  String _linkLabel(RelativePerson p) {
+    final parts = <String>[p.fullName];
+    if (p.birthDate != null) parts.add(_fmtDate(p.birthDate!));
+    if (p.relationDegree.isNotEmpty) parts.add(p.relationDegree);
+    return parts.join(' · ');
+  }
+
   Widget _relativeDropdown(
     String label,
     String? value,
@@ -375,7 +382,7 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
                 value: null, child: Text('— йўқ —')),
             ..._others.map((p) => DropdownMenuItem<String?>(
                   value: p.id,
-                  child: Text(p.fullName, overflow: TextOverflow.ellipsis),
+                  child: Text(_linkLabel(p), overflow: TextOverflow.ellipsis),
                 )),
           ],
           onChanged: onChanged,

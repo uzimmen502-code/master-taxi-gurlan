@@ -1,4 +1,4 @@
-import 'package:cloud_functions/cloud_functions.dart';
+﻿import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/firebase_functions_errors.dart';
@@ -8,6 +8,7 @@ import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
+import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
 import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_view.dart';
@@ -94,52 +95,62 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         return StreamBuilder<List<RelativePerson>>(
           stream: _relRepo.watchPeople(widget.userId),
           builder: (context, personalSnap) {
-            return StreamBuilder<List<TreePerson>>(
-              stream: _repo.watchComponent(componentId),
-              builder: (context, compSnap) {
-                final personal =
-                    personalSnap.data ?? const <RelativePerson>[];
-                final comp = compSnap.data ?? const <TreePerson>[];
-                _personalById = {for (final p in personal) p.id: p};
-                if (personalSnap.connectionState == ConnectionState.waiting &&
-                    compSnap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            return StreamBuilder<Map<String, String>>(
+              stream: _repo.watchRedirects(),
+              builder: (context, redirSnap) {
+                final redirects = redirSnap.data ?? const {};
+                return StreamBuilder<List<TreePerson>>(
+                  stream: _repo.watchComponent(componentId),
+                  builder: (context, compSnap) {
+                    final personal =
+                        personalSnap.data ?? const <RelativePerson>[];
+                    final comp = compSnap.data ?? const <TreePerson>[];
+                    _personalById = {for (final p in personal) p.id: p};
+                    if (personalSnap.connectionState ==
+                            ConnectionState.waiting &&
+                        compSnap.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                final compById = {for (final n in comp) n.id: n};
-                // Birlashma: komponent nasab maydonlari ustun; shaxsiy — aloqa/izoh.
-                final renderById = <String, RelativePerson>{};
-                final allIds = {
-                  ...comp.map((n) => n.id),
-                  ...personal.map((p) => p.id),
-                };
-                for (final id in allIds) {
-                  renderById[id] = _mergeForTreeDisplay(
-                    _personalById[id],
-                    compById[id],
-                  );
-                }
-                final people = renderById.values.toList(growable: false);
-                final dupGroups = _findDuplicates(comp);
-                _comp = comp;
+                    final compById = {for (final n in comp) n.id: n};
+                    final renderById = <String, RelativePerson>{};
+                    final allIds = {
+                      ...comp.map((n) => n.id),
+                      ...personal.map((p) => p.id),
+                    };
+                    for (final id in allIds) {
+                      if (redirects.containsKey(id)) continue;
+                      final merged = _mergeForTreeDisplay(
+                        _personalById[id],
+                        compById[id],
+                      );
+                      renderById[id] =
+                          resolvePersonLinks(merged, redirects);
+                    }
+                    final people =
+                        renderById.values.toList(growable: false);
+                    final dupGroups = findDuplicateGroups(comp);
+                    _comp = comp;
 
-                return Column(
-                  children: [
-                    if (dupGroups.isNotEmpty) _dupBar(dupGroups),
-                    Expanded(
-                      child: FamilyTreeView(
-                        people: people,
-                        onTap: (RelativePerson p) {
-                          final node = compById[p.id];
-                          if (node != null) {
-                            _onNodeTap(node);
-                          } else if (widget.onEditOwnNode != null) {
-                            widget.onEditOwnNode!(p.id);
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+                    return Column(
+                      children: [
+                        if (dupGroups.isNotEmpty) _dupBar(dupGroups),
+                        Expanded(
+                          child: FamilyTreeView(
+                            people: people,
+                            onTap: (RelativePerson p) {
+                              final node = compById[p.id];
+                              if (node != null) {
+                                _onNodeTap(node);
+                              } else if (widget.onEditOwnNode != null) {
+                                widget.onEditOwnNode!(p.id);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );
@@ -149,8 +160,51 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     );
   }
 
-  String _normName(String s) =>
-      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  Future<void> _mergeGroup(BuildContext sheetCtx, List<TreePerson> group) async {
+    Navigator.pop(sheetCtx);
+    final keep = group.firstWhere((n) => n.isClaimed, orElse: () => group.first);
+    final others = group.where((n) => n.id != keep.id).toList();
+    final bothClaimed = others.any((n) => n.isClaimed && n.claimedBy != keep.claimedBy);
+    if (bothClaimed) {
+      _snack('Иккала тугун ҳам аккаунтга уланган — бирлаштириб бўлмайди.');
+      return;
+    }
+    final label = duplicateGroupLabel(group);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Такрорларни бирлаштириш'),
+        content: Text(
+          '«$label» — ${group.length} та тугун.\n\n'
+          'Бу bir xil odam deb ishonchingiz komilmi?\n'
+          '«${keep.fullName}» saqlanadi, qolganlari o‘chiriladi.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Бирлаштириш'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    var done = 0;
+    try {
+      for (final m in others) {
+        await TreeService.mergeTreePersons(keepId: keep.id, mergeId: m.id);
+        done++;
+      }
+      _snack('$done та тугун «${keep.fullName}» билан бирлаштирилди.');
+    } on FirebaseFunctionsException catch (e) {
+      _snack(firebaseFunctionsUserMessage(e));
+    } catch (e) {
+      _snack('Хатолик ($done bajarildi): $e');
+    }
+  }
 
   /// Daraxt ko'rinishi: nasab (ism, bog'lanish) komponentdan; shaxsiy faqat aloqa.
   RelativePerson _mergeForTreeDisplay(
@@ -178,19 +232,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       isSelf: personal.isSelf,
       createdAt: personal.createdAt,
     );
-  }
-
-  /// Bir xil nomli (>=2) tugunlar — ehtimoliy takrorlar.
-  List<List<TreePerson>> _findDuplicates(List<TreePerson> nodes) {
-    final byName = <String, List<TreePerson>>{};
-    for (final n in nodes) {
-      final key = _normName(n.fullName);
-      if (key.isEmpty) continue;
-      byName.putIfAbsent(key, () => []).add(n);
-    }
-    return byName.values
-        .where((g) => g.length > 1)
-        .toList(growable: false);
   }
 
   Widget _dupBar(List<List<TreePerson>> groups) {
@@ -238,7 +279,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'Бир хил исмли тугунлар. Айни одам бўлса — «Бирлаштириш».',
+                'Исм, туғилган сана ва жинс mos kelsa — bir xil odam bo‘lishi mumkin.',
                 style: TextStyle(color: Colors.grey),
               ),
             ),
@@ -250,7 +291,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('«${g.first.fullName}» — ${g.length} та',
+                      Text('${duplicateGroupLabel(g)} — ${g.length} та',
                           style:
                               const TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 6),
@@ -291,24 +332,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     );
   }
 
-  Future<void> _mergeGroup(BuildContext sheetCtx, List<TreePerson> group) async {
-    Navigator.pop(sheetCtx);
-    // Saqlanadigan tugun: hisobga ulangani, bo'lmasa birinchisi.
-    final keep = group.firstWhere((n) => n.isClaimed, orElse: () => group.first);
-    final others = group.where((n) => n.id != keep.id).toList();
-    var done = 0;
-    try {
-      for (final m in others) {
-        await TreeService.mergeTreePersons(keepId: keep.id, mergeId: m.id);
-        done++;
-      }
-      _snack('$done та тугун «${keep.fullName}» билан бирлаштирилди.');
-    } on FirebaseFunctionsException catch (e) {
-      _snack(firebaseFunctionsUserMessage(e));
-    } catch (e) {
-      _snack('Хатолик ($done бажарилди): $e');
-    }
-  }
 
   void _onNodeTap(TreePerson node) {
     final isMine = node.ownerUid == widget.userId;

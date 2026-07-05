@@ -11,8 +11,10 @@ import '../../../models/relative_event.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
+import '../../../models/tree_person.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
+import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
 import '../widgets/tree_link_invite_indicator.dart';
 import '../widgets/tree_link_invites_sheet.dart';
@@ -111,27 +113,54 @@ class _RelativesScreenState extends State<RelativesScreen>
     }
   }
 
+  Future<List<RelativePerson>> _loadLinkCandidates({String? excludeId}) async {
+    final phone = _phone;
+    if (phone == null || phone.length < 12) return _people;
+    try {
+      final meta = await _treeRepo.watchMyTreeMeta(phone).first;
+      final redirects = await _treeRepo.watchRedirects().first;
+      final comp = meta.componentId.isEmpty
+          ? const <TreePerson>[]
+          : await _treeRepo.watchComponent(meta.componentId).first;
+      return buildLinkCandidates(
+        personal: _people,
+        component: comp,
+        redirects: redirects,
+        excludeId: excludeId,
+      );
+    } catch (_) {
+      return _people;
+    }
+  }
+
   Future<void> _add() async {
     final phone = _phone;
     if (phone == null || phone.length < 12) {
       _snack('Аввал профилда телефонни тасдиқланг.');
       return;
     }
+    final candidates = await _loadLinkCandidates();
+    if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RelativeFormScreen(userId: phone, allPeople: _people),
+        builder: (_) => RelativeFormScreen(userId: phone, allPeople: candidates),
       ),
     );
   }
 
   Future<void> _edit(RelativePerson p) async {
     final phone = _phone!;
+    final candidates = await _loadLinkCandidates(excludeId: p.id);
+    if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            RelativeFormScreen(userId: phone, existing: p, allPeople: _people),
+        builder: (_) => RelativeFormScreen(
+          userId: phone,
+          existing: p,
+          allPeople: candidates,
+        ),
       ),
     );
   }

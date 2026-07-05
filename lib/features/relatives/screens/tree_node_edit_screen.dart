@@ -108,17 +108,30 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     }
     setState(() => _busy = true);
     try {
-      await TreeService.saveNode(
-        nodeId: widget.existing?.id ?? '',
-        fullName: name,
-        gender: _gender,
-        photoUrl: _photoUrl,
-        photoPath: _photoPath,
-        birthDate: _birthDate,
-        fatherId: _fatherId,
-        motherId: _motherId,
-        spouseId: _spouseId,
-      );
+      if (widget.existing == null) {
+        await TreeService.addRelativePerson(
+          fullName: name,
+          gender: _gender,
+          photoUrl: _photoUrl,
+          photoPath: _photoPath,
+          birthDate: _birthDate,
+          fatherId: _fatherId,
+          motherId: _motherId,
+          spouseId: _spouseId,
+        );
+      } else {
+        await TreeService.saveNode(
+          nodeId: widget.existing!.id,
+          fullName: name,
+          gender: _gender,
+          photoUrl: _photoUrl,
+          photoPath: _photoPath,
+          birthDate: _birthDate,
+          fatherId: _fatherId,
+          motherId: _motherId,
+          spouseId: _spouseId,
+        );
+      }
       if (mounted) Navigator.pop(context);
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
@@ -253,6 +266,12 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     );
   }
 
+  String _nodeLinkLabel(TreePerson p) {
+    final parts = <String>[p.fullName];
+    if (p.birthDate != null) parts.add(_fmtDate(p.birthDate!));
+    return parts.join(' · ');
+  }
+
   Widget _relativeDropdown(
     String label,
     String? value,
@@ -275,7 +294,7 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
                 value: null, child: Text('— йўқ —')),
             ..._others.map((p) => DropdownMenuItem<String?>(
                   value: p.id,
-                  child: Text(p.fullName, overflow: TextOverflow.ellipsis),
+                  child: Text(_nodeLinkLabel(p), overflow: TextOverflow.ellipsis),
                 )),
           ],
           onChanged: onChanged,

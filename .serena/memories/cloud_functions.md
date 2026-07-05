@@ -103,12 +103,12 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - addRelativePerson — server create `relatives/people/{id}` (single id); mirror via `onRelativePersonWrite`; resolves redirect on link fields.
 - deleteRelativePerson — owner deletes `relatives/people/{id}` (+ album photos, tree cleanup, unlinks parent/spouse refs); client list delete uses this CF; rules block direct client delete.
 - onRelativePersonWrite — mirror relatives→tree_persons (redirect-aware); delete branch clears tree when unclaimed.
-- sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link); accept rewrites component `relatives` refs, removes inviter placeholder row; push via notifyUserInApp (`tree_link_invite`).
-- mergeTreePersons — dedup two nodes in a component (`tree_history` type=merge); rewrites component `relatives` refs; deletes merged private row.
+- sendTreeLinkInvite / respondTreeLinkInvite — two-sided node link → component+node merge, `tree_redirects`, `tree_history` (type=link); accept rewrites component `relatives` refs, removes inviter placeholder row; stores `relativeRefChanges` + victim snapshot for undo; push via notifyUserInApp (`tree_link_invite`).
+- mergeTreePersons — dedup two nodes in a component (`tree_history` type=merge); rewrites component `relatives` refs (returns changes for undo); deletes merged private row; stores `relativeRefChanges` + victim snapshot in history.
 - onRelativePersonWrite (trigger) — mirror `relatives/{uid}/people/{pid}` → `tree_persons` (redirect-aware); sync phone watcher index + notify owner if phone already registered.
 - onUserProfileReady (trigger `users/{uid}`) — first profile complete (`name`) → notify phone watchers (owner A) + new user B (`relative_waiting`).
-- saveTreeNode — create/edit any component node; mirrors to owner `relatives/people` (no clobber); history type=create/edit.
-- undoTreeOperation — reverse link/merge/edit/create from `tree_history`.
+- saveTreeNode — **create** writes only `relatives/people` (mirror to tree); **edit** updates `tree_persons` + owner mirror; resolves redirects on link fields; history type=create/edit.
+- undoTreeOperation — reverse link/merge/edit/create from `tree_history`; link/merge undo restores `relatives/people` via `restoreRelativePersonDoc` + `undoRelativeRefChanges`.
 
 ## Agro pickup (sut qabul)
 - placeAgroPickupOrder — customer `agro_pickup_orders` (milk literCount 1..500).

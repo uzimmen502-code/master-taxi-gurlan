@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
-import '../../dating/screens/dating_home_screen.dart';
 import '../../relatives/widgets/tree_link_invite_indicator.dart';
 import '../../relatives/screens/relatives_screen.dart';
 import '../utils/circle_type_spec.dart';
 import 'circles_list_screen.dart';
 
-/// "Mening yaqinlarim" hubi. Faol: Sinfdosh/Kursdosh/Hamkasb (umumiy dvigatel).
-/// Qarindosh + Tanishuv — alohida modul (tez orada).
+/// "Mening yaqinlarim" hubi. Faol: Sinfdosh/Kursdosh/Hamkasb + Qarindoshlar.
 class CirclesHubScreen extends StatefulWidget {
   const CirclesHubScreen({super.key});
 
@@ -108,17 +106,6 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const RelativesScreen()),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _CircleCard(
-            emoji: '❤️',
-            title: 'Танишув, мулоқат ва оила қуриш',
-            subtitle: 'Профил + модерация + хавфсиз танишув',
-            color: const Color(0xFFE5446D),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DatingHomeScreen()),
             ),
           ),
         ],

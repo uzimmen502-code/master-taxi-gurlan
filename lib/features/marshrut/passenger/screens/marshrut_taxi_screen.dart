@@ -31,6 +31,7 @@ import '../controllers/marshrut_search_controller.dart';
 import '../services/marshrut_mfy_history.dart';
 import '../services/marshrut_search_reminder_service.dart';
 import '../widgets/marshrut_direction_chips.dart';
+import '../widgets/marshrut_pulsing_route_card.dart';
 import '../widgets/marshrut_results_view_toggle.dart';
 import '../widgets/marshrut_route_field.dart';
 import '../widgets/marshrut_search_map_view.dart';
@@ -76,6 +77,8 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   Timer? _autoSearchDebounce;
   String? _lastErrorShown;
   bool _directionChanged = false;
+  bool _directionBannerDismissed = false;
+  int _routePulseToken = 0;
   bool _isSubmitting = false;
   List<String> _recentFrom = const [];
   List<String> _recentTo = const [];
@@ -369,7 +372,11 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   void _applyRoutePair(MarshrutSearchController c, MarshrutRoutePair route) {
     c.setFromMfy(route.from);
     c.setToMfy(route.to);
-    setState(() => _directionChanged = false);
+    setState(() {
+      _directionChanged = false;
+      _directionBannerDismissed = false;
+      _routePulseToken++;
+    });
     _scheduleAutoSearch(c);
   }
 
@@ -393,7 +400,10 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   }
 
   Future<void> _runSearch(MarshrutSearchController c) async {
-    setState(() => _directionChanged = false);
+    setState(() {
+      _directionChanged = false;
+      _directionBannerDismissed = false;
+    });
     await c.search();
     await _persistMfyHistory(c);
     if (c.results.isNotEmpty &&
@@ -712,8 +722,10 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     return Scaffold(
       backgroundColor: AppColors.moduleBg,
       appBar: AppBar(
-        title: Text('🚐 ${context.tr('marshrut_taxi')}',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: Text(
+          context.tr('marshrut_taxi'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -804,15 +816,21 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
             toMfy: c.toMfy,
             recentRoutes: _recentRoutes,
             isSearching: c.isSearching,
+            showChips: !c.searched && !c.isSearching,
+            routePulseToken: _routePulseToken,
             onFromTap: () => _openFromPicker(c),
             onToTap: () => _openToPicker(c),
             onFromClear: () {
               c.setFromMfy('');
-              setState(() {});
+              setState(() {
+                _directionBannerDismissed = false;
+              });
             },
             onToClear: () {
               c.setToMfy('');
-              setState(() {});
+              setState(() {
+                _directionBannerDismissed = false;
+              });
             },
             onRouteSelected: (route) => _applyRoutePair(c, route),
             onSwapDirection: () => _swapDirection(c),
@@ -823,9 +841,59 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     );
   }
 
+  String _resultsHeaderText(MarshrutSearchController c) {
+    final countPart = '${c.results.length} ${context.tr('cars_found')}';
+    if (_pricePerSeat != null && _pricePerSeat! > 0) {
+      final pricePart = context
+          .tr('marshrut_seat_price_short')
+          .replaceAll('{price}', '$_pricePerSeat');
+      return context
+          .tr('marshrut_results_header')
+          .replaceAll('{count}', countPart)
+          .replaceAll('{price}', pricePart);
+    }
+    return context.tr('marshrut_results_header_count').replaceAll(
+          '{count}',
+          countPart,
+        );
+  }
+
+  Widget _stickyRouteBar(MarshrutSearchController c) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.route, size: 16, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              context
+                  .tr('marshrut_sticky_route')
+                  .replaceAll('{from}', c.fromMfy)
+                  .replaceAll('{to}', c.toMfy),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResults(MarshrutSearchController c) {
     if (c.isSearching && !c.searched) {
-      return const ScheduleCardSkeletonList(count: 3);
+      return const ScheduleCardSkeletonList(count: 2);
     }
     if (!c.searched) {
       return Center(
@@ -864,19 +932,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
               textAlign: TextAlign.center,
             ),
           ),
-        ] else ...[
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              context.tr('marshrut_try_swap_direction'),
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
         ],
         const SizedBox(height: 8),
         if (_reminderScheduledLabel(c) != null)
@@ -897,10 +952,13 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
       ]));
     }
     return Column(children: [
-      if (c.searched && c.results.isNotEmpty && _directionChanged)
+      if (c.searched &&
+          c.results.isNotEmpty &&
+          _directionChanged &&
+          !_directionBannerDismissed)
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
           decoration: BoxDecoration(
             color: Colors.orange.shade50,
             borderRadius: BorderRadius.circular(8),
@@ -912,59 +970,49 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
             Expanded(
               child: Text(
                 context.tr('driver_route_may_change'),
-                style: TextStyle(fontSize: 12, color: Colors.orange),
+                style: const TextStyle(fontSize: 12, color: Colors.orange),
               ),
+            ),
+            IconButton(
+              onPressed: () => setState(() => _directionBannerDismissed = true),
+              icon: const Icon(Icons.close, size: 18, color: Colors.orange),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: context.tr('close'),
             ),
           ]),
         ),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '🚐 ${c.results.length} ${context.tr('cars_found')}',
-                    style: const TextStyle(
-                      fontSize: AppText.bodyLarge,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+            Expanded(
+              child: Text(
+                _resultsHeaderText(c),
+                style: const TextStyle(
+                  fontSize: AppText.bodyMedium,
+                  fontWeight: FontWeight.bold,
                 ),
-                MarshrutResultsViewToggle(
-                  selected: _resultsView,
-                  onChanged: (v) => setState(() => _resultsView = v),
-                ),
-              ],
+              ),
             ),
-            if (_pricePerSeat != null && _pricePerSeat! > 0) ...[
-              const SizedBox(height: 4),
-              Text(
-                context
-                    .tr('marshrut_price_per_seat')
-                    .replaceAll('{price}', '$_pricePerSeat'),
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-            if (marshrutHumanFilterHint(context, c.filterStats,
-                    emptyResults: false) !=
-                null) ...[
-              const SizedBox(height: 4),
-              Text(
-                marshrutHumanFilterHint(context, c.filterStats,
-                    emptyResults: false)!,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ],
+            MarshrutResultsViewToggle(
+              selected: _resultsView,
+              onChanged: (v) => setState(() => _resultsView = v),
+            ),
           ],
         ),
       ),
+      if (marshrutHumanFilterHint(context, c.filterStats, emptyResults: false) !=
+          null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Text(
+            marshrutHumanFilterHint(context, c.filterStats,
+                emptyResults: false)!,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ),
+      _stickyRouteBar(c),
       Expanded(
         child: _resultsView == MarshrutResultsView.map
             ? MarshrutSearchMapView(
@@ -991,6 +1039,8 @@ class _SearchPanel extends StatelessWidget {
     required this.toMfy,
     required this.recentRoutes,
     required this.isSearching,
+    required this.showChips,
+    required this.routePulseToken,
     required this.onFromTap,
     required this.onToTap,
     required this.onFromClear,
@@ -1004,6 +1054,8 @@ class _SearchPanel extends StatelessWidget {
   final String toMfy;
   final List<MarshrutRoutePair> recentRoutes;
   final bool isSearching;
+  final bool showChips;
+  final int routePulseToken;
   final VoidCallback onFromTap;
   final VoidCallback onToTap;
   final VoidCallback onFromClear;
@@ -1017,63 +1069,66 @@ class _SearchPanel extends StatelessWidget {
     final canSearch = fromMfy.isNotEmpty && toMfy.isNotEmpty;
     return Container(
       color: _MarshrutTaxiViewState._accent,
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 9),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Material(
-            elevation: 2,
-            shadowColor: Colors.black26,
-            borderRadius: BorderRadius.circular(12),
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 2, 4, 2),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        MarshrutRouteField(
-                          hint: context.tr('from'),
-                          value: fromMfy,
-                          icon: Icons.trip_origin,
-                          iconColor: AppColors.primaryMid,
-                          onTap: onFromTap,
-                          onClear: onFromClear,
-                          compact: true,
-                        ),
-                        Divider(color: Colors.grey.shade300, height: 1),
-                        MarshrutRouteField(
-                          hint: context.tr('to'),
-                          value: toMfy,
-                          icon: Icons.location_on,
-                          iconColor: Colors.redAccent,
-                          onTap: onToTap,
-                          onClear: onToClear,
-                          compact: true,
-                        ),
-                      ],
+          MarshrutPulsingRouteCard(
+            pulseToken: routePulseToken,
+            child: Material(
+              elevation: 2,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          MarshrutRouteField(
+                            hint: context.tr('from'),
+                            value: fromMfy,
+                            icon: Icons.trip_origin,
+                            iconColor: AppColors.primaryMid,
+                            onTap: onFromTap,
+                            onClear: onFromClear,
+                          ),
+                          Divider(color: Colors.grey.shade300, height: 1),
+                          MarshrutRouteField(
+                            hint: context.tr('to'),
+                            value: toMfy,
+                            icon: Icons.location_on,
+                            iconColor: Colors.redAccent,
+                            onTap: onToTap,
+                            onClear: onToClear,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, right: 2),
-                    child: Center(
-                      child: _SwapDirectionButton(onTap: onSwapDirection),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, right: 2),
+                      child: Center(
+                        child: _SwapDirectionButton(onTap: onSwapDirection),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          MarshrutDirectionChips(
-            recentRoutes: recentRoutes,
-            popularRoutes: MarshrutPopularRoutes.routes,
-            activeFrom: fromMfy.isEmpty ? null : fromMfy,
-            activeTo: toMfy.isEmpty ? null : toMfy,
-            onRouteSelected: onRouteSelected,
-          ),
+          if (showChips) ...[
+            const SizedBox(height: 8),
+            MarshrutDirectionChips(
+              recentRoutes: recentRoutes,
+              popularRoutes: MarshrutPopularRoutes.routes,
+              activeFrom: fromMfy.isEmpty ? null : fromMfy,
+              activeTo: toMfy.isEmpty ? null : toMfy,
+              onRouteSelected: onRouteSelected,
+            ),
+          ],
           if (isSearching) ...[
             const SizedBox(height: 6),
             const LinearProgressIndicator(

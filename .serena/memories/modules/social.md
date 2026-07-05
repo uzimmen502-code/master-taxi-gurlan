@@ -1,6 +1,6 @@
 # Social Module — "Mening yaqinlarim" (relatives + circles + dating + family tree)
 
-Hub: `lib/features/circles/screens/circles_hub_screen.dart` (cards: Qarindosh / Sinfdosh / Kursdosh / Hamkasb / Dating). Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
+Hub: `lib/features/circles/screens/circles_hub_screen.dart` (cards: Sinfdosh / Kursdosh / Hamkasb / Qarindosh). Tanishuv — faqat bosh ekran grid (`home_screen` → `DatingHomeScreen`). Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 
 ## Circles (generic engine: classmates/coursemates/colleagues)

@@ -4,7 +4,7 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../models/marshrut_route_pair.dart';
 
-/// Oxirgi / mashhur yo'nalish chip-lari (Phase B).
+/// Oxirgi + mashhur yo'nalishlar — bitta gorizontal qator (Phase R).
 class MarshrutDirectionChips extends StatelessWidget {
   const MarshrutDirectionChips({
     super.key,
@@ -13,6 +13,7 @@ class MarshrutDirectionChips extends StatelessWidget {
     required this.onRouteSelected,
     this.activeFrom,
     this.activeTo,
+    this.maxRecent = 3,
   });
 
   final List<MarshrutRoutePair> recentRoutes;
@@ -20,79 +21,56 @@ class MarshrutDirectionChips extends StatelessWidget {
   final ValueChanged<MarshrutRoutePair> onRouteSelected;
   final String? activeFrom;
   final String? activeTo;
+  final int maxRecent;
 
-  List<MarshrutRoutePair> _dedupePopular() {
-    final seen = recentRoutes.map((r) => r.key).toSet();
-    return popularRoutes.where((r) => !seen.contains(r.key)).toList();
+  List<MarshrutRoutePair> _mergedRoutes() {
+    final seen = <String>{};
+    final merged = <MarshrutRoutePair>[];
+    for (final route in recentRoutes.take(maxRecent)) {
+      if (seen.add(route.key)) merged.add(route);
+    }
+    for (final route in popularRoutes) {
+      if (seen.add(route.key)) merged.add(route);
+    }
+    return merged;
   }
 
   @override
   Widget build(BuildContext context) {
-    final popular = _dedupePopular();
-    if (recentRoutes.isEmpty && popular.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    final routes = _mergedRoutes();
+    if (routes.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (recentRoutes.isNotEmpty) ...[
-          _SectionLabel(text: context.tr('marshrut_recent_directions')),
-          const SizedBox(height: 6),
-          _ChipRow(
-            routes: recentRoutes,
-            activeFrom: activeFrom,
-            activeTo: activeTo,
-            onRouteSelected: onRouteSelected,
+        Text(
+          context.tr('marshrut_quick_directions'),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.white.withValues(alpha: 0.85),
+            letterSpacing: 0.2,
           ),
-        ],
-        if (popular.isNotEmpty) ...[
-          if (recentRoutes.isNotEmpty) const SizedBox(height: 10),
-          _SectionLabel(text: context.tr('marshrut_popular_directions')),
-          const SizedBox(height: 6),
-          _ChipRow(
-            routes: popular,
-            activeFrom: activeFrom,
-            activeTo: activeTo,
-            onRouteSelected: onRouteSelected,
+        ),
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final route in routes) ...[
+                _DirectionChip(
+                  label: _shortLabel(route),
+                  selected: route.from == activeFrom && route.to == activeTo,
+                  onTap: () => onRouteSelected(route),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     );
   }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: Colors.white.withValues(alpha: 0.85),
-        letterSpacing: 0.2,
-      ),
-    );
-  }
-}
-
-class _ChipRow extends StatelessWidget {
-  const _ChipRow({
-    required this.routes,
-    required this.onRouteSelected,
-    this.activeFrom,
-    this.activeTo,
-  });
-
-  final List<MarshrutRoutePair> routes;
-  final ValueChanged<MarshrutRoutePair> onRouteSelected;
-  final String? activeFrom;
-  final String? activeTo;
 
   String _shortLabel(MarshrutRoutePair route) {
     String short(String s) {
@@ -101,25 +79,6 @@ class _ChipRow extends StatelessWidget {
     }
 
     return '${short(route.from)} → ${short(route.to)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final route in routes) ...[
-            _DirectionChip(
-              label: _shortLabel(route),
-              selected: route.from == activeFrom && route.to == activeTo,
-              onTap: () => onRouteSelected(route),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
-      ),
-    );
   }
 }
 

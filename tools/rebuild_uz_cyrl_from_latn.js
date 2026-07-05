@@ -24,6 +24,17 @@ const MANUAL = {
   enter_car_model: 'Масalan: Shevrolet Kobalt',
   role_accountant: '💰 Buxgalter',
   home_display_name_aka: '{name} aka',
+  bottom_wallet: 'Ҳamyon',
+  home_featured_title: 'Tavsiya etamiz',
+  home_module_local: 'MAHALLIY TAKSI',
+  home_module_intercity: 'SHAHARLARARO TAKSI',
+  home_module_marshrut: 'MARSHRUT TAKSI',
+  home_module_courier: 'Kuryer xizmati',
+  home_module_sell: 'SOTISH TAKLIFI',
+  home_module_food: 'TAOM buyurtma',
+  home_module_jobs: 'ISH DOSKASI',
+  home_module_bread: 'NON YOPISH',
+  home_module_relatives: 'Mening yaqinlarim',
 };
 
 let n = 0;
@@ -46,8 +57,11 @@ const sorted = Object.fromEntries(
 );
 fs.writeFileSync(cyrlPath, JSON.stringify(sorted, null, 2) + '\n');
 
+require('./fix_home_cyrl_modules.js');
+
+const cyrlFinal = JSON.parse(fs.readFileSync(cyrlPath, 'utf8'));
 const lat = /[A-Za-z]/;
-const remaining = Object.entries(cyrl).filter(
+const remaining = Object.entries(cyrlFinal).filter(
   ([k, v]) => lat.test(v) && k !== 'app_name',
 );
 console.log(`Yangilandi: ${n} kalit`);

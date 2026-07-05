@@ -52,7 +52,8 @@ class _WalletCardState extends State<WalletCard>
     super.initState();
     _highlightCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 6500),
+      // Bir to'liq aylanish ~8 s.
+      duration: const Duration(milliseconds: 8000),
     )..repeat();
   }
 

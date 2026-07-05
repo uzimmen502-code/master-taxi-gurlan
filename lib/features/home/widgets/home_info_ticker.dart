@@ -109,7 +109,7 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
       final painter = TextPainter(
         text: TextSpan(children: [_buildSpan(upper, fs)]),
         textDirection: TextDirection.ltr,
-        textAlign: TextAlign.start,
+        textAlign: TextAlign.center,
         maxLines: 2,
       )..layout(maxWidth: maxWidth);
       if (!painter.didExceedMaxLines && painter.height <= maxHeight) {
@@ -161,7 +161,6 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
     if (widget.ads.isEmpty) return const SizedBox.shrink();
     final text = widget.ads[_index].text;
     final upper = text.toUpperCase();
-    final isShort = text.length <= 25;
 
     return SizedBox(
       height: 53,
@@ -191,12 +190,11 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
                 constraints.maxHeight,
               );
               return Align(
-                alignment:
-                    isShort ? Alignment.center : Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: RichText(
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  textAlign: isShort ? TextAlign.center : TextAlign.start,
+                  textAlign: TextAlign.center,
                   text: TextSpan(children: [_buildSpan(upper, fs)]),
                 ),
               );

@@ -1,0 +1,15 @@
+O'zbek (Play Console — Release notes, 500 belgigacha):
+
+• Marshrut taksi: qidiruv ekrani tuzatildi (bo'sh ekran xatosi bartaraf etildi)
+• Marshrut qidiruv UX yaxshilandi (tez tanlov, xarita, yo'nalish tasdiqi)
+• Bosh ekran kirill/lotin matnlari to'g'rilandi
+• «Mening yaqinlarim»dan takroriy «Tanishuv» olib tashlandi
+• Umumiy barqarorlik yaxshilandi
+
+Русский (ixtiyoriy):
+
+• Исправлен экран поиска маршрутного такси
+• Улучшен интерфейс поиска маршрута
+• Исправлены тексты на главном экране
+• Убрано дублирование «Знакомства»
+• Повышена стабильность

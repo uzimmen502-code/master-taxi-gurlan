@@ -724,21 +724,23 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
       appBar: AppBar(
         title: Text(
           context.tr('marshrut_taxi'),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 10),
+            padding: const EdgeInsets.only(right: 8),
             child: Opacity(
               opacity: _isSubmitting ? 0.6 : 1,
               child: GestureDetector(
                 onTap: _isSubmitting ? null : _openDriverPanel,
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -758,13 +760,15 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                         const SizedBox(width: 6),
                       ],
                       Text(
-                          _isSubmitting
-                              ? 'Юкланмоқда...'
-                              : context.tr('become_driver'),
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary)),
+                        _isSubmitting
+                            ? context.tr('loading')
+                            : context.tr('become_driver'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1082,39 +1086,40 @@ class _SearchPanel extends StatelessWidget {
               color: Colors.white,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          MarshrutRouteField(
-                            hint: context.tr('from'),
-                            value: fromMfy,
-                            icon: Icons.trip_origin,
-                            iconColor: AppColors.primaryMid,
-                            onTap: onFromTap,
-                            onClear: onFromClear,
-                          ),
-                          Divider(color: Colors.grey.shade300, height: 1),
-                          MarshrutRouteField(
-                            hint: context.tr('to'),
-                            value: toMfy,
-                            icon: Icons.location_on,
-                            iconColor: Colors.redAccent,
-                            onTap: onToTap,
-                            onClear: onToClear,
-                          ),
-                        ],
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            MarshrutRouteField(
+                              hint: context.tr('from'),
+                              value: fromMfy,
+                              icon: Icons.trip_origin,
+                              iconColor: AppColors.primaryMid,
+                              onTap: onFromTap,
+                              onClear: onFromClear,
+                            ),
+                            Divider(color: Colors.grey.shade300, height: 1),
+                            MarshrutRouteField(
+                              hint: context.tr('to'),
+                              value: toMfy,
+                              icon: Icons.location_on,
+                              iconColor: Colors.redAccent,
+                              onTap: onToTap,
+                              onClear: onToClear,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, right: 2),
-                      child: Center(
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, right: 2),
                         child: _SwapDirectionButton(onTap: onSwapDirection),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

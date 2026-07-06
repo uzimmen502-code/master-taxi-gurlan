@@ -155,8 +155,7 @@ class MarshrutWaitingController extends ChangeNotifier {
       return;
     }
     if (!sched.routeAllows(pickupMfy, dropoffMfy)) {
-      _errorMessage = 'direction_mismatch';
-      _safeNotify();
+      _moveToNext('marshrut_skip_direction_mismatch');
       return;
     }
 
@@ -235,6 +234,9 @@ class MarshrutWaitingController extends ChangeNotifier {
     } else if (trip.isNoSeats) {
       _timer?.cancel();
       _moveToNext('no_seat_on_driver');
+    } else if (trip.isExpired || trip.status == 'expired') {
+      _timer?.cancel();
+      _moveToNext('driver_no_response');
     }
   }
 

@@ -267,7 +267,6 @@ class MarshrutSearchController extends ChangeNotifier {
         offline: stats.offline,
         full: stats.full,
         routeMismatch: stats.routeMismatch,
-        notYetEligible: stats.notYetEligible,
         expired: stats.expired,
         tooFar: stats.tooFar,
       );
@@ -386,7 +385,6 @@ class MarshrutSearchController extends ChangeNotifier {
     int? offline,
     int? full,
     int? routeMismatch,
-    int? notYetEligible,
     int? expired,
     int? tooFar,
   }) {
@@ -396,7 +394,6 @@ class MarshrutSearchController extends ChangeNotifier {
       offline: offline ?? s.offline,
       full: full ?? s.full,
       routeMismatch: routeMismatch ?? s.routeMismatch,
-      notYetEligible: notYetEligible ?? s.notYetEligible,
       expired: expired ?? s.expired,
       tooFar: tooFar ?? s.tooFar,
     );

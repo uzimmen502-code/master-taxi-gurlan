@@ -356,6 +356,39 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         ),
         if (listed) ...[
           const SizedBox(height: 8),
+          if (onPanel)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _confirmLeavePanel(context, c),
+                icon: const Icon(Icons.phone_disabled_outlined, size: 18),
+                label: Text(context.tr('intercity_leave_panel_btn')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey.shade800,
+                  side: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  await c.openPanel();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.tr('intercity_open_panel_done'))),
+                  );
+                },
+                icon: const Icon(Icons.phone_in_talk_outlined, size: 18),
+                label: Text(context.tr('intercity_open_panel_btn')),
+                style: FilledButton.styleFrom(
+                  backgroundColor: IntercityDriverPanelScreen._primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -388,6 +421,36 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         ],
       ]),
     );
+  }
+
+  Future<void> _confirmLeavePanel(
+    BuildContext context,
+    IntercityDriverPanelController c,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('intercity_leave_panel_title')),
+        content: Text(ctx.tr('intercity_leave_panel_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(ctx.tr('no')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(ctx.tr('intercity_leave_panel_btn')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await c.leavePanel();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('intercity_leave_panel_done'))),
+    );
+    Navigator.pop(context);
   }
 
   Future<void> _openReturnSchedule(

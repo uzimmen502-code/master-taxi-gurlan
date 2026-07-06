@@ -203,7 +203,8 @@ class RidesRepository {
 
       if (status != 'accepted') return;
 
-      final driverId = data['driverId'] as String? ?? '';
+      final driverId =
+          (data['acceptedDriverId'] ?? data['driverId'] ?? '') as String;
 
       t.update(ref, {
         'status': 'cancelled',
@@ -1367,6 +1368,17 @@ class RidesRepository {
                 SetOptions(merge: true));
           }
         }
+        final isLocalTaxi = taxiType == 'alone' || taxiType == 'local';
+        if (isLocalTaxi && driverId.isNotEmpty) {
+          tx.set(
+            _drivers.doc(driverId),
+            {
+              'isBusy': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
         tx.update(tripRef, {
           'status': 'accepted',
           'acceptedDriverId': driverId,
@@ -1374,6 +1386,9 @@ class RidesRepository {
           'acceptedDriverPhone': driverPhone,
           'acceptedDriverCar': driverCar,
           'acceptedDriverPlate': driverPlate,
+          'driverPhone': driverPhone,
+          'driverName': driverName,
+          'driverId': driverId,
           'acceptedAt': FieldValue.serverTimestamp(),
         });
       });
@@ -1470,10 +1485,21 @@ class RidesRepository {
           'acceptedDriverPhone': '',
           'acceptedDriverCar': '',
           'acceptedDriverPlate': '',
+          'driverId': '',
+          'driverName': '',
+          'driverPhone': '',
           'reservedBy': '',
           'reservedByName': '',
           'reservedAt': FieldValue.delete(),
         });
+        tx.set(
+          _drivers.doc(driverId),
+          {
+            'isBusy': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
       });
     } catch (_) {}
   }
@@ -1484,12 +1510,25 @@ class RidesRepository {
   }) async {
     if (tripId.isEmpty) return;
     try {
+      final snap = await _trips.doc(tripId).get();
+      final driverId =
+          (snap.data()?['acceptedDriverId'] ?? snap.data()?['driverId'] ?? '')
+              as String;
       await _trips.doc(tripId).update({
         'status': 'completed',
         'fare': fare,
         'cashPaid': cashPaid,
         'completedAt': FieldValue.serverTimestamp(),
       });
+      if (driverId.isNotEmpty) {
+        await _drivers.doc(driverId).set(
+          {
+            'isBusy': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
     } catch (_) {}
   }
 }

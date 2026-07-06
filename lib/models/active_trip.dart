@@ -123,7 +123,8 @@ class ActiveTrip {
       driverLng: (d['driverLng'] as num?)?.toDouble(),
       driverId: d['driverId'] ?? d['acceptedDriverId'] ?? '',
       driverName: d['driverName'] ?? d['acceptedDriverName'] ?? '',
-      driverPhone: d['driverPhone'] ?? '',
+      driverPhone:
+          d['driverPhone'] ?? d['acceptedDriverPhone'] ?? '',
       driverCar: d['driverCar'] ?? d['acceptedDriverCar'] ?? '',
       driverPlate: d['driverPlate'] ?? d['acceptedDriverPlate'] ?? '',
       fare: (d['fare'] as num?)?.toInt() ?? 0,

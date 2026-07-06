@@ -112,7 +112,16 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
       builder: (_) => DriverTripScreen(
         ride: ride,
         onFinish: (fare) async {
-          final earned = await c.finishRide(fare: fare, cashPaid: fare);
+          if (!mounted) return;
+          final result = await showFareCalculatorDialog(
+            context,
+            initialFare: fare,
+          );
+          if (!mounted || result == null) return;
+          final earned = await c.finishRide(
+            fare: result.fare,
+            cashPaid: result.cashPaid,
+          );
           if (!mounted) return;
           _showSnack(
               '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм',

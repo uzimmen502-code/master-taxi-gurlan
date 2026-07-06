@@ -16,6 +16,7 @@ import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../utils/fare_calculator.dart';
 import '../../../../utils/gurlan_places.dart';
 import '../../../map_picker/screens/map_picker_screen.dart';
 import '../controllers/local_taxi_controller.dart';
@@ -132,15 +133,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 
   Future<void> _loadEstimatedPrice() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('prices')
-          .get();
-      final base =
-          (snap.data()?['local_base'] as num?)?.toInt() ?? 5000;
-      final perKm =
-          (snap.data()?['local_per_km'] as num?)?.toInt() ?? 1500;
-      final est = base + (perKm * 3);
+      await FareCalculator.loadPrices();
+      final est = FareCalculator.calculate(distanceKm: 3);
       if (mounted) {
         setState(() {
           _estimatedPriceText = '${formatPrice(est)}+ сўм';
@@ -203,7 +197,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           .collection('trips')
           .where('userPhone', isEqualTo: phone)
           .where('taxiType', isEqualTo: 'local')
-          .where('status', whereIn: ['searching', 'accepted'])
+          .where('status', whereIn: ['searching', 'reserved', 'accepted'])
           .get();
       if (snap.docs.isEmpty) return null;
       final docs = snap.docs.toList();
@@ -246,7 +240,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             );
             return;
           }
-          if (status == 'searching') {
+          if (status == 'searching' || status == 'reserved') {
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -275,7 +269,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           builder: (_) => LocalTaxiActiveTripScreen(tripId: trip.id),
         ),
       );
-    } else if (status == 'searching') {
+    } else if (status == 'searching' || status == 'reserved') {
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -297,6 +291,19 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     try {
       if (_fromCtrl.text.trim().isEmpty) {
         _showGpsDialog();
+        return;
+      }
+      try {
+        await context.read<LocationService>().getCurrentCoords();
+      } on LocationException catch (e) {
+        if (!mounted) return;
+        final key = switch (e.kind) {
+          LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
+          LocationErrorKind.serviceDisabled => 'gps_service_disabled_msg',
+          LocationErrorKind.timeout => 'gps_timeout_msg',
+          LocationErrorKind.lookupFailed => 'local_gps_required_for_search',
+        };
+        _snack(context.tr(key));
         return;
       }
       if (await _hasActiveTripSearch()) {

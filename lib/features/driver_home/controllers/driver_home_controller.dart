@@ -241,7 +241,16 @@ class DriverHomeController extends ChangeNotifier {
       }
       notifyListeners();
       if (newStatus) {
-        await _goOnline();
+        final onlineOk = await _goOnline();
+        if (!onlineOk) {
+          isOnline = false;
+          notifyListeners();
+          return (
+            success: false,
+            error:
+                '⚠️ GPS aniqlanmadi. Online bo\'lish uchun joylashuvni yoqing.',
+          );
+        }
       } else {
         await _goOffline();
       }
@@ -251,30 +260,35 @@ class DriverHomeController extends ChangeNotifier {
     }
   }
 
-  Future<void> _goOnline() async {
-    if (session.driverId.isEmpty) return;
-    Position? pos;
+  Future<bool> _goOnline() async {
+    if (session.driverId.isEmpty) return false;
+    late final Position pos;
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      if (perm != LocationPermission.denied &&
-          perm != LocationPermission.deniedForever) {
-        pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.high,
-                timeLimit: Duration(seconds: 8)));
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return false;
       }
-    } catch (_) {}
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return false;
+      pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8)));
+    } catch (_) {
+      return false;
+    }
 
     await _driverRepo.goOnline(
       uid: session.driverId,
       name: session.name,
       phone: session.phone,
       taxiType: session.taxiType,
-      lat: pos?.latitude,
-      lng: pos?.longitude,
+      lat: pos.latitude,
+      lng: pos.longitude,
     );
 
     final prefs = await SharedPreferences.getInstance();
@@ -293,10 +307,11 @@ class DriverHomeController extends ChangeNotifier {
       plate: session.carPlate,
       taxiType: session.taxiType,
       date: _todayDateStr,
-      lat: pos?.latitude,
-      lng: pos?.longitude,
+      lat: pos.latitude,
+      lng: pos.longitude,
     );
     _listenToTrips();
+    return true;
   }
 
   Future<void> _goOffline() async {

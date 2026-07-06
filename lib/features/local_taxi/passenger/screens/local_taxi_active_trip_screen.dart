@@ -17,6 +17,7 @@ import '../../../../models/active_trip.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/notification_service.dart';
 import '../../../../services/settlement_service.dart';
+import 'searching_screen.dart';
 
 /// Mahalliy taksi — haydovchi qabul qilgandan keyin safar ekrani.
 class LocalTaxiActiveTripScreen extends StatefulWidget {
@@ -460,6 +461,42 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
                 Navigator.of(context).pop();
+              });
+            }
+          } else if (trip.status == 'searching') {
+            if (!_tripEndHandled) {
+              _tripEndHandled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!mounted) return;
+                final nav = Navigator.of(context);
+                final title = context.tr('local_driver_abandoned_title');
+                final body = context.tr('local_driver_abandoned_body');
+                final okLabel = context.tr('ok');
+                await showDialog<void>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (ctx) => AlertDialog(
+                    title: Text(title),
+                    content: Text(body),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text(okLabel),
+                      ),
+                    ],
+                  ),
+                );
+                if (!mounted) return;
+                nav.pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => SearchingScreen(
+                      from: trip.fromAddr,
+                      to: trip.toAddr,
+                      taxiType: 'local',
+                      tripId: widget.tripId,
+                    ),
+                  ),
+                );
               });
             }
           } else if (trip.status == 'completed') {

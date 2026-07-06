@@ -8,7 +8,7 @@ import '../../../../models/nearby_driver.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
-import '../../services/price_service.dart';
+import '../../../../utils/fare_calculator.dart';
 
 /// Yo'lovchining "haydovchi qidirish" oqimini boshqaradi (BROADCAST modeli).
 ///
@@ -77,21 +77,13 @@ class SearchingController extends ChangeNotifier {
 
   // ── Boshlash ──────────────────────────────────────────────────────
   Future<void> start() async {
-    await PriceService.loadPrices();
+    await FareCalculator.loadPrices();
 
     final prefs = await SharedPreferences.getInstance();
     _userPhone = prefs.getString('user_phone') ?? '';
     _userName = prefs.getString('user_name') ?? '';
     _userGender = prefs.getString('user_gender') ?? '';
     _userBirthDate = prefs.getString('user_birth_date') ?? '';
-
-    try {
-      final coords = await _locationService.getCurrentCoords();
-      _fromLat = coords.lat;
-      _fromLng = coords.lng;
-    } on LocationException {
-      // GPS olinmadi — koordinatasiz davom etamiz (drivers list bo'sh bo'ladi).
-    }
 
     try {
       final resumeId = existingTripId?.trim() ?? '';
@@ -101,8 +93,31 @@ class SearchingController extends ChangeNotifier {
         if (existing != null) {
           _fromLat = existing.fromLat;
           _fromLng = existing.fromLng;
+          if (existing.isReserved) {
+            driverReserved = true;
+          }
         }
-      } else {
+      }
+
+      if (_fromLat == 0 && _fromLng == 0) {
+        try {
+          final coords = await _locationService.getCurrentCoords();
+          _fromLat = coords.lat;
+          _fromLng = coords.lng;
+        } on LocationException catch (e) {
+          errorMessage = switch (e.kind) {
+            LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
+            LocationErrorKind.serviceDisabled => 'gps_service_disabled_msg',
+            LocationErrorKind.timeout => 'gps_timeout_msg',
+            LocationErrorKind.lookupFailed => 'local_gps_required_for_search',
+          };
+          isSearching = false;
+          notifyListeners();
+          return;
+        }
+      }
+
+      if (resumeId.isEmpty) {
         tripId = await _ridesRepo.createSearchRequest(
           userPhone: _userPhone,
           userName: _userName,
@@ -179,17 +194,11 @@ class SearchingController extends ChangeNotifier {
   }
 
   Future<void> _loadDriversInRadius(double radiusKm) async {
-    // GPS yo'q — barcha mavjud haydovchilarni ko'rsatamiz (radius filtrsiz)
     if (_fromLat == 0 && _fromLng == 0) {
-      try {
-        final all = await _driverRepo.getAvailable();
-        if (!_isDisposed) {
-          drivers = all
-              .map((d) => NearbyDriver(driver: d, distanceKm: 0))
-              .toList();
-          notifyListeners();
-        }
-      } catch (_) {}
+      if (!_isDisposed) {
+        drivers = const [];
+        notifyListeners();
+      }
       return;
     }
     try {
@@ -213,6 +222,15 @@ class SearchingController extends ChangeNotifier {
   // ── Trip kuzatuvchisidan kelgan yangiliklar ─────────────────────────
   void _onTripUpdate(ActiveTrip trip) {
     if (_isDisposed) return;
+
+    if (trip.isCancelled || trip.status == 'expired') {
+      _timer?.cancel();
+      isSearching = false;
+      driverReserved = false;
+      errorMessage = 'local_search_ended_cancelled';
+      notifyListeners();
+      return;
+    }
 
     // Қабул қилинди
     if (trip.isAccepted && acceptedTrip == null) {

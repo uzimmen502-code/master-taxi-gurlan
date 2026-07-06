@@ -11,6 +11,7 @@ import '../../../models/route_stop.dart';
 import '../../../models/trip_request.dart';
 import '../../../services/google_directions_service.dart';
 import '../../../services/polyline_decoder.dart';
+import '../../../services/location_service.dart';
 import '../../../utils/fare_calculator.dart';
 
 /// Ҳайдовчи сафар экрани — йўловчи қабул қилингандан кейин.
@@ -47,6 +48,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   final _mapController = Completer<GoogleMapController>();
   final _directionsService = GoogleDirectionsService();
   final _polylineDecoder = const PolylineDecoder();
+  final _locationService = const LocationService();
 
   /// Йўловчи жойлашуви (бошланиш нуқтаси).
   late final LatLng _origin;
@@ -71,6 +73,7 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
   int _liveFare = 0;
   bool _arrived = false;
   bool _finishing = false;
+  bool _prefillingDestination = false;
 
   @override
   void initState() {
@@ -79,6 +82,24 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
       widget.ride.fromLat != 0 ? widget.ride.fromLat : 41.4957,
       widget.ride.fromLng != 0 ? widget.ride.fromLng : 60.5822,
     );
+    _prefillDestinationFromRide();
+  }
+
+  Future<void> _prefillDestinationFromRide() async {
+    final to = widget.ride.to.trim();
+    if (to.isEmpty) return;
+    setState(() => _prefillingDestination = true);
+    try {
+      final coords = await _locationService.coordsFromAddress(to);
+      if (!mounted || coords == null) return;
+      setState(() {
+        _destination = LatLng(coords.lat, coords.lng);
+        _prefillingDestination = false;
+      });
+      await _calculateRoute();
+    } catch (_) {
+      if (mounted) setState(() => _prefillingDestination = false);
+    }
   }
 
   @override
@@ -333,11 +354,39 @@ class _DriverTripScreenState extends State<DriverTripScreen> {
 
   // 1-фаза пастки панели.
   Widget _buildPickPanel() {
+    final toHint = widget.ride.to.trim();
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_destination == null) ...[
+        if (toHint.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(children: [
+              const Icon(Icons.flag, color: _green, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  toHint,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        if (_prefillingDestination) ...[
+          const Row(children: [
+            SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 12),
+            Text('Манзил харитада қидирилмоқда...'),
+          ]),
+        ] else if (_destination == null) ...[
           Row(children: [
             const Icon(Icons.touch_app, color: _green, size: 20),
             const SizedBox(width: 8),

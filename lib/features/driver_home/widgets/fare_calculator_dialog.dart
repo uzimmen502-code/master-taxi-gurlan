@@ -7,16 +7,28 @@ import '../../../utils/fare_calculator.dart';
 ///
 /// Қайтариш: `(fare, cashPaid)` ёки `null` (бекор қилинди).
 Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
-    BuildContext context) {
+  BuildContext context, {
+  int? initialFare,
+  double? initialDistanceKm,
+}) {
   return showDialog<({int fare, int cashPaid})>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const _FareCalculatorDialog(),
+    builder: (_) => _FareCalculatorDialog(
+      initialFare: initialFare,
+      initialDistanceKm: initialDistanceKm,
+    ),
   );
 }
 
 class _FareCalculatorDialog extends StatefulWidget {
-  const _FareCalculatorDialog();
+  const _FareCalculatorDialog({
+    this.initialFare,
+    this.initialDistanceKm,
+  });
+
+  final int? initialFare;
+  final double? initialDistanceKm;
 
   @override
   State<_FareCalculatorDialog> createState() => _FareCalculatorDialogState();
@@ -27,7 +39,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
   static const _green = AppColors.primaryDark;
   static const _orange = AppColors.primary;
 
-  double _distanceKm = 3.0;
+  late double _distanceKm;
   int _waitMins = 0;
   bool _isNight = FareCalculator.isNightTime();
   bool _isHoliday = false;
@@ -35,6 +47,12 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
   bool _isUrgent = false;
   final _cashPaidCtrl = TextEditingController();
   bool _cashPaidInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _distanceKm = widget.initialDistanceKm ?? 3.0;
+  }
 
   @override
   void dispose() {
@@ -73,7 +91,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       isUrgent: _isUrgent,
     );
     if (!_cashPaidInitialized) {
-      _cashPaidCtrl.text = '$fare';
+      _cashPaidCtrl.text = '${widget.initialFare ?? fare}';
       _cashPaidInitialized = true;
     }
     return AlertDialog(

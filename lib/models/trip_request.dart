@@ -92,6 +92,7 @@ class TripRequest {
       secsLeft: secsLeft,
       scheduleId: (d['scheduleId'] ?? '') as String,
       targetDriverId: (d['targetDriverId'] ?? '') as String,
+      reservedBy: (d['reservedBy'] ?? '') as String,
     );
   }
 }

@@ -6,7 +6,6 @@ class MarshrutSearchFilterStats {
     this.offline = 0,
     this.full = 0,
     this.routeMismatch = 0,
-    this.notYetEligible = 0,
     this.expired = 0,
     this.tooFar = 0,
   });
@@ -16,12 +15,10 @@ class MarshrutSearchFilterStats {
   final int offline;
   final int full;
   final int routeMismatch;
-  final int notYetEligible;
   final int expired;
   final int tooFar;
 
-  int get hidden =>
-      offline + full + routeMismatch + notYetEligible + expired + tooFar;
+  int get hidden => offline + full + routeMismatch + expired + tooFar;
 
   bool get hasHiddenReasons => hidden > 0;
 }

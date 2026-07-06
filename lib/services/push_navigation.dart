@@ -150,12 +150,7 @@ class PushNavigation {
     }
 
     if (type == 'local_trip_request') {
-      // Driver-targeted push; passenger app does not open TripRequestScreen.
-      final tripId = (data['tripId'] ?? '').trim();
-      if (tripId.isNotEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('pending_local_trip_request_id', tripId);
-      }
+      // Driver-targeted push; deep link saqlanmaydi — haydovchi ilovada stream orqali ko'radi.
       return;
     }
 

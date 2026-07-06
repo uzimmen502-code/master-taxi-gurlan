@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import '../core/l10n/offline_l10n.dart';
 import '../core/utils/formatters.dart';
 import '../features/intercity_taxi/intercity_driver_alert_text.dart';
-import '../models/driver_client_stats.dart';
 import '../models/intercity_booking.dart';
 import '../utils/intercity_places.dart';
 
@@ -38,7 +37,6 @@ enum IntercityBookingErrorKind {
 ///     3. `intercity_drivers/{driverId}/clients/{userPhone}` aggregation
 ///        increment qilinadi
 ///     4. `notifications` ёзилади — ҳайдовчи телефонига push (FCMService listener)
-///   - **Доимий мижоз ҳолатини текшириш** (`getDriverClient`)
 ///   - **Мижознинг охирги бронлари** (`watchByUser`)
 ///   - **Бронни бекор қилиш** (`cancelBooking`) — seat реверт + counters decrement
 class IntercityBookingsRepository {
@@ -62,26 +60,6 @@ class IntercityBookingsRepository {
 
   CollectionReference<Map<String, dynamic>> _driverClients(String driverId) =>
       _drivers.doc(driverId).collection('clients');
-
-  // ─── Доимий мижоз ҳолати ─────────────────────────────────────────────
-
-  /// `intercity_drivers/{driverId}/clients/{userPhone}` ҳужжати —
-  /// бўлмаса `null`.
-  Future<DriverClientStats?> getDriverClient({
-    required String driverId,
-    required String userPhone,
-  }) async {
-    if (driverId.isEmpty || userPhone.isEmpty) return null;
-    try {
-      final key = canonicalPhoneId(userPhone);
-      if (key.isEmpty) return null;
-      final snap = await _driverClients(driverId).doc(key).get();
-      if (!snap.exists) return null;
-      return DriverClientStats.fromDoc(snap);
-    } catch (_) {
-      return null;
-    }
-  }
 
   // ─── Мижознинг бронлари ─────────────────────────────────────────────
 
@@ -112,7 +90,10 @@ class IntercityBookingsRepository {
     try {
       final snap = await _bookings
           .where('userPhone', isEqualTo: canonical)
-          .where('status', whereIn: ['pending', 'confirmed', 'pickup'])
+          .where('status', whereIn: [
+            IntercityBookingStatus.pending,
+            IntercityBookingStatus.confirmed,
+          ])
           .limit(5)
           .get();
       if (snap.docs.isEmpty) return null;

@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../models/driver_client_stats.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../models/intercity_ride.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
@@ -16,9 +15,8 @@ import '../../../../utils/intercity_places.dart';
 ///   - Йўналиш (from/to) ва Тошкент тумани танлови
 ///   - "Бугун / Эртага" тугмалари ҳамда йўловчилар сони
 ///   - Reyslarни Firestore-dан олиш (хатолик ёки бўш — demo fallback)
-///   - **Реал бронь яратиш** (transactional, seat decrement, доимий мижоз
-///     aggregation, ҳайдовчига notification)
-///   - Танланган рейс учун доимий мижоз ҳолатини текшириш
+///   - **Реал бронь яратиш** (transactional, seat decrement,
+///     ҳайдовчига notification)
 class IntercityTaxiController extends ChangeNotifier {
   IntercityTaxiController({
     required IntercityRidesRepository ridesRepo,
@@ -47,13 +45,6 @@ class IntercityTaxiController extends ChangeNotifier {
 
   /// Энг охирги муваффақиятли бронь (BookingConfirmationSheet-да кўрсатилади).
   IntercityBooking? lastBooking;
-
-  /// Танланган рейс учун **доимий мижоз** ҳолати — `isLoyal`, `bookingCount`...
-  /// `null` → ҳали юкланмаган ёки фойдаланувчи бу ҳайдовчида биринчи марта.
-  DriverClientStats? loyaltyForSelected;
-
-  /// Қайси рейс учун `loyaltyForSelected` юкланган (race condition'дан асраш).
-  String? _loyaltyRideId;
 
   StreamSubscription<List<IntercityRide>>? _ridesSub;
   List<IntercityRide> _allRides = const [];
@@ -304,8 +295,6 @@ class IntercityTaxiController extends ChangeNotifier {
     isLoading = false;
     _isSearching = false;
     lastBooking = null;
-    loyaltyForSelected = null;
-    _loyaltyRideId = null;
     notifyListeners();
   }
 
@@ -318,36 +307,6 @@ class IntercityTaxiController extends ChangeNotifier {
   void clearLastBooking() {
     if (lastBooking == null) return;
     lastBooking = null;
-    notifyListeners();
-  }
-
-  // ─── Доимий мижоз ҳолатини олиш ─────────────────────────────────────
-
-  /// Bron sheet ochilganda chaqiriladi — fon orqali oxirgi ma'lumotni
-  /// chaqirsoq, sheet "Доимий мижоз" badge bilan ko'rsatadi.
-  Future<void> loadLoyaltyFor(IntercityRide ride) async {
-    _loyaltyRideId = ride.id;
-    loyaltyForSelected = null;
-    notifyListeners();
-
-    final prefs = await SharedPreferences.getInstance();
-    final userPhone = prefs.getString('user_phone') ?? '';
-    if (userPhone.isEmpty) return;
-
-    final stats = await _bookingsRepo.getDriverClient(
-      driverId: ride.id,
-      userPhone: userPhone,
-    );
-    // Boshqa rayd tanlangan bo'lsa — bu javobni e'tibor bermaslik
-    if (_loyaltyRideId != ride.id) return;
-    loyaltyForSelected = stats;
-    notifyListeners();
-  }
-
-  void clearLoyalty() {
-    if (loyaltyForSelected == null && _loyaltyRideId == null) return;
-    loyaltyForSelected = null;
-    _loyaltyRideId = null;
     notifyListeners();
   }
 

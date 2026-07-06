@@ -3,13 +3,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 /// Karta konturi bo'ylab qisqa oq-oltin yorug' chiziq(lar).
-/// Ikki chiziq qarama-qarshi nuqtadan, bir yo'nalishda aylanadi.
+/// 4 ta soat yo'nalishi, 4 ta teskari — jami 8 segment.
 class MetallicBorderHighlightPainter extends CustomPainter {
   MetallicBorderHighlightPainter({
     required this.progress,
     required this.borderRadius,
     this.strokeWidth = 2.4,
     this.highlightFraction = 0.13,
+    this.segmentCountPerDirection = 4,
   });
 
   /// 0..1 — kontur bo'ylab aylanish.
@@ -17,6 +18,9 @@ class MetallicBorderHighlightPainter extends CustomPainter {
   final double borderRadius;
   final double strokeWidth;
   final double highlightFraction;
+
+  /// Har bir yo'nalishdagi nur chiziqlari soni (jami 2 × segmentCountPerDirection).
+  final int segmentCountPerDirection;
 
   static const _goldWarm = Color(0xFFFFF0A0);
   static const _goldSoft = Color(0xFFFFF8E0);
@@ -37,10 +41,15 @@ class MetallicBorderHighlightPainter extends CustomPainter {
     final metric = metrics.first;
     final total = metric.length;
     final segLen = total * highlightFraction;
-    final travel = progress * total;
+    final travelCw = progress * total;
+    final travelCcw = total - travelCw;
+    final step = total / segmentCountPerDirection;
 
-    _drawHighlight(canvas, metric, travel % total, segLen);
-    _drawHighlight(canvas, metric, (travel + total / 2) % total, segLen);
+    for (var i = 0; i < segmentCountPerDirection; i++) {
+      final offset = step * i;
+      _drawHighlight(canvas, metric, (travelCw + offset) % total, segLen);
+      _drawHighlight(canvas, metric, (travelCcw + offset) % total, segLen);
+    }
   }
 
   void _drawHighlight(
@@ -111,6 +120,7 @@ class MetallicBorderHighlightPainter extends CustomPainter {
     return oldDelegate.progress != progress ||
         oldDelegate.borderRadius != borderRadius ||
         oldDelegate.strokeWidth != strokeWidth ||
-        oldDelegate.highlightFraction != highlightFraction;
+        oldDelegate.highlightFraction != highlightFraction ||
+        oldDelegate.segmentCountPerDirection != segmentCountPerDirection;
   }
 }

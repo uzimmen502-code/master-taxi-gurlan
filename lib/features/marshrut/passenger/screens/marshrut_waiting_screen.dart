@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../models/active_trip.dart';
 import '../../../../models/marshrut_driver_option.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../controllers/marshrut_waiting_controller.dart';
+import '../models/marshrut_passenger_route_context.dart';
 import 'marshrut_accepted_screen.dart';
 
 /// Marshrut taksi haydovchilarni ketma-ket chaqirayotgan vaqtda
@@ -57,7 +57,7 @@ class _MarshrutWaitingView extends StatefulWidget {
 class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
   static const Color _color = AppColors.primary;
   bool _dialogShown = false;
-  bool _cancelAfterAcceptShown = false;
+  bool _navigatedToAccepted = false;
 
   @override
   void initState() {
@@ -106,10 +106,25 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
       ));
       c.clearTransient();
     }
-    if (!_cancelAfterAcceptShown && c.acceptedTrip != null) {
-      _cancelAfterAcceptShown = true;
-      final t = c.consumeAcceptedTrip()!;
-      _showAcceptedWithCancelDialog(t);
+    if (!_navigatedToAccepted && c.acceptedTrip != null) {
+      _navigatedToAccepted = true;
+      final trip = c.consumeAcceptedTrip()!;
+      final routeContext = MarshrutPassengerRouteContext(
+        pickupMfy: c.pickupMfy,
+        pickupAddr: c.pickupAddr,
+        dropoffMfy: c.dropoffMfy,
+        userLat: c.userLat,
+        userLng: c.userLng,
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MarshrutAcceptedScreen(
+            trip: trip,
+            routeContext: routeContext,
+          ),
+        ),
+      );
       return;
     }
     if (!_dialogShown && c.allRejected) {
@@ -122,54 +137,6 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
     final c = context.read<MarshrutWaitingController>();
     await c.cancelByUser();
     if (mounted) Navigator.pop(context);
-  }
-
-  Future<void> _showAcceptedWithCancelDialog(ActiveTrip trip) async {
-    final c = context.read<MarshrutWaitingController>();
-
-    final cancel = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.tr('marshrut_driver_accepted')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('🚌 ${trip.driverName}'),
-            Text('📞 ${trip.driverPhone}'),
-            Text('🚗 ${trip.driverCar}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(context.tr('cancel_trip'),
-                style: const TextStyle(color: Colors.red)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(context.tr('ok')),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    if (cancel == true) {
-      await c.cancelAfterAccept(trip.id);
-      if (mounted) Navigator.of(context).pop();
-    } else {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MarshrutAcceptedScreen(trip: trip),
-          ),
-        );
-      }
-    }
   }
 
   void _showAllRejectedDialog() {

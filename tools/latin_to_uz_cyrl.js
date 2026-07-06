@@ -15,9 +15,13 @@ function latinToUzCyrl(text) {
   });
 
   const digraphs = [
+    ['SH', 'Ш'],
+    ['CH', 'Ч'],
     ["G'", 'Ғ'],
-    ["g'", 'ғ'],
     ["O'", 'Ў'],
+    ['YU', 'Ю'],
+    ['NG', 'НГ'],
+    ["g'", 'ғ'],
     ["o'", 'ў'],
     ['Yu', 'Ю'],
     ['yu', 'ю'],
@@ -51,6 +55,7 @@ function latinToUzCyrl(text) {
     P: 'П',
     Q: 'Қ',
     R: 'Р',
+    C: 'Ч',
     S: 'С',
     T: 'Т',
     U: 'У',
@@ -75,6 +80,7 @@ function latinToUzCyrl(text) {
     p: 'п',
     q: 'қ',
     r: 'р',
+    c: 'ч',
     s: 'с',
     t: 'т',
     u: 'у',

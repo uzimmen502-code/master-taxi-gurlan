@@ -257,6 +257,11 @@ class MarshrutRegisterController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    if (!hasValidPrice) {
+      _errorMessage = 'marshrut_price_required';
+      notifyListeners();
+      return false;
+    }
 
     final car = await CarInfoRecord.load(canonicalPhoneId(_userId));
     if (car == null || !car.isComplete) {
@@ -296,18 +301,24 @@ class MarshrutRegisterController extends ChangeNotifier {
         plannedStartAt: plannedStartAt,
       );
       // Yo'nalish narxini server avtoritetida belgilash/ko'zgu qilish.
-      // Mavjud bo'lsa CF uni qaytaradi (proposed e'tiborga olinmaydi).
       final proposed = _existingRoutePrice ?? _priceInput ?? 0;
       try {
         final res = await MarshrutPricingService.seedRoutePrice(
           scheduleId: scheduleId,
           price: proposed,
         );
-        _existingRoutePrice = (res['price'] as num?)?.toInt();
+        final seededPrice = (res['price'] as num?)?.toInt() ?? 0;
+        if (seededPrice <= 0) {
+          throw StateError('price_zero');
+        }
+        _existingRoutePrice = seededPrice;
       } catch (e) {
-        // Narx ko'zgusi muvaffaqiyatsiz — reys baribir yaratildi.
-        // Haydovchi navbatga price>0 darvozasidan o'tmaguncha kirmaydi.
-        debugPrint('seedRoutePrice: $e');
+        _errorMessage = routePriceLocked
+            ? 'marshrut_price_seed_failed'
+            : 'marshrut_price_required';
+        _isSaving = false;
+        notifyListeners();
+        return false;
       }
       _savedProfile = profile;
       _isSaving = false;

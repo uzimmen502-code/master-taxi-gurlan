@@ -12,16 +12,24 @@ import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/schedule.dart';
 import '../../../../repositories/marshrut_block_repository.dart';
+import '../../../../repositories/queue_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../services/settlement_service.dart';
+import '../models/marshrut_passenger_route_context.dart';
+import 'marshrut_waiting_screen.dart';
 
 /// Marshrut — haydovchi qabul qilgandan keyingi to'liq safar ekrani.
 class MarshrutAcceptedScreen extends StatefulWidget {
-  const MarshrutAcceptedScreen({super.key, required this.trip});
+  const MarshrutAcceptedScreen({
+    super.key,
+    required this.trip,
+    this.routeContext,
+  });
 
   final ActiveTrip trip;
+  final MarshrutPassengerRouteContext? routeContext;
 
   @override
   State<MarshrutAcceptedScreen> createState() => _MarshrutAcceptedScreenState();
@@ -42,6 +50,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
   double? _distanceKmBuffered;
   int _gpsRefreshCounter = 0;
   bool _tripEndHandled = false;
+  bool _rerouteInProgress = false;
 
   @override
   void initState() {
@@ -181,7 +190,14 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         initialData: widget.trip,
         builder: (context, tripSnap) {
           final trip = tripSnap.data ?? widget.trip;
-          if (trip.status == 'cancelled') {
+          if (trip.isDriverNoRoomCancel) {
+            if (!_tripEndHandled) {
+              _tripEndHandled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _handleDriverNoRoomReroute(trip);
+              });
+            }
+          } else if (trip.status == 'cancelled') {
             if (!_tripEndHandled) {
               _tripEndHandled = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -397,6 +413,84 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
           ),
         ],
       );
+
+  /// Haydovchi "o'rin yo'q" deb bekor qilganda — keyingi haydovchiga qayta dispatch.
+  Future<void> _handleDriverNoRoomReroute(ActiveTrip cancelled) async {
+    if (_rerouteInProgress || !mounted) return;
+    final route = widget.routeContext;
+    if (route == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    _rerouteInProgress = true;
+    final proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(context.tr('no_seat_title')),
+        content: Text(context.tr('no_seat_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('back_short')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.button,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(context.tr('continue')),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) {
+      _rerouteInProgress = false;
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    final excludeId = cancelled.driverId.isNotEmpty
+        ? cancelled.driverId
+        : cancelled.targetDriverId;
+    final drivers = await context.read<QueueRepository>().findNextEligibleMarshrutDrivers(
+          pickupMfy: route.pickupMfy,
+          dropoffMfy: route.dropoffMfy,
+          limit: 7,
+          excludeDriverIds:
+              excludeId.isNotEmpty ? {excludeId} : const {},
+        );
+    if (!mounted) {
+      _rerouteInProgress = false;
+      return;
+    }
+    if (drivers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('no_other_driver_now'))),
+      );
+      _rerouteInProgress = false;
+      Navigator.of(context).pop();
+      return;
+    }
+
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MarshrutWaitingScreen(
+          pickupMfy: route.pickupMfy,
+          pickupAddr: route.pickupAddr,
+          dropoffMfy: route.dropoffMfy,
+          drivers: drivers,
+          userLat: route.userLat,
+          userLng: route.userLng,
+        ),
+      ),
+    );
+    _rerouteInProgress = false;
+  }
 
   /// Safar tugadi — qaytim (settlement) pending bo'lsa tasdiq dialogi, so'ng pop.
   Future<void> _handleCompleted(String tripId) async {

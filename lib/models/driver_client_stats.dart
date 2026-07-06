@@ -32,20 +32,6 @@ class DriverClientStats {
   final DateTime? firstBookingAt;
   final DateTime? lastBookingAt;
 
-  /// **Доимий мижоз** деб ҳисоблаш мезони — энг камида 3 та bron.
-  bool get isLoyal => bookingCount >= 3;
-
-  /// "VIP" — 10+ bron ёки 1 млн+ сўм.
-  bool get isVip => bookingCount >= 10 || totalSpent >= 1000000;
-
-  /// UI yorlig'i: "3-сафар", "Доимий мижоз", "VIP мижоз".
-  String get loyaltyLabel {
-    if (isVip) return 'VIP мижоз';
-    if (isLoyal) return 'Доимий мижоз';
-    if (bookingCount > 1) return '$bookingCount-сафар';
-    return '';
-  }
-
   static const empty = DriverClientStats(
     userPhone: '',
     userName: '',

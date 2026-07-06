@@ -9,12 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../../../models/active_trip.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/marshrut_driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../repositories/queue_repository.dart';
-import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
 import '../../../../shared/widgets/driver_route_application_dialog.dart';
@@ -85,8 +83,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
   List<MarshrutRoutePair> _recentRoutes = const [];
   MarshrutResultsView _resultsView = MarshrutResultsView.list;
   MarshrutSearchReminder? _pendingReminder;
-  StreamSubscription<ActiveTrip>? _acceptedTripSub;
-  bool _rerouteInProgress = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _approvalSub;
   bool _isListening = false;
   int? _pricePerSeat;
@@ -161,7 +157,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     _searchCtrl?.removeListener(_onSearchBlockUpdate);
     _approvalSub?.cancel();
     _autoSearchDebounce?.cancel();
-    _acceptedTripSub?.cancel();
     super.dispose();
   }
 
@@ -232,102 +227,6 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         await _onDriverApproved(docId);
       }
     });
-  }
-
-  void _startAcceptedTripMonitor(ActiveTrip trip) {
-    _acceptedTripSub?.cancel();
-    final rides = context.read<RidesRepository>();
-    _acceptedTripSub = rides.watch(trip.id).listen((t) {
-      if (!mounted || _rerouteInProgress) return;
-      if (t.isDriverNoRoomCancel) {
-        _acceptedTripSub?.cancel();
-        unawaited(_onDriverNoRoomCancel(t));
-      }
-    });
-  }
-
-  Future<void> _onDriverNoRoomCancel(ActiveTrip cancelled) async {
-    if (_rerouteInProgress || !mounted) return;
-    _rerouteInProgress = true;
-    final c = context.read<MarshrutSearchController>();
-    final excludeId = cancelled.driverId.isNotEmpty
-        ? cancelled.driverId
-        : cancelled.targetDriverId;
-
-    final proceed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.tr('no_seat_title')),
-        content: Text(context.tr('no_seat_body')),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.button,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(context.tr('continue')),
-          ),
-        ],
-      ),
-    );
-    if (proceed != true || !mounted) {
-      _rerouteInProgress = false;
-      return;
-    }
-
-    await c.search();
-    if (!mounted) {
-      _rerouteInProgress = false;
-      return;
-    }
-    final prep = await c.prepareSystemQueueCall(
-      excludeDriverIds: {excludeId},
-      skipResultsGuard: true,
-    );
-    if (!mounted) {
-      _rerouteInProgress = false;
-      return;
-    }
-    if (!prep.isReady) {
-      _snack(context.trMsg(prep.error ?? 'no_other_driver_now'));
-      _rerouteInProgress = false;
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final profileAddr = prefs.getString('user_address') ?? '';
-    final pickupAddr = profileAddr.trim().isNotEmpty
-        ? (c.fromMfy.isNotEmpty ? "$profileAddr (${c.fromMfy})" : profileAddr)
-        : c.fromMfy;
-
-    if (!mounted) return;
-    final accepted = await Navigator.push<ActiveTrip?>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MarshrutWaitingScreen(
-          pickupMfy: c.fromMfy,
-          pickupAddr: pickupAddr,
-          dropoffMfy: c.toMfy,
-          drivers: prep.drivers,
-          userLat: c.userLat,
-          userLng: c.userLng,
-        ),
-      ),
-    );
-    _rerouteInProgress = false;
-    if (!mounted) return;
-    if (accepted != null) {
-      _startAcceptedTripMonitor(accepted);
-      _snack(context
-          .tr('marshrut_accepted')
-          .replaceAll('{name}', accepted.driverName));
-    } else {
-      await c.search();
-      if (mounted) setState(() => _directionChanged = true);
-    }
   }
 
   void _swapDirection(MarshrutSearchController c) {
@@ -669,7 +568,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
         : c.fromMfy;
 
     if (!mounted) return;
-    final accepted = await Navigator.push<ActiveTrip?>(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => MarshrutWaitingScreen(
@@ -683,15 +582,8 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
       ),
     );
     if (!mounted) return;
-    if (accepted != null) {
-      _startAcceptedTripMonitor(accepted);
-      _snack(context
-          .tr('marshrut_accepted')
-          .replaceAll('{name}', accepted.driverName));
-    } else {
-      await c.search();
-      if (mounted) setState(() => _directionChanged = true);
-    }
+    await c.search();
+    if (mounted) setState(() => _directionChanged = true);
   }
 
   void _snack(String msg, [Color? backgroundColor]) {

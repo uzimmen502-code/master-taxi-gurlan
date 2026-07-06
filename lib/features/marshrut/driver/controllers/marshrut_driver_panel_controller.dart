@@ -383,6 +383,15 @@ class MarshrutDriverPanelController extends ChangeNotifier {
 
   Future<void> goOnline() async {
     try {
+      if (_scheduleId != null) {
+        final sched = await _schedules.getById(_scheduleId!);
+        if (sched == null || sched.price <= 0) {
+          _errorMessage = 'marshrut_price_required_before_online';
+          _safeNotify();
+          return;
+        }
+      }
+
       double? lat;
       double? lng;
       if (!kIsWeb) {

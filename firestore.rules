@@ -177,6 +177,16 @@ service cloud.firestore {
               ]);
     }
 
+    function intercityBookingParticipantRead() {
+      return isAuth() && (
+        isAdmin()
+        || phoneDocIdsMatch(
+            userDocIdFromPhoneToken(), resource.data.userPhone)
+        || phoneDocIdsMatch(
+            userDocIdFromPhoneToken(), resource.data.driverId)
+      );
+    }
+
     function intercityDriverPanelPatch() {
       return request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['isOnPanel', 'updatedAt']);
@@ -1217,11 +1227,12 @@ service cloud.firestore {
     // INTERCITY BOOKINGS — шаҳарлараро ишончли бронлар
     // ══════════════════════════════════════
     match /intercity_bookings/{bookingId} {
-      // Ўқиш — барча (мижоз ва ҳайдовчи бронни кўриши учун)
-      allow read: if true;
+      allow read: if intercityBookingParticipantRead();
 
       // Яратиш — userPhone, driverId, status, totalAmount > 0 бўлиши шарт.
       allow create: if isAuth()
+          && phoneDocIdsMatch(
+              userDocIdFromPhoneToken(), request.resource.data.userPhone)
           && 'userPhone' in request.resource.data
           && 'driverId' in request.resource.data
           && 'status' in request.resource.data

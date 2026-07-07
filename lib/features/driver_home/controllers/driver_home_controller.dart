@@ -21,6 +21,9 @@ import '../../../services/balance_service.dart';
 import '../../../services/deferred_settlement_queue.dart';
 import '../../../services/settlement_service.dart';
 
+/// Haydovchi GPS profili — batareya uchun moslashtirilgan.
+enum _DriverGpsProfile { waiting, offers, trip }
+
 /// Ҳайдовчи бош экранининг controller'и — сессия, онлайн, навбат, буюртмалар.
 class DriverHomeController extends ChangeNotifier {
   DriverHomeController({
@@ -51,18 +54,6 @@ class DriverHomeController extends ChangeNotifier {
   List<TripRequest> activeRequests = const [];
   TripRequest? acceptedRide;
 
-  // ─── Reserve (band qilish) holati ───
-  /// Ҳозир бу ҳайдовчи банд қилиб, қарор кутаётган трип (Қабул/Рад учун).
-  TripRequest? reservingRide;
-
-  /// Қарор учун қолган сония (10 дан 0 гача).
-  int reserveSecsLeft = 0;
-
-  /// "Қабул" босилганда қарор учун бериладиган вақт (сония).
-  static const int reserveDecisionSeconds = 10;
-
-  Timer? _reserveTimer;
-
   int seatsLeft = 0;
   int totalSeats = 0;
 
@@ -77,6 +68,23 @@ class DriverHomeController extends ChangeNotifier {
 
   double? _driverLat;
   double? _driverLng;
+  double? _lastWrittenLat;
+  double? _lastWrittenLng;
+
+  /// Kutish / chaqiruv / safar — GPS tezligi va Firestore yozuvlari.
+  _DriverGpsProfile _gpsProfile = _DriverGpsProfile.waiting;
+
+  double? get driverLat => _driverLat;
+  double? get driverLng => _driverLng;
+
+  TripRequest? get nearestRequest =>
+      activeRequests.isNotEmpty ? activeRequests.first : null;
+
+  bool get isLocalAcceptedRide {
+    final r = acceptedRide;
+    if (r == null) return false;
+    return r.taxiType == 'local' || r.taxiType == 'alone';
+  }
 
   /// Бу ҳайдовчи "Рад" қилиб локал равишда яширган трип ID'лари.
   /// Broadcast моделида рад этиш трипни ҳамма учун бекор қилмайди — фақат шу
@@ -327,15 +335,55 @@ class DriverHomeController extends ChangeNotifier {
     await _driverRepo.goOffline(session.driverId);
   }
 
+  void _reconcileGpsProfile() {
+    final next = isBusy
+        ? _DriverGpsProfile.trip
+        : activeRequests.isNotEmpty
+            ? _DriverGpsProfile.offers
+            : _DriverGpsProfile.waiting;
+    if (next == _gpsProfile) return;
+    _gpsProfile = next;
+    if (isOnline) _startGpsTracking();
+  }
+
   void _startGpsTracking() {
     _gpsSub?.cancel();
-    _gpsSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high, distanceFilter: 20),
-    ).listen((pos) {
+    final settings = switch (_gpsProfile) {
+      _DriverGpsProfile.waiting => const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          distanceFilter: 60,
+        ),
+      _DriverGpsProfile.offers => const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 20,
+        ),
+      _DriverGpsProfile.trip => const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+    };
+    _gpsSub = Geolocator.getPositionStream(locationSettings: settings)
+        .listen((pos) {
       _driverLat = pos.latitude;
       _driverLng = pos.longitude;
       if (!isOnline || session.driverId.isEmpty) return;
+
+      final minWriteM = switch (_gpsProfile) {
+        _DriverGpsProfile.waiting => 80.0,
+        _DriverGpsProfile.offers => 25.0,
+        _DriverGpsProfile.trip => 8.0,
+      };
+      if (_lastWrittenLat != null && _lastWrittenLng != null) {
+        final moved = Geolocator.distanceBetween(
+          _lastWrittenLat!,
+          _lastWrittenLng!,
+          pos.latitude,
+          pos.longitude,
+        );
+        if (moved < minWriteM) return;
+      }
+      _lastWrittenLat = pos.latitude;
+      _lastWrittenLng = pos.longitude;
       _driverRepo.updateLocation(
           uid: session.driverId, lat: pos.latitude, lng: pos.longitude);
     });
@@ -370,10 +418,7 @@ class DriverHomeController extends ChangeNotifier {
       final filtered = trips.where((t) {
         if (t.taxiType == 'marshrut') return false;
         if (_dismissedTripIds.contains(t.id)) return false;
-        if (t.createdAt != null) {
-          final age = now.difference(t.createdAt!);
-          if (age.inMinutes >= 3) return false;
-        }
+        if (!t.isActiveSearchOffer) return false;
         if (!_matchesTaxiType(t.taxiType)) return false;
         // Radius gate: haydovchi faqat yo'lovchining joriy qidiruv radiusi
         // ichidagi buyurtmalarni ko'radi (0.5 km — GPS xatosi uchun bufer).
@@ -391,13 +436,29 @@ class DriverHomeController extends ChangeNotifier {
           if (dKm > t.radiusKm + 0.5) return false;
         }
         return true;
-      }).toList();
+      }).toList()
+        ..sort((a, b) {
+          final da = Geolocator.distanceBetween(
+            _driverLat ?? 0,
+            _driverLng ?? 0,
+            a.fromLat,
+            a.fromLng,
+          );
+          final db = Geolocator.distanceBetween(
+            _driverLat ?? 0,
+            _driverLng ?? 0,
+            b.fromLat,
+            b.fromLng,
+          );
+          return da.compareTo(db);
+        });
 
       final list = filtered.map((t) {
-        int secs = 180;
-        if (t.createdAt != null) {
-          secs = (180 - now.difference(t.createdAt!).inSeconds)
-              .clamp(0, 180);
+        int secs = 0;
+        if (t.expiresAt != null) {
+          secs = t.expiresAt!.difference(now).inSeconds.clamp(0, 999);
+        } else if (t.createdAt != null) {
+          secs = (180 - now.difference(t.createdAt!).inSeconds).clamp(0, 180);
         }
         double distKm = 0;
         if (_driverLat != null &&
@@ -432,6 +493,7 @@ class DriverHomeController extends ChangeNotifier {
       }).toList();
 
       activeRequests = list;
+      _reconcileGpsProfile();
       notifyListeners();
       if (list.isNotEmpty && !isBusy && acceptedRide == null) {
         _newRequestController.add(list.first);
@@ -452,67 +514,6 @@ class DriverHomeController extends ChangeNotifier {
   }
 
   // ─── Қабул қилиш / рад этиш ──────────────────────────────────────
-
-  /// 1-қадам: "Қабул" босилди — трипни ВАҚТИНЧА банд қилади ва 10 сонияли
-  /// таймер бошлайди. Бошқа ҳайдовчилар бу трипни "Кутиб туринг" кўради.
-  Future<({bool success, String? error})> reserveRide(TripRequest ride) async {
-    if (reservingRide != null || isBusy) {
-      return (success: false, error: null);
-    }
-    final result = await _ridesRepo.reserveRide(
-      tripId: ride.id,
-      driverId: session.driverId,
-      driverName: session.name,
-    );
-    if (!result.success) {
-      return (success: false, error: '⚠️ Аллақачон банд қилинган');
-    }
-    reservingRide = ride;
-    reserveSecsLeft = reserveDecisionSeconds;
-    notifyListeners();
-
-    _reserveTimer?.cancel();
-    _reserveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_disposed) return;
-      reserveSecsLeft--;
-      if (reserveSecsLeft <= 0) {
-        // Вақт тугади — бандликни бекор қилиб, трипни озод қиламиз.
-        cancelReservation(timedOut: true);
-      } else {
-        notifyListeners();
-      }
-    });
-    return (success: true, error: null);
-  }
-
-  /// 2а-қадам: банд қилинган трипни ЯКУНИЙ қабул қилиш.
-  Future<({bool success, String? error})> confirmReservedRide() async {
-    final ride = reservingRide;
-    if (ride == null) return (success: false, error: null);
-    _reserveTimer?.cancel();
-    final res = await acceptRide(ride);
-    if (res.success) {
-      reservingRide = null;
-      reserveSecsLeft = 0;
-    }
-    notifyListeners();
-    return res;
-  }
-
-  /// 2б-қадам: бандликни бекор қилиш (Рад ёки таймаут) — трип `searching`'га.
-  Future<void> cancelReservation({bool timedOut = false}) async {
-    final ride = reservingRide;
-    _reserveTimer?.cancel();
-    reservingRide = null;
-    reserveSecsLeft = 0;
-    notifyListeners();
-    if (ride != null) {
-      await _ridesRepo.releaseReservation(
-        tripId: ride.id,
-        driverId: session.driverId,
-      );
-    }
-  }
 
   Future<({bool success, String? error})> acceptRide(TripRequest ride) async {
     final result = await _ridesRepo.acceptRide(
@@ -557,6 +558,7 @@ class DriverHomeController extends ChangeNotifier {
       isBusy = true;
       seatsLeft = newSeats.clamp(0, totalSeats);
       activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
+      _reconcileGpsProfile();
       notifyListeners();
 
       if (newSeats <= 0) {
@@ -569,6 +571,7 @@ class DriverHomeController extends ChangeNotifier {
     acceptedRide = ride;
     isBusy = true;
     activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
+    _reconcileGpsProfile();
     notifyListeners();
     return (success: true, error: null);
   }
@@ -579,6 +582,7 @@ class DriverHomeController extends ChangeNotifier {
   void dismissRequest(TripRequest ride) {
     _dismissedTripIds.add(ride.id);
     activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
+    _reconcileGpsProfile();
     notifyListeners();
   }
 
@@ -649,8 +653,8 @@ class DriverHomeController extends ChangeNotifier {
     );
     acceptedRide = null;
     isBusy = false;
-    // #5: GPS'ни қайта ёқамиз — кейинги йўловчилар учун масофа ишлаши учун.
-    if (isOnline) _startGpsTracking();
+    _reconcileGpsProfile();
+    if (isOnline && _gpsSub == null) _startGpsTracking();
     notifyListeners();
     await _saveStats();
     return fare;
@@ -661,7 +665,8 @@ class DriverHomeController extends ChangeNotifier {
     final ride = acceptedRide;
     acceptedRide = null;
     isBusy = false;
-    if (isOnline) _startGpsTracking();
+    _reconcileGpsProfile();
+    if (isOnline && _gpsSub == null) _startGpsTracking();
     notifyListeners();
     if (ride != null) {
       // Трипни `searching`'га қайтариш — бошқа ҳайдовчи қабул қила олиши учун.
@@ -738,7 +743,6 @@ class DriverHomeController extends ChangeNotifier {
     _tripsSub?.cancel();
     _queueSub?.cancel();
     _gpsSub?.cancel();
-    _reserveTimer?.cancel();
     _newRequestController.close();
     _seatsFullController.close();
     if (isOnline) _driverRepo.goOffline(session.driverId);

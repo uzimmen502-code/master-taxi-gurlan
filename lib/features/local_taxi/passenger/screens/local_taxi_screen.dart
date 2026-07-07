@@ -197,7 +197,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           .collection('trips')
           .where('userPhone', isEqualTo: phone)
           .where('taxiType', isEqualTo: 'local')
-          .where('status', whereIn: ['searching', 'reserved', 'accepted'])
+          .where('status', whereIn: ['searching', 'accepted'])
           .get();
       if (snap.docs.isEmpty) return null;
       final docs = snap.docs.toList();
@@ -240,7 +240,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             );
             return;
           }
-          if (status == 'searching' || status == 'reserved') {
+          if (status == 'searching') {
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -269,7 +269,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           builder: (_) => LocalTaxiActiveTripScreen(tripId: trip.id),
         ),
       );
-    } else if (status == 'searching' || status == 'reserved') {
+    } else if (status == 'searching') {
       await Navigator.push(
         context,
         MaterialPageRoute(

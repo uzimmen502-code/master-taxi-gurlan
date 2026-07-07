@@ -6,6 +6,7 @@ import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
 import '../controllers/searching_controller.dart';
+import '../widgets/passenger_search_map_view.dart';
 import 'local_taxi_active_trip_screen.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -22,8 +23,6 @@ class SearchingScreen extends StatelessWidget {
   final String from;
   final String to;
   final String taxiType;
-
-  /// Mavjud `trips/{id}` ni tiklash (qayta yaratmaslik).
   final String? tripId;
 
   @override
@@ -59,7 +58,6 @@ class _SearchingViewState extends State<_SearchingView> {
   Widget build(BuildContext context) {
     final c = context.watch<SearchingController>();
 
-    // Side-effects: snackbar va dialog.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final err = c.consumeError();
@@ -82,189 +80,216 @@ class _SearchingViewState extends State<_SearchingView> {
         if (context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        backgroundColor: AppColors.scaffold,
-        appBar: AppBar(
-          title: Text(context.tr('searching_driver_title')),
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () async {
-              await c.cancelByUser();
-              if (context.mounted) Navigator.pop(context);
-            },
-          ),
-        ),
-        body: Column(children: [
-          _statusBanner(c),
-          _addressRow(
-            icon: Icons.circle,
-            color: AppColors.primary,
-            text: c.from,
-          ),
-          if (c.to.isNotEmpty)
-            _addressRow(
-              icon: Icons.location_on,
-              color: Colors.red,
-              text: c.to,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: PassengerSearchMapView(
+                fromLat: c.fromLat,
+                fromLng: c.fromLng,
+                radiusKm: c.currentRadiusKm,
+                drivers: c.drivers,
+                isSearching: c.isSearching,
+                pickupLabel: context.tr('passenger_map_you'),
+              ),
             ),
-          const Divider(height: 1),
-          Expanded(child: _searchingBody(c)),
-        ]),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: Row(
+                    children: [
+                      _roundIconButton(
+                        icon: Icons.close,
+                        onPressed: () async {
+                          await c.cancelByUser();
+                          if (context.mounted) Navigator.pop(context);
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: _statusChip(c)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: _bottomPanel(c),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // Sections
-  // ────────────────────────────────────────────────────────────────────
-  Widget _statusBanner(SearchingController c) {
+  Widget _roundIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) =>
+      Material(
+        color: Colors.white,
+        shape: const CircleBorder(),
+        elevation: 3,
+        child: IconButton(
+          icon: Icon(icon, color: _blue),
+          onPressed: onPressed,
+        ),
+      );
+
+  Widget _statusChip(SearchingController c) {
+    if (c.isSearching) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: _blue,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
+          ],
+        ),
+        child: Row(children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _fmt('radius_timer', {
+                    'km': c.currentRadiusKm.toInt().toString(),
+                    'sec': c.seconds.toString(),
+                  }),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  _fmt('cycle_progress', {
+                    'current': '${c.cycle + 1}',
+                    'total': '3',
+                  }),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ]),
+      );
+    }
+
     return Container(
-      color: _blue,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-      child: Column(children: [
-        if (c.driverReserved) ...[
-          const Icon(Icons.check_circle, color: Colors.white, size: 48),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('driver_found_waiting'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold),
-          ),
-        ] else if (c.isSearching) ...[
-          const CircularProgressIndicator(
-              color: Colors.white, strokeWidth: 3),
-          const SizedBox(height: 12),
-          Text(
-            _fmt('radius_timer', {
-              'km': c.currentRadiusKm.toInt().toString(),
-              'sec': c.seconds.toString(),
-            }),
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _fmt('cycle_progress', {
-              'current': '${c.cycle + 1}',
-              'total': '3',
-            }),
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-        ] else ...[
-          const Icon(Icons.sentiment_dissatisfied,
-              color: Colors.white70, size: 48),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('no_free_driver_now'),
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.tr('retry_later'),
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white, foregroundColor: _blue),
-            child: Text(context.tr('back_short')),
-          ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8),
         ],
-      ]),
+      ),
+      child: Text(
+        context.tr('no_free_driver_now'),
+        style: TextStyle(
+            fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+      ),
     );
   }
+
+  Widget _bottomPanel(SearchingController c) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14), blurRadius: 12),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _addressRow(
+              icon: Icons.circle,
+              color: AppColors.primary,
+              text: c.from,
+            ),
+            if (c.to.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _addressRow(
+                icon: Icons.location_on,
+                color: Colors.red,
+                text: c.to,
+              ),
+            ],
+            const SizedBox(height: 10),
+            if (c.isSearching) ...[
+              Text(
+                context.tr('searching_broadcast_hint'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              if (c.drivers.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _fmt('nearby_drivers_count', {'n': '${c.drivers.length}'}),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ] else ...[
+              Text(
+                context.tr('drivers_not_found'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                style: FilledButton.styleFrom(backgroundColor: _blue),
+                child: Text(context.tr('back_short')),
+              ),
+            ],
+          ],
+        ),
+      );
 
   Widget _addressRow({
     required IconData icon,
     required Color color,
     required String text,
-  }) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(children: [
-        Icon(icon, size: 10, color: color),
+  }) =>
+      Row(children: [
+        Icon(icon, size: 12, color: color),
         const SizedBox(width: 8),
         Expanded(
           child: Text(text,
-              style: const TextStyle(fontSize: 13),
-              maxLines: 1,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis),
         ),
-      ]),
-    );
-  }
+      ]);
 
-  /// Broadcast modeli — yo'lovchi haydovchini tanlamaydi, faqat kutadi.
-  /// So'rov radius ichidagi barcha haydovchilarga avtomatik yuborilgan;
-  /// birinchi qabul qilgan haydovchi bilan bog'lanadi.
-  Widget _searchingBody(SearchingController c) {
-    if (!c.isSearching) {
-      return Center(
-        child: Text(
-          context.tr('drivers_not_found'),
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        ),
-      );
-    }
-
-    if (c.driverReserved) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.directions_car,
-                color: AppColors.primary, size: 56),
-            const SizedBox(height: 14),
-            Text(
-              context.tr('driver_found_waiting'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ]),
-        ),
-      );
-    }
-
-    final nearby = c.drivers.length;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.podcasts, color: Colors.grey.shade400, size: 56),
-          const SizedBox(height: 14),
-          Text(
-            context.tr('searching_broadcast_hint'),
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-          ),
-          if (nearby > 0) ...[
-            const SizedBox(height: 8),
-            Text(
-              _fmt('nearby_drivers_count', {'n': '$nearby'}),
-              style: TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600),
-            ),
-          ],
-        ]),
-      ),
-    );
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // Side-effects
-  // ────────────────────────────────────────────────────────────────────
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),

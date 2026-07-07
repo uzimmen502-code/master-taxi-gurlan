@@ -16,9 +16,8 @@ import '../../../../utils/fare_calculator.dart';
 /// yaratiladi va radius bo'yicha kengayadi (3 km → 5 km → 7 km, har biri 30s);
 /// radius `trips.radiusKm` ga yoziladi — atrofdagi BARCHA haydovchilar shu
 /// radius ichida so'rovni ko'radi (`watchPendingTrips` + radius gate).
-/// Birinchi "Qabul" bosgan haydovchi tripni band qiladi (`reserved`, 10s),
-/// so'ng yakuniy qabul qilsa `accepted` bo'ladi (first-accept-wins).
-/// Hech kim qabul qilmasa — bo'sh ekran + cancel.
+/// Birinchi "Qabul" bosgan haydovchi tripni to'g'ridan `accepted` qiladi
+/// (first-accept-wins). Hech kim qabul qilmasa — bo'sh ekran + cancel.
 class SearchingController extends ChangeNotifier {
   SearchingController({
     required RidesRepository ridesRepo,
@@ -65,14 +64,10 @@ class SearchingController extends ChangeNotifier {
   /// Haydovchi qabul qilganda to'ladi. UI buni "iste'mol" qilib dialog ko'rsatadi.
   ActiveTrip? acceptedTrip;
 
-  /// Бирор ҳайдовчи трипни банд қилди (reserved) — "топилди, кутилмоқда".
-  /// Шу ҳолатда радиус сикли музлатилади (ҳайдовчи 10с қарор қилмагунча
-  /// қидирув кенгаймайди ва тугатилмайди).
-  bool driverReserved = false;
-
   String? errorMessage;
 
   Timer? _timer;
+  Timer? _driversRefreshTimer;
   StreamSubscription<ActiveTrip>? _tripSub;
 
   // ── Boshlash ──────────────────────────────────────────────────────
@@ -93,9 +88,6 @@ class SearchingController extends ChangeNotifier {
         if (existing != null) {
           _fromLat = existing.fromLat;
           _fromLng = existing.fromLng;
-          if (existing.isReserved) {
-            driverReserved = true;
-          }
         }
       }
 
@@ -143,6 +135,11 @@ class SearchingController extends ChangeNotifier {
 
   double get currentRadiusKm => _radiusForCycle(cycle);
 
+  double get fromLat => _fromLat;
+  double get fromLng => _fromLng;
+
+  bool get hasPickupCoords => _fromLat != 0 || _fromLng != 0;
+
   double _radiusForCycle(int c) {
     switch (c) {
       case 0:
@@ -159,14 +156,13 @@ class SearchingController extends ChangeNotifier {
   void _startCycle() {
     _loadDriversInRadius(currentRadiusKm);
     _timer?.cancel();
+    _driversRefreshTimer?.cancel();
+    _driversRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_isDisposed || !isSearching) return;
+      _loadDriversInRadius(currentRadiusKm);
+    });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_isDisposed) return;
-      // Ҳайдовчи трипни банд қилиб қарор кутаётганда — сиклни музлатамиз
-      // (кенгайтирмаймиз ва "топилмади" деб тугатмаймиз).
-      if (driverReserved) {
-        notifyListeners();
-        return;
-      }
       seconds--;
       if (seconds <= 0) {
         _nextCycle();
@@ -225,39 +221,25 @@ class SearchingController extends ChangeNotifier {
 
     if (trip.isCancelled || trip.status == 'expired') {
       _timer?.cancel();
+      _driversRefreshTimer?.cancel();
       isSearching = false;
-      driverReserved = false;
       errorMessage = 'local_search_ended_cancelled';
       notifyListeners();
       return;
     }
 
-    // Қабул қилинди
     if (trip.isAccepted && acceptedTrip == null) {
       acceptedTrip = trip;
-      driverReserved = false;
       _timer?.cancel();
+      _driversRefreshTimer?.cancel();
       _tripSub?.cancel();
-      notifyListeners();
-      return;
-    }
-
-    // Ҳайдовчи банд қилди (reserved) — "Ҳайдовчи топилди, кутилмоқда".
-    if (trip.isReserved && !driverReserved) {
-      driverReserved = true;
-      notifyListeners();
-      return;
-    }
-    // Банд бекор қилинди (ҳайдовчи рад этди ёки таймаут) — қидирув давом этади,
-    // бошқа ҳайдовчилар трипни яна кўради.
-    if (!trip.isReserved && driverReserved && !trip.isAccepted) {
-      driverReserved = false;
       notifyListeners();
     }
   }
 
   void _noDriversFound() {
     _timer?.cancel();
+    _driversRefreshTimer?.cancel();
     isSearching = false;
     notifyListeners();
     // Trip "expired" sifatida bekor qilish.
@@ -282,6 +264,7 @@ class SearchingController extends ChangeNotifier {
     if (_isCancelled) return;
     _isCancelled = true;
     _timer?.cancel();
+    _driversRefreshTimer?.cancel();
     _tripSub?.cancel();
     if (tripId != null) {
       try {
@@ -301,6 +284,7 @@ class SearchingController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _timer?.cancel();
+    _driversRefreshTimer?.cancel();
     _tripSub?.cancel();
     _cancelTripSilently();
     super.dispose();

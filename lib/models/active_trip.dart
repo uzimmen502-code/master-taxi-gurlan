@@ -93,6 +93,8 @@ class ActiveTrip {
   bool get isDriverNoRoomCancel =>
       isCancelled && cancelledBy == 'driver' && cancelReason == 'no_room';
   bool get isSearching => status == 'searching';
+  /// Faol mahalliy qidiruv: `searching` va muddati o'tmagan.
+  bool get isActiveSearchOffer => isSearching && !isExpired;
   bool get isReserved => status == 'reserved';
   bool get isRejected => status == 'rejected';
   bool get isNoSeats => status == 'no_seats';

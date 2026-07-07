@@ -212,38 +212,154 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Future<void> _animateCamera() async {
     if (_driverLatLng == null) return;
     final ctrl = await _mapController.future;
-    ctrl.animateCamera(CameraUpdate.newLatLng(_driverLatLng!));
+    final trip = _trip;
+    if (trip != null && trip.fromLat != 0 && trip.fromLng != 0) {
+      final pickup = LatLng(trip.fromLat, trip.fromLng);
+      final bounds = LatLngBounds(
+        southwest: LatLng(
+          pickup.latitude < _driverLatLng!.latitude
+              ? pickup.latitude
+              : _driverLatLng!.latitude,
+          pickup.longitude < _driverLatLng!.longitude
+              ? pickup.longitude
+              : _driverLatLng!.longitude,
+        ),
+        northeast: LatLng(
+          pickup.latitude > _driverLatLng!.latitude
+              ? pickup.latitude
+              : _driverLatLng!.latitude,
+          pickup.longitude > _driverLatLng!.longitude
+              ? pickup.longitude
+              : _driverLatLng!.longitude,
+        ),
+      );
+      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+      return;
+    }
+    await ctrl.animateCamera(CameraUpdate.newLatLng(_driverLatLng!));
   }
 
-  Widget _buildMap(BuildContext context) {
-    return SizedBox(
-      height: 220,
-      child: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: _driverLatLng ?? const LatLng(41.6, 60.6),
-          zoom: 15,
-        ),
-        onMapCreated: _mapController.complete,
-        markers: _driverLatLng == null
-            ? {}
-            : {
-                Marker(
-                  markerId: const MarkerId('driver'),
-                  position: _driverLatLng!,
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueGreen,
-                  ),
-                  infoWindow: InfoWindow(
-                    title: context.tr('driver_on_way'),
-                  ),
-                ),
-              },
-        myLocationEnabled: true,
-        zoomControlsEnabled: false,
-        mapToolbarEnabled: false,
-      ),
-    );
+  Set<Marker> _buildMarkers(ActiveTrip trip) {
+    final markers = <Marker>{};
+    if (trip.fromLat != 0 || trip.fromLng != 0) {
+      markers.add(Marker(
+        markerId: const MarkerId('pickup'),
+        position: LatLng(trip.fromLat, trip.fromLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(title: context.tr('passenger_map_you')),
+      ));
+    }
+    if (_driverLatLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('driver'),
+        position: _driverLatLng!,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(title: context.tr('driver_on_way')),
+      ));
+    }
+    return markers;
   }
+
+  Widget _phonePanel(ActiveTrip trip) => Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
+          ],
+        ),
+        child: Row(children: [
+          const Icon(Icons.phone, color: AppColors.primaryDark, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              trip.driverPhone.isNotEmpty ? trip.driverPhone : '—',
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: trip.driverPhone.isEmpty
+                ? null
+                : () => _callDriver(trip.driverPhone),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primaryDark,
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.call, size: 18),
+            label: Text(context.tr('trip_call_driver')),
+          ),
+        ]),
+      );
+
+  Widget _tripInfoPanel(
+    BuildContext context,
+    ActiveTrip trip,
+    int estimatedPrice,
+    String statusText,
+  ) =>
+      Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              statusText,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '👤 ${trip.driverName}',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '🚗 ${trip.driverCar}  ${trip.driverPlate}',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            ),
+            if (estimatedPrice > 0) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    context.tr('estimated_price'),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                  ),
+                  Text(
+                    '${formatPrice(estimatedPrice)} сўм',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (trip.status == 'accepted') ...[
+              const SizedBox(height: 10),
+              _buildCancelButton(context),
+            ],
+          ],
+        ),
+      );
 
   Future<void> _callDriver(String phone) async {
     await callPhone(phone);
@@ -432,12 +548,6 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
-      appBar: AppBar(
-        title: Text(context.tr('active_trip_title')),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        automaticallyImplyLeading: false,
-      ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('trips')
@@ -533,102 +643,72 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               ? context.tr('trip_status_completed')
               : context.tr('trip_status_accepted');
 
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildMap(context),
-                const SizedBox(height: 12),
-                if (estimatedPrice > 0)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          context.tr('estimated_price'),
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          '${formatPrice(estimatedPrice)} сўм',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+          final initialTarget = trip.fromLat != 0 || trip.fromLng != 0
+              ? LatLng(trip.fromLat, trip.fromLng)
+              : (_driverLatLng ?? const LatLng(41.4957, 60.5822));
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: initialTarget,
+                    zoom: 14,
                   ),
-                Card(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          statusText,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '👤 ${trip.driverName}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '🚗 ${trip.driverCar}  ${trip.driverPlate}',
-                          style: TextStyle(color: Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 10),
-                        Text('📍 ${trip.fromAddr}',
-                            style: const TextStyle(fontSize: 14)),
-                        if (trip.toAddr.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text('🏁 ${trip.toAddr}',
-                              style: const TextStyle(fontSize: 14)),
-                        ],
-                      ],
-                    ),
-                  ),
+                  onMapCreated: _mapController.complete,
+                  markers: _buildMarkers(trip),
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
                 ),
-                const Spacer(),
-                if (trip.driverPhone.isNotEmpty)
-                  ElevatedButton.icon(
-                    onPressed: () => _callDriver(trip.driverPhone),
-                    icon: const Icon(Icons.phone),
-                    label: Text(context.tr('trip_call_driver')),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.button,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 8),
+                        ],
+                      ),
+                      child: Text(
+                        context.tr('active_trip_title'),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                     ),
                   ),
-                if (trip.status == 'accepted') ...[
-                  const SizedBox(height: 12),
-                  _buildCancelButton(context),
-                ],
-              ],
-            ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (trip.driverPhone.isNotEmpty) _phonePanel(trip),
+                      _tripInfoPanel(
+                          context, trip, estimatedPrice, statusText),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

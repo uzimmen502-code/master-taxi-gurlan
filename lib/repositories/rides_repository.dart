@@ -1301,7 +1301,7 @@ class RidesRepository {
   /// Сlient тарафда taxi тури ва вақт бўйича фильтрланади.
   Stream<List<ActiveTrip>> watchPendingTrips({int limit = 20}) {
     return _trips
-        .where('status', whereIn: ['searching', 'pending', 'reserved'])
+        .where('status', whereIn: ['searching', 'pending'])
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
@@ -1331,11 +1331,9 @@ class RidesRepository {
         final tripDoc = await tx.get(tripRef);
         if (!tripDoc.exists) throw Exception('taken');
         final status = (tripDoc.data()?['status'] ?? '') as String;
-        final reservedBy = (tripDoc.data()?['reservedBy'] ?? '') as String;
-        // searching/pending — to'g'ridan-to'g'ri; reserved — faqat band qilgan haydovchi.
+        // Mahalliy/shaharlararo: faqat `searching`/`pending`.
         final canAccept = status == 'searching' ||
-            status == 'pending' ||
-            (status == 'reserved' && reservedBy == driverId);
+            status == 'pending';
         if (!canAccept) {
           throw Exception('taken');
         }

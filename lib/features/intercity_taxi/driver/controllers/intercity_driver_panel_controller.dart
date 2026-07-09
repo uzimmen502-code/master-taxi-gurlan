@@ -10,6 +10,8 @@ import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/intercity_rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../services/intercity_pickup_route_service.dart';
+import '../../../../core/utils/formatters.dart';
+import '../../../../services/trip_change_settlement.dart';
 import '../../intercity_driver_alert_text.dart';
 import '../../../../services/notification_delivery.dart';
 import '../../../../utils/intercity_places.dart';
@@ -197,14 +199,57 @@ class IntercityDriverPanelController extends ChangeNotifier {
     await _bookingsRepo.rejectBooking(bookingId: bookingId, driverId: driverId);
   }
 
-  Future<void> complete(String bookingId) async {
-    final owns = bookings.any(
-      (b) => b.id == bookingId && b.driverId == driverId,
-    );
-    if (!owns) return;
+  /// Yakunlash — fare/cash dialog → booking complete → qaytim settlement.
+  Future<String?> completeWithFare({
+    required String bookingId,
+    required int fare,
+    required int cashPaid,
+  }) async {
+    IntercityBooking? booking;
+    for (final b in bookings) {
+      if (b.id == bookingId) {
+        booking = b;
+        break;
+      }
+    }
+    if (booking == null || booking.driverId != driverId) {
+      return 'booking_not_found';
+    }
     await _bookingsRepo.completeBooking(
       bookingId: bookingId,
       driverId: driverId,
+    );
+    if (booking.userPhone.isNotEmpty && cashPaid > fare) {
+      final change = cashPaid - fare;
+      final outcome = await TripChangeSettlement.settle(
+        passengerPhone: canonicalPhoneId(booking.userPhone),
+        tripId: bookingId,
+        opId: 'settle_ic_$bookingId',
+        change: change,
+      );
+      if (outcome.status == TripChangeSettlementStatus.failedPermanent) {
+        return outcome.userMessage ?? 'settlement_failed';
+      }
+      if (outcome.status == TripChangeSettlementStatus.deferred) {
+        return outcome.userMessage;
+      }
+    }
+    return null;
+  }
+
+  Future<void> complete(String bookingId) async {
+    IntercityBooking? booking;
+    for (final b in bookings) {
+      if (b.id == bookingId) {
+        booking = b;
+        break;
+      }
+    }
+    if (booking == null || booking.driverId != driverId) return;
+    await completeWithFare(
+      bookingId: bookingId,
+      fare: booking.totalAmount,
+      cashPaid: booking.totalAmount,
     );
   }
 

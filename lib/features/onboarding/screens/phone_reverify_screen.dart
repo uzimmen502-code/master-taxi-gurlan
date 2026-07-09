@@ -13,7 +13,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
-import '../../home/screens/home_screen.dart';
+import '../../../shared/navigation/app_home_route.dart';
 
 /// Mavjud foydalanuvchi — Firebase sessiyasi yo'qolganda qayta kirish wizard.
 ///
@@ -301,7 +301,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      appHomeRoute(),
       (_) => false,
     );
   }

@@ -49,16 +49,6 @@ class OrderPaymentService {
     });
   }
 
-  static Future<void> courierMarkCourierOrderArrived({
-    required String orderId,
-    required String courierPhone,
-  }) async {
-    await _fn.httpsCallable('courierMarkCourierOrderArrived').call({
-      'orderId': orderId,
-      'courierPhone': courierPhone,
-    });
-  }
-
   static Future<int?> getCustomerWalletBalance({
     required String courierPhone,
     required String customerPhone,
@@ -89,24 +79,6 @@ class OrderPaymentService {
       'lines': lines,
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
-    });
-    return Map<String, dynamic>.from(result.data as Map);
-  }
-
-  static Future<Map<String, dynamic>> courierSubmitCourierOrderPayment({
-    required String courierPhone,
-    required String orderId,
-    required int cashGiven,
-    int cardGiven = 0,
-    int walletGiven = 0,
-  }) async {
-    final result =
-        await _fn.httpsCallable('courierSubmitCourierOrderPayment').call({
-      'courierPhone': courierPhone,
-      'orderId': orderId,
-      'cashGiven': cashGiven,
-      'cardGiven': cardGiven,
-      'walletGiven': walletGiven,
     });
     return Map<String, dynamic>.from(result.data as Map);
   }

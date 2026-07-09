@@ -1408,6 +1408,23 @@ function userUid(phone) {
   return uid;
 }
 
+/**
+ * Hisobot denormalizatsiyasi: user hujjatidan regionId/districtId/serviceAreaId
+ * ni order/trip hujjatiga bosish uchun (faqat boʻsh emas maydonlar).
+ * Xizmat mavjudligiga taʼsir qilmaydi — faqat hisobot/dashboard uchun.
+ */
+function geoReportStamp(userData) {
+  const u = userData || {};
+  const out = {};
+  const region = String(u.regionId || '').trim();
+  const district = String(u.districtId || '').trim();
+  const area = String(u.serviceAreaId || '').trim();
+  if (region) out.regionId = region;
+  if (district) out.districtId = district;
+  if (area) out.serviceAreaId = area;
+  return out;
+}
+
 /** Нақд қайтим → Balance (credit) */
 exports.creditChange = functions.https.onCall(async (data, context) => {
   const operatorUid = await requireCallerRoles(
@@ -1542,9 +1559,10 @@ exports.creditSupplier = functions.https.onCall(async (data, context) => {
     const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
     const next = prev + amount;
 
-    // Ledger ko'zgusi (READ fazasi).
+    // Ledger ko'zgusi (READ fazasi) — V2: supplier_payable funding.
     const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
       idempotencyKey,
+      fundingAccount: settlementLedger.supplierPayableAccount(uid),
     });
 
     t.set(userRef, {
@@ -1923,6 +1941,7 @@ exports.placeOrderWithWallet = functions.https.onCall(async (data, context) => {
     }
     const userData = userSnap.data() || {};
     const userAddr = userData.address;
+    Object.assign(orderPayload, geoReportStamp(userData));
     let lat = orderBase.lat != null && orderBase.lat !== ''
       ? Number(orderBase.lat)
       : null;
@@ -2184,6 +2203,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     if (orderType === 'bread' && orderBase.extras) {
       orderPayload.extras = orderBase.extras;
     }
+    Object.assign(orderPayload, geoReportStamp(userData));
     let lat = orderBase.lat != null && orderBase.lat !== '' ? Number(orderBase.lat) : null;
     let lng = orderBase.lng != null && orderBase.lng !== '' ? Number(orderBase.lng) : null;
     if ((lat == null || lng == null) && userAddr && typeof userAddr === 'object') {
@@ -2276,7 +2296,7 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
       // (иккита active маршрут → яширин/етим буюртмаларни олдини олиш).
       const activeQuery = db.collection('delivery_routes')
         .where('courierId', '==', courierId)
-        .where('status', '==', 'active')
+        .where('status', 'in', ['active', 'ready'])
         .limit(1);
       const activeSnap = await t.get(activeQuery);
       const existingRoute = activeSnap.empty ? null : activeSnap.docs[0];
@@ -2851,292 +2871,6 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   };
 });
 
-/** Курьер: `courier_orders` — манзилга етиб келди (қўнғироқли хабар). */
-exports.courierMarkCourierOrderArrived = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  }
-
-  const orderId = String(data.orderId || '').trim();
-  const courierPhone = String(data.courierPhone || '');
-  const courierDigits = assertCourierPhone(courierPhone);
-  const caller = callerPhone(context);
-  if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
-    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
-  }
-  const courierUid = await resolveAuthorizedCourierUid(courierPhone);
-  if (!orderId) {
-    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
-  }
-
-  const orderRef = db.collection('courier_orders').doc(orderId);
-  const orderSnap = await orderRef.get();
-  if (!orderSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'order not found');
-  }
-  const od = orderSnap.data() || {};
-  const status = String(od.status || '');
-
-  if (canonicalUid(String(od.courierId || '')) !== canonicalUid(courierUid)) {
-    throw new functions.https.HttpsError('permission-denied', 'Not your order');
-  }
-  if (status !== 'picked_up') {
-    throw new functions.https.HttpsError('failed-precondition', 'en route first');
-  }
-  if (od.arrivedAt) {
-    return { ok: true, idempotent: true, orderId };
-  }
-
-  await orderRef.update({
-    arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  try {
-    await notifyCourierArrivedToCustomer(String(od.customerPhone || ''), {
-      orderId,
-      module: 'courier_order',
-    });
-  } catch (e) {
-    console.error('courierMarkCourierOrderArrived notify:', e.message || e);
-  }
-
-  return { ok: true, orderId };
-});
-
-/** Мижоз нақд чиқариш талаби */
-/** Kuryer: courier_orders to'lov + yetkazildi (Admin SDK, bitta transaction). */
-exports.courierSubmitCourierOrderPayment = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  }
-
-  const orderId = String(data.orderId || '').trim();
-  const courierPhone = String(data.courierPhone || '');
-  const courierDigits = assertCourierPhone(courierPhone);
-  const caller = callerPhone(context);
-  if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
-    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
-  }
-  const courierUid = await resolveAuthorizedCourierUid(courierPhone);
-
-  const cashGiven = parseInt(String(data.cashGiven ?? 0), 10);
-  const cardGiven = parseInt(String(data.cardGiven ?? 0), 10);
-  const walletGiven = parseInt(String(data.walletGiven ?? 0), 10);
-  if (!Number.isFinite(cashGiven) || cashGiven < 0
-      || !Number.isFinite(cardGiven) || cardGiven < 0
-      || !Number.isFinite(walletGiven) || walletGiven < 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amounts must be >= 0');
-  }
-  if (!orderId) {
-    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
-  }
-
-  const orderRef = db.collection('courier_orders').doc(orderId);
-
-  const courierOrderTotal = (od) => {
-    const totalPrice = parseInt(String(od.totalPrice ?? 0), 10) || 0;
-    if (totalPrice > 0) return totalPrice;
-    const estimated = parseInt(String(od.estimatedPrice ?? 0), 10) || 0;
-    const fee = parseInt(String(od.deliveryFee ?? 0), 10) || 0;
-    return estimated + fee;
-  };
-
-  let txnResult = null;
-
-  await db.runTransaction(async (t) => {
-    const orderSnap = await t.get(orderRef);
-    if (!orderSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'order not found');
-    }
-    const od = orderSnap.data() || {};
-    const status = String(od.status || '');
-
-    if (status === 'delivered') {
-      txnResult = {
-        ok: true,
-        idempotent: true,
-        total: courierOrderTotal(od),
-        paid: parseInt(String(od.totalPaid ?? 0), 10) || 0,
-        changeCredit: parseInt(String(od.changeCredit ?? 0), 10) || 0,
-        newBalance: null,
-        customerUid: '',
-        description: String(od.description || ''),
-      };
-      return;
-    }
-
-    const storedCourier = String(od.courierId || '');
-    if (canonicalUid(storedCourier) !== canonicalUid(courierUid)) {
-      throw new functions.https.HttpsError('permission-denied', 'Not your order');
-    }
-    if (status !== 'picked_up') {
-      throw new functions.https.HttpsError('failed-precondition', 'picked_up first');
-    }
-    if (!od.arrivedAt) {
-      throw new functions.https.HttpsError('failed-precondition', 'arrived first');
-    }
-
-    const total = courierOrderTotal(od);
-    if (!Number.isFinite(total) || total <= 0) {
-      throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
-    }
-
-    const paid = cashGiven + cardGiven + walletGiven;
-    if (paid < total - 1) {
-      throw new functions.https.HttpsError('failed-precondition', 'underpayment');
-    }
-
-    const walletApplied = Math.min(
-      walletGiven,
-      Math.max(0, total - cashGiven - cardGiven),
-    );
-    const changeCredit = Math.max(0, cashGiven + cardGiven + walletApplied - total);
-
-    const customerPhone = String(od.customerPhone || '');
-    const uid9 = userUid(customerPhone);
-    const uid12 = canonicalUid(customerPhone);
-    let customerRef = db.collection('users').doc(uid12);
-    let userSnap = await t.get(customerRef);
-    if (!userSnap.exists && uid9 !== uid12) {
-      customerRef = db.collection('users').doc(uid9);
-      userSnap = await t.get(customerRef);
-    }
-    if (!userSnap.exists) {
-      throw new functions.https.HttpsError('not-found', 'customer user not found');
-    }
-
-    // Ledger ko'zgusi (READ fazasi) — yozuvlardan OLDIN.
-    const bonusUid = customerRef.id;
-    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, bonusUid, {
-      idempotencyKey: `courier_order_${orderId}`,
-    });
-
-    if (walletGiven > 0) {
-      const prevBalance = parseInt(String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
-      if (prevBalance < walletGiven) {
-        throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
-      }
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(-walletGiven),
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      t.set(customerRef.collection('wallet_ledger').doc(), {
-        type: 'purchase_debit',
-        amount: -walletGiven,
-        module: 'courier_order',
-        refType: 'courier_order',
-        refId: orderId,
-        meta: { orderTotal: total },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'courier_order_payment',
-      });
-    }
-
-    if (changeCredit > 0) {
-      t.update(customerRef, {
-        bonusBalance: admin.firestore.FieldValue.increment(changeCredit),
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      t.set(customerRef.collection('wallet_ledger').doc(), {
-        type: 'change_accrued',
-        amount: changeCredit,
-        module: 'courier_order',
-        refType: 'courier_order',
-        refId: orderId,
-        meta: { orderTotal: total, paidSum: paid },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'courier_order_payment',
-      });
-    }
-
-    // Ledger ko'zgusi (WRITE fazasi) — net delta = changeCredit - walletGiven.
-    const bonusDelta = changeCredit - walletGiven;
-    if (bonusDelta !== 0) {
-      settlementLedger.commitBonusInTx(t, bonusCtx, {
-        delta: bonusDelta,
-        kind: 'courier_order',
-        refType: 'courier_order',
-        refId: orderId,
-        meta: { module: 'courier_order', orderTotal: total, walletGiven, changeCredit },
-        postedBy: 'courier_order_payment',
-        postedRole: 'courier',
-      });
-    }
-
-    t.update(orderRef, {
-      status: 'delivered',
-      deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
-      cashGiven,
-      cardGiven,
-      walletGiven,
-      totalPaid: paid,
-      changeCredit,
-    });
-
-    const afterSnap = await t.get(customerRef);
-    const newBalance = parseInt(String(afterSnap.data()?.bonusBalance ?? 0), 10) || 0;
-
-    txnResult = {
-      ok: true,
-      idempotent: false,
-      total,
-      paid,
-      changeCredit,
-      newBalance,
-      customerUid: customerRef.id,
-      description: String(od.description || ''),
-    };
-  });
-
-  if (!txnResult) {
-    throw new functions.https.HttpsError('internal', 'transaction failed');
-  }
-
-  if (txnResult.idempotent) {
-    return {
-      ok: true,
-      total: txnResult.total,
-      paid: txnResult.paid,
-      changeCredit: txnResult.changeCredit,
-      newBalance: txnResult.newBalance,
-    };
-  }
-
-  let body = txnResult.description.trim();
-  if (body) body += '\n';
-  body += `Jami: ${txnResult.total} so'm`;
-  if (cashGiven > 0) body += `\n💵 Naqd: ${cashGiven}`;
-  if (walletGiven > 0) body += `\n💼 Hamyondan: ${walletGiven}`;
-  if (txnResult.changeCredit > 0) {
-    body += `\n🔁 Qaytim: ${txnResult.changeCredit} so'm`;
-  }
-
-  try {
-    await notifyUserInApp({
-      userId: txnResult.customerUid,
-      title: '✅ Buyurtma yetkazildi',
-      body,
-      category: 'order',
-      source: 'courier_order_receipt',
-      dataType: 'courier_order',
-      screen: 'profile',
-      extraData: { orderId, changeCredit: String(txnResult.changeCredit) },
-    });
-  } catch (e) {
-    console.error('courierSubmitCourierOrderPayment receipt push:', e.message || e);
-  }
-
-  return {
-    ok: true,
-    total: txnResult.total,
-    paid: txnResult.paid,
-    changeCredit: txnResult.changeCredit,
-    newBalance: txnResult.newBalance,
-  };
-});
-
-
 exports.requestPayout = functions.https.onCall(async (data, context) => {
   const userPhone = String(data.userPhone || '');
   const amount = parseInt(String(data.amount ?? 0), 10);
@@ -3171,9 +2905,32 @@ exports.requestPayout = functions.https.onCall(async (data, context) => {
   }
 
   const userSnap = await db.collection('users').doc(uid).get();
-  const bal = (userSnap.data() && userSnap.data().bonusBalance) || 0;
+  if (!userSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'user not found');
+  }
+  const userData = userSnap.data() || {};
+  if (!payoutKycOk(userData)) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Payout KYC talab qilinadi — profil yoki admin tasdiqlashini yakunlang');
+  }
+  const bal = userData.bonusBalance || 0;
   if (bal < amount) {
     throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
+  }
+
+  const settings = await getAnomalySettings();
+  if (amount > settings.maxWithdrawalPerUser) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Bir martada ${settings.maxWithdrawalPerUser.toLocaleString('uz-UZ')} so'mdan ko'p`);
+  }
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const totalWithdrawn = await sumRecentWithdrawals(uid, oneHourAgo);
+  if (totalWithdrawn + amount > settings.maxWithdrawalPerHour) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        `1 soat ichida ${settings.maxWithdrawalPerHour.toLocaleString('uz-UZ')} so'mdan ko'p`);
   }
 
   const reqRef = db.collection('payout_requests').doc();
@@ -3237,7 +2994,13 @@ exports.confirmPayout = functions.https.onCall(async (data, context) => {
     const amount = parseInt(String(req.amount || 0), 10);
     const userRef = db.collection('users').doc(uid);
     const userSnap = await t.get(userRef);
-    const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
+    const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+    if (!payoutKycOk(userData)) {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Payout KYC talab qilinadi — profil yoki admin tasdiqlashini yakunlang');
+    }
+    const prev = userData.bonusBalance || 0;
     if (prev < amount) {
       throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
     }
@@ -4594,6 +4357,199 @@ exports.adminUpdateJobAd = functions.https.onCall(async (data, context) => {
   }
   await ref.update(patch);
   return { ok: true, adId };
+});
+
+const ADMIN_SELL_SUBMISSION_STATUSES = new Set(['pending', 'reviewed', 'archived']);
+
+/** Mijoz: sell_submissions yaratish (CF-only, rate limit). */
+exports.submitSellSubmission = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  const itemsIn = Array.isArray(data.items) ? data.items : [];
+  if (itemsIn.length < 1 || itemsIn.length > 20) {
+    throw new functions.https.HttpsError('invalid-argument', 'items 1..20');
+  }
+  const userName = String(data.userName || '').trim().slice(0, 80);
+  const pickupAddress = String(data.pickupAddress || '').trim().slice(0, 500);
+  const pickupNote = String(data.pickupNote || '').trim().slice(0, 300);
+  const pickupLat = data.pickupLat != null ? Number(data.pickupLat) : null;
+  const pickupLng = data.pickupLng != null ? Number(data.pickupLng) : null;
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const recentSnap = await db.collection('sell_submissions')
+    .where('userId', '==', uid)
+    .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+    .limit(20)
+    .get();
+  if (recentSnap.size >= 10) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily submission limit reached');
+  }
+
+  const payload = {
+    userId: uid,
+    userPhone: uid,
+    userName,
+    items: itemsIn.slice(0, 20),
+    status: 'pending',
+    visibleToUserIds: [],
+    adminNote: '',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (pickupAddress) payload.pickupAddress = pickupAddress;
+  if (Number.isFinite(pickupLat)) payload.pickupLat = pickupLat;
+  if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
+  if (pickupNote) payload.pickupDetails = { note: pickupNote };
+  if (data.pickupDetails && typeof data.pickupDetails === 'object') {
+    payload.pickupDetails = data.pickupDetails;
+  }
+
+  const ref = await db.collection('sell_submissions').add(payload);
+  return { ok: true, submissionId: ref.id };
+});
+
+/** Admin web: sell_submissions status / forward (CF-only writes). */
+exports.adminUpdateSellSubmission = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const submissionId = String(data.submissionId || '').trim();
+  if (!submissionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'submissionId required');
+  }
+  const ref = db.collection('sell_submissions').doc(submissionId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'submission not found');
+  }
+
+  const action = String(data.action || 'setStatus').trim();
+  if (action === 'setStatus') {
+    const status = String(data.status || '').trim();
+    if (!ADMIN_SELL_SUBMISSION_STATUSES.has(status)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
+    }
+    const patch = {
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      moderatedBy: adminDocId,
+      moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAdminAction: 'setStatus',
+    };
+    if (data.adminNote != null) {
+      patch.adminNote = String(data.adminNote).trim();
+    }
+    await ref.update(patch);
+    return { ok: true, submissionId, status };
+  }
+
+  if (action === 'forward') {
+    const audience = String(data.forwardAudience || '').trim();
+    if (!['all', 'selected'].includes(audience)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Invalid audience');
+    }
+    const patch = {
+      forwardAudience: audience,
+      forwardedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      moderatedBy: adminDocId,
+      moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAdminAction: 'forward',
+    };
+    if (audience === 'selected') {
+      const raw = Array.isArray(data.targetUserIds) ? data.targetUserIds : [];
+      const normalized = [...new Set(raw.map((x) => canonicalUid(String(x || '')))
+        .filter((p) => p.length >= 9))];
+      if (normalized.length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'targetUserIds required');
+      }
+      patch.visibleToUserIds = normalized;
+    }
+    if (data.adminNote != null && String(data.adminNote).trim()) {
+      patch.adminNote = String(data.adminNote).trim();
+    }
+    await ref.update(patch);
+    return { ok: true, submissionId, forwardAudience: audience };
+  }
+
+  throw new functions.https.HttpsError('invalid-argument', 'Unknown action');
+});
+
+/** Mijoz: tanishuv profili bo'yicha shikoyat (CF-only yozuv). */
+exports.submitDatingReport = functions.https.onCall(async (data, context) => {
+  const reporterId = datingCallerUid(context);
+  const targetId = String(data.targetId || '').trim();
+  const reason = String(data.reason || '').trim();
+  if (!targetId || targetId === reporterId) {
+    throw new functions.https.HttpsError('invalid-argument', 'targetId required');
+  }
+  if (reason.length < 3) {
+    throw new functions.https.HttpsError('invalid-argument', 'reason too short');
+  }
+  const targetSnap = await db.collection('dating_profiles').doc(targetId).get();
+  if (!targetSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'profile not found');
+  }
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const todaySnap = await db.collection('reports')
+    .where('type', '==', 'dating_profile')
+    .where('reporterId', '==', reporterId)
+    .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+    .limit(10)
+    .get();
+  if (todaySnap.size >= 5) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily report limit reached');
+  }
+
+  const openSnap = await db.collection('reports')
+    .where('type', '==', 'dating_profile')
+    .where('reporterId', '==', reporterId)
+    .where('targetId', '==', targetId)
+    .where('status', '==', 'open')
+    .limit(1)
+    .get();
+  if (!openSnap.empty) {
+    return { ok: true, reportId: openSnap.docs[0].id, duplicate: true };
+  }
+
+  const ref = db.collection('reports').doc();
+  await ref.set({
+    type: 'dating_profile',
+    reporterId,
+    targetId,
+    reason,
+    status: 'open',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, reportId: ref.id };
+});
+
+/** Admin web: dating report resolve. */
+exports.adminResolveDatingReport = functions.https.onCall(async (data, context) => {
+  const adminDocId = await assertAdmin(String(data.adminPhone || ''), context);
+  const reportId = String(data.reportId || '').trim();
+  if (!reportId) {
+    throw new functions.https.HttpsError('invalid-argument', 'reportId required');
+  }
+  const ref = db.collection('reports').doc(reportId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'report not found');
+  }
+  await ref.update({
+    status: 'resolved',
+    resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    resolvedBy: adminDocId,
+  });
+  return { ok: true, reportId };
 });
 
 /** Admin web: shikoyatni hal qilindi deb belgilash. */
@@ -8394,7 +8350,7 @@ exports.releaseStaleReservations = functions.pubsub
 exports.reconcileLedger = functions.https.onCall(async (data, context) => {
   await requireCallerRoles(
       context,
-      ['admin', 'superadmin', 'finance', 'auditor'],
+      ['superadmin', 'finance', 'auditor'],
       'Finance/audit role required',
   );
   return settlementLedger.reconcile(db);
@@ -8410,7 +8366,7 @@ exports.reconcileLedger = functions.https.onCall(async (data, context) => {
 // ─────────────────────────────────────────────────────────────────────
 exports.closePeriod = functions.https.onCall(async (data, context) => {
   const callerUid = await requireCallerRoles(
-      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+      context, ['superadmin', 'finance'], 'Finance role required');
 
   const periodId = String((data && data.periodId) || '').trim() ||
       new Date().toISOString().slice(0, 10);
@@ -8537,7 +8493,7 @@ async function floatStatusOf(driverUid) {
 
 exports.floatTopUp = functions.https.onCall(async (data, context) => {
   const callerUid = await requireCallerRoles(
-      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+      context, ['superadmin', 'finance'], 'Finance role required');
   const { driverUid, amount, opId } = parseFloatOpInput(data);
   const config = await settlementLedger.getConfig(db);
   const floatAcc = settlementLedger.driverFloatAccount(driverUid);
@@ -8588,7 +8544,7 @@ exports.floatTopUp = functions.https.onCall(async (data, context) => {
 
 exports.floatReturn = functions.https.onCall(async (data, context) => {
   const callerUid = await requireCallerRoles(
-      context, ['admin', 'superadmin', 'finance'], 'Finance role required');
+      context, ['superadmin', 'finance'], 'Finance role required');
   const { driverUid, amount, opId } = parseFloatOpInput(data);
   const floatAcc = settlementLedger.driverFloatAccount(driverUid);
 
@@ -8663,6 +8619,15 @@ async function isIdentifiedUser(uid) {
   return doc.exists;
 }
 
+/** Payout KYC — admin tasdiqlangan yoki to'liq profil (V1 fallback). */
+function payoutKycOk(userData) {
+  if (!userData || typeof userData !== 'object') return false;
+  if (userData.payoutKycVerified === true) return true;
+  const name = String(userData.name || '').trim();
+  const birthDate = userData.birthDate;
+  return name.length >= 2 && birthDate != null && String(birthDate).length >= 4;
+}
+
 exports.openSettlement = functions.https.onCall(async (data, context) => {
   const driverUid = requireCallerUid(context);
   const passengerUid = canonicalUid(data && (data.passengerUid || data.passengerPhone));
@@ -8716,9 +8681,13 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
 
   const ref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
   const tripRef = db.collection('trips').doc(tripId);
+  const bookingRef = db.collection('intercity_bookings').doc(tripId);
   const created = await db.runTransaction(async (tx) => {
     const ex = await tx.get(ref);
     if (ex.exists) return false; // idempotent
+    const [tripSnap, bookSnap] = await Promise.all([
+      tx.get(tripRef), tx.get(bookingRef),
+    ]);
     tx.set(ref, {
       tripId,
       driverUid,
@@ -8731,12 +8700,16 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       journalEntryId: '',
     });
-    // Yo'lovchi ekrani trip doc'ni tinglaydi — settlement holatini tamg'alaymiz.
-    tx.set(tripRef, {
+    const hostPatch = {
       settlementId: opId,
       settlementState: 'pending',
       settlementAmount,
-    }, { merge: true });
+    };
+    if (tripSnap.exists) {
+      tx.set(tripRef, hostPatch, { merge: true });
+    } else if (bookSnap.exists) {
+      tx.set(bookingRef, hostPatch, { merge: true });
+    }
     return true;
   });
 
@@ -8800,7 +8773,17 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError(
             'failed-precondition', 'Settlement endi pending emas');
       }
-      return fd;
+      let hostPatchRef = null;
+      if (fd.tripId) {
+        const tripRef = db.collection('trips').doc(fd.tripId);
+        const bookingRef = db.collection('intercity_bookings').doc(fd.tripId);
+        const [tripSnap, bookSnap] = await Promise.all([
+          tx.get(tripRef), tx.get(bookingRef),
+        ]);
+        if (tripSnap.exists) hostPatchRef = tripRef;
+        else if (bookSnap.exists) hostPatchRef = bookingRef;
+      }
+      return { fd, hostPatchRef };
     },
     assert: ({ accounts }) => {
       const fa = accounts.get(floatAcc);
@@ -8809,17 +8792,16 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
             'failed-precondition', 'Float yetarli emas (online: manfiylik mumkin emas)');
       }
     },
-    onCommit: (tx, { entryId }) => {
+    onCommit: (tx, { entryId, pre }) => {
       tx.update(sref, {
         state: 'completed',
         confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
         journalEntryId: entryId,
       });
-      if (s.tripId) {
-        tx.set(db.collection('trips').doc(s.tripId), {
-          settlementState: 'completed',
-        }, { merge: true });
+      const hostPatchRef = pre && pre.hostPatchRef;
+      if (hostPatchRef) {
+        tx.set(hostPatchRef, { settlementState: 'completed' }, { merge: true });
       }
     },
   });
@@ -8869,9 +8851,17 @@ exports.cancelSettlement = functions.https.onCall(async (data, context) => {
       cancelReason: reason,
     });
     if (s.tripId) {
-      tx.set(db.collection('trips').doc(s.tripId), {
-        settlementState: 'cancelled',
-      }, { merge: true });
+      const tripRef = db.collection('trips').doc(s.tripId);
+      const bookingRef = db.collection('intercity_bookings').doc(s.tripId);
+      const [tripSnap, bookSnap] = await Promise.all([
+        tx.get(tripRef), tx.get(bookingRef),
+      ]);
+      const hostPatch = { settlementState: 'cancelled' };
+      if (tripSnap.exists) {
+        tx.set(tripRef, hostPatch, { merge: true });
+      } else if (bookSnap.exists) {
+        tx.set(bookingRef, hostPatch, { merge: true });
+      }
     }
   });
 
@@ -8932,6 +8922,7 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
 
   const sref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
   const tripRef = db.collection('trips').doc(tripId);
+  const bookingRef = db.collection('intercity_bookings').doc(tripId);
   const timeoutAt = admin.firestore.Timestamp.fromMillis(
       Date.now() + (config.deferredTimeoutHours * 3600 * 1000));
 
@@ -8951,6 +8942,15 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
     mirrorBonus: true,
     walletLedgerType: 'settlement_credit',
     meta: { tripId, settlementId: opId, driverUid, deferred: true },
+    precheck: async (tx) => {
+      const [tripSnap, bookSnap] = await Promise.all([
+        tx.get(tripRef), tx.get(bookingRef),
+      ]);
+      let hostPatchRef = null;
+      if (tripSnap.exists) hostPatchRef = tripRef;
+      else if (bookSnap.exists) hostPatchRef = bookingRef;
+      return { hostPatchRef };
+    },
     // Headroom: float floordan past tushmasin (deferred chegarasi).
     assert: ({ accounts }) => {
       const fa = accounts.get(floatAcc);
@@ -8968,7 +8968,7 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
         ? { blocked: true, blockedReason: 'deferred_debt', deferredTimeoutAt: timeoutAt }
         : { blocked: false, blockedReason: '', deferredTimeoutAt: null };
     },
-    onCommit: (tx, { entryId, balances }) => {
+    onCommit: (tx, { entryId, balances, pre }) => {
       const next = balances[floatAcc] || 0;
       resultNext = next;
       tx.set(sref, {
@@ -8986,11 +8986,14 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
         journalEntryId: entryId,
       }, { merge: true });
-      tx.set(tripRef, {
-        settlementId: opId,
-        settlementState: 'completed',
-        settlementAmount,
-      }, { merge: true });
+      const hostPatchRef = pre && pre.hostPatchRef;
+      if (hostPatchRef) {
+        tx.set(hostPatchRef, {
+          settlementId: opId,
+          settlementState: 'completed',
+          settlementAmount,
+        }, { merge: true });
+      }
       tx.set(db.collection('users').doc(driverUid),
           { settlementBlocked: next < 0 }, { merge: true });
     },
@@ -10959,6 +10962,16 @@ exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
     }
 
+    const idempotencyKey = String(data.idempotencyKey || '').trim();
+    if (idempotencyKey) {
+      const idemRef = db.collection('wallet_idempotency').doc('carpet_' + idempotencyKey);
+      const idemSnap = await idemRef.get();
+      if (idemSnap.exists) {
+        const prev = idemSnap.data() || {};
+        return { ok: true, orderId: String(prev.orderId || ''), idempotent: true };
+      }
+    }
+
     const carpetCount = parseInt(String(data.carpetCount || 0), 10);
     const pickupAddress = String(data.pickupAddress || '').trim();
     const note = String(data.note || '').trim();
@@ -11012,8 +11025,20 @@ exports.placeCarpetWashOrder = functions.https.onCall(async (data, context) => {
     };
     if (Number.isFinite(pickupLat)) payload.pickupLat = pickupLat;
     if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
+    Object.assign(payload, geoReportStamp(userData));
 
     await orderRef.set(payload);
+    if (idempotencyKey) {
+      const idemRef = db.collection('wallet_idempotency').doc('carpet_' + idempotencyKey);
+      await db.runTransaction(async (t) => {
+        const idemSnap = await t.get(idemRef);
+        if (idemSnap.exists) return;
+        t.set(idemRef, {
+          orderId: orderRef.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+    }
     return { ok: true, orderId: orderRef.id };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
@@ -11344,6 +11369,16 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
     }
 
+    const idempotencyKey = String(data.idempotencyKey || '').trim();
+    if (idempotencyKey) {
+      const idemRef = db.collection('wallet_idempotency').doc('agro_' + idempotencyKey);
+      const idemSnap = await idemRef.get();
+      if (idemSnap.exists) {
+        const prev = idemSnap.data() || {};
+        return { ok: true, orderId: String(prev.orderId || ''), idempotent: true };
+      }
+    }
+
     const productType = String(data.productType || 'milk').trim();
     const literCount = Number(data.literCount);
     const pickupAddress = String(data.pickupAddress || '').trim();
@@ -11400,8 +11435,20 @@ exports.placeAgroPickupOrder = functions.https.onCall(async (data, context) => {
     };
     if (Number.isFinite(pickupLat)) payload.pickupLat = pickupLat;
     if (Number.isFinite(pickupLng)) payload.pickupLng = pickupLng;
+    Object.assign(payload, geoReportStamp(userData));
 
     await orderRef.set(payload);
+    if (idempotencyKey) {
+      const idemRef = db.collection('wallet_idempotency').doc('agro_' + idempotencyKey);
+      await db.runTransaction(async (t) => {
+        const idemSnap = await t.get(idemRef);
+        if (idemSnap.exists) return;
+        t.set(idemRef, {
+          orderId: orderRef.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+    }
     return { ok: true, orderId: orderRef.id };
   } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;

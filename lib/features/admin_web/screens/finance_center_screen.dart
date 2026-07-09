@@ -1,3 +1,6 @@
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:html' as html;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
@@ -5,10 +8,10 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 
-/// Finance Center — Settlement Ledger boshqaruvi (admin/finance).
+/// Finance Center — Settlement Ledger (finance/auditor/superadmin, SoD).
 ///   • Driver Float — top-up / return + zona
-///   • Settlements — trip settlement holatlari
-///   • Журнал — journal_entries (o'zgarmas)
+///   • Settlements — holatlar + CSV export
+///   • Журнал — journal_entries + CSV export
 ///   • Sverka (reconcile) — invariant tekshiruvi
 /// To'liq dizayn: docs/settlement_ledger_v1_uz.md
 class FinanceCenterScreen extends StatefulWidget {
@@ -21,6 +24,22 @@ class FinanceCenterScreen extends StatefulWidget {
 // settings/settlement default'lari bilan sinxron (faqat ko'rsatish uchun).
 const int _floatMin = 100000;
 const int _floatCritical = 20000;
+
+void _downloadCsv(String filename, String content) {
+  final blob = html.Blob([content], 'text/csv;charset=utf-8');
+  final url = html.Url.createObjectUrlFromBlob(blob);
+  html.AnchorElement(href: url)
+    ..setAttribute('download', filename)
+    ..click();
+  html.Url.revokeObjectUrl(url);
+}
+
+String _csvEscape(String value) {
+  if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+    return '"${value.replaceAll('"', '""')}"';
+  }
+  return value;
+}
 
 class _FinanceCenterScreenState extends State<FinanceCenterScreen>
     with SingleTickerProviderStateMixin {
@@ -436,12 +455,79 @@ Future<void> _floatDialog(BuildContext context,
 // ════════════════════════════════════════════════════════════
 // SETTLEMENTS
 // ════════════════════════════════════════════════════════════
-class _SettlementsTab extends StatelessWidget {
+class _SettlementsTab extends StatefulWidget {
   const _SettlementsTab();
 
   @override
+  State<_SettlementsTab> createState() => _SettlementsTabState();
+}
+
+class _SettlementsTabState extends State<_SettlementsTab> {
+  bool _exporting = false;
+
+  Future<void> _exportCsv() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('settlements')
+          .orderBy('createdAt', descending: true)
+          .limit(2000)
+          .get();
+      final rows = <String>[
+        'id,tripId,driverUid,passengerUid,state,settlementAmount,totalChange,cashGiven,createdAt',
+      ];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        rows.add([
+          _csvEscape(doc.id),
+          _csvEscape('${d['tripId'] ?? ''}'),
+          _csvEscape('${d['driverUid'] ?? ''}'),
+          _csvEscape('${d['passengerUid'] ?? ''}'),
+          _csvEscape('${d['state'] ?? ''}'),
+          '${(d['settlementAmount'] as num?) ?? 0}',
+          '${(d['totalChange'] as num?) ?? 0}',
+          '${(d['cashGiven'] as num?) ?? 0}',
+          _csvEscape(_fmtTs(d['createdAt'])),
+        ].join(','));
+      }
+      _downloadCsv(
+        'settlements_${DateTime.now().toIso8601String().substring(0, 10)}.csv',
+        rows.join('\n'),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Export xato: $e'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: TextButton.icon(
+              onPressed: _exporting ? null : _exportCsv,
+              icon: _exporting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download, size: 18),
+              label: const Text('CSV export'),
+            ),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('settlements')
           .orderBy('createdAt', descending: true)
@@ -510,6 +596,9 @@ class _SettlementsTab extends StatelessWidget {
           },
         );
       },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -532,12 +621,88 @@ class _SettlementsTab extends StatelessWidget {
 // ════════════════════════════════════════════════════════════
 // ЖУРНАЛ (journal_entries)
 // ════════════════════════════════════════════════════════════
-class _JournalTab extends StatelessWidget {
+class _JournalTab extends StatefulWidget {
   const _JournalTab();
 
   @override
+  State<_JournalTab> createState() => _JournalTabState();
+}
+
+class _JournalTabState extends State<_JournalTab> {
+  bool _exporting = false;
+
+  Future<void> _exportCsv() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('journal_entries')
+          .orderBy('ts', descending: true)
+          .limit(2000)
+          .get();
+      final rows = <String>[
+        'id,kind,amount,postedBy,postedRole,refType,refId,ts,legs',
+      ];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final legs = ((d['legs'] as List?) ?? [])
+            .map((l) {
+              final m = Map<String, dynamic>.from(l as Map);
+              final acc = m['account'] ?? '';
+              final dr = (m['dr'] as num?) ?? 0;
+              final cr = (m['cr'] as num?) ?? 0;
+              return dr > 0 ? 'Dr $acc $dr' : 'Cr $acc $cr';
+            })
+            .join(' | ');
+        rows.add([
+          _csvEscape(doc.id),
+          _csvEscape('${d['kind'] ?? ''}'),
+          '${(d['amount'] as num?) ?? 0}',
+          _csvEscape('${d['postedBy'] ?? ''}'),
+          _csvEscape('${d['postedRole'] ?? ''}'),
+          _csvEscape('${d['refType'] ?? ''}'),
+          _csvEscape('${d['refId'] ?? ''}'),
+          _csvEscape(_fmtTs(d['ts'])),
+          _csvEscape(legs),
+        ].join(','));
+      }
+      _downloadCsv(
+        'journal_${DateTime.now().toIso8601String().substring(0, 10)}.csv',
+        rows.join('\n'),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Export xato: $e'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: TextButton.icon(
+              onPressed: _exporting ? null : _exportCsv,
+              icon: _exporting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download, size: 18),
+              label: const Text('CSV export'),
+            ),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('journal_entries')
           .orderBy('ts', descending: true)
@@ -624,6 +789,9 @@ class _JournalTab extends StatelessWidget {
           },
         );
       },
+          ),
+        ),
+      ],
     );
   }
 }

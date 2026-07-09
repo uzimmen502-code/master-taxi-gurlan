@@ -6,17 +6,27 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'taxi_price_region.dart';
+
 class FareCalculator {
   // ── Базавий нархлар (settings/prices дан юкланади) ──
   static int baseFare      = 5000;  // Базавий нарх (local_base)
   static int pricePerKm    = 1500;  // 1 км учун (local_per_km)
   static const int pricePerMin   = 200;   // Кутиш: 1 дақ учун
   static const int freeWaitMins  = 3;     // Бепул кутиш дақиқаси
-  static bool _loaded = false;
+  static String _loadedRegionKey = '';
+  static String _activeRegionKey = TaxiPriceRegion.defaultKey;
 
-  /// Нархларни Firestore `settings/prices` дан бир марта юклаш.
-  static Future<void> loadPrices() async {
-    if (_loaded) return;
+  static String get activeRegionKey => _activeRegionKey;
+
+  /// Нархларни Firestore `settings/prices` (+ ixtiyoriy `regions`) дан юклаш.
+  ///
+  /// [lat]/[lng] berilsa — mintaqaviy `regions.{key}`; aks holda `local_*`.
+  static Future<void> loadPrices({double? lat, double? lng}) async {
+    final regionKey = lat != null && lng != null
+        ? TaxiPriceRegion.resolveKey(lat: lat, lng: lng)
+        : TaxiPriceRegion.defaultKey;
+    if (_loadedRegionKey == regionKey) return;
     try {
       final doc = await FirebaseFirestore.instance
           .collection('settings')
@@ -24,10 +34,28 @@ class FareCalculator {
           .get();
       final data = doc.data();
       if (data != null) {
-        baseFare = (data['local_base'] as num?)?.toInt() ?? baseFare;
-        pricePerKm = (data['local_per_km'] as num?)?.toInt() ?? pricePerKm;
+        final regions = data['regions'];
+        Map<String, dynamic>? regionPrices;
+        if (regions is Map) {
+          final raw = regions[regionKey];
+          if (raw is Map) {
+            regionPrices = Map<String, dynamic>.from(raw);
+          } else {
+            final fallback = regions[TaxiPriceRegion.defaultKey];
+            if (fallback is Map) {
+              regionPrices = Map<String, dynamic>.from(fallback);
+            }
+          }
+        }
+        baseFare = (regionPrices?['local_base'] as num?)?.toInt() ??
+            (data['local_base'] as num?)?.toInt() ??
+            baseFare;
+        pricePerKm = (regionPrices?['local_per_km'] as num?)?.toInt() ??
+            (data['local_per_km'] as num?)?.toInt() ??
+            pricePerKm;
+        _activeRegionKey = regionKey;
       }
-      _loaded = true;
+      _loadedRegionKey = regionKey;
     } catch (_) {
       // Хато — default қийматлар сақланади.
     }

@@ -5,6 +5,7 @@ import '../models/job_ad.dart';
 import '../models/sell_offer_item.dart';
 import '../models/sell_submission.dart';
 import '../models/sell_offer_formatters.dart';
+import '../services/sell_submission_service.dart';
 import 'jobs_repository.dart';
 
 /// `sell_submissions` — сотиш таклифлари.
@@ -41,14 +42,25 @@ class SellOffersRepository {
   Future<DocumentReference<Map<String, dynamic>>> create(
     SellSubmission draft,
   ) async {
-    return _col.add(draft.toCreateMap());
+    return createWithPickup(draft, {});
   }
 
   Future<DocumentReference<Map<String, dynamic>>> createWithPickup(
     SellSubmission draft,
     Map<String, dynamic> pickupFields,
   ) async {
-    return _col.add(draft.toCreateMapWithPickup(pickupFields));
+    final submissionId = await SellSubmissionService.submit(
+      items: draft.items.map((e) => e.toMap()).toList(growable: false),
+      userName: draft.userName,
+      pickupAddress: (pickupFields['pickupAddress'] as String?) ?? draft.pickupAddress,
+      pickupLat: (pickupFields['pickupLat'] as num?)?.toDouble() ?? draft.pickupLat,
+      pickupLng: (pickupFields['pickupLng'] as num?)?.toDouble() ?? draft.pickupLng,
+      pickupNote: draft.pickupNote,
+      pickupDetails: pickupFields['pickupDetails'] is Map
+          ? Map<String, dynamic>.from(pickupFields['pickupDetails'] as Map)
+          : null,
+    );
+    return _col.doc(submissionId);
   }
 
   /// «Сотаман» — `ads` коллекциясига (moderatsiya: pending).

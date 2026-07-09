@@ -44,6 +44,7 @@ import 'repositories/sell_offers_repository.dart';
 import 'repositories/orders_repository.dart';
 import 'repositories/queue_repository.dart';
 import 'repositories/rides_repository.dart';
+import 'repositories/settings_repository.dart';
 import 'repositories/user_repository.dart';
 import 'core/passenger_cancel_rules_holder.dart';
 import 'core/theme/app_theme.dart';
@@ -126,6 +127,7 @@ class AdminWebApp extends StatelessWidget {
             create: (_) => DeliveryRoutesRepository()),
         Provider<ChatRepository>(create: (_) => ChatRepository()),
         Provider<AdminService>(create: (_) => AdminService()),
+        Provider<SettingsRepository>(create: (_) => SettingsRepository()),
         Provider<ProcurementPricesService>(
           create: (_) => ProcurementPricesService(),
         ),

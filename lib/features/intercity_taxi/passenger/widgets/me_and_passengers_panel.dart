@@ -5,7 +5,9 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/intercity_booking.dart';
+import '../../../../repositories/entertainment_repository.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
+import '../../../entertainment/passenger/screens/entertainment_list_screen.dart';
 import '../controllers/intercity_taxi_controller.dart';
 import '../controllers/me_and_passengers_controller.dart';
 import 'intercity_pickup_sheet.dart';
@@ -333,46 +335,110 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
     bool compact = false,
   }) {
     final vPad = compact ? 8.0 : 10.0;
-    return Row(
+    final booking = c.myBooking;
+    final showEntertainment = booking != null &&
+        IntercityBookingStatus.active.contains(booking.status);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.green.shade700,
-              side: BorderSide(color: Colors.green.shade300),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green.shade700,
+                  side: BorderSide(color: Colors.green.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: vPad),
+                ),
+                onPressed: () => callPhone(booking!.driverPhone),
+                icon: const Icon(Icons.phone, size: 16),
+                label: Text(
+                  context.tr('call_lowercase'),
+                  style: const TextStyle(fontSize: 13),
+                ),
               ),
-              padding: EdgeInsets.symmetric(vertical: vPad),
             ),
-            onPressed: () => callPhone(c.myBooking!.driverPhone),
-            icon: const Icon(Icons.phone, size: 16),
-            label: Text(
-              context.tr('call_lowercase'),
-              style: const TextStyle(fontSize: 13),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red.shade600,
+                  side: BorderSide(color: Colors.red.shade300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: vPad),
+                ),
+                onPressed: () => _confirmCancel(context, c),
+                icon: const Icon(Icons.cancel_outlined, size: 16),
+                label: Text(
+                  context.tr('cancel'),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (showEntertainment) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.deepPurple.shade700,
+                side: BorderSide(color: Colors.deepPurple.shade200),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: EdgeInsets.symmetric(vertical: vPad),
+              ),
+              onPressed: () => _openEntertainment(context, booking),
+              icon: const Icon(Icons.movie_outlined, size: 16),
+              label: const Text(
+                'Kino',
+                style: TextStyle(fontSize: 13),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red.shade600,
-              side: BorderSide(color: Colors.red.shade300),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: EdgeInsets.symmetric(vertical: vPad),
-            ),
-            onPressed: () => _confirmCancel(context, c),
-            icon: const Icon(Icons.cancel_outlined, size: 16),
-            label: Text(
-              context.tr('cancel'),
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        ),
+        ],
       ],
+    );
+  }
+
+  Future<void> _openEntertainment(
+    BuildContext context,
+    IntercityBooking booking,
+  ) async {
+    final repo = context.read<EntertainmentRepository>();
+    final ok = await repo.userHasEntertainmentAccess(
+      userPhone: booking.userPhone,
+      driverId: booking.driverId,
+      bookingId: booking.id,
+    );
+    if (!context.mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Кинони фақат тасдиқланган бронингиз бўлганда томоша қила оласиз.',
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EntertainmentListScreen(
+          driverId: booking.driverId,
+          driverName: booking.driverName,
+          userPhone: booking.userPhone,
+          bookingId: booking.id,
+        ),
+      ),
     );
   }
 

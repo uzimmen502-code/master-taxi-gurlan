@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/splash_settings.dart';
+
 /// `settings/*` — ilova sozlamalari.
 class SettingsRepository {
   SettingsRepository({FirebaseFirestore? db})
@@ -46,5 +48,36 @@ class SettingsRepository {
       if (digits.length >= 9) return digits;
     } catch (_) {}
     return defaultDispatcherPhone;
+  }
+
+  DocumentReference<Map<String, dynamic>> get _splashSettings =>
+      _db.collection('settings').doc('splash');
+
+  /// Splash tagline — `settings/splash`.
+  Future<SplashSettings> getSplashSettings() async {
+    try {
+      final snap = await _splashSettings.get();
+      return SplashSettings.fromMap(snap.data());
+    } catch (_) {
+      return SplashSettings.defaults;
+    }
+  }
+
+  /// Admin: splash tagline roʻyxatini yangilash.
+  Future<void> setSplashSettings({
+    required List<String> taglines,
+    required bool enabled,
+    String? updatedBy,
+  }) async {
+    final clean = SplashSettings.sanitizeTaglines(taglines);
+    if (clean.isEmpty) {
+      throw ArgumentError('Kamida bitta soʻz kerak');
+    }
+    await _splashSettings.set({
+      ...SplashSettings(taglines: clean, enabled: enabled).toMap(
+        updatedBy: updatedBy,
+      ),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }

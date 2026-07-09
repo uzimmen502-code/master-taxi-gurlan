@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
+import '../utils/geo_hash.dart';
 import '../models/active_trip.dart';
 import '../models/marshrut_driver_option.dart';
 import '../models/marshrut_dispatch_event.dart';
@@ -127,6 +131,7 @@ class RidesRepository {
       'toAddr': toAddr,
       'fromLat': fromLat,
       'fromLng': fromLng,
+      'geohash4': GeoHash.encode(fromLat, fromLng, precision: 4),
       'taxiType': taxiType,
       'radiusKm': initialRadiusKm,
       'driverId': '',
@@ -135,6 +140,7 @@ class RidesRepository {
       'cancelCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
       'expiresAt': Timestamp.fromDate(expiresAt),
+      ...ServiceConfigHolder.reportStamp(),
     });
     return ref.id;
   }
@@ -180,16 +186,26 @@ class RidesRepository {
   // Faqat `taxiType != 'marshrut'` qidiruvlari. Marshrut blokiga tegishli emas.
 
   /// Qidiruvni bekor qiladi (`status: cancelled`, `cancelReason: search_cancelled`).
+  /// Faqat `searching` / `pending` holatda — `accepted` ustiga yozmaydi.
   Future<void> cancelSearch({
     required String tripId,
   }) async {
     if (tripId.isEmpty) return;
-    await _trips.doc(tripId).update({
-      'status': 'cancelled',
-      'cancelledBy': 'passenger',
-      'cancelReason': 'search_cancelled',
-      'cancelledAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await _db.runTransaction((tx) async {
+        final ref = _trips.doc(tripId);
+        final snap = await tx.get(ref);
+        if (!snap.exists) return;
+        final status = (snap.data()?['status'] ?? '') as String;
+        if (status != 'searching' && status != 'pending') return;
+        tx.update(ref, {
+          'status': 'cancelled',
+          'cancelledBy': 'passenger',
+          'cancelReason': 'search_cancelled',
+          'cancelledAt': FieldValue.serverTimestamp(),
+        });
+      });
+    } catch (_) {}
   }
 
   /// Qabul qilingan mahalliy safarni yo'lovchi bekor qiladi.
@@ -287,6 +303,7 @@ class RidesRepository {
         'offerTimeoutSeconds': offerTimeoutSeconds,
         'createdAt': FieldValue.serverTimestamp(),
         'expiresAt': Timestamp.fromDate(DateTime.now().add(ttl)),
+        ...ServiceConfigHolder.reportStamp(),
       });
 
       if (phone.isNotEmpty) {
@@ -605,6 +622,86 @@ class RidesRepository {
     final snap = await _trips.doc(tripId).get();
     if (!snap.exists) return null;
     return ActiveTrip.fromDoc(snap);
+  }
+
+  /// Marshrut — muddati o'tgan `pending` trip.
+  bool isExpiredTripData(Map<String, dynamic> data) => _isExpiredTripData(data);
+
+  /// Mahalliy taksi — `searching` / `accepted` (eng yangi, muddati o'tmagan).
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> findActiveLocalTripDoc(
+    String phone,
+  ) async {
+    if (phone.isEmpty) return null;
+    try {
+      final snap = await _trips
+          .where('userPhone', isEqualTo: phone)
+          .where('taxiType', isEqualTo: 'local')
+          .where('status', whereIn: ['searching', 'accepted'])
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final docs = snap.docs.toList();
+      docs.sort((a, b) {
+        final ta = a.data()['createdAt'] as Timestamp?;
+        final tb = b.data()['createdAt'] as Timestamp?;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+      for (final doc in docs) {
+        final status = (doc.data()['status'] ?? '') as String;
+        if (status == 'searching' && _isExpiredTripData(doc.data())) {
+          continue;
+        }
+        return doc;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Marshrut — `pending` / `accepted` (eng yangi, muddati o'tmagan).
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?> findActiveMarshrutTripDoc(
+    String phone,
+  ) async {
+    if (phone.isEmpty) return null;
+    try {
+      final snap = await _trips
+          .where('userPhone', isEqualTo: phone)
+          .where('taxiType', isEqualTo: 'marshrut')
+          .where('status', whereIn: ['pending', 'accepted'])
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final docs = snap.docs.toList();
+      docs.sort((a, b) {
+        final ta = a.data()['createdAt'] as Timestamp?;
+        final tb = b.data()['createdAt'] as Timestamp?;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+      for (final doc in docs) {
+        final d = doc.data();
+        final status = (d['status'] ?? '') as String;
+        if (status == 'pending' && _isExpiredTripData(d)) {
+          unawaited(markExpired(doc.id));
+          continue;
+        }
+        return doc;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ActiveTrip? activeTripFromDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    if (!doc.exists) return null;
+    return ActiveTrip.fromDoc(doc);
   }
 
   /// Haydovchi majburiy chiqqanda faol safarni bekor qilish.
@@ -1297,9 +1394,32 @@ class RidesRepository {
 
   // ─── Driver home screen — universal trips stream ─────────────────────
 
-  /// `searching`/`pending` ҳолатидаги охирги 20 та трипни кузатиш.
-  /// Сlient тарафда taxi тури ва вақт бўйича фильтрланади.
-  Stream<List<ActiveTrip>> watchPendingTrips({int limit = 20}) {
+  /// `searching`/`pending` triplar — haydovchi atrofidagi geohash hujayralari.
+  ///
+  /// Index: `trips` — `geohash4` ASC, `createdAt` DESC.
+  /// Index yo'q bo'lsa [watchPendingTrips] ga tushadi.
+  Stream<List<ActiveTrip>> watchPendingTripsNear({
+    required double lat,
+    required double lng,
+    int limit = 50,
+  }) {
+    if (lat.abs() < 1e-6 && lng.abs() < 1e-6) {
+      return watchPendingTrips(limit: limit);
+    }
+    final cells = GeoHash.neighborsForRadius(lat, lng, precision: 4);
+    return _trips
+        .where('geohash4', whereIn: cells)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map(ActiveTrip.fromDoc)
+            .where((t) => t.status == 'searching' || t.status == 'pending')
+            .toList());
+  }
+
+  /// `searching`/`pending` ҳолатидаги триплар (global fallback).
+  Stream<List<ActiveTrip>> watchPendingTrips({int limit = 50}) {
     return _trips
         .where('status', whereIn: ['searching', 'pending'])
         .orderBy('createdAt', descending: true)
@@ -1398,65 +1518,6 @@ class RidesRepository {
       }
       return (success: false, errorCode: 'taken');
     }
-  }
-
-  /// "Қабул" босилганда — трипни ВАҚТИНЧА банд қилади (`reserved`).
-  /// Бошқа ҳайдовчилар бу трипни "Кутиб туринг" ҳолатида кўради.
-  /// Фақат бошланғич `searching` ҳолатидаги трипни банд қилади (lock).
-  Future<({bool success, String? errorCode})> reserveRide({
-    required String tripId,
-    required String driverId,
-    required String driverName,
-  }) async {
-    if (tripId.isEmpty) {
-      return (success: false, errorCode: 'taken');
-    }
-    try {
-      await _db.runTransaction((tx) async {
-        final tripRef = _trips.doc(tripId);
-        final tripDoc = await tx.get(tripRef);
-        if (!tripDoc.exists) throw Exception('taken');
-        final status = (tripDoc.data()?['status'] ?? '') as String;
-        if (status != 'searching') {
-          throw Exception('taken');
-        }
-        tx.update(tripRef, {
-          'status': 'reserved',
-          'reservedBy': driverId,
-          'reservedByName': driverName,
-          'reservedAt': FieldValue.serverTimestamp(),
-        });
-      });
-      return (success: true, errorCode: null);
-    } catch (_) {
-      return (success: false, errorCode: 'taken');
-    }
-  }
-
-  /// Бандликни бекор қилади — трип `searching`'га қайтади (Рад ёки таймаут).
-  /// Фақат шу ҳайдовчи банд қилган бўлса (`reservedBy == driverId`) ишлайди.
-  Future<void> releaseReservation({
-    required String tripId,
-    required String driverId,
-  }) async {
-    if (tripId.isEmpty) return;
-    try {
-      await _db.runTransaction((tx) async {
-        final tripRef = _trips.doc(tripId);
-        final tripDoc = await tx.get(tripRef);
-        if (!tripDoc.exists) return;
-        final data = tripDoc.data() ?? const <String, dynamic>{};
-        final status = (data['status'] ?? '') as String;
-        final by = (data['reservedBy'] ?? '') as String;
-        if (status != 'reserved' || by != driverId) return;
-        tx.update(tripRef, {
-          'status': 'searching',
-          'reservedBy': '',
-          'reservedByName': '',
-          'reservedAt': FieldValue.delete(),
-        });
-      });
-    } catch (_) {}
   }
 
   /// Қабул қилинган трипни `searching`'га қайтаради (ҳайдовчи сафарни

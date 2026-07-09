@@ -17,9 +17,8 @@ import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../services/background_gps_service.dart';
-import '../../../services/balance_service.dart';
 import '../../../services/deferred_settlement_queue.dart';
-import '../../../services/settlement_service.dart';
+import '../../../services/trip_change_settlement.dart';
 
 /// Haydovchi GPS profili — batareya uchun moslashtirilgan.
 enum _DriverGpsProfile { waiting, offers, trip }
@@ -63,6 +62,7 @@ class DriverHomeController extends ChangeNotifier {
   // ─── Subscriptions ────────────────────────────────────────────────
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   StreamSubscription<List<ActiveTrip>>? _tripsSub;
+  StreamSubscription<List<ActiveTrip>>? _acceptedTripsSub;
   StreamSubscription<List<QueueEntry>>? _queueSub;
   StreamSubscription<Position>? _gpsSub;
 
@@ -100,6 +100,17 @@ class DriverHomeController extends ChangeNotifier {
   final _seatsFullController = StreamController<void>.broadcast();
   Stream<void> get onSeatsFull => _seatsFullController.stream;
 
+  /// Yo'lovchi qabul qilingan safarni bekor qilganda UI xabari.
+  final _passengerCancelController = StreamController<void>.broadcast();
+  Stream<void> get onPassengerCancelled => _passengerCancelController.stream;
+
+  /// `finishRide` / `abandonRide` paytida noto'g'ri cancel xabari chiqmasligi учун.
+  String? _finishingTripId;
+  String? _releasingTripId;
+
+  /// Oxirgi qaytim settlement natijasi (UI snackbar uchun).
+  TripChangeSettlementOutcome? lastSettlementOutcome;
+
   bool _disposed = false;
 
   String get _todayDateStr {
@@ -112,6 +123,7 @@ class DriverHomeController extends ChangeNotifier {
     await _loadSession();
     await FareCalculator.loadPrices();
     _listenConnectivity();
+    await _tryRestoreOnlineSession();
     // Ilova ochilishida — kutib qolgan deferred settlement'larni yuborish.
     unawaited(DeferredSettlementQueue.flush());
   }
@@ -179,7 +191,115 @@ class DriverHomeController extends ChangeNotifier {
   }
 
   /// Ишни бошлаш экранидан қайтгандан кейин қайта чақирилади.
+  Future<void> _tryRestoreOnlineSession() async {
+    if (session.driverId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('driver_online') ?? false)) return;
+
+    final hasValid = await _schedulesRepo.hasActiveToday(
+      driverId: session.driverId,
+      date: _todayDateStr,
+    );
+    if (!hasValid) return;
+
+    isOnline = true;
+    notifyListeners();
+    final onlineOk = await _goOnline();
+    if (!onlineOk) {
+      isOnline = false;
+      notifyListeners();
+    }
+  }
+
+  bool _isLocalTaxiTrip(ActiveTrip trip) =>
+      trip.taxiType == 'local' || trip.taxiType == 'alone';
+
+  TripRequest _tripRequestFromActiveTrip(ActiveTrip t) => TripRequest(
+        id: t.id,
+        userPhone: t.userPhone,
+        userName: t.userName,
+        userGender: t.userGender,
+        userBirthDate: t.userBirthDate,
+        fromLat: t.fromLat,
+        fromLng: t.fromLng,
+        from: t.fromAddr,
+        to: t.toAddr,
+        taxiType: t.taxiType,
+        secsLeft: 0,
+        scheduleId: t.scheduleId,
+        targetDriverId: t.targetDriverId,
+        reservedBy: t.reservedBy,
+      );
+
+  void _setAcceptedFromActiveTrip(ActiveTrip trip) {
+    acceptedRide = _tripRequestFromActiveTrip(trip);
+    isBusy = true;
+    activeRequests =
+        activeRequests.where((r) => r.id != trip.id).toList();
+    _reconcileGpsProfile();
+    notifyListeners();
+  }
+
+  Future<void> _releaseLocalAcceptedTripIfAny() async {
+    final ride = acceptedRide;
+    if (ride == null || !isLocalAcceptedRide) return;
+    _releasingTripId = ride.id;
+    try {
+      await _ridesRepo.releaseAcceptedTrip(
+        tripId: ride.id,
+        driverId: session.driverId,
+      );
+    } catch (_) {}
+    _releasingTripId = null;
+    acceptedRide = null;
+    isBusy = false;
+    _reconcileGpsProfile();
+    notifyListeners();
+  }
+
+  Future<void> _notifyPassengerCancelIfRemoved(String tripId) async {
+    if (tripId.isEmpty) return;
+    if (_finishingTripId == tripId || _releasingTripId == tripId) return;
+    try {
+      final trip = await _ridesRepo.getTrip(tripId);
+      if (trip != null && trip.isPassengerCancelled) {
+        _passengerCancelController.add(null);
+      }
+    } catch (_) {}
+  }
+
+  void _listenAcceptedTrips() {
+    _acceptedTripsSub?.cancel();
+    if (session.driverId.isEmpty) return;
+    _acceptedTripsSub =
+        _ridesRepo.watchAcceptedForDriver(session.driverId).listen((trips) {
+      if (_disposed) return;
+      final local =
+          trips.where(_isLocalTaxiTrip).toList(growable: false);
+
+      if (acceptedRide != null) {
+        final still =
+            local.any((t) => t.id == acceptedRide!.id);
+        if (!still) {
+          final removedId = acceptedRide!.id;
+          acceptedRide = null;
+          isBusy = false;
+          _reconcileGpsProfile();
+          notifyListeners();
+          unawaited(_notifyPassengerCancelIfRemoved(removedId));
+        }
+        return;
+      }
+
+      if (local.isNotEmpty) {
+        _setAcceptedFromActiveTrip(local.first);
+      }
+    });
+  }
+
+  /// Ишни бошлаш экранидан қайтгандан кейин қайта чақирилади.
   Future<void> refreshTodaySchedule() => _checkTodaySchedule();
+
 
   /// Маҳаллий такси (alone/local) учун "ИШНИ БОШЛАШ" — бир босишда:
   /// бугунги жадвални яратади (агар йўқ бўлса) ва онлайнга чиқаради.
@@ -242,10 +362,15 @@ class DriverHomeController extends ChangeNotifier {
       }
       isOnline = newStatus;
       if (!newStatus) {
-        activeRequests = const [];
-        acceptedRide = null;
-        isBusy = false;
+        if (isBusy && isLocalAcceptedRide) {
+          await _releaseLocalAcceptedTripIfAny();
+        } else {
+          activeRequests = const [];
+          acceptedRide = null;
+          isBusy = false;
+        }
         _tripsSub?.cancel();
+        _acceptedTripsSub?.cancel();
       }
       notifyListeners();
       if (newStatus) {
@@ -285,10 +410,13 @@ class DriverHomeController extends ChangeNotifier {
       pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 8)));
+              timeLimit: Duration(seconds: 12)));
     } catch (_) {
       return false;
     }
+
+    _driverLat = pos.latitude;
+    _driverLng = pos.longitude;
 
     await _driverRepo.goOnline(
       uid: session.driverId,
@@ -319,12 +447,14 @@ class DriverHomeController extends ChangeNotifier {
       lng: pos.longitude,
     );
     _listenToTrips();
+    _listenAcceptedTrips();
     return true;
   }
 
   Future<void> _goOffline() async {
     if (session.driverId.isEmpty) return;
     _gpsSub?.cancel();
+    _acceptedTripsSub?.cancel();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('driver_online', false);
     try {
@@ -413,7 +543,12 @@ class DriverHomeController extends ChangeNotifier {
   // ─── Трипларни кузатиш ────────────────────────────────────────────
   void _listenToTrips() {
     _tripsSub?.cancel();
-    _tripsSub = _ridesRepo.watchPendingTrips().listen((trips) {
+    final lat = _driverLat;
+    final lng = _driverLng;
+    final stream = lat != null && lng != null
+        ? _ridesRepo.watchPendingTripsNear(lat: lat, lng: lng)
+        : _ridesRepo.watchPendingTrips();
+    _tripsSub = stream.listen((trips) {
       final now = DateTime.now();
       final filtered = trips.where((t) {
         if (t.taxiType == 'marshrut') return false;
@@ -593,56 +728,26 @@ class DriverHomeController extends ChangeNotifier {
   }) async {
     final ride = acceptedRide;
     if (ride == null) return 0;
+    _finishingTripId = ride.id;
     _gpsSub?.cancel();
     await _ridesRepo.finishTrip(
         tripId: ride.id, fare: fare, cashPaid: cashPaid);
 
+    lastSettlementOutcome = null;
     if (ride.userPhone.isNotEmpty && cashPaid > fare) {
       final change = cashPaid - fare;
-      // Settlement Ledger: float yetarli bo'lsa → Pending settlement ochiladi
-      // (yo'lovchi tasdiqlagach kredit). Float yo'q/kritik bo'lsa yoki xato →
-      // eski to'g'ridan-to'g'ri kreditlash (creditChange) fallback sifatida.
       final opId = 'settle_trip_${ride.id}';
-      var settled = false;
-      try {
-        await SettlementService.openSettlement(
-          passengerPhone: canonicalPhoneId(ride.userPhone),
-          tripId: ride.id,
-          opId: opId,
-          totalChange: change,
-          cashGiven: 0,
-        );
-        settled = true;
-      } catch (e, st) {
-        debugPrint('openSettlement: $e\n$st');
-      }
-      var credited = false;
-      if (!settled) {
-        try {
-          await BalanceService.creditChange(
-            userPhone: ride.userPhone,
-            orderTotal: fare,
-            cashPaid: cashPaid,
-            refType: 'trip',
-            refId: ride.id,
-            module: session.taxiType,
-            idempotencyKey: 'change_trip_${ride.id}',
-            operatorPhone: session.phone,
-          );
-          credited = true;
-        } catch (e, st) {
-          debugPrint('creditChange: $e\n$st');
-        }
-      }
-      // Internet yo'q/xato → deferred (offline-lite) navbatga: internet
-      // qaytgach `submitDeferredSettlement` orqali post qilinadi (idempotent).
-      if (!settled && !credited) {
-        await DeferredSettlementQueue.enqueue(
-          passengerPhone: canonicalPhoneId(ride.userPhone),
-          tripId: ride.id,
-          opId: opId,
-          settlementAmount: change,
-        );
+      lastSettlementOutcome = await TripChangeSettlement.settle(
+        passengerPhone: canonicalPhoneId(ride.userPhone),
+        tripId: ride.id,
+        opId: opId,
+        change: change,
+      );
+      if (lastSettlementOutcome!.status ==
+          TripChangeSettlementStatus.failedPermanent) {
+        debugPrint(
+            'settlement: ${lastSettlementOutcome!.reasonCode} '
+            '${lastSettlementOutcome!.userMessage}');
       }
     }
 
@@ -657,23 +762,27 @@ class DriverHomeController extends ChangeNotifier {
     if (isOnline && _gpsSub == null) _startGpsTracking();
     notifyListeners();
     await _saveStats();
+    _finishingTripId = null;
     return fare;
   }
 
   /// Сафарни тугатмасдан тарк этиш (back тугмаси) — трипни озод қилади.
   Future<void> abandonRide() async {
     final ride = acceptedRide;
+    if (ride != null) {
+      _releasingTripId = ride.id;
+    }
     acceptedRide = null;
     isBusy = false;
     _reconcileGpsProfile();
     if (isOnline && _gpsSub == null) _startGpsTracking();
     notifyListeners();
     if (ride != null) {
-      // Трипни `searching`'га қайтариш — бошқа ҳайдовчи қабул қила олиши учун.
       try {
         await _ridesRepo.releaseAcceptedTrip(
             tripId: ride.id, driverId: session.driverId);
       } catch (_) {}
+      _releasingTripId = null;
     }
   }
 
@@ -725,6 +834,9 @@ class DriverHomeController extends ChangeNotifier {
   // ─── Иш кунини якунлаш ──────────────────────────────────────────
   Future<void> endWorkDay() async {
     if (session.driverId.isEmpty) return;
+    if (isBusy && isLocalAcceptedRide) {
+      await _releaseLocalAcceptedTripIfAny();
+    }
     await _schedulesRepo.endTodayWork(
         driverId: session.driverId, date: _todayDateStr);
     await _driverRepo.markUnavailable(session.driverId);
@@ -741,10 +853,12 @@ class DriverHomeController extends ChangeNotifier {
     _disposed = true;
     _connSub?.cancel();
     _tripsSub?.cancel();
+    _acceptedTripsSub?.cancel();
     _queueSub?.cancel();
     _gpsSub?.cancel();
     _newRequestController.close();
     _seatsFullController.close();
+    _passengerCancelController.close();
     if (isOnline) _driverRepo.goOffline(session.driverId);
     super.dispose();
   }

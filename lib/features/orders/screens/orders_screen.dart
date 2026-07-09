@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../models/order_model.dart';
+import '../../../models/agro_pickup_order.dart';
+import '../../../models/carpet_wash_order.dart';
+import '../../../repositories/agro_pickup_orders_repository.dart';
+import '../../../repositories/carpet_wash_orders_repository.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../profile/widgets/order_card.dart';
+import '../customer_orders_hub.dart';
 
-/// Buyurtmalar ekrani (bottom-nav). 1-bosqich: faqat non + taom (`orders`).
-/// Faol / Tugagan segmentlari, real-vaqt stream, mavjud [OrderCard].
+/// Buyurtmalar ekrani — non/taom + gilam + sut bitta ro'yxatda.
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
@@ -18,18 +23,28 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  // Faol holatlar (hali yetkazilmagan) va tugagan holatlar.
-  static const _activeStatuses = {'new', 'accepted', 'ready', 'in_delivery'};
-  static const _doneStatuses = {'delivered'};
+  static final _dateFmt = DateFormat('dd.MM.yyyy HH:mm');
 
   bool _showActive = true;
+  CustomerOrderKind? _typeFilter;
   String _phone = '';
   bool _phoneLoaded = false;
+  late final CustomerOrdersHub _hub;
 
   @override
   void initState() {
     super.initState();
     _loadPhone();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _hub = CustomerOrdersHub(
+      orders: context.read<OrdersRepository>(),
+      carpet: context.read<CarpetWashOrdersRepository>(),
+      agro: context.read<AgroPickupOrdersRepository>(),
+    );
   }
 
   Future<void> _loadPhone() async {
@@ -45,7 +60,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     final aliases = phoneAliases(_phone);
-    final repo = context.read<OrdersRepository>();
 
     return Scaffold(
       backgroundColor: AppColors.scaffold,
@@ -70,11 +84,50 @@ class _OrdersScreenState extends State<OrdersScreen> {
               onChanged: (v) => setState(() => _showActive = v),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _TypeChip(
+                    label: 'Ҳаммаси',
+                    selected: _typeFilter == null,
+                    onTap: () => setState(() => _typeFilter = null),
+                  ),
+                  const SizedBox(width: 8),
+                  _TypeChip(
+                    label: 'Нон/Таом',
+                    selected: _typeFilter == CustomerOrderKind.food,
+                    onTap: () =>
+                        setState(() => _typeFilter = CustomerOrderKind.food),
+                  ),
+                  const SizedBox(width: 8),
+                  _TypeChip(
+                    label: 'Гилам',
+                    selected: _typeFilter == CustomerOrderKind.carpet,
+                    onTap: () =>
+                        setState(() => _typeFilter = CustomerOrderKind.carpet),
+                  ),
+                  const SizedBox(width: 8),
+                  _TypeChip(
+                    label: 'Сут',
+                    selected: _typeFilter == CustomerOrderKind.milk,
+                    onTap: () =>
+                        setState(() => _typeFilter = CustomerOrderKind.milk),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Expanded(
             child: !_phoneLoaded
                 ? const Center(child: CircularProgressIndicator())
-                : StreamBuilder<List<OrderModel>>(
-                    stream: repo.watchByUser(aliases),
+                : StreamBuilder<List<CustomerOrderEntry>>(
+                    stream: _hub.watchUnified(
+                      phoneAliases: aliases,
+                      customerPhone: _phone,
+                    ),
                     builder: (context, snap) {
                       if (snap.connectionState == ConnectionState.waiting &&
                           !snap.hasData) {
@@ -84,12 +137,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       if (snap.hasError) {
                         return Center(child: Text('Хатолик: ${snap.error}'));
                       }
-                      final all = snap.data ?? const <OrderModel>[];
-                      final filtered = all.where((o) {
-                        final s = o.status;
-                        return _showActive
-                            ? _activeStatuses.contains(s)
-                            : _doneStatuses.contains(s);
+                      final all = snap.data ?? const <CustomerOrderEntry>[];
+                      final filtered = all.where((e) {
+                        if (_typeFilter != null && e.kind != _typeFilter) {
+                          return false;
+                        }
+                        return _showActive ? e.isActive : !e.isActive;
                       }).toList(growable: false);
 
                       if (filtered.isEmpty) {
@@ -102,7 +155,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         separatorBuilder: (_, __) =>
                             const SizedBox(height: 12),
                         itemBuilder: (context, i) =>
-                            OrderCard(order: filtered[i]),
+                            _entryTile(context, filtered[i]),
                       );
                     },
                   ),
@@ -111,6 +164,208 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
+
+  Widget _entryTile(BuildContext context, CustomerOrderEntry entry) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => _openEntryDetail(context, entry),
+      child: _entryBody(context, entry),
+    );
+  }
+
+  Widget _entryBody(BuildContext context, CustomerOrderEntry entry) {
+    return switch (entry.kind) {
+      CustomerOrderKind.food => OrderCard(order: entry.food!),
+      CustomerOrderKind.carpet =>
+        _CarpetOrderTile(order: entry.carpet!, dateFmt: _dateFmt),
+      CustomerOrderKind.milk =>
+        _MilkOrderTile(order: entry.milk!, dateFmt: _dateFmt),
+    };
+  }
+
+  void _openEntryDetail(BuildContext context, CustomerOrderEntry entry) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: _entryBody(ctx, entry),
+      ),
+    );
+  }
+}
+
+class _TypeChip extends StatelessWidget {
+  const _TypeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: AppColors.primary.withValues(alpha: 0.15),
+      checkmarkColor: AppColors.primary,
+    );
+  }
+}
+
+class _CarpetOrderTile extends StatelessWidget {
+  const _CarpetOrderTile({required this.order, required this.dateFmt});
+
+  static const _accent = Color(0xFF6D4C41);
+
+  final CarpetWashOrder order;
+  final DateFormat dateFmt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_laundry_service_outlined,
+                  size: 18, color: _accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${order.carpetCount} ${context.tr('carpet_count_suffix')}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              _statusBadge(context.tr(order.statusLabelKey()), _accent),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            order.pickupAddress,
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          if (order.finalPrice > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${formatPrice(order.finalPrice)} so\'m',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: _accent,
+              ),
+            ),
+          ],
+          if (order.createdAt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              dateFmt.format(order.createdAt!),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MilkOrderTile extends StatelessWidget {
+  const _MilkOrderTile({required this.order, required this.dateFmt});
+
+  static const _accent = Color(0xFF4A6FA5);
+
+  final AgroPickupOrder order;
+  final DateFormat dateFmt;
+
+  @override
+  Widget build(BuildContext context) {
+    final liters = order.literCount == order.literCount.roundToDouble()
+        ? '${order.literCount.toInt()}'
+        : order.literCount.toStringAsFixed(1);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.water_drop_outlined, size: 18, color: _accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '$liters ${context.tr('milk_liter_suffix')}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              _statusBadge(context.tr(order.statusLabelKey()), _accent),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            order.pickupAddress,
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          if (order.finalPrice > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${formatPrice(order.finalPrice)} so\'m',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: _accent,
+              ),
+            ),
+          ],
+          if (order.createdAt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              dateFmt.format(order.createdAt!),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+Widget _statusBadge(String label, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.w600,
+        fontSize: 11,
+      ),
+    ),
+  );
 }
 
 class _SegmentToggle extends StatelessWidget {

@@ -146,6 +146,21 @@ class EntertainmentRepository {
     return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
   }
 
+  /// Йўловчи кинoga kirish huquqi (faol bрон).
+  Future<bool> userHasEntertainmentAccess({
+    required String userPhone,
+    required String driverId,
+    String? bookingId,
+    IntercityBookingsRepository? bookingsRepo,
+  }) {
+    final repo = bookingsRepo ?? IntercityBookingsRepository();
+    return repo.userHasEntertainmentAccess(
+      userPhone: userPhone,
+      driverId: driverId,
+      bookingId: bookingId,
+    );
+  }
+
   /// Йўловчи — брон + haydovchi tanlovi tekshiriladi.
   Future<List<EntertainmentVideo>> videosForPassenger({
     required IntercityBookingsRepository bookingsRepo,

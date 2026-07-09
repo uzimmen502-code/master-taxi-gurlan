@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/utils/formatters.dart';
-import '../../features/home/screens/home_screen.dart';
+import '../../shared/navigation/app_home_route.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../repositories/user_repository.dart';
 
@@ -31,10 +31,7 @@ Future<bool> ensureCarInfoViaProfile(BuildContext context) async {
   if (saved == true) return true;
 
   if (context.mounted) {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-      (_) => false,
-    );
+    Navigator.of(context).pushAndRemoveUntil(appHomeRoute(), (_) => false);
   }
   return false;
 }

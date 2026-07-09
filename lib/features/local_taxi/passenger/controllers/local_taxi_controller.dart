@@ -28,25 +28,31 @@ class LocalTaxiController extends ChangeNotifier {
   String? errorMessage;
   List<SavedPlace> savedPlaces = const [];
 
+  double? pickupLat;
+  double? pickupLng;
+
   Future<void> init() async {
     await loadSavedPlaces();
   }
 
   // ─── GPS ───────────────────────────────────────────────────────────
 
-  /// Joriy GPS manzilni matn ko'rinishida qaytaradi. Xatolik bo'lsa `null`,
-  /// `errorMessage` saqlanadi.
+  /// Joriy GPS manzilni matn + koordinata qaytaradi.
   Future<String?> getCurrentAddress() async {
     isGpsLoading = true;
     notifyListeners();
     try {
-      final addr = await _locationService.getCurrentAddress(
-        gpsMediumTimeout: const Duration(seconds: 5),
-        gpsHighTimeout: const Duration(seconds: 12),
-        geocodeTimeout: const Duration(seconds: 5),
+      final coords = await _locationService.getFreshCoords();
+      pickupLat = coords.lat;
+      pickupLng = coords.lng;
+      final addr = await _locationService.addressFromCoords(
+        coords.lat,
+        coords.lng,
+        fallbackToCoords: true,
       );
       infoMessage = 'gps_detected';
-      return addr;
+      return addr ??
+          '${coords.lat.toStringAsFixed(4)}, ${coords.lng.toStringAsFixed(4)}';
     } on LocationException catch (e) {
       errorMessage = switch (e.kind) {
         LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
@@ -64,7 +70,16 @@ class LocalTaxiController extends ChangeNotifier {
     }
   }
 
-  // ─── Saved places (SharedPreferences) ─────────────────────────────
+  void setPickupCoords({required double lat, required double lng}) {
+    pickupLat = lat;
+    pickupLng = lng;
+    notifyListeners();
+  }
+
+  void clearPickupCoords() {
+    pickupLat = null;
+    pickupLng = null;
+  }
 
   Future<void> loadSavedPlaces() async {
     final prefs = await SharedPreferences.getInstance();

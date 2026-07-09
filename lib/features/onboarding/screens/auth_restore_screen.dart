@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
-import '../../home/screens/home_screen.dart';
+import '../../../shared/navigation/app_home_route.dart';
 import 'phone_reverify_screen.dart';
 
 /// Restores Firebase Auth (trusted device) before Home or full reverify.
@@ -69,10 +69,7 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
 
   void _goHome() {
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-    );
+    pushAppHome(context);
   }
 
   void _goReverify() {

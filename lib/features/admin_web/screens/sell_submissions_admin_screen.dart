@@ -14,6 +14,7 @@ import '../../../services/collection_service.dart';
 import '../../../services/procurement_prices_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/admin_auth_service.dart';
+import '../services/admin_sell_service.dart';
 
 /// Админ — платформага юборилган сотиш таклифлари (jadval ko‘rinishi).
 class SellSubmissionsAdminScreen extends StatefulWidget {
@@ -56,11 +57,22 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
   }
 
   Future<void> _setStatus(SellSubmission s, String status) async {
+    final adminPhone = _adminPhoneForCf();
+    if (adminPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Admin telefon topilmadi — qayta kiring'),
+        ),
+      );
+      return;
+    }
     try {
-      await context.read<SellOffersRepository>().updateStatus(
-            id: s.id,
-            status: status,
-          );
+      await AdminSellService.updateStatus(
+        adminPhone: adminPhone,
+        submissionId: s.id,
+        status: status,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -84,15 +96,30 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
       builder: (ctx) => _ForwardDialog(submission: s),
     );
     if (result == null || !mounted) return;
+    final adminPhone = _adminPhoneForCf();
+    if (adminPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Admin telefon topilmadi — qayta kiring'),
+        ),
+      );
+      return;
+    }
     final repo = context.read<SellOffersRepository>();
     final jobsRepo = context.read<JobsRepository>();
     try {
       if (s.status == 'pending') {
-        await repo.updateStatus(id: s.id, status: 'reviewed');
+        await AdminSellService.updateStatus(
+          adminPhone: adminPhone,
+          submissionId: s.id,
+          status: 'reviewed',
+        );
       }
-      await repo.forwardToUsers(
-        id: s.id,
-        audience: result.audience,
+      await AdminSellService.forward(
+        adminPhone: adminPhone,
+        submissionId: s.id,
+        forwardAudience: result.audience,
         targetUserIds: result.phones,
         adminNote: result.note,
       );

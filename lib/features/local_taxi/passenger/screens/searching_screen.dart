@@ -18,12 +18,16 @@ class SearchingScreen extends StatelessWidget {
     required this.to,
     required this.taxiType,
     this.tripId,
+    this.pickupLat,
+    this.pickupLng,
   });
 
   final String from;
   final String to;
   final String taxiType;
   final String? tripId;
+  final double? pickupLat;
+  final double? pickupLng;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +40,8 @@ class SearchingScreen extends StatelessWidget {
         to: to,
         taxiType: taxiType,
         existingTripId: tripId,
+        pickupLat: pickupLat,
+        pickupLng: pickupLng,
       )..start(),
       child: const _SearchingView(),
     );

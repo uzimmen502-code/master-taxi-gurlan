@@ -25,7 +25,8 @@ class AdsRepository {
   Future<String> createAd(AdModel ad) async {
     final ref = _col.doc();
     final data = ad.toMap(forCreate: true);
-    data['status'] = 'active';
+    data['status'] = 'pending';
+    data.remove('publishedAt');
     data['views'] = 0;
     await ref.set(data);
     return ref.id;

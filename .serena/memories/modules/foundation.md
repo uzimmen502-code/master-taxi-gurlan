@@ -4,7 +4,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 
 ## home (`features/home/`)
 - Entry `home_screen.dart` (re-exported by screens/home_screen.dart); home_controller.dart, home_grid_layout.dart, home_modules_catalog.dart (HomeModulesCatalog.modules: bread,food,sell,cheap_products_home,marshrut,local_taxi,intercity,jobs).
-- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier_order,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile).
+- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile).
 
 ## onboarding (`features/onboarding/`)
 - onboarding_controller.dart (6 pages name→phone→OTP→...→address); screens onboarding/phone_reverify/auth_restore/language_select.

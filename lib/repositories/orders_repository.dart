@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/service_config_holder.dart';
 import '../models/order_model.dart';
 
 /// `orders` collection (non + ovqat buyurtmalari).
@@ -117,6 +118,7 @@ class OrdersRepository {
       'total': total,
       'status': 'new',
       'createdAt': FieldValue.serverTimestamp(),
+      ...ServiceConfigHolder.reportStamp(),
     });
   }
 
@@ -126,7 +128,7 @@ class OrdersRepository {
   /// Direct write — use only for admin/test purposes.
   Future<DocumentReference<Map<String, dynamic>>> createBreadOrder(
       Map<String, dynamic> data) async {
-    return _col.add(data);
+    return _col.add({...data, ...ServiceConfigHolder.reportStamp()});
   }
 
   /// Админ навбати: охирги buyurtmalar (`createdAt` бўйича). Индекс — фақат

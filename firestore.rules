@@ -89,15 +89,14 @@ service cloud.firestore {
               in ['admin', 'superadmin', 'dispatcher', 'courier'];
     }
 
-    // Settlement Ledger / Finance Center o'qish huquqi.
-    // V1: oddiy admin ham ko'radi. Kelajakda SoD bilan finance/auditor'ga
-    // toraytirilishi mumkin. To'liq dizayn: docs/settlement_ledger_v1_uz.md
+    // Settlement Ledger / Finance Center o'qish huquqi (SoD).
+    // Faqat finance, auditor, superadmin — oddiy admin ko'rmaydi.
     function isFinanceReader() {
       let uid = userDocIdFromPhoneToken();
       return uid != ''
           && exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.role
-              in ['admin', 'superadmin', 'finance', 'auditor'];
+              in ['superadmin', 'finance', 'auditor'];
     }
 
     // Phone Auth enabled — Firebase verifyPhoneNumber.
@@ -675,57 +674,113 @@ service cloud.firestore {
           ];
     }
 
-    // Mahalliy taksi — qattiq ownership (passenger / target driver / accepted driver).
+    function localTripPassengerPatchFields() {
+      return [
+        'targetDriverId', 'targetedAt', 'cancelledBy', 'cancelReason',
+        'cancelledAt', 'status', 'radiusKm'
+      ];
+    }
+
+    function localTripDriverAcceptFields() {
+      return [
+        'status', 'acceptedDriverId', 'acceptedDriverName', 'acceptedDriverPhone',
+        'acceptedDriverCar', 'acceptedDriverPlate', 'driverId', 'driverName',
+        'driverPhone', 'acceptedAt'
+      ];
+    }
+
+    function localTripDriverCompleteFields() {
+      return [
+        'driverId', 'driverName', 'driverCar', 'driverPlate', 'acceptedAt',
+        'price', 'completedAt', 'date', 'status', 'fare', 'cashPaid'
+      ];
+    }
+
+    function localTripDriverReleaseFields() {
+      return [
+        'status', 'acceptedDriverId', 'acceptedDriverName', 'acceptedDriverPhone',
+        'acceptedDriverCar', 'acceptedDriverPlate', 'driverId', 'driverName',
+        'driverPhone', 'reservedBy', 'reservedByName', 'reservedAt'
+      ];
+    }
+
+    function localTripDriverRejectFields() {
+      return [
+        'targetDriverId', 'lastRejectedBy', 'lastRejectReason', 'lastRejectedAt'
+      ];
+    }
+
+    // Mahalliy taksi — passenger / broadcast driver accept / abandon / complete.
     function localTripLifecycleUpdate() {
       let d = request.resource.data;
       let prev = resource.data;
       let uid = userDocIdFromPhoneToken();
       let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
 
-      let passengerFields = [
-        'targetDriverId', 'targetedAt', 'cancelledBy', 'cancelReason',
-        'cancelledAt', 'status', 'radiusKm'
-      ];
-      let driverFields = [
-        'driverId', 'driverName', 'driverCar', 'driverPlate', 'acceptedAt',
-        'price', 'completedAt', 'date', 'status'
-      ];
-      let driverRejectFields = [
-        'targetDriverId', 'lastRejectedBy', 'lastRejectReason', 'lastRejectedAt'
-      ];
-
-      // Passenger: own trip — target driver, cancel, radius expand
       let isPassenger = uid == prev.userPhone
-          && affectedKeys.hasOnly(passengerFields);
+          && affectedKeys.hasOnly(localTripPassengerPatchFields());
 
-      // Driver: accepted → completed
-      let isDriver = prev.status == 'accepted'
-          && uid == prev.driverId
+      let isDriverComplete = prev.status == 'accepted'
+          && (uid == prev.driverId || uid == prev.acceptedDriverId)
           && d.status == 'completed'
-          && affectedKeys.hasOnly(driverFields);
+          && affectedKeys.hasOnly(localTripDriverCompleteFields());
 
-      // searching → accepted: only targeted driver
-      let isAccept = prev.status == 'searching'
+      let isBroadcastAccept = prev.status == 'searching'
           && d.status == 'accepted'
-          && uid == prev.targetDriverId
-          && affectedKeys.hasOnly(driverFields);
+          && uid == d.acceptedDriverId
+          && uid == d.driverId
+          && approvedDriverForTaxi(uid, prev.taxiType)
+          && affectedKeys.hasOnly(localTripDriverAcceptFields());
 
-      // Driver reject: clear targetDriverId while searching
-      let isDriverReject = prev.status == 'searching'
+      let isTargetedAccept = prev.status == 'searching'
+          && d.status == 'accepted'
+          && prev.targetDriverId != ''
           && uid == prev.targetDriverId
-          && affectedKeys.hasOnly(driverRejectFields);
+          && affectedKeys.hasOnly(localTripDriverAcceptFields());
+
+      let isDriverRelease = prev.status == 'accepted'
+          && d.status == 'searching'
+          && (
+            (prev.acceptedDriverId != '' && uid == prev.acceptedDriverId)
+            || (prev.driverId != '' && uid == prev.driverId)
+          )
+          && affectedKeys.hasOnly(localTripDriverReleaseFields());
+
+      let isDriverReject = prev.status == 'searching'
+          && prev.targetDriverId != ''
+          && uid == prev.targetDriverId
+          && affectedKeys.hasOnly(localTripDriverRejectFields());
 
       return isAuth()
           && prev.taxiType in ['local', 'alone']
-          && (isPassenger || isDriver || isAccept || isDriverReject);
+          && (
+            isPassenger
+            || isDriverComplete
+            || isBroadcastAccept
+            || isTargetedAccept
+            || isDriverRelease
+            || isDriverReject
+          );
     }
 
     // TRIPS — taksi (Flutter + web mahalliy modul `taxiType: local` / marshrut).
     // Yaratishda Phone Auth talab qilinmaydi; yangilanishlar alohida shartlar bilan.
+    function tripParticipantRead() {
+      return isAuth()
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               phoneDigits(resource.data.get('userPhone', '')));
+    }
+
+    function tripDriverRead() {
+      return isAuth()
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               phoneDigits(resource.data.get('driverPhone', '')));
+    }
+
     match /trips/{tripId} {
-      // Ўқиш: Admin web (PIN, Phone Auth йўқ) Monitoring Center collection query
-      // учун ochiq; yozish alohida cheklangan.
-      allow read: if true;
+      allow read: if isStaff() || tripParticipantRead() || tripDriverRead();
 
       // Яратиш — lokal/intercity taksi
       allow create: if isAuth() && (
@@ -1007,8 +1062,36 @@ service cloud.firestore {
 
     // ══════════════════════════════════════
     // CONFIG — yo'lovchi blok qoidalari va boshqa server sozlamalar
+    // (shu jumladan `config/module_defaults` — global modul baseline)
     // ══════════════════════════════════════
     match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ══════════════════════════════════════
+    // GEO IERARXIYA + MODUL KONFIGI (configuration-driven platform)
+    //   geo_regions / geo_districts / service_areas — ierarxiya
+    //   service_area_modules — MFY bo'yicha modul override
+    // Hammaga o'qish ochiq (Home dinamik qurish + onboarding kaskadi),
+    // yozish faqat admin.
+    // ══════════════════════════════════════
+    match /geo_regions/{regionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /geo_districts/{districtId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /service_areas/{areaId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /service_area_modules/{areaId} {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -1269,17 +1352,10 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ══════════════════════════════════════
-    // INTERCITY TRIPS — veb moduli (hozircha intercity_drivers bilan parallel)
-    // Keyinroq intercity_drivers'ga to'liq ko'chiriladi, shu vaqtgacha ochiq.
-    // ══════════════════════════════════════
+  // Legacy — faqat tarixiy o'qish (admin/staff). App `intercity_drivers` ishlatadi.
     match /intercity_trips/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.keys()
-              .hasAll(['from', 'to', 'date', 'phone'])
-          && request.resource.data.keys().hasAny(['ownerUid', 'phone']);
-      allow update: if false;
-      allow delete: if false;
+      allow read: if isStaff();
+      allow create, update, delete: if false;
     }
 
     match /ride_requests/{id} {
@@ -1427,9 +1503,10 @@ service cloud.firestore {
       }
     }
 
-    // Shikoyatlar — har qanday authed yaratadi; faqat admin ko'radi/hal qiladi.
+    // Shikoyatlar — dating CF orqali; boshqa turlar client yaratishi mumkin.
     match /reports/{reportId} {
-      allow create: if isAuth();
+      allow create: if isAuth()
+          && request.resource.data.get('type', '') != 'dating_profile';
       allow read, update, delete: if isAdmin();
     }
 
@@ -1636,11 +1713,11 @@ service cloud.firestore {
       return isAuth()
           && isCheapProductAdData(request.resource.data)
           && request.resource.data.ownerId == userDocIdFromPhoneToken()
-          && request.resource.data.status == 'active'
+          && request.resource.data.status == 'pending'
           && request.resource.data.keys().hasAll([
             'type', 'ownerId', 'title', 'titleLower', 'description', 'price',
             'phone', 'sellerName', 'imageUrls', 'status', 'views',
-            'createdAt', 'updatedAt', 'publishedAt'
+            'createdAt', 'updatedAt'
           ]);
     }
 
@@ -1723,27 +1800,24 @@ service cloud.firestore {
     }
 
     // Сотиш таклифлари — фойдаланувчи юборadi; админ/оператор кўради.
-    function sellSubmissionCreateOk() {
-      return request.resource.data.keys().hasAll([
-            'userId', 'userPhone', 'items', 'status', 'createdAt', 'updatedAt'])
-          && request.resource.data.status == 'pending'
-          && request.resource.data.userId is string
-          && request.resource.data.userId.size() >= 9
-          && request.resource.data.userPhone is string
-          && request.resource.data.items is list
-          && request.resource.data.items.size() >= 1
-          && request.resource.data.items.size() <= 20
-          && request.resource.data.visibleToUserIds is list;
+    function sellSubmissionOwnerRead() {
+      return isAuth()
+          && (phoneDocIdsMatch(
+                  userDocIdFromPhoneToken(),
+                  phoneDigits(resource.data.get('userId', '')))
+              || phoneDocIdsMatch(
+                  userDocIdFromPhoneToken(),
+                  phoneDigits(resource.data.get('userPhone', ''))));
     }
 
-    function sellSubmissionAdminPatchOk() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly([
-            'status', 'adminNote', 'visibleToUserIds', 'updatedAt',
-            'forwardAudience', 'forwardedAt',
-            'collectionTaskId', 'inCollection'
-          ])
-          && request.resource.data.status in ['pending', 'reviewed', 'archived'];
+    function sellSubmissionForwardedRead() {
+      let uid = userDocIdFromPhoneToken();
+      return isAuth()
+          && (
+            (resource.data.get('forwardAudience', '') == 'all')
+            || (resource.data.get('forwardAudience', '') == 'selected'
+                && resource.data.get('visibleToUserIds', []).hasAny([uid]))
+          );
     }
 
     function isCollectionTaskCourier() {
@@ -1760,10 +1834,11 @@ service cloud.firestore {
     }
 
     match /sell_submissions/{id} {
-      allow read: if true;
-      allow create: if sellSubmissionCreateOk();
-      allow update: if sellSubmissionAdminPatchOk();
-      allow delete: if false;
+      allow read: if isAdmin()
+          || sellSubmissionOwnerRead()
+          || sellSubmissionForwardedRead();
+      allow create: if false;
+      allow update, delete: if false;
     }
 
     match /collection_tasks/{id} {
@@ -1804,22 +1879,10 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // COURIER
     // ══════════════════════════════════════
+    // Legacy `courier_orders` — faqat tarixiy o'qish (CF va client yozuvi o'chirildi).
     match /courier_orders/{id} {
-      allow create: if isAuth()
-          && request.resource.data.customerPhone
-              == phoneDigits(request.auth.token.phone_number)
-          && request.resource.data.status == 'pending';
-      allow read: if isAuth()
-          && (resource.data.customerPhone
-                  == phoneDigits(request.auth.token.phone_number)
-              || resource.data.courierId == request.auth.uid
-              || isAdmin());
-      allow update: if isAuth()
-          && (isAdmin()
-              || resource.data.courierId == request.auth.uid
-              || (resource.data.status == 'pending'
-                  && request.resource.data.courierId == request.auth.uid));
-      allow delete: if false;
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /delivery_routes/{id} {

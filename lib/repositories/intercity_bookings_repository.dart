@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/l10n/offline_l10n.dart';
+import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
 import '../features/intercity_taxi/intercity_driver_alert_text.dart';
 import '../models/intercity_booking.dart';
@@ -352,6 +353,7 @@ class IntercityBookingsRepository {
           'pickupAddress': '',
           'dropoffNote': '',
           'archivedByDriver': false,
+          ...ServiceConfigHolder.reportStamp(),
         });
 
         // 3. Доимий мижоз aggregation. `firstBookingAt` фақат биринчи бронда

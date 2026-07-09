@@ -250,6 +250,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
         runSpacing: 10,
         children: [
           _summaryCard('Jami', ads.length, Colors.blueGrey),
+          _summaryCard('Kutilmoqda', count('pending'), Colors.deepOrange),
           _summaryCard('Faol', count('active'), Colors.green),
           _summaryCard('Nofaol', count('inactive'), Colors.orange),
         ],
@@ -318,6 +319,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
             children: [
               for (final item in [
                 ('all', 'Barchasi'),
+                ('pending', 'Kutilmoqda'),
                 ('active', 'Faol'),
                 ('inactive', 'Nofaol'),
               ])

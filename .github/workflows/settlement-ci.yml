@@ -1,0 +1,44 @@
+name: Settlement Ledger CI
+
+on:
+  push:
+    paths:
+      - 'functions/settlement_ledger.js'
+      - 'functions/index.js'
+      - 'functions/tools/settlement_*.js'
+      - '.github/workflows/settlement-ci.yml'
+  pull_request:
+    paths:
+      - 'functions/settlement_ledger.js'
+      - 'functions/index.js'
+      - 'functions/tools/settlement_*.js'
+      - '.github/workflows/settlement-ci.yml'
+
+jobs:
+  settlement-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Write service account (if configured)
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > functions/service-account.json
+
+      - name: Run settlement E2E tests
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}
+        working-directory: functions
+        run: node tools/settlement_e2e_test.js
+
+      - name: Skip notice (no Firebase credentials)
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON == '' }}
+        run: echo "Skipping settlement E2E — FIREBASE_SERVICE_ACCOUNT_JSON secret not set"

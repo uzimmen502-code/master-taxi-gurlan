@@ -9,6 +9,7 @@ import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
 import '../../../repositories/schedules_repository.dart';
 import '../../../utils/fare_calculator.dart';
+import '../../../services/trip_change_settlement.dart';
 import '../controllers/driver_home_controller.dart';
 import '../widgets/driver_unified_map_view.dart';
 import '../widgets/fare_calculator_dialog.dart';
@@ -42,6 +43,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   static const _green = AppColors.primaryDark;
 
   StreamSubscription<void>? _seatsFullSub;
+  StreamSubscription<void>? _passengerCancelSub;
 
   @override
   void initState() {
@@ -53,11 +55,18 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     if (!mounted) return;
     final c = context.read<DriverHomeController>();
     _seatsFullSub = c.onSeatsFull.listen((_) => _showSeatsFullDialog());
+    _passengerCancelSub =
+        c.onPassengerCancelled.listen((_) => _showPassengerCancelledSnack());
+  }
+
+  void _showPassengerCancelledSnack() {
+    _showSnack('⚠️ Йўловчи сафарни бекор қилди', Colors.orange);
   }
 
   @override
   void dispose() {
     _seatsFullSub?.cancel();
+    _passengerCancelSub?.cancel();
     super.dispose();
   }
 
@@ -135,6 +144,23 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     if (!mounted) return;
     _showSnack(
         '✅ Сафар якунланди! +${FareCalculator.format(fare)} сўм', _green);
+    _maybeShowSettlementNotice(c);
+  }
+
+  void _maybeShowSettlementNotice(DriverHomeController c) {
+    final settlement = c.lastSettlementOutcome;
+    if (settlement == null ||
+        settlement.userMessage == null ||
+        settlement.status == TripChangeSettlementStatus.skipped ||
+        settlement.status == TripChangeSettlementStatus.opened) {
+      return;
+    }
+    _showSnack(
+      settlement.userMessage!,
+      settlement.status == TripChangeSettlementStatus.deferred
+          ? Colors.orange
+          : Colors.red,
+    );
   }
 
   Future<void> _onFinishLocalTrip(int fare) async {
@@ -148,6 +174,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
     if (!mounted) return;
     _showSnack(
         '✅ Сафар якунланди! +${FareCalculator.format(earned)} сўм', _green);
+    _maybeShowSettlementNotice(c);
   }
 
   Future<void> _onAbandonLocalTrip() async {

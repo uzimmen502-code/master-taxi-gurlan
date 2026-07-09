@@ -29,7 +29,7 @@ class LocationCoords {
 class LocationService {
   const LocationService();
 
-  /// Joriy GPS: охирги нуқта → medium → high.
+  /// Joriy GPS: oxirgi nuqta → medium → high (tez UX — profil va boshqalar).
   Future<LocationCoords> getCurrentCoords({
     Duration mediumTimeout = const Duration(seconds: 5),
     Duration highTimeout = const Duration(seconds: 10),
@@ -46,6 +46,34 @@ class LocationService {
       return _fromPosition(last, fromLastKnown: true);
     }
 
+    return _readFreshPosition(
+      mediumTimeout: mediumTimeout,
+      highTimeout: highTimeout,
+    );
+  }
+
+  /// Mahalliy taksi: faqat yangi GPS (cache/lastKnown ishlatilmaydi).
+  Future<LocationCoords> getFreshCoords({
+    Duration mediumTimeout = const Duration(seconds: 5),
+    Duration highTimeout = const Duration(seconds: 12),
+  }) async {
+    await _ensurePermission();
+
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) {
+      throw const LocationException(LocationErrorKind.serviceDisabled);
+    }
+
+    return _readFreshPosition(
+      mediumTimeout: mediumTimeout,
+      highTimeout: highTimeout,
+    );
+  }
+
+  Future<LocationCoords> _readFreshPosition({
+    required Duration mediumTimeout,
+    required Duration highTimeout,
+  }) async {
     try {
       final medium = await Geolocator.getCurrentPosition(
         locationSettings: LocationSettings(
@@ -157,14 +185,33 @@ class LocationService {
     }
   }
 
-  /// Матнli manzildan taxminiy GPS (admin kuryer marshruti учун).
-  Future<LocationCoords?> coordsFromAddress(String address) async {
+  /// Матнli manzildan taxminiy GPS.
+  ///
+  /// [regionBias] `gurlan` — legacy marshrut/kuryer; `uzbekistan` — mahalliy taksi;
+  /// `none` — faqat [address].
+  Future<LocationCoords?> coordsFromAddress(
+    String address, {
+    String regionBias = 'gurlan',
+  }) async {
     final raw = address.trim();
     if (raw.isEmpty) return null;
-    final query = raw.toLowerCase().contains('gurlan') ||
-            raw.contains('Гурлан')
-        ? raw
-        : '$raw, Gurlan, Xorazm, Uzbekistan';
+    if (_looksLikeCoordinates(raw)) {
+      final parts = raw.split(',');
+      if (parts.length >= 2) {
+        final lat = double.tryParse(parts[0].trim());
+        final lng = double.tryParse(parts[1].trim());
+        if (lat != null && lng != null) {
+          return LocationCoords(lat: lat, lng: lng);
+        }
+      }
+    }
+    final query = switch (regionBias) {
+      'none' => raw,
+      'uzbekistan' => '$raw, Uzbekistan',
+      _ => raw.toLowerCase().contains('gurlan') || raw.contains('Гурлан')
+          ? raw
+          : '$raw, Gurlan, Xorazm, Uzbekistan',
+    };
     try {
       final marks = await locationFromAddress(query);
       if (marks.isEmpty) return null;

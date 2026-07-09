@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/service_config_holder.dart';
+import '../../../core/widgets/service_area_picker.dart';
 import '../../../models/user_address.dart';
 import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
@@ -44,6 +46,10 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
   bool _saving = false;
   String? _err;
 
+  String _regionId = '';
+  String _districtId = '';
+  String _serviceAreaId = '';
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +72,30 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     } else {
       _hydrateFromLegacy();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_hydrateGeoFromUser());
+    });
+  }
+
+  Future<void> _hydrateGeoFromUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = phoneDigits(prefs.getString('user_phone') ?? '');
+    if (uid.length < 9 || !mounted) return;
+    try {
+      final user = await context.read<UserRepository>().getById(uid);
+      if (user == null || !mounted) return;
+      setState(() {
+        if (_regionId.isEmpty && user.regionId.isNotEmpty) {
+          _regionId = user.regionId;
+        }
+        if (_districtId.isEmpty && user.districtId.isNotEmpty) {
+          _districtId = user.districtId;
+        }
+        if (_serviceAreaId.isEmpty && user.serviceAreaId.isNotEmpty) {
+          _serviceAreaId = user.serviceAreaId;
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _hydrateFromLegacy() async {
@@ -193,15 +223,43 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     }
 
     if (!mounted) return;
+    final userRepo = context.read<UserRepository>();
     setState(() => _saving = true);
     try {
-      await context.read<UserRepository>().saveAddress(
+      await userRepo.saveAddress(
             uid: uid,
             address: address,
             legacyFromString: prefs.getString('user_address'),
           );
       // Каш — SharedPreferences ҳам янгилaнади.
       await prefs.setString('user_address', address.formatted);
+
+      // Xizmat zonasi tanlangan bo'lsa — saqlash + config override yangilash.
+      // Ixtiyoriy: tanlanmagan bo'lsa manzil baribir saqlanadi.
+      if (_serviceAreaId.isNotEmpty) {
+        try {
+          await userRepo.saveServiceArea(
+                uid: uid,
+                regionId: _regionId,
+                districtId: _districtId,
+                serviceAreaId: _serviceAreaId,
+              );
+        } catch (_) {
+          // Zona saqlanmasa ham manzil saqlangan — bloklamaymiz.
+        }
+      }
+      if (_regionId.isNotEmpty ||
+          _districtId.isNotEmpty ||
+          _serviceAreaId.isNotEmpty) {
+        try {
+          await ServiceConfigHolder.applyGeo(
+                regionId: _regionId,
+                districtId: _districtId,
+                serviceAreaId: _serviceAreaId,
+              );
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       Navigator.pop(context, address);
     } catch (e) {
@@ -404,6 +462,46 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                 maxLines: 2,
               ),
             ]),
+          ),
+          const SizedBox(height: 16),
+
+          // Xizmat zonasi (configuration-driven) — ixtiyoriy, saqlashni bloklamaydi.
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    Icon(Icons.hub_outlined, color: _green, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Xizmat zonasi (qaysi xizmatlar mavjudligi)',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.bold)),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  ServiceAreaPicker(
+                    initialRegionId: _regionId,
+                    initialDistrictId: _districtId,
+                    initialServiceAreaId: _serviceAreaId,
+                    onChanged: (region, district, area) {
+                      _regionId = region;
+                      _districtId = district;
+                      _serviceAreaId = area;
+                    },
+                  ),
+                ]),
           ),
 
           if (_err != null) ...[

@@ -397,6 +397,26 @@ class UserRepository {
     await _col.doc(uid).set(patch, SetOptions(merge: true));
   }
 
+  /// Configuration-driven platforma: foydalanuvchi geo zonasini saqlash.
+  ///
+  /// [serviceAreaId] — xizmat mavjudligini aniqlaydi; [regionId]/[districtId]
+  /// hisobot uchun. Firestore rules: bu maydonlar himoyalanmagan → egasi yozadi.
+  Future<void> saveServiceArea({
+    required String uid,
+    required String regionId,
+    required String districtId,
+    required String serviceAreaId,
+  }) async {
+    if (uid.isEmpty) return;
+    await _col.doc(canonicalPhoneId(uid)).set({
+      'regionId': regionId.trim(),
+      'districtId': districtId.trim(),
+      'serviceAreaId': serviceAreaId.trim(),
+      'geoUpdatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   /// Умумий янгиликлар ўқилди.
   Future<void> markNewsRead(String uid) async {
     if (uid.isEmpty) return;

@@ -1,4 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:uuid/uuid.dart';
 
 /// Gilam yuvish Cloud Functions wrapper.
 class CarpetWashService {
@@ -6,6 +7,7 @@ class CarpetWashService {
       : _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFunctions _functions;
+  static const _uuid = Uuid();
 
   Future<String> placeOrder({
     required int carpetCount,
@@ -13,13 +15,16 @@ class CarpetWashService {
     double? pickupLat,
     double? pickupLng,
     String note = '',
+    String? idempotencyKey,
   }) async {
+    final key = idempotencyKey ?? _uuid.v4();
     final result = await _functions.httpsCallable('placeCarpetWashOrder').call({
       'carpetCount': carpetCount,
       'pickupAddress': pickupAddress.trim(),
       if (pickupLat != null) 'pickupLat': pickupLat,
       if (pickupLng != null) 'pickupLng': pickupLng,
       'note': note.trim(),
+      'idempotencyKey': key,
     });
     final data = Map<String, dynamic>.from(result.data as Map);
     final id = (data['orderId'] ?? '') as String;

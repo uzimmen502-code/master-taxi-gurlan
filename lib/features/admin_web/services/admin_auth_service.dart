@@ -24,6 +24,7 @@ class AdminAuthService extends ChangeNotifier {
   String? _phone;
   String? _phoneDigits;
   String? _displayName;
+  String? _role;
 
   String _verificationId = '';
   int? _resendToken;
@@ -40,10 +41,20 @@ class AdminAuthService extends ChangeNotifier {
   String? get phone => _phone;
   String? get phoneDigits => _phoneDigits;
   String? get displayName => _displayName;
+  String? get role => _role;
 
-  static bool _isAdminRole(String? role) {
+  bool get isFinanceReader {
+    final r = (_role ?? '').trim().toLowerCase();
+    return r == 'finance' || r == 'auditor' || r == 'superadmin';
+  }
+
+  static bool _isPanelRole(String? role) {
     final r = (role ?? '').trim().toLowerCase();
-    return r == 'admin' || r == 'superadmin' || r == 'dispatcher';
+    return r == 'admin' ||
+        r == 'superadmin' ||
+        r == 'dispatcher' ||
+        r == 'finance' ||
+        r == 'auditor';
   }
 
   static List<String> _userDocIdCandidates(String rawPhone) =>
@@ -76,7 +87,7 @@ class AdminAuthService extends ChangeNotifier {
         }
         if (rawPhone.isNotEmpty) {
           final snap = await _findUserDoc(rawPhone);
-          if (snap != null && _isAdminRole(snap.data()?['role'] as String?)) {
+          if (snap != null && _isPanelRole(snap.data()?['role'] as String?)) {
             await _applyAdminSession(rawPhone: rawPhone, snap: snap);
             return;
           }
@@ -124,7 +135,7 @@ class AdminAuthService extends ChangeNotifier {
         return 'Bu telefon Firestore\'da topilmadi.';
       }
       final role = snap.data()?['role'] as String? ?? '';
-      if (!_isAdminRole(role)) {
+      if (!_isPanelRole(role)) {
         await _auth.signOut();
         return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
       }
@@ -173,7 +184,7 @@ class AdminAuthService extends ChangeNotifier {
         return 'Admin operator Firestore\'da topilmadi.';
       }
       final role = snap.data()?['role'] as String? ?? '';
-      if (!_isAdminRole(role)) {
+      if (!_isPanelRole(role)) {
         await _auth.signOut();
         return 'Bu hisob admin emas.';
       }
@@ -199,10 +210,11 @@ class AdminAuthService extends ChangeNotifier {
     _phone = digits.startsWith('+') ? digits : '+$digits';
     _phoneDigits = snap.id;
     _displayName = (snap.data()?['name'] as String?) ?? '';
+    _role = (snap.data()?['role'] as String?) ?? '';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPhoneKey, _phone!);
     await prefs.setString('user_phone', _phone!);
-    await prefs.setString('user_role', 'admin');
+    await prefs.setString('user_role', _role!.isNotEmpty ? _role! : 'admin');
     await prefs.setString('user_name', _displayName ?? '');
     notifyListeners();
   }
@@ -286,7 +298,7 @@ class AdminAuthService extends ChangeNotifier {
         return 'Bu telefon Firestore\'da topilmadi.';
       }
       final role = snap.data()?['role'] as String? ?? '';
-      if (!_isAdminRole(role)) {
+      if (!_isPanelRole(role)) {
         await _auth.signOut();
         return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
       }

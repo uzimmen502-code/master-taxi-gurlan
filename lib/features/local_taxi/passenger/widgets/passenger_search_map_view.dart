@@ -31,14 +31,14 @@ class PassengerSearchMapView extends StatefulWidget {
 }
 
 class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
-  static const _defaultCenter = LatLng(41.4957, 60.5822);
-
   final _mapController = Completer<GoogleMapController>();
   double? _lastFittedRadiusKm;
 
-  LatLng get _pickup => widget.fromLat != 0 || widget.fromLng != 0
-      ? LatLng(widget.fromLat, widget.fromLng)
-      : _defaultCenter;
+  bool get _hasPickup =>
+      widget.fromLat.abs() > 1e-6 || widget.fromLng.abs() > 1e-6;
+
+  LatLng? get _pickup =>
+      _hasPickup ? LatLng(widget.fromLat, widget.fromLng) : null;
 
   @override
   void didUpdateWidget(covariant PassengerSearchMapView oldWidget) {
@@ -49,11 +49,14 @@ class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
   }
 
   Future<void> _fitRadius() async {
-    if (!_mapController.isCompleted || !widget.isSearching) return;
+    final pickup = _pickup;
+    if (pickup == null || !_mapController.isCompleted || !widget.isSearching) {
+      return;
+    }
     if (_lastFittedRadiusKm == widget.radiusKm) return;
     _lastFittedRadiusKm = widget.radiusKm;
     final ctrl = await _mapController.future;
-    final bounds = _boundsForRadius(_pickup, widget.radiusKm);
+    final bounds = _boundsForRadius(pickup, widget.radiusKm);
     await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48));
   }
 
@@ -69,12 +72,12 @@ class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
     );
   }
 
-  Set<Circle> _circles() {
+  Set<Circle> _circles(LatLng pickup) {
     if (!widget.isSearching) return const {};
     return {
       Circle(
         circleId: const CircleId('search_radius'),
-        center: _pickup,
+        center: pickup,
         radius: widget.radiusKm * 1000,
         fillColor: AppColors.primary.withValues(alpha: 0.08),
         strokeColor: AppColors.primary.withValues(alpha: 0.45),
@@ -83,11 +86,11 @@ class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
     };
   }
 
-  Set<Marker> _markers() {
+  Set<Marker> _markers(LatLng pickup) {
     final markers = <Marker>{
       Marker(
         markerId: const MarkerId('pickup'),
-        position: _pickup,
+        position: pickup,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
         infoWindow: InfoWindow(title: widget.pickupLabel),
       ),
@@ -109,10 +112,18 @@ class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
 
   @override
   Widget build(BuildContext context) {
+    final pickup = _pickup;
+    if (pickup == null) {
+      return const ColoredBox(
+        color: Color(0xFFE8EEF2),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return GoogleMap(
-      initialCameraPosition: CameraPosition(target: _pickup, zoom: 13),
-      markers: _markers(),
-      circles: _circles(),
+      initialCameraPosition: CameraPosition(target: pickup, zoom: 13),
+      markers: _markers(pickup),
+      circles: _circles(pickup),
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
       zoomControlsEnabled: false,

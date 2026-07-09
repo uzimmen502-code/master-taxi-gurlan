@@ -4,6 +4,7 @@ Grep exact name with `^exports\.NAME` to jump to a function (no line numbers —
 Types: onCall = `functions.https.onCall`; trigger = `functions.firestore`; sched = `functions.pubsub.schedule`; http = `onRequest`; storage = `onObjectFinalized`.
 Region `us-central1`, Node 20 1st Gen. Helpers from `settlement_ledger.js` imported as `settlementLedger`.
 Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_idempotency/{key}` + client `opId`.
+Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,districtId,serviceAreaId} (faqat boʻsh emas) user hujjatidan olib order payload'ga bosiladi. Ishlatilgan: placeOrderWithWallet, placeOrderPostPaid, placeCarpetWashOrder, placeAgroPickupOrder. (Client-side trips/courier/intercity Flutter `ServiceConfigHolder.reportStamp()` bilan bosadi.)
 
 ## Wallet / Finance (onCall)
 - creditChange — wallet credit/refund (change, bonuses); idemKey e.g. `change_trip_{id}`.
@@ -33,15 +34,13 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - courierCreateRoute / courierRecoverOrphanRoute — build/recover delivery route.
 - courierMarkPicked / courierMarkArrived — bread/food `orders` delivery; arrived → `notifyCourierArrivedToCustomer` (ring push `courier_arrived`).
 - courierMarkCollectionArrived — collection_tasks arrived + ring; finalize requires `arrivedAt`.
-- courierMarkCourierOrderArrived — legacy `courier_orders` arrived + ring; payment requires `arrivedAt`.
 - courierGetCustomerWalletBalance — courier reads customer wallet (for payment).
 - courierSubmitPayment — order payment (cash/card/wallet/product lines).
-- courierSubmitCourierOrderPayment — payment for direct `courier_orders`.
 - onDeliveryRouteCreate / onDeliveryRouteAssign (triggers) — route side effects.
 - adminCreateCollectionTask / courierFinalizeCollection / adminGetWarehouseStock — sell-collection + `warehouse_stock`.
 
 ## Carpet wash
-- placeCarpetWashOrder — customer creates `carpet_wash_orders` doc (carpetCount, pickupAddress, note).
+- placeCarpetWashOrder — customer creates `carpet_wash_orders` doc (carpetCount, pickupAddress, note); **idempotencyKey** → `wallet_idempotency/carpet_{key}`.
 - adminSetCarpetWashStatus — admin status + optional finalPrice.
 - courierClaimCarpetPickup / courierMarkCarpetArrived (leg pickup|return) / courierMarkCarpetPickedUp — pickup flow; picked_up requires `pickupArrivedAt`.
 - courierClaimCarpetReturn / courierMarkCarpetDelivered — return flow; completed requires `returnArrivedAt`.
@@ -87,6 +86,7 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - detectAnomaly (trigger) — risk/anomaly signals (`risk_events`).
 - getDirections (http) — Google Directions proxy.
 - onAdUpdate / onSellSubmissionUpdate / onBirthDateRequestUpdate / onDeviceChangeRequestUpdate (triggers) — moderation/request side effects.
+- **adminUpdateSellSubmission** — admin status/forward `sell_submissions` (rules client update false).
 
 ## Dating (Tanishuv)
 - saveDatingProfile — create/edit profile → `pending` yoki `settings/app.datingAutoApprove` bo'lsa darhol `approved`. CF-only write to `dating_profiles`.
@@ -97,6 +97,8 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.
 - respondDatingInterest — accept/decline interest → match on accept.
+- **submitDatingReport** — client shikoyat → `reports` (type=dating_profile); rules client create blok.
+- **adminResolveDatingReport** — admin report `resolved`.
 
 ## Family Tree (Nasab daraxti — global graph)
 - ensureMyTree — idempotent: create caller's `treeComponentId`+`treePersonId` (self node); auto `relatives/people/{treePersonId}` «Мен» from profile (`isSelf:true`); backfills phone watchers + registered-relative notify; tree backfill only fills empty tree fields (no clobber).
@@ -111,7 +113,7 @@ Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_id
 - undoTreeOperation — reverse link/merge/edit/create from `tree_history`; link/merge undo restores `relatives/people` via `restoreRelativePersonDoc` + `undoRelativeRefChanges`.
 
 ## Agro pickup (sut qabul)
-- placeAgroPickupOrder — customer `agro_pickup_orders` (milk literCount 1..500).
+- placeAgroPickupOrder — customer `agro_pickup_orders` (milk literCount 1..500); **idempotencyKey** → `wallet_idempotency/agro_{key}`.
 - adminSetAgroPickupStatus — admin status + optional finalPrice.
 - courierClaimAgroPickup / courierMarkAgroPickupArrived / courierMarkAgroPickedUp — courier claim + ring on arrived.
 

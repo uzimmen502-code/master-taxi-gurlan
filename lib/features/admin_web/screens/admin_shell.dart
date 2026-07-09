@@ -41,6 +41,8 @@ import 'warehouse_stock_screen.dart';
 import 'sell_submissions_admin_screen.dart';
 import 'risk_review_screen.dart';
 import 'anomaly_settings_screen.dart';
+import 'service_config_admin_screen.dart';
+import 'splash_taglines_screen.dart';
 import 'users_devices_screen.dart';
 
 /// Admin Web Panel — асосий навигaция (sidebar + контент).
@@ -56,8 +58,19 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _selectedIndex = 0;
-  late final List<Widget?> _pageCache;
+  List<Widget?> _pageCache = [];
   final PendingCodeAutoListener _pendingCodeAuto = PendingCodeAutoListener();
+
+  int _visibleIndexFor(int rawIndex, int visibleCount) {
+    if (visibleCount <= 0) return 0;
+    return rawIndex.clamp(0, visibleCount - 1);
+  }
+
+  List<_AdminSection> _visibleSections(AdminAuthService auth) {
+    return _sections
+        .where((s) => !s.financeOnly || auth.isFinanceReader)
+        .toList(growable: false);
+  }
 
   @override
   void initState() {
@@ -127,6 +140,16 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Бегущая строка',
       icon: Icons.view_stream_outlined,
       description: 'Bosh ekran yuguruvchi matn',
+    ),
+    _AdminSection(
+      label: 'Ҳудудлар ва хизматлар',
+      icon: Icons.map_outlined,
+      description: 'MFY boʻyicha modul mavjudligi (config-driven)',
+    ),
+    _AdminSection(
+      label: 'Splash soʻzlari',
+      icon: Icons.branding_watermark_outlined,
+      description: 'Ilova ochilish animatsiyasi matnlari',
     ),
     _AdminSection(
       label: 'Буюртма хабар',
@@ -207,6 +230,7 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Finance Center',
       icon: Icons.account_balance,
       description: 'Settlement Ledger — float, settlement, журнал',
+      financeOnly: true,
     ),
     _AdminSection(
       label: 'Birthday bonus',
@@ -250,13 +274,22 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AdminAuthService>();
+    final visible = _visibleSections(auth);
+    final safeIndex = _visibleIndexFor(_selectedIndex, visible.length);
+    if (safeIndex != _selectedIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedIndex = safeIndex);
+      });
+    }
+
     final media = MediaQuery.of(context);
     final isWide = media.size.width > 1100;
     final isMedium = media.size.width > 700;
 
     final sidebar = _Sidebar(
-      sections: _sections,
-      selectedIndex: _selectedIndex,
+      sections: visible,
+      selectedIndex: safeIndex,
       onSelect: (i) => setState(() => _selectedIndex = i),
       onLogout: _logout,
       compact: !isWide,
@@ -266,10 +299,9 @@ class _AdminShellState extends State<AdminShell> {
       backgroundColor: AppColors.scaffold,
       drawer: isMedium ? null : Drawer(child: sidebar),
       body: Row(children: [
-        // Tor panel: icon + қисқа ном бор — 76px етарсиз.
         if (isMedium) SizedBox(width: isWide ? 240 : 92, child: sidebar),
         Expanded(
-          child: _body(),
+          child: _body(visible, safeIndex),
         ),
       ]),
       appBar: isMedium
@@ -277,7 +309,7 @@ class _AdminShellState extends State<AdminShell> {
           : AppBar(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              title: Text(_sections[_selectedIndex].label),
+              title: Text(visible[safeIndex].label),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.home_outlined),
@@ -291,16 +323,20 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
-  Widget _body() {
-    final cached = _pageCache[_selectedIndex];
+  Widget _body(List<_AdminSection> visible, int index) {
+    final section = visible[index];
+    final rawIndex = _sections.indexOf(section);
+    if (rawIndex < 0) {
+      return const Center(child: Text('Bo\'lim topilmadi'));
+    }
+    final cached = _pageCache[rawIndex];
     if (cached != null) return cached;
-    final built = _buildSection(_selectedIndex);
-    _pageCache[_selectedIndex] = built;
+    final built = _buildSection(section);
+    _pageCache[rawIndex] = built;
     return built;
   }
 
-  Widget _buildSection(int index) {
-    final section = _sections[index];
+  Widget _buildSection(_AdminSection section) {
     if (section.label == 'Monitoring Center') {
       return const MonitoringCenterScreen(embedded: true);
     }
@@ -309,6 +345,12 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Бегущая строка') {
       return const AdminHomeTickerScreen();
+    }
+    if (section.label == 'Ҳудудлар ва хизматлар') {
+      return const ServiceConfigAdminScreen();
+    }
+    if (section.label == 'Splash soʻzlari') {
+      return const SplashTaglinesScreen();
     }
     if (section.label == 'Буюртма хабар') {
       return const AdminOrderNewsListScreen();
@@ -359,6 +401,15 @@ class _AdminShellState extends State<AdminShell> {
       return const PayoutManagementScreen();
     }
     if (section.label == 'Finance Center') {
+      if (!context.read<AdminAuthService>().isFinanceReader) {
+        return const Center(
+          child: Text(
+            'Finance Center faqat finance/auditor/superadmin uchun.\n'
+            'Oddiy admin bu bo\'limga kira olmaydi (SoD).',
+            textAlign: TextAlign.center,
+          ),
+        );
+      }
       return const FinanceCenterScreen();
     }
     if (section.label == 'Birthday bonus') {
@@ -400,10 +451,12 @@ class _AdminSection {
     required this.label,
     required this.icon,
     required this.description,
+    this.financeOnly = false,
   });
   final String label;
   final IconData icon;
   final String description;
+  final bool financeOnly;
 }
 
 class _Sidebar extends StatelessWidget {
@@ -604,10 +657,10 @@ class _Sidebar extends StatelessWidget {
         return db
             .collection('ads')
             .where('type', isEqualTo: 'cheap_product')
+            .where('status', isEqualTo: 'pending')
+            .limit(200)
             .snapshots()
-            .map((s) => s.docs
-                .where((d) => (d.data()['status'] ?? '') == 'inactive')
-                .length);
+            .map((s) => s.docs.length);
       case '❤️ Танишув':
         return db
             .collection('dating_profiles')

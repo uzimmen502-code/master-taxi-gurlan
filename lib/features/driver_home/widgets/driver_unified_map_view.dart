@@ -49,7 +49,6 @@ enum _TripPhase { pick, navigating }
 class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     with SingleTickerProviderStateMixin {
   static const _green = AppColors.primaryDark;
-  static const _defaultCenter = LatLng(41.4957, 60.5822);
 
   final _mapController = Completer<GoogleMapController>();
   final _directionsService = GoogleDirectionsService();
@@ -173,7 +172,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     return DateTime.now().difference(seen) > const Duration(seconds: 30);
   }
 
-  LatLng _cameraTarget(DriverHomeController c) {
+  LatLng? _cameraTarget(DriverHomeController c) {
     if (c.driverLat != null && c.driverLng != null) {
       return LatLng(c.driverLat!, c.driverLng!);
     }
@@ -183,14 +182,16 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
         return LatLng(r.fromLat, r.fromLng);
       }
     }
-    return _defaultCenter;
+    return null;
   }
 
+  LatLng _cameraTargetOrWorld(DriverHomeController c) =>
+      _cameraTarget(c) ?? const LatLng(41.2995, 69.2401);
+
   void _ensureTripOrigin(TripRequest ride) {
-    _tripOrigin ??= LatLng(
-      ride.fromLat != 0 ? ride.fromLat : _defaultCenter.latitude,
-      ride.fromLng != 0 ? ride.fromLng : _defaultCenter.longitude,
-    );
+    if (ride.fromLat != 0 || ride.fromLng != 0) {
+      _tripOrigin ??= LatLng(ride.fromLat, ride.fromLng);
+    }
   }
 
   Future<void> _prefillDestination(TripRequest ride) async {
@@ -198,7 +199,10 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     if (to.isEmpty || _destination != null) return;
     setState(() => _prefillingDestination = true);
     try {
-      final coords = await _locationService.coordsFromAddress(to);
+      final coords = await _locationService.coordsFromAddress(
+        to,
+        regionBias: 'uzbekistan',
+      );
       if (!mounted || coords == null) return;
       setState(() {
         _destination = LatLng(coords.lat, coords.lng);
@@ -551,7 +555,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
             animation: _pulseController,
             builder: (context, _) => GoogleMap(
               initialCameraPosition:
-                  CameraPosition(target: _cameraTarget(c), zoom: 14),
+                  CameraPosition(target: _cameraTargetOrWorld(c), zoom: 14),
               markers: _buildMarkers(c),
               circles: _buildPulseCircles(c),
               polylines: inLocalTrip ? _tripPolylines : const {},

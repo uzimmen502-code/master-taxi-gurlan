@@ -9,6 +9,7 @@ import '../../../models/dating_profile.dart';
 import '../../../repositories/dating_repository.dart';
 import '../../dating/services/dating_service.dart';
 import '../services/admin_auth_service.dart';
+import '../services/admin_dating_service.dart';
 
 /// Admin: tanishuv profillari moderatsiyasi + shikoyatlar.
 class DatingModerationScreen extends StatelessWidget {
@@ -344,6 +345,37 @@ class _ProfileModerationCardState extends State<_ProfileModerationCard> {
 class _ReportsTab extends StatelessWidget {
   const _ReportsTab();
 
+  String _adminPhone(BuildContext context) {
+    final auth = context.read<AdminAuthService>();
+    if (auth.phoneDigits != null && auth.phoneDigits!.isNotEmpty) {
+      return auth.phoneDigits!;
+    }
+    final d = phoneDigits(auth.phone ?? '');
+    return d.length >= 9 ? d : '';
+  }
+
+  Future<void> _resolveReport(
+    BuildContext context,
+    String reportId, {
+    String? blockUserId,
+  }) async {
+    final adminPhone = _adminPhone(context);
+    if (adminPhone.isEmpty) return;
+    if (blockUserId != null && blockUserId.isNotEmpty) {
+      try {
+        await DatingService.adminModerate(
+          userId: blockUserId,
+          action: 'block',
+          reason: 'Шикоят асосида',
+        );
+      } catch (_) {}
+    }
+    await AdminDatingService.resolveReport(
+      adminPhone: adminPhone,
+      reportId: reportId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final q = FirebaseFirestore.instance
@@ -380,21 +412,17 @@ class _ReportsTab extends StatelessWidget {
                   IconButton(
                     tooltip: 'Профилни блоклаш',
                     icon: const Icon(Icons.block, color: Colors.red),
-                    onPressed: () async {
-                      try {
-                        await DatingService.adminModerate(
-                            userId: targetId,
-                            action: 'block',
-                            reason: 'Шикоят асосида');
-                      } catch (_) {}
-                      await docs[i].reference.update({'status': 'resolved'});
-                    },
+                    onPressed: () => _resolveReport(
+                      context,
+                      docs[i].id,
+                      blockUserId: targetId,
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Ҳал қилинди',
                     icon: const Icon(Icons.done, color: Colors.green),
                     onPressed: () =>
-                        docs[i].reference.update({'status': 'resolved'}),
+                        _resolveReport(context, docs[i].id),
                   ),
                 ],
               ),

@@ -3,7 +3,9 @@
   "description": "Firebase Cloud Functions",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test:settlement:e2e": "node tools/settlement_e2e_test.js",
+    "test:settlement:all": "node tools/settlement_e2e_test.js"
   },
   "engines": {
     "node": "20"

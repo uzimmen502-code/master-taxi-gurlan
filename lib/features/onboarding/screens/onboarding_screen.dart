@@ -5,10 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/service_area_picker.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/user_repository.dart';
-import '../../home/screens/home_screen.dart';
+import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
 import '../controllers/onboarding_controller.dart';
 
@@ -73,6 +74,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
         context.read<OnboardingController>().setDistrict(_districtCtrl.text));
     _noteCtrl.addListener(
         () => context.read<OnboardingController>().setNote(_noteCtrl.text));
+    _birthDateCtrl.addListener(() => context
+        .read<OnboardingController>()
+        .setBirthDate(_birthDateCtrl.text));
   }
 
   void _enforcePhonePrefix() {
@@ -167,6 +171,15 @@ class _OnboardingViewState extends State<_OnboardingView> {
       return;
     }
 
+    if (c.currentPage == 4) {
+      final bd = _birthDateCtrl.text.trim();
+      c.setBirthDate(bd);
+      if (bd.isNotEmpty && OnboardingController.parseBirthDate(bd) == null) {
+        _showError(loc.translate('ob_birth_invalid_format'));
+        return;
+      }
+    }
+
     final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
     if (err != null) {
       _showError(err);
@@ -199,29 +212,13 @@ class _OnboardingViewState extends State<_OnboardingView> {
     return '${value.year}-${two(value.month)}-${two(value.day)}';
   }
 
-  DateTime? _parseBirthDate(String value) {
-    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
-    if (m == null) return null;
-    final y = int.tryParse(m.group(1)!);
-    final mo = int.tryParse(m.group(2)!);
-    final d = int.tryParse(m.group(3)!);
-    if (y == null || mo == null || d == null) return null;
-    try {
-      final parsed = DateTime(y, mo, d);
-      if (parsed.year != y || parsed.month != mo || parsed.day != d) {
-        return null;
-      }
-      return parsed;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _pickBirthDate() async {
     final loc = AppLocalizations.of(context)!;
     final c = context.read<OnboardingController>();
     final now = DateTime.now();
-    final initial = _parseBirthDate(c.birthDate) ?? DateTime(now.year - 25);
+    final initial =
+        OnboardingController.parseBirthDate(c.birthDate) ??
+            DateTime(now.year - 25);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -248,8 +245,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       _showError(err);
     }
     if (!ok || !mounted) return;
-    Navigator.pushReplacement(
-        context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+    pushAppHome(context);
   }
 
   @override
@@ -685,16 +681,15 @@ class _OnboardingViewState extends State<_OnboardingView> {
               ),
             ),
             const SizedBox(height: 24),
-            GestureDetector(
-              onTap: _pickBirthDate,
-              child: AbsorbPointer(
-                child: _field(
-                  controller: _birthDateCtrl,
-                  hint: loc.translate('ob_birth_input_hint'),
-                  icon: Icons.cake_outlined,
-                  inputType: TextInputType.datetime,
-                ),
-              ),
+            _field(
+              controller: _birthDateCtrl,
+              hint: loc.translate('ob_birth_input_hint'),
+              icon: Icons.cake_outlined,
+              inputType: TextInputType.datetime,
+              formatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d\-]')),
+                LengthLimitingTextInputFormatter(10),
+              ],
             ),
             const SizedBox(height: 12),
             TextButton.icon(
@@ -754,8 +749,46 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
           // Қўлдa тўлдириш — МФЙ, кўча, уй.
           _manualCard(loc),
+          const SizedBox(height: 12),
+
+          // Config-driven zona (ixtiyoriy) — xizmat mavjudligini aniqlaydi.
+          _serviceAreaCard(c),
         ],
       ),
+    );
+  }
+
+  Widget _serviceAreaCard(OnboardingController c) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.holiday_village, color: _green2, size: 18),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text('Xizmat zonasi *',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+          'Viloyat va tumaningizni tanlang — bu hududingizda mavjud '
+          'xizmatlarni aniqlaydi.',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 10),
+        ServiceAreaPicker(
+          initialRegionId: c.geoRegionId,
+          initialDistrictId: c.geoDistrictId,
+          initialServiceAreaId: c.geoServiceAreaId,
+          showAreaDropdown: false,
+          onChanged: c.setGeoArea,
+        ),
+      ]),
     );
   }
 

@@ -28,6 +28,7 @@ import '../services/intercity_place_history.dart';
 import '../widgets/intercity_place_field.dart';
 import '../widgets/intercity_ride_card.dart';
 import '../widgets/intercity_pickup_sheet.dart';
+import '../widgets/intercity_settlement_watcher.dart';
 import '../widgets/me_and_passengers_panel.dart';
 import '../../driver/intercity_driver_resume.dart';
 import '../../driver/screens/intercity_driver_panel_screen.dart';
@@ -695,6 +696,13 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
               : _buildSearchForm(c, today, tomorrow),
           const Positioned.fill(
             child: MeAndPassengersPanel(),
+          ),
+          Consumer<MeAndPassengersController>(
+            builder: (_, panel, __) {
+              final id = panel.myBooking?.id ?? '';
+              if (id.isEmpty) return const SizedBox.shrink();
+              return IntercitySettlementWatcher(bookingId: id);
+            },
           ),
         ],
       ),

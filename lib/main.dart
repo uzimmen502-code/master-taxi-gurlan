@@ -20,7 +20,6 @@ import 'repositories/carpet_wash_orders_repository.dart';
 import 'repositories/agro_pickup_orders_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/collection_tasks_repository.dart';
-import 'repositories/courier_orders_repository.dart';
 import 'repositories/couriers_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
@@ -49,6 +48,7 @@ import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
+import 'core/widgets/zone_gate.dart';
 import 'features/home/screens/home_screen.dart';
 import 'core/utils/formatters.dart';
 import 'features/onboarding/screens/auth_restore_screen.dart';
@@ -58,7 +58,10 @@ import 'features/ads/repositories/ads_repository.dart';
 import 'features/ads/services/ads_storage_service.dart';
 import 'core/l10n/locale_notifier.dart';
 import 'core/passenger_cancel_rules_holder.dart';
+import 'core/splash_taglines_holder.dart';
+import 'core/service_config_holder.dart';
 import 'core/utils/firestore_crash_guard.dart';
+import 'services/deferred_settlement_queue.dart';
 import 'utils/locale_utils.dart';
 
 void main() async {
@@ -76,6 +79,8 @@ void main() async {
   );
 
   await PassengerCancelRulesHolder.load();
+  await SplashTaglinesHolder.load();
+  await ServiceConfigHolder.bootstrap();
 
   // Web'da notification permission / messaging init ayrim браузерларда
   // birinchi frame'dan oldin osilib qolishi мумкин. UI аввал чиқсин.
@@ -171,7 +176,27 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ServiceConfigHolder.bootstrap());
+      unawaited(DeferredSettlementQueue.flush());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -210,7 +235,6 @@ class _MyAppState extends State<MyApp> {
         Provider<CollectionTasksRepository>(
             create: (_) => CollectionTasksRepository()),
         Provider<CouriersRepository>(create: (_) => CouriersRepository()),
-        Provider<CourierOrdersRepository>(create: (_) => CourierOrdersRepository()),
         Provider<SettingsRepository>(create: (_) => SettingsRepository()),
         Provider<AdsStorageService>(create: (_) => AdsStorageService()),
         Provider<AdsRepository>(create: (_) => AdsRepository()),
@@ -241,7 +265,7 @@ class _MyAppState extends State<MyApp> {
                 : !widget.isReturningUser
                     ? const OnboardingScreen()
                     : widget.hasFirebaseAuth
-                        ? const HomeScreen()
+                        ? const ZoneGate(child: HomeScreen())
                         : const AuthRestoreScreen(),
             ),
           );

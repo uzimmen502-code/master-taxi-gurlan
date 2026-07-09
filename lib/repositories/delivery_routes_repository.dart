@@ -17,7 +17,7 @@ class DeliveryRoutesRepository {
     if (courierId.isEmpty) return null;
     final snap = await _col
         .where('courierId', isEqualTo: courierId)
-        .where('status', isEqualTo: 'active')
+        .where('status', whereIn: ['active', 'ready'])
         .limit(1)
         .get();
     if (snap.docs.isEmpty) return null;

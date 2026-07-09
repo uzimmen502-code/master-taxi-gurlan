@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/service_config_holder.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user_address.dart';
@@ -61,6 +62,11 @@ class OnboardingController extends ChangeNotifier {
   String district = 'Гурлан';
   String note = '';
 
+  // Config-driven zona (ixtiyoriy — tanlansa xizmat mavjudligini aniqlaydi).
+  String geoRegionId = '';
+  String geoDistrictId = '';
+  String geoServiceAreaId = '';
+
   double? lat;
   double? lng;
   double? accuracy;
@@ -106,6 +112,25 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// `YYYY-MM-DD` — noto'g'ri yoki bo'sh bo'lsa `null`.
+  static DateTime? parseBirthDate(String value) {
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value.trim());
+    if (m == null) return null;
+    final y = int.tryParse(m.group(1)!);
+    final mo = int.tryParse(m.group(2)!);
+    final d = int.tryParse(m.group(3)!);
+    if (y == null || mo == null || d == null) return null;
+    try {
+      final parsed = DateTime(y, mo, d);
+      if (parsed.year != y || parsed.month != mo || parsed.day != d) {
+        return null;
+      }
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
   void setMfy(String v) {
     mfy = v;
     notifyListeners();
@@ -131,6 +156,13 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setGeoArea(String regionId, String districtId, String serviceAreaId) {
+    geoRegionId = regionId;
+    geoDistrictId = districtId;
+    geoServiceAreaId = serviceAreaId;
+    notifyListeners();
+  }
+
   String? validate({
     required String name,
     required String phone,
@@ -153,6 +185,9 @@ class OnboardingController extends ChangeNotifier {
         }
         if (!hasManualParts) {
           return 'МФЙ, кўча ва уй рақамини тўлдиринг';
+        }
+        if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
+          return 'Xizmat zonasi — viloyat va tumaningizni tanlang';
         }
         break;
     }
@@ -499,6 +534,11 @@ class OnboardingController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
+      errorMessage = 'Xizmat zonasi — viloyat va tumaningizni tanlang';
+      notifyListeners();
+      return false;
+    }
 
     isSubmitting = true;
     notifyListeners();
@@ -528,6 +568,28 @@ class OnboardingController extends ChangeNotifier {
         legacyAddressLine: formatted,
         address: structured,
       );
+
+      // Majburiy: config-driven zona (viloyat+tuman) saqlanadi.
+      // serviceAreaId — tumanning birlamchi zonasi (avto-tanlangan).
+      if (geoDistrictId.trim().isNotEmpty) {
+        try {
+          await _userRepo.saveServiceArea(
+            uid: uid,
+            regionId: geoRegionId,
+            districtId: geoDistrictId,
+            serviceAreaId: geoServiceAreaId,
+          );
+          await ServiceConfigHolder.applyGeo(
+            regionId: geoRegionId,
+            districtId: geoDistrictId,
+            serviceAreaId: geoServiceAreaId,
+          );
+        } catch (e) {
+          errorMessage =
+              'Zona saqlanmadi. Internet aloqasini tekshiring va qayta urinib ko\'ring.';
+          return false;
+        }
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userId', uid);

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -11,13 +9,13 @@ import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/become_driver_button.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../../models/map_picker_result.dart';
 import '../../../../models/saved_place.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../utils/fare_calculator.dart';
-import '../../../../utils/gurlan_places.dart';
 import '../../../map_picker/screens/map_picker_screen.dart';
 import '../controllers/local_taxi_controller.dart';
 import '../../../driver_home/screens/driver_home_screen.dart';
@@ -61,9 +59,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   final FocusNode _fromFocus = FocusNode();
   final FocusNode _toFocus = FocusNode();
 
-  List<String> _fromSug = const [];
-  List<String> _toSug = const [];
-  Timer? _debounce;
+  double? _pickupLat;
+  double? _pickupLng;
 
   bool _bootstrapped = false;
   bool _isSearching = false;
@@ -74,12 +71,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   @override
   void initState() {
     super.initState();
-    _fromFocus.addListener(() {
-      if (!_fromFocus.hasFocus) setState(() => _fromSug = const []);
-    });
-    _toFocus.addListener(() {
-      if (!_toFocus.hasFocus) setState(() => _toSug = const []);
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onGpsTap();
       _tryResumeActiveTrip();
@@ -117,7 +108,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     _toCtrl.dispose();
     _fromFocus.dispose();
     _toFocus.dispose();
-    _debounce?.cancel();
     super.dispose();
   }
 
@@ -143,47 +133,46 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     } catch (_) {}
   }
 
-  // ─── Autocomplete ─────────────────────────────────────────────────
-
-  void _onFromChanged(String q) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(() => _fromSug = GurlanPlaces.search(q));
-    });
-  }
-
-  void _onToChanged(String q) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () {
-      if (!mounted) return;
-      setState(() => _toSug = GurlanPlaces.search(q));
-    });
-  }
-
-  // ─── Actions ──────────────────────────────────────────────────────
+  // ─── Manzil maydonlari (MFY autocomplete yo'q — GPS / xarita) ─────
 
   Future<void> _onGpsTap() async {
-    final addr = await context.read<LocalTaxiController>().getCurrentAddress();
+    final ctrl = context.read<LocalTaxiController>();
+    final addr = await ctrl.getCurrentAddress();
     if (!mounted || addr == null) return;
     setState(() {
       _fromCtrl.text = addr;
-      _fromSug = const [];
+      _pickupLat = ctrl.pickupLat;
+      _pickupLng = ctrl.pickupLng;
     });
   }
 
   Future<void> _pickOnMap({required bool isFrom}) async {
-    final result = await Navigator.push<String>(
+    final saved = context.read<LocalTaxiController>().savedPlaces;
+    final result = await Navigator.push<MapPickerResult>(
       context,
       MaterialPageRoute(
-          builder: (_) => MapPickerScreen(title: context.tr('pick_location'))),
+        builder: (_) => MapPickerScreen(
+          title: context.tr('pick_location'),
+          recentPlaces: saved,
+        ),
+      ),
     );
     if (result == null || !mounted) return;
+    if (result.lat.abs() < 1e-6 && result.lng.abs() < 1e-6) {
+      _snack(context.tr('local_gps_required_for_search'));
+      return;
+    }
     setState(() {
       if (isFrom) {
-        _fromCtrl.text = result;
+        _fromCtrl.text = result.label;
+        _pickupLat = result.lat;
+        _pickupLng = result.lng;
+        context.read<LocalTaxiController>().setPickupCoords(
+              lat: result.lat,
+              lng: result.lng,
+            );
       } else {
-        _toCtrl.text = result;
+        _toCtrl.text = result.label;
       }
     });
   }
@@ -294,7 +283,10 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         return;
       }
       try {
-        await context.read<LocationService>().getCurrentCoords();
+        final loc = context.read<LocationService>();
+        final coords = await loc.getFreshCoords();
+        _pickupLat = coords.lat;
+        _pickupLng = coords.lng;
       } on LocationException catch (e) {
         if (!mounted) return;
         final key = switch (e.kind) {
@@ -319,6 +311,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             from: _fromCtrl.text.trim(),
             to: _toCtrl.text.trim(),
             taxiType: 'local',
+            pickupLat: _pickupLat,
+            pickupLng: _pickupLng,
           ),
         ),
       );
@@ -358,12 +352,21 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
   // ─── Saved places ─────────────────────────────────────────────────
 
   Future<void> _onAddPlace() async {
-    final addr = await Navigator.push<String>(
+    final saved = context.read<LocalTaxiController>().savedPlaces;
+    final picked = await Navigator.push<MapPickerResult>(
       context,
       MaterialPageRoute(
-          builder: (_) => MapPickerScreen(title: context.tr('new_location_title'))),
+        builder: (_) => MapPickerScreen(
+          title: context.tr('new_location_title'),
+          recentPlaces: saved,
+        ),
+      ),
     );
-    if (addr == null || !mounted) return;
+    if (picked == null || !mounted) return;
+    if (picked.lat.abs() < 1e-6 && picked.lng.abs() < 1e-6) {
+      _snack(context.tr('local_gps_required_for_search'));
+      return;
+    }
     final nameCtrl = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -395,9 +398,14 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     );
     if (name == null || name.isEmpty) return;
     if (!mounted) return;
-    await context
-        .read<LocalTaxiController>()
-        .addSavedPlace(SavedPlace(name: name, address: addr));
+    await context.read<LocalTaxiController>().addSavedPlace(
+          SavedPlace(
+            name: name,
+            address: picked.label,
+            lat: picked.lat,
+            lng: picked.lng,
+          ),
+        );
   }
 
   Future<void> _onDeletePlace(String name) async {
@@ -612,26 +620,26 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             toHint: loc.translate('to_optional'),
             mapTooltip: loc.translate('pick_on_map'),
             isGpsLoading: c.isGpsLoading,
-            fromSuggestions: _fromSug,
-            toSuggestions: _toSug,
-            onFromChanged: _onFromChanged,
-            onToChanged: _onToChanged,
+            fromSuggestions: const [],
+            toSuggestions: const [],
+            onFromChanged: (_) {},
+            onToChanged: (_) {},
             onGpsTap: _onGpsTap,
+            onMapFromTap: () => _pickOnMap(isFrom: true),
             onMapTap: () => _pickOnMap(isFrom: false),
             onSwap: () {
               final tmp = _fromCtrl.text;
               _fromCtrl.text = _toCtrl.text;
               _toCtrl.text = tmp;
+              final tLat = _pickupLat;
+              final tLng = _pickupLng;
               setState(() {});
+              // pickup koordinata swap qilinmaydi — faqat matn
+              _pickupLat = tLat;
+              _pickupLng = tLng;
             },
-            onPickFromSug: (v) {
-              _fromCtrl.text = v;
-              setState(() => _fromSug = const []);
-            },
-            onPickToSug: (v) {
-              _toCtrl.text = v;
-              setState(() => _toSug = const []);
-            },
+            onPickFromSug: (_) {},
+            onPickToSug: (_) {},
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -645,7 +653,17 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                       sectionLabel: loc.translate('saved_places'),
                       onAdd: _onAddPlace,
                       onPick: (p) {
-                        setState(() => _fromCtrl.text = p.address);
+                        setState(() {
+                          _fromCtrl.text =
+                              p.address.isNotEmpty ? p.address : p.name;
+                          if (p.hasCoordinates) {
+                            _pickupLat = p.lat;
+                            _pickupLng = p.lng;
+                            context
+                                .read<LocalTaxiController>()
+                                .setPickupCoords(lat: p.lat!, lng: p.lng!);
+                          }
+                        });
                       },
                       onLongPress: _onDeletePlace,
                     ),
@@ -743,6 +761,7 @@ class _HeroCard extends StatelessWidget {
     required this.onFromChanged,
     required this.onToChanged,
     required this.onGpsTap,
+    required this.onMapFromTap,
     required this.onMapTap,
     required this.onSwap,
     required this.onPickFromSug,
@@ -762,6 +781,7 @@ class _HeroCard extends StatelessWidget {
   final ValueChanged<String> onFromChanged;
   final ValueChanged<String> onToChanged;
   final VoidCallback onGpsTap;
+  final VoidCallback onMapFromTap;
   final VoidCallback onMapTap;
   final VoidCallback onSwap;
   final ValueChanged<String> onPickFromSug;
@@ -787,18 +807,32 @@ class _HeroCard extends StatelessWidget {
           icon: Icons.circle,
           iconColor: AppColors.primaryMid,
           onChange: onFromChanged,
-          trailing: isGpsLoading
-              ? const SizedBox(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isGpsLoading)
+                const SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : IconButton(
+                      color: Colors.white, strokeWidth: 2),
+                )
+              else ...[
+                IconButton(
                   icon: const Icon(Icons.gps_fixed,
                       color: AppColors.primaryMid, size: 20),
                   onPressed: onGpsTap,
                   tooltip: 'GPS',
                 ),
+                IconButton(
+                  icon: const Icon(Icons.map_outlined,
+                      color: Colors.white70, size: 20),
+                  onPressed: onMapFromTap,
+                  tooltip: mapTooltip,
+                ),
+              ],
+            ],
+          ),
         ),
         if (fromSuggestions.isNotEmpty)
           _suggestList(fromSuggestions, onPickFromSug),

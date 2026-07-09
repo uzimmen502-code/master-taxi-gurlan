@@ -32,6 +32,13 @@ class UserModel {
   /// «Хабарлар» таби (мурожаат + чат) охирги марта ўқилган вақт.
   final DateTime? lastMessagesReadAt;
 
+  /// Configuration-driven platforma geo ID'lari.
+  /// [regionId]/[districtId] — hisobot/dashboard; [serviceAreaId] — FAQAT
+  /// xizmat mavjudligini aniqlash (Home dinamik).
+  final String regionId;
+  final String districtId;
+  final String serviceAreaId;
+
   const UserModel({
     required this.id,
     this.name = '',
@@ -47,6 +54,9 @@ class UserModel {
     this.lastNewsReadAt,
     this.lastOrderNewsReadAt,
     this.lastMessagesReadAt,
+    this.regionId = '',
+    this.districtId = '',
+    this.serviceAreaId = '',
   });
 
   /// Манзил тўлдирилганми? (4 та мажбурий майдон).
@@ -79,6 +89,9 @@ class UserModel {
       lastNewsReadAt: (d['lastNewsReadAt'] as Timestamp?)?.toDate(),
       lastOrderNewsReadAt: (d['lastOrderNewsReadAt'] as Timestamp?)?.toDate(),
       lastMessagesReadAt: (d['lastMessagesReadAt'] as Timestamp?)?.toDate(),
+      regionId: (d['regionId'] ?? '') as String,
+      districtId: (d['districtId'] ?? '') as String,
+      serviceAreaId: (d['serviceAreaId'] ?? '') as String,
     );
   }
 }

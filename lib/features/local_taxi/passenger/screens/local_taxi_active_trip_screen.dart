@@ -643,9 +643,15 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               ? context.tr('trip_status_completed')
               : context.tr('trip_status_accepted');
 
-          final initialTarget = trip.fromLat != 0 || trip.fromLng != 0
+          final LatLng? initialTarget = trip.fromLat != 0 || trip.fromLng != 0
               ? LatLng(trip.fromLat, trip.fromLng)
-              : (_driverLatLng ?? const LatLng(41.4957, 60.5822));
+              : _driverLatLng;
+
+          if (initialTarget == null) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
           return Stack(
             children: [

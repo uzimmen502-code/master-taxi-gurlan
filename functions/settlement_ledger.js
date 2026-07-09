@@ -57,6 +57,9 @@ function passengerCreditAccount(uid) {
 function driverFloatAccount(uid) {
   return `driver_float:${uid}`;
 }
+function supplierPayableAccount(uid) {
+  return `supplier_payable:${uid}`;
+}
 
 /**
  * Legs'ni tekshiradi va normallashtiradi.
@@ -537,6 +540,7 @@ module.exports = {
   naturalDelta,
   passengerCreditAccount,
   driverFloatAccount,
+  supplierPayableAccount,
   buildEntry,
   postEntry,
   prepareBonusInTx,

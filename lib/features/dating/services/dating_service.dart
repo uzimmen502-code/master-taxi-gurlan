@@ -66,4 +66,14 @@ class DatingService {
       'enabled': enabled,
     });
   }
+
+  static Future<void> submitReport({
+    required String targetId,
+    required String reason,
+  }) async {
+    await _fn.httpsCallable('submitDatingReport').call({
+      'targetId': targetId,
+      'reason': reason,
+    });
+  }
 }

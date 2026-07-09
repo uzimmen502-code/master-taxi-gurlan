@@ -27,12 +27,18 @@ class SearchingController extends ChangeNotifier {
     required this.to,
     required this.taxiType,
     this.existingTripId,
+    this.pickupLat,
+    this.pickupLng,
   })  : _ridesRepo = ridesRepo,
         _driverRepo = driverRepo,
         _locationService = locationService;
 
   /// Mavjud qidiruv tripini tiklash (yangi trip yaratilmaydi).
   final String? existingTripId;
+
+  /// Xarita/GPS dan aniq pickup (berilsa fresh GPS o'rniga ishlatiladi).
+  final double? pickupLat;
+  final double? pickupLng;
 
   final RidesRepository _ridesRepo;
   final DriverRepository _driverRepo;
@@ -59,6 +65,9 @@ class SearchingController extends ChangeNotifier {
   bool _isDisposed = false;
   bool _isCancelled = false;
 
+  /// Haydovchi qabul qilganda faol safar ekraniga o'tiladi — dispose bekor qilmasin.
+  bool _handedOffToActiveTrip = false;
+
   List<NearbyDriver> drivers = const [];
 
   /// Haydovchi qabul qilganda to'ladi. UI buni "iste'mol" qilib dialog ko'rsatadi.
@@ -72,7 +81,14 @@ class SearchingController extends ChangeNotifier {
 
   // ── Boshlash ──────────────────────────────────────────────────────
   Future<void> start() async {
-    await FareCalculator.loadPrices();
+    final prefsLat = pickupLat;
+    final prefsLng = pickupLng;
+    if (prefsLat != null &&
+        prefsLng != null &&
+        (prefsLat.abs() > 1e-6 || prefsLng.abs() > 1e-6)) {
+      _fromLat = prefsLat;
+      _fromLng = prefsLng;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     _userPhone = prefs.getString('user_phone') ?? '';
@@ -93,7 +109,7 @@ class SearchingController extends ChangeNotifier {
 
       if (_fromLat == 0 && _fromLng == 0) {
         try {
-          final coords = await _locationService.getCurrentCoords();
+          final coords = await _locationService.getFreshCoords();
           _fromLat = coords.lat;
           _fromLng = coords.lng;
         } on LocationException catch (e) {
@@ -108,6 +124,8 @@ class SearchingController extends ChangeNotifier {
           return;
         }
       }
+
+      await FareCalculator.loadPrices(lat: _fromLat, lng: _fromLng);
 
       if (resumeId.isEmpty) {
         tripId = await _ridesRepo.createSearchRequest(
@@ -230,6 +248,8 @@ class SearchingController extends ChangeNotifier {
 
     if (trip.isAccepted && acceptedTrip == null) {
       acceptedTrip = trip;
+      _handedOffToActiveTrip = true;
+      _isCancelled = true;
       _timer?.cancel();
       _driversRefreshTimer?.cancel();
       _tripSub?.cancel();
@@ -286,7 +306,9 @@ class SearchingController extends ChangeNotifier {
     _timer?.cancel();
     _driversRefreshTimer?.cancel();
     _tripSub?.cancel();
-    _cancelTripSilently();
+    if (!_handedOffToActiveTrip) {
+      _cancelTripSilently();
+    }
     super.dispose();
   }
 }

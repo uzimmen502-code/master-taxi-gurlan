@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/dating/services/dating_service.dart';
 import '../models/dating_interest.dart';
 import '../models/dating_match.dart';
 import '../models/dating_profile.dart';
@@ -152,14 +153,7 @@ class DatingRepository {
     required String targetId,
     required String reason,
   }) async {
-    await _db.collection('reports').add({
-      'type': 'dating_profile',
-      'reporterId': reporterId,
-      'targetId': targetId,
-      'reason': reason,
-      'status': 'open',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await DatingService.submitReport(targetId: targetId, reason: reason);
   }
 
   // ── Admin moderatsiya o'qishlari ──────────────────────────────────

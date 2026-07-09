@@ -9,6 +9,7 @@ import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../driver_schedule/screens/driver_schedule_screen.dart';
 import '../../../entertainment/driver/widgets/driver_entertainment_picker.dart';
+import '../../../driver_home/widgets/fare_calculator_dialog.dart';
 import '../controllers/intercity_driver_panel_controller.dart';
 import '../intercity_route_stops.dart';
 import '../widgets/intercity_booking_request_dialog.dart';
@@ -481,6 +482,29 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     );
   }
 
+  Future<void> _onCompleteBooking(
+    BuildContext context,
+    IntercityDriverPanelController c,
+    IntercityBooking b,
+  ) async {
+    final result = await showFareCalculatorDialog(
+      context,
+      initialFare: b.totalAmount,
+    );
+    if (!context.mounted || result == null) return;
+    final notice = await c.completeWithFare(
+      bookingId: b.id,
+      fare: result.fare,
+      cashPaid: result.cashPaid,
+    );
+    if (!context.mounted) return;
+    if (notice != null && notice.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(notice), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
   String _statusLabel(String status) {
     switch (status) {
       case IntercityBookingStatus.pending:
@@ -589,7 +613,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
             ),
           const Spacer(),
           TextButton(
-            onPressed: () => c.complete(b.id),
+            onPressed: () => _onCompleteBooking(context, c, b),
             child: Text(context.tr('complete_btn')),
           ),
         ]),

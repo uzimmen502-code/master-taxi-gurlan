@@ -6,14 +6,17 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/l10n/l10n_extension.dart';
+import '../../core/service_config_holder.dart';
 import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/feed_item.dart';
+import '../../models/active_trip.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/wallet_ledger_entry.dart';
 import '../../models/home_ticker_ad.dart';
 import '../../repositories/intercity_bookings_repository.dart';
+import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
@@ -30,7 +33,10 @@ import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../jobs/jobs_tabs.dart';
 import '../jobs/screens/jobs_screen.dart';
+import '../local_taxi/passenger/screens/local_taxi_active_trip_screen.dart';
 import '../local_taxi/passenger/screens/local_taxi_screen.dart';
+import '../local_taxi/passenger/screens/searching_screen.dart';
+import '../marshrut/passenger/screens/marshrut_accepted_screen.dart';
 import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
@@ -38,6 +44,7 @@ import '../sell/screens/sell_offer_screen.dart';
 import '../circles/screens/circles_hub_screen.dart';
 import '../dating/screens/dating_home_screen.dart';
 import 'controllers/home_controller.dart';
+import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
 import 'widgets/product_feed_section.dart';
@@ -117,12 +124,23 @@ class _HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<_HomeView> {
   StreamSubscription<void>? _promoSub;
+  StreamSubscription<UserModel>? _userGeoSub;
+  VoidCallback? _configListener;
+  bool _tripResumeDone = false;
+  String? _lastAppliedServiceAreaId;
 
   @override
   void initState() {
     super.initState();
+    _configListener = () {
+      if (mounted) setState(() {});
+    };
+    ServiceConfigHolder.revision.addListener(_configListener!);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      unawaited(ServiceConfigHolder.bootstrap());
+      unawaited(_startUserGeoWatch());
+      unawaited(_runTripResumeOnce());
       _checkActiveIntercityBooking();
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
@@ -130,6 +148,37 @@ class _HomeViewState extends State<_HomeView> {
       unawaited(TreeService.ensureMyTree().catchError(
           (_) => <String, dynamic>{}));
     });
+  }
+
+  Future<void> _startUserGeoWatch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = phoneDigits(prefs.getString('user_phone') ?? '');
+    if (uid.length < 9 || !mounted) return;
+    final userRepo = context.read<UserRepository>();
+    await _userGeoSub?.cancel();
+    _userGeoSub = userRepo.watch(uid).listen((user) async {
+      final areaId = user.serviceAreaId.trim();
+      if (areaId.isEmpty || areaId == _lastAppliedServiceAreaId) return;
+      _lastAppliedServiceAreaId = areaId;
+      if (user.regionId.isNotEmpty && user.districtId.isNotEmpty) {
+        await ServiceConfigHolder.applyGeo(
+          regionId: user.regionId,
+          districtId: user.districtId,
+          serviceAreaId: areaId,
+        );
+      } else {
+        await ServiceConfigHolder.applyServiceArea(areaId);
+      }
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _runTripResumeOnce() async {
+    if (_tripResumeDone) return;
+    _tripResumeDone = true;
+    await _checkActiveLocalTrip();
+    if (!mounted) return;
+    await _checkActiveMarshrutTrip();
   }
 
   Future<void> _checkActiveIntercityBooking() async {
@@ -160,9 +209,92 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
+  Future<void> _checkActiveLocalTrip() async {
+    try {
+      if (!mounted) return;
+      final repo = context.read<RidesRepository>();
+      final prefs = await SharedPreferences.getInstance();
+      final role = prefs.getString('user_role') ?? 'user';
+      if (role == 'driver') return;
+
+      final phone = prefs.getString('user_phone') ?? '';
+      if (phone.isEmpty) return;
+
+      final resumeId = prefs.getString('resume_local_trip_id') ?? '';
+      if (resumeId.isNotEmpty) {
+        await prefs.remove('resume_local_trip_id');
+        final trip = await repo.getTrip(resumeId);
+        if (trip != null && mounted) {
+          await _navigateLocalTrip(trip, resumeId);
+          return;
+        }
+      }
+
+      final doc = await repo.findActiveLocalTripDoc(phone);
+      if (doc == null || !mounted) return;
+      final trip = repo.activeTripFromDoc(doc);
+      if (trip == null) return;
+      await _navigateLocalTrip(trip, doc.id);
+    } catch (e) {
+      debugPrint('_checkActiveLocalTrip: $e');
+    }
+  }
+
+  Future<void> _navigateLocalTrip(ActiveTrip trip, String tripId) async {
+    if (!mounted) return;
+    if (trip.status == 'accepted') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LocalTaxiActiveTripScreen(tripId: tripId),
+        ),
+      );
+    } else if (trip.status == 'searching') {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SearchingScreen(
+            from: trip.fromAddr,
+            to: trip.toAddr,
+            taxiType: 'local',
+            tripId: tripId,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _checkActiveMarshrutTrip() async {
+    try {
+      if (!mounted) return;
+      final repo = context.read<RidesRepository>();
+      final prefs = await SharedPreferences.getInstance();
+      final role = prefs.getString('user_role') ?? 'user';
+      if (role == 'driver') return;
+
+      final phone = prefs.getString('user_phone') ?? '';
+      if (phone.isEmpty) return;
+
+      final doc = await repo.findActiveMarshrutTripDoc(phone);
+      if (doc == null || !mounted) return;
+      final trip = repo.activeTripFromDoc(doc);
+      if (trip == null || trip.status != 'accepted') return;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MarshrutAcceptedScreen(trip: trip),
+        ),
+      );
+    } catch (e) {
+      debugPrint('_checkActiveMarshrutTrip: $e');
+    }
+  }
+
   @override
   void dispose() {
     _promoSub?.cancel();
+    _userGeoSub?.cancel();
+    if (_configListener != null) {
+      ServiceConfigHolder.revision.removeListener(_configListener!);
+    }
     super.dispose();
   }
 
@@ -204,6 +336,10 @@ class _HomeViewState extends State<_HomeView> {
   }
 
   Future<void> _openModule(HomeModule m) async {
+    if (!HomeModuleGate.canOpen(m.id)) {
+      HomeModuleGate.onTapBlocked(context, m.id);
+      return;
+    }
     if (m.id == 'sell') {
       final phone = phoneDigits(context.read<HomeController>().phone);
       if (phone.length < 9) {
@@ -353,8 +489,11 @@ class _HomeViewState extends State<_HomeView> {
                                   displayName:
                                       _displayName(context, user, home),
                                   dateText: _todayText(context),
-                                  locationText:
-                                      context.tr('home_location_gurlan'),
+                                  locationText: ServiceConfigHolder
+                                          .districtId
+                                          .isNotEmpty
+                                      ? ServiceConfigHolder.districtId
+                                      : context.tr('home_location_gurlan'),
                                   lastTxIsCredit: lastEntry == null
                                       ? null
                                       : lastEntry.amount >= 0,
@@ -392,28 +531,58 @@ class _HomeViewState extends State<_HomeView> {
                                 SizedBox(
                                     height: _sectionGap(context, base: 12)),
                                 PromoCarousel(
-                                  onNonTap: () => _openModule(
-                                    HomeModulesCatalog.byId('bread'),
+                                  onNonTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'bread',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId('bread'),
+                                    ),
                                   ),
-                                  onCarpetWashTap: () =>
-                                      _push(const CarpetWashScreen()),
-                                  onMilkTap: () =>
-                                      _push(const MilkPickupScreen()),
-                                  onTaomTap: () => _openModule(
-                                    HomeModulesCatalog.byId('food'),
+                                  onCarpetWashTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'carpet_wash',
+                                    () => _push(const CarpetWashScreen()),
                                   ),
-                                  onBozorTap: () => _openModule(
-                                    HomeModulesCatalog.byId(
-                                        'cheap_products_home'),
+                                  onMilkTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'milk',
+                                    () => _push(const MilkPickupScreen()),
                                   ),
-                                  onLocalTaxiTap: () => _openModule(
-                                    HomeModulesCatalog.byId('local_taxi'),
+                                  onTaomTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'food',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId('food'),
+                                    ),
                                   ),
-                                  onIntercityTap: () => _openModule(
-                                    HomeModulesCatalog.byId('intercity'),
+                                  onBozorTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'cheap_products_home',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId(
+                                          'cheap_products_home'),
+                                    ),
                                   ),
-                                  onMarshrutTap: () => _openModule(
-                                    HomeModulesCatalog.byId('marshrut'),
+                                  onLocalTaxiTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'local_taxi',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId('local_taxi'),
+                                    ),
+                                  ),
+                                  onIntercityTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'intercity',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId('intercity'),
+                                    ),
+                                  ),
+                                  onMarshrutTap: HomeModuleGate.gatedTap(
+                                    context,
+                                    'marshrut',
+                                    () => _openModule(
+                                      HomeModulesCatalog.byId('marshrut'),
+                                    ),
                                   ),
                                 ),
                                 SizedBox(
@@ -429,6 +598,11 @@ class _HomeViewState extends State<_HomeView> {
                                     HomeModulesCatalog.byId('marshrut'),
                                   ),
                                   onCourier: () async {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'courier')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
                                     final phone = phoneDigits(
                                       context.read<HomeController>().phone,
                                     );
@@ -444,11 +618,18 @@ class _HomeViewState extends State<_HomeView> {
                                   onFood: () => _openModule(
                                     HomeModulesCatalog.byId('food'),
                                   ),
-                                  onJobAd: () => _push(
-                                    const JobsScreen(
-                                      initialTabIndex: JobsTabs.ad,
-                                    ),
-                                  ),
+                                  onJobAd: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'jobs')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    _push(
+                                      const JobsScreen(
+                                        initialTabIndex: JobsTabs.ad,
+                                      ),
+                                    );
+                                  },
                                   onOnlineMarket: () => _openModule(
                                     HomeModulesCatalog.byId(
                                         'cheap_products_home'),
@@ -458,10 +639,11 @@ class _HomeViewState extends State<_HomeView> {
                                   ),
                                   onCarpetWash: () =>
                                       _push(const CarpetWashScreen()),
-                                  onSut: () => _push(const MilkPickupScreen()),
-                                  onCarWash: _showTezKundaSnack,
-                                  onTire: _showTezKundaSnack,
-                                  onOilChange: _showTezKundaSnack,
+                                  onSut: () =>
+                                      _push(const MilkPickupScreen()),
+                                  onCarWash: () {},
+                                  onTire: () {},
+                                  onOilChange: () {},
                                   onCircles: () =>
                                       _push(const CirclesHubScreen()),
                                   onDating: () =>
@@ -587,40 +769,55 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final items = <_GridItemData>[
-      _GridItemData('assets/images/services/service_taxi_local.png',
+    final rawItems = <_GridItemData>[
+      _GridItemData('local_taxi', 'assets/images/services/service_taxi_local.png',
           context.tr('home_module_local'), widget.onLocal),
-      _GridItemData('assets/images/services/service_taxi_intercity.png',
+      _GridItemData('intercity', 'assets/images/services/service_taxi_intercity.png',
           context.tr('home_module_intercity'), widget.onIntercity),
-      _GridItemData('assets/images/services/service_marshrut.png',
+      _GridItemData('marshrut', 'assets/images/services/service_marshrut.png',
           context.tr('home_module_marshrut'), widget.onMarshrut),
-      _GridItemData('assets/images/services/service_courier.png',
+      _GridItemData('courier', 'assets/images/services/service_courier.png',
           context.tr('home_module_courier'), widget.onCourier),
-      _GridItemData('assets/images/services/service_sell.png',
+      _GridItemData('sell', 'assets/images/services/service_sell.png',
           context.tr('home_module_sell'), widget.onSell),
-      _GridItemData('assets/images/services/service_food.png',
+      _GridItemData('food', 'assets/images/services/service_food.png',
           context.tr('home_module_food'), widget.onFood),
-      _GridItemData('assets/images/services/service_jobs.png',
+      _GridItemData('jobs', 'assets/images/services/service_jobs.png',
           context.tr('home_module_jobs'), widget.onJobAd),
-      _GridItemData('assets/images/services/service_market.png',
+      _GridItemData('cheap_products_home', 'assets/images/services/service_market.png',
           context.tr('home_module_cheap_products'), widget.onOnlineMarket),
-      _GridItemData('assets/images/services/service_bread.png',
+      _GridItemData('bread', 'assets/images/services/service_bread.png',
           context.tr('home_module_bread'), widget.onNon),
-      _GridItemData('assets/images/services/service_carpet_wash.png',
+      _GridItemData('carpet_wash', 'assets/images/services/service_carpet_wash.png',
           context.tr('home_module_carpet'), widget.onCarpetWash),
-      _GridItemData('assets/images/services/service_relatives.png',
+      _GridItemData('circles', 'assets/images/services/service_relatives.png',
           context.tr('home_module_relatives'), widget.onCircles),
-      _GridItemData(null, context.tr('dating_short_label'), widget.onDating,
-          emoji: '❤️', iconScale: 0.85),
-      _GridItemData('assets/images/services/service_milk.png',
+      _GridItemData('dating', null, context.tr('dating_short_label'),
+          widget.onDating, emoji: '❤️', iconScale: 0.85),
+      _GridItemData('milk', 'assets/images/services/service_milk.png',
           context.tr('milk_short_label'), widget.onSut),
-      _GridItemData('assets/images/services/service_tire.png',
+      _GridItemData('tire', 'assets/images/services/service_tire.png',
           context.tr('home_module_tire'), widget.onTire),
-      _GridItemData('assets/images/services/service_car_wash.png',
+      _GridItemData('car_wash', 'assets/images/services/service_car_wash.png',
           context.tr('home_module_car_wash'), widget.onCarWash),
-      _GridItemData('assets/images/services/service_oil_change.png',
+      _GridItemData('oil_change', 'assets/images/services/service_oil_change.png',
           context.tr('home_module_oil_change'), widget.onOilChange),
     ];
+
+    final items = rawItems
+        .where((d) => HomeModuleGate.showInGrid(d.moduleId))
+        .map(
+          (d) => _GridItemData(
+            d.moduleId,
+            d.image,
+            d.label,
+            HomeModuleGate.gatedTap(context, d.moduleId, d.onTap),
+            icon: d.icon,
+            emoji: d.emoji,
+            iconScale: d.iconScale,
+          ),
+        )
+        .toList();
 
     final colGap = _scaled(context, 13).clamp(10.0, 13.0);
     final pageCount = (items.length / _perPage).ceil();
@@ -711,8 +908,17 @@ class _PageDots extends StatelessWidget {
 }
 
 class _GridItemData {
-  const _GridItemData(this.image, this.label, this.onTap,
-      {this.icon, this.emoji, this.iconScale = 1.0});
+  const _GridItemData(
+    this.moduleId,
+    this.image,
+    this.label,
+    this.onTap, {
+    this.icon,
+    this.emoji,
+    this.iconScale = 1.0,
+  });
+
+  final String moduleId;
   final String? image;
   final String label;
   final VoidCallback onTap;

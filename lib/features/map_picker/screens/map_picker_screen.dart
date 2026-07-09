@@ -1,37 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../models/map_picker_result.dart';
+import '../../../models/saved_place.dart';
+import '../../../services/location_service.dart';
 
 /// Xaritada manzil tanlash ekrani.
 ///
-/// `Navigator.pop(context, String)` orqali tanlangan manzilni qaytaradi.
-/// State butunlay lokal bo'lgani uchun `ChangeNotifier` ishlatilmaydi —
-/// `setState` yetarli.
+/// `Navigator.pop(context, MapPickerResult)` orqali tanlangan nuqta qaytariladi.
 class MapPickerScreen extends StatefulWidget {
-  const MapPickerScreen({super.key, required this.title});
+  const MapPickerScreen({
+    super.key,
+    required this.title,
+    this.recentPlaces = const [],
+  });
 
   final String title;
+  final List<SavedPlace> recentPlaces;
 
   @override
   State<MapPickerScreen> createState() => _MapPickerScreenState();
 }
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
-  /// Boshlang'ich xarita markazi (Gurlan, Xorazm).
-  static const _initialCenter = LatLng(41.4957, 60.5822);
+  static const _fallbackCenter = LatLng(41.2995, 69.2401);
 
-  /// Placeholder "so'nggi manzillar" — kelajakda foydalanuvchi tarixidan kelishi kerak.
-  static const _recentAddresses = <_RecentPlace>[
-    _RecentPlace(name: 'Гурлан маркази', lat: 41.4957, lng: 60.5822),
-    _RecentPlace(name: 'Гурлан бозори', lat: 41.4980, lng: 60.5850),
-    _RecentPlace(name: 'Гурлан МФЙ-1', lat: 41.4940, lng: 60.5800),
-    _RecentPlace(name: 'Гурлан МФЙ-2', lat: 41.4920, lng: 60.5780),
-  ];
-
+  GoogleMapController? _mapController;
+  LatLng? _mapCenter;
   LatLng? _selectedLocation;
   String? _selectedAddress;
   bool _showRecentPlaces = false;
+  bool _loadingGps = true;
+  String? _gpsError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialCenter());
+  }
+
+  Future<void> _loadInitialCenter() async {
+    try {
+      final coords =
+          await context.read<LocationService>().getFreshCoords();
+      if (!mounted) return;
+      final center = LatLng(coords.lat, coords.lng);
+      setState(() {
+        _mapCenter = center;
+        _loadingGps = false;
+      });
+      await _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(center, 14),
+      );
+    } on LocationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingGps = false;
+        _gpsError = LocationException.userMessage(e.kind);
+        _mapCenter = _fallbackCenter;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingGps = false;
+        _gpsError = LocationException.userMessage(
+          LocationErrorKind.lookupFailed,
+        );
+        _mapCenter = _fallbackCenter;
+      });
+    }
+  }
+
+  LatLng get _initialCenter => _mapCenter ?? _fallbackCenter;
 
   void _toggleRecentPlaces() {
     setState(() => _showRecentPlaces = !_showRecentPlaces);
@@ -52,6 +94,37 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     });
   }
 
+  void _confirmSelection() {
+    final loc = _selectedLocation;
+    if (loc == null) return;
+    Navigator.pop(
+      context,
+      MapPickerResult(
+        lat: loc.latitude,
+        lng: loc.longitude,
+        label: _selectedAddress ?? '',
+      ),
+    );
+  }
+
+  void _pickRecent(SavedPlace place) {
+    if (place.lat != null && place.lng != null) {
+      Navigator.pop(
+        context,
+        MapPickerResult(
+          lat: place.lat!,
+          lng: place.lng!,
+          label: place.address,
+        ),
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      MapPickerResult(lat: 0, lng: 0, label: place.address),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,9 +133,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
-          if (_selectedAddress != null)
+          if (_selectedLocation != null)
             TextButton(
-              onPressed: () => Navigator.pop(context, _selectedAddress),
+              onPressed: _confirmSelection,
               child: const Text('Танлаш',
                   style: TextStyle(
                       color: Colors.white,
@@ -74,8 +147,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       body: Stack(children: [
         GoogleMap(
           initialCameraPosition:
-              const CameraPosition(target: _initialCenter, zoom: 12),
-          onMapCreated: (_) {},
+              CameraPosition(target: _initialCenter, zoom: 14),
+          onMapCreated: (c) => _mapController = c,
           onTap: _onMapTap,
           onCameraMove: (_) => _hideRecentPlaces(),
           myLocationEnabled: true,
@@ -88,18 +161,55 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 }
               : const <Marker>{},
         ),
+        if (_loadingGps)
+          const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 12),
+                    Text('GPS...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_gpsError != null)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: Material(
+              color: Colors.orange.shade800,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  _gpsError!,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
         if (_selectedAddress != null) _selectedAddressBanner(),
-        if (!_showRecentPlaces) _recentPlacesButton(),
+        if (!_showRecentPlaces && widget.recentPlaces.isNotEmpty)
+          _recentPlacesButton(),
         if (_showRecentPlaces) _recentPlacesSheet(),
       ]),
-      bottomNavigationBar: _selectedAddress != null ? _confirmButton() : null,
+      bottomNavigationBar: _selectedLocation != null ? _confirmButton() : null,
     );
   }
 
-  // ─── Tanlangan manzil banner ───────────────────────────────────────
   Widget _selectedAddressBanner() {
     return Positioned(
-      top: 12,
+      top: _gpsError != null ? 72 : 12,
       left: 12,
       right: 12,
       child: Container(
@@ -121,7 +231,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     );
   }
 
-  // ─── "So'nggi manzillar" tugmasi ──────────────────────────────────
   Widget _recentPlacesButton() {
     return Positioned(
       bottom: 20,
@@ -142,7 +251,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             const Icon(Icons.history, size: 18, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
-              'Сўнгги ${_recentAddresses.length} та',
+              'Сақланган ${widget.recentPlaces.length}',
               style: const TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w500),
             ),
@@ -152,7 +261,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     );
   }
 
-  // ─── So'nggi manzillar paneli ──────────────────────────────────────
   Widget _recentPlacesSheet() {
     return Positioned(
       bottom: 0,
@@ -183,7 +291,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                     borderRadius: BorderRadius.circular(2)),
               ),
               const Spacer(),
-              const Text('Сўнгги манзиллар',
+              const Text('Сақланган манзиллар',
                   style: TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w600)),
               const Spacer(),
@@ -197,17 +305,21 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             child: ListView.separated(
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              itemCount: _recentAddresses.length,
+              itemCount: widget.recentPlaces.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
-                final place = _recentAddresses[index];
+                final place = widget.recentPlaces[index];
                 return ListTile(
                   leading: const Icon(Icons.location_on,
                       color: Colors.red, size: 22),
                   title: Text(place.name,
                       style: const TextStyle(fontSize: 14)),
+                  subtitle: place.address.isNotEmpty
+                      ? Text(place.address,
+                          maxLines: 1, overflow: TextOverflow.ellipsis)
+                      : null,
                   dense: true,
-                  onTap: () => Navigator.pop(context, place.name),
+                  onTap: () => _pickRecent(place),
                 );
               },
             ),
@@ -217,7 +329,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     );
   }
 
-  // ─── Tasdiqlash tugmasi ────────────────────────────────────────────
   Widget _confirmButton() {
     return SafeArea(
       child: Padding(
@@ -225,7 +336,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         child: SizedBox(
           height: 50,
           child: ElevatedButton.icon(
-            onPressed: () => Navigator.pop(context, _selectedAddress),
+            onPressed: _confirmSelection,
             icon: const Icon(Icons.check, size: 20),
             label: const Text('Тасдиқлаш',
                 style: TextStyle(
@@ -241,17 +352,4 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       ),
     );
   }
-}
-
-/// "So'nggi manzillar" panelidagi bitta yozuv.
-class _RecentPlace {
-  const _RecentPlace({
-    required this.name,
-    required this.lat,
-    required this.lng,
-  });
-
-  final String name;
-  final double lat;
-  final double lng;
 }

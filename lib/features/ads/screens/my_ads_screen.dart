@@ -10,7 +10,7 @@ import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/my_ad_actions.dart';
 
-/// Owner's active and hidden ads.
+/// Owner's active, pending moderation, and hidden ads.
 class MyAdsScreen extends StatefulWidget {
   const MyAdsScreen({super.key});
 
@@ -39,7 +39,7 @@ class _MyAdsScreenState extends State<MyAdsScreen>
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Менинг эълонларим'),
@@ -49,8 +49,10 @@ class _MyAdsScreenState extends State<MyAdsScreen>
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
+            isScrollable: true,
             tabs: [
               Tab(text: 'Фаол'),
+              Tab(text: 'Текширувда'),
               Tab(text: 'Яширилган'),
             ],
           ),
@@ -60,6 +62,7 @@ class _MyAdsScreenState extends State<MyAdsScreen>
             : TabBarView(
                 children: [
                   _AdsList(uid: _uid, status: 'active'),
+                  _AdsList(uid: _uid, status: 'pending', pendingOnly: true),
                   _AdsList(uid: _uid, status: 'inactive'),
                 ],
               ),
@@ -69,10 +72,15 @@ class _MyAdsScreenState extends State<MyAdsScreen>
 }
 
 class _AdsList extends StatelessWidget {
-  const _AdsList({required this.uid, required this.status});
+  const _AdsList({
+    required this.uid,
+    required this.status,
+    this.pendingOnly = false,
+  });
 
   final String uid;
   final String status;
+  final bool pendingOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +99,13 @@ class _AdsList extends StatelessWidget {
         }
         final ads = snap.data ?? const [];
         if (ads.isEmpty) {
-          return const Center(child: Text('Эълонлар йўқ'));
+          return Center(
+            child: Text(
+              pendingOnly
+                  ? 'Moderatsiyada e\'lonlar yo\'q'
+                  : 'E\'lonlar yo\'q',
+            ),
+          );
         }
         return ListView.separated(
           itemCount: ads.length,
@@ -111,27 +125,46 @@ class _AdsList extends StatelessWidget {
                         height: 60,
                         fit: BoxFit.cover,
                       )
-                    : Container(
-                        width: 60,
-                        height: 60,
-                        color: AppColors.cardImageBg,
-                        child: const Icon(Icons.image),
-                      ),
+                    : _thumbPlaceholder(),
               ),
               title: Text(
                 ad.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              subtitle: Text(
-                '${ad.price} so\'m'
-                '${date != null ? ' · ${dateFmt.format(date)}' : ''}',
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${ad.price} so\'m'
+                    '${date != null ? ' · ${dateFmt.format(date)}' : ''}',
+                  ),
+                  if (pendingOnly)
+                    Text(
+                      'Moderatsiyada — admin tasdiqlagach bozorda ko\'rinadi',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                ],
               ),
-              trailing: MyAdActions(ad: ad),
+              trailing: pendingOnly
+                  ? const Icon(Icons.hourglass_top, color: Colors.orange)
+                  : MyAdActions(ad: ad),
             );
           },
         );
       },
+    );
+  }
+
+  Widget _thumbPlaceholder() {
+    return Container(
+      width: 60,
+      height: 60,
+      color: AppColors.cardImageBg,
+      child: const Icon(Icons.image),
     );
   }
 }

@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "firebase": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase.ps1",
+    "firebase:login": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase-login.ps1",
+    "firestore:indexes": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-firestore-indexes.ps1"
   },
   "dependencies": {
     "express": "^4.18.2",

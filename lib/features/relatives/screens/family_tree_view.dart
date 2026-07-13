@@ -92,6 +92,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
 
   Size _contentSize = Size.zero;
   int _placed = 0;
+  bool _routingIncomplete = false;
   String _sig = '';
   int _colorSeq = 0;
   final Map<int, double> _siblingGapAtGen = {};
@@ -189,17 +190,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     );
   }
 
-  _FamilyNode? _resolveParentFamily(RelativePerson m) {
-    if (_has(m.fatherId)) {
-      final f = _familyOf[m.fatherId!];
-      if (f != null) return f;
-    }
-    if (_has(m.motherId)) {
-      return _familyOf[m.motherId!];
-    }
-    return null;
-  }
-
   bool _hasParentInTree(RelativePerson p) {
     if (_has(p.fatherId) && _familyOf.containsKey(p.fatherId)) return true;
     if (_has(p.motherId) && _familyOf.containsKey(p.motherId)) return true;
@@ -268,7 +258,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   }
 
   double _maxCardRowHeightAtGen(int gen) {
-    var h = _cardH;
+    var h = 0.0;
     for (final f in _families) {
       if (f.gen == gen) h = math.max(h, _cardRowHeight(f));
     }
@@ -296,13 +286,12 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   double _yForCardRow(int gen) {
     var y = 0.0;
     for (var g = 0; g < gen; g++) {
-      y += _maxCardRowHeightAtGen(g) + _corridorHeightAtGen(g);
+      final h = _maxCardRowHeightAtGen(g);
+      if (h == 0) continue;
+      y += h + _corridorHeightAtGen(g);
     }
     return y;
   }
-
-  double _corridorTop(int gen) =>
-      _yForCardRow(gen) + _maxCardRowHeightAtGen(gen);
 
   void _resetLayoutGaps() {
     _siblingGapAtGen.clear();
@@ -320,10 +309,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
         _siblingGapAt(gen) + (amount ?? _siblingGapAt(gen) * 0.5);
   }
 
-  void _expandRoots({double? amount}) {
-    _layoutRootGap += amount ?? _layoutRootGap * 0.3;
-  }
-
   void _resetFamilyLayout() {
     _cardRect.clear();
     _segments.clear();
@@ -333,40 +318,46 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
   }
 
-  /// Daraxtda ota-ona bo'lsa — majburiy bog'lash (istisno yo'q).
-  void _linkParentFamilies() {
-    for (final f in _families) {
-      if (f.parent != null) continue;
-      _FamilyNode? pf;
-      String? anchorId;
-      for (final m in f.members) {
-        final candidate = _resolveParentFamily(m);
-        if (candidate == null || identical(candidate, f)) continue;
-        if (!_hasDirectParentLink(m, candidate)) continue;
-        pf = candidate;
-        anchorId = m.id;
-        break;
-      }
-      if (pf == null) continue;
-      f.parent = pf;
-      f.anchorId = anchorId;
-      if (!pf.children.contains(f)) pf.children.add(f);
-    }
-  }
-
-  /// Har bir odam uchun gen: ota/ona bo'lsa gen = max(ota.gen)+1 (istisno yo'q).
+  /// Har bir odam uchun gen: ota/ona bo'lsa gen = max(ota.gen)+1.
+  /// Aylana bog'lanish (A.fatherId=B, B.fatherId=A) DFS bilan aniqlanib,
+  /// tsikl qirralari o'tkazib yuboriladi.
   void _assignGenerationsFromPersonLinks() {
     final g = <String, int>{for (final id in _byId.keys) id: 0};
     _maxGen = 0;
+
+    // Aylana bog'lanishlarni aniqlash: child→parent grafda DFS rang usuli.
+    final cycleEdges = <String, Set<String>>{};
+    const white = 0, gray = 1, black = 2;
+    final color = <String, int>{for (final id in _byId.keys) id: white};
+
+    void dfs(String id) {
+      color[id] = gray;
+      final p = _byId[id]!;
+      for (final parentId in [p.fatherId, p.motherId]) {
+        if (parentId == null || !_byId.containsKey(parentId)) continue;
+        if (color[parentId] == gray) {
+          cycleEdges.putIfAbsent(id, () => <String>{}).add(parentId);
+        } else if (color[parentId] == white) {
+          dfs(parentId);
+        }
+      }
+      color[id] = black;
+    }
+
+    for (final id in _byId.keys) {
+      if (color[id] == white) dfs(id);
+    }
+
     var changed = true;
     for (var pass = 0; pass < _byId.length + 2 && changed; pass++) {
       changed = false;
       for (final p in _byId.values) {
         var need = g[p.id]!;
-        if (_has(p.fatherId)) {
+        final skip = cycleEdges[p.id];
+        if (_has(p.fatherId) && !(skip?.contains(p.fatherId!) ?? false)) {
           need = math.max(need, g[p.fatherId!]! + 1);
         }
-        if (_has(p.motherId)) {
+        if (_has(p.motherId) && !(skip?.contains(p.motherId!) ?? false)) {
           need = math.max(need, g[p.motherId!]! + 1);
         }
         if (need > g[p.id]!) {
@@ -379,9 +370,33 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       f.gen = f.members.map((m) => g[m.id]!).fold(0, math.max);
       _maxGen = math.max(_maxGen, f.gen);
     }
+    _compactGenerations();
+  }
+
+  /// Avlodlar orasidagi bo'sh joylarni olib tashlab, zich diapazon qiladi.
+  void _compactGenerations() {
+    final usedGens = <int>{};
+    for (final f in _families) {
+      usedGens.add(f.gen);
+    }
+    if (usedGens.isEmpty) return;
+    final sorted = usedGens.toList()..sort();
+    final remap = <int, int>{};
+    for (var i = 0; i < sorted.length; i++) {
+      remap[sorted[i]] = i;
+    }
+    for (final f in _families) {
+      f.gen = remap[f.gen]!;
+    }
+    _maxGen = sorted.length - 1;
   }
 
   /// Oilalar daraxtini shaxsiy ota-ona bog'lanishidan qayta qurish.
+  ///
+  /// Intentional: each family is linked to a single parent family (the
+  /// highest-gen parent found). When both parents belong to different
+  /// families, only one link is created — this keeps the simplified tree
+  /// layout single-rooted per subtree and avoids diamond routing.
   void _rebuildFamilyTreeFromPersonGens() {
     for (final f in _families) {
       f.children.clear();
@@ -454,8 +469,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     return true;
   }
 
-  double _rowHeightFor(_FamilyNode f) => _cardRowHeight(f);
-
   void _build() {
     _sig = _signatureOf(widget.people);
     _byId = {for (final p in widget.people) p.id: p};
@@ -472,6 +485,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _colorSeq = 0;
     _contentSize = Size.zero;
     _placed = 0;
+    _routingIncomplete = false;
 
     final referenced = <String>{};
     for (final p in widget.people) {
@@ -491,7 +505,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     final partner = <String, String>{};
     void pair(String a, String b) {
       if (a == b) return;
-      if (partner.containsKey(a) || partner.containsKey(b)) return;
+      if (partner.containsKey(a) || partner.containsKey(b)) {
+        debugPrint('Tree: spouse conflict $a already paired');
+        return;
+      }
       partner[a] = b;
       partner[b] = a;
     }
@@ -523,7 +540,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       }
     }
 
-    _linkParentFamilies();
     _assignGenerationsFromPersonLinks();
     _rebuildFamilyTreeFromPersonGens();
 
@@ -709,6 +725,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
         (linesOk &&
             _segments.isNotEmpty &&
             _segmentsClearInterior(_segments));
+    _routingIncomplete = !routingOk;
     if (!routingOk && needsLines && attempt < maxLayoutAttempts - 1) {
       var expandGen = 0;
       for (final f in _families) {
@@ -956,11 +973,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
         laneStep: step,
       );
 
-      // Lane to'liq band bo'lsa — preferred Y ga qisqa fallback (koridor ichida).
-      final resolvedBusY = busY ??
-          (maxBusY >= minBusY
-              ? preferredBusY.clamp(minBusY, maxBusY)
-              : null);
+      final resolvedBusY = busY;
       if (resolvedBusY == null) {
         for (var i = 0; i < targets.length; i++) {
           final end = ends[i];
@@ -1289,12 +1302,24 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
         if (widget.immersive) {
           return Scaffold(
             backgroundColor: const Color(0xFFF5F4F8),
-            body: SafeArea(child: canvas),
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  canvas,
+                  if (_routingIncomplete) _layoutWarning(),
+                ],
+              ),
+            ),
           );
         }
         return Container(
           color: const Color(0xFFF5F4F8),
-          child: canvas,
+          child: Stack(
+            children: [
+              canvas,
+              if (_routingIncomplete) _layoutWarning(),
+            ],
+          ),
         );
       },
     );
@@ -1378,6 +1403,32 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _layoutWarning() {
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: Material(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  size: 16, color: Colors.orange.shade700),
+              const SizedBox(width: 4),
+              Text(
+                context.tr('rel_tree_layout_incomplete'),
+                style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

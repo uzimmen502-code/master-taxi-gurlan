@@ -93,24 +93,31 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     return StreamBuilder<({String componentId, String personId})>(
       stream: _repo.watchMyTreeMeta(widget.userId),
       builder: (context, metaSnap) {
+        if (metaSnap.hasError) return _streamError(metaSnap.error);
         final componentId = metaSnap.data?.componentId ?? '';
         return StreamBuilder<List<RelativePerson>>(
           stream: _relRepo.watchPeople(widget.userId),
           builder: (context, personalSnap) {
+            if (personalSnap.hasError) return _streamError(personalSnap.error);
             return StreamBuilder<Map<String, String>>(
               stream: _repo.watchRedirects(),
               builder: (context, redirSnap) {
+                if (redirSnap.hasError) return _streamError(redirSnap.error);
                 final redirects = redirSnap.data ?? const {};
                 return StreamBuilder<List<TreePerson>>(
                   stream: _repo.watchComponent(componentId),
                   builder: (context, compSnap) {
+                    if (compSnap.hasError) return _streamError(compSnap.error);
                     final personal =
                         personalSnap.data ?? const <RelativePerson>[];
                     final comp = compSnap.data ?? const <TreePerson>[];
                     _personalById = {for (final p in personal) p.id: p};
-                    if (personalSnap.connectionState ==
-                            ConnectionState.waiting &&
-                        compSnap.connectionState == ConnectionState.waiting) {
+                    final anyWaiting =
+                        metaSnap.connectionState == ConnectionState.waiting ||
+                        personalSnap.connectionState == ConnectionState.waiting ||
+                        redirSnap.connectionState == ConnectionState.waiting ||
+                        compSnap.connectionState == ConnectionState.waiting;
+                    if (anyWaiting && comp.isEmpty && personal.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
@@ -126,6 +133,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                         _personalById[id],
                         compById[id],
                       );
+                      if (merged == null) continue;
                       renderById[id] =
                           resolvePersonLinks(merged, redirects);
                     }
@@ -219,11 +227,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     }
   }
 
-  RelativePerson _mergeForTreeDisplay(
+  RelativePerson? _mergeForTreeDisplay(
     RelativePerson? personal,
     TreePerson? comp,
   ) {
-    if (comp == null) return personal!;
+    if (comp == null) return personal;
     if (personal == null) return comp.toRelativePerson();
     return RelativePerson(
       id: comp.id,
@@ -573,6 +581,34 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       _snack(RelativesL10n.trParams(
           context, 'error_generic', {'error': '$e'}));
     }
+  }
+
+  Widget _streamError(Object? error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              context.tr('rel_tree_load_error'),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$error',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _snack(String m) {

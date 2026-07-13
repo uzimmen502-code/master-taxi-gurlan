@@ -554,7 +554,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _resetLayoutGaps();
     _assignColors();
 
-    const maxLayoutAttempts = 48;
+    const maxLayoutAttempts = 12;
     for (var attempt = 0; attempt < maxLayoutAttempts; attempt++) {
       _resetFamilyLayout();
 

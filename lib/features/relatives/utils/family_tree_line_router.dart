@@ -29,7 +29,8 @@ class FamilyTreeLineRouter {
   /// Band qilingan segmentlar (penalty / kesishish tekshiruvi).
   final List<(Offset, Offset)> _occupied = [];
 
-  static const int maxPathPoints = 35;
+  static const int maxPathPoints = 20;
+  static const int maxBfsIterations = 400;
   static const double laneStepMin = 16.0;
   static const double laneStepMax = 28.0;
   static const double laneOverlapFactor = 0.9;
@@ -215,17 +216,13 @@ class FamilyTreeLineRouter {
     }
 
     // Band segment / to'siqdan aylanib o'tish uchun qo'shimcha yo'laklar.
-    for (final d in [-2.0, -1.0, 1.0, 2.0]) {
+    for (final d in [-1.0, 1.0]) {
       final dy = d * laneStep;
       final dx = d * laneStep;
       add(Offset(a.dx, a.dy + dy));
       add(Offset(b.dx, b.dy + dy));
-      add(Offset(a.dx, b.dy + dy));
-      add(Offset(b.dx, a.dy + dy));
       add(Offset(a.dx + dx, a.dy));
       add(Offset(b.dx + dx, b.dy));
-      add(Offset(a.dx + dx, b.dy));
-      add(Offset(b.dx + dx, a.dy));
     }
 
     return out;
@@ -246,30 +243,54 @@ class FamilyTreeLineRouter {
 
     final candidates = collectCandidates(a, b, obs);
     final visited = <String>{ptKey(a)};
-    final queue = <List<Offset>>[
-      [a],
-    ];
+    // Parent-pointer BFS — har bir node faqat 1 marta saqlanadi.
+    final parent = <String, String?>{ptKey(a): null};
+    final nodeAt = <String, Offset>{ptKey(a): a};
+    final queue = <String>[ptKey(a)];
+    var head = 0;
+    var iterations = 0;
+    String? goalKey;
 
-    while (queue.isNotEmpty) {
-      final path = queue.removeAt(0);
-      final cur = path.last;
+    while (head < queue.length && iterations < maxBfsIterations) {
+      iterations++;
+      final curKey = queue[head++];
+      final cur = nodeAt[curKey]!;
       if ((cur.dx - b.dx).abs() < 0.5 && (cur.dy - b.dy).abs() < 0.5) {
-        if (pathClear(path, obs)) return path;
-        continue;
+        goalKey = curKey;
+        break;
       }
-      if (path.length >= maxPathPoints) continue;
+      // Depth limit
+      var depth = 0;
+      var pk = curKey as String?;
+      while (pk != null && depth < maxPathPoints) {
+        pk = parent[pk];
+        depth++;
+      }
+      if (depth >= maxPathPoints) continue;
 
       for (final next in candidates) {
         if (!axisAligned(cur, next)) continue;
+        final nk = ptKey(next);
+        if (visited.contains(nk)) continue;
         if (!segmentClear(cur, next, obstacles: obs)) continue;
         if (!clearOfOccupied(cur, next)) continue;
-        final k = ptKey(next);
-        if (visited.contains(k)) continue;
-        visited.add(k);
-        queue.add([...path, next]);
+        visited.add(nk);
+        parent[nk] = curKey;
+        nodeAt[nk] = next;
+        queue.add(nk);
       }
     }
 
+    if (goalKey == null) return null;
+    // Reconstruct path
+    final path = <Offset>[];
+    var k = goalKey as String?;
+    while (k != null) {
+      path.add(nodeAt[k]!);
+      k = parent[k];
+    }
+    final result = path.reversed.toList();
+    if (pathClear(result, obs)) return result;
     return null;
   }
 

@@ -7,8 +7,6 @@ import '../../../repositories/sell_offers_repository.dart';
 import '../../ads/screens/cheap_products_screen.dart';
 import '../../ads/screens/create_ad_screen.dart';
 import '../../ads/screens/my_ads_screen.dart';
-import '../../jobs/jobs_tabs.dart';
-import '../../jobs/screens/jobs_screen.dart';
 import '../widgets/sell_submission_tile.dart';
 import 'sell_offer_screen.dart';
 
@@ -105,22 +103,6 @@ class _SellHubScreenState extends State<SellHubScreen>
                   subtitle: 'Эълон жойлаштириш · Менинг эълонларим',
                   onTap: phoneOk
                       ? () => _openMarketSheet(context)
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                _PathCard(
-                  icon: Icons.campaign_outlined,
-                  title: 'P2P Сотаман',
-                  subtitle: 'Иш топда бошқаларга эълон',
-                  onTap: phoneOk
-                      ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const JobsScreen(
-                                initialTabIndex: JobsTabs.sell,
-                              ),
-                            ),
-                          )
                       : null,
                 ),
               ],

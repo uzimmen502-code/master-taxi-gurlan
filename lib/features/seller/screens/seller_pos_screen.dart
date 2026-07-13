@@ -357,13 +357,15 @@ class _TezkorBody extends StatelessWidget {
                   color: Colors.white,
                   child: SafeArea(
                     left: false,
-                    child: _CartPanel(c: c),
+                    child: _CartPanel(c: c, fillHeight: true),
                   ),
                 ),
               ),
             ],
           );
         }
+        // Telefon: savat kontent balandligida (Expanded bilan yarim ekranni
+        // yeb qo'ymasligi uchun compact). Max — ekranning ~40%.
         return Column(
           children: [
             Expanded(child: grid),
@@ -374,9 +376,9 @@ class _TezkorBody extends StatelessWidget {
                 top: false,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * 0.48,
+                    maxHeight: constraints.maxHeight * 0.40,
                   ),
-                  child: _CartPanel(c: c),
+                  child: _CartPanel(c: c, fillHeight: false),
                 ),
               ),
             ),
@@ -396,7 +398,9 @@ class _OrdersBody extends StatelessWidget {
     if (c.payingOrder != null) {
       return Material(
         color: Colors.white,
-        child: SafeArea(child: _CartPanel(c: c, pickupMode: true)),
+        child: SafeArea(
+          child: _CartPanel(c: c, pickupMode: true, fillHeight: true),
+        ),
       );
     }
 
@@ -884,9 +888,15 @@ class _ProductCard extends StatelessWidget {
 }
 
 class _CartPanel extends StatefulWidget {
-  const _CartPanel({required this.c, this.pickupMode = false});
+  const _CartPanel({
+    required this.c,
+    this.pickupMode = false,
+    this.fillHeight = true,
+  });
   final SellerPosController c;
   final bool pickupMode;
+  /// false = telefon pastki panel: faqat kontent balandligi (kartalarni yopmasin).
+  final bool fillHeight;
 
   @override
   State<_CartPanel> createState() => _CartPanelState();
@@ -924,6 +934,81 @@ class _CartPanelState extends State<_CartPanel> {
     super.dispose();
   }
 
+  double _compactLinesHeight(bool pickup, List<SellerCartLine> lines) {
+    if (pickup) {
+      final n = widget.c.payingOrder?.items.length ?? 0;
+      if (n == 0) return 36;
+      return (n * 44.0).clamp(44.0, 120.0);
+    }
+    if (lines.isEmpty) return 32;
+    return (lines.length * 56.0).clamp(56.0, 120.0);
+  }
+
+  Widget _cartLinesList(
+    SellerPosController c,
+    bool pickup,
+    List<SellerCartLine> lines,
+  ) {
+    if (pickup) {
+      return ListView(
+        shrinkWrap: !widget.fillHeight,
+        physics: widget.fillHeight
+            ? null
+            : const ClampingScrollPhysics(),
+        children: c.payingOrder!.items
+            .map((it) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(it.name),
+                  trailing: Text(
+                    '×${it.qty ?? it.count} · ${formatPrice(it.lineTotal > 0 ? it.lineTotal : it.itemTotal)}',
+                  ),
+                ))
+            .toList(),
+      );
+    }
+    if (lines.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Mahsulot tanlang',
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: !widget.fillHeight,
+      physics: widget.fillHeight ? null : const ClampingScrollPhysics(),
+      itemCount: lines.length,
+      itemBuilder: (_, i) {
+        final l = lines[i];
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('${l.emoji} ${l.name}'),
+          subtitle: Text('${formatPrice(l.unitPrice)} × ${l.qty}'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: () =>
+                    c.setQty(l.key, l.qty - (l.kind == 'food' ? 0.5 : 1)),
+              ),
+              Text('${l.qty}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () =>
+                    c.setQty(l.key, l.qty + (l.kind == 'food' ? 0.5 : 1)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
@@ -931,9 +1016,19 @@ class _CartPanelState extends State<_CartPanel> {
     final lines = c.cart.values.toList();
     final total = pickup ? c.payingOrder!.total : c.cartTotal;
 
+    final linesList = _cartLinesList(c, pickup, lines);
+    final linesBlock = widget.fillHeight
+        ? Expanded(child: linesList)
+        : SizedBox(
+            height: _compactLinesHeight(pickup, lines),
+            child: linesList,
+          );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       child: Column(
+        mainAxisSize:
+            widget.fillHeight ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -960,66 +1055,9 @@ class _CartPanelState extends State<_CartPanel> {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: pickup
-                ? ListView(
-                    children: c.payingOrder!.items
-                        .map((it) => ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(it.name),
-                              trailing: Text(
-                                '×${it.qty ?? it.count} · ${formatPrice(it.lineTotal > 0 ? it.lineTotal : it.itemTotal)}',
-                              ),
-                            ))
-                        .toList(),
-                  )
-                : lines.isEmpty
-                    ? Center(
-                        child: Text(
-                          'Mahsulot tanlang',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: lines.length,
-                        itemBuilder: (_, i) {
-                          final l = lines[i];
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text('${l.emoji} ${l.name}'),
-                            subtitle: Text(
-                              '${formatPrice(l.unitPrice)} × ${l.qty}',
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline),
-                                  onPressed: () => c.setQty(
-                                      l.key,
-                                      l.qty -
-                                          (l.kind == 'food' ? 0.5 : 1)),
-                                ),
-                                Text('${l.qty}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold)),
-                                IconButton(
-                                  icon: const Icon(Icons.add_circle_outline),
-                                  onPressed: () => c.setQty(
-                                      l.key,
-                                      l.qty +
-                                          (l.kind == 'food' ? 0.5 : 1)),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-          ),
-          const Divider(),
+          const SizedBox(height: 4),
+          linesBlock,
+          const Divider(height: 12),
           Text(
             'Jami: ${formatPrice(total)} so\'m',
             style: const TextStyle(

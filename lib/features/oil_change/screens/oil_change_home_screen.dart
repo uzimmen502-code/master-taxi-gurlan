@@ -14,6 +14,7 @@ import 'oil_booking_screen.dart';
 import 'oil_car_setup_screen.dart';
 import 'oil_history_screen.dart';
 import 'oil_prices_screen.dart';
+import 'oil_ref_screen.dart';
 import 'oil_services_screen.dart';
 import 'oil_vehicle_edit_screen.dart';
 
@@ -302,6 +303,19 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           ],
         ),
         const SizedBox(height: 12),
+        _linkTile(
+          Icons.menu_book_outlined,
+          context.tr('oil_ref_guide'),
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OilRefScreen(
+                uid: _uid,
+                initialVehicleId: selected.id,
+              ),
+            ),
+          ),
+        ),
         _linkTile(
           Icons.history,
           context.tr('oil_history'),

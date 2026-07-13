@@ -35,6 +35,9 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging) setState(() {});
+    });
   }
 
   @override
@@ -171,8 +174,8 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Админ/бухгалтер: ном, нарх, расм. Илова галереяси шу ердан олади.',
-                        style: TextStyle(color: Colors.black54),
+                        'Сотув каталоги: ном, нарх, расм (ихтиёрий). Янги мой/фильтр қўшиш мумкин. Илова галереяси шу ердан олади.',
+                        style: TextStyle(color: Colors.black54, fontSize: 13),
                       ),
                     ],
                   ),
@@ -197,9 +200,25 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
                     backgroundColor: AppColors.primary,
                   ),
                   icon: const Icon(Icons.add),
-                  label: const Text('Қўшиш'),
+                  label: Text(_tabs.index == 1 ? 'Янги фильтр' : 'Янги мой'),
                 ),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF90CAF9)),
+              ),
+              child: const Text(
+                'Расм мажбурий эмас — «Расм юклаш» орқали қўшинг. Рўйхатда йўқ маҳсулотни «Янги мой/фильтр» билан ном, нарх, meta (SAE/API) ва хусусиятлар билан қўшиш мумкин.',
+                style: TextStyle(fontSize: 12.5, height: 1.35),
+              ),
             ),
           ),
           TabBar(
@@ -579,24 +598,46 @@ class _OilCatalogEditDialogState extends State<_OilCatalogEditDialog> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.upload),
-                      label: const Text('Расм юклаш'),
+                      label: Text(
+                        url.isEmpty ? 'Расм юклаш (ихтиёрий)' : 'Расмни алмаштириш',
+                      ),
                     ),
                   ),
+                  if (url.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Расмни олиб ташлаш',
+                      onPressed: _uploading
+                          ? null
+                          : () => setState(() => _imageUrl.clear()),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 10),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  'JPG/PNG/WebP, max 2 MB. Расмсиз ҳам сақлаш мумкин.',
+                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                ),
+              ),
               TextField(
                 controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Ном',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: _isFilter ? 'Фильтр номи *' : 'Мой номи *',
+                  hintText: _isFilter
+                      ? 'Масалан: Mann Filter W 712/75'
+                      : 'Масалан: Mobil 1 5W-30',
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _meta,
                 decoration: const InputDecoration(
-                  labelText: 'Қисқа meta (API, SAE…)',
+                  labelText: 'Хусусиятлар (API, SAE, Dexos…)',
+                  hintText: 'SP · 5W-30 · Dexos1 Gen 3',
                   border: OutlineInputBorder(),
                 ),
               ),

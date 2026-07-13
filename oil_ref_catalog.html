@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chevrolet Moy Ma'lumotnomasi — AVA Gurlan</title>
+<style>
+  :root {
+    --green: #1B7A28;
+    --green-bg: #EAF6EB;
+    --green-border: #B7DFB9;
+    --orange: #E65100;
+    --orange-bg: #FFF3E0;
+    --brown: #5D4037;
+    --brown-bg: #EFEBE9;
+    --ink: #1A2E1B;
+    --muted: #6B7C6C;
+    --bg: #F5F7F4;
+    --card: #fff;
+    --primary: #2E7D32;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 12px 60px;
+  }
+
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 20px 16px 12px;
+    margin: 0 -12px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 { font-size: 18px; font-weight: 800; }
+  header p { font-size: 12px; opacity: .8; margin-top: 2px; }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    background: var(--primary);
+    margin: 0 -12px;
+    padding: 0 12px;
+    position: sticky;
+    top: 56px;
+    z-index: 99;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px 4px;
+    font-weight: 700;
+    font-size: 13px;
+    color: rgba(255,255,255,.65);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all .2s;
+    user-select: none;
+  }
+  .tab.active {
+    color: #fff;
+    border-bottom-color: #fff;
+  }
+  .tab:hover { color: #fff; }
+
+  .search-bar {
+    padding: 10px 0 6px;
+    position: sticky;
+    top: 99px;
+    z-index: 98;
+    background: var(--bg);
+  }
+  .search-bar input {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    font-size: 14px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23999' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E") 12px center no-repeat;
+    outline: none;
+  }
+  .search-bar input:focus { border-color: var(--primary); }
+
+  .stats {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .stat-badge {
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-weight: 700;
+  }
+  .stat-full { background: rgba(27,122,40,.1); color: var(--green); }
+  .stat-semi { background: rgba(230,81,0,.1); color: var(--orange); }
+  .stat-mineral { background: rgba(93,64,55,.1); color: var(--brown); }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: box-shadow .2s;
+    border: 1px solid #e8ede8;
+  }
+  .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .card-num {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .brand-logo {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    object-fit: contain;
+    flex-shrink: 0;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+  }
+  .brand-logo-fallback {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900;
+    font-size: 13px;
+    color: #fff;
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+  .num-full { background: rgba(27,122,40,.12); color: var(--green); }
+  .num-semi { background: rgba(230,81,0,.12); color: var(--orange); }
+  .num-mineral { background: rgba(93,64,55,.12); color: var(--brown); }
+
+  .card-info { flex: 1; min-width: 0; }
+  .card-brand {
+    font-size: 14px;
+    color: #7B1FA2;
+    font-weight: 800;
+    font-style: italic;
+  }
+  .card-name { font-weight: 800; font-size: 14px; word-break: break-word; }
+
+  .card-rating {
+    padding: 3px 8px;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 800;
+    font-size: 12px;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .rate-high { background: #2E7D32; }
+  .rate-mid { background: #F57F17; }
+  .rate-low { background: #795548; }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 8px;
+  }
+  .chip {
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    position: relative;
+    cursor: help;
+  }
+  .chip .chip-tip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    font-style: normal;
+    white-space: normal;
+    width: 220px;
+    line-height: 1.4;
+    z-index: 300;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    pointer-events: none;
+  }
+  .chip:hover .chip-tip { display: block; }
+  .chip-sae { background: rgba(21,101,192,.1); color: #1565C0; }
+  .chip-api { background: rgba(63,81,181,.1); color: #3F51B5; }
+  .chip-acea { background: rgba(0,150,136,.1); color: #009688; }
+  .chip-dexos { background: rgba(46,125,50,.1); color: #2E7D32; }
+  .chip-country { background: rgba(96,125,139,.1); color: #607D8B; }
+
+  .card-bottom {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+    font-size: 10.5px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stars-chev { color: #F9A825; }
+  .stars-lpg { color: #EF6C00; }
+  .interval { color: var(--muted); font-weight: 600; margin-left: auto; }
+
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 200;
+    justify-content: center;
+    align-items: flex-end;
+  }
+  .detail-overlay.open { display: flex; }
+  .detail-sheet {
+    background: #fff;
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 900px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 16px 20px 24px;
+    animation: slideUp .25s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } }
+
+  .detail-handle {
+    width: 40px; height: 4px;
+    background: #ccc; border-radius: 2px;
+    margin: 0 auto 12px;
+  }
+  .detail-title { font-weight: 800; font-size: 18px; }
+  .detail-country { color: var(--muted); margin-bottom: 16px; }
+  .detail-row {
+    display: flex;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .detail-label {
+    width: 130px;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .detail-value { font-weight: 700; font-size: 13px; }
+
+  .spec-block {
+    margin-top: 14px;
+    border: 1px solid #e0e8e0;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .spec-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+  }
+  .spec-header:hover { background: #e8ede8; }
+  .spec-badge {
+    padding: 3px 10px;
+    border-radius: 8px;
+    font-weight: 800;
+    font-size: 13px;
+    color: #fff;
+  }
+  .spec-title {
+    font-weight: 800;
+    font-size: 14px;
+    flex: 1;
+  }
+  .spec-arrow {
+    font-size: 12px;
+    color: var(--muted);
+    transition: transform .2s;
+  }
+  .spec-block.open .spec-arrow { transform: rotate(180deg); }
+  .spec-body {
+    display: none;
+    padding: 12px 14px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #333;
+    border-top: 1px solid #e0e8e0;
+  }
+  .spec-block.open .spec-body { display: block; }
+  .spec-body h4 {
+    font-size: 13px;
+    font-weight: 800;
+    margin: 10px 0 4px;
+    color: var(--ink);
+  }
+  .spec-body h4:first-child { margin-top: 0; }
+  .spec-body ul {
+    margin: 4px 0 0 16px;
+    padding: 0;
+  }
+  .spec-body li { margin-bottom: 3px; }
+  .spec-body .highlight {
+    background: #FFF8E1;
+    border-left: 3px solid #F9A825;
+    padding: 6px 10px;
+    border-radius: 0 8px 8px 0;
+    margin: 8px 0;
+    font-weight: 600;
+  }
+  .spec-body .gas-warn {
+    background: #FFF3E0;
+    border-left: 3px solid #EF6C00;
+    padding: 6px 10px;
+    border-radius: 0 8px 8px 0;
+    margin: 8px 0;
+    font-weight: 600;
+  }
+
+  .reco-section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 12px 0;
+    border: 1px solid #e8ede8;
+  }
+  .reco-title { font-weight: 800; font-size: 15px; margin-bottom: 12px; }
+
+  .model-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .model-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 2px solid #ddd;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .2s;
+    user-select: none;
+  }
+  .model-chip.active {
+    background: rgba(46,125,50,.15);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .model-chip:hover { border-color: var(--primary); }
+
+  .slider-group { margin: 16px 0; }
+  .slider-label { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--primary); }
+  .slider-val { font-weight: 800; font-size: 13px; min-width: 70px; text-align: right; }
+
+  .switch-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .switch-row label { font-weight: 600; font-size: 14px; cursor: pointer; }
+  .switch-row input { accent-color: var(--primary); width: 18px; height: 18px; }
+
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .btn:hover { background: #256b29; }
+
+  .reco-hint {
+    padding: 12px;
+    border-radius: 12px;
+    margin-top: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .reco-hint.green { background: var(--green-bg); border: 1px solid var(--green-border); }
+  .reco-hint.orange { background: var(--orange-bg); border: 1px solid #FFCC80; }
+
+  .mileage-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  .mileage-table th,
+  .mileage-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    font-size: 13px;
+  }
+  .mileage-table th {
+    font-weight: 800;
+    background: var(--bg);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .mileage-table td:first-child { font-weight: 700; }
+
+  .sae-intro {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #444;
+    margin-bottom: 12px;
+  }
+  .sae-acc {
+    border: 1px solid #e0e8e0;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    background: #fff;
+  }
+  .sae-acc.open { border-color: #1565C0; }
+  .sae-acc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 12px;
+    cursor: pointer;
+    user-select: none;
+    background: #f7faf7;
+  }
+  .sae-acc.open .sae-acc-head { background: #E3F2FD; }
+  .sae-acc-badge {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 900;
+    font-size: 13px;
+    color: #fff;
+    background: #1565C0;
+    flex-shrink: 0;
+  }
+  .sae-acc-badge.warn { background: #EF6C00; }
+  .sae-acc-badge.ok { background: #2E7D32; }
+  .sae-acc-badge.hot { background: #6A1B9A; }
+  .sae-acc-badge.old { background: #795548; }
+  .sae-acc-badge.min { background: #546E7A; }
+  .sae-acc-meta { flex: 1; min-width: 0; }
+  .sae-acc-title { font-weight: 800; font-size: 13.5px; }
+  .sae-acc-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .sae-acc-arrow { color: var(--muted); font-size: 12px; transition: transform .2s; }
+  .sae-acc.open .sae-acc-arrow { transform: rotate(180deg); }
+  .sae-acc-body { display: none; padding: 12px; border-top: 1px solid #e0e8e0; font-size: 13px; line-height: 1.55; }
+  .sae-acc.open .sae-acc-body { display: block; }
+  .sae-param {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 4px 10px;
+    margin-bottom: 10px;
+    font-size: 12.5px;
+  }
+  .sae-param dt { color: var(--muted); font-weight: 700; }
+  .sae-param dd { font-weight: 600; color: #333; margin: 0; }
+  .sae-link-btn {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #E3F2FD;
+    color: #1565C0;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 12.5px;
+    border: none;
+    cursor: pointer;
+  }
+  .sae-link-btn:hover { background: #BBDEFB; }
+  .compare-wrap {
+    overflow-x: auto;
+    margin-top: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .compare-table {
+    width: 100%;
+    min-width: 640px;
+    border-collapse: collapse;
+    font-size: 11.5px;
+  }
+  .compare-table th,
+  .compare-table td {
+    padding: 7px 8px;
+    border: 1px solid #e8ede8;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .compare-table th {
+    background: #1565C0;
+    color: #fff;
+    font-weight: 800;
+  }
+  .compare-table th:first-child,
+  .compare-table td:first-child {
+    text-align: left;
+    font-weight: 700;
+    background: #f7faf7;
+    color: var(--ink);
+    position: sticky;
+    left: 0;
+  }
+  .compare-table th:first-child { background: #0D47A1; color: #fff; }
+  .compare-table .best { background: #E8F5E9; font-weight: 800; color: #2E7D32; }
+
+  .results-title {
+    font-weight: 800;
+    font-size: 15px;
+    margin: 16px 0 8px;
+  }
+
+  .empty-msg {
+    text-align: center;
+    padding: 40px 0;
+    color: var(--muted);
+  }
+
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0; right: 0;
+    background: #fff;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+    padding: 8px 12px 12px;
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+  }
+  .bottom-bar .btn { max-width: 900px; margin: 0; }
+
+  #recoResults { display: none; }
+  #recoResults.show { display: block; }
+
+  .edit-note {
+    background: #FFFDE7;
+    border: 1px solid #FFF59D;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .edit-note b { color: #F57F17; }
+
+  @media (max-width: 480px) {
+    .card-bottom { font-size: 10px; }
+    .detail-sheet { padding: 12px 14px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛢️ Moy Ma'lumotnomasi</h1>
+  <p>Chevrolet avtomobillari uchun · AVA Gurlan</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="full">To'liq Sintetik (50)</div>
+  <div class="tab" data-tab="semi">Yarim Sintetik (20)</div>
+  <div class="tab" data-tab="mineral">Mineral (20)</div>
+  <div class="tab" data-tab="reco">⭐ Tavsiya</div>
+</div>
+
+<div class="search-bar">
+  <input type="text" id="searchInput" placeholder="Qidirish: brend, nomi, SAE, API, dexos...">
+</div>
+
+<div class="stats">
+  <span class="stat-badge stat-full" id="countFull">50 ta sintetik</span>
+  <span class="stat-badge stat-semi" id="countSemi">20 ta yarim</span>
+  <span class="stat-badge stat-mineral" id="countMineral">20 ta mineral</span>
+</div>
+
+<div class="section active" id="sec-full"></div>
+<div class="section" id="sec-semi"></div>
+<div class="section" id="sec-mineral"></div>
+<div class="section" id="sec-reco">
+
+  <div class="reco-section">
+    <div class="reco-title">📊 Kilometraj bo'yicha tavsiyalar</div>
+    <table class="mileage-table">
+      <thead>
+        <tr><th>Kilometraj</th><th>Tavsiya</th></tr>
+      </thead>
+      <tbody id="mileageTable"></tbody>
+    </table>
+  </div>
+
+  <div class="reco-section" id="saeGuideSection">
+    <div class="reco-title">📖 SAE қўлланма — мой қалинлиги</div>
+    <p class="sae-intro">
+      SAE — мойнинг <b>ёпишқоқлик синфи</b> (0W-20, 5W-30, 5W-40, 10W-40, 15W-40).
+      У қалинлик ва ҳароратга боғлиқликни белгилайди: <b>W = Winter (қиш)</b> — совуқда қандай оқиши,
+      иккинчи рақам — иссиқда қандай ҳимоя қилиши. Ҳар бир синф ёнилғи тежаш ва мотор ҳимоясига бевосита таъсир қилади.
+    </p>
+    <div id="saeAccordions"></div>
+    <div class="reco-title" style="margin-top:16px;font-size:14px">📊 Қиёсий жадвал</div>
+    <div class="compare-wrap" id="saeCompare"></div>
+  </div>
+
+  <div class="reco-section">
+    <div class="reco-title">🚗 Model tanlang</div>
+    <div class="model-chips" id="modelChips"></div>
+    <div id="modelReco"></div>
+  </div>
+
+  <div class="reco-section">
+    <div class="reco-title">🔧 Menga mos moy</div>
+
+    <div class="slider-group">
+      <div class="slider-label">Yurgan masofasi</div>
+      <div class="slider-row">
+        <input type="range" id="mileageSlider" min="0" max="400000" step="10000" value="50000">
+        <span class="slider-val" id="mileageVal">50 ming km</span>
+      </div>
+    </div>
+
+    <div class="switch-row">
+      <input type="checkbox" id="lpgCheck">
+      <label for="lpgCheck">LPG/CNG (metan/propan)</label>
+    </div>
+
+    <button class="btn" onclick="doRecommend()">Tavsiya olish</button>
+
+    <div id="recoResults"></div>
+  </div>
+
+</div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+  <div class="detail-sheet" id="detailSheet"></div>
+</div>
+
+<div class="bottom-bar" id="bottomBar" style="display:none">
+  <button class="btn" onclick="switchTab('reco')">⭐ Menga mos moy tanlash</button>
+</div>
+
+<script>
+const DATA = {
+  full: [
+    {brand:'Mobil',name:'Mobil 1™ 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'A5/B5, C2',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
+    {brand:'Mobil',name:'Super™ All-In-One Protection D1 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Shell',name:'Helix Ultra SP 5W-30',country:'UK/Gollandiya',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
+    {brand:'Liqui Moly',name:'Special Tec DX1 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
+    {brand:'Castrol',name:'EDGE 5W-30',country:'UK',sae:'5W-30',api:'SP',acea:'A5/B5, C2',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
+    {brand:'Motul',name:'8100 ECO-LITE 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP-RC',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
+    {brand:'TotalEnergies',name:'Quartz 9000 Future FGC 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Ravenol',name:'HDX 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Valvoline',name:'SynPower DX1 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Valvoline',name:'Advanced Full Synthetic 5W-30',country:'AQSh',sae:'5W-30',api:'SP/SQ',acea:'GF-7A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'ZIC',name:'X7 D1 5W-30',country:'Janubiy Koreya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'ELF',name:'Evolution 900 USX 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Mannol',name:'Energy Premium 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'C2, C3',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Mannol',name:'For Chinese Cars 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Wolf',name:'EcoTech 5W-30 SP/RC D1-3',country:'Belgiya',sae:'5W-30',api:'SP/RC',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Fuchs',name:'TITAN Supersyn D1 5W-30',country:'Germaniya',sae:'5W-30',api:'SP RC',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Eurol',name:'Cleantec DXS 5W-30',country:'Gollandiya',sae:'5W-30',api:'SP (RC)',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Eni',name:'i-Sint tech GMX 5W-30',country:'Italiya',sae:'5W-30',api:'SP RC',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Petronas',name:'Syntium 3000 XS 5W-30',country:'Malayziya',sae:'5W-30',api:'SP',acea:'',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Kixx',name:'G1 Dexos1 5W-30',country:'Janubiy Koreya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Mobil',name:'Mobil 1 ESP 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Shell',name:'Helix Ultra ECT C3 5W-30',country:'UK/Gollandiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Liqui Moly',name:'Top Tec 4200 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Castrol',name:'EDGE C3 5W-30',country:'UK',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Motul',name:'8100 X-clean 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'TotalEnergies',name:'Quartz INEO MC3 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Ravenol',name:'VMO 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Valvoline',name:'SynPower C3 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'ZIC',name:'X9 5W-30',country:'Janubiy Koreya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'ELF',name:'Evolution 900 SXR 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Mobil',name:'Super™ Synthetic 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Shell',name:'Helix Ultra Professional AF 5W-30',country:'UK/Gollandiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Liqui Moly',name:'Molygen New Generation 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Castrol',name:'MAGNATEC 5W-30 DX',country:'UK',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Motul',name:'8100 Eco-energy 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'TotalEnergies',name:'Quartz 9000 Energy 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Ravenol',name:'ECS 5W-30',country:'Germaniya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Valvoline',name:'Extended Protection 5W-30',country:'AQSh',sae:'5W-30',api:'SP/SQ',acea:'GF-7A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'ZIC',name:'X5 5W-30',country:'Janubiy Koreya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'ELF',name:'Evolution 900 FT 5W-30',country:'Frantsiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Mannol',name:'Energy Formula JP 5W-30',country:'Germaniya',sae:'5W-30',api:'SP-RC',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Wolf',name:'OfficialTech 5W-30 C3',country:'Belgiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Fuchs',name:'TITAN GT1 5W-30 C3',country:'Germaniya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:9.0},
+    {brand:'Eurol',name:'Syntence 5W-30',country:'Gollandiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Eni',name:'i-Sint 5W-30',country:'Italiya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Petronas',name:'Syntium 7000 5W-30',country:'Malayziya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Kixx',name:'G1 5W-30 C3',country:'Janubiy Koreya',sae:'5W-30',api:'SP',acea:'C3',dexos:'Dexos2',chevCompat:4,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Idemitsu',name:'Fully Synthetic 5W-30 SP',country:'Yaponiya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Q8',name:'Formula Special G Long Life 5W-30',country:'Quvayt',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+    {brand:'Repsol',name:'Elite Long Life 5W-30',country:'Ispaniya',sae:'5W-30',api:'SP',acea:'GF-6A',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:8.5},
+  ],
+  semi: [
+    {brand:'Mobil',name:'Super 2000 X1 10W-40',country:'AQSh',sae:'10W-40',api:'SN Plus',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Shell',name:'Helix HX7 10W-40',country:'UK/Gollandiya',sae:'10W-40',api:'SN Plus',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Liqui Moly',name:'Optimal 10W-40',country:'Germaniya',sae:'10W-40',api:'SL/CF',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Castrol',name:'MAGNATEC 10W-40 A3/B4',country:'UK',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Motul',name:'6100 Synergie+ 10W-40',country:'Frantsiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'TotalEnergies',name:'Quartz 7000 10W-40',country:'Frantsiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Ravenol',name:'TSI 10W-40',country:'Germaniya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Valvoline',name:'MaxLife 10W-40',country:'AQSh',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'ELF',name:'Evolution 700 STI 10W-40',country:'Frantsiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'ZIC',name:'X5 10W-40',country:'Janubiy Koreya',sae:'10W-40',api:'SN Plus',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Mannol',name:'Classic 10W-40',country:'Germaniya',sae:'10W-40',api:'SN/CF',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.0},
+    {brand:'Fuchs',name:'TITAN SYN MC 10W-40',country:'Germaniya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Wolf',name:'GuardTech B4 10W-40',country:'Belgiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.0},
+    {brand:'Eni',name:'i-Sint Professional 10W-40',country:'Italiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.0},
+    {brand:'Petronas',name:'Syntium 800 10W-40',country:'Malayziya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.0},
+    {brand:'Kixx',name:'Gold SN 10W-40',country:'Janubiy Koreya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.0},
+    {brand:'Castrol',name:'GTX Ultraclean 10W-40 A3/B4',country:'UK',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Shell',name:'Helix HX6 10W-40',country:'UK/Gollandiya',sae:'10W-40',api:'SN',acea:'A3/B3',dexos:'',chevCompat:4,lpgCngCompat:3,intervalKm:'7–10',rating:8.0},
+    {brand:'Liqui Moly',name:'Super Leichtlauf 10W-40',country:'Germaniya',sae:'10W-40',api:'SN/CF',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+    {brand:'Motul',name:'4100 Turbolight 10W-40',country:'Frantsiya',sae:'10W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:4,lpgCngCompat:4,intervalKm:'7–10',rating:8.5},
+  ],
+  mineral: [
+    {brand:'Mobil',name:'Super 1000 X1 15W-40',country:'AQSh',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Shell',name:'Helix HX3 15W-40',country:'UK/Gollandiya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Liqui Moly',name:'MoS2 Leichtlauf 15W-40',country:'Germaniya',sae:'15W-40',api:'SL/CF',acea:'A3/B4',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Castrol',name:'GTX 15W-40 A3/B3',country:'UK',sae:'15W-40',api:'SL',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Motul',name:'2100 Power+ 15W-40',country:'Frantsiya',sae:'15W-40',api:'SL',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'TotalEnergies',name:'Quartz 5000 15W-40',country:'Frantsiya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Ravenol',name:'Formel Standard 15W-40',country:'Germaniya',sae:'15W-40',api:'SF/CD',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Valvoline',name:'Daily Protection 15W-40',country:'AQSh',sae:'15W-40',api:'SN',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'ELF',name:'Evolution 500 TS 15W-40',country:'Frantsiya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'ZIC',name:'X5 15W-40',country:'Janubiy Koreya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Mannol',name:'Universal 15W-40',country:'Germaniya',sae:'15W-40',api:'SG/CD',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Wolf',name:'GuardTech B4 15W-40',country:'Belgiya',sae:'15W-40',api:'SL/CF',acea:'A3/B4',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Fuchs',name:'TITAN Universal HD 15W-40',country:'Germaniya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Eni',name:'i-Sigma Universal 15W-40',country:'Italiya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Petronas',name:'Mach 5 15W-40',country:'Malayziya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Kixx',name:'HD 15W-40',country:'Janubiy Koreya',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Repsol',name:'Elite Multivalvulas 15W-40',country:'Ispaniya',sae:'15W-40',api:'SN',acea:'A3/B4',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.5},
+    {brand:'Idemitsu',name:'SN/CF 15W-40',country:'Yaponiya',sae:'15W-40',api:'SN/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Eurol',name:'Turbosyn 15W-40',country:'Gollandiya',sae:'15W-40',api:'SL/CF',acea:'A3/B4',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+    {brand:'Q8',name:'T 800 15W-40',country:'Quvayt',sae:'15W-40',api:'SL/CF',acea:'A3/B3',dexos:'',chevCompat:3,lpgCngCompat:3,intervalKm:'5–7',rating:7.0},
+  ]
+};
+
+const MODEL_RECOS = [
+  {model:'Damas',engine:'0.8L (F8C)',oilCapacity:'2.7',filterCapacity:'0.2',total:'2.9',reco:'10W-40 Yarim sintetik yoki 15W-40 Mineral'},
+  {model:'Matiz',engine:'0.8L (F8CV) / 1.0L (B10S1)',oilCapacity:'2.7',filterCapacity:'0.2',total:'2.9 / 3.2',reco:'10W-40 Yarim sintetik yoki 5W-30 Sintetik'},
+  {model:'Nexia 1',engine:'1.5L (G15MF) / 1.6L (A16DMS)',oilCapacity:'3.5',filterCapacity:'0.3',total:'3.8',reco:'10W-40 Yarim sintetik yoki 5W-30 Sintetik'},
+  {model:'Nexia 2',engine:'1.5L (A15SMS) / 1.6L (F16D3)',oilCapacity:'3.5',filterCapacity:'0.3',total:'3.8 / 4.0',reco:'5W-30 Sintetik yoki 10W-40 Yarim sintetik'},
+  {model:'Nexia 3',engine:'1.5L (L2B)',oilCapacity:'3.7',filterCapacity:'0.3',total:'4.0',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Spark',engine:'1.0L (B10D1) / 1.2L (B12D1)',oilCapacity:'3.2',filterCapacity:'0.2',total:'3.4 / 3.7',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Cobalt',engine:'1.5L (L2B)',oilCapacity:'3.7',filterCapacity:'0.3',total:'4.0',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Gentra',engine:'1.5L (B15D2)',oilCapacity:'3.5',filterCapacity:'0.3',total:'3.8',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Lacetti',engine:'1.4L / 1.6L (F14D3/F16D3)',oilCapacity:'3.5',filterCapacity:'0.3',total:'3.8 / 4.0',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Malibu',engine:'1.5T (LFV) / 2.0T',oilCapacity:'4.0',filterCapacity:'0.3',total:'4.3 / 5.0',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+  {model:'Tracker',engine:'1.0T (L3T) / 1.2T (LJ7)',oilCapacity:'3.5',filterCapacity:'0.3',total:'3.8 / 4.2',reco:'5W-30 Full Synthetic (Dexos1 Gen2/Gen3)'},
+];
+
+const MILEAGE_RECOS = [
+  {range:"0–80 ming km",reco:"0W-20 yoki 5W-30 to'liq sintetik"},
+  {range:"80–150 ming km",reco:"5W-30 to'liq sintetik"},
+  {range:"150–250 ming km",reco:"5W-40 to'liq sintetik"},
+  {range:"250 ming+",reco:"10W-40 yarim sintetik"},
+  {range:"Moy sarflaydi",reco:"10W-40 yoki 15W-40"},
+];
+
+let currentTab = 'full';
+let selectedModel = null;
+
+const BRAND_LOGOS = {
+  'Mobil':        {domain:'exxonmobil.com', color:'#E31837'},
+  'Shell':        {domain:'shell.com', color:'#FBCE07'},
+  'Liqui Moly':   {domain:'liqui-moly.com', color:'#00519E'},
+  'Castrol':      {domain:'castrol.com', color:'#00964B'},
+  'Motul':        {domain:'motul.com', color:'#E2001A'},
+  'TotalEnergies':{domain:'totalenergies.com', color:'#E42313'},
+  'Ravenol':      {domain:'ravenol.de', color:'#004990'},
+  'Valvoline':    {domain:'valvoline.com', color:'#004F9F'},
+  'ZIC':          {domain:'zicoil.com', color:'#1A237E'},
+  'ELF':          {domain:'elf-lubricants.com', color:'#E42313'},
+  'Mannol':       {domain:'mannol.de', color:'#1B5E20'},
+  'Wolf':         {domain:'wolfoil.com', color:'#B71C1C'},
+  'Fuchs':        {domain:'fuchs.com', color:'#00695C'},
+  'Eurol':        {domain:'eurol.com', color:'#1565C0'},
+  'Eni':          {domain:'eni.com', color:'#FDD835'},
+  'Petronas':     {domain:'petronas.com', color:'#00838F'},
+  'Kixx':         {domain:'kixxoil.com', color:'#E65100'},
+  'Idemitsu':     {domain:'idemitsu.com', color:'#D32F2F'},
+  'Q8':           {domain:'q8oils.com', color:'#7B1FA2'},
+  'Repsol':       {domain:'repsol.com', color:'#F57F17'},
+};
+
+function brandLogoHtml(brand) {
+  const info = BRAND_LOGOS[brand];
+  if (!info) {
+    return `<div class="brand-logo-fallback" style="background:${info?.color || '#666'}">${brand.charAt(0)}</div>`;
+  }
+  const initials = brand.length <= 3 ? brand : brand.substring(0, 2);
+  return `<img class="brand-logo" src="https://logo.clearbit.com/${info.domain}" alt="${brand}" onerror="this.outerHTML='<div class=\\'brand-logo-fallback\\' style=\\'background:${info.color}\\'>${initials}</div>'">`;
+}
+
+function stars(n, max=5) {
+  return '★'.repeat(n) + '☆'.repeat(max - n);
+}
+
+function rateClass(r) {
+  if (r >= 9.0) return 'rate-high';
+  if (r >= 8.0) return 'rate-mid';
+  return 'rate-low';
+}
+
+function numClass(type) {
+  return type === 'full' ? 'num-full' : type === 'semi' ? 'num-semi' : 'num-mineral';
+}
+
+function typeLabel(type) {
+  return type === 'full' ? "To'liq sintetik" : type === 'semi' ? 'Yarim sintetik' : 'Mineral';
+}
+
+function renderCard(p, i, type) {
+  let chips = `<span class="chip chip-sae">${p.sae}<span class="chip-tip">SAE — мой қовушқоқлиги (viscosity). Биринчи рақам (5W) — совуқда оқувчанлик, иккинчиси (30/40) — иссиқда қалинлик.</span></span>`;
+  chips += `<span class="chip chip-api">${p.api}<span class="chip-tip">API — Америка нефть институти стандарти. SP/SN — бензин мотори сифат даражаси (SP энг янги).</span></span>`;
+  if (p.acea) chips += `<span class="chip chip-acea">${p.acea}<span class="chip-tip">ACEA — Европа автоишлаб чиқарувчилар стандарти. A — бензин, B — дизел, C — катализатор мос (low-SAPS).</span></span>`;
+  if (p.dexos) chips += `<span class="chip chip-dexos">${p.dexos}<span class="chip-tip">Dexos — General Motors (Chevrolet) расмий мой стандарти. Dexos1 — бензин, Dexos2 — дизел/универсал. Gen 3 — энг сўнгги талаблар.</span></span>`;
+  chips += `<span class="chip chip-country">и/ч давлат: ${p.country}</span>`;
+
+  return `<div class="card" onclick='showDetail(${JSON.stringify(p).replace(/'/g,"&#39;")}, "${type}")'>
+    <div class="card-top">
+      <div class="card-num ${numClass(type)}">${i}</div>
+      ${brandLogoHtml(p.brand)}
+      <div class="card-info">
+        <div class="card-brand">${p.brand}</div>
+        <div class="card-name">${p.name}</div>
+      </div>
+      <div class="card-rating ${rateClass(p.rating)}">${p.rating}</div>
+    </div>
+    <div class="chips">${chips}</div>
+    <div class="card-bottom">
+      <span class="stars-chev">Chevrolet учун ${stars(p.chevCompat)} ${p.chevCompat}/5</span>
+      <span class="stars-lpg">Метан/Пропан мослиги ${stars(p.lpgCngCompat)} ${p.lpgCngCompat}/5</span>
+      <span class="interval">${p.intervalKm} минг км</span>
+    </div>
+  </div>`;
+}
+
+function renderList(type, query) {
+  const sec = document.getElementById('sec-' + type);
+  let items = DATA[type];
+  if (query) {
+    const q = query.toLowerCase();
+    items = items.filter(p =>
+      p.brand.toLowerCase().includes(q) ||
+      p.name.toLowerCase().includes(q) ||
+      p.sae.toLowerCase().includes(q) ||
+      p.api.toLowerCase().includes(q) ||
+      (p.dexos && p.dexos.toLowerCase().includes(q)) ||
+      (p.acea && p.acea.toLowerCase().includes(q)) ||
+      p.country.toLowerCase().includes(q)
+    );
+  }
+  if (items.length === 0) {
+    sec.innerHTML = '<div class="empty-msg">Topilmadi</div>';
+  } else {
+    sec.innerHTML = items.map((p, i) => renderCard(p, i + 1, type)).join('');
+  }
+
+  const counts = { full: DATA.full.length, semi: DATA.semi.length, mineral: DATA.mineral.length };
+  if (query) {
+    counts.full = DATA.full.filter(p => matchQ(p, query)).length;
+    counts.semi = DATA.semi.filter(p => matchQ(p, query)).length;
+    counts.mineral = DATA.mineral.filter(p => matchQ(p, query)).length;
+  }
+  document.getElementById('countFull').textContent = counts.full + ' ta sintetik';
+  document.getElementById('countSemi').textContent = counts.semi + ' ta yarim';
+  document.getElementById('countMineral').textContent = counts.mineral + ' ta mineral';
+}
+
+function matchQ(p, query) {
+  const q = query.toLowerCase();
+  return p.brand.toLowerCase().includes(q) ||
+    p.name.toLowerCase().includes(q) ||
+    p.sae.toLowerCase().includes(q) ||
+    p.api.toLowerCase().includes(q) ||
+    (p.dexos && p.dexos.toLowerCase().includes(q)) ||
+    (p.acea && p.acea.toLowerCase().includes(q)) ||
+    p.country.toLowerCase().includes(q);
+}
+
+function renderAll(query) {
+  renderList('full', query);
+  renderList('semi', query);
+  renderList('mineral', query);
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + tab));
+
+  const bar = document.getElementById('bottomBar');
+  bar.style.display = tab === 'reco' ? 'none' : 'flex';
+
+  const search = document.querySelector('.search-bar');
+  const stats = document.querySelector('.stats');
+  if (tab === 'reco') {
+    search.style.display = 'none';
+    stats.style.display = 'none';
+  } else {
+    search.style.display = '';
+    stats.style.display = '';
+  }
+}
+
+const SAE_GUIDE = {
+  '0W-20': {
+    badge: 'warn',
+    subtitle: 'Энг суюқ · замонавий стандарт',
+    thickness: 'Жуда суюқ. Совуқда (−35°C гача) энг яхши оқувчанлик.',
+    hotProtect: '100°C да ёпишқоқлиги 6.9–9.3 cSt (керакли минимум).',
+    main: 'Максимал ёнилғи тежамкорлиги (Fuel Economy). Ишқаланишни минимумга туширади.',
+    engines: 'Фақат 2010 йилдан кейинги, жуда аниқ геометрияли, турбонаддувсиз ёки гибрид двигателлар.',
+    chevy: 'Cobalt/Gentra 1.5 ёки Tracker учун фақат Dexos1 Gen3 тасдиғи билан ишлатиш мумкин.',
+    pros: 'Совуқ ишга тушиш осон, бензин тежалади, кул ва лой қолдиқлари жуда кам.',
+    cons: 'Эски ва иссиқда яхши совутмайдиган двигателларда металл-металл уринишига олиб келиши мумкин. 150 000 км дан ошган моторга қўйиш мумкин эмас.',
+    lpg: 'Мутлақо мос эмас (газ юқори ҳарорат беради, мой жуда суюқ бўлиб, поршен эришишига сабаб бўлади).',
+    lpgBad: true,
+  },
+  '5W-30': {
+    badge: 'ok',
+    subtitle: 'Универсал «Олтин стандарт» · завод тавсияси',
+    thickness: 'Ўртача суюқ. Қишда −30°C гача ишонади, ёзги иссиқда (40°C) яхши ҳимоя қилади.',
+    hotProtect: '100°C да ёпишқоқлиги 9.3–12.5 cSt. Аксарият двигателлар учун «шифт» ҳисобланади.',
+    main: 'Энергия тежамкорлиги ва ҳимоя ўртасидаги мукаммал мувозанат.',
+    engines: '0–150 000 км юргизишли барча замонавий бензин двигателлари.',
+    chevy: 'Chevrolet заводи томонидан расмий тавсия этилган асосий вязкость. Cobalt, Gentra, Nexia, Lacetti, Spark, Malibu (бензин) учун 1-рақамли танлов.',
+    pros: 'Универсал, ҳарорат ўзгаришига чидамли, Dexos1 Gen3 билан келганда 15 000 км гача ишлайди. LPG да ҳам ўртача даражада ишлайди (агар C3 бўлмаса).',
+    cons: 'Юқори юкланган турбо двигателлар ва иссиқ иқлимда 5W-40 га нисбатан ҳимояси паст.',
+    lpg: 'Тўлиқ синтетик ва Dexos1 Gen3 бўлса, LPG учун яроқли, лекин 10 000 км дан оширмаслик керак. Агар ACEA C3 (Dexos2) бўлса, LPG учун жуда яхши.',
+    lpgBad: false,
+  },
+  '5W-40': {
+    badge: 'hot',
+    subtitle: 'Иссиққа чидамли · «Европа» стандарти',
+    thickness: '5W-30 га нисбатан қалинроқ. Совуқда ҳам суюқ, лекин иссиқда (100°C) ёпишқоқлиги 12.5–16.3 cSt.',
+    hotProtect: 'Юқори ҳароратдаги ҳимоя (HTHS) — 3.5 дан юқори. Мой плёнкаси жуда мустаҳкам.',
+    main: '150–250 000 км, турбонаддувли ёки иссиқ иқлимда ишлайдиган двигателлар учун.',
+    engines: '150–250 000 км юргизишли, турбонаддувли, ёки иссиқ иқлимда ишлайдиган двигателлар.',
+    chevy: 'Cobalt/Gentra 150 000 км дан ошганда 5W-30 дан 5W-40 га ўтиш энг тўғри стратегия. Tracker турбо учун иссиқ ҳудудларда ҳам қўйиш мумкин.',
+    pros: 'Мойни камайтирмайди (сарфламайди), поршен-цилиндр оралиғи каттайганда ҳам босимни ушлаб туради.',
+    cons: '5W-30 га нисбатан бензин сарфи 2–3% га ошади. Совуқда (−20°C) бироз оғир ишга тушади.',
+    lpg: 'Энг яхши вариантлардан бири. ACEA A3/B4 ёки C3 (Dexos2) билан келса, газ юқори ҳароратида клапанларни ажойиб ҳимоя қилади.',
+    lpgBad: false,
+  },
+  '10W-40': {
+    badge: 'old',
+    subtitle: 'Ярим синтетик · эски двигателлар',
+    thickness: '5W-40 га нисбатан совуқда жуда қалин. −20°C гача ишлайди (ундан пастда мушкул).',
+    hotProtect: 'Эски двигателлардаги босимни тиклаш учун мўлжалланган. Одатда минерал ёки ярим синтетик.',
+    main: '250 000 км дан ошган, цилиндр-поршен гуруҳи эскирган, мой сарфлайдиган двигателлар.',
+    engines: '250 000 км дан ошган, мой сарфлайдиган двигателлар.',
+    chevy: 'Фақат эски авлод Nexia 1 / Damas / Matiz учун. Cobalt/Gentra (1.5) га қўйиш тавсия этилмайди — гидрокомпенсаторлар ўз вақтида «тўлдириб» улгурмайди.',
+    pros: 'Арзон, эски двигателда босимни яхши ушлайди, мой сарфини камайтиради.',
+    cons: 'Бензин тежамкорлиги ёмон (3–5% га ортади). Совуқда двигател жуда оғир айланади. Ресурси 7–8 минг км дан ошмайди.',
+    lpg: 'Ярим синтетик бўлгани учун LPG даги юқори ҳароратда тез ёниб кетади. LPG учун яроқсиз (агар махсус газ формуляцияси бўлмаса).',
+    lpgBad: true,
+  },
+  '15W-40': {
+    badge: 'min',
+    subtitle: 'Минерал · бюджет ва оғир юк',
+    thickness: 'Энг қалин. Совуқда −15°C гача ишлайди, ундан пастда двигателни айлантириш қийин.',
+    hotProtect: 'Эски технология. Кўпинча минерал асосда. Мой плёнкаси жуда қалин, лекин иссиқда тез суюқланади.',
+    main: 'Фақат 300 000+ км босиб ўтган, ёки заводдан 15W-40 талаб қиладиган эски двигателлар.',
+    engines: '300 000+ км ёки жуда эски / оғир юкли двигателлар.',
+    chevy: 'Фақат эски Nexia / Lacetti да мой сарфлаши жуда кўп бўлганда вақтинчалик. Cobalt / Gentra / Tracker га қатъиян ман.',
+    pros: 'Жуда арзон. Эски, ширали двигателларда гидрокомпенсатор шовқинини камайтиради (босимни оширади).',
+    cons: 'Ёнилғи тежамкорлиги энг ёмон. Қишда ишга тушиш муаммоси. Ресурси 5 000 км. Замонавий катализатор ва фильтрни тезда тиқиб қўяди.',
+    lpg: 'Мутлақо яроқсиз. Газ ҳароратида тезда ёниб, коксланиб қолади, поршен халқаларини бикиштириб қўяди.',
+    lpgBad: true,
+  },
+};
+
+function saeGuideBody(sae) {
+  const g = SAE_GUIDE[sae];
+  if (!g) return '<p>Ушбу SAE учун қўлланма топилмади.</p>';
+  return `
+    <dl class="sae-param">
+      <dt>Қалинлиги</dt><dd>${g.thickness}</dd>
+      <dt>Иссиқда ҳимоя</dt><dd>${g.hotProtect}</dd>
+      <dt>Асосий хусусият</dt><dd>${g.main}</dd>
+      <dt>Қандай двигател</dt><dd>${g.engines}</dd>
+      <dt>Chevrolet учун</dt><dd>${g.chevy}</dd>
+      <dt>Афзаллиги</dt><dd>${g.pros}</dd>
+      <dt>Камчилиги</dt><dd>${g.cons}</dd>
+    </dl>
+    <div class="${g.lpgBad ? 'gas-warn' : 'highlight'}">⛽ Газ (LPG/метан-пропан): ${g.lpg}</div>
+  `;
+}
+
+function saeExplain(sae) {
+  const g = SAE_GUIDE[sae];
+  const parts = sae.match(/(\d+)W[- ](\d+)/);
+  const w = parts ? parts[1] : '';
+  const hot = parts ? parts[2] : '';
+
+  let short = `
+    <div class="highlight">
+      <b>${sae}</b> — совуқда ${w}W (қиш), иссиқда ${hot} синф.
+      ${g ? g.subtitle + '.' : ''}
+    </div>
+  `;
+  if (g) {
+    short += `
+      <p style="margin-top:8px"><b>Chevrolet:</b> ${g.chevy}</p>
+      <div class="${g.lpgBad ? 'gas-warn' : 'highlight'}">⛽ LPG: ${g.lpg}</div>
+    `;
+  }
+  short += `<button type="button" class="sae-link-btn" onclick="event.stopPropagation(); openSaeGuide('${sae}')">📖 Тўлиқ SAE қўлланмани ўқиш →</button>`;
+  return short;
+}
+
+function initSaeGuide() {
+  const order = ['5W-30', '5W-40', '0W-20', '10W-40', '15W-40'];
+  const el = document.getElementById('saeAccordions');
+  el.innerHTML = order.map(sae => {
+    const g = SAE_GUIDE[sae];
+    const open = sae === '5W-30' ? ' open' : '';
+    return `
+      <div class="sae-acc${open}" id="sae-acc-${sae}" data-sae="${sae}">
+        <div class="sae-acc-head" onclick="toggleSaeAcc('${sae}')">
+          <span class="sae-acc-badge ${g.badge}">${sae}</span>
+          <div class="sae-acc-meta">
+            <div class="sae-acc-title">${sae}</div>
+            <div class="sae-acc-sub">${g.subtitle}</div>
+          </div>
+          <span class="sae-acc-arrow">▼</span>
+        </div>
+        <div class="sae-acc-body">${saeGuideBody(sae)}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('saeCompare').innerHTML = `
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Кўрсаткич</th>
+          <th>0W-20</th>
+          <th>5W-30</th>
+          <th>5W-40</th>
+          <th>10W-40</th>
+          <th>15W-40</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Қишлик чегара</td><td>−35°C</td><td>−30°C</td><td>−30°C</td><td>−20°C</td><td>−15°C</td></tr>
+        <tr><td>100°C ёпишқоқлик</td><td>6.9–9.3</td><td>9.3–12.5</td><td>12.5–16.3</td><td>12.5–16.3</td><td>15.0–18.0</td></tr>
+        <tr><td>HTHS ҳимоя</td><td>2.6–2.8 (паст)</td><td>2.9–3.2 (ўрта)</td><td>3.5–3.8 (юқори)</td><td>3.2–3.5</td><td>3.5–4.0</td></tr>
+        <tr><td>Ёнилғи тежаш</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐</td><td>⭐</td></tr>
+        <tr><td>Двигател ҳимояси</td><td>⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
+        <tr><td>Мой сарфи</td><td>Ортади</td><td>Нормал</td><td>Камаяди</td><td>Камаяди</td><td>Жуда камаяди</td></tr>
+        <tr>
+          <td>Замон. Chevrolet</td>
+          <td>Фақат Dexos1 G3</td>
+          <td class="best">✅ ЗАВОД ТАВСИЯСИ</td>
+          <td>150к+ / LPG</td>
+          <td>Фақат 250к+</td>
+          <td>Фақат 300к+</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+function toggleSaeAcc(sae) {
+  const acc = document.getElementById('sae-acc-' + sae);
+  if (!acc) return;
+  const wasOpen = acc.classList.contains('open');
+  document.querySelectorAll('.sae-acc').forEach(a => a.classList.remove('open'));
+  if (!wasOpen) acc.classList.add('open');
+}
+
+function openSaeGuide(sae) {
+  document.getElementById('detailOverlay').classList.remove('open');
+  switchTab('reco');
+  const section = document.getElementById('saeGuideSection');
+  if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.sae-acc').forEach(a => a.classList.remove('open'));
+  const key = SAE_GUIDE[sae] ? sae : '5W-30';
+  const acc = document.getElementById('sae-acc-' + key);
+  if (acc) {
+    acc.classList.add('open');
+    setTimeout(() => acc.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 200);
+  }
+}
+
+function apiExplain(api) {
+  const levels = {
+    'SP': {grade: 'Энг юқори (2020+)', desc: 'Ҳозирги кунда бензин моторлари учун энг замонавий стандарт.'},
+    'SP-RC': {grade: 'Энг юқори + ресурс тежаш', desc: 'SP стандарти + катализаторни ҳимоялаш хусусияти.'},
+    'SP/SQ': {grade: 'Энг юқори + келажак', desc: 'SP + SQ (янги авлод) стандартларига мос.'},
+    'SP/RC': {grade: 'Энг юқори + ресурс тежаш', desc: 'SP стандарти + ресурс тежовчи формула.'},
+    'SP (RC)': {grade: 'Энг юқори + ресурс тежаш', desc: 'SP стандарти + ресурс тежовчи формула.'},
+    'SP RC': {grade: 'Энг юқори + ресурс тежаш', desc: 'SP стандарти + ресурс тежовчи формула.'},
+    'SN Plus': {grade: 'Юқори (2018)', desc: 'Олдинги авлод юқори стандарт, ҳали ҳам яхши сифат.'},
+    'SN': {grade: 'Яхши (2010)', desc: 'Кўпчилик моторлар учун етарли, лекин энг янги эмас.'},
+    'SN/CF': {grade: 'Яхши (универсал)', desc: 'Бензин (SN) ва дизел (CF) моторлар учун универсал.'},
+    'SL': {grade: 'Ўрта (2004)', desc: 'Эскироқ стандарт, фақат оддий моторлар учун.'},
+    'SL/CF': {grade: 'Ўрта (универсал)', desc: 'Бензин (SL) ва дизел (CF) учун, эски авлод.'},
+    'SG/CD': {grade: 'Паст (1989)', desc: 'Жуда эски стандарт. Замонавий моторлар учун тавсия этилмайди.'},
+    'SF/CD': {grade: 'Паст (1988)', desc: 'Жуда эски стандарт. Замонавий моторлар учун тавсия этилмайди.'},
+  };
+  const info = levels[api] || {grade: api, desc: ''};
+
+  return `
+    <h4>📋 API ${api} нима?</h4>
+    <p><b>API</b> (American Petroleum Institute) — Америка нефт институтининг мой сифат стандарти. Ҳар бир ҳарф мой авлодини кўрсатади.</p>
+    <p><b>Даражаси:</b> ${info.grade}</p>
+    <p>${info.desc}</p>
+
+    <h4>📊 API даражалари (пастдан юқорига):</h4>
+    <ul>
+      <li><b>SF → SG → SH → SJ</b> — эски стандартлар (1988–2001), замонавий Chevrolet учун <span style="color:red">тавсия этилмайди</span></li>
+      <li><b>SL</b> (2004) — минерал мойлар учун минимал стандарт</li>
+      <li><b>SM</b> (2010) — ўрта сифат</li>
+      <li><b>SN / SN Plus</b> (2018) — яхши сифат, кўпчилик моторлар учун мос</li>
+      <li><b>SP</b> (2020) — <span style="color:green;font-weight:800">энг юқори стандарт</span>, барча янги Chevrolet учун тавсия этилади</li>
+    </ul>
+
+    <h4>🔧 Моторга таъсири:</h4>
+    <ul>
+      <li><b>Юқори API (SP)</b> = мотор ичидаги ёнилғи қолдиқлари, кислота ва қурум камроқ ҳосил бўлади</li>
+      <li><b>Юқори API</b> = поршень ҳалқалари, клапанлар ва турбина яхшироқ ҳимояланади</li>
+      <li><b>Юқори API</b> = мой узоқроқ хизмат қилади, мотор тозароқ ишлайди</li>
+      <li><b>Паст API (SL, SG)</b> = мой тезроқ эскиради, мотор ичи қурумланади, ресурс камаяди</li>
+    </ul>
+
+    <div class="gas-warn">⛽ Газли моторда API муҳим: Газ (метан/пропан) юқори ҳарорат ҳосил қилади. SP даражали мой иссиққа чидамлироқ, кислота ва қурумга қарши кучлироқ. Газли моторда SP дан паст стандарт ишлатманг!</div>
+  `;
+}
+
+function aceaExplain(acea) {
+  if (!acea) return '';
+
+  const parts = acea.split(/[,;]\s*/);
+  let details = '';
+  for (const part of parts) {
+    const p = part.trim();
+    if (p.startsWith('A5') || p.startsWith('A3')) {
+      details += `<li><b>${p.split('/')[0]}</b> — бензин моторлари учун. ${p.includes('A5') ? 'A5 = ёнилғи тежовчи (fuel-saving), юпқароқ мой' : 'A3 = стандарт ҳимоя, барча режимларда ишончли'}</li>`;
+    }
+    if (p.includes('B')) {
+      const bPart = p.includes('/') ? p.split('/')[1] : p;
+      details += `<li><b>${bPart}</b> — дизел моторлари учун. ${bPart.includes('B5') ? 'B5 = ёнилғи тежовчи дизел мой' : bPart.includes('B4') ? 'B4 = юқори самарали дизел мой, инжекторларни ҳимоялайди' : 'B3 = стандарт дизел ҳимояси'}</li>`;
+    }
+    if (p.startsWith('C2')) {
+      details += `<li><b>C2</b> — катализатор (DPF/TWC) мос мой. Low-SAPS: кам кул, кам олтингугурт. Катализаторни емирмайди, айни пайтда яхши ҳимоя қилади</li>`;
+    }
+    if (p.startsWith('C3')) {
+      details += `<li><b>C3</b> — катализатор мос, лекин C2 дан бироз қалинроқ. Кўпчилик замонавий европа моторлари учун тавсия этилади</li>`;
+    }
+    if (p.includes('GF-6A') || p.includes('GF-7A')) {
+      details += `<li><b>${p}</b> — ILSAC стандарти (Япон-Америка). ${p.includes('GF-7A') ? 'GF-7A = энг янги авлод, максимал ёнилғи тежаш' : 'GF-6A = замонавий ёнилғи тежовчи мой'}. Chevrolet ва GM моторларида расмий тавсия</li>`;
+    }
+  }
+
+  return `
+    <h4>🇪🇺 ACEA ${acea} нима?</h4>
+    <p><b>ACEA</b> (Association des Constructeurs Européens d'Automobiles) — Европа автомобилсозлар уюшмасининг мой стандарти. API дан фарқли ўлароқ, Европа моторларининг талабларига мослаштирилган.</p>
+
+    <h4>Ҳарфлар нимани англатади:</h4>
+    <ul>
+      <li><b>A</b> — бензин моторлари учун</li>
+      <li><b>B</b> — дизел моторлари учун</li>
+      <li><b>C</b> — катализатор ёки DPF фильтрли моторлар учун (Low-SAPS)</li>
+    </ul>
+
+    <h4>Ушбу мойнинг ACEA даражаси:</h4>
+    <ul>${details}</ul>
+
+    <h4>🔧 Моторга таъсири:</h4>
+    <ul>
+      <li>ACEA стандарти мойнинг мотор ичидаги тозалаш, кислотага қаршилик ва емирилишдан ҳимоя қобилиятини белгилайди</li>
+      <li><b>A3/B4</b> ёки ундан юқори = мотор ичи тоза, поршень ҳалқалари ёпишмайди</li>
+      <li><b>C2/C3</b> = катализатор ва DPF узоқ хизмат қилади</li>
+    </ul>
+
+    <div class="gas-warn">⛽ Газли моторда: ACEA A3/B4 ёки C3 мослиги бўлган мой газли моторда иссиққа яхшироқ чидайди. Газ ёқилғиси кўпроқ қурум ва кислота ҳосил қилади — ACEA стандарти бу масалада API дан батафсилроқ ҳимоя талаб қилади.</div>
+  `;
+}
+
+function dexosExplain(dexos) {
+  if (!dexos) return '';
+
+  const isDx1 = dexos.includes('Dexos1');
+  const isDx2 = dexos.includes('Dexos2');
+  const isGen3 = dexos.includes('Gen 3');
+
+  return `
+    <h4>🏭 ${dexos} нима?</h4>
+    <p><b>Dexos</b> — General Motors (GM) компаниясининг шахсий мой стандарти. Chevrolet GM компаниясига тегишли бўлгани учун, бу стандарт тўғридан-тўғри сизнинг мотор учун яратилган.</p>
+
+    <h4>Dexos турлари:</h4>
+    <ul>
+      <li><b>Dexos1</b> — фақат <b>бензин</b> моторлари учун. Chevrolet Cobalt, Gentra, Nexia 3, Spark, Lacetti, Malibu — барчаси шу стандартни талаб қилади</li>
+      <li><b>Dexos2</b> — <b>дизел ва универсал</b>. Бензин моторида ҳам ишлайди, лекин Dexos1 дан бироз фарқли формула</li>
+    </ul>
+
+    ${isGen3 ? `
+    <h4>Gen 3 нима?</h4>
+    <p><b>Gen 3</b> (3-авлод) — 2021 йилдан бошлаб жорий қилинган энг янги талаблар:</p>
+    <ul>
+      <li>Олдинги Gen 2 дан <b>40% кучлироқ</b> кислотага қаршилик</li>
+      <li><b>LSPI</b> (Low-Speed Pre-Ignition) — паст тезликда ёнилғининг бевақт алангаланишидан ҳимоя. Бу Chevrolet турбо моторларида жуда муҳим!</li>
+      <li>Мой <b>узоқроқ</b> ўз хусусиятларини сақлайди (10–15 минг км)</li>
+      <li>Катализаторни <b>ҳимоялайди</b> — кам кул (Low-SAPS)</li>
+    </ul>
+    ` : ''}
+
+    <h4>Нега Dexos муҳим?</h4>
+    <div class="highlight">
+      ${isDx1 ? 'Dexos1 — бу Chevrolet заводининг расмий талаби. Ушбу стандартсиз мой ишлатсангиз, мотор кафолати бекор бўлиши мумкин.' : 'Dexos2 — универсал стандарт. Chevrolet бензин моторида ишлайди (4/5 мослик), лекин Dexos1 афзалроқ.'}
+    </div>
+
+    <h4>🔧 Моторга реал таъсири:</h4>
+    <ul>
+      <li>Dexos ${isDx1 ? '1' : '2'} мой ишлатсангиз — мотор <b>тоза</b> ишлайди, ёғ каналлари <b>тиқилмайди</b></li>
+      <li>Поршень ҳалқалари <b>ёпишмайди</b> — компрессия сақланади</li>
+      <li>Мотор <b>камроқ ёниш мосламаси</b> (deposit) тўплайди</li>
+      <li>Мой <b>тежамкор</b> — ёнилғи сарфи 1-3% камаяди</li>
+    </ul>
+
+    <div class="gas-warn">⛽ Газли моторда Dexos: Газ (метан ёки пропан) моторда бензинга қараганда қуруқроқ ёнади — мотор ичидаги мойлаш камаяди. Dexos ${isDx1 ? '1 Gen 3' : '2'} стандартли мой бу муаммони ҳисобга олган — иссиққа чидамли базавий мой ва кучли қўшимчалар ишлатилган. Газли моторда Dexos стандартсиз мой ишлатиш мотор умрини 30-50% қисқартиради!</div>
+  `;
+}
+
+function showDetail(p, type) {
+  const sheet = document.getElementById('detailSheet');
+  sheet.innerHTML = `
+    <div class="detail-handle"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+      ${brandLogoHtml(p.brand)}
+      <div>
+        <div class="detail-title"><span style="color:#7B1FA2;font-style:italic">${p.brand}</span> ${p.name}</div>
+        <div class="detail-country">и/ч давлат: ${p.country} · ${typeLabel(type)}</div>
+      </div>
+    </div>
+
+    <div class="detail-row"><span class="detail-label">Chevrolet учун</span><span class="detail-value">${stars(p.chevCompat)} ${p.chevCompat}/5</span></div>
+    <div class="detail-row"><span class="detail-label">Метан/Пропан</span><span class="detail-value">${stars(p.lpgCngCompat)} ${p.lpgCngCompat}/5</span></div>
+    <div class="detail-row"><span class="detail-label">Интервал</span><span class="detail-value">${p.intervalKm} минг км</span></div>
+    <div class="detail-row"><span class="detail-label">Рейтинг</span><span class="detail-value">${p.rating}/10</span></div>
+
+    <div class="spec-block open" onclick="this.classList.toggle('open')">
+      <div class="spec-header">
+        <span class="spec-badge" style="background:#1565C0">SAE</span>
+        <span class="spec-title">${p.sae} — Мой қовушқоқлиги</span>
+        <span class="spec-arrow">▼</span>
+      </div>
+      <div class="spec-body">${saeExplain(p.sae)}</div>
+    </div>
+
+    <div class="spec-block" onclick="this.classList.toggle('open')">
+      <div class="spec-header">
+        <span class="spec-badge" style="background:#3F51B5">API</span>
+        <span class="spec-title">${p.api} — Сифат стандарти</span>
+        <span class="spec-arrow">▼</span>
+      </div>
+      <div class="spec-body">${apiExplain(p.api)}</div>
+    </div>
+
+    ${p.acea ? `
+    <div class="spec-block" onclick="this.classList.toggle('open')">
+      <div class="spec-header">
+        <span class="spec-badge" style="background:#009688">ACEA</span>
+        <span class="spec-title">${p.acea} — Европа стандарти</span>
+        <span class="spec-arrow">▼</span>
+      </div>
+      <div class="spec-body">${aceaExplain(p.acea)}</div>
+    </div>
+    ` : ''}
+
+    ${p.dexos ? `
+    <div class="spec-block" onclick="this.classList.toggle('open')">
+      <div class="spec-header">
+        <span class="spec-badge" style="background:#2E7D32">Dexos</span>
+        <span class="spec-title">${p.dexos} — GM/Chevrolet стандарти</span>
+        <span class="spec-arrow">▼</span>
+      </div>
+      <div class="spec-body">${dexosExplain(p.dexos)}</div>
+    </div>
+    ` : ''}
+  `;
+  document.getElementById('detailOverlay').classList.add('open');
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('detailOverlay')) {
+    document.getElementById('detailOverlay').classList.remove('open');
+  }
+}
+
+function initModelChips() {
+  const el = document.getElementById('modelChips');
+  el.innerHTML = MODEL_RECOS.map(r =>
+    `<div class="model-chip" data-model="${r.model}" onclick="selectModel('${r.model}')">🚗 ${r.model} <span style="font-size:11px;color:#888;font-weight:400">${r.total}L</span></div>`
+  ).join('');
+}
+
+function selectModel(m) {
+  selectedModel = selectedModel === m ? null : m;
+  document.querySelectorAll('.model-chip').forEach(c =>
+    c.classList.toggle('active', c.dataset.model === selectedModel)
+  );
+  const el = document.getElementById('modelReco');
+  if (selectedModel) {
+    const r = MODEL_RECOS.find(x => x.model === selectedModel);
+    el.innerHTML = `
+      <div class="reco-hint green" style="margin-bottom:8px">${selectedModel} учун: ${r.reco}</div>
+      <div style="background:#fff;border:1px solid #e0e8e0;border-radius:12px;padding:14px;margin-top:8px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:10px">🛢️ ${selectedModel} мотор мой ҳажми</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:13px;color:#666;width:120px">Мотор:</span>
+          <span style="font-weight:700;font-size:13px">${r.engine}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:13px;color:#666;width:120px">Мой (картерга):</span>
+          <span style="font-weight:700;font-size:13px">${r.oilCapacity} литр</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:13px;color:#666;width:120px">Фильтрга:</span>
+          <span style="font-weight:700;font-size:13px">${r.filterCapacity} литр</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:8px;border-top:2px solid #2E7D32">
+          <span style="font-size:14px;font-weight:800;color:#2E7D32;width:120px">ЖАМИ КЕРАК:</span>
+          <span style="font-weight:900;font-size:18px;color:#2E7D32">${r.total} литр</span>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#888;line-height:1.4">💡 Тавсия: 4 литрлик банка олинг. Қолган мой навбатдаги текширишда тўлдириш учун ишлатилади.</div>
+      </div>
+    `;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+function initMileageTable() {
+  const el = document.getElementById('mileageTable');
+  el.innerHTML = MILEAGE_RECOS.map(r =>
+    `<tr><td>${r.range}</td><td>${r.reco}</td></tr>`
+  ).join('');
+}
+
+function doRecommend() {
+  const mileage = parseInt(document.getElementById('mileageSlider').value);
+  const isLpg = document.getElementById('lpgCheck').checked;
+
+  let targetType;
+  if (mileage < 250000) targetType = 'full';
+  else targetType = 'semi';
+
+  const all = [...DATA.full.map(p=>({...p,t:'full'})), ...DATA.semi.map(p=>({...p,t:'semi'})), ...DATA.mineral.map(p=>({...p,t:'mineral'}))];
+  let filtered = all.filter(p => {
+    if (targetType === 'full') return p.t === 'full';
+    return p.t === 'semi';
+  });
+  if (isLpg) filtered = filtered.filter(p => p.lpgCngCompat >= 4);
+  filtered.sort((a, b) => b.rating - a.rating);
+
+  const top = filtered.slice(0, 10);
+  const el = document.getElementById('recoResults');
+  el.classList.add('show');
+
+  let html = `<div class="results-title">Top ${top.length} tavsiya</div>`;
+  html += top.map((p, i) => renderCard(p, i + 1, p.t)).join('');
+
+  if (mileage >= 250000) {
+    html += `<div class="reco-hint orange">250 ming km dan oshgan motorlar uchun 10W-40 yarim sintetik tavsiya etiladi.</div>`;
+  }
+  el.innerHTML = html;
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => switchTab(t.dataset.tab));
+});
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  renderAll(e.target.value);
+});
+
+document.getElementById('mileageSlider').addEventListener('input', e => {
+  const v = parseInt(e.target.value);
+  document.getElementById('mileageVal').textContent = (v / 1000).toFixed(0) + ' ming km';
+  document.getElementById('recoResults').classList.remove('show');
+});
+
+renderAll('');
+initModelChips();
+initMileageTable();
+initSaeGuide();
+document.getElementById('bottomBar').style.display = 'flex';
+</script>
+
+</body>
+</html>

@@ -23,7 +23,9 @@ Foydalanuvchi mashinasidan moy muddatini kuzatadi, tarix yuritadi, punkt/narx ko
 - Hub UX (proto B): `OilChangeHomeScreen` — AVA promise → car setup → oil types (animated bars) → gallery → ranked 1/2/3 (+ filter bundle) → book/history
 - Bars ticker: **parallel** 20s cycle (all start together); km label 0→5k/7k/10k synced with flag fill; no «ихчам · босиб» hint.
 - Catalog: static `data/oil_catalog.dart` + Firestore `oil_change_catalog` via `OilCatalogRepository` (app gallery fallback to static)
-- Admin: `OilCatalogAdminScreen` — seed, CRUD, image → Storage `oil_images/`
+- Admin: `OilCatalogAdminScreen` — seed, CRUD, image → Storage `oil_images/` (sotuv katalogi only; rasm optional; «Yangi moy/filtr»)
+- Reference guide: static `data/oil_ref_catalog.dart` (90 products + SAE/model capacity) + HTML prototype `oil_ref_catalog.html` — NOT in Admin B / not Firestore
+- `OilRefScreen(uid, initialVehicleId?)`: tabs **Tavsiya | Sintetik | Yarim | Mineral**; open gate → `OilCarSetupScreen` if 0 cars or selected `!isRecommendationReady`; 2+ cars → chip picker on Tavsiya; home navigates with uid+vehicleId
 - widgets: `oil_hub_widgets.dart`; setup: `OilCarSetupScreen`
 - Home grid: oil_change after bread (page1); carpet_wash after car_wash (page2). `oil_change` must be `enabled` in `config/module_defaults` when enforce=true (else «Tez orada»).
 - Onboarding: 7-sahifa ixtiyoriy mashina + 5 000 so‘m bonus; finish → saveCarInfo + claimCarProfileBonus

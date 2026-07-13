@@ -46,7 +46,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Order placement ALWA
 - Tabs: **Tezkor** (walk-in cash/wallet/mixed via `sellerPlaceSale`) + **Buyurtmalar** (pickup queue: filter Tayyor/Kutilmoqda/Hammasi, search, mark ready, same payment via `sellerSubmitPickupPayment`).
 - Customer food/bread cart: Yetkazish | Olib ketish → `fulfillmentMode` pickup|delivery (`placeOrderPostPaid`).
 - CFs: `sellerMarkPickupReady`, `sellerSubmitPickupPayment`; rules `isStaff` includes seller.
-- Catalog Tezkor: `food_catalog` + ready bread ONLY (no extras/yopish/toy — by design). Walk-in cash OK without phone; wallet/change needs customer phone.
+- Catalog Tezkor: `food_catalog` + tayyor bread + ёпиш qoldiq (`totalStock>0`); toy/extras yo‘q. Qidiruv maydoni yo‘q. Walk-in cash OK without phone; wallet/change needs customer phone.
 
 ## courier_orders (legacy, REMOVED 2026-07)
 - Collection `courier_orders` — admin read-only (tarix); Flutter/CF olib tashlangan. Audit: `functions/tools/audit_courier_orders_collection.js`.

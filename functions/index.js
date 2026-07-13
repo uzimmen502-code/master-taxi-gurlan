@@ -1800,11 +1800,23 @@ async function resolveSellerCatalogLine(kind, inventoryId) {
     const d = snap.data() || {};
     const typeRaw = String(d.type || 'tayyor').toLowerCase();
     const isReady = typeRaw === 'tayyor' || typeRaw === 'тайёр' || typeRaw === 'ready';
-    if (!isReady) {
+    const isYopish = typeRaw === 'yopish' || typeRaw === 'ёпиш';
+    // POS: tayyor + ёпиш қолдиқлари (той — yo'q).
+    if (!isReady && !isYopish) {
       throw new functions.https.HttpsError(
           'failed-precondition',
-          'POS faqat tayyor non',
+          'POS faqat tayyor yoki yopish non',
       );
+    }
+    if (isYopish) {
+      const total = Number(d.totalStock) || 0;
+      const sold = Number(d.soldToday) || 0;
+      if (total <= 0 || total - sold <= 0) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            'Yopish qoldiq zahirasi yo\'q',
+        );
+      }
     }
     const unitPrice = Math.trunc(Number(d.price || 0));
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {

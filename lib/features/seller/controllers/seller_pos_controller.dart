@@ -85,7 +85,6 @@ class SellerPosController extends ChangeNotifier {
   SellerMainTab mainTab = SellerMainTab.tezkor;
   SellerOrderFilter orderFilter = SellerOrderFilter.waiting;
   String orderSearch = '';
-  String productSearch = '';
 
   List<FoodProduct> foodProducts = const [];
   List<BreadProduct> breadProducts = const [];
@@ -184,20 +183,12 @@ class SellerPosController extends ChangeNotifier {
     }).toList();
   }
 
-  List<FoodProduct> get filteredFoodProducts {
-    final q = productSearch.trim().toLowerCase();
-    if (q.isEmpty) return foodProducts;
-    return foodProducts
-        .where((p) => p.name.toLowerCase().contains(q))
-        .toList();
-  }
-
-  List<BreadProduct> get filteredBreadProducts {
-    final q = productSearch.trim().toLowerCase();
-    if (q.isEmpty) return breadProducts;
-    return breadProducts
-        .where((p) => p.name.toLowerCase().contains(q))
-        .toList();
+  /// Rasta: tayyor non + ёпишдан қолган (zahirasi bor) nonlar.
+  static bool isPosSellableBread(BreadProduct p) {
+    if ((p.price ?? 0) <= 0) return false;
+    if (p.isReady) return !p.isSoldOut;
+    if (p.isYopish) return p.totalStock > 0 && p.remaining > 0;
+    return false;
   }
 
   Future<void> _init() async {
@@ -243,8 +234,7 @@ class SellerPosController extends ChangeNotifier {
     });
 
     _breadSub = _breadRepo.watchProducts().listen((list) {
-      breadProducts =
-          list.where((p) => p.isReady && (p.price ?? 0) > 0).toList();
+      breadProducts = list.where(isPosSellableBread).toList();
       notifyListeners();
     });
 
@@ -300,11 +290,6 @@ class SellerPosController extends ChangeNotifier {
 
   void setOrderSearch(String q) {
     orderSearch = q;
-    notifyListeners();
-  }
-
-  void setProductSearch(String q) {
-    productSearch = q;
     notifyListeners();
   }
 

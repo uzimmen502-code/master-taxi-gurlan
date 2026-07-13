@@ -1,12 +1,12 @@
-# Seller role / POS audit (2026-07-13)
-
-Overall **~5.5/10** → P0–P2 done. Entry: profile «Sotuv paneli» / home pin.
+# Seller role / POS (2026-07-13)
 
 ## Layout (phone)
-Tezkor: pastki `_CartPanel(fillHeight: false)` — kontent balandligi, max ~40% ekran. `Expanded` bilan doim yarim ekran yeb qo‘ymasligi uchun (2026-07-13 fix). Wide ≥720: side cart `fillHeight: true`.
+Tezkor: pastki savat `SizedBox(height: 42%|20%)` + ichida ListView — qatorlar (nima×qancha) tepada, to‘lov pastga scroll. Qidiruv maydoni YO‘Q.
+
+## Catalog
+- Food: `food_catalog` + `food_inventory`.
+- Bread: **tayyor** + **ёпиш qoldiq** (`totalStock>0` va remaining>0). Toy — yo‘q. CF `resolveSellerCatalogLine` shu qoida.
+- Yopish qoldiq kartada `(qoldiq)` yorlig‘i.
 
 ## P0–P2 DONE
-Catalog prices, stock, pickup ready-before-pay, badges, FCM, UUID Tezkor idempotency, search+receipt, shift summary, home pin, product images.
-
-## 10/10 (optional later)
-Print/share receipt; multi-seller store shift; offline queue.
+… (oldingi).

@@ -321,27 +321,7 @@ class _TezkorBody extends StatelessWidget {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 720;
         final ultra = constraints.maxWidth >= 1100;
-        final grid = Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Mahsulot qidirish',
-                  prefixIcon: const Icon(Icons.search),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onChanged: c.setProductSearch,
-              ),
-            ),
-            Expanded(child: _ProductGrid(c: c)),
-          ],
-        );
+        final grid = _ProductGrid(c: c);
         if (wide) {
           final cartW = ultra
               ? (constraints.maxWidth * 0.34).clamp(360.0, 440.0)
@@ -364,8 +344,8 @@ class _TezkorBody extends StatelessWidget {
             ],
           );
         }
-        // Telefon: savat kontent balandligida (Expanded bilan yarim ekranni
-        // yeb qo'ymasligi uchun compact). Max — ekranning ~40%.
+        // Telefon: savat max ~42%. Ichida qatorlar scroll — nima/qancha ko'rinsin.
+        final cartBusy = c.cart.isNotEmpty;
         return Column(
           children: [
             Expanded(child: grid),
@@ -374,11 +354,9 @@ class _TezkorBody extends StatelessWidget {
               color: Colors.white,
               child: SafeArea(
                 top: false,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * 0.40,
-                  ),
-                  child: _CartPanel(c: c, fillHeight: false),
+                child: SizedBox(
+                  height: constraints.maxHeight * (cartBusy ? 0.42 : 0.20),
+                  child: _CartPanel(c: c, fillHeight: true),
                 ),
               ),
             ),
@@ -688,17 +666,11 @@ class _ProductGrid extends StatelessWidget {
             ? 200.0
             : (constraints.maxWidth >= 720 ? 180.0 : 160.0);
         final tiles = <Widget>[
-          ...c.filteredFoodProducts.map((p) => _FoodTile(product: p, c: c)),
-          ...c.filteredBreadProducts.map((p) => _BreadTile(product: p, c: c)),
+          ...c.foodProducts.map((p) => _FoodTile(product: p, c: c)),
+          ...c.breadProducts.map((p) => _BreadTile(product: p, c: c)),
         ];
         if (tiles.isEmpty) {
-          return Center(
-            child: Text(
-              c.productSearch.trim().isEmpty
-                  ? 'Mahsulotlar yuklanmoqda…'
-                  : 'Topilmadi',
-            ),
-          );
+          return const Center(child: Text('Mahsulotlar yuklanmoqda…'));
         }
         return GridView.builder(
           padding: const EdgeInsets.all(12),
@@ -750,7 +722,7 @@ class _BreadTile extends StatelessWidget {
       emoji: product.emoji,
       imageUrl: product.imageUrl,
       assetImage: product.image,
-      name: product.name,
+      name: product.isYopish ? '${product.name} (qoldiq)' : product.name,
       price: product.price ?? 0,
       stockLabel: stock,
       soldOut: soldOut,
@@ -934,81 +906,6 @@ class _CartPanelState extends State<_CartPanel> {
     super.dispose();
   }
 
-  double _compactLinesHeight(bool pickup, List<SellerCartLine> lines) {
-    if (pickup) {
-      final n = widget.c.payingOrder?.items.length ?? 0;
-      if (n == 0) return 36;
-      return (n * 44.0).clamp(44.0, 120.0);
-    }
-    if (lines.isEmpty) return 32;
-    return (lines.length * 56.0).clamp(56.0, 120.0);
-  }
-
-  Widget _cartLinesList(
-    SellerPosController c,
-    bool pickup,
-    List<SellerCartLine> lines,
-  ) {
-    if (pickup) {
-      return ListView(
-        shrinkWrap: !widget.fillHeight,
-        physics: widget.fillHeight
-            ? null
-            : const ClampingScrollPhysics(),
-        children: c.payingOrder!.items
-            .map((it) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(it.name),
-                  trailing: Text(
-                    '×${it.qty ?? it.count} · ${formatPrice(it.lineTotal > 0 ? it.lineTotal : it.itemTotal)}',
-                  ),
-                ))
-            .toList(),
-      );
-    }
-    if (lines.isEmpty) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          'Mahsulot tanlang',
-          style: TextStyle(color: Colors.grey.shade600),
-        ),
-      );
-    }
-    return ListView.builder(
-      shrinkWrap: !widget.fillHeight,
-      physics: widget.fillHeight ? null : const ClampingScrollPhysics(),
-      itemCount: lines.length,
-      itemBuilder: (_, i) {
-        final l = lines[i];
-        return ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: Text('${l.emoji} ${l.name}'),
-          subtitle: Text('${formatPrice(l.unitPrice)} × ${l.qty}'),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: () =>
-                    c.setQty(l.key, l.qty - (l.kind == 'food' ? 0.5 : 1)),
-              ),
-              Text('${l.qty}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: () =>
-                    c.setQty(l.key, l.qty + (l.kind == 'food' ? 0.5 : 1)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
@@ -1016,19 +913,18 @@ class _CartPanelState extends State<_CartPanel> {
     final lines = c.cart.values.toList();
     final total = pickup ? c.payingOrder!.total : c.cartTotal;
 
-    final linesList = _cartLinesList(c, pickup, lines);
-    final linesBlock = widget.fillHeight
-        ? Expanded(child: linesList)
-        : SizedBox(
-            height: _compactLinesHeight(pickup, lines),
-            child: linesList,
-          );
+    final summary = pickup
+        ? c.payingOrder!.items
+            .map((it) =>
+                '${it.name} ×${it.qty ?? it.count}')
+            .join(' · ')
+        : lines
+            .map((l) => '${l.emoji} ${l.name} ×${_fmtQty(l.qty)}')
+            .join(' · ');
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
       child: Column(
-        mainAxisSize:
-            widget.fillHeight ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -1055,146 +951,233 @@ class _CartPanelState extends State<_CartPanel> {
                 ),
             ],
           ),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
-          linesBlock,
-          const Divider(height: 12),
-          Text(
-            'Jami: ${formatPrice(total)} so\'m',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primaryDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (!pickup)
-            TextField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Mijoz telefoni (ixtiyoriy)',
-                hintText: '90 123 45 67',
-                isDense: true,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                suffixIcon: c.walletLoading
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : null,
-              ),
-              onChanged: (v) {
-                _phoneDebounce?.cancel();
-                _phoneDebounce = Timer(const Duration(milliseconds: 500), () {
-                  c.setCustomerPhone(v);
-                });
-              },
-            )
-          else
-            Text(
-              'Mijoz: ${c.customerPhone} · Hamyon: ${formatPrice(c.walletBalance)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          if (!pickup && c.customerPhone.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Hamyon: ${formatPrice(c.walletBalance)} so\'m',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          ],
-          if (c.walletLoadError != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              c.walletLoadError!,
-              style: TextStyle(fontSize: 12, color: Colors.red.shade700),
-            ),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _PayChip(
-                label: 'Naqd',
-                selected: c.payMode == SellerPayMode.cash,
-                onTap: () => c.setPayMode(SellerPayMode.cash),
-              ),
-              const SizedBox(width: 6),
-              _PayChip(
-                label: 'Hamyon',
-                selected: c.payMode == SellerPayMode.wallet,
-                onTap: () => c.setPayMode(SellerPayMode.wallet),
-              ),
-              const SizedBox(width: 6),
-              _PayChip(
-                label: 'Aralash',
-                selected: c.payMode == SellerPayMode.mixed,
-                onTap: () => c.setPayMode(SellerPayMode.mixed),
-              ),
-            ],
-          ),
-          if (c.payMode != SellerPayMode.wallet) ...[
-            const SizedBox(height: 8),
-            TextField(
-              controller: _cashCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: 'Naqd olingan',
-                isDense: true,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              onChanged: (v) => c.setCashPaid(int.tryParse(v) ?? 0),
-            ),
-          ],
-          if (c.walletPaid > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Hamyondan: ${formatPrice(c.walletPaid)} · '
-                'Naqd: ${formatPrice(c.cashDue)}',
-                style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
-              ),
-            ),
-          if (c.lastError != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                c.lastError!,
-                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-              ),
-            ),
-          const SizedBox(height: 10),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              minimumSize: const Size.fromHeight(48),
-            ),
-            onPressed: c.busy || (!pickup && c.cart.isEmpty)
-                ? null
-                : () async {
-                    final result = await c.checkout();
-                    if (!context.mounted || result == null) return;
-                    await _showSaleReceipt(context, c);
-                    if (!context.mounted) return;
-                    _cashCtrl.text = '0';
-                  },
-            child: c.busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (pickup)
+                  ...c.payingOrder!.items.map(
+                    (it) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(it.name),
+                      trailing: Text(
+                        '×${it.qty ?? it.count} · ${formatPrice(it.lineTotal > 0 ? it.lineTotal : it.itemTotal)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   )
-                : Text('To\'lov · ${formatPrice(total)}'),
+                else if (lines.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Mahsulot tanlang',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  )
+                else
+                  ...lines.map((l) {
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${l.emoji} ${l.name}'),
+                      subtitle: Text(
+                        '${formatPrice(l.unitPrice)} × ${_fmtQty(l.qty)} = ${formatPrice(l.lineTotal)}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () => c.setQty(
+                                l.key, l.qty - (l.kind == 'food' ? 0.5 : 1)),
+                          ),
+                          Text(
+                            _fmtQty(l.qty),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () => c.setQty(
+                                l.key, l.qty + (l.kind == 'food' ? 0.5 : 1)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                const Divider(height: 16),
+                Text(
+                  'Jami: ${formatPrice(total)} so\'m',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (!pickup)
+                  TextField(
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Mijoz telefoni (ixtiyoriy)',
+                      hintText: '90 123 45 67',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      suffixIcon: c.walletLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : null,
+                    ),
+                    onChanged: (v) {
+                      _phoneDebounce?.cancel();
+                      _phoneDebounce =
+                          Timer(const Duration(milliseconds: 500), () {
+                        c.setCustomerPhone(v);
+                      });
+                    },
+                  )
+                else
+                  Text(
+                    'Mijoz: ${c.customerPhone} · Hamyon: ${formatPrice(c.walletBalance)}',
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                if (!pickup && c.customerPhone.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Hamyon: ${formatPrice(c.walletBalance)} so\'m',
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ],
+                if (c.walletLoadError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    c.walletLoadError!,
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.red.shade700),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _PayChip(
+                      label: 'Naqd',
+                      selected: c.payMode == SellerPayMode.cash,
+                      onTap: () => c.setPayMode(SellerPayMode.cash),
+                    ),
+                    const SizedBox(width: 6),
+                    _PayChip(
+                      label: 'Hamyon',
+                      selected: c.payMode == SellerPayMode.wallet,
+                      onTap: () => c.setPayMode(SellerPayMode.wallet),
+                    ),
+                    const SizedBox(width: 6),
+                    _PayChip(
+                      label: 'Aralash',
+                      selected: c.payMode == SellerPayMode.mixed,
+                      onTap: () => c.setPayMode(SellerPayMode.mixed),
+                    ),
+                  ],
+                ),
+                if (c.payMode != SellerPayMode.wallet) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _cashCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'Naqd olingan',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onChanged: (v) => c.setCashPaid(int.tryParse(v) ?? 0),
+                  ),
+                ],
+                if (c.walletPaid > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Hamyondan: ${formatPrice(c.walletPaid)} · '
+                      'Naqd: ${formatPrice(c.cashDue)}',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade800),
+                    ),
+                  ),
+                if (c.lastError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      c.lastError!,
+                      style: TextStyle(
+                          color: Colors.red.shade700, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: c.busy || (!pickup && c.cart.isEmpty)
+                      ? null
+                      : () async {
+                          final result = await c.checkout();
+                          if (!context.mounted || result == null) return;
+                          await _showSaleReceipt(context, c);
+                          if (!context.mounted) return;
+                          _cashCtrl.text = '0';
+                        },
+                  child: c.busy
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text('To\'lov · ${formatPrice(total)}'),
+                ),
+                const SizedBox(height: 4),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  static String _fmtQty(double q) {
+    if (q == q.roundToDouble()) return '${q.round()}';
+    return q.toStringAsFixed(1);
   }
 }
 

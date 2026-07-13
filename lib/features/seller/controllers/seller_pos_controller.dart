@@ -116,6 +116,14 @@ class SellerPosController extends ChangeNotifier {
   int get cartCount => cart.values.fold(0, (s, l) => s + l.qty.round());
   int get cartTotal => cart.values.fold(0, (s, l) => s + l.lineTotal);
 
+  double cartQtyForFood(FoodProduct p) => cart['food_${p.id}']?.qty ?? 0;
+
+  double cartQtyForBread(BreadProduct p) {
+    final id = p.firestoreId ?? '';
+    if (id.isEmpty) return 0;
+    return cart['bread_$id']?.qty ?? 0;
+  }
+
   int get maxWallet {
     final total = payingOrder?.total ?? cartTotal;
     return WalletPayment.maxDebitFromWallet(walletBalance, total);

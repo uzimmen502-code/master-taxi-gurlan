@@ -153,6 +153,11 @@ class _ShiftRow extends StatelessWidget {
   }
 }
 
+String _fmtQty(double q) {
+  if (q == q.roundToDouble()) return '${q.round()}';
+  return q.toStringAsFixed(1);
+}
+
 Future<void> _showSaleReceipt(
   BuildContext context,
   SellerPosController c,
@@ -344,8 +349,7 @@ class _TezkorBody extends StatelessWidget {
             ],
           );
         }
-        // Telefon: savat max ~42%. Ichida qatorlar scroll — nima/qancha ko'rinsin.
-        final cartBusy = c.cart.isNotEmpty;
+        // Telefon: ixcham pastki bar; To'lov → expand sheet.
         return Column(
           children: [
             Expanded(child: grid),
@@ -354,10 +358,7 @@ class _TezkorBody extends StatelessWidget {
               color: Colors.white,
               child: SafeArea(
                 top: false,
-                child: SizedBox(
-                  height: constraints.maxHeight * (cartBusy ? 0.42 : 0.20),
-                  child: _CartPanel(c: c, fillHeight: true),
-                ),
+                child: _PhoneCartBar(c: c),
               ),
             ),
           ],
@@ -704,6 +705,7 @@ class _FoodTile extends StatelessWidget {
       price: product.price,
       stockLabel: stock >= 999999 ? '∞' : '$stock',
       soldOut: soldOut,
+      cartQty: c.cartQtyForFood(product),
       onTap: soldOut ? null : () => c.addFood(product),
     );
   }
@@ -726,6 +728,7 @@ class _BreadTile extends StatelessWidget {
       price: product.price ?? 0,
       stockLabel: stock,
       soldOut: soldOut,
+      cartQty: c.cartQtyForBread(product),
       onTap: soldOut ? null : () => c.addBread(product),
     );
   }
@@ -741,6 +744,7 @@ class _ProductCard extends StatelessWidget {
     required this.onTap,
     this.imageUrl = '',
     this.assetImage = '',
+    this.cartQty = 0,
   });
 
   final String emoji;
@@ -750,6 +754,7 @@ class _ProductCard extends StatelessWidget {
   final int price;
   final String stockLabel;
   final bool soldOut;
+  final double cartQty;
   final VoidCallback? onTap;
 
   @override
@@ -764,22 +769,51 @@ class _ProductCard extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.cardBorderMuted),
+            border: Border.all(
+              color: cartQty > 0 ? AppColors.primary : AppColors.cardBorderMuted,
+              width: cartQty > 0 ? 1.5 : 1,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 flex: 3,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: ColoredBox(
-                    color: Colors.grey.shade100,
-                    child: Opacity(
-                      opacity: soldOut ? 0.45 : 1,
-                      child: _buildImage(),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: ColoredBox(
+                        color: Colors.grey.shade100,
+                        child: Opacity(
+                          opacity: soldOut ? 0.45 : 1,
+                          child: _buildImage(),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (cartQty > 0)
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '×${_fmtQty(cartQty)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 6),
@@ -856,6 +890,392 @@ class _ProductCard extends StatelessWidget {
       );
     }
     return _emojiFallback();
+  }
+}
+
+/// Telefon: ixcham savat bari (bo'sh = minimal).
+class _PhoneCartBar extends StatelessWidget {
+  const _PhoneCartBar({required this.c});
+  final SellerPosController c;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = c.cart.isEmpty;
+    final lines = c.cart.values.toList();
+    final summary = lines
+        .map((l) => '${l.emoji} ${l.name} ×${_fmtQty(l.qty)}')
+        .join(' · ');
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(14, empty ? 8 : 10, 14, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  empty ? 'Savat' : 'Savat · ${c.cartCount} ta',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: AppText.titleMedium,
+                  ),
+                ),
+              ),
+              if (!empty)
+                TextButton(
+                  onPressed: c.busy ? null : c.clearCart,
+                  child: const Text('Tozalash'),
+                ),
+            ],
+          ),
+          if (empty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Mahsulot tanlang',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+            )
+          else ...[
+            InkWell(
+              onTap: () => _showQtyEditorSheet(context, c),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.edit_outlined,
+                        size: 18, color: Colors.grey.shade600),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Jami: ${formatPrice(c.cartTotal)} so\'m',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            onPressed: empty || c.busy
+                ? null
+                : () => _showPayExpandSheet(context, c),
+            child: Text(
+              empty
+                  ? 'To\'lov'
+                  : 'To\'lov · ${formatPrice(c.cartTotal)}',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _showQtyEditorSheet(
+  BuildContext context,
+  SellerPosController c,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) {
+      return ListenableBuilder(
+        listenable: c,
+        builder: (_, __) {
+          final lines = c.cart.values.toList();
+          if (lines.isEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (ctx.mounted) Navigator.pop(ctx);
+            });
+            return const SizedBox(height: 80);
+          }
+          return SafeArea(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              itemCount: lines.length,
+              itemBuilder: (_, i) {
+                final l = lines[i];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${l.emoji} ${l.name}'),
+                  subtitle: Text(
+                    '${formatPrice(l.unitPrice)} × ${_fmtQty(l.qty)} = ${formatPrice(l.lineTotal)}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () => c.setQty(
+                          l.key,
+                          l.qty - (l.kind == 'food' ? 0.5 : 1),
+                        ),
+                      ),
+                      Text(
+                        _fmtQty(l.qty),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () => c.setQty(
+                          l.key,
+                          l.qty + (l.kind == 'food' ? 0.5 : 1),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<void> _showPayExpandSheet(
+  BuildContext context,
+  SellerPosController c,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+        ),
+        child: _PayExpandSheet(c: c),
+      );
+    },
+  );
+}
+
+/// To'lov tugmasidan ochiladigan to'liq forma (telefon / naqd).
+class _PayExpandSheet extends StatefulWidget {
+  const _PayExpandSheet({required this.c});
+  final SellerPosController c;
+
+  @override
+  State<_PayExpandSheet> createState() => _PayExpandSheetState();
+}
+
+class _PayExpandSheetState extends State<_PayExpandSheet> {
+  final _phoneCtrl = TextEditingController();
+  final _cashCtrl = TextEditingController();
+  Timer? _phoneDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _phoneCtrl.text = widget.c.customerPhone;
+    _cashCtrl.text = '${widget.c.cashPaid}';
+  }
+
+  @override
+  void dispose() {
+    _phoneDebounce?.cancel();
+    _phoneCtrl.dispose();
+    _cashCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.c,
+      builder: (context, _) {
+        final c = widget.c;
+        final total = c.cartTotal;
+        final wantCash = '${c.cashPaid}';
+        if (_cashCtrl.text != wantCash &&
+            FocusManager.instance.primaryFocus?.context == null) {
+          _cashCtrl.text = wantCash;
+        }
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'To\'lov · ${formatPrice(total)} so\'m',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: AppText.titleMedium,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  c.cart.values
+                      .map((l) => '${l.emoji} ${l.name} ×${_fmtQty(l.qty)}')
+                      .join(' · '),
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Mijoz telefoni (ixtiyoriy)',
+                    hintText: '90 123 45 67',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    suffixIcon: c.walletLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                  ),
+                  onChanged: (v) {
+                    _phoneDebounce?.cancel();
+                    _phoneDebounce =
+                        Timer(const Duration(milliseconds: 500), () {
+                      c.setCustomerPhone(v);
+                    });
+                  },
+                ),
+                if (c.customerPhone.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Hamyon: ${formatPrice(c.walletBalance)} so\'m',
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ],
+                if (c.walletLoadError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    c.walletLoadError!,
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.red.shade700),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _PayChip(
+                      label: 'Naqd',
+                      selected: c.payMode == SellerPayMode.cash,
+                      onTap: () => c.setPayMode(SellerPayMode.cash),
+                    ),
+                    const SizedBox(width: 6),
+                    _PayChip(
+                      label: 'Hamyon',
+                      selected: c.payMode == SellerPayMode.wallet,
+                      onTap: () => c.setPayMode(SellerPayMode.wallet),
+                    ),
+                    const SizedBox(width: 6),
+                    _PayChip(
+                      label: 'Aralash',
+                      selected: c.payMode == SellerPayMode.mixed,
+                      onTap: () => c.setPayMode(SellerPayMode.mixed),
+                    ),
+                  ],
+                ),
+                if (c.payMode != SellerPayMode.wallet) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _cashCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: 'Naqd olingan',
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onChanged: (v) => c.setCashPaid(int.tryParse(v) ?? 0),
+                  ),
+                ],
+                if (c.walletPaid > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Hamyondan: ${formatPrice(c.walletPaid)} · '
+                      'Naqd: ${formatPrice(c.cashDue)}',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.blue.shade800),
+                    ),
+                  ),
+                if (c.lastError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      c.lastError!,
+                      style: TextStyle(
+                          color: Colors.red.shade700, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: c.busy || c.cart.isEmpty
+                      ? null
+                      : () async {
+                          final result = await c.checkout();
+                          if (!context.mounted) return;
+                          if (result == null) return;
+                          // #6: sheet yopiladi, savat tozalandi → ixcham bar.
+                          Navigator.pop(context);
+                          await _showSaleReceipt(context, c);
+                          if (context.mounted) _cashCtrl.text = '0';
+                        },
+                  child: c.busy
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text('Tasdiqlash · ${formatPrice(total)}'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -1175,10 +1595,6 @@ class _CartPanelState extends State<_CartPanel> {
     );
   }
 
-  static String _fmtQty(double q) {
-    if (q == q.roundToDouble()) return '${q.round()}';
-    return q.toStringAsFixed(1);
-  }
 }
 
 class _PayChip extends StatelessWidget {

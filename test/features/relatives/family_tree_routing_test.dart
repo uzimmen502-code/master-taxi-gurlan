@@ -83,6 +83,91 @@ void main() {
       );
       expect(path, isNull);
     });
+
+    test('har oila alohida bus Y oladi', () {
+      final router = FamilyTreeLineRouter(
+        obstacles: const [],
+        laneStep: 22,
+        linePad: 8,
+      );
+      final y1 = router.allocateBusY(
+        laneId: 'a',
+        corridorId: 0,
+        preferred: 100,
+        minY: 80,
+        maxY: 200,
+        minX: 0,
+        maxX: 300,
+      );
+      final y2 = router.allocateBusY(
+        laneId: 'b',
+        corridorId: 0,
+        preferred: 100,
+        minY: 80,
+        maxY: 200,
+        minX: 0,
+        maxX: 300,
+      );
+      expect(y1, isNotNull);
+      expect(y2, isNotNull);
+      expect((y1! - y2!).abs(), greaterThanOrEqualTo(18));
+    });
+
+    test('har oila alohida stem X oladi (Y oralig\'i ustma-ust)', () {
+      final router = FamilyTreeLineRouter(
+        obstacles: const [],
+        laneStep: 22,
+        linePad: 8,
+      );
+      final x1 = router.allocateStemX(
+        laneId: 'a',
+        corridorId: 0,
+        preferred: 150,
+        minX: 50,
+        maxX: 250,
+        minY: 0,
+        maxY: 120,
+      );
+      final x2 = router.allocateStemX(
+        laneId: 'b',
+        corridorId: 0,
+        preferred: 150,
+        minX: 50,
+        maxX: 250,
+        minY: 0,
+        maxY: 140,
+      );
+      expect(x1, isNotNull);
+      expect(x2, isNotNull);
+      expect((x1! - x2!).abs(), greaterThanOrEqualTo(18));
+    });
+
+    test('band segmentga penalty — bo\'sh yo\'l afzal', () {
+      final router = FamilyTreeLineRouter(
+        obstacles: const [],
+        laneStep: 22,
+        linePad: 8,
+        preferShortestDirect: false,
+      );
+      // Qisqa band vertikal — to'g'ri gorizontalni bloklaydi, aylanma mumkin.
+      router.registerSegment(const Offset(100, 90), const Offset(100, 110));
+      final path = router.route(
+        const Offset(50, 100),
+        const Offset(150, 100),
+      );
+      expect(path, isNotNull);
+      for (var i = 0; i < path!.length - 1; i++) {
+        expect(
+          FamilyTreeLineRouter.segmentsConflict(
+            path[i],
+            path[i + 1],
+            const Offset(100, 90),
+            const Offset(100, 110),
+          ),
+          isFalse,
+        );
+      }
+    });
   });
 
   group('FamilyTreeView routing integration', () {

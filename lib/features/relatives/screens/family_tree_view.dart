@@ -809,7 +809,8 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
   }
 
-  /// Har bir farzand uchun BFS — nikoh ramkasi ichidan chiqib, farzand KARTASIGA.
+  /// Har oila: vertikal o'zak + horizontal bus + bolalarga tushish.
+  /// Tutashuv: karta tashqi chekkasi (past/yuqori markaz).
   bool _buildRoutedLines() {
     final usedKeys = <String>{};
     var allOk = true;
@@ -824,6 +825,9 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     }
 
     bool addValidatedSeg(Offset a, Offset b, Color color) {
+      if ((a.dx - b.dx).abs() < 0.5 && (a.dy - b.dy).abs() < 0.5) {
+        return true;
+      }
       if (!_segmentClearOfPersons(a, b)) {
         allOk = false;
         return false;
@@ -841,9 +845,8 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       );
     }
 
-    final obstacles = [
-      for (final r in _cardRect.values) r.inflate(_linePad),
-    ];
+    // Chekkaga yopishish: to'siq = karta o'zi (inflate yo'q).
+    final obstacles = _cardRect.values.toList();
     final router = FamilyTreeLineRouter(
       obstacles: obstacles,
       laneStep: _laneStep,
@@ -851,9 +854,22 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       preferShortestDirect: false,
     );
 
+    // Avlod bo'yicha dinamik laneStep.
+    final stepAtGen = <int, double>{};
+    for (var g = 0; g <= _maxGen; g++) {
+      final lanes = _laneCountAtGen(g);
+      if (lanes == 0) continue;
+      stepAtGen[g] = FamilyTreeLineRouter.laneStepFor(
+        corridorHeight: _corridorHeightAtGen(g),
+        laneCount: lanes,
+        linePad: _linePad,
+      );
+    }
+
+    /// Ota/ona kartasi past markaz (tashqi chekka).
     Offset belowSingleCard(_FamilyNode parent) {
       final card = _cardRect[parent.members.first.id]!;
-      return Offset(card.center.dx, card.bottom + _linePad);
+      return Offset(card.center.dx, card.bottom);
     }
 
     Offset belowCoupleCards(_FamilyNode parent) {
@@ -861,36 +877,40 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       final right = _cardRect[parent.members[1].id]!;
       return Offset(
         (left.center.dx + right.center.dx) / 2,
-        math.max(left.bottom, right.bottom) + _linePad,
+        math.max(left.bottom, right.bottom),
       );
     }
 
+    /// Bola kartasi yuqori markaz (tashqi chekka).
     Offset childCardTarget(RelativePerson child) {
       final r = _cardRect[child.id]!;
-      return Offset(r.center.dx, r.top - _linePad);
+      return Offset(r.center.dx, r.top);
     }
 
-    bool drawRoutedPath(
-      List<Offset> prefix,
-      List<Offset>? path,
-      Color color,
-      double endCx,
-    ) {
-      if (path == null || path.length < 2) {
+    bool drawPathPoints(List<Offset> pts, Color color, {double? endCx}) {
+      if (pts.length < 2) {
         allOk = false;
         return false;
       }
-      final full = [...prefix, ...path.skip(prefix.isEmpty ? 0 : 1)];
-      for (var i = 0; i < full.length - 1; i++) {
-        if (!addValidatedSeg(full[i], full[i + 1], color)) return false;
+      for (var i = 0; i < pts.length - 1; i++) {
+        if (!addValidatedSeg(pts[i], pts[i + 1], color)) return false;
       }
-      drawTopConnector(endCx, full.last.dy, color);
+      router.registerPath(pts);
+      if (endCx != null) {
+        drawTopConnector(endCx, pts.last.dy, color);
+      }
       return true;
     }
 
-    for (final f in _families) {
-      final color = f.familyColor ?? _accent;
+    final ordered = [..._families]
+      ..sort((a, b) {
+        final g = a.gen.compareTo(b.gen);
+        if (g != 0) return g;
+        return a.centerX.compareTo(b.centerX);
+      });
 
+    for (final f in ordered) {
+      final color = f.familyColor ?? _accent;
       if (!_hasLinkedChildren(f)) continue;
 
       final linked = _directChildrenOf(f);
@@ -902,16 +922,101 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
           final bx = _cardRect[b.child.id]?.center.dx ?? 0;
           return ax.compareTo(bx);
         });
+      if (targets.isEmpty) continue;
 
       final routeStart = f.isCouple && f.members.length == 2
           ? belowCoupleCards(f)
           : belowSingleCard(f);
-      final prefix = [routeStart];
 
-      for (final t in targets) {
-        final end = childCardTarget(t.child);
-        final path = router.route(routeStart, end, obstacles: obstacles);
-        drawRoutedPath(prefix, path, color, end.dx);
+      final ends = <Offset>[
+        for (final t in targets) childCardTarget(t.child),
+      ];
+      final minChildX = ends.map((e) => e.dx).reduce(math.min);
+      final maxChildX = ends.map((e) => e.dx).reduce(math.max);
+      final minChildTop = ends.map((e) => e.dy).reduce(math.min);
+
+      final step = stepAtGen[f.gen] ?? _laneStep;
+      // Faqat karta koordinatalari (layout +_pad tarjimasi bilan mos).
+      final minBusY = routeStart.dy + math.max(step * 0.35, _linePad);
+      final maxBusY = minChildTop - math.max(step * 0.35, _linePad);
+      final preferredBusY = (minBusY + maxBusY) / 2;
+
+      final busSpanMinX = math.min(routeStart.dx, minChildX);
+      final busSpanMaxX = math.max(routeStart.dx, maxChildX);
+
+      final busY = router.allocateBusY(
+        laneId: f,
+        corridorId: f.gen,
+        preferred: preferredBusY,
+        minY: minBusY,
+        maxY: maxBusY,
+        minX: busSpanMinX,
+        maxX: busSpanMaxX,
+        obstacles: obstacles,
+        laneStep: step,
+      );
+
+      // Lane to'liq band bo'lsa — preferred Y ga qisqa fallback (koridor ichida).
+      final resolvedBusY = busY ??
+          (maxBusY >= minBusY
+              ? preferredBusY.clamp(minBusY, maxBusY)
+              : null);
+      if (resolvedBusY == null) {
+        for (var i = 0; i < targets.length; i++) {
+          final end = ends[i];
+          final path = router.route(routeStart, end, obstacles: obstacles);
+          if (path == null ||
+              !drawPathPoints(path, color, endCx: end.dx)) {
+            allOk = false;
+          }
+        }
+        continue;
+      }
+
+      final stemX = router.allocateStemX(
+            laneId: f,
+            corridorId: f.gen,
+            preferred: routeStart.dx,
+            minX: busSpanMinX - step * 2,
+            maxX: busSpanMaxX + step * 2,
+            minY: routeStart.dy,
+            maxY: resolvedBusY,
+            obstacles: obstacles,
+            laneStep: step,
+          ) ??
+          routeStart.dx;
+
+      // 1) Ota-onadan o'zakka (kerak bo'lsa) + vertikal o'zak.
+      final stemPath = <Offset>[routeStart];
+      if ((stemX - routeStart.dx).abs() >= 0.5) {
+        stemPath.add(Offset(stemX, routeStart.dy));
+      }
+      stemPath.add(Offset(stemX, resolvedBusY));
+      if (!drawPathPoints(stemPath, color)) {
+        allOk = false;
+        continue;
+      }
+
+      // 2) Horizontal bus (o'zak + bolalar oralig'i).
+      final busLeft = math.min(stemX, minChildX);
+      final busRight = math.max(stemX, maxChildX);
+      if ((busRight - busLeft).abs() >= 0.5) {
+        if (!drawPathPoints(
+          [Offset(busLeft, resolvedBusY), Offset(busRight, resolvedBusY)],
+          color,
+        )) {
+          allOk = false;
+          continue;
+        }
+      }
+
+      // 3) Har bolaga vertikal tushish + yuqori tutashuv.
+      for (var i = 0; i < ends.length; i++) {
+        final end = ends[i];
+        final drop = [Offset(end.dx, resolvedBusY), end];
+        if (!drawPathPoints(drop, color, endCx: end.dx)) {
+          allOk = false;
+        }
       }
     }
 

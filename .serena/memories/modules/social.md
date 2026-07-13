@@ -28,16 +28,9 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 ## Family Tree (Nasab daraxti — GLOBAL graph, Phases F1–F5 done)
 Architecture: per-user private `relatives/people` + SHARED global `tree_persons` graph keyed by `componentId`. `users/{uid}` carries treeComponentId, treePersonId, treeMigratedAt.
 - UI: `family_tree_screen.dart` (combines personal `relatives/people` + shared component, personal precedence), `family_tree_view.dart` (CUSTOM genealogy layout, NOT graphview), `tree_history_screen.dart` (audit + undo).
-- `family_tree_view.dart`: slot layout + corridor Y. **Rules:** gen from `fatherId`/`motherId` per person (`_assignGenerationsFromPersonLinks`); child card always below parent; marriage = heart symbol between cards (**no outer couple frame**); BFS per child to **that child's person card** (`preferShortestDirect: false`, no L-shortcut fallback); every segment validated vs person card interior.
+- **Line routing (2026-07-13):** classic per-family geometry — vertical stem + horizontal bus (`allocateBusY` / `allocateStemX` by `laneId`+`corridorId=gen`) + child drops. Band segments registered; `route()` BFS skips occupied (T-junction OK). Dynamic `laneStepFor` (16–28) per gen. **Edge attach:** parent bottom center / child top center (no `linePad` gap). Bus Y range from card coords only (not raw `_corridorTop` — cards are `+_pad` translated). Obstacles = raw card rects. Fallback BFS if bus range empty. Tests: `test/features/relatives/family_tree_routing_test.dart`.
 - Collections: tree_persons (nodes; survivorId on merge), tree_link_invites (two-sided), tree_redirects (oldId→survivor), tree_history (audit). All CF-only writes.
-- CFs by phase:
-  - F1 ensureMyTree (create component+self node), onRelativePersonWrite (mirror relatives→tree_persons, redirect-aware).
-  - F2 sendTreeLinkInvite/respondTreeLinkInvite (two-sided consent → component+node merge victim→survivor, writes tree_redirects + tree_history type=link).
-  - F3 mergeTreePersons (dedup nodes within component, history type=merge).
-  - F4 undoTreeOperation (reverse link/merge/edit/create from tree_history).
-  - F5 saveTreeNode (any component member edits/creates node; mirrors to owner relatives/people WITHOUT clobbering; history create/edit).
-- Privacy: link = mutual consent (invite→accept); linked members see WHOLE shared tree; any member can edit shared network.
-- Phase-1 (FamilySearch-inspired): `addRelativePerson` single-id create; tree tab display prefers component for genealogy fields; link/merge rewrite `relatives` refs + remove placeholder; invite FCM + auto sheet on RelativesScreen; rules block client delete on `relatives/people`.
-- Phase-2: client `tree_redirects` resolve for tree display; link dropdowns from personal+component (`buildLinkCandidates`); dedup by name+birth+gender with confirm dialog; `saveTreeNode` create via relatives mirror; undo link/merge restores `relatives/people` snapshots + ref changes.
-- Phase-3 (partial): GEDCOM 5.5 export + PNG/PDF share from tree tab (`GedcomExporter`, `TreeExportService`); phone/address omitted from GEDCOM.
-- GOTCHAS: family_tree_view uses translateByDouble/scaleByDouble (Matrix4 translate/scale deprecated). Personal relatives/people takes precedence over mirror when combining on LIST tab; TREE tab prefers component for fatherId/motherId/spouseId/name. Merge logic victim→survivor must update tree_redirects to avoid mirror inconsistency.
+- CFs by phase: F1 ensureMyTree + onRelativePersonWrite; F2 send/respondTreeLinkInvite; F3 mergeTreePersons; F4 undoTreeOperation; F5 saveTreeNode.
+- Privacy: link = mutual consent; linked members see WHOLE shared tree.
+- Phase-1/2/3: addRelativePerson, redirects, GEDCOM/PNG/PDF export.
+- GOTCHAS: translateByDouble/scaleByDouble; TREE tab prefers component for genealogy fields; merge must update tree_redirects.

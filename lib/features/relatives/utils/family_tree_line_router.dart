@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Ramka ichidan o'tmaydigan orthogonal marshrut — visibility graph + BFS.
+/// Orthogonal nasab marshrut: oila bus/stem + band segment penalty.
 class FamilyTreeLineRouter {
   FamilyTreeLineRouter({
     required this.obstacles,
@@ -16,13 +16,24 @@ class FamilyTreeLineRouter {
   final double linePad;
   /// `false` bo'lsa, to'g'ri qisqa segment ishlatilmaydi — faqat BFS yo'laklari.
   final bool preferShortestDirect;
-  final Map<int, double> _colorLanes = {};
-  final Map<int, int> _laneCorridorOf = {};
+
+  /// Horizontal bus Y — laneId bo'yicha (rang emas).
+  final Map<int, double> _busLanes = {};
+  final Map<int, int> _busCorridorOf = {};
+
+  /// Vertikal o'zak X — laneId bo'yicha.
+  final Map<int, double> _stemLanes = {};
+  final Map<int, (double, double)> _stemYRangeOf = {};
+  
+
+  /// Band qilingan segmentlar (penalty / kesishish tekshiruvi).
+  final List<(Offset, Offset)> _occupied = [];
 
   static const int maxPathPoints = 35;
   static const double laneStepMin = 16.0;
   static const double laneStepMax = 28.0;
   static const double laneOverlapFactor = 0.9;
+  static const double occupiedPenalty = 120.0;
 
   /// Koridor balandligi va yo'laklar soniga qarab bus qadami.
   static double laneStepFor({
@@ -77,6 +88,85 @@ class FamilyTreeLineRouter {
   static bool axisAligned(Offset a, Offset b) =>
       (a.dx - b.dx).abs() < 0.5 || (a.dy - b.dy).abs() < 0.5;
 
+  /// Ikki orthogonal segment kesishadi yoki ustma-ust yotadi.
+  static bool segmentsConflict(Offset a1, Offset b1, Offset a2, Offset b2) {
+    final v1 = (a1.dx - b1.dx).abs() < 0.5;
+    final v2 = (a2.dx - b2.dx).abs() < 0.5;
+    final h1 = (a1.dy - b1.dy).abs() < 0.5;
+    final h2 = (a2.dy - b2.dy).abs() < 0.5;
+    if (!((v1 || h1) && (v2 || h2))) return false;
+
+    if (v1 && v2) {
+      if ((a1.dx - a2.dx).abs() >= 0.5) return false;
+      final y1a = math.min(a1.dy, b1.dy);
+      final y1b = math.max(a1.dy, b1.dy);
+      final y2a = math.min(a2.dy, b2.dy);
+      final y2b = math.max(a2.dy, b2.dy);
+      return y1a < y2b - 0.5 && y2a < y1b - 0.5;
+    }
+    if (h1 && h2) {
+      if ((a1.dy - a2.dy).abs() >= 0.5) return false;
+      final x1a = math.min(a1.dx, b1.dx);
+      final x1b = math.max(a1.dx, b1.dx);
+      final x2a = math.min(a2.dx, b2.dx);
+      final x2b = math.max(a2.dx, b2.dx);
+      return x1a < x2b - 0.5 && x2a < x1b - 0.5;
+    }
+    // Orthogonal cross.
+    final vx = v1 ? a1.dx : a2.dx;
+    final hy = h1 ? a1.dy : a2.dy;
+    final vMin = v1
+        ? math.min(a1.dy, b1.dy)
+        : math.min(a2.dy, b2.dy);
+    final vMax = v1
+        ? math.max(a1.dy, b1.dy)
+        : math.max(a2.dy, b2.dy);
+    final hMin = h1
+        ? math.min(a1.dx, b1.dx)
+        : math.min(a2.dx, b2.dx);
+    final hMax = h1
+        ? math.max(a1.dx, b1.dx)
+        : math.max(a2.dx, b2.dx);
+    final crosses = vx >= hMin - 0.5 &&
+        vx <= hMax + 0.5 &&
+        hy >= vMin - 0.5 &&
+        hy <= vMax + 0.5;
+    if (!crosses) return false;
+    // T-tutashuv (kesishish nuqtasi bir segmentning uchi) — ruxsat.
+    final cross = Offset(vx, hy);
+    bool atEnd(Offset p, Offset s, Offset e) =>
+        (p.dx - s.dx).abs() < 0.5 && (p.dy - s.dy).abs() < 0.5 ||
+        (p.dx - e.dx).abs() < 0.5 && (p.dy - e.dy).abs() < 0.5;
+    if (atEnd(cross, a1, b1) || atEnd(cross, a2, b2)) return false;
+    return true;
+  }
+
+  bool clearOfOccupied(Offset a, Offset b) {
+    for (final (oa, ob) in _occupied) {
+      if (segmentsConflict(a, b, oa, ob)) return false;
+    }
+    return true;
+  }
+
+  double segmentPenalty(Offset a, Offset b) {
+    var p = 0.0;
+    for (final (oa, ob) in _occupied) {
+      if (segmentsConflict(a, b, oa, ob)) p += occupiedPenalty;
+    }
+    return p;
+  }
+
+  void registerSegment(Offset a, Offset b) {
+    if ((a.dx - b.dx).abs() < 0.5 && (a.dy - b.dy).abs() < 0.5) return;
+    _occupied.add((a, b));
+  }
+
+  void registerPath(List<Offset> path) {
+    for (var i = 0; i < path.length - 1; i++) {
+      registerSegment(path[i], path[i + 1]);
+    }
+  }
+
   List<Offset> collectCandidates(Offset a, Offset b, List<Rect> obs) {
     final out = <Offset>[a, b];
     final seen = <String>{ptKey(a), ptKey(b)};
@@ -124,16 +214,33 @@ class FamilyTreeLineRouter {
       add(Offset(x, b.dy));
     }
 
+    // Band segment / to'siqdan aylanib o'tish uchun qo'shimcha yo'laklar.
+    for (final d in [-2.0, -1.0, 1.0, 2.0]) {
+      final dy = d * laneStep;
+      final dx = d * laneStep;
+      add(Offset(a.dx, a.dy + dy));
+      add(Offset(b.dx, b.dy + dy));
+      add(Offset(a.dx, b.dy + dy));
+      add(Offset(b.dx, a.dy + dy));
+      add(Offset(a.dx + dx, a.dy));
+      add(Offset(b.dx + dx, b.dy));
+      add(Offset(a.dx + dx, b.dy));
+      add(Offset(b.dx + dx, a.dy));
+    }
+
     return out;
   }
 
+  /// Orthogonal yo'l; band segmentlardan qochadi (penalty / hard skip).
   List<Offset>? route(
     Offset a,
     Offset b, {
     List<Rect>? obstacles,
   }) {
     final obs = obstacles ?? this.obstacles;
-    if (preferShortestDirect && segmentClear(a, b, obstacles: obs)) {
+    if (preferShortestDirect &&
+        segmentClear(a, b, obstacles: obs) &&
+        clearOfOccupied(a, b)) {
       return [a, b];
     }
 
@@ -155,6 +262,7 @@ class FamilyTreeLineRouter {
       for (final next in candidates) {
         if (!axisAligned(cur, next)) continue;
         if (!segmentClear(cur, next, obstacles: obs)) continue;
+        if (!clearOfOccupied(cur, next)) continue;
         final k = ptKey(next);
         if (visited.contains(k)) continue;
         visited.add(k);
@@ -162,41 +270,13 @@ class FamilyTreeLineRouter {
       }
     }
 
-    for (final start in candidates) {
-      if ((start.dx - b.dx).abs() > 0.5 && (start.dy - b.dy).abs() > 0.5) {
-        continue;
-      }
-      if (!segmentClear(start, b, obstacles: obs)) continue;
-      final subVisited = <String>{ptKey(a)};
-      final subQueue = <List<Offset>>[
-        [a],
-      ];
-      while (subQueue.isNotEmpty) {
-        final path = subQueue.removeAt(0);
-        final cur = path.last;
-        if ((cur.dx - start.dx).abs() < 0.5 &&
-            (cur.dy - start.dy).abs() < 0.5) {
-          final full = [...path, b];
-          if (pathClear(full, obs)) return full;
-          continue;
-        }
-        if (path.length >= maxPathPoints - 1) continue;
-        for (final next in candidates) {
-          if (!axisAligned(cur, next)) continue;
-          if (!segmentClear(cur, next, obstacles: obs)) continue;
-          final k = ptKey(next);
-          if (subVisited.contains(k)) continue;
-          subVisited.add(k);
-          subQueue.add([...path, next]);
-        }
-      }
-    }
-
     return null;
   }
 
+  /// Oila uchun alohida horizontal bus Y.
   double? allocateBusY({
-    required Color color,
+    required Object laneId,
+    required Object corridorId,
     required double preferred,
     required double minY,
     required double maxY,
@@ -208,31 +288,100 @@ class FamilyTreeLineRouter {
     if (maxY < minY) return null;
     final step = laneStep ?? this.laneStep;
     final obs = obstacles ?? this.obstacles;
-    // Bir xil koridorda turli ranglar alohida y; boshqa koridorlarda qayta ishlatiladi.
-    final corridorKey = Object.hash(
-      minY.round(),
-      maxY.round(),
+    final corridorKey = corridorId.hashCode;
+    final laneKey = Object.hash(identityHashCode(laneId), corridorKey);
+
+    final existing = _busLanes[laneKey];
+    if (existing != null) return existing;
+
+    final candidates = <double>[];
+    for (var y = minY; y <= maxY + 0.5; y += step) {
+      candidates.add(y);
+    }
+    if (preferred >= minY && preferred <= maxY) {
+      candidates.add(preferred);
+    }
+    candidates.sort(
+      (a, b) => (a - preferred).abs().compareTo((b - preferred).abs()),
     );
-    final laneKey = Object.hash(color.toARGB32(), corridorKey);
-    var y = minY;
-    while (y <= maxY + 0.5) {
-      final laneFree = !_colorLanes.entries.any(
+
+    for (final y in candidates) {
+      final laneFree = !_busLanes.entries.any(
         (e) =>
             e.key != laneKey &&
-            _laneCorridorOf[e.key] == corridorKey &&
+            _busCorridorOf[e.key] == corridorKey &&
             (e.value - y).abs() < step * laneOverlapFactor,
       );
-      final horizClear = segmentClear(
-        Offset(minX, y),
-        Offset(maxX, y),
-        obstacles: obs,
-      );
+      final a = Offset(minX, y);
+      final b = Offset(maxX, y);
+      final horizClear = segmentClear(a, b, obstacles: obs);
+      // Lane ajratish asosiy; occupied — faqat route() fallbackda.
       if (laneFree && horizClear) {
-        _colorLanes[laneKey] = y;
-        _laneCorridorOf[laneKey] = corridorKey;
+        _busLanes[laneKey] = y;
+        _busCorridorOf[laneKey] = corridorKey;
         return y;
       }
-      y += step;
+    }
+    return null;
+  }
+
+  /// Oila uchun alohida vertikal o'zak X.
+  double? allocateStemX({
+    required Object laneId,
+    required Object corridorId,
+    required double preferred,
+    required double minX,
+    required double maxX,
+    required double minY,
+    required double maxY,
+    List<Rect>? obstacles,
+    double? laneStep,
+  }) {
+    if (maxX < minX || maxY < minY) return null;
+    final step = laneStep ?? this.laneStep;
+    final obs = obstacles ?? this.obstacles;
+    final corridorKey = corridorId.hashCode;
+    final laneKey = Object.hash(identityHashCode(laneId), corridorKey);
+
+    final existing = _stemLanes[laneKey];
+    if (existing != null) return existing;
+
+    final candidates = <double>[preferred];
+    for (var x = minX; x <= maxX + 0.5; x += step) {
+      candidates.add(x);
+    }
+    // preferred atrofida zichroq qidiruv
+    for (var i = 1; i <= 8; i++) {
+      candidates.add(preferred + i * step);
+      candidates.add(preferred - i * step);
+    }
+    final uniq = <double>{};
+    final ordered = <double>[];
+    for (final x in candidates) {
+      if (x < minX - 0.5 || x > maxX + 0.5) continue;
+      if (uniq.add(x)) ordered.add(x);
+    }
+    ordered.sort(
+      (a, b) => (a - preferred).abs().compareTo((b - preferred).abs()),
+    );
+
+    for (final x in ordered) {
+      final laneFree = !_stemLanes.entries.any((e) {
+        if (e.key == laneKey) return false;
+        if ((e.value - x).abs() >= step * laneOverlapFactor) return false;
+        final range = _stemYRangeOf[e.key];
+        if (range == null) return false;
+        // Y oralig'i ustma-ust bo'lsa bir xil X taqiqlanadi.
+        return minY < range.$2 - 0.5 && range.$1 < maxY - 0.5;
+      });
+      final a = Offset(x, minY);
+      final b = Offset(x, maxY);
+      final vertClear = segmentClear(a, b, obstacles: obs);
+      if (laneFree && vertClear) {
+        _stemLanes[laneKey] = x;
+        _stemYRangeOf[laneKey] = (minY, maxY);
+        return x;
+      }
     }
     return null;
   }

@@ -53,6 +53,9 @@ class TreeService {
   /// { ok, personId }
   static Future<Map<String, dynamic>> addRelativePerson({
     required String fullName,
+    String firstName = '',
+    String lastName = '',
+    String patronymic = '',
     String gender = '',
     String photoUrl = '',
     String photoPath = '',
@@ -68,6 +71,9 @@ class TreeService {
   }) async {
     final res = await _fn.httpsCallable('addRelativePerson').call({
       'fullName': fullName,
+      'firstName': firstName,
+      'lastName': lastName,
+      'patronymic': patronymic,
       'gender': gender,
       'photoUrl': photoUrl,
       'photoPath': photoPath,
@@ -99,6 +105,9 @@ class TreeService {
   static Future<Map<String, dynamic>> saveNode({
     String nodeId = '',
     required String fullName,
+    String firstName = '',
+    String lastName = '',
+    String patronymic = '',
     String gender = '',
     String photoUrl = '',
     String photoPath = '',
@@ -110,6 +119,9 @@ class TreeService {
     final res = await _fn.httpsCallable('saveTreeNode').call({
       'nodeId': nodeId,
       'fullName': fullName,
+      'firstName': firstName,
+      'lastName': lastName,
+      'patronymic': patronymic,
       'gender': gender,
       'photoUrl': photoUrl,
       'photoPath': photoPath,

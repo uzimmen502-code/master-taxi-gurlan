@@ -10,7 +10,9 @@ import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
 import '../features/intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../features/relatives/screens/relatives_screen.dart';
+import '../features/dating/screens/dating_home_screen.dart';
 import '../l10n/app_localizations.dart';
+import '../features/ads/screens/my_ads_screen.dart';
 import '../features/jobs/screens/jobs_screen.dart';
 import '../features/local_taxi/passenger/screens/local_taxi_screen.dart';
 import '../features/marshrut/driver/screens/driver_panel_marshrut_screen.dart';
@@ -21,7 +23,8 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
-import '../features/sell/screens/sell_offer_screen.dart';
+import '../features/sell/screens/sell_hub_screen.dart';
+import '../features/seller/screens/seller_pos_screen.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
@@ -202,6 +205,15 @@ class PushNavigation {
       return;
     }
 
+    if (screen == 'my_ads' ||
+        type == 'market_ad_published' ||
+        type == 'market_ad_moderation') {
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const MyAdsScreen()),
+      );
+      return;
+    }
+
     if (screen == 'jobs' ||
         type == 'ad_published' ||
         type == 'ad_moderation') {
@@ -215,14 +227,21 @@ class PushNavigation {
       final prefs = await SharedPreferences.getInstance();
       final phone = phoneDigits(prefs.getString('user_phone') ?? '');
       if (phone.length < 9) return;
+      final tab = data['tab'] == 'forwarded' ? 1 : 0;
       await nav.push(
         MaterialPageRoute(
-          builder: (_) => SellOfferScreen(
+          builder: (_) => SellHubScreen(
             phone: phone,
-            defaultToPlatform: false,
-            defaultToPublic: true,
+            initialTab: tab,
           ),
         ),
+      );
+      return;
+    }
+
+    if (screen == 'seller_pos' || type == 'seller_pickup') {
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const SellerPosScreen()),
       );
       return;
     }
@@ -322,6 +341,13 @@ class PushNavigation {
       return;
     }
 
+    if (screen == 'dating' || type == 'dating_youth_promo') {
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const DatingHomeScreen()),
+      );
+      return;
+    }
+
     final newsTab = _newsHubTabIndex(tab: tab, type: type);
     await nav.push(
       MaterialPageRoute(
@@ -369,10 +395,14 @@ class PushNavigation {
     } else if (type == 'order' || type.startsWith('order')) {
       out['screen'] = 'news';
       out['tab'] = 'orders';
+    } else if (type == 'market_ad_published' || type == 'market_ad_moderation') {
+      out['screen'] = 'my_ads';
     } else if (type == 'ad_published' || type == 'ad_moderation') {
       out['screen'] = 'jobs';
     } else if (type == 'sell_offer') {
       out['screen'] = 'sell';
+    } else if (type == 'seller_pickup') {
+      out['screen'] = 'seller_pos';
     } else if (type == 'support_chat') {
       out['screen'] = 'chat';
     } else if (type == 'identity' || type == 'general') {
@@ -383,6 +413,8 @@ class PushNavigation {
     } else if (type == 'tree_link_invite') {
       out['screen'] = 'relatives';
       out['tab'] = 'tree';
+    } else if (type == 'dating_youth_promo') {
+      out['screen'] = 'dating';
     } else if (type == 'driver_request_approved') {
       out['screen'] = 'local_taxi';
     } else if (type == 'local_trip_accepted') {

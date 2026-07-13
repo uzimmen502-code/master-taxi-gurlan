@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -165,7 +166,22 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
 
   Future<void> _onFinishLocalTrip(int fare) async {
     final c = context.read<DriverHomeController>();
-    final result = await showFareCalculatorDialog(context, initialFare: fare);
+    var walletIntent = 0;
+    final tripId = c.acceptedRide?.id;
+    if (tripId != null && tripId.isNotEmpty) {
+      final snap = await FirebaseFirestore.instance
+          .collection('trips')
+          .doc(tripId)
+          .get();
+      walletIntent =
+          (snap.data()?['passengerWalletIntent'] as num?)?.toInt() ?? 0;
+    }
+    if (!mounted) return;
+    final result = await showFareCalculatorDialog(
+      context,
+      initialFare: fare,
+      passengerWalletIntent: walletIntent,
+    );
     if (!mounted || result == null) return;
     final earned = await c.finishRide(
       fare: result.fare,

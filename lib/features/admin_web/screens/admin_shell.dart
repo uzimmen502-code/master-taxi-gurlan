@@ -36,6 +36,7 @@ import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
+import 'oil_catalog_admin_screen.dart';
 import 'taxi_price_screen.dart';
 import 'warehouse_stock_screen.dart';
 import 'sell_submissions_admin_screen.dart';
@@ -67,9 +68,8 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   List<_AdminSection> _visibleSections(AdminAuthService auth) {
-    return _sections
-        .where((s) => !s.financeOnly || auth.isFinanceReader)
-        .toList(growable: false);
+    final role = (auth.role ?? '').trim().toLowerCase();
+    return _sections.where((s) => s.visibleFor(role)).toList(growable: false);
   }
 
   @override
@@ -95,6 +95,7 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
       description: 'Нон ва овқат буюртмалари',
+      access: _SectionAccess.opsAndFinance,
     ),
     _AdminSection(
       label: 'Gilam yuvish',
@@ -167,19 +168,27 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Нон, овқaт, нархлaр',
     ),
     _AdminSection(
+      label: 'Мой каталоги',
+      icon: Icons.opacity,
+      description: 'Мой/фильтр · нарх · расм',
+      access: _SectionAccess.opsAndFinance,
+    ),
+    _AdminSection(
       label: 'Харид нархлари',
       icon: Icons.price_change_outlined,
       description: 'Йиғиб олиш ва тўлов нархлари',
+      access: _SectionAccess.opsAndFinance,
     ),
     _AdminSection(
       label: '🚕 Такси нархи',
       icon: Icons.local_taxi,
-      description: 'Маҳаллий такси бошланғич ва км нархи',
+      description: 'Mahalliy taksi: boshlang\'ich, km, koeffitsient',
     ),
     _AdminSection(
       label: 'Омбор',
       icon: Icons.warehouse_outlined,
       description: 'Йиғилган маҳсулот қолдиқлари',
+      access: _SectionAccess.opsAndFinance,
     ),
     _AdminSection(
       label: 'Ҳaйдовчи aризалари',
@@ -210,27 +219,31 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Фойдаланувчилар',
       icon: Icons.people_alt_outlined,
       description: 'Телефон, туғилган кун, қурилмалар',
+      access: _SectionAccess.users,
     ),
     _AdminSection(
       label: 'Risk review',
       icon: Icons.security,
       description: 'Хавфли сигналлар',
+      access: _SectionAccess.superOnly,
     ),
     _AdminSection(
       label: 'Аномалия созламалари',
       icon: Icons.settings,
       description: 'Чеги ва чиқим лимитлари',
+      access: _SectionAccess.superOnly,
     ),
     _AdminSection(
       label: 'Молия',
       icon: Icons.account_balance_wallet,
       description: 'Payout ва тушум',
+      access: _SectionAccess.finance,
     ),
     _AdminSection(
       label: 'Finance Center',
       icon: Icons.account_balance,
       description: 'Settlement Ledger — float, settlement, журнал',
-      financeOnly: true,
+      access: _SectionAccess.finance,
     ),
     _AdminSection(
       label: 'Birthday bonus',
@@ -388,6 +401,9 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Маҳсулoтлaр') {
       return const ProductsManagerScreen();
     }
+    if (section.label == 'Мой каталоги') {
+      return const OilCatalogAdminScreen();
+    }
     if (section.label == 'Харид нархлари') {
       return const ProcurementPricesScreen();
     }
@@ -451,13 +467,35 @@ class _AdminSection {
     required this.label,
     required this.icon,
     required this.description,
-    this.financeOnly = false,
+    this.access = _SectionAccess.ops,
   });
   final String label;
   final IconData icon;
   final String description;
-  final bool financeOnly;
+  final _SectionAccess access;
+
+  bool visibleFor(String role) {
+    final r = role.trim().toLowerCase();
+    switch (access) {
+      case _SectionAccess.ops:
+        return r == 'admin' || r == 'superadmin' || r == 'dispatcher';
+      case _SectionAccess.finance:
+        return r == 'finance' || r == 'auditor' || r == 'superadmin';
+      case _SectionAccess.opsAndFinance:
+        return r == 'admin' ||
+            r == 'superadmin' ||
+            r == 'dispatcher' ||
+            r == 'finance' ||
+            r == 'auditor';
+      case _SectionAccess.users:
+        return r == 'admin' || r == 'superadmin';
+      case _SectionAccess.superOnly:
+        return r == 'superadmin';
+    }
+  }
 }
+
+enum _SectionAccess { ops, finance, opsAndFinance, users, superOnly }
 
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
@@ -819,11 +857,14 @@ class _Sidebar extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(auth.phone ?? '',
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 10),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      '${auth.roleDisplayLabel}'
+                      '${auth.phone != null && auth.phone!.isNotEmpty ? ' · ${auth.phone}' : ''}',
+                      style: const TextStyle(
+                          color: Colors.white60, fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ]),
             ),
             const Icon(Icons.logout, color: Colors.white60, size: 18),

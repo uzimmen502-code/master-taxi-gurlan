@@ -4,10 +4,12 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/tree_person.dart';
 import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/tree_service.dart';
+import '../utils/relative_name_smart.dart';
 
 /// Umumiy nasab tugunini yaratish/tahrirlash (Faza 5 — umumiy tahrir).
 class TreeNodeEditScreen extends StatefulWidget {
@@ -31,9 +33,11 @@ class TreeNodeEditScreen extends StatefulWidget {
 class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
   final _photo = RelativePhotoStorage();
   final _picker = ImagePicker();
-  final _nameCtrl = TextEditingController();
+  final _firstCtrl = TextEditingController();
+  final _lastCtrl = TextEditingController();
+  final _patronymicCtrl = TextEditingController();
+  final _birthCtrl = TextEditingController();
 
-  DateTime? _birthDate;
   String _gender = '';
   String _photoUrl = '';
   String _photoPath = '';
@@ -41,14 +45,20 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
   String? _motherId;
   String? _spouseId;
   bool _busy = false;
+  String? _birthError;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _nameCtrl.text = e.fullName;
-      _birthDate = e.birthDate;
+      final parts = RelativeNameSmart.splitLegacy(e.fullName);
+      _firstCtrl.text = parts.firstName;
+      _lastCtrl.text = parts.lastName;
+      _patronymicCtrl.text = parts.patronymic;
+      if (e.birthDate != null) {
+        _birthCtrl.text = _fmtDate(e.birthDate!);
+      }
       _gender = e.gender;
       _photoUrl = e.photoUrl;
       _fatherId = e.fatherId;
@@ -59,7 +69,10 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _firstCtrl.dispose();
+    _lastCtrl.dispose();
+    _patronymicCtrl.dispose();
+    _birthCtrl.dispose();
     super.dispose();
   }
 
@@ -90,32 +103,59 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
     }
   }
 
-  Future<void> _pickBirthDate() async {
+  DateTime? _parseBirthInput() {
+    final raw = _birthCtrl.text.trim();
+    if (raw.isEmpty) {
+      setState(() => _birthError = null);
+      return null;
+    }
+    final d = parseBirthDate(raw);
+    if (d == null) {
+      setState(() => _birthError = context.tr('rel_birth_manual_invalid'));
+      return null;
+    }
     final now = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 25),
-      firstDate: DateTime(1900),
-      lastDate: now,
-    );
-    if (d != null) setState(() => _birthDate = d);
+    if (d.isAfter(now) || d.year < 1900) {
+      setState(() => _birthError = context.tr('rel_birth_manual_invalid'));
+      return null;
+    }
+    setState(() => _birthError = null);
+    return d;
   }
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      _snack(context.tr('rel_name_required'));
+    final first = _firstCtrl.text.trim();
+    final last = _lastCtrl.text.trim();
+    if (first.isEmpty) {
+      _snack(context.tr('rel_first_name_required'));
       return;
     }
+    if (last.isEmpty) {
+      _snack(context.tr('rel_last_name_required'));
+      return;
+    }
+    final birth = _parseBirthInput();
+    if (_birthCtrl.text.trim().isNotEmpty && birth == null) return;
+
+    final patronymic = _patronymicCtrl.text.trim();
+    final name = RelativeNameSmart.compose(
+      firstName: first,
+      lastName: last,
+      patronymic: patronymic,
+    );
+
     setState(() => _busy = true);
     try {
       if (widget.existing == null) {
         await TreeService.addRelativePerson(
           fullName: name,
+          firstName: first,
+          lastName: last,
+          patronymic: patronymic,
           gender: _gender,
           photoUrl: _photoUrl,
           photoPath: _photoPath,
-          birthDate: _birthDate,
+          birthDate: birth,
           fatherId: _fatherId,
           motherId: _motherId,
           spouseId: _spouseId,
@@ -124,10 +164,13 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
         await TreeService.saveNode(
           nodeId: widget.existing!.id,
           fullName: name,
+          firstName: first,
+          lastName: last,
+          patronymic: patronymic,
           gender: _gender,
           photoUrl: _photoUrl,
           photoPath: _photoPath,
-          birthDate: _birthDate,
+          birthDate: birth,
           fatherId: _fatherId,
           motherId: _motherId,
           spouseId: _spouseId,
@@ -180,26 +223,28 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(
-              labelText: context.tr('rel_field_name'),
-              prefixIcon: const Icon(Icons.person_outline),
-              border: const OutlineInputBorder(),
-              isDense: true,
+          _field(_firstCtrl, context.tr('rel_field_first_name'),
+              Icons.badge_outlined),
+          _field(_lastCtrl, context.tr('rel_field_last_name'),
+              Icons.family_restroom_outlined),
+          _field(_patronymicCtrl, context.tr('rel_field_patronymic'),
+              Icons.person_outline),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: _birthCtrl,
+              keyboardType: TextInputType.datetime,
+              decoration: InputDecoration(
+                labelText: context.tr('rel_field_birth_manual'),
+                hintText: context.tr('rel_birth_manual_hint'),
+                prefixIcon: const Icon(Icons.cake_outlined),
+                border: const OutlineInputBorder(),
+                isDense: true,
+                errorText: _birthError,
+                helperText: context.tr('rel_birth_manual_helper'),
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.cake_outlined),
-            title: Text(_birthDate == null
-                ? context.tr('rel_field_birth')
-                : _fmtDate(_birthDate!)),
-            trailing: const Icon(Icons.edit_calendar_outlined),
-            onTap: _pickBirthDate,
-          ),
-          const SizedBox(height: 8),
           _dropdown(
             context.tr('rel_field_gender'),
             _gender,
@@ -243,6 +288,21 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _field(TextEditingController c, String label, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: c,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
       ),
     );
   }

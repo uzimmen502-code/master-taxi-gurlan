@@ -57,11 +57,8 @@ class AdsRepository {
     }
   }
 
-  Future<void> activateAd(String adId) async {
-    await updateAd(adId, {
-      'status': 'active',
-      'publishedAt': FieldValue.serverTimestamp(),
-    });
+  Future<void> requestRepublish(String adId) async {
+    await updateAd(adId, {'status': 'pending'});
   }
 
   Future<void> deactivateAd(String adId) async {
@@ -107,9 +104,19 @@ class AdsRepository {
     if (status != null && status.isNotEmpty) {
       q = q.where('status', isEqualTo: status);
     }
-    return q.orderBy('publishedAt', descending: true).snapshots().map(
-          (snap) => snap.docs.map(AdModel.fromFirestore).toList(),
-        );
+    // pending da publishedAt bo'lmasligi mumkin — client sort.
+    return q.snapshots().map((snap) {
+      final list = snap.docs.map(AdModel.fromFirestore).toList();
+      list.sort((a, b) {
+        final da = b.updatedAt ?? b.createdAt ?? b.publishedAt;
+        final db = a.updatedAt ?? a.createdAt ?? a.publishedAt;
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da.compareTo(db);
+      });
+      return list;
+    });
   }
 
   Future<bool> canCreateAd(String uid) async {

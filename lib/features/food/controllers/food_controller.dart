@@ -38,6 +38,8 @@ class FoodController extends ChangeNotifier {
   int walletBalance = 0;
   bool isSubmitting = false;
   String? errorMessage;
+  /// `delivery` | `pickup`
+  String fulfillmentMode = 'delivery';
   bool hasInternet = true;
   int pendingCount = 0;
 
@@ -311,6 +313,13 @@ class FoodController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setFulfillmentMode(String mode) {
+    final m = mode == 'pickup' ? 'pickup' : 'delivery';
+    if (fulfillmentMode == m) return;
+    fulfillmentMode = m;
+    notifyListeners();
+  }
+
   void clearError() {
     if (errorMessage == null) return;
     errorMessage = null;
@@ -379,7 +388,7 @@ class FoodController extends ChangeNotifier {
         'status': 'new',
         'fulfillmentStatus': 'pending',
         'paymentStatus': 'unpaid',
-        'fulfillmentMode': 'delivery',
+        'fulfillmentMode': fulfillmentMode,
       };
 
       final decMaps = <Map<String, dynamic>>[

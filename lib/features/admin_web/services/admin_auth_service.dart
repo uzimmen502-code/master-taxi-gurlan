@@ -48,6 +48,46 @@ class AdminAuthService extends ChangeNotifier {
     return r == 'finance' || r == 'auditor' || r == 'superadmin';
   }
 
+  bool get isSuperAdmin {
+    final r = (_role ?? '').trim().toLowerCase();
+    return r == 'superadmin';
+  }
+
+  /// Operatsion admin (kundalik boshqaruv).
+  bool get isOpsAdmin {
+    final r = (_role ?? '').trim().toLowerCase();
+    return r == 'admin' || r == 'superadmin' || r == 'dispatcher';
+  }
+
+  /// Foydalanuvchilar bo'limi (rol berish).
+  bool get canManageUsers {
+    final r = (_role ?? '').trim().toLowerCase();
+    return r == 'admin' || r == 'superadmin';
+  }
+
+  /// Privileged rollar: finance / auditor / admin / superadmin.
+  bool get canAssignPrivilegedRoles => isSuperAdmin;
+
+  /// UI yorliq.
+  String get roleDisplayLabel {
+    switch ((_role ?? '').trim().toLowerCase()) {
+      case 'superadmin':
+        return 'Super Admin';
+      case 'admin':
+        return 'Admin';
+      case 'finance':
+        return 'Buxgalter';
+      case 'auditor':
+        return 'Auditor';
+      case 'dispatcher':
+        return 'Dispatcher';
+      case 'seller':
+        return 'Sotuvchi';
+      default:
+        return _role ?? 'user';
+    }
+  }
+
   static bool _isPanelRole(String? role) {
     final r = (role ?? '').trim().toLowerCase();
     return r == 'admin' ||

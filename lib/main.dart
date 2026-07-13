@@ -46,6 +46,7 @@ import 'services/fcm_service.dart';
 import 'services/background_gps_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
+import 'features/dating/services/dating_youth_promo_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
 import 'core/widgets/zone_gate.dart';
@@ -194,6 +195,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       unawaited(ServiceConfigHolder.bootstrap());
       unawaited(DeferredSettlementQueue.flush());
+      unawaited(DatingYouthPromoService.maybeShowOnAppOpen());
     }
   }
 

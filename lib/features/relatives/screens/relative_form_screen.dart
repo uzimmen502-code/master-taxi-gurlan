@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
-import 'package:image_picker/image_picker.dart';
 import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
+import '../utils/relative_name_smart.dart';
 
 /// Qarindosh qo'shish / tahrirlash.
 class RelativeFormScreen extends StatefulWidget {
@@ -33,12 +35,14 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
   final _photo = RelativePhotoStorage();
   final _picker = ImagePicker();
 
-  final _nameCtrl = TextEditingController();
+  final _firstCtrl = TextEditingController();
+  final _lastCtrl = TextEditingController();
+  final _patronymicCtrl = TextEditingController();
+  final _birthCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _degreeCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
-  DateTime? _birthDate;
   String _gender = '';
   String _side = '';
   String _photoUrl = '';
@@ -47,18 +51,25 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
   String? _motherId;
   String? _spouseId;
   bool _busy = false;
+  String? _birthError;
+  List<({RelativePerson person, double score})> _similar = const [];
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     if (e != null) {
-      _nameCtrl.text = e.fullName;
+      final parts = RelativeNameSmart.fromPerson(e);
+      _firstCtrl.text = parts.firstName;
+      _lastCtrl.text = parts.lastName;
+      _patronymicCtrl.text = parts.patronymic;
       _phoneCtrl.text = e.phone;
       _addressCtrl.text = e.address;
       _degreeCtrl.text = e.relationDegree;
       _notesCtrl.text = e.notes;
-      _birthDate = e.birthDate;
+      if (e.birthDate != null) {
+        _birthCtrl.text = _fmtDate(e.birthDate!);
+      }
       _gender = e.gender;
       _side = e.side;
       _photoUrl = e.photoUrl;
@@ -67,16 +78,45 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
       _motherId = e.motherId;
       _spouseId = e.spouseId;
     }
+    _firstCtrl.addListener(_refreshSimilar);
+    _lastCtrl.addListener(_refreshSimilar);
+    _patronymicCtrl.addListener(_refreshSimilar);
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _firstCtrl.removeListener(_refreshSimilar);
+    _lastCtrl.removeListener(_refreshSimilar);
+    _patronymicCtrl.removeListener(_refreshSimilar);
+    _firstCtrl.dispose();
+    _lastCtrl.dispose();
+    _patronymicCtrl.dispose();
+    _birthCtrl.dispose();
     _phoneCtrl.dispose();
     _addressCtrl.dispose();
     _degreeCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  RelativeNameParts get _queryParts => RelativeNameParts(
+        firstName: _firstCtrl.text.trim(),
+        lastName: _lastCtrl.text.trim(),
+        patronymic: _patronymicCtrl.text.trim(),
+      );
+
+  void _refreshSimilar() {
+    final q = _queryParts;
+    if (q.firstName.isEmpty) {
+      if (_similar.isNotEmpty) setState(() => _similar = const []);
+      return;
+    }
+    final found = RelativeNameSmart.findSimilarPeople(
+      query: q,
+      people: widget.allPeople,
+      excludeId: widget.existing?.id,
+    );
+    setState(() => _similar = found.take(3).toList());
   }
 
   Future<void> _pickPhoto() async {
@@ -99,35 +139,194 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
     }
   }
 
-  Future<void> _pickBirthDate() async {
+  DateTime? _parseBirthInput() {
+    final raw = _birthCtrl.text.trim();
+    if (raw.isEmpty) {
+      setState(() => _birthError = null);
+      return null;
+    }
+    final d = parseBirthDate(raw);
+    if (d == null) {
+      setState(() => _birthError = context.tr('rel_birth_manual_invalid'));
+      return null;
+    }
     final now = DateTime.now();
-    final d = await showDatePicker(
+    if (d.isAfter(now) || d.year < 1900) {
+      setState(() => _birthError = context.tr('rel_birth_manual_invalid'));
+      return null;
+    }
+    setState(() => _birthError = null);
+    return d;
+  }
+
+  Future<void> _applySuggested(RelativePerson p) async {
+    final parts = RelativeNameSmart.fromPerson(p);
+    setState(() {
+      _firstCtrl.text = parts.firstName;
+      _lastCtrl.text = parts.lastName;
+      _patronymicCtrl.text = parts.patronymic;
+    });
+    _refreshSimilar();
+  }
+
+  Future<bool> _confirmSimilarGate() async {
+    if (_similar.isEmpty) return true;
+    final top = _similar.first;
+    final action = await showDialog<String>(
       context: context,
-      initialDate: _birthDate ?? DateTime(now.year - 25),
-      firstDate: DateTime(1900),
-      lastDate: now,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('rel_similar_title')),
+        content: Text(
+          RelativesL10n.trParams(ctx, 'rel_similar_body', {
+            'mine': _queryParts.displayFullName,
+            'other': top.person.fullName,
+            'pct': '${(top.score * 100).round()}',
+          }),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'keep'),
+            child: Text(ctx.tr('rel_similar_keep')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'fix'),
+            child: Text(ctx.tr('rel_similar_fix')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'merge'),
+            child: Text(ctx.tr('rel_similar_merge')),
+          ),
+        ],
+      ),
     );
-    if (d != null) setState(() => _birthDate = d);
+    if (action == null) return false;
+    if (action == 'fix') {
+      await _applySuggested(top.person);
+      return false;
+    }
+    if (action == 'merge') {
+      await _mergeInto(top.person);
+      return false;
+    }
+    return true; // keep — янги deb сақлаш
+  }
+
+  Future<void> _mergeInto(RelativePerson existing) async {
+    setState(() => _busy = true);
+    try {
+      final birth = _parseBirthInput();
+      if (_birthCtrl.text.trim().isNotEmpty && birth == null) return;
+
+      final parts = RelativeNameSmart.fromPerson(existing);
+      final composed = RelativeNameSmart.compose(
+        firstName: parts.firstName.isNotEmpty
+            ? parts.firstName
+            : _firstCtrl.text.trim(),
+        lastName:
+            parts.lastName.isNotEmpty ? parts.lastName : _lastCtrl.text.trim(),
+        patronymic: parts.patronymic.isNotEmpty
+            ? parts.patronymic
+            : _patronymicCtrl.text.trim(),
+      );
+      final merged = existing.copyWith(
+        fullName: composed,
+        firstName: parts.firstName.isNotEmpty
+            ? parts.firstName
+            : _firstCtrl.text.trim(),
+        lastName:
+            parts.lastName.isNotEmpty ? parts.lastName : _lastCtrl.text.trim(),
+        patronymic: parts.patronymic.isNotEmpty
+            ? parts.patronymic
+            : _patronymicCtrl.text.trim(),
+        phone: existing.phone.isNotEmpty
+            ? existing.phone
+            : _phoneCtrl.text.trim(),
+        address: existing.address.isNotEmpty
+            ? existing.address
+            : _addressCtrl.text.trim(),
+        birthDate: existing.birthDate ?? birth,
+        gender: existing.gender.isNotEmpty ? existing.gender : _gender,
+        relationDegree: existing.relationDegree.isNotEmpty
+            ? existing.relationDegree
+            : _degreeCtrl.text.trim(),
+        side: existing.side.isNotEmpty ? existing.side : _side,
+        notes: existing.notes.isNotEmpty
+            ? existing.notes
+            : _notesCtrl.text.trim(),
+        photoUrl: existing.photoUrl.isNotEmpty ? existing.photoUrl : _photoUrl,
+        photoPath:
+            existing.photoPath.isNotEmpty ? existing.photoPath : _photoPath,
+        fatherId: existing.fatherId ?? _fatherId,
+        motherId: existing.motherId ?? _motherId,
+        spouseId: existing.spouseId ?? _spouseId,
+      );
+      await _repo.updatePerson(widget.userId, existing.id, merged);
+      if (widget.existing != null &&
+          widget.existing!.id != existing.id &&
+          !(widget.existing!.isSelf)) {
+        // Янги форма эди — эски duplicate йўқ; editда бошқасига merge
+      }
+      if (mounted) {
+        _snack(context.tr('rel_similar_merged_ok'));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        _snack(RelativesL10n.trParams(
+            context, 'error_generic', {'error': '$e'}));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _save() async {
     final isSelf = widget.existing?.isSelf ?? false;
-    final name = _nameCtrl.text.trim();
-    if (!isSelf && name.isEmpty) {
-      _snack(context.tr('rel_name_required'));
+    final first = _firstCtrl.text.trim();
+    final last = _lastCtrl.text.trim();
+    if (!isSelf) {
+      if (first.isEmpty) {
+        _snack(context.tr('rel_first_name_required'));
+        return;
+      }
+      if (last.isEmpty) {
+        _snack(context.tr('rel_last_name_required'));
+        return;
+      }
+    }
+
+    final birth = isSelf ? widget.existing?.birthDate : _parseBirthInput();
+    if (!isSelf && _birthCtrl.text.trim().isNotEmpty && birth == null) {
       return;
     }
+
+    if (!isSelf) {
+      final ok = await _confirmSimilarGate();
+      if (!ok) return;
+    }
+
     setState(() => _busy = true);
     try {
       final existing = widget.existing;
+      final patronymic = _patronymicCtrl.text.trim();
+      final composed = isSelf
+          ? existing!.fullName
+          : RelativeNameSmart.compose(
+              firstName: first,
+              lastName: last,
+              patronymic: patronymic,
+            );
       final person = RelativePerson(
         id: existing?.id ?? '',
-        fullName: isSelf ? existing!.fullName : name,
+        fullName: composed,
+        firstName: isSelf ? existing!.firstName : first,
+        lastName: isSelf ? existing!.lastName : last,
+        patronymic: isSelf ? existing!.patronymic : patronymic,
         photoUrl: isSelf ? existing!.photoUrl : _photoUrl,
         photoPath: isSelf ? existing!.photoPath : _photoPath,
         phone: isSelf ? existing!.phone : _phoneCtrl.text.trim(),
         address: isSelf ? existing!.address : _addressCtrl.text.trim(),
-        birthDate: isSelf ? existing!.birthDate : _birthDate,
+        birthDate: birth,
         gender: isSelf ? existing!.gender : _gender,
         relationDegree:
             isSelf ? existing!.relationDegree : _degreeCtrl.text.trim(),
@@ -221,32 +420,59 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
                     ? const Icon(Icons.person, color: RelativeFormScreen._accent)
                     : null,
               ),
-              title: Text(_nameCtrl.text,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(
+                RelativeNameSmart.compose(
+                  firstName: _firstCtrl.text,
+                  lastName: _lastCtrl.text,
+                  patronymic: _patronymicCtrl.text,
+                ).isNotEmpty
+                    ? RelativeNameSmart.compose(
+                        firstName: _firstCtrl.text,
+                        lastName: _lastCtrl.text,
+                        patronymic: _patronymicCtrl.text,
+                      )
+                    : widget.existing!.fullName,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               subtitle: Text([
                 if (_phoneCtrl.text.isNotEmpty) _phoneCtrl.text,
-                if (_birthDate != null) _fmtDate(_birthDate!),
+                if (_birthCtrl.text.isNotEmpty) _birthCtrl.text,
               ].join(' · ')),
             ),
           if (!isSelf) ...[
-            _field(_nameCtrl, context.tr('rel_field_name'), Icons.person_outline),
+            _field(_firstCtrl, context.tr('rel_field_first_name'),
+                Icons.badge_outlined),
+            _field(_lastCtrl, context.tr('rel_field_last_name'),
+                Icons.family_restroom_outlined),
+            _field(_patronymicCtrl, context.tr('rel_field_patronymic'),
+                Icons.person_outline),
+            if (_similar.isNotEmpty) _similarBanner(),
             _field(_phoneCtrl, context.tr('phone'), Icons.phone_outlined,
                 keyboard: TextInputType.phone),
             _field(_degreeCtrl, context.tr('rel_field_degree'),
                 Icons.diversity_1_outlined),
             _field(_addressCtrl, context.tr('rel_field_address'),
                 Icons.location_on_outlined),
-            const SizedBox(height: 4),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.cake_outlined),
-              title: Text(_birthDate == null
-                  ? context.tr('rel_field_birth')
-                  : _fmtDate(_birthDate!)),
-              trailing: const Icon(Icons.edit_calendar_outlined),
-              onTap: _pickBirthDate,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextField(
+                controller: _birthCtrl,
+                keyboardType: TextInputType.datetime,
+                onChanged: (_) {
+                  if (_birthError != null) _parseBirthInput();
+                },
+                decoration: InputDecoration(
+                  labelText: context.tr('rel_field_birth_manual'),
+                  hintText: context.tr('rel_birth_manual_hint'),
+                  prefixIcon: const Icon(Icons.cake_outlined),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  errorText: _birthError,
+                  helperText: context.tr('rel_birth_manual_helper'),
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             _dropdown(
               context.tr('rel_field_gender'),
               _gender,
@@ -303,6 +529,44 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _similarBanner() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.tr('rel_similar_hint'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: Color(0xFFE65100),
+                ),
+              ),
+              const SizedBox(height: 6),
+              for (final s in _similar)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(s.person.fullName),
+                  subtitle: Text('${(s.score * 100).round()}%'),
+                  trailing: TextButton(
+                    onPressed: () => _applySuggested(s.person),
+                    child: Text(context.tr('rel_similar_fix')),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

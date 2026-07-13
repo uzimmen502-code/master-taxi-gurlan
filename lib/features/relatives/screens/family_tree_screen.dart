@@ -228,6 +228,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     return RelativePerson(
       id: comp.id,
       fullName: comp.fullName.isNotEmpty ? comp.fullName : personal.fullName,
+      firstName: personal.firstName,
+      lastName: personal.lastName,
+      patronymic: personal.patronymic,
       photoUrl:
           comp.photoUrl.isNotEmpty ? comp.photoUrl : personal.photoUrl,
       photoPath: personal.photoPath,

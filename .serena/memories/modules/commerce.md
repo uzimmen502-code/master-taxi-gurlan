@@ -40,5 +40,13 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Order placement ALWA
 ## Customer courier entry (`features/home/screens/courier_services_hub_screen.dart`)
 - Home grid **Kuryer xizmati** → hub: 3 cards → BreadScreen, FoodScreen, CarpetWashScreen.
 
+## seller POS (`features/seller/`) — mini-kassa (phone/tablet/Android monoblock)
+- `seller_pos_screen.dart` + `seller_pos_controller.dart`; service `seller_sale_service.dart`.
+- Role `seller` (admin `setUserRoleByAdmin`); profile «Sotuv paneli» also for admin/superadmin.
+- Tabs: **Tezkor** (walk-in cash/wallet/mixed via `sellerPlaceSale`) + **Buyurtmalar** (pickup queue: filter Tayyor/Kutilmoqda/Hammasi, search, mark ready, same payment via `sellerSubmitPickupPayment`).
+- Customer food/bread cart: Yetkazish | Olib ketish → `fulfillmentMode` pickup|delivery (`placeOrderPostPaid`).
+- CFs: `sellerMarkPickupReady`, `sellerSubmitPickupPayment`; rules `isStaff` includes seller.
+- Catalog Tezkor: `food_catalog` + ready bread ONLY (no extras/yopish/toy — by design). Walk-in cash OK without phone; wallet/change needs customer phone.
+
 ## courier_orders (legacy, REMOVED 2026-07)
 - Collection `courier_orders` — admin read-only (tarix); Flutter/CF olib tashlangan. Audit: `functions/tools/audit_courier_orders_collection.js`.

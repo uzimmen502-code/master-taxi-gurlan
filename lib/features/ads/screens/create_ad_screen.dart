@@ -171,13 +171,17 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         phone: _phoneCtrl.text.trim(),
         sellerName: _sellerName(),
         imageUrls: urls,
-        status: 'active',
+        status: 'pending',
         views: 0,
       );
       await repo.createAd(ad);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Эълон жойлаштирилди')),
+        const SnackBar(
+          content: Text(
+            'Эълон модерацияга юборилди. Тасдиқлангач бозорда кўринади',
+          ),
+        ),
       );
       Navigator.pop(context);
     } catch (e) {

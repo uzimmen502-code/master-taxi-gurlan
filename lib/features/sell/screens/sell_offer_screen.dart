@@ -60,7 +60,7 @@ class SellOfferScreen extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
-                            const JobsScreen(initialTabIndex: JobsTabs.ad),
+                            const JobsScreen(initialTabIndex: JobsTabs.sell),
                       ),
                     );
                   }

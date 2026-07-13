@@ -31,4 +31,6 @@ Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bre
 - Social "Mening yaqinlarim": circles + relatives + dating + global family tree (F1–F5): `mem:modules/social`
 - Admin web panel + analytics (main_admin.dart, shell sections, RBAC): `mem:modules/admin_panel`
 - Jobs board + cheap-product marketplace (both `ads`) + entertainment: `mem:modules/jobs_ads_entertainment`
+- Sell hub (platform/bozor/P2P + forwarded + collection progress): `mem:modules/sell`
 - Foundation: home + onboarding (admin-code phone auth) + profile + core services: `mem:modules/foundation`
+- Oil change (moy almashtirish — vehicles, due reminder, booking, car-profile bonus): `mem:modules/oil_change`

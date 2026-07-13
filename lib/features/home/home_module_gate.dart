@@ -8,7 +8,7 @@ class HomeModuleGate {
   HomeModuleGate._();
 
   /// Hali implement qilinmagan modullar — har doim "Tez orada".
-  static const placeholderModuleIds = {'tire', 'car_wash', 'oil_change'};
+  static const placeholderModuleIds = {'tire', 'car_wash'};
 
   static bool showInGrid(String moduleId) =>
       ServiceConfigHolder.isVisible(moduleId);

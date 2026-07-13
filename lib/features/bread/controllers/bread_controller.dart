@@ -47,6 +47,16 @@ class BreadController extends ChangeNotifier {
 
   bool get isLoading => pricesLoading || firestoreLoading || extraLoading;
 
+  /// `delivery` | `pickup`
+  String fulfillmentMode = 'delivery';
+
+  void setFulfillmentMode(String mode) {
+    final m = mode == 'pickup' ? 'pickup' : 'delivery';
+    if (fulfillmentMode == m) return;
+    fulfillmentMode = m;
+    notifyListeners();
+  }
+
   // ─── Сават ───────────────────────────────────────────────────────────
   final Map<int, int> cart = {};
   final Map<int, double> extraProductsCart = {};
@@ -691,7 +701,7 @@ class BreadController extends ChangeNotifier {
       'status': 'new',
       'fulfillmentStatus': 'pending',
       'paymentStatus': 'unpaid',
-      'fulfillmentMode': 'delivery',
+      'fulfillmentMode': fulfillmentMode,
       if (orderLat != null) 'lat': orderLat,
       if (orderLng != null) 'lng': orderLng,
     };

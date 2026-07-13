@@ -19,6 +19,7 @@ import '../../../repositories/trips_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../../courier/screens/courier_screen.dart';
+import '../../seller/screens/seller_pos_screen.dart';
 import '../../marshrut/driver/screens/driver_panel_marshrut_screen.dart';
 import '../../marshrut/driver/screens/driver_register_marshrut_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
@@ -159,6 +160,18 @@ class _ProfileViewState extends State<_ProfileView> {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const CourierScreen())),
           ),
+          if (c.role == 'seller' ||
+              c.role == 'admin' ||
+              c.role == 'superadmin')
+            _rolePanelButton(
+              label: 'Sotuv paneli',
+              icon: Icons.point_of_sale,
+              color: AppColors.primaryDark,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SellerPosScreen()),
+              ),
+            ),
           if (c.role == 'driver' || c.hasCarInfo || widget.autoOpenCarEdit) ...[
             const SizedBox(height: 12),
             _CarInfoSection(ctrl: c),

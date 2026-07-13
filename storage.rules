@@ -80,6 +80,18 @@ service firebase.storage {
           && request.auth.token.phone_number.replace('\\+', '') == userId;
     }
 
+    // Мой/фильтр каталог расмлари (админ upload + илова read).
+    match /oil_images/{name=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Таом каталог расмлари
+    match /food_images/{name=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

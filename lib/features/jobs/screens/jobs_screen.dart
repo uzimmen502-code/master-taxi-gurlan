@@ -9,11 +9,11 @@ import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/add_ad_sheet.dart';
 
-/// 📰 ИШ ТОП — 2 таб: Иш бор, Хизмат таклифи.
+/// 📰 ИШ ТОП — 3 таб: Иш бор, Хизмат таклифи, Сотаман.
 class JobsScreen extends StatelessWidget {
   const JobsScreen({super.key, this.initialTabIndex = JobsTabs.ad});
 
-  /// [JobsTabs.ad], [JobsTabs.service].
+  /// [JobsTabs.ad], [JobsTabs.service], [JobsTabs.sell].
   final int initialTabIndex;
 
   @override
@@ -182,6 +182,7 @@ class _JobsViewState extends State<_JobsView>
             children: const [
               _Feed(kindFilter: AdKind.ad),
               _Feed(kindFilter: AdKind.service),
+              _Feed(kindFilter: AdKind.sell),
             ],
           ),
         ),

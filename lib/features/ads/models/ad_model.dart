@@ -34,7 +34,7 @@ class AdModel {
   final String sellerName;
   final List<String> imageUrls;
 
-  /// `active` | `inactive`
+  /// `active` | `inactive` | `pending`
   final String status;
   final int views;
   final DateTime? createdAt;
@@ -45,6 +45,8 @@ class AdModel {
   final String moderatedBy;
 
   bool get isActive => status == 'active';
+  bool get isPending => status == 'pending';
+  bool get isInactive => status == 'inactive';
 
   factory AdModel.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -101,7 +103,7 @@ class AdModel {
     if (forCreate) {
       map['createdAt'] = FieldValue.serverTimestamp();
       map['updatedAt'] = FieldValue.serverTimestamp();
-      map['publishedAt'] = FieldValue.serverTimestamp();
+      // publishedAt — faqat admin active qilganda
     }
     return map;
   }

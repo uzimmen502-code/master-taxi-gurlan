@@ -12,6 +12,7 @@ import '../../../models/user_address.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../repositories/sell_offers_repository.dart';
 import '../../../repositories/user_repository.dart';
+import 'sell_submission_tile.dart';
 
 /// Бирлашган сотиш формаси — платформа ва/ёки «Сотаман» (P2P).
 class SellOfferForm extends StatefulWidget {
@@ -356,7 +357,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
               }
               return Column(
                 children: list
-                    .map((s) => _HistoryTile(submission: s))
+                    .map((s) => SellSubmissionTile(submission: s))
                     .toList(growable: false),
               );
             },
@@ -517,58 +518,3 @@ class _OfferCardState extends State<_OfferCard> {
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.submission});
-
-  final SellSubmission submission;
-
-  @override
-  Widget build(BuildContext context) {
-    final date = submission.createdAt;
-    final when =
-        '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')} '
-        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    final summary = submission.items
-        .map((e) => '${e.productName} · ${e.quantityText}')
-        .join('; ');
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                SellSubmission.statusLabel(submission.status),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: submission.status == 'pending'
-                      ? Colors.orange.shade800
-                      : Colors.green.shade800,
-                ),
-              ),
-              const Spacer(),
-              Text(when, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            summary,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
-}

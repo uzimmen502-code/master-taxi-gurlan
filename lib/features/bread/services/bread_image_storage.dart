@@ -59,4 +59,20 @@ class BreadImageStorage {
     await ref.putData(bytes, SettableMetadata(contentType: contentType));
     return ref.getDownloadURL();
   }
+
+  /// Мой/фильтр каталог расми (`oil_images/`).
+  Future<String> uploadOilImage({
+    required String docId,
+    required Uint8List bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    final ext = contentType.contains('png')
+        ? 'png'
+        : contentType.contains('webp')
+            ? 'webp'
+            : 'jpg';
+    final ref = _storage.ref('oil_images/$docId.$ext');
+    await ref.putData(bytes, SettableMetadata(contentType: contentType));
+    return ref.getDownloadURL();
+  }
 }

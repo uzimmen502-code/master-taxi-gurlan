@@ -18,6 +18,7 @@ import '../../../repositories/schedules_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../services/background_gps_service.dart';
 import '../../../services/deferred_settlement_queue.dart';
+import '../../../services/local_taxi_payment_service.dart';
 import '../../../services/trip_change_settlement.dart';
 
 /// Haydovchi GPS profili — batareya uchun moslashtirilgan.
@@ -730,12 +731,27 @@ class DriverHomeController extends ChangeNotifier {
     if (ride == null) return 0;
     _finishingTripId = ride.id;
     _gpsSub?.cancel();
-    await _ridesRepo.finishTrip(
-        tripId: ride.id, fare: fare, cashPaid: cashPaid);
 
     lastSettlementOutcome = null;
-    if (ride.userPhone.isNotEmpty && cashPaid > fare) {
-      final change = cashPaid - fare;
+    final isLocal = ride.taxiType == 'local' || ride.taxiType == 'alone';
+    int change = 0;
+
+    if (isLocal) {
+      final result = await LocalTaxiPaymentService.completeTrip(
+        tripId: ride.id,
+        fare: fare,
+        cashPaid: cashPaid,
+      );
+      change = result.change;
+    } else {
+      await _ridesRepo.finishTrip(
+          tripId: ride.id, fare: fare, cashPaid: cashPaid);
+      if (ride.userPhone.isNotEmpty && cashPaid > fare) {
+        change = cashPaid - fare;
+      }
+    }
+
+    if (ride.userPhone.isNotEmpty && change > 0) {
       final opId = 'settle_trip_${ride.id}';
       lastSettlementOutcome = await TripChangeSettlement.settle(
         passengerPhone: canonicalPhoneId(ride.userPhone),

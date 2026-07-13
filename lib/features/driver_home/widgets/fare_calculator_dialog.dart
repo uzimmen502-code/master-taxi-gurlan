@@ -10,6 +10,7 @@ Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
   BuildContext context, {
   int? initialFare,
   double? initialDistanceKm,
+  int passengerWalletIntent = 0,
 }) {
   return showDialog<({int fare, int cashPaid})>(
     context: context,
@@ -17,6 +18,7 @@ Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
     builder: (_) => _FareCalculatorDialog(
       initialFare: initialFare,
       initialDistanceKm: initialDistanceKm,
+      passengerWalletIntent: passengerWalletIntent,
     ),
   );
 }
@@ -25,10 +27,12 @@ class _FareCalculatorDialog extends StatefulWidget {
   const _FareCalculatorDialog({
     this.initialFare,
     this.initialDistanceKm,
+    this.passengerWalletIntent = 0,
   });
 
   final int? initialFare;
   final double? initialDistanceKm;
+  final int passengerWalletIntent;
 
   @override
   State<_FareCalculatorDialog> createState() => _FareCalculatorDialogState();
@@ -91,7 +95,8 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       isUrgent: _isUrgent,
     );
     if (!_cashPaidInitialized) {
-      _cashPaidCtrl.text = '${widget.initialFare ?? fare}';
+      final cashDefault = (fare - widget.passengerWalletIntent).clamp(0, fare);
+      _cashPaidCtrl.text = '$cashDefault';
       _cashPaidInitialized = true;
     }
     return AlertDialog(
@@ -163,6 +168,24 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                 (v) => setState(() => _isRainy = v)),
           ]),
           const Divider(height: 20),
+          if (widget.passengerWalletIntent > 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '💳 Yo\'lovchi hamyon: ${FareCalculator.format(widget.passengerWalletIntent)} so\'m',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),

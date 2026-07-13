@@ -52,9 +52,11 @@ class CollectionTask {
     this.pickupLng,
     required this.items,
     required this.totalValue,
+    this.finalValue = 0,
     required this.courierId,
     required this.status,
     this.arrivedAt,
+    this.completedAt,
     this.createdAt,
     this.createdBy = '',
   });
@@ -69,9 +71,11 @@ class CollectionTask {
   final double? pickupLng;
   final List<CollectionItem> items;
   final int totalValue;
+  final int finalValue;
   final String courierId;
   final String status;
   final DateTime? arrivedAt;
+  final DateTime? completedAt;
   final DateTime? createdAt;
   final String createdBy;
 
@@ -122,9 +126,11 @@ class CollectionTask {
       pickupLng: (d['pickupLng'] as num?)?.toDouble(),
       items: items,
       totalValue: (d['totalValue'] as num?)?.toInt() ?? 0,
+      finalValue: (d['finalValue'] as num?)?.toInt() ?? 0,
       courierId: (d['courierId'] ?? '') as String,
       status: (d['status'] ?? 'assigned') as String,
       arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
+      completedAt: (d['completedAt'] as Timestamp?)?.toDate(),
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       createdBy: (d['createdBy'] ?? '') as String,
     );

@@ -1,11 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../features/relatives/utils/relative_name_smart.dart';
+
 /// `relatives/{userId}/people/{personId}` — foydalanuvchining SHAXSIY qarindosh
 /// yozuvi (ulashilmaydi). side: 'paternal' (ota tomon) | 'maternal' (ona tomon).
 class RelativePerson {
   const RelativePerson({
     required this.id,
     required this.fullName,
+    this.firstName = '',
+    this.lastName = '',
+    this.patronymic = '',
     this.photoUrl = '',
     this.photoPath = '',
     this.phone = '',
@@ -23,7 +28,12 @@ class RelativePerson {
   });
 
   final String id;
+  /// Кўрсатиш / CF учун бирлашган исм (Фамилия Исм Шариф).
   final String fullName;
+  final String firstName;
+  final String lastName;
+  /// Шариф (отаси исми) — ихтиёрий.
+  final String patronymic;
   final String photoUrl;
   final String photoPath;
   final String phone;
@@ -43,6 +53,8 @@ class RelativePerson {
   final bool isSelf;
 
   final DateTime? createdAt;
+
+  RelativeNameParts get nameParts => RelativeNameSmart.fromPerson(this);
 
   /// Keyingi tug'ilgan kun sanasi (bugundan boshlab).
   DateTime? get nextBirthday {
@@ -76,9 +88,22 @@ class RelativePerson {
 
   factory RelativePerson.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
+    final full = (d['fullName'] ?? '') as String;
+    var first = (d['firstName'] ?? '') as String;
+    var last = (d['lastName'] ?? '') as String;
+    var pat = (d['patronymic'] ?? '') as String;
+    if (first.trim().isEmpty && last.trim().isEmpty && full.trim().isNotEmpty) {
+      final parts = RelativeNameSmart.splitLegacy(full);
+      first = parts.firstName;
+      last = parts.lastName;
+      pat = parts.patronymic;
+    }
     return RelativePerson(
       id: doc.id,
-      fullName: (d['fullName'] ?? '') as String,
+      fullName: full,
+      firstName: first,
+      lastName: last,
+      patronymic: pat,
       photoUrl: (d['photoUrl'] ?? '') as String,
       photoPath: (d['photoPath'] ?? '') as String,
       phone: (d['phone'] ?? '') as String,
@@ -98,6 +123,9 @@ class RelativePerson {
 
   Map<String, dynamic> toMap() => {
         'fullName': fullName,
+        'firstName': firstName,
+        'lastName': lastName,
+        'patronymic': patronymic,
         'photoUrl': photoUrl,
         'photoPath': photoPath,
         'phone': phone,
@@ -112,4 +140,49 @@ class RelativePerson {
         'spouseId': spouseId,
         'updatedAt': FieldValue.serverTimestamp(),
       };
+
+  RelativePerson copyWith({
+    String? fullName,
+    String? firstName,
+    String? lastName,
+    String? patronymic,
+    String? photoUrl,
+    String? photoPath,
+    String? phone,
+    String? address,
+    DateTime? birthDate,
+    bool clearBirthDate = false,
+    String? gender,
+    String? relationDegree,
+    String? side,
+    String? notes,
+    String? fatherId,
+    String? motherId,
+    String? spouseId,
+    bool clearFatherId = false,
+    bool clearMotherId = false,
+    bool clearSpouseId = false,
+  }) {
+    return RelativePerson(
+      id: id,
+      fullName: fullName ?? this.fullName,
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      patronymic: patronymic ?? this.patronymic,
+      photoUrl: photoUrl ?? this.photoUrl,
+      photoPath: photoPath ?? this.photoPath,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+      birthDate: clearBirthDate ? null : (birthDate ?? this.birthDate),
+      gender: gender ?? this.gender,
+      relationDegree: relationDegree ?? this.relationDegree,
+      side: side ?? this.side,
+      notes: notes ?? this.notes,
+      fatherId: clearFatherId ? null : (fatherId ?? this.fatherId),
+      motherId: clearMotherId ? null : (motherId ?? this.motherId),
+      spouseId: clearSpouseId ? null : (spouseId ?? this.spouseId),
+      isSelf: isSelf,
+      createdAt: createdAt,
+    );
+  }
 }

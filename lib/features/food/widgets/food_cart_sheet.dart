@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../models/user_model.dart';
 import '../../../models/food_product.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../utils/food_catalog.dart';
@@ -112,24 +111,26 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
       return _showError(loc.translate('bread_error_phone_invalid'));
     }
 
-    // Манзил кафолати — курьер координатани профилдан олиши учун.
-    final uid = phoneDigits(phone);
-    final userRepo = context.read<UserRepository>();
-    var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
-    if (profile == null || !profile.address.isComplete) {
-      if (!mounted) return;
-      final filled = await AddressGate.ensureFilled(context, user: profile);
-      if (filled == null) return;
-      profile = await userRepo.getById(uid);
-      if (!mounted) return;
+    final isPickup = c.fulfillmentMode == 'pickup';
+    String deliveryText = 'Olib ketish';
+    if (!isPickup) {
+      // Манзил кафолати — курьер координатани профилдан олиши учун.
+      final uid = phoneDigits(phone);
+      final userRepo = context.read<UserRepository>();
+      var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
       if (profile == null || !profile.address.isComplete) {
-        return _showError(loc.translate('bread_error_address_required'));
+        if (!mounted) return;
+        final filled = await AddressGate.ensureFilled(context, user: profile);
+        if (filled == null) return;
+        profile = await userRepo.getById(uid);
+        if (!mounted) return;
+        if (profile == null || !profile.address.isComplete) {
+          return _showError(loc.translate('bread_error_address_required'));
+        }
+        setState(() => _addrCtrl.text = profile!.address.formatted);
       }
-      setState(() => _addrCtrl.text = profile!.address.formatted);
+      deliveryText = profile.address.formatted;
     }
-
-    final UserModel user = profile;
-    final deliveryText = user.address.formatted;
 
     setState(() => _isSending = true);
     try {
@@ -228,6 +229,26 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ModeChip(
+                        label: 'Yetkazish',
+                        selected: c.fulfillmentMode == 'delivery',
+                        onTap: () => c.setFulfillmentMode('delivery'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ModeChip(
+                        label: 'Olib ketish',
+                        selected: c.fulfillmentMode == 'pickup',
+                        onTap: () => c.setFulfillmentMode('pickup'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 // ─── Сават рўйхати ───
                 ...cartEntries.map((entry) {
                   FoodProduct? p;
@@ -327,9 +348,11 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                 _inputField(_nameCtrl, loc.translate('bread_hint_name'),
                     TextInputType.name),
                 const SizedBox(height: 8),
-                _inputField(_addrCtrl, loc.translate('bread_hint_address'),
-                    TextInputType.streetAddress),
-                const SizedBox(height: 8),
+                if (c.fulfillmentMode != 'pickup') ...[
+                  _inputField(_addrCtrl, loc.translate('bread_hint_address'),
+                      TextInputType.streetAddress),
+                  const SizedBox(height: 8),
+                ],
                 _inputField(_phoneCtrl, loc.translate('bread_hint_phone'),
                     TextInputType.phone),
                 const SizedBox(height: 20),
@@ -399,6 +422,44 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
         fillColor: Colors.grey.shade50,
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.primary : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : Colors.black87,
+          ),
+        ),
       ),
     );
   }

@@ -26,6 +26,7 @@ import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
+import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../relatives/services/tree_service.dart';
@@ -40,7 +41,7 @@ import '../marshrut/passenger/screens/marshrut_accepted_screen.dart';
 import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
-import '../sell/screens/sell_offer_screen.dart';
+import '../sell/screens/sell_hub_screen.dart';
 import '../circles/screens/circles_hub_screen.dart';
 import '../dating/screens/dating_home_screen.dart';
 import 'controllers/home_controller.dart';
@@ -50,6 +51,7 @@ import 'widgets/featured_products_section.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
+import 'widgets/seller_pos_home_pin.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -352,11 +354,7 @@ class _HomeViewState extends State<_HomeView> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => SellOfferScreen(
-            phone: phone,
-            defaultToPlatform: true,
-            defaultToPublic: true,
-          ),
+          builder: (_) => SellHubScreen(phone: phone),
         ),
       );
       return;
@@ -511,6 +509,12 @@ class _HomeViewState extends State<_HomeView> {
                                     );
                                   },
                                 ),
+                                if (home.role == 'seller' ||
+                                    home.isAdminOrSuperadmin) ...[
+                                  SizedBox(
+                                      height: _sectionGap(context, base: 10)),
+                                  const SellerPosHomePin(),
+                                ],
                                 SizedBox(
                                     height: _sectionGap(context, base: 10)),
                                 StreamBuilder<List<HomeTickerAd>>(
@@ -643,7 +647,11 @@ class _HomeViewState extends State<_HomeView> {
                                       _push(const MilkPickupScreen()),
                                   onCarWash: () {},
                                   onTire: () {},
-                                  onOilChange: () {},
+                                  onOilChange: HomeModuleGate.gatedTap(
+                                    context,
+                                    'oil_change',
+                                    () => _push(const OilChangeHomeScreen()),
+                                  ),
                                   onCircles: () =>
                                       _push(const CirclesHubScreen()),
                                   onDating: () =>
@@ -788,8 +796,8 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           context.tr('home_module_cheap_products'), widget.onOnlineMarket),
       _GridItemData('bread', 'assets/images/services/service_bread.png',
           context.tr('home_module_bread'), widget.onNon),
-      _GridItemData('carpet_wash', 'assets/images/services/service_carpet_wash.png',
-          context.tr('home_module_carpet'), widget.onCarpetWash),
+      _GridItemData('oil_change', 'assets/images/services/service_oil_change.png',
+          context.tr('home_module_oil_change'), widget.onOilChange),
       _GridItemData('circles', 'assets/images/services/service_relatives.png',
           context.tr('home_module_relatives'), widget.onCircles),
       _GridItemData('dating', null, context.tr('dating_short_label'),
@@ -800,8 +808,8 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           context.tr('home_module_tire'), widget.onTire),
       _GridItemData('car_wash', 'assets/images/services/service_car_wash.png',
           context.tr('home_module_car_wash'), widget.onCarWash),
-      _GridItemData('oil_change', 'assets/images/services/service_oil_change.png',
-          context.tr('home_module_oil_change'), widget.onOilChange),
+      _GridItemData('carpet_wash', 'assets/images/services/service_carpet_wash.png',
+          context.tr('home_module_carpet'), widget.onCarpetWash),
     ];
 
     final items = rawItems

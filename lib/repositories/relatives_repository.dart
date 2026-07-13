@@ -37,6 +37,9 @@ class RelativesRepository {
           .httpsCallable('addRelativePerson')
           .call({
         'fullName': person.fullName,
+        'firstName': person.firstName,
+        'lastName': person.lastName,
+        'patronymic': person.patronymic,
         'gender': person.gender,
         'photoUrl': person.photoUrl,
         'photoPath': person.photoPath,

@@ -1,5 +1,6 @@
 import '../../../models/relative_person.dart';
 import '../../../models/tree_person.dart';
+import '../utils/relative_name_smart.dart';
 
 typedef TreeRedirectMap = Map<String, String>;
 
@@ -23,6 +24,9 @@ RelativePerson resolvePersonLinks(
   return RelativePerson(
     id: person.id,
     fullName: person.fullName,
+    firstName: person.firstName,
+    lastName: person.lastName,
+    patronymic: person.patronymic,
     photoUrl: person.photoUrl,
     photoPath: person.photoPath,
     phone: person.phone,
@@ -61,6 +65,9 @@ List<RelativePerson> buildLinkCandidates({
       byId[p.id] = RelativePerson(
         id: p.id,
         fullName: comp.fullName.isNotEmpty ? comp.fullName : p.fullName,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        patronymic: p.patronymic,
         photoUrl: comp.photoUrl.isNotEmpty ? comp.photoUrl : p.photoUrl,
         photoPath: p.photoPath,
         phone: p.phone,
@@ -88,17 +95,16 @@ List<RelativePerson> buildLinkCandidates({
   return list;
 }
 
-String normPersonName(String s) =>
-    s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+String normPersonName(String s) => RelativeNameSmart.normalize(s);
 
 String? birthDateKey(DateTime? d) {
   if (d == null) return null;
   return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
-/// Dedup guruhlari: ism + (sana) + (jins).
+/// Dedup: аниқ мос + ўхшаш исм (орфография).
 List<List<TreePerson>> findDuplicateGroups(List<TreePerson> nodes) {
-  final byKey = <String, List<TreePerson>>{};
+  final exact = <String, List<TreePerson>>{};
   for (final n in nodes) {
     final name = normPersonName(n.fullName);
     if (name.isEmpty) continue;
@@ -109,11 +115,27 @@ List<List<TreePerson>> findDuplicateGroups(List<TreePerson> nodes) {
         : g.isNotEmpty
             ? '$name||$g'
             : name;
-    byKey.putIfAbsent(key, () => []).add(n);
+    exact.putIfAbsent(key, () => []).add(n);
   }
-  return byKey.values
-      .where((g) => g.length > 1)
-      .toList(growable: false);
+  final fromExact = exact.values.where((g) => g.length > 1).toList();
+
+  final fuzzy = RelativeNameSmart.fuzzyGroups<TreePerson>(
+    items: nodes.where((n) => n.fullName.trim().isNotEmpty).toList(),
+    nameOf: (n) => n.fullName,
+    birthOf: (n) => n.birthDate,
+    genderOf: (n) => n.gender,
+  );
+
+  // Бирлаштириш: fuzzy гуруҳлар + exact (дубликатсиз).
+  final seen = <String>{};
+  final out = <List<TreePerson>>[];
+  for (final g in [...fromExact, ...fuzzy]) {
+    final ids = g.map((e) => e.id).toList()..sort();
+    final sig = ids.join('|');
+    if (!seen.add(sig)) continue;
+    if (g.length > 1) out.add(g);
+  }
+  return out;
 }
 
 String duplicateGroupLabel(List<TreePerson> group) {

@@ -86,7 +86,7 @@ service cloud.firestore {
       return uid != ''
           && exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.role
-              in ['admin', 'superadmin', 'dispatcher', 'courier'];
+              in ['admin', 'superadmin', 'dispatcher', 'courier', 'seller'];
     }
 
     // Settlement Ledger / Finance Center o'qish huquqi (SoD).
@@ -561,6 +561,19 @@ service cloud.firestore {
             || marshrutStateDriverSyncOk(userId);
         allow delete: if false;
       }
+
+      // Moy almashtirish — mashinalar va tarix
+      match /vehicles/{vehicleId} {
+        allow read, create, update, delete: if isOwner(userId) || isAdmin();
+        match /oil_history/{entryId} {
+          allow read, create, update, delete: if isOwner(userId) || isAdmin();
+        }
+      }
+
+      match /car_profile_bonus_claims/{claimId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+      }
     }
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)
@@ -677,7 +690,8 @@ service cloud.firestore {
     function localTripPassengerPatchFields() {
       return [
         'targetDriverId', 'targetedAt', 'cancelledBy', 'cancelReason',
-        'cancelledAt', 'status', 'radiusKm'
+        'cancelledAt', 'status', 'radiusKm',
+        'passengerWalletIntent', 'passengerWalletUpdatedAt',
       ];
     }
 
@@ -692,7 +706,7 @@ service cloud.firestore {
     function localTripDriverCompleteFields() {
       return [
         'driverId', 'driverName', 'driverCar', 'driverPlate', 'acceptedAt',
-        'price', 'completedAt', 'date', 'status', 'fare', 'cashPaid'
+        'price', 'completedAt', 'date', 'status', 'fare', 'cashPaid', 'walletPaid'
       ];
     }
 
@@ -1115,6 +1129,40 @@ service cloud.firestore {
 
     match /settings/courier {
       allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Moy almashtirish — punktlar va bronlar
+    match /oil_change_services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /oil_change_bookings/{bookingId} {
+      allow read: if isAuth() && (
+        isAdmin()
+        || resource.data.uid == userDocIdFromPhoneToken()
+      );
+      allow create: if isAuth()
+          && request.resource.data.uid == userDocIdFromPhoneToken()
+          && request.resource.data.keys().hasAll([
+            'uid', 'vehicleId', 'packageId', 'servicePointId', 'slotAt', 'status'
+          ])
+          && request.resource.data.status == 'new';
+      allow update: if isAdmin()
+          || (
+            isAuth()
+            && resource.data.uid == userDocIdFromPhoneToken()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'updatedAt'])
+            && request.resource.data.status == 'cancelled'
+          );
+      allow delete: if false;
+    }
+
+    // Moy/filtr katalogi (admin write, hammaga read)
+    match /oil_change_catalog/{itemId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -1721,12 +1769,26 @@ service cloud.firestore {
           ]);
     }
 
+    // Owner may edit content / hide / re-submit for moderation — never set active.
     function cheapProductOwnerUpdateOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isAuth()
           && isCheapProductAdData(resource.data)
           && resource.data.ownerId == userDocIdFromPhoneToken()
           && request.resource.data.ownerId == resource.data.ownerId
-          && request.resource.data.type == resource.data.type;
+          && request.resource.data.type == resource.data.type
+          && changed.hasOnly([
+                'title', 'titleLower', 'description', 'price', 'phone',
+                'sellerName', 'imageUrls', 'status', 'updatedAt'
+              ])
+          && (!changed.hasAny(['status'])
+              || (
+                (request.resource.data.status == 'inactive'
+                    && resource.data.status in ['active', 'pending'])
+                // hide→pending (republish) yoki active→pending (tahrirdan keyin qayta moderatsiya)
+                || (request.resource.data.status == 'pending'
+                    && resource.data.status in ['inactive', 'active'])
+              ));
     }
 
     function cheapProductViewIncrementOk() {

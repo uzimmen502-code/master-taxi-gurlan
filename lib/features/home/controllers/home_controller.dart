@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/l10n/offline_l10n.dart';
 import '../../../services/user_role_sync.dart';
+import '../../dating/services/dating_youth_promo_service.dart';
 
 /// Бош экран controller'и — фойдаланувчи, интернет, бир марталик agro promo.
 class HomeController extends ChangeNotifier {
@@ -38,6 +39,7 @@ class HomeController extends ChangeNotifier {
     await _loadUser();
     await _initConnectivity();
     await _maybeFireAgroPromo();
+    await DatingYouthPromoService.maybeShowOnAppOpen();
   }
 
   Future<void> _loadUser() async {

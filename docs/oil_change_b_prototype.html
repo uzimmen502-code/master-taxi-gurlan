@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AVA Gurlan — Мой алмаштириш (B · 10/10)</title>
+  <style>
+    :root {
+      --green: #36A63A;
+      --green-dark: #2a8530;
+      --green-soft: #e8f5e9;
+      --ink: #1a2e1c;
+      --muted: #5c6b5e;
+      --bg: #f2f5f0;
+      --card: #fff;
+      --line: #d8e2d7;
+      --violet: #7c5cbf;
+      --soon: #c79100;
+      --over: #c62828;
+      --shadow: 0 10px 28px rgba(26,46,28,.1);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      font-family: "Segoe UI", "Noto Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 520px at 0% -10%, #d7ebd8 0%, transparent 55%),
+        radial-gradient(800px 420px at 100% 0%, #e6efe3 0%, transparent 45%),
+        #e8ede6;
+      padding: 20px 14px 40px;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page-head { width: min(980px, 100%); }
+    .page-head h1 { font-size: 1.25rem; font-weight: 780; }
+    .page-head p { color: var(--muted); margin-top: 6px; line-height: 1.45; font-size: .92rem; max-width: 72ch; }
+    .badges { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .badge {
+      font-size: .72rem; font-weight: 700; padding: 5px 9px; border-radius: 999px;
+      background: #fff; border: 1px solid var(--line); color: var(--muted);
+    }
+    .badge.a { background: var(--green-soft); border-color: #b6deb8; color: var(--green-dark); }
+    .edit-note {
+      width: min(980px, 100%); background: #fffef8; border: 1px dashed #e2d7a8;
+      border-radius: 12px; padding: 10px 12px; font-size: .84rem; color: #5d5320; line-height: 1.45;
+    }
+    .workspace {
+      width: min(980px, 100%);
+      display: grid; grid-template-columns: 270px 1fr; gap: 16px; align-items: start;
+    }
+    @media (max-width: 860px) { .workspace { grid-template-columns: 1fr; } }
+    .panel {
+      background: rgba(255,255,255,.85); border: 1px solid #fff; border-radius: 18px;
+      padding: 12px; box-shadow: var(--shadow);
+    }
+    .panel h2 {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .nav-btn {
+      width: 100%; text-align: left; border: 1px solid transparent; background: transparent;
+      border-radius: 12px; padding: 9px 10px; margin-bottom: 4px; cursor: pointer;
+      font: inherit; color: var(--ink); display: flex; gap: 9px;
+    }
+    .nav-btn:hover { background: #f3f8f2; }
+    .nav-btn.active { background: var(--green-soft); border-color: #b6deb8; }
+    .nav-btn .n {
+      width: 22px; height: 22px; border-radius: 50%; background: #e2ebe1; color: var(--muted);
+      display: grid; place-items: center; font-size: .7rem; font-weight: 800; flex: 0 0 auto;
+    }
+    .nav-btn.active .n { background: var(--green); color: #fff; }
+    .nav-btn .t { font-size: .88rem; font-weight: 700; }
+    .nav-btn .s { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .tools { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+    .tools .btn { width: 100%; margin-top: 6px; }
+
+    .phone {
+      width: min(390px, 100%); height: 820px; background: #101710; border-radius: 36px;
+      padding: 11px; position: relative; margin: 0 auto;
+      box-shadow: 0 28px 55px rgba(0,0,0,.22), inset 0 0 0 2px #2a342b;
+    }
+    .phone::before {
+      content: ""; position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      width: 106px; height: 20px; border-radius: 18px; background: #090e0a; z-index: 6;
+    }
+    .screen {
+      height: 100%; background: var(--bg); border-radius: 28px; overflow: hidden;
+      display: flex; flex-direction: column; position: relative;
+    }
+    .appbar {
+      background: linear-gradient(135deg, var(--green-dark), var(--green));
+      color: #fff; padding: 40px 14px 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .appbar .back, .appbar .ghost {
+      border: 0; background: rgba(255,255,255,.18); color: #fff; cursor: pointer;
+      border-radius: 10px; width: 34px; height: 34px; font-size: 1rem;
+    }
+    .appbar .ghost { width: auto; padding: 0 10px; font-size: .78rem; font-weight: 700; background: transparent; }
+    .appbar h3 { flex: 1; font-size: 1.02rem; font-weight: 750; }
+    .content { flex: 1; overflow: auto; padding: 12px; }
+    .content::-webkit-scrollbar { width: 0; }
+    .view { display: none; animation: in .2s ease; }
+    .view.active { display: block; }
+    @keyframes in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .hero-note {
+      background: linear-gradient(135deg, #1f3d22, #2f6b34);
+      color: #fff; border-radius: 16px; padding: 12px 13px; margin-bottom: 10px;
+    }
+    .hero-note.compact h4 { font-size: .88rem; line-height: 1.35; font-weight: 780; }
+    .hero-note.compact p { font-size: .76rem; line-height: 1.4; margin-top: 6px; opacity: .92; }
+    .hero-note .kicker {
+      font-size: .68rem; opacity: .85; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; margin-bottom: 4px;
+    }
+
+    .car-setup {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    }
+    .car-setup .ico {
+      width: 44px; height: 44px; border-radius: 12px; background: var(--green-soft);
+      display: grid; place-items: center; font-size: 1.3rem; flex: 0 0 auto;
+    }
+    .car-setup .txt { flex: 1; min-width: 0; }
+    .car-setup .txt strong { display: block; font-size: .95rem; font-weight: 800; }
+    .car-setup .txt span { font-size: .78rem; color: var(--muted); line-height: 1.3; }
+    .car-setup .btn { flex: 0 0 auto; padding: 10px 14px; }
+
+    .status {
+      border-radius: var(--radius); padding: 14px; color: #fff; margin-bottom: 10px;
+      background: linear-gradient(145deg, #3f8f42, #2e7d32);
+    }
+    .status.soon { background: linear-gradient(145deg, #e0a800, #c79100); }
+    .status.over { background: linear-gradient(145deg, #e53935, #c62828); }
+    .status .tag {
+      display: inline-block; background: rgba(255,255,255,.2); padding: 3px 9px;
+      border-radius: 999px; font-size: .72rem; font-weight: 800; margin-bottom: 6px;
+    }
+    .status .big { font-size: 1.05rem; font-weight: 800; }
+    .status .sub { margin-top: 5px; font-size: .8rem; opacity: .95; }
+
+    .section-title {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin: 12px 2px 8px; gap: 8px;
+    }
+    .section-title h4 { font-size: .9rem; font-weight: 780; }
+    .section-title span { font-size: .7rem; color: var(--muted); font-weight: 650; }
+
+    .block {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 12px; margin-bottom: 10px;
+    }
+    .block .label {
+      font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 6px;
+    }
+
+    /* Compact oil types — bars only */
+    .type-mini { display: grid; gap: 8px; }
+    .type-mini button {
+      width: 100%; border: 0; background: transparent; padding: 0; cursor: pointer;
+      text-align: left; font: inherit; color: inherit;
+    }
+    .type-mini .row-top {
+      display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+    }
+    .type-mini .name { font-size: .82rem; font-weight: 800; }
+    .type-mini .km { font-size: .72rem; font-weight: 750; color: var(--green-dark); }
+    .bar {
+      height: 12px; border-radius: 999px; background: #e6eee5; overflow: hidden;
+      position: relative;
+    }
+    .bar > i {
+      display: block; height: 100%; border-radius: 999px;
+      width: var(--bar-w, 50%);
+      background: linear-gradient(90deg, #7bc67e, var(--green), #7bc67e);
+      background-size: 200% 100%;
+      transform-origin: left center;
+      animation:
+        barFill 2.4s ease-in-out infinite,
+        barShine 2.4s linear infinite;
+    }
+    .bar.semi > i {
+      background: linear-gradient(90deg, #69c06d, #2f9e45, #69c06d);
+      background-size: 200% 100%;
+    }
+    .bar.full > i {
+      background: linear-gradient(90deg, #4caf50, #1b7a28, #4caf50);
+      background-size: 200% 100%;
+    }
+    @keyframes barFill {
+      0%, 100% { width: 12%; opacity: .85; }
+      45%, 55% { width: var(--bar-w, 50%); opacity: 1; }
+    }
+    @keyframes barShine {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bar > i { animation: none; width: var(--bar-w, 50%); }
+    }
+    .fine-print { margin-top: 8px; font-size: .64rem; color: var(--muted); line-height: 1.35; }
+
+    .type-card {
+      border: 1px solid var(--line); border-radius: 14px; padding: 11px; background: #fff;
+      cursor: pointer; text-align: left; width: 100%; font: inherit; margin-bottom: 8px;
+    }
+    .type-card .head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .type-card .title { font-weight: 800; font-size: .92rem; }
+    .type-card .km-pill {
+      font-size: .7rem; font-weight: 750; background: var(--green-soft); color: var(--green-dark);
+      padding: 3px 8px; border-radius: 999px;
+    }
+    .type-card .body-text { margin-top: 7px; font-size: .76rem; color: var(--muted); line-height: 1.4; }
+    .type-card .tap { margin-top: 6px; font-size: .7rem; font-weight: 750; color: var(--green-dark); }
+
+    .gallery-scroll {
+      display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+      scroll-snap-type: x mandatory;
+    }
+    .gallery-scroll::-webkit-scrollbar { height: 0; }
+    .product-card {
+      flex: 0 0 160px; scroll-snap-align: start; border-radius: 16px; overflow: hidden;
+      background: var(--card); border: 1px solid var(--line); cursor: pointer;
+      box-shadow: 0 4px 12px rgba(26,46,28,.06);
+    }
+    .product-card .art {
+      height: 112px; position: relative; display: grid; place-items: center;
+    }
+    .product-card.oil .art {
+      background: linear-gradient(160deg, #1b2a1d, #2f5a34 55%, #3d7a42);
+    }
+    .product-card.filter .art {
+      background: linear-gradient(160deg, #243041, #3a5168 60%, #5a738c);
+    }
+    .can {
+      width: 50px; height: 72px; border-radius: 8px;
+      background: linear-gradient(180deg, #f4fff4, #cfe8d1);
+      border: 2px solid rgba(255,255,255,.4); position: relative;
+    }
+    .can::before {
+      content: ""; position: absolute; top: -5px; left: 11px; right: 11px; height: 7px;
+      background: #9bb89d; border-radius: 4px;
+    }
+    .can .label {
+      position: absolute; inset: 14px 5px auto; text-align: center; font-size: .52rem;
+      font-weight: 800; color: #1a3a1e; line-height: 1.15;
+    }
+    .filt {
+      width: 58px; height: 58px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff, #c5d0da 45%, #7e8fa0);
+      position: relative;
+    }
+    /* Нарх: бинафша + фон прозрачний + ўқилувчанлик */
+    .price-tag {
+      position: absolute; left: 6px; right: 6px; bottom: 6px;
+      background: transparent !important; border: 0; text-align: center; padding: 0;
+      color: var(--violet);
+      text-shadow:
+        0 0 3px rgba(255,255,255,.95),
+        0 1px 2px rgba(0,0,0,.65),
+        0 0 10px rgba(0,0,0,.35);
+      -webkit-text-stroke: 0.35px rgba(255,255,255,.35);
+    }
+    .price-tag .from, .price-tag .cur { font-size: .6rem; font-weight: 700; color: var(--violet); }
+    .price-tag .sum { font-size: .95rem; font-weight: 850; color: var(--violet); letter-spacing: -.01em; }
+    .product-card .body { padding: 8px; }
+    .product-card .body .name { font-size: .76rem; font-weight: 780; }
+    .product-card .body .meta { font-size: .66rem; color: var(--muted); margin-top: 2px; }
+
+    .rank-card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 11px; margin-bottom: 8px; cursor: pointer; text-align: left; width: 100%;
+      font: inherit; color: inherit;
+    }
+    .rank-card.best { border-color: #9fd4a2; background: linear-gradient(180deg, #f3faf3, #fff); }
+    .rank-badge {
+      display: inline-block; font-size: .66rem; font-weight: 800; padding: 3px 8px;
+      border-radius: 999px; margin-bottom: 6px;
+    }
+    .rank-badge.r1 { background: var(--green); color: #fff; }
+    .rank-badge.r2 { background: #fff3cd; color: #7a5b00; }
+    .rank-badge.r3 { background: #eef2ee; color: var(--muted); }
+    .rank-card h5 { font-size: .9rem; font-weight: 800; }
+    .rank-card .meta { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+    .rank-card .price-line {
+      margin-top: 6px; font-size: .8rem; font-weight: 800; color: var(--violet);
+      background: transparent;
+    }
+    .rank-card .hint-tap { margin-top: 6px; font-size: .7rem; color: var(--green-dark); font-weight: 700; }
+
+    .filter-bundle {
+      background: var(--card); border: 1px dashed #b7dfb9; border-radius: 14px;
+      padding: 12px; margin-top: 4px; margin-bottom: 10px;
+    }
+    .filter-bundle h5 { font-size: .82rem; font-weight: 800; margin-bottom: 8px; color: var(--green-dark); }
+    .filter-chip {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 9px 0; border-bottom: 1px solid var(--line); cursor: pointer;
+      background: transparent; border-left: 0; border-right: 0; border-top: 0;
+      width: 100%; font: inherit; text-align: left; color: inherit;
+    }
+    .filter-chip:last-child { border-bottom: 0; }
+    .filter-chip strong { font-size: .82rem; }
+    .filter-chip span { font-size: .72rem; color: var(--violet); font-weight: 800; }
+
+    .locked {
+      background: #f7f8f6; border: 1px dashed var(--line); border-radius: 14px;
+      padding: 16px; text-align: center; margin-bottom: 10px;
+    }
+    .locked p { font-size: .84rem; color: var(--muted); line-height: 1.4; margin-bottom: 10px; }
+
+    .choice-note {
+      text-align: center; font-size: .76rem; color: var(--muted); font-weight: 700;
+      padding: 6px 4px 10px;
+    }
+    .btn {
+      border: 0; border-radius: 13px; padding: 12px; font: inherit; font-weight: 780; cursor: pointer;
+    }
+    .btn.primary { background: var(--green); color: #fff; }
+    .btn.secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    .btn.full { width: 100%; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+    .link {
+      border: 0; background: transparent; color: var(--green-dark); font: inherit;
+      font-weight: 700; font-size: .86rem; padding: 8px 2px; cursor: pointer; display: block; text-align: left;
+    }
+    .disclaimer { font-size: .68rem; color: var(--muted); line-height: 1.35; margin-top: 8px; }
+    .chip {
+      display: inline-flex; font-size: .7rem; font-weight: 750; padding: 4px 8px;
+      border-radius: 999px; background: #eef2ee; color: var(--muted); border: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .car-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+    .car-line .name { font-weight: 800; font-size: .95rem; }
+
+    .stepper { display: flex; gap: 6px; margin-bottom: 12px; }
+    .stepper span { flex: 1; height: 4px; border-radius: 4px; background: #d4dfd3; }
+    .stepper span.on { background: var(--green); }
+    .field { margin-bottom: 9px; }
+    .field label { display: block; font-size: .74rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+    .field select {
+      width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px;
+      font: inherit; background: #fff;
+    }
+    .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .seg button {
+      border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 11px 4px;
+      font: inherit; font-weight: 750; font-size: .78rem; cursor: pointer;
+    }
+    .seg button.on { background: var(--green); border-color: var(--green); color: #fff; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chips button {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 11px;
+      font: inherit; font-size: .78rem; font-weight: 700; cursor: pointer;
+    }
+    .chips button.on { background: var(--green-soft); border-color: #9fd4a2; color: var(--green-dark); }
+    .hint {
+      background: #fff8e8; border: 1px solid #f0e0b8; color: #7a5b00; border-radius: 12px;
+      padding: 9px 11px; font-size: .78rem; line-height: 1.4; margin-bottom: 10px;
+    }
+    .preview-soft { background: var(--green-soft); border-color: #b7dfb9; }
+    .value { font-size: .95rem; font-weight: 800; }
+    .meta { font-size: .8rem; color: var(--muted); line-height: 1.4; margin-top: 4px; }
+
+    .tip { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 11px; margin-bottom: 8px; }
+    .tip h5 { font-size: .86rem; font-weight: 800; margin: 4px 0; }
+    .tip p { font-size: .76rem; color: var(--muted); line-height: 1.4; }
+    .check-list .item { display: flex; gap: 8px; font-size: .8rem; margin-bottom: 7px; line-height: 1.35; }
+    .check-list .dot {
+      width: 18px; height: 18px; border-radius: 50%; background: var(--green-soft); color: var(--green-dark);
+      display: grid; place-items: center; font-size: .7rem; font-weight: 900; flex: 0 0 auto;
+    }
+    .filter-info { margin-bottom: 8px; }
+    .filter-info h5 { font-size: .86rem; font-weight: 800; margin-bottom: 4px; }
+    .filter-info p { font-size: .78rem; color: var(--muted); line-height: 1.4; margin-bottom: 6px; }
+    .filter-info .ava {
+      background: var(--green-soft); border-radius: 10px; padding: 8px;
+      font-size: .76rem; color: var(--green-dark); line-height: 1.4;
+    }
+
+    .toast {
+      position: absolute; left: 12px; right: 12px; bottom: 16px; background: #1a2e1c; color: #fff;
+      border-radius: 14px; padding: 11px; font-size: .82rem; z-index: 8;
+      transform: translateY(120%); opacity: 0; transition: .25s;
+    }
+    .toast.show { transform: none; opacity: 1; }
+    .modal {
+      position: absolute; inset: 0; background: rgba(10,16,11,.45); display: none;
+      align-items: flex-end; z-index: 9; border-radius: 28px;
+    }
+    .modal.show { display: flex; }
+    .sheet {
+      width: 100%; background: #fff; border-radius: 18px 18px 28px 28px; padding: 15px 15px 20px;
+      max-height: 78%; overflow: auto;
+    }
+    .sheet h4 { font-size: 1rem; margin-bottom: 6px; }
+    .sheet p, .sheet .body { font-size: .86rem; color: var(--muted); line-height: 1.45; }
+    .sheet .spec-grid { margin-top: 10px; display: grid; gap: 6px; font-size: .82rem; }
+    .sheet .spec-grid div {
+      display: flex; justify-content: space-between; gap: 10px;
+      padding: 6px 0; border-bottom: 1px dashed var(--line); color: var(--ink);
+    }
+    .sheet .reason-box {
+      margin-top: 10px; background: var(--green-soft); border-radius: 10px; padding: 10px;
+      font-size: .82rem; color: var(--ink); line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <h1>AVA Gurlan — Мой модули (B · 10/10 тузатиш)</h1>
+    <p>
+      Архитектура ўзгармаган (ишонч B). Яшил тема қайтарилди. Бош лента: автомобиль → турлар → галерея → 1/2/3 + фильтр.
+      Нарх — бинафша, фон прозрачний.
+    </p>
+    <div class="badges">
+      <span class="badge a">Яшил тема</span>
+      <span class="badge a">Биринчи очилиш · Созлаш</span>
+      <span class="badge">1/2/3 + фильтр</span>
+      <span class="badge">Нарх бинафша / прозрачний</span>
+    </div>
+  </header>
+
+  <div class="edit-note">
+    <strong>10/10 тузатишлар:</strong> «мақбул нарх», созлаш тугагунча тавсия блокланган,
+    мой турлари ихчам, фильтрлар «Мой билан бирга», босиб сабаб+спека.
+  </div>
+
+  <div class="workspace">
+    <aside class="panel">
+      <h2>Навигация</h2>
+      <button class="nav-btn active" data-go="hub" type="button">
+        <span class="n">★</span><span><div class="t">Бош лента</div><div class="s">Янги тартиб</div></span>
+      </button>
+      <button class="nav-btn" data-go="setup" type="button">
+        <span class="n">0</span><span><div class="t">Созлаш (модел+шароит)</div><div class="s">Бир оқим</div></span>
+      </button>
+      <button class="nav-btn" data-go="types" type="button">
+        <span class="n">2</span><span><div class="t">Мой турлари · батафсил</div><div class="s">Босиб ўқиш</div></span>
+      </button>
+      <button class="nav-btn" data-go="gallery" type="button">
+        <span class="n">4</span><span><div class="t">Галерея</div><div class="s">Нарх прозрачний</div></span>
+      </button>
+      <button class="nav-btn" data-go="reco" type="button">
+        <span class="n">5</span><span><div class="t">Тавсиялар</div><div class="s">1/2/3 + фильтр</div></span>
+      </button>
+      <button class="nav-btn" data-go="driver" type="button">
+        <span class="n">6</span><span><div class="t">Ҳайдовчи учун</div><div class="s">Ўзгаришсиз</div></span>
+      </button>
+      <button class="nav-btn" data-go="remind" type="button">
+        <span class="n">7</span><span><div class="t">Эслатма</div><div class="s">Ўзгаришсиз</div></span>
+      </button>
+      <div class="tools">
+        <button class="btn secondary" type="button" id="resetSetup">Биринчи очилишни синаш</button>
+        <button class="btn secondary" type="button" id="cycleStatus">Ҳолат айлантириш</button>
+      </div>
+    </aside>
+
+    <div class="phone">
+      <div class="screen">
+        <div class="appbar">
+          <button class="back" type="button" id="backBtn">←</button>
+          <h3 id="title">Мой алмаштириш</h3>
+          <button class="ghost" type="button" id="setupBtn">Созлаш</button>
+        </div>
+        <div class="content">
+
+          <!-- HUB -->
+          <section class="view active" id="view-hub">
+            <div class="hero-note compact">
+              <div class="kicker">AVA</div>
+              <h4>Тўғри танланган мой — ортиқча харажатларнинг олдини олади</h4>
+              <p>
+                AVA автомобил маълумотлари, ёқилғи тури ва фойдаланиш шароитига асосланиб
+                мой ва фильтрлар бўйича аниқ тавсия беради. Сизга энг мақбул ва оптимал
+                вариантлар <strong>мақбул нархда</strong> таклиф қилинади.
+              </p>
+            </div>
+
+            <!-- 2. Автомобил -->
+            <div id="carBlock"></div>
+
+            <!-- 3. Мой турлари ихчам -->
+            <div class="section-title"><h4>Мой тури</h4><span>ихчам · босиб</span></div>
+            <div class="block" id="hubTypes" data-animate></div>
+
+            <!-- 4. Галерея -->
+            <div class="section-title"><h4>Мотор мойлари ва фильтрлар</h4><span>нарх прозрачний</span></div>
+            <div class="gallery-scroll" id="hubGallery"></div>
+            <button class="link" type="button" data-go="gallery">Тўлиқ галерея →</button>
+
+            <!-- 5. Тавсия -->
+            <div class="section-title"><h4>Сизга тавсия қилинади</h4><span>1 / 2 / 3</span></div>
+            <div id="hubReco"></div>
+
+            <div class="actions">
+              <button class="btn secondary" type="button" data-go="driver">Ҳайдовчи учун</button>
+              <button class="btn primary" type="button" id="bookBtn">Брон</button>
+            </div>
+            <p class="disclaimer">AVA маслаҳати · завод кафолати эмас · сервис билан мослаштиринг.</p>
+          </section>
+
+          <!-- SETUP combined -->
+          <section class="view" id="view-setup">
+            <div class="stepper"><span id="s1" class="on"></span><span id="s2"></span></div>
+            <div id="setupStep1">
+              <div class="hint">Қадам 1/2 — модел (ишонч B). VIN шарт эмас.</div>
+              <div class="field"><label>Марка</label>
+                <select id="brand"><option>Chevrolet</option><option>Daewoo</option><option>Kia</option><option>Hyundai</option></select>
+              </div>
+              <div class="field"><label>Модель</label>
+                <select id="model"><option>Cobalt</option><option>Spark</option><option>Tracker</option><option>Damas</option></select>
+              </div>
+              <div class="field"><label>Йил</label>
+                <select id="year"><option>2020</option><option>2019</option><option>2021</option><option>2022</option></select>
+              </div>
+              <div class="field"><label>Двигатель</label>
+                <select id="engine"><option>1.5</option><option>1.2</option><option>1.6</option></select>
+              </div>
+              <button class="btn primary full" type="button" id="toStep2">Давом · Шароит</button>
+            </div>
+            <div id="setupStep2" hidden>
+              <div class="hint">Қадам 2/2 — ёқилғи ва фойдаланиш (бир нечта).</div>
+              <div class="field">
+                <label>Ёқилғи</label>
+                <div class="seg" id="fuelSeg">
+                  <button type="button" data-fuel="petrol">Бензин</button>
+                  <button type="button" class="on" data-fuel="cng">Метан</button>
+                  <button type="button" data-fuel="lpg">Пропан</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>Фойдаланиш</label>
+                <div class="chips" id="usageChips">
+                  <button type="button" data-u="personal">Шахсий</button>
+                  <button type="button" class="on" data-u="taxi">Такси</button>
+                  <button type="button" data-u="corp">Корпоратив</button>
+                  <button type="button" data-u="dust">Қишлоқ / чангли</button>
+                  <button type="button" data-u="long">Узоқ масофа</button>
+                </div>
+              </div>
+              <div class="block preview-soft">
+                <div class="label" style="color:var(--green-dark)">Олдиндан кўриш</div>
+                <div class="value" id="previewRec">5W-30 Full Syn · 7 000 км</div>
+                <div class="meta" id="previewWhy">Метан + такси → қисқароқ интервал</div>
+              </div>
+              <button class="btn secondary full" type="button" id="backStep1" style="margin-bottom:8px">← Моделга</button>
+              <button class="btn primary full" type="button" id="saveSetup">Сақлаш</button>
+            </div>
+          </section>
+
+          <section class="view" id="view-types">
+            <div class="hint">Карточкани босинг — мой турини содда тилда ўқинг.</div>
+            <div id="fullTypes"></div>
+            <button class="btn primary full" type="button" data-go="hub">Бош лентага</button>
+          </section>
+
+          <section class="view" id="view-gallery">
+            <div class="hero-note compact">
+              <div class="kicker">Каталог</div>
+              <h4>Мой ва фильтрлар</h4>
+              <p>Нарх бинафша · фон прозрачний. Админ/бухгалтер янгилайди.</p>
+            </div>
+            <div class="section-title"><h4>Мойлар</h4></div>
+            <div class="gallery-scroll" id="oilGallery"></div>
+            <div class="section-title"><h4>Фильтрлар</h4></div>
+            <div class="gallery-scroll" id="filterGallery"></div>
+            <button class="btn secondary full" type="button" data-go="hub" style="margin-top:10px">Орқага</button>
+          </section>
+
+          <section class="view" id="view-reco">
+            <div class="hero-note compact">
+              <div class="kicker">Сизга мос</div>
+              <h4>Тавсия этилган мойлар</h4>
+              <p id="recoIntro">Сабаблар оддий тилда. Танлов сиздан.</p>
+            </div>
+            <div id="recoList"></div>
+            <div class="choice-note">Танлов сиздан — AVA йўл кўрсатади</div>
+            <div class="actions">
+              <button class="btn secondary" type="button" data-go="gallery">Галерея</button>
+              <button class="btn primary" type="button" id="bookBtn2">Брон</button>
+            </div>
+          </section>
+
+          <section class="view" id="view-driver">
+            <div class="tip"><div class="ic">⛽</div><h5>Ёқилғи тежаш</h5><p>Эскирган мой ишқаланишни оширади — бакон кўпроқ ейди.</p></div>
+            <div class="tip"><div class="ic">🛡</div><h5>Таъмирдан ҳимоя</h5><p>Двигатель таъмири мойдан бир неча баравар қиммат.</p></div>
+            <div class="tip"><div class="ic">🔥</div><h5>Метан / пропан</h5><p>Газда двигатель иссиқроқ — Full Synthetic ва қисқароқ интервал.</p></div>
+            <div class="tip"><div class="ic">🌫</div><h5>Ўзбекистон чанги</h5><p>Қишлоқда ҳаво фильтрини тез-тез текширинг.</p></div>
+            <div class="section-title"><h4>Чеклист</h4></div>
+            <div class="block check-list">
+              <div class="item"><span class="dot">1</span><span>Одометрни ёзинг</span></div>
+              <div class="item"><span class="dot">2</span><span>Ёқилғини тўғри танланг</span></div>
+              <div class="item"><span class="dot">3</span><span>Такси/чанг → Full Synthetic</span></div>
+              <div class="item"><span class="dot">4</span><span>Мой фильтрини бирга алмаштиринг</span></div>
+              <div class="item"><span class="dot">5</span><span>Эслатмани ёқинг</span></div>
+            </div>
+            <div class="section-title"><h4>Фильтрлар</h4></div>
+            <div class="block filter-info">
+              <h5>Ҳаво фильтри</h5>
+              <p>Чанг-қумни ушлайди.</p>
+              <div class="ava">AVA: шаҳар 10–15 минг км; қишлоқ 5–7 минг км.</div>
+            </div>
+            <div class="block filter-info">
+              <h5>Мой фильтри</h5>
+              <p>Мой билан бирга янгиланг.</p>
+              <div class="ava">AVA: ҳар мой алмаштиришда.</div>
+            </div>
+            <button class="btn secondary full" type="button" data-go="remind">Эслатма</button>
+          </section>
+
+          <section class="view" id="view-remind">
+            <div class="hint">Ихчам: кунига ≤1 та push.</div>
+            <div class="block">
+              <div class="label">Push</div>
+              <div class="value" style="font-size:.95rem">Мой яқинлашди</div>
+              <div class="meta">~1 000 км қолди · 5W-30 Full Syn</div>
+            </div>
+            <div class="block">
+              <div class="label">Қачон</div>
+              <div class="meta" style="margin-top:0;color:var(--ink)">Км: 1000 · 200 · ўтди<br/>Вақт: 7 кун · 1 кун</div>
+            </div>
+            <button class="btn primary full" type="button" data-go="hub">Бош лентага</button>
+          </section>
+        </div>
+
+        <div class="toast" id="toast"></div>
+        <div class="modal" id="modal">
+          <div class="sheet">
+            <h4 id="sheetTitle">…</h4>
+            <div class="body" id="sheetText"></div>
+            <button class="btn primary full" type="button" id="closeModal" style="margin-top:12px">Ёпиш</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE = 'ava_oil_proto_setup_v3';
+    let configured = localStorage.getItem(STORAGE) === '1';
+    let statusIdx = 0;
+
+    const oilTypes = [
+      {
+        key: 'mineral', title: '🟤 Mineral', km: '5 000 км гача*', w: '50%', bar: '',
+        short: 'Арзон минерал мой. Эски авто, енгил юклама учун.',
+        detailTitle: 'Mineral (Минерал) мой нима?',
+        detail: 'Нефтдан олинади, ишлов пастроқ. Нарх арзон, муддат қисқа. Турбо, такси, газ учун одатда тавсия этилмайди.'
+      },
+      {
+        key: 'semi', title: '🟡 Semi-Synthetic', km: '7 000 км гача*', w: '70%', bar: 'semi',
+        short: 'Аралашма. Шаҳарда кундалик фойдаланиш учун мувозанат.',
+        detailTitle: 'Semi-Synthetic (Ярим синтетик) мой нима?',
+        detail: 'Минерал + синтетик. Иссиққа чидамлироқ, муддат узунроқ. Ўртача юклама учун мос.'
+      },
+      {
+        key: 'full', title: '🟢 Full Synthetic', km: '10 000 км гача*', w: '100%', bar: 'full',
+        short: 'Энг чидамли. Такси, метан/пропан, узоқ йўл учун.',
+        detailTitle: 'Full Synthetic (Тўлиқ синтетик) мой нима?',
+        detail: 'Замонавий технология. Иссиқ/совуқда барқарор, ҳимоя кучли. Газ ва такси учун энг кўп тавсия.'
+      }
+    ];
+    const finePrint = '* Умумий тавсия. Аниқ интервал — завод, мой сифати ва шароитга қараб ўзгаради.';
+
+    const oils = [
+      { id: 'o1', name: 'Liqui Moly 5W-30', meta: 'Full Syn · API SP · ACEA C3', price: 185000,
+        reason: 'Метан ва таксида двигатель иссиқроқ — бу мой иссиққа чидайди.',
+        specs: { SAE: '5W-30', API: 'SP', ACEA: 'C3', Тури: 'Full Synthetic', Давлат: 'DE' } },
+      { id: 'o2', name: 'Mobil 1 ESP 5W-30', meta: 'Full Syn · ACEA C3', price: 210000,
+        reason: 'Узоқ йўл ва оғир иш учун барқарор сифат.',
+        specs: { SAE: '5W-30', API: 'SP', ACEA: 'C3', Тури: 'Full Synthetic', Давлат: 'US' } },
+      { id: 'o3', name: 'Shell Helix HX8', meta: 'Full Syn · API SN', price: 165000,
+        reason: 'Нарх/сифат мувозанати — шаҳар таксисига мақбул.',
+        specs: { SAE: '5W-30', API: 'SN', ACEA: 'A3/B4', Тури: 'Full Synthetic', Давлат: 'NL' } },
+      { id: 'o4', name: 'Castrol Magnatec', meta: 'Full Syn · API SP', price: 175000,
+        reason: 'Тўхтаб-кетувчи тирбандликда ҳимояни ушлаб туради.',
+        specs: { SAE: '5W-30', API: 'SP', ACEA: 'C2', Тури: 'Full Synthetic', Давлат: 'EU' } },
+      { id: 'o5', name: 'Local Pro 5W-30', meta: 'Full Syn · API SP', price: 145000,
+        reason: 'Мақбул нархдаги тўлиқ синтетик — бюджетни сақлайди.',
+        specs: { SAE: '5W-30', API: 'SP', ACEA: 'C3', Тури: 'Full Synthetic', Давлат: 'UZ' } },
+      { id: 'o6', name: 'Semi City 10W-40', meta: 'Semi · API SN', price: 980000,
+        reason: 'Фақат енгил шахсий иш. Газ/такси учун эмас.',
+        specs: { SAE: '10W-40', API: 'SN', Тури: 'Semi-Synthetic', Давлат: 'UZ' } },
+    ];
+    // fix typo 980000 -> 98000
+    oils[5].price = 98000;
+
+    const filters = [
+      { id: 'f1', name: 'Мой фильтри', meta: 'Мой билан бирга', price: 45000,
+        reason: 'Мой алмаштирилса фильтр ҳам янги бўлсин — акс ҳолда кир қайта айланади.',
+        specs: { Вазифа: 'Мойни тозалаш', Қачон: 'Ҳар мой алмаштиришда', AVA: 'Мажбурий бирга' }, must: true },
+      { id: 'f2', name: 'Ҳаво фильтри', meta: 'Чангга қарши', price: 55000,
+        reason: 'Ўзбекистон чангида муҳим. Булғанса ёқилғи кўпаяди.',
+        specs: { Вазифа: 'Ҳавони тозалаш', Шаҳар: '10–15 минг км текшириш', Қишлоқ: '5–7 минг км' }, dust: true },
+      { id: 'f3', name: 'Салон фильтри', meta: 'Кондиционер', price: 60000,
+        reason: 'Ҳид ва чангни камайтиради — мижоз ҳам рози.',
+        specs: { Вазифа: 'Салон ҳавоси', Қачон: 'Йилига 1–2 марта' } },
+      { id: 'f4', name: 'Ёқилғи фильтри', meta: 'CNG / бензин', price: 70000,
+        reason: 'Насос ва форсункани ҳимоя қилади.',
+        specs: { Вазифа: 'Ёқилғи тозалиги', Газ: 'Сифатсиз газда тезроқ' }, gas: true },
+    ];
+
+    const money = n => n.toLocaleString('uz-UZ').replace(/,/g, ' ');
+    const titles = {
+      hub: 'Мой алмаштириш', setup: 'Автомобилни созлаш', types: 'Мой турлари',
+      gallery: 'Галерея', reco: 'Тавсиялар', driver: 'Ҳайдовчи учун', remind: 'Эслатма'
+    };
+    const history = ['hub'];
+    const statuses = [
+      { cls: '', tag: 'Яхши', big: 'Қолди ~1 200 км · 18 кун', sub: 'Метан · Такси · Кейинги: 03.09.2026' },
+      { cls: 'soon', tag: 'Яқинлашди', big: 'Қолди ~800 км · 6 кун', sub: 'Эслатма вақти келди' },
+      { cls: 'over', tag: 'Муддат ўтди', big: 'Алмаштириш керак', sub: 'Кечикманг' },
+    ];
+
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(toast._tm); toast._tm = setTimeout(() => t.classList.remove('show'), 2200);
+    }
+    function openSheet(title, html) {
+      document.getElementById('sheetTitle').textContent = title;
+      document.getElementById('sheetText').innerHTML = html;
+      document.getElementById('modal').classList.add('show');
+    }
+    function productSheet(p) {
+      const specs = Object.entries(p.specs || {}).map(([k,v]) =>
+        `<div><span>${k}</span><strong>${v}</strong></div>`).join('');
+      openSheet(p.name, `
+        <div class="reason-box"><strong>Нега танланди?</strong><br/>${p.reason}</div>
+        <div class="spec-grid">${specs}</div>
+        <p style="margin-top:10px"><strong style="color:var(--violet)">дан ${money(p.price)} сўм</strong>
+        · нарх админ/бухгалтер томонидан янгиланади</p>
+      `);
+    }
+
+    function animateBars() { /* CSS doimiy анимация — JS керак эмас */ }
+
+    function go(id, push = true) {
+      if ((id === 'reco') && !configured) {
+        toast('Аввал автомобилни созланг');
+        id = 'setup';
+      }
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + id).classList.add('active');
+      document.getElementById('title').textContent = titles[id] || '';
+      document.getElementById('setupBtn').style.visibility =
+        (id === 'hub' || id === 'reco') ? 'visible' : 'hidden';
+      document.querySelectorAll('.nav-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.go === id));
+      if (push && history[history.length - 1] !== id) history.push(id);
+      if (id === 'hub') { renderHub(); animateBars(document.getElementById('hubTypes')); }
+      if (id === 'types') animateBars(document.getElementById('fullTypes'));
+      if (id === 'reco') renderRecoPage();
+    }
+
+    function cardHTML(p) {
+      const oil = p.must !== undefined || p.dust !== undefined || p.gas !== undefined || p.id.startsWith('f')
+        ? false : true;
+      // detect filter by id prefix
+      const isOil = p.id.startsWith('o');
+      return `<article class="product-card ${isOil ? 'oil' : 'filter'}" data-id="${p.id}">
+        <div class="art">
+          ${isOil
+            ? `<div class="can"><div class="label">${p.name.split(' ').slice(0,2).join('<br>')}</div></div>`
+            : `<div class="filt"></div>`}
+          <div class="price-tag">
+            <div class="from">дан</div>
+            <div class="sum">${money(p.price)}</div>
+            <div class="cur">сўм</div>
+          </div>
+        </div>
+        <div class="body">
+          <div class="name">${p.name}</div>
+          <div class="meta">${p.meta}</div>
+        </div>
+      </article>`;
+    }
+
+    function bindCards(root) {
+      (root || document).querySelectorAll('.product-card').forEach(el => {
+        el.onclick = () => {
+          const p = [...oils, ...filters].find(x => x.id === el.dataset.id);
+          if (p) productSheet(p);
+        };
+      });
+    }
+
+    function fillGalleries() {
+      document.getElementById('hubGallery').innerHTML =
+        [...oils.slice(0, 3), ...filters.slice(0, 2)].map(cardHTML).join('');
+      document.getElementById('oilGallery').innerHTML = oils.map(cardHTML).join('');
+      document.getElementById('filterGallery').innerHTML = filters.map(cardHTML).join('');
+      bindCards();
+    }
+
+    function renderTypes() {
+      document.getElementById('hubTypes').innerHTML = `
+        <div class="type-mini">
+          ${oilTypes.map(t => `
+            <button type="button" data-type="${t.key}">
+              <div class="row-top"><span class="name">${t.title}</span><span class="km">${t.km}</span></div>
+              <div class="bar ${t.bar}" style="--bar-w:${t.w}"><i></i></div>
+            </button>`).join('')}
+        </div>
+        <p class="fine-print">${finePrint}</p>
+        <button class="link" type="button" data-go="types">Батафсил →</button>`;
+
+      document.getElementById('fullTypes').innerHTML = oilTypes.map(t => `
+        <button type="button" class="type-card" data-type="${t.key}">
+          <div class="head"><span class="title">${t.title}</span><span class="km-pill">${t.km}</span></div>
+          <div class="bar ${t.bar}" style="margin-top:8px;--bar-w:${t.w}"><i></i></div>
+          <div class="body-text">${t.short}</div>
+          <div class="tap">📖 Босиб ўқинг</div>
+        </button>`).join('') + `<p class="fine-print">${finePrint}</p>`;
+
+      document.querySelectorAll('[data-type]').forEach(el => {
+        el.onclick = (e) => {
+          if (el.classList.contains('link')) return;
+          const t = oilTypes.find(x => x.key === el.dataset.type);
+          if (t) openSheet(t.detailTitle, t.detail);
+        };
+      });
+      document.querySelectorAll('#hubTypes [data-go]').forEach(el => {
+        el.onclick = (e) => { e.stopPropagation(); go(el.dataset.go); };
+      });
+    }
+
+    function pickRanked() {
+      const fuel = document.querySelector('#fuelSeg .on')?.dataset.fuel || 'cng';
+      const usage = [...document.querySelectorAll('#usageChips .on')].map(b => b.dataset.u);
+      const heavy = usage.includes('taxi') || usage.includes('dust') || usage.includes('long');
+      const gas = fuel === 'cng' || fuel === 'lpg';
+      const dust = usage.includes('dust');
+      let ranked = gas || heavy ? [oils[0], oils[2], oils[4]] : [oils[2], oils[4], oils[5]];
+      const intro = gas
+        ? 'Газ + оғир иш учун тўлиқ синтетик — энг тўғри йўл.'
+        : (heavy ? 'Оғир фойдаланиш: тўлиқ синтетик афзал.' : 'Оддий шароит: нарх/сифат мувозанати.');
+      const bundle = [filters[0]];
+      if (dust || heavy) bundle.push(filters[1]);
+      if (gas) bundle.push(filters[3]);
+      else bundle.push(filters[2]);
+      return { ranked, intro, bundle };
+    }
+
+    function rankHTML(p, i) {
+      const labels = [
+        { c: 'r1', t: '1-ўрин · Энг тўғри танлов', best: true },
+        { c: 'r2', t: '2-ўрин · Яхши муқобил', best: false },
+        { c: 'r3', t: '3-ўрин · Мақбул нарх', best: false },
+      ];
+      const L = labels[i];
+      return `<button type="button" class="rank-card ${L.best ? 'best' : ''}" data-oil="${p.id}">
+        <span class="rank-badge ${L.c}">${L.t}</span>
+        <h5>${p.name}</h5>
+        <div class="meta">${p.meta}</div>
+        <div class="price-line">дан ${money(p.price)} сўм</div>
+        <div class="hint-tap">Нега? · Характеристика →</div>
+      </button>`;
+    }
+
+    function filterBundleHTML(bundle) {
+      return `<div class="filter-bundle">
+        <h5>Мой билан бирга тавсия</h5>
+        ${bundle.map(f => `
+          <button type="button" class="filter-chip" data-filter="${f.id}">
+            <div><strong>${f.name}</strong><div class="meta" style="margin:0">${f.meta}</div></div>
+            <span>дан ${money(f.price)}</span>
+          </button>`).join('')}
+      </div>`;
+    }
+
+    function bindRecoClicks(root) {
+      root.querySelectorAll('[data-oil]').forEach(el => {
+        el.onclick = () => {
+          const p = oils.find(x => x.id === el.dataset.oil);
+          if (p) productSheet(p);
+        };
+      });
+      root.querySelectorAll('[data-filter]').forEach(el => {
+        el.onclick = () => {
+          const p = filters.find(x => x.id === el.dataset.filter);
+          if (p) productSheet(p);
+        };
+      });
+    }
+
+    function renderRecoBlocks(targetId) {
+      const el = document.getElementById(targetId);
+      if (!configured) {
+        el.innerHTML = `<div class="locked">
+          <p>Сизга мос 1/2/3 тавсия учун аввал автомобилни созланг.<br/>
+          Ҳозирча каталогни кўриб чиқишингиз мумкин.</p>
+          <button class="btn primary" type="button" id="lockSetup">Менинг автомобилим · Созлаш</button>
+        </div>`;
+        document.getElementById('lockSetup').onclick = () => go('setup');
+        return;
+      }
+      const { ranked, intro, bundle } = pickRanked();
+      if (document.getElementById('recoIntro')) {
+        document.getElementById('recoIntro').textContent = intro;
+      }
+      el.innerHTML =
+        ranked.map((p, i) => rankHTML(p, i)).join('') +
+        `<div class="choice-note">Танлов сиздан</div>` +
+        filterBundleHTML(bundle);
+      bindRecoClicks(el);
+    }
+
+    function renderRecoPage() {
+      renderRecoBlocks('recoList');
+    }
+
+    function renderCarBlock() {
+      const box = document.getElementById('carBlock');
+      if (!configured) {
+        box.innerHTML = `<div class="car-setup">
+          <div class="ico">🚗</div>
+          <div class="txt">
+            <strong>Менинг автомобилим</strong>
+            <span>Модел ва шароитни киритинг — тавсия шаҳсийлашади</span>
+          </div>
+          <button class="btn primary" type="button" id="carSetupBtn">Созлаш</button>
+        </div>`;
+        document.getElementById('carSetupBtn').onclick = () => go('setup');
+        return;
+      }
+      const model = document.getElementById('model').value;
+      const year = document.getElementById('year').value;
+      const engine = document.getElementById('engine').value;
+      const fuel = document.querySelector('#fuelSeg .on')?.textContent || 'Метан';
+      const usage = [...document.querySelectorAll('#usageChips .on')].map(b => b.textContent).join(' · ');
+      box.innerHTML = `
+        <div class="car-line">
+          <div class="name">${model} · ${year} · ${engine}</div>
+          <button class="chip" type="button" id="trustBtn">Модел бўйича</button>
+        </div>
+        <div class="status" id="statusCard">
+          <div class="tag" id="statusTag">${statuses[statusIdx].tag}</div>
+          <div class="big" id="statusBig">${statuses[statusIdx].big}</div>
+          <div class="sub" id="statusSub">${fuel} · ${usage}</div>
+        </div>
+        <button class="link" type="button" id="editCar">Автомобилни таҳрирлаш →</button>`;
+      document.getElementById('trustBtn').onclick = () => openSheet('Модел бўйича',
+        'Тавсия марка, модель, йил ва двигатель асосида. VIN аниқлиги эмас.');
+      document.getElementById('editCar').onclick = () => go('setup');
+      const card = document.getElementById('statusCard');
+      if (card) card.className = 'status ' + statuses[statusIdx].cls;
+    }
+
+    function renderHub() {
+      renderCarBlock();
+      renderRecoBlocks('hubReco');
+    }
+
+    function updatePreview() {
+      const fuel = document.querySelector('#fuelSeg .on')?.dataset.fuel || 'cng';
+      const usage = [...document.querySelectorAll('#usageChips .on')].map(b => b.dataset.u);
+      const heavy = usage.includes('taxi') || usage.includes('dust') || usage.includes('long');
+      let rec = '5W-30 Full Syn · 9 000 км', why = 'Оддий шароит';
+      if (fuel === 'cng' || fuel === 'lpg') {
+        rec = heavy ? '5W-30 Full Syn · 7 000 км' : '5W-30 Full Syn · 8 000 км';
+        why = (fuel === 'cng' ? 'Метан' : 'Пропан') + (heavy ? ' + оғир иш' : '') + ' → қисқароқ интервал';
+      } else if (heavy) {
+        rec = '5W-30 Full Syn · 8 000 км'; why = 'Оғир фойдаланиш → интервал қисқартирилди';
+      }
+      document.getElementById('previewRec').textContent = rec;
+      document.getElementById('previewWhy').textContent = why;
+    }
+
+    // nav
+    document.querySelectorAll('[data-go]').forEach(el => {
+      el.addEventListener('click', () => go(el.dataset.go));
+    });
+    document.getElementById('backBtn').onclick = () => {
+      if (history.length > 1) { history.pop(); go(history[history.length - 1], false); }
+      else go('hub', false);
+    };
+    document.getElementById('setupBtn').onclick = () => go('setup');
+    document.getElementById('closeModal').onclick = () => document.getElementById('modal').classList.remove('show');
+    document.getElementById('bookBtn').onclick = () => toast(configured ? 'Брон оқимига уланади' : 'Аввал созланг');
+    document.getElementById('bookBtn2').onclick = () => toast('Брон оқимига уланади');
+
+    document.getElementById('toStep2').onclick = () => {
+      document.getElementById('setupStep1').hidden = true;
+      document.getElementById('setupStep2').hidden = false;
+      document.getElementById('s2').classList.add('on');
+      updatePreview();
+    };
+    document.getElementById('backStep1').onclick = () => {
+      document.getElementById('setupStep2').hidden = true;
+      document.getElementById('setupStep1').hidden = false;
+      document.getElementById('s2').classList.remove('on');
+    };
+    document.getElementById('saveSetup').onclick = () => {
+      configured = true;
+      localStorage.setItem(STORAGE, '1');
+      toast('Сақланди — тавсия тайёр');
+      go('hub');
+    };
+    document.getElementById('resetSetup').onclick = () => {
+      configured = false;
+      localStorage.removeItem(STORAGE);
+      statusIdx = 0;
+      toast('Биринчи очилиш ҳолати');
+      go('hub');
+    };
+    document.getElementById('cycleStatus').onclick = () => {
+      if (!configured) { toast('Аввал созланг'); return; }
+      statusIdx = (statusIdx + 1) % statuses.length;
+      go('hub');
+    };
+
+    document.getElementById('fuelSeg').onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      [...e.currentTarget.children].forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); updatePreview();
+    };
+    document.getElementById('usageChips').onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      b.classList.toggle('on'); updatePreview();
+    };
+
+    fillGalleries();
+    renderTypes();
+    updatePreview();
+    renderHub();
+    animateBars(document.getElementById('hubTypes'));
+  </script>
+</body>
+</html>

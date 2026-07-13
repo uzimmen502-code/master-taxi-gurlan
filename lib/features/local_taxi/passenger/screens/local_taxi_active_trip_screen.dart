@@ -9,14 +9,17 @@ import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../repositories/rides_repository.dart';
+import '../../../../repositories/user_repository.dart';
 import '../../../../services/notification_service.dart';
 import '../../../../services/settlement_service.dart';
+import '../widgets/local_taxi_wallet_panel.dart';
 import 'searching_screen.dart';
 
 /// Mahalliy taksi — haydovchi qabul qilgandan keyin safar ekrani.
@@ -45,17 +48,28 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Position? _myPosition;
   final _mapController = Completer<GoogleMapController>();
   final _localNotifications = FlutterLocalNotificationsPlugin();
+  String? _passengerUid;
 
   @override
   void initState() {
     super.initState();
     _trip = widget.initialTrip;
+    _loadPassengerUid();
     _initPassengerPosition();
     final driverId = _trip?.driverId ?? '';
     if (driverId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _syncDriverLocationListener(driverId);
       });
+    }
+  }
+
+  Future<void> _loadPassengerUid() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('user_phone') ?? '';
+    final uid = canonicalPhoneId(phone);
+    if (mounted && uid.isNotEmpty) {
+      setState(() => _passengerUid = uid);
     }
   }
 
@@ -299,8 +313,9 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     BuildContext context,
     ActiveTrip trip,
     int estimatedPrice,
-    String statusText,
-  ) =>
+    String statusText, {
+    Widget? walletSection,
+  }) =>
       Container(
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -352,6 +367,10 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                   ),
                 ],
               ),
+            ],
+            if (walletSection != null) ...[
+              const SizedBox(height: 10),
+              walletSection,
             ],
             if (trip.status == 'accepted') ...[
               const SizedBox(height: 10),
@@ -643,6 +662,27 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               ? context.tr('trip_status_completed')
               : context.tr('trip_status_accepted');
 
+          Widget? walletSection;
+          if (trip.status == 'accepted' &&
+              _passengerUid != null &&
+              _passengerUid!.isNotEmpty) {
+            final fareEst = estimatedPrice > 0
+                ? estimatedPrice
+                : trip.estimatedPrice;
+            walletSection = StreamBuilder<int>(
+              stream: context
+                  .read<UserRepository>()
+                  .watchBonusBalance(_passengerUid!),
+              builder: (context, balSnap) => LocalTaxiWalletPanel(
+                tripId: widget.tripId,
+                walletBalance: balSnap.data ?? 0,
+                fareEstimate: fareEst,
+                initialIntent: trip.passengerWalletIntent,
+                enabled: true,
+              ),
+            );
+          }
+
           final LatLng? initialTarget = trip.fromLat != 0 || trip.fromLng != 0
               ? LatLng(trip.fromLat, trip.fromLng)
               : _driverLatLng;
@@ -709,7 +749,12 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                     children: [
                       if (trip.driverPhone.isNotEmpty) _phonePanel(trip),
                       _tripInfoPanel(
-                          context, trip, estimatedPrice, statusText),
+                        context,
+                        trip,
+                        estimatedPrice,
+                        statusText,
+                        walletSection: walletSection,
+                      ),
                     ],
                   ),
                 ),

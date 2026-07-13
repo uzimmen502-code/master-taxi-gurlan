@@ -11,6 +11,7 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 
 ## Relatives (private, V1)
 - `features/relatives/` — personal relative profiles, call, birthday reminders, photo album, events. Firestore `relatives/{uid}/people/{id}` (+ `/photos`), `relatives/{uid}/events/{id}` — OWNER-ONLY.
+- Person fields: **firstName / lastName / patronymic** (шариф optional) + composed `fullName`; birthDate **manual** `kk.oo.yyyy` (optional). Smart ortho: `RelativeNameSmart` (normalize + Levenshtein); form suggests similar names (fix/merge/keep); tree dedup uses fuzzy groups.
 - Person fields incl. fatherId/motherId/spouseId (nasab links chosen manually via "🌳 Насаб боғланиши" dropdown), relationship side (ota/ona tomon).
 - OS push for birthdays/events via flutter_local_notifications.
 - `relatives/people` is the user's PRIVATE source; mirrored to shared `tree_persons` by CF `onRelativePersonWrite`.
@@ -22,11 +23,12 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 - Scope: user-defined; moderation: admin approve (status pending→approved); photos: open; interaction: interest/like; audience: opposite gender.
 - CFs: saveDatingProfile, setDatingActive, setDatingAgePreference, deleteDatingProfile (profile+photos+interests+matches+blocks), adminModerateDatingProfile, ...
 - GOTCHA: report dialog disposes controller in try/finally.
+- **Youth promo push (18–23):** `DatingYouthPromoService.maybeShowOnAppOpen` — local notification on home init + app resume; age from `user_birth_date` / Firestore `users.birthDate`; rotates `dating_youth_promo_1..10` via OfflineL10n (uz_Cyrl/uz_Latn/ru); tap → `DatingHomeScreen` (`type=dating_youth_promo`). Skips driver/courier/admin. Debounce 4s.
 
 ## Family Tree (Nasab daraxti — GLOBAL graph, Phases F1–F5 done)
 Architecture: per-user private `relatives/people` + SHARED global `tree_persons` graph keyed by `componentId`. `users/{uid}` carries treeComponentId, treePersonId, treeMigratedAt.
 - UI: `family_tree_screen.dart` (combines personal `relatives/people` + shared component, personal precedence), `family_tree_view.dart` (CUSTOM genealogy layout, NOT graphview), `tree_history_screen.dart` (audit + undo).
-- `family_tree_view.dart`: slot layout + corridor Y. **Rules:** gen from `fatherId`/`motherId` per person (`_assignGenerationsFromPersonLinks`); child card always below parent; marriage outer = symbol only (stem inside padding); BFS per child to **that child's person card** (`preferShortestDirect: false`, no L-shortcut fallback); every segment validated vs person card interior.
+- `family_tree_view.dart`: slot layout + corridor Y. **Rules:** gen from `fatherId`/`motherId` per person (`_assignGenerationsFromPersonLinks`); child card always below parent; marriage = heart symbol between cards (**no outer couple frame**); BFS per child to **that child's person card** (`preferShortestDirect: false`, no L-shortcut fallback); every segment validated vs person card interior.
 - Collections: tree_persons (nodes; survivorId on merge), tree_link_invites (two-sided), tree_redirects (oldId→survivor), tree_history (audit). All CF-only writes.
 - CFs by phase:
   - F1 ensureMyTree (create component+self node), onRelativePersonWrite (mirror relatives→tree_persons, redirect-aware).

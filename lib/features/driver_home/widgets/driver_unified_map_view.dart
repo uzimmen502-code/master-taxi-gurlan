@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -49,6 +50,9 @@ enum _TripPhase { pick, navigating }
 class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     with SingleTickerProviderStateMixin {
   static const _green = AppColors.primaryDark;
+  /// Mahalliy taksi max qidiruv radiusi — yo'lovchi bilan bir xil.
+  static const _onlineSearchRadiusKm = 7.0;
+  static const _onlineCameraPadding = 48.0;
 
   final _mapController = Completer<GoogleMapController>();
   final _directionsService = GoogleDirectionsService();
@@ -77,6 +81,10 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
   bool _finishing = false;
   bool _prefillingDestination = false;
   double? _distToPassengerM;
+
+  /// Har safar onlayn bo'lganda (2-B) bir marta 7 km kadrga sig'dirish.
+  bool _wasOnline = false;
+  bool _pendingOnlineCameraFit = false;
 
   @override
   void initState() {
@@ -111,25 +119,90 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     return text;
   }
 
-  Set<Circle> _buildPulseCircles(DriverHomeController c) {
-    if (!c.isOnline || c.isBusy || c.activeRequests.isEmpty) {
-      return const {};
+  LatLngBounds _boundsForRadius(LatLng center, double radiusKm) {
+    const kmPerDegLat = 111.0;
+    final kmPerDegLng = 111.0 *
+        math.cos(center.latitude * math.pi / 180).abs().clamp(0.01, 1.0);
+    final dLat = radiusKm / kmPerDegLat;
+    final dLng = radiusKm / kmPerDegLng;
+    return LatLngBounds(
+      southwest: LatLng(center.latitude - dLat, center.longitude - dLng),
+      northeast: LatLng(center.latitude + dLat, center.longitude + dLng),
+    );
+  }
+
+  Future<void> _fitCameraToOnlineRadius(LatLng center) async {
+    if (!_mapController.isCompleted) return;
+    try {
+      final ctrl = await _mapController.future;
+      final bounds = _boundsForRadius(center, _onlineSearchRadiusKm);
+      await ctrl.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, _onlineCameraPadding),
+      );
+    } catch (_) {}
+  }
+
+  /// Onlayn bo'lganda GPS kelguncha kutadi (3-A), keyin markaz + 7 km kadr.
+  void _syncOnlineCamera(DriverHomeController c) {
+    final inLocalTrip = c.isLocalAcceptedRide && c.acceptedRide != null;
+
+    if (!c.isOnline) {
+      _wasOnline = false;
+      _pendingOnlineCameraFit = false;
+      return;
     }
-    final nearest = c.nearestRequest;
-    if (nearest == null || nearest.fromLat == 0 && nearest.fromLng == 0) {
-      return const {};
+
+    if (!_wasOnline) {
+      _wasOnline = true;
+      _pendingOnlineCameraFit = true;
     }
-    final t = _pulseController.value;
-    return {
-      Circle(
-        circleId: const CircleId('offer_pulse'),
-        center: LatLng(nearest.fromLat, nearest.fromLng),
-        radius: 35 + t * 50,
-        fillColor: AppColors.primary.withValues(alpha: 0.1 + t * 0.1),
-        strokeColor: AppColors.primary.withValues(alpha: 0.45 + t * 0.35),
-        strokeWidth: 2,
-      ),
-    };
+
+    if (!_pendingOnlineCameraFit || inLocalTrip || c.isBusy) return;
+
+    final lat = c.driverLat;
+    final lng = c.driverLng;
+    if (lat == null || lng == null) return;
+
+    _pendingOnlineCameraFit = false;
+    unawaited(_fitCameraToOnlineRadius(LatLng(lat, lng)));
+  }
+
+  Set<Circle> _buildCircles(DriverHomeController c) {
+    final circles = <Circle>{};
+    final inLocalTrip = c.isLocalAcceptedRide && c.acceptedRide != null;
+
+    if (c.isOnline && !c.isBusy && !inLocalTrip) {
+      final lat = c.driverLat;
+      final lng = c.driverLng;
+      if (lat != null && lng != null) {
+        circles.add(Circle(
+          circleId: const CircleId('online_search_radius'),
+          center: LatLng(lat, lng),
+          radius: _onlineSearchRadiusKm * 1000,
+          fillColor: AppColors.primary.withValues(alpha: 0.08),
+          strokeColor: AppColors.primary.withValues(alpha: 0.45),
+          strokeWidth: 2,
+        ));
+      }
+    }
+
+    if (c.isOnline && !c.isBusy && c.activeRequests.isNotEmpty) {
+      final nearest = c.nearestRequest;
+      if (nearest != null &&
+          !(nearest.fromLat == 0 && nearest.fromLng == 0)) {
+        final t = _pulseController.value;
+        circles.add(Circle(
+          circleId: const CircleId('offer_pulse'),
+          center: LatLng(nearest.fromLat, nearest.fromLng),
+          radius: 35 + t * 50,
+          fillColor: AppColors.primary.withValues(alpha: 0.1 + t * 0.1),
+          strokeColor: AppColors.primary.withValues(alpha: 0.45 + t * 0.35),
+          strokeWidth: 2,
+        ));
+      }
+    }
+
+    return circles;
   }
 
   void _syncOffers(List<TripRequest> offers) {
@@ -531,12 +604,13 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
       });
     }
 
-    if (c.isOnline && !c.isBusy) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (c.isOnline && !c.isBusy) {
         _syncOffers(c.activeRequests);
-      });
-    }
+      }
+      _syncOnlineCamera(c);
+    });
 
     final inLocalTrip = c.isLocalAcceptedRide && c.acceptedRide != null;
     final showOffers = c.isOnline && !c.isBusy && c.activeRequests.isNotEmpty;
@@ -557,7 +631,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
               initialCameraPosition:
                   CameraPosition(target: _cameraTargetOrWorld(c), zoom: 14),
               markers: _buildMarkers(c),
-              circles: _buildPulseCircles(c),
+              circles: _buildCircles(c),
               polylines: inLocalTrip ? _tripPolylines : const {},
               myLocationEnabled: c.isOnline,
               myLocationButtonEnabled: c.isOnline,
@@ -565,6 +639,10 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                 if (!_mapController.isCompleted) {
                   _mapController.complete(controller);
                 }
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _syncOnlineCamera(context.read<DriverHomeController>());
+                });
               },
               onTap: _onMapTap,
             ),

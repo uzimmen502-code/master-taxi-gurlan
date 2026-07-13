@@ -959,8 +959,10 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
 
   static const Map<String, String> _roleLabels = {
     'admin': 'Admin',
-    'finance': 'Finance',
+    'finance': 'Buxgalter',
     'auditor': 'Auditor',
+    'seller': 'Sotuvchi',
+    'superadmin': 'Super Admin',
     'user': 'Oddiy',
   };
 
@@ -1021,6 +1023,11 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
   @override
   Widget build(BuildContext context) {
     final role = widget.currentRole;
+    final auth = context.watch<AdminAuthService>();
+    if (!auth.canManageUsers) {
+      return const SizedBox.shrink();
+    }
+    final canPriv = auth.canAssignPrivilegedRoles;
 
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
@@ -1029,9 +1036,12 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _roleBtn('admin', Icons.admin_panel_settings, AppColors.primary, role),
-          _roleBtn('finance', Icons.account_balance, Colors.teal, role),
-          _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
+          if (canPriv) ...[
+            _roleBtn('admin', Icons.admin_panel_settings, AppColors.primary, role),
+            _roleBtn('finance', Icons.account_balance, Colors.teal, role),
+            _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
+          ],
+          _roleBtn('seller', Icons.point_of_sale, Colors.orange.shade800, role),
           if (role != 'user')
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _setRole('user'),

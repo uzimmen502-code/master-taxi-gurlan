@@ -53,6 +53,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _houseCtrl = TextEditingController();
   final _districtCtrl = TextEditingController(text: 'Гурлан');
   final _noteCtrl = TextEditingController();
+  final _carModelCtrl = TextEditingController();
+  final _carColorCtrl = TextEditingController();
+  final _carPlateCtrl = TextEditingController();
+  final _carSeatsCtrl = TextEditingController(text: '4');
 
   bool _isLoading = false;
 
@@ -77,6 +81,14 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _birthDateCtrl.addListener(() => context
         .read<OnboardingController>()
         .setBirthDate(_birthDateCtrl.text));
+    _carModelCtrl.addListener(() =>
+        context.read<OnboardingController>().setCarModel(_carModelCtrl.text));
+    _carColorCtrl.addListener(() =>
+        context.read<OnboardingController>().setCarColor(_carColorCtrl.text));
+    _carPlateCtrl.addListener(() =>
+        context.read<OnboardingController>().setCarPlate(_carPlateCtrl.text));
+    _carSeatsCtrl.addListener(() =>
+        context.read<OnboardingController>().setCarSeats(_carSeatsCtrl.text));
   }
 
   void _enforcePhonePrefix() {
@@ -99,6 +111,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _houseCtrl.dispose();
     _districtCtrl.dispose();
     _noteCtrl.dispose();
+    _carModelCtrl.dispose();
+    _carColorCtrl.dispose();
+    _carPlateCtrl.dispose();
+    _carSeatsCtrl.dispose();
     super.dispose();
   }
 
@@ -236,6 +252,15 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   Future<void> _finish() async {
     final c = context.read<OnboardingController>();
+    // Qisman to'ldirilgan mashina — to'liq talab qilamiz (yoki o'tkazib yuborish).
+    final anyCar = _carModelCtrl.text.trim().isNotEmpty ||
+        _carColorCtrl.text.trim().isNotEmpty ||
+        _carPlateCtrl.text.trim().isNotEmpty;
+    if (anyCar && !c.hasCarDraft && !c.skipCarStep) {
+      _showError(
+          'Автомобил майдонларини тўлиқ тўлдиринг ёки «ўтказиб юбориш»ни босинг');
+      return;
+    }
     final ok = await c.finish(
       name: _nameCtrl.text,
       phone: _phoneCtrl.text,
@@ -279,6 +304,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   _page3(loc, c),
                   _pageBirthDate(loc, c),
                   _pageAddress(loc, c),
+                  _pageCar(c),
                 ],
               ),
             ),
@@ -316,54 +342,87 @@ class _OnboardingViewState extends State<_OnboardingView> {
   }
 
   Widget _footerButtons(OnboardingController c, AppLocalizations loc) {
+    final isCarPage = c.currentPage == OnboardingController.totalPages - 1;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-      child: Row(children: [
-        if (c.currentPage > 0)
-          GestureDetector(
-            onTap: _prev,
-            child: Container(
-              width: 50,
-              height: 50,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isCarPage)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextButton(
+                onPressed: c.isSubmitting || _isLoading
+                    ? null
+                    : () {
+                        c.setSkipCarStep(true);
+                        _carModelCtrl.clear();
+                        _carColorCtrl.clear();
+                        _carPlateCtrl.clear();
+                        c.setCarModel('');
+                        c.setCarColor('');
+                        c.setCarPlate('');
+                        _finish();
+                      },
+                child: Text(
+                  'Ҳозирча ўтказиб юбориш',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              child: const Icon(Icons.arrow_back, color: Colors.white),
             ),
-          ),
-        Expanded(
-          child: SizedBox(
-            height: 50,
-            child: ElevatedButton(
-              onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
-                  ? null
-                  : (c.isLastPage ? _finish : _next),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: _green2,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                elevation: 0,
+          Row(children: [
+            if (c.currentPage > 0)
+              GestureDetector(
+                onTap: _prev,
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white),
+                ),
               ),
-              child: c.isSubmitting
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.primary))
-                  : Text(
-                      c.isLastPage
-                          ? loc.translate('start')
-                          : loc.translate('continue'),
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
+            Expanded(
+              child: SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
+                      ? null
+                      : (c.isLastPage ? _finish : _next),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: _green2,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  child: c.isSubmitting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primary))
+                      : Text(
+                          c.isLastPage
+                              ? (c.hasCarDraft
+                                  ? 'Сақлаш ва бошлаш'
+                                  : loc.translate('start'))
+                              : loc.translate('continue'),
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ]),
+          ]),
+        ],
+      ),
     );
   }
 
@@ -753,6 +812,117 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
           // Config-driven zona (ixtiyoriy) — xizmat mavjudligini aniqlaydi.
           _serviceAreaCard(c),
+        ],
+      ),
+    );
+  }
+
+  Widget _pageCar(OnboardingController c) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🚗', style: TextStyle(fontSize: 40)),
+          const SizedBox(height: 8),
+          const Text(
+            'Автомобилингиз борми?',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Бир марта киритинг — мой алмаштириш, такси ва бошқа '
+            'авто хизматларда қайта ёзмайсиз.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Нега ҳозир?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '• Мой муддатини эслатиб турамиз\n'
+                  '• Таксида ҳайдовчи сифатида тезроқ тайёр бўласиз\n'
+                  '• Профилингиз тўлиқроқ — хизматлар қulayроқ',
+                  style: TextStyle(color: Colors.white, height: 1.4),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  '🎁 Бонус: автомобилни киритсангиз — ҳамёнингизга '
+                  '5 000 сўм бонус берилади.',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _carModelCtrl,
+            hint: 'Марка / модель (масалан Cobalt)',
+            icon: Icons.directions_car_outlined,
+            inputType: TextInputType.text,
+          ),
+          const SizedBox(height: 10),
+          _field(
+            controller: _carColorCtrl,
+            hint: 'Ранг',
+            icon: Icons.palette_outlined,
+            inputType: TextInputType.text,
+          ),
+          const SizedBox(height: 10),
+          _field(
+            controller: _carPlateCtrl,
+            hint: 'Давлат рақами',
+            icon: Icons.pin_outlined,
+            inputType: TextInputType.text,
+            formatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _field(
+            controller: _carSeatsCtrl,
+            hint: 'Ўриндиқлар сони',
+            icon: Icons.event_seat_outlined,
+            inputType: TextInputType.number,
+            formatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Мажбурий эмас — кейинроқ профилда ҳам қўшиш мумкин.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
         ],
       ),
     );

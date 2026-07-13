@@ -8,16 +8,20 @@ KEY: jobs board and cheap-product marketplace BOTH live in Firestore `ads` colle
 - Model `models/job_ad.dart` JobAd + `enum AdKind{work,service,ad,sell}` + AdKindX. Repo `repositories/jobs_repository.dart` JobsRepository (collection `ads`, `type`∈work|service|ad|sell). Complaints → `complaints`.
 - AdKindX: expiresInDays work=3/service=30/ad=14/sell=14; urgentExpiryDays=2; supportsUrgent=work|ad; userPanelKinds=[ad,service,sell].
 - JobAd: type,text,title,priceText,authorName,authorPhone,address,isUrgent,status(pending|active|completed|blocked),expiresAt.
-- Flow: create→status `pending` (admin moderation, UI admin_web/jobs_moderation_screen.dart); daily limit 10 (JobsController.dailyAdLimit/dailyCountByAuthor); owner edit gated by authorPhone (`_assertOwner`). isAdmin from prefs `user_role`. NO CF (pure Firestore). JobsTabs = 2 tabs (Иш бор=ad / Хизмат таклифи=service).
+- Flow: create→status `pending` (admin moderation, UI admin_web/jobs_moderation_screen.dart); daily limit 10; owner edit gated by authorPhone. NO CF (pure Firestore).
+- **JobsTabs = 3 tabs** (Иш бор=ad / Хизмат=service / **Сотаман=sell**). SellOfferScreen → `JobsTabs.sell`.
+- CF `onAdUpdate`: Jobs → `authorPhone` + screen `jobs`.
 
 ## Ads marketplace / cheap products (`features/ads/`)
-- model `ad_model.dart` AdModel (typeKey='cheap_product'); repo `ads_repository.dart` AdsRepository; `services/ads_storage_service.dart` AdsStorageService (Firebase Storage img). screens cheap_products/ad_details/create_ad/edit_ad/my_ads; widgets ad_card/ad_image_slider/my_ad_actions.
-- Firestore `ads` where type=='cheap_product'; fields ownerId,title,titleLower,description,price(int),phone,sellerName,imageUrls[],status(active|inactive),views,publishedAt.
-- Limits: maxActivePerUser=50 (canCreateAd). search via titleLower range. getSimilarAds weighted 50% keyword/30% price/20% freshness minScore .35. NO moderation, NO CF. incrementViews, migrateTitleLowerForCheapProducts (client one-time).
+- model `ad_model.dart` AdModel (typeKey='cheap_product'); repo `ads_repository.dart`; `ads_storage_service.dart`. screens cheap_products/ad_details/create_ad/edit_ad/my_ads (Фаол/Текширувда/Яширилган); widgets my_ad_actions.
+- Firestore `ads` type==`cheap_product`; status **`pending|active|inactive`**. Create: repo forces `pending` (rules require pending). `publishedAt` only on admin activate.
+- Owner rules (`cheapProductOwnerUpdateOk`): content + status **inactive** (hide) or **pending** (republish from inactive **or remode after edit of active**) — **never `active`**. Edit active → pending. `requestRepublish`. Sell hub: `mem:modules/sell`.
+- Admin: `market_moderation_screen` + CF `adminUpdateMarketAdStatus` / `adminUpdateMarketAd` / `adminDeleteMarketAd` / `adminListMarketAds`.
+- CF `onAdUpdate`: market → `ownerId`, screen `my_ads`, types `market_ad_published` / `market_ad_moderation` (inactive notify only admin reject/hide).
+- Limits: maxActivePerUser=50. getMyAds client-sort (pending may lack publishedAt).
 
 ## Entertainment (`features/entertainment/`)
-- passenger entertainment_list/entertainment_player; driver driver_entertainment_picker; services entertainment_storage/entertainment_cache_service. model `entertainment_video.dart` EntertainmentVideo. repo `entertainment_repository.dart`.
-- Firestore `entertainment_catalog/{id}` (orderBy sortOrder); driver selection on `intercity_drivers/{id}` fields entertainmentAllowed(bool), entertainmentIds[] (maxDriverSelection=5).
-- Access gate: EntertainmentAccessException unless confirmed intercity booking (bookingsRepo.userHasEntertainmentAccess).
-- Storage `entertainment/{videoId}.mp4` (maxUploadBytes=400MB, matches storage rules). Cache `entertainment_cache/{videoId}.mp4` (maxCacheBytes≈1.5GB, LRU prune by mtime). Player chewie+video_player; local cache file else network STREAM.
-- CF transcodeEntertainmentVideo (storage-triggered, 720p) — NOT called from Flutter; client reads catalog downloadUrl. Admin UI admin_web/entertainment_catalog_tab.dart.
+- passenger entertainment_list/entertainment_player; driver driver_entertainment_picker; services entertainment_storage/entertainment_cache_service. model `entertainment_video.dart`. repo `entertainment_repository.dart`.
+- Firestore `entertainment_catalog/{id}` (orderBy sortOrder); driver selection on `intercity_drivers/{id}` entertainmentAllowed + entertainmentIds[] (max 5).
+- Access gate: EntertainmentAccessException unless confirmed intercity booking.
+- Storage `entertainment/{videoId}.mp4` (max 400MB). Cache LRU ~1.5GB. CF transcodeEntertainmentVideo (720p). Admin UI entertainment_catalog_tab.dart.

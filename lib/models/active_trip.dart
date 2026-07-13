@@ -49,6 +49,8 @@ class ActiveTrip {
   final int offerTimeoutSeconds;
   final String cancelledBy;
   final String cancelReason;
+  final int passengerWalletIntent;
+  final int estimatedPrice;
 
   const ActiveTrip({
     required this.id,
@@ -83,6 +85,8 @@ class ActiveTrip {
     this.offerTimeoutSeconds = 0,
     this.cancelledBy = '',
     this.cancelReason = '',
+    this.passengerWalletIntent = 0,
+    this.estimatedPrice = 0,
   });
 
   bool get isAccepted => status == 'accepted';
@@ -137,6 +141,8 @@ class ActiveTrip {
       offerTimeoutSeconds: (d['offerTimeoutSeconds'] as num?)?.toInt() ?? 0,
       cancelledBy: (d['cancelledBy'] ?? '') as String,
       cancelReason: (d['cancelReason'] ?? '') as String,
+      passengerWalletIntent: (d['passengerWalletIntent'] as num?)?.toInt() ?? 0,
+      estimatedPrice: (d['estimatedPrice'] as num?)?.toInt() ?? 0,
     );
   }
 }

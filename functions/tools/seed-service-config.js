@@ -87,6 +87,7 @@ const moduleDefaults = {
     jobs: { status: 'enabled' },
     local_taxi: { status: 'enabled' },
     marshrut: { status: 'enabled' },
+    oil_change: { status: 'enabled' },
     // Gurlandan boshqa tumanlarda hali "tez orada":
     bread: { status: 'coming_soon' },
     food: { status: 'coming_soon' },
@@ -106,6 +107,7 @@ const GURLAN_LOCAL_ENABLED = {
   courier: { status: 'enabled' },
   carpet_wash: { status: 'enabled' },
   milk: { status: 'enabled' },
+  oil_change: { status: 'enabled' },
 };
 
 // Boshqa tumanlar: taksi/marshrut ochiq; Non/Ovqat/Kuryer/Gilam/Sut — "tez orada".
@@ -118,6 +120,7 @@ const OTHER_DISTRICT_MODULES = {
   courier: { status: 'coming_soon' },
   carpet_wash: { status: 'coming_soon' },
   milk: { status: 'coming_soon' },
+  oil_change: { status: 'enabled' },
 };
 
 // Gurlan tumani MFY ro'yxati — `assets/data/mfy_list.json` (ilova bilan bir xil manba).

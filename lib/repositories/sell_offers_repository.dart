@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/utils/formatters.dart';
@@ -29,6 +31,70 @@ class SellOffersRepository {
         .limit(limit)
         .snapshots()
         .map((s) => s.docs.map(SellSubmission.fromDoc).toList(growable: false));
+  }
+
+  /// Админ forward қилган таклифлар (барчага + менга танланган).
+  Stream<List<SellSubmission>> watchForwardedForUser(
+    String userId, {
+    int limit = 30,
+  }) {
+    final uid = phoneDigits(userId);
+    if (uid.length < 9) return Stream.value(const []);
+
+    final all$ = _col
+        .where('forwardAudience', isEqualTo: 'all')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots();
+    final selected$ = _col
+        .where('visibleToUserIds', arrayContains: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots();
+
+    List<SellSubmission> lastAll = const [];
+    List<SellSubmission> lastSelected = const [];
+
+    late final StreamController<List<SellSubmission>> controller;
+    StreamSubscription? subAll;
+    StreamSubscription? subSelected;
+
+    void emit() {
+      final byId = <String, SellSubmission>{};
+      for (final s in lastAll) {
+        byId[s.id] = s;
+      }
+      for (final s in lastSelected) {
+        byId[s.id] = s;
+      }
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) {
+        controller.add(merged);
+      }
+    }
+
+    controller = StreamController<List<SellSubmission>>(
+      onListen: () {
+        subAll = all$.listen((snap) {
+          lastAll =
+              snap.docs.map(SellSubmission.fromDoc).toList(growable: false);
+          emit();
+        }, onError: controller.addError);
+        subSelected = selected$.listen((snap) {
+          lastSelected =
+              snap.docs.map(SellSubmission.fromDoc).toList(growable: false);
+          emit();
+        }, onError: controller.addError);
+      },
+      onCancel: () async {
+        await subAll?.cancel();
+        await subSelected?.cancel();
+        await controller.close();
+      },
+    );
+
+    return controller.stream;
   }
 
   Stream<List<SellSubmission>> watchForAdmin({int limit = 200}) {

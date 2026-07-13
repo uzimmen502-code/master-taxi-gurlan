@@ -59,7 +59,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   ];
 
   static const _lineWidth = 3.2;
-  static const _outerFrameWidth = 2.4;
   static const _lineageTiers = 5;
   /// Koridor yo'lak qadami (har bolali oila = 1 lane).
   static const _laneStep = 22.0;
@@ -74,9 +73,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   static const double _spouseGap = 0;
   static const double _siblingGap = 40;
   static const _rootGap = 64.0;
-  static const double _familyPadTop = 8;
-  static const double _familyPadSide = 8;
-  static const double _familyPadBottom = 10;
+  /// Эр/хотин ташқи рамкаси олиб ташланган — пад энди 0.
+  static const double _familyPadTop = 0;
+  static const double _familyPadSide = 0;
+  static const double _familyPadBottom = 0;
   static const double _pad = 48;
 
   late Map<String, RelativePerson> _byId;
@@ -85,7 +85,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   final Map<String, _FamilyNode> _familyOf = {};
   final Map<String, Rect> _cardRect = {};
   final List<_LineSeg> _segments = [];
-  final List<_OuterFrame> _outerFrames = [];
   final Map<String, Color> _inheritedColor = {};
   final Map<String, Color?> _ownFamilyColor = {};
   final Map<String, bool> _splitBorder = {};
@@ -328,7 +327,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   void _resetFamilyLayout() {
     _cardRect.clear();
     _segments.clear();
-    _outerFrames.clear();
     for (final f in _families) {
       f.centerX = 0;
       f.outerRect = null;
@@ -468,7 +466,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _familyOf.clear();
     _cardRect.clear();
     _segments.clear();
-    _outerFrames.clear();
     _inheritedColor.clear();
     _ownFamilyColor.clear();
     _splitBorder.clear();
@@ -705,7 +702,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     _placed = _cardRect.length;
 
     _segments.clear();
-    _outerFrames.clear();
     final linesOk = _buildRoutedLines();
 
     final needsLines = _families.any(_hasLinkedChildren);
@@ -739,10 +735,7 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
             (childId: p.id, parentId: p.motherId!),
         ],
       ],
-      outerFrames: [
-        for (final f in _families)
-          if (f.outerRect != null) f.outerRect!,
-      ],
+      outerFrames: const [],
       layoutRowGap: List.generate(_maxGen + 1, _corridorHeightAtGen)
           .fold(0.0, math.max),
       layoutSiblingGap: _siblingGapAtGen.values.fold(
@@ -858,22 +851,18 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
       preferShortestDirect: false,
     );
 
-    Offset marriageInner(_FamilyNode parent) {
-      final outer = parent.outerRect!;
-      return Offset(
-        outer.center.dx,
-        outer.bottom - _familyPadBottom + _linePad,
-      );
-    }
-
-    Offset belowMarriageFrame(_FamilyNode parent) {
-      final outer = parent.outerRect!;
-      return Offset(outer.center.dx, outer.bottom + _linePad);
-    }
-
     Offset belowSingleCard(_FamilyNode parent) {
       final card = _cardRect[parent.members.first.id]!;
       return Offset(card.center.dx, card.bottom + _linePad);
+    }
+
+    Offset belowCoupleCards(_FamilyNode parent) {
+      final left = _cardRect[parent.members[0].id]!;
+      final right = _cardRect[parent.members[1].id]!;
+      return Offset(
+        (left.center.dx + right.center.dx) / 2,
+        math.max(left.bottom, right.bottom) + _linePad,
+      );
     }
 
     Offset childCardTarget(RelativePerson child) {
@@ -902,10 +891,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
     for (final f in _families) {
       final color = f.familyColor ?? _accent;
 
-      if (f.isCouple && f.outerRect != null) {
-        _outerFrames.add(_OuterFrame(f.outerRect!, color));
-      }
-
       if (!_hasLinkedChildren(f)) continue;
 
       final linked = _directChildrenOf(f);
@@ -918,16 +903,10 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
           return ax.compareTo(bx);
         });
 
-      final List<Offset> prefix;
-      final Offset routeStart;
-      if (f.isCouple && f.outerRect != null) {
-        final inner = marriageInner(f);
-        routeStart = belowMarriageFrame(f);
-        prefix = [inner, routeStart];
-      } else {
-        routeStart = belowSingleCard(f);
-        prefix = [routeStart];
-      }
+      final routeStart = f.isCouple && f.members.length == 2
+          ? belowCoupleCards(f)
+          : belowSingleCard(f);
+      final prefix = [routeStart];
 
       for (final t in targets) {
         final end = childCardTarget(t.child);
@@ -1134,7 +1113,6 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
                     child: CustomPaint(
                       painter: _TreeLinesPainter(
                         _segments,
-                        _outerFrames,
                         _sig.hashCode,
                       ),
                     ),
@@ -1344,22 +1322,14 @@ class _LineSeg {
   final double width;
 }
 
-class _OuterFrame {
-  const _OuterFrame(this.rect, this.color);
-  final Rect rect;
-  final Color color;
-}
-
 class _TreeLinesPainter extends CustomPainter {
-  _TreeLinesPainter(this.segments, this.frames, this.revision);
+  _TreeLinesPainter(this.segments, this.revision);
 
   final List<_LineSeg> segments;
-  final List<_OuterFrame> frames;
   final int revision;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Chiziqlar avval — boshqa oila ramkalari ustidan ko'rinmasin.
     for (final s in segments) {
       final paint = Paint()
         ..color = s.color
@@ -1367,16 +1337,6 @@ class _TreeLinesPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
       canvas.drawLine(s.a, s.b, paint);
-    }
-    for (final f in frames) {
-      final paint = Paint()
-        ..color = f.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = _FamilyTreeViewState._outerFrameWidth;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(f.rect, const Radius.circular(14)),
-        paint,
-      );
     }
   }
 

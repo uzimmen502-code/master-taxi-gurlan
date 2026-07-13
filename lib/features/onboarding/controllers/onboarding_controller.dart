@@ -50,7 +50,7 @@ class OnboardingController extends ChangeNotifier {
   bool _bindingRegistered = false;
   String _deviceLockedUid = '';
 
-  static const totalPages = 6;
+  static const totalPages = 7;
 
   int currentPage = 0;
   String gender = 'male';
@@ -66,6 +66,13 @@ class OnboardingController extends ChangeNotifier {
   String geoRegionId = '';
   String geoDistrictId = '';
   String geoServiceAreaId = '';
+
+  /// Ixtiyoriy — onboarding oxirida mashina tavsiyasi.
+  String carModel = '';
+  String carColor = '';
+  String carPlate = '';
+  String carSeats = '4';
+  bool skipCarStep = false;
 
   double? lat;
   double? lng;
@@ -94,6 +101,39 @@ class OnboardingController extends ChangeNotifier {
   bool get hasGps => lat != null && lng != null;
 
   bool get hasCompleteAddress => hasManualParts && hasGps;
+
+  bool get hasCarDraft {
+    final seats = int.tryParse(carSeats.trim()) ?? 0;
+    return carModel.trim().isNotEmpty &&
+        carColor.trim().isNotEmpty &&
+        carPlate.trim().isNotEmpty &&
+        seats > 0;
+  }
+
+  void setCarModel(String v) {
+    carModel = v;
+    notifyListeners();
+  }
+
+  void setCarColor(String v) {
+    carColor = v;
+    notifyListeners();
+  }
+
+  void setCarPlate(String v) {
+    carPlate = v;
+    notifyListeners();
+  }
+
+  void setCarSeats(String v) {
+    carSeats = v;
+    notifyListeners();
+  }
+
+  void setSkipCarStep(bool v) {
+    skipCarStep = v;
+    notifyListeners();
+  }
 
   bool get hasLowAccuracyGps {
     if (accuracy == null) return false;
@@ -603,6 +643,27 @@ class OnboardingController extends ChangeNotifier {
       await prefs.setString('user_address', formatted);
       await prefs.setBool('onboarding_done', true);
       await prefs.setBool('phone_reverified', true);
+
+      if (hasCarDraft) {
+        try {
+          final seats = int.tryParse(carSeats.trim()) ?? 4;
+          await _userRepo.saveCarInfo(
+            uid: uid,
+            carModel: carModel,
+            carColor: carColor,
+            carPlate: carPlate,
+            carSeats: seats,
+          );
+          // Bonus CF keyinroq (sessiya tayyor) — xato finishni to'xtatmasin.
+          try {
+            await FirebaseFunctions.instance
+                .httpsCallable('claimCarProfileBonus')
+                .call(<String, dynamic>{'uid': canonicalPhoneId(uid)});
+          } catch (_) {}
+        } catch (e) {
+          debugPrint('onboarding car save: $e');
+        }
+      }
 
       try {
         await FCMService().refreshToken();

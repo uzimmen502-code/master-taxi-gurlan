@@ -102,18 +102,29 @@ class _EditAdScreenState extends State<EditAdScreen> {
       }
 
       final title = _titleCtrl.text.trim();
-      await repo.updateAd(ad.id, {
+      final patch = <String, dynamic>{
         'title': title,
         if (title != ad.title) 'titleLower': title.toLowerCase(),
         'description': _descCtrl.text.trim(),
         'price': int.parse(_priceCtrl.text.trim()),
         'phone': _phoneCtrl.text.trim(),
         'imageUrls': urls,
-      });
+      };
+      // Фаол эълон таҳрири — қайта модерация.
+      if (ad.isActive) {
+        patch['status'] = 'pending';
+      }
+      await repo.updateAd(ad.id, patch);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сақланди')),
+        SnackBar(
+          content: Text(
+            ad.isActive
+                ? 'Сақланди. Қайта модерацияга юборилди'
+                : 'Сақланди',
+          ),
+        ),
       );
       Navigator.pop(context);
     } catch (e) {

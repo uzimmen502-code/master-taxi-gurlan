@@ -12,9 +12,13 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - debitForOrder — legacy wallet debit for order.
 - placeOrderWithWallet — legacy pre-paid order (wallet).
 - placeOrderPostPaid — CURRENT order placement (bread/food), post-paid; takes orderBase+decrements+idempotencyKey.
+- sellerPlaceSale / sellerGetCustomerWalletBalance / sellerGetShiftSummary — seller POS (role seller|admin|superadmin); cash/wallet/mixed; `fulfillmentMode:pos`; shift = today Tashkent `paidBySellerId`+`paidAt`.
+- sellerMarkPickupReady / sellerSubmitPickupPayment — pickup order ready + in-store pay.
 - requestPayout / confirmPayout / rejectPayout — cash-out lifecycle (`payout_requests`).
 - checkWithdrawalLimit — payout limit guard.
 - grantBirthdayBonus — yearly birthday bonus (`users/{uid}/birthday_bonus_claims/{year}`).
+- claimCarProfileBonus — one-time bonus when profile car complete; `users/{uid}/car_profile_bonus_claims/v1`; amount `settings/oil_change.carProfileBonusAmount` (default 5000).
+- adminUpsertOilCatalogItem / adminDeleteOilCatalogItem / adminSeedOilCatalog — oil catalog CRUD (admin|finance); Storage images client-side.
 
 ## Settlement Ledger / Finance Center (onCall + sched)
 - reconcileLedger — recompute/verify ledger balances.
@@ -25,7 +29,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - settlementDeferredWatch (sched) — process `ledger_exceptions` (negative float / deferred).
 
 ## Orders / Food / Stock
-- onOrderCreate (trigger) / onOrderUpdate (trigger) — order side effects (notifications, status).
+- onOrderCreate (trigger) / onOrderUpdate (trigger) — order side effects; pickup → FCM sellers (`seller_pickup` / `seller_pos`).
 - adminSetOrderStatus / adminSetOrderStatusBatch (onCall) — admin order status.
 - resetDailySoldStock (sched) / resetSoldStockNow (onCall) — reset daily sold counters.
 - seedFoodCatalog (http) — seed food menu.
@@ -46,6 +50,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - courierClaimCarpetReturn / courierMarkCarpetDelivered — return flow; completed requires `returnArrivedAt`.
 
 ## Taxi (local + marshrut)
+- completeLocalTrip (onCall) — driver completes local/alone trip: debit passenger wallet per `passengerWalletIntent` (idem `local_trip_complete_{tripId}`), set `completed`+`walletPaid`; returns `{fare,cashPaid,walletPaid,cashDue,change}`.
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
 - expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds.
 - cleanupStaleDrivers (sched) — offline stale drivers.
@@ -85,7 +90,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - dailyReport20 (sched) / generateDailyReportNow (onCall) — daily report (`daily_reports`).
 - detectAnomaly (trigger) — risk/anomaly signals (`risk_events`).
 - getDirections (http) — Google Directions proxy.
-- onAdUpdate / onSellSubmissionUpdate / onBirthDateRequestUpdate / onDeviceChangeRequestUpdate (triggers) — moderation/request side effects.
+- onAdUpdate (trigger) — Jobs=`authorPhone`→jobs; cheap_product=`ownerId`→my_ads (`market_ad_*`). onSellSubmissionUpdate / onBirthDateRequestUpdate / onDeviceChangeRequestUpdate — other side effects.
 - **adminUpdateSellSubmission** — admin status/forward `sell_submissions` (rules client update false).
 
 ## Dating (Tanishuv)

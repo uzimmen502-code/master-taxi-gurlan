@@ -15,6 +15,7 @@ class MyAdActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = context.read<AdsRepository>();
     final isActive = ad.isActive;
+    final isPending = ad.isPending;
 
     return PopupMenuButton<String>(
       onSelected: (value) async {
@@ -36,12 +37,14 @@ class MyAdActions extends StatelessWidget {
             );
             break;
           case 'republish':
-            await repo.activateAd(ad.id);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Эълон қайта фаоллаштирилди')),
-              );
-            }
+            await _confirm(
+              context,
+              title: 'Қайта жойлаштириш',
+              body:
+                  'Эълон қайта модерацияга юборилади. Админ тасдиқлагач '
+                  'бозорда кўринади.',
+              onConfirm: () => repo.requestRepublish(ad.id),
+            );
             break;
           case 'delete':
             await _confirm(
@@ -56,6 +59,13 @@ class MyAdActions extends StatelessWidget {
       },
       itemBuilder: (ctx) {
         if (isActive) {
+          return [
+            const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
+            const PopupMenuItem(value: 'hide', child: Text('Яшириш')),
+            const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
+          ];
+        }
+        if (isPending) {
           return [
             const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
             const PopupMenuItem(value: 'hide', child: Text('Яшириш')),

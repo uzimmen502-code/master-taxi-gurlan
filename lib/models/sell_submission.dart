@@ -22,6 +22,7 @@ class SellSubmission {
     this.pickupNote = '',
     this.collectionTaskId = '',
     this.inCollection = false,
+    this.collectionCompleted = false,
   });
 
   final String id;
@@ -53,9 +54,25 @@ class SellSubmission {
   final String collectionTaskId;
   final bool inCollection;
 
+  /// Курьер йиғишни якунлаганда CF `collectionCompleted: true` қўяди.
+  final bool collectionCompleted;
+
   bool get hasPickupGps => pickupLat != null && pickupLng != null;
 
   bool get isForwarded => forwardAudience.isNotEmpty;
+
+  /// Таклифдаги нархлар йиғиндиси (тахминий).
+  int get estimatedTotal =>
+      items.fold(0, (s, e) => s + e.priceOffered);
+
+  /// Сотувчи учун бир қаторли прогресс ҳолати.
+  String get progressLabel {
+    if (collectionCompleted) return 'Йиғиб олинди';
+    if (inCollection) return 'Йиғилмоқда';
+    if (status == 'archived') return 'Архив';
+    if (status == 'reviewed') return 'Кўрилди';
+    return 'Янги';
+  }
 
   String get forwardAudienceLabel {
     switch (forwardAudience) {
@@ -115,6 +132,7 @@ class SellSubmission {
       pickupNote: note,
       collectionTaskId: (d['collectionTaskId'] ?? '') as String,
       inCollection: d['inCollection'] == true,
+      collectionCompleted: d['collectionCompleted'] == true,
     );
   }
 

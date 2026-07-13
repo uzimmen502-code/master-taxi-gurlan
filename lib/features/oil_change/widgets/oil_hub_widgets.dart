@@ -260,7 +260,7 @@ class _OilStartStopFlagPainter extends CustomPainter {
       oldDelegate.wave != wave;
 }
 
-/// 20 с цикл: минерал → ярим → тўлиқ, кетма-кет.
+/// 20 с цикл: учта полоса параллел (бир вақтда), phase 0→1.
 class OilSequentialBarsTicker extends StatefulWidget {
   const OilSequentialBarsTicker({super.key, required this.builder});
 
@@ -293,16 +293,8 @@ class _OilSequentialBarsTickerState extends State<OilSequentialBarsTicker>
     super.dispose();
   }
 
-  double _phaseOf(int index) {
-    const n = 3;
-    final segment = 1.0 / n;
-    final start = index * segment;
-    final end = start + segment;
-    final t = _c.value;
-    if (t < start) return 0;
-    if (t >= end) return 1;
-    return (t - start) / segment;
-  }
+  /// Барча индекслар учун бир хил phase — синхрон старт.
+  double _phaseOf(int index) => _c.value;
 
   @override
   Widget build(BuildContext context) {
@@ -311,6 +303,27 @@ class _OilSequentialBarsTickerState extends State<OilSequentialBarsTicker>
       builder: (context, _) => widget.builder(context, _phaseOf),
     );
   }
+}
+
+/// Байроқ тўлдириш прогресси (OilTypeBar билан мос).
+double oilBarFillProgress(double phase) {
+  if (phase <= 0) return 0;
+  if (phase >= 1) return 1;
+  if (phase < 0.7) return phase / 0.7;
+  return 1;
+}
+
+String oilAnimatedKmLabel(
+  BuildContext context,
+  OilTypeInfo t,
+  double phase,
+) {
+  final current =
+      (t.targetKm * oilBarFillProgress(phase)).round();
+  return context.tr('oil_km_upto').replaceAll(
+        '{km}',
+        formatPrice(current),
+      );
 }
 
 void showOilProductSheet(BuildContext context, OilProduct p) {

@@ -21,6 +21,7 @@ Foydalanuvchi mashinasidan moy muddatini kuzatadi, tarix yuritadi, punkt/narx ko
 ## Flutter
 - `lib/models/oil_vehicle.dart` (+ brand, engine, fuelType, usageTags), repo, service
 - Hub UX (proto B): `OilChangeHomeScreen` — AVA promise → car setup → oil types (animated bars) → gallery → ranked 1/2/3 (+ filter bundle) → book/history
+- Bars ticker: **parallel** 20s cycle (all start together); km label 0→5k/7k/10k synced with flag fill; no «ихчам · босиб» hint.
 - Catalog: static `data/oil_catalog.dart` + Firestore `oil_change_catalog` via `OilCatalogRepository` (app gallery fallback to static)
 - Admin: `OilCatalogAdminScreen` — seed, CRUD, image → Storage `oil_images/`
 - widgets: `oil_hub_widgets.dart`; setup: `OilCarSetupScreen`

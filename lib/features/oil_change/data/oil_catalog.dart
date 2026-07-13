@@ -10,10 +10,13 @@ class OilTypeInfo {
   const OilTypeInfo({
     required this.key,
     required this.width,
+    required this.targetKm,
   });
 
   final String key;
   final double width; // 0..1
+  /// Анимация якуни: 5000 / 7000 / 10000.
+  final int targetKm;
 
   String title(BuildContext c) => c.tr('oil_type_${key}_title');
   String km(BuildContext c) => c.tr('oil_type_${key}_km');
@@ -142,9 +145,9 @@ class OilRecoResult {
 
 abstract final class OilCatalog {
   static const types = <OilTypeInfo>[
-    OilTypeInfo(key: 'mineral', width: 0.5),
-    OilTypeInfo(key: 'semi', width: 0.7),
-    OilTypeInfo(key: 'full', width: 1),
+    OilTypeInfo(key: 'mineral', width: 0.5, targetKm: 5000),
+    OilTypeInfo(key: 'semi', width: 0.7, targetKm: 7000),
+    OilTypeInfo(key: 'full', width: 1, targetKm: 10000),
   ];
 
   static const oils = <OilProduct>[

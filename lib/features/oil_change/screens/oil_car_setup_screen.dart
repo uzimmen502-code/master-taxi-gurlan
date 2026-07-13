@@ -553,7 +553,7 @@ class OilTypesScreen extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  t.km(context),
+                                  oilAnimatedKmLabel(context, t, phaseOf(i)),
                                   style: const TextStyle(
                                     color: Color(0xFF1B7A28),
                                     fontWeight: FontWeight.w700,

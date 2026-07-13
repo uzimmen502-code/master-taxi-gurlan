@@ -233,10 +233,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
         const SizedBox(height: 12),
         _carBlock(selected),
         const SizedBox(height: 16),
-        _sectionTitle(
-          context.tr('oil_section_types'),
-          context.tr('oil_section_types_hint'),
-        ),
+        _sectionTitle(context.tr('oil_section_types')),
         const SizedBox(height: 8),
         _oilTypesCompact(),
         const SizedBox(height: 16),
@@ -560,7 +557,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                                 ),
                               ),
                               Text(
-                                t.km(context),
+                                oilAnimatedKmLabel(context, t, phaseOf(i)),
                                 style: const TextStyle(
                                   color: Color(0xFF1B7A28),
                                   fontWeight: FontWeight.w700,
@@ -710,7 +707,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
     );
   }
 
-  Widget _sectionTitle(String title, String hint) {
+  Widget _sectionTitle(String title, [String? hint]) {
     return Row(
       children: [
         Expanded(
@@ -719,7 +716,8 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
         ),
-        Text(hint, style: const TextStyle(fontSize: 11.5, color: oilHubMuted)),
+        if (hint != null && hint.isNotEmpty)
+          Text(hint, style: const TextStyle(fontSize: 11.5, color: oilHubMuted)),
       ],
     );
   }

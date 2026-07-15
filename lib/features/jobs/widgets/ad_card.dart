@@ -22,8 +22,6 @@ class AdCard extends StatelessWidget {
         return AppColors.primary;
       case AdKind.ad:
         return AppColors.primary;
-      case AdKind.sell:
-        return AppColors.primary;
     }
   }
 
@@ -45,7 +43,7 @@ class AdCard extends StatelessWidget {
     }
   }
 
-  String get _body => ad.isSell ? ad.displayText : ad.text;
+  String get _body => ad.text;
 
   String get _headline {
     if (ad.title.trim().isNotEmpty) return ad.title;

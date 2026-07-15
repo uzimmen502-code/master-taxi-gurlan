@@ -8,7 +8,6 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/procurement_product.dart';
 import '../../../models/sell_offer_item.dart';
 import '../../../models/sell_submission.dart';
-import '../../../repositories/jobs_repository.dart';
 import '../../../repositories/sell_offers_repository.dart';
 import '../../../services/collection_service.dart';
 import '../../../services/procurement_prices_service.dart';
@@ -106,8 +105,6 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
       );
       return;
     }
-    final repo = context.read<SellOffersRepository>();
-    final jobsRepo = context.read<JobsRepository>();
     try {
       if (s.status == 'pending') {
         await AdminSellService.updateStatus(
@@ -123,15 +120,6 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
         targetUserIds: result.phones,
         adminNote: result.note,
       );
-      if (result.publishToJobs) {
-        await repo.publishAsPublicAd(
-          jobsRepo: jobsRepo,
-          items: s.items,
-          authorName: s.userName,
-          authorPhone: s.userPhone,
-          address: s.pickupAddress,
-        );
-      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1051,13 +1039,11 @@ class _ForwardOptions {
     required this.audience,
     required this.phones,
     required this.note,
-    required this.publishToJobs,
   });
 
   final String audience;
   final List<String> phones;
   final String note;
-  final bool publishToJobs;
 }
 
 class _ForwardDialog extends StatefulWidget {
@@ -1071,7 +1057,6 @@ class _ForwardDialog extends StatefulWidget {
 
 class _ForwardDialogState extends State<_ForwardDialog> {
   String _audience = 'all';
-  bool _publishToJobs = false;
   final _phonesCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
 
@@ -1147,14 +1132,6 @@ class _ForwardDialogState extends State<_ForwardDialog> {
                 ),
                 maxLines: 2,
               ),
-              CheckboxListTile(
-                value: _publishToJobs,
-                onChanged: (v) => setState(() => _publishToJobs = v == true),
-                title: const Text('Иш топ «Сотаман» ga e\'lon qilish'),
-                subtitle: const Text('Moderatsiyadan keyin hammaga ko\'rinadi'),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
             ],
           ),
         ),
@@ -1179,7 +1156,6 @@ class _ForwardDialogState extends State<_ForwardDialog> {
                 audience: _audience,
                 phones: phones,
                 note: _noteCtrl.text.trim(),
-                publishToJobs: _publishToJobs,
               ),
             );
           },

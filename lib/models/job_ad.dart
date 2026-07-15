@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Эълон тури — иш, хизмат, оддий эълон, сотаман (P2P).
-enum AdKind { work, service, ad, sell }
+/// Эълон тури — иш, хизмат, оддий эълон (Иш топ doskasi).
+enum AdKind { work, service, ad }
 
 extension AdKindX on AdKind {
   String get key {
@@ -12,8 +12,6 @@ extension AdKindX on AdKind {
         return 'service';
       case AdKind.ad:
         return 'ad';
-      case AdKind.sell:
-        return 'sell';
     }
   }
 
@@ -25,8 +23,6 @@ extension AdKindX on AdKind {
         return '🛠️';
       case AdKind.ad:
         return '📢';
-      case AdKind.sell:
-        return '🛒';
     }
   }
 
@@ -38,8 +34,6 @@ extension AdKindX on AdKind {
         return 'Хизмат';
       case AdKind.ad:
         return 'Эълон';
-      case AdKind.sell:
-        return 'Сотаман';
     }
   }
 
@@ -55,19 +49,16 @@ extension AdKindX on AdKind {
         return 30;
       case AdKind.ad:
         return 14;
-      case AdKind.sell:
-        return 14;
     }
   }
 
-  /// Фойдаланувчи панелида яратish mumkin bo'lgan turlar (Иш йўқ).
+  /// Фойдаланувчи панелида яратиш mumkin bo'lgan turlar.
   static const List<AdKind> userPanelKinds = [
     AdKind.ad,
     AdKind.service,
-    AdKind.sell,
   ];
 
-  /// Шошилинч белгиси қўйиш мумкин бўлган турлар (эski «Иш» эълонлари учун ham).
+  /// Шошилинч белгиси қўйиш мумкин бўлган турлар (эски «Иш» эълонлари учун ham).
   bool get supportsUrgent => this == AdKind.work || this == AdKind.ad;
 
   /// Янги эълон формасида шошилинч — фақат «Эълон» учун.
@@ -80,22 +71,20 @@ extension AdKindX on AdKind {
       case 'ad':
       case 'announcement':
         return AdKind.ad;
-      case 'sell':
-        return AdKind.sell;
       case 'work':
         return AdKind.work;
       default:
+        // Legacy `sell` ва noma'lum type — doskaga kirmaydi; fallback.
         return AdKind.work;
     }
   }
 
-  /// `cheap_product` va boshqa turlar doskaga kirmaydi.
+  /// `cheap_product`, legacy `sell` va boshqa turlar doskaga kirmaydi.
   static bool isJobsBoardType(String? type) {
     switch (type) {
       case 'work':
       case 'service':
       case 'ad':
-      case 'sell':
         return true;
       default:
         return false;
@@ -104,8 +93,6 @@ extension AdKindX on AdKind {
 }
 
 /// `ads` collection — иш / хизмат / эълон (mini-OLX).
-///
-/// Эски `type` (`work` | `service`) сақланди, янги `ad` тур қўшилди.
 class JobAd {
   const JobAd({
     required this.id,
@@ -159,7 +146,6 @@ class JobAd {
   bool get isWork => kind == AdKind.work;
   bool get isService => kind == AdKind.service;
   bool get isAnnouncement => kind == AdKind.ad;
-  bool get isSell => kind == AdKind.sell;
 
   bool get supportsUrgent => kind.supportsUrgent;
 
@@ -181,16 +167,7 @@ class JobAd {
     return '$d/$m/${ts.year}';
   }
 
-  /// «Сотаман» рўйхати учун: префикс ва (Бир марта|Доимий) олиб ташланган матн.
-  String get displayText {
-    if (!isSell) return text;
-    var t = text.trim();
-    const prefix = '🛒 Сотиш таклифи:';
-    if (t.startsWith(prefix)) {
-      t = t.substring(prefix.length).trim();
-    }
-    return t.replaceAll(RegExp(r'\s*\((Бир марта|Доимий)\)'), '');
-  }
+  String get displayText => text;
 
   /// "5 дақ. олдин" / "2 соат олдин" / "3 кун олдин".
   String get timeAgo {

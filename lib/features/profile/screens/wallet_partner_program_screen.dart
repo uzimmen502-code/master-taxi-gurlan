@@ -11,10 +11,6 @@ class WalletPartnerProgramScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SellOfferScreen(
-      phone: phone,
-      defaultToPlatform: true,
-      defaultToPublic: false,
-    );
+    return SellOfferScreen(phone: phone);
   }
 }

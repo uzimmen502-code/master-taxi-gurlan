@@ -5343,7 +5343,7 @@ const ADMIN_JOB_AD_STATUSES = new Set([
 function isJobsBoardAdDataJs(d) {
   const t = String((d && d.type) || '');
   if (t === 'cheap_product') return false;
-  return ['work', 'service', 'ad', 'sell', 'announcement'].includes(t) || t === '';
+  return ['work', 'service', 'ad', 'announcement'].includes(t) || t === '';
 }
 
 function urgentForJobAdType(type, isUrgent) {

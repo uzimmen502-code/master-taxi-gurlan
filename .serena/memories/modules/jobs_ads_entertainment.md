@@ -5,11 +5,11 @@ KEY: jobs board and cheap-product marketplace BOTH live in Firestore `ads` colle
 
 ## Jobs board (`features/jobs/`)
 - `jobs_screen.dart`,`jobs_tabs.dart`,`jobs_controller.dart`, widgets ad_card/add_ad_sheet/edit_ad_sheet/urgent_toggle/complaint_sheet.
-- Model `models/job_ad.dart` JobAd + `enum AdKind{work,service,ad,sell}` + AdKindX. Repo `repositories/jobs_repository.dart` JobsRepository (collection `ads`, `type`∈work|service|ad|sell). Complaints → `complaints`.
-- AdKindX: expiresInDays work=3/service=30/ad=14/sell=14; urgentExpiryDays=2; supportsUrgent=work|ad; userPanelKinds=[ad,service,sell].
+- Model `models/job_ad.dart` JobAd + `enum AdKind{work,service,ad}` + AdKindX. Repo `repositories/jobs_repository.dart` JobsRepository (collection `ads`, `type`∈work|service|ad). Complaints → `complaints`.
+- AdKindX: expiresInDays work=3/service=30/ad=14; urgentExpiryDays=2; supportsUrgent=work|ad; userPanelKinds=[ad,service]. Legacy `type:sell` filtered out (`isJobsBoardType` false); new create blocked in rules/CF.
 - JobAd: type,text,title,priceText,authorName,authorPhone,address,isUrgent,status(pending|active|completed|blocked),expiresAt.
 - Flow: create→status `pending` (admin moderation, UI admin_web/jobs_moderation_screen.dart); daily limit 10; owner edit gated by authorPhone. NO CF (pure Firestore).
-- **JobsTabs = 3 tabs** (Иш бор=ad / Хизмат=service / **Сотаман=sell**). SellOfferScreen → `JobsTabs.sell`.
+- **JobsTabs = 2 tabs** (Иш бор=ad / Хизмат=service). P2P «Сотаман» Jobs tab removed — selling is Sell hub + Online market (`mem:modules/sell`).
 - CF `onAdUpdate`: Jobs → `authorPhone` + screen `jobs`.
 
 ## Ads marketplace / cheap products (`features/ads/`)

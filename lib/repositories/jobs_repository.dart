@@ -42,17 +42,17 @@ class JobsRepository {
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
   }
 
-  /// 3 та тип бирваракай (work + service + ad). Mini-OLX ягона feed учун.
+  /// Иш / хизмат / эълон feed (актив).
   Stream<List<JobAd>> watchAllActive({int limit = 100}) {
     return _ads
-        .where('type', whereIn: ['work', 'service', 'ad', 'sell'])
+        .where('type', whereIn: ['work', 'service', 'ad'])
         .where('status', isEqualTo: 'active')
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
   }
 
-  /// Муаллифнинг барча эълонлари (pending, active, …).
+  /// Муаллифнинг барча эълонлари (pending, active, …) — фақат Иш топ турлари.
   Stream<List<JobAd>> watchAdsByAuthor(String authorPhone, {int limit = 30}) {
     final phone = _normPhone(authorPhone);
     if (phone.isEmpty) return Stream.value(const []);
@@ -61,7 +61,10 @@ class JobsRepository {
         .limit(limit)
         .snapshots()
         .map((snap) {
-      final list = snap.docs.map(JobAd.fromDoc).toList(growable: false);
+      final list = snap.docs
+          .map(JobAd.fromDoc)
+          .where((a) => JobAd.isJobsBoardType(a.type))
+          .toList(growable: false);
       list.sort((a, b) {
         final at = a.createdAt;
         final bt = b.createdAt;
@@ -74,7 +77,7 @@ class JobsRepository {
     });
   }
 
-  /// Admin panel учун: faqat Иш топ doskasi (`work|service|ad|sell`).
+  /// Admin panel учун: фақат Иш топ doskasi (`work|service|ad`).
   Stream<List<JobAd>> watchAllForAdmin({int limit = 500}) {
     return _ads
         .orderBy('createdAt', descending: true)
@@ -144,6 +147,9 @@ class JobsRepository {
     final phone = _normPhone(authorPhone);
     if (phone.length < 9) {
       throw StateError('Телефон рақами нотўғри');
+    }
+    if (!JobAd.isJobsBoardType(type)) {
+      throw StateError('Номаълум эълон тури');
     }
     await _ads.add({
       'type': type,

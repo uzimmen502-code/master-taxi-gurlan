@@ -1692,7 +1692,7 @@ service cloud.firestore {
     function adCreateOk() {
       return request.resource.data.keys().hasAll([
             'type', 'text', 'authorPhone', 'authorName', 'status', 'createdAt'])
-          && request.resource.data.type in ['work', 'service', 'ad', 'sell']
+          && request.resource.data.type in ['work', 'service', 'ad']
           && request.resource.data.status == 'pending'
           && adAuthorPhoneOk(request.resource.data.authorPhone);
     }
@@ -1700,7 +1700,7 @@ service cloud.firestore {
     function isJobsBoardAdData(d) {
       let t = d.get('type', '');
       return t != 'cheap_product'
-          && (t in ['work', 'service', 'ad', 'sell', 'announcement']
+          && (t in ['work', 'service', 'ad', 'announcement']
               || t == ''
               || !('type' in d));
     }

@@ -1,23 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/formatters.dart';
-import '../../jobs/jobs_tabs.dart';
-import '../../jobs/screens/jobs_screen.dart';
 import '../widgets/sell_offer_form.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Бирлашган «Сотаман» — профил «Сотиш» ва Иш топ билан бир xil forma.
+/// Платформага сотиш таклифи (`sell_submissions`).
 class SellOfferScreen extends StatelessWidget {
   const SellOfferScreen({
     super.key,
     required this.phone,
-    this.defaultToPlatform = true,
-    this.defaultToPublic = false,
   });
 
   final String phone;
-  final bool defaultToPlatform;
-  final bool defaultToPublic;
 
   static const _green = AppColors.primaryDark;
   static const _brown = AppColors.primarySoft;
@@ -31,7 +25,7 @@ class SellOfferScreen extends StatelessWidget {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         title: const Text(
-          'Сотаман',
+          'Сотиш таклифи',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         backgroundColor: AppColors.primary,
@@ -49,28 +43,6 @@ class SellOfferScreen extends StatelessWidget {
           SellOfferForm(
             phone: phone,
             phoneOk: phoneOk,
-            defaultToPlatform: defaultToPlatform,
-            defaultToPublic: defaultToPublic,
-          ),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            onPressed: phoneOk
-                ? () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const JobsScreen(initialTabIndex: JobsTabs.sell),
-                      ),
-                    );
-                  }
-                : null,
-            icon: const Icon(Icons.storefront_outlined),
-            label: const Text('Бошқалар таклифларини кўриш (Иш топ)'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _brown,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
           ),
           const SizedBox(height: 24),
           const Divider(),
@@ -81,8 +53,7 @@ class SellOfferScreen extends StatelessWidget {
             color: _brown,
             child: const Text(
               'Платформага таклиф юборсангиз — қабул пунктида вазн бўйича '
-              'қабул қилинади, сумма кошелёкка ёзилади.\n\n'
-              '«Сотаман» эълони — бошқа фойдаланувчилар ўзлари боғланади.',
+              'қабул қилинади, сумма кошелёкка ёзилади.',
               style: TextStyle(fontSize: 14, height: 1.45),
             ),
           ),

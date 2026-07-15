@@ -9,7 +9,7 @@ import '../widgets/jobs_ad_edit_dialog.dart';
 import 'jobs_complaints_tab.dart';
 import '../../../core/theme/app_theme.dart';
 
-enum _JobsTypeFilter { all, work, service, ad, sell, urgent }
+enum _JobsTypeFilter { all, work, service, ad, urgent }
 
 class JobsModerationScreen extends StatefulWidget {
   const JobsModerationScreen({super.key});
@@ -328,8 +328,6 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
         return ad.kind == AdKind.service;
       case _JobsTypeFilter.ad:
         return ad.kind == AdKind.ad;
-      case _JobsTypeFilter.sell:
-        return ad.kind == AdKind.sell;
       case _JobsTypeFilter.urgent:
         return ad.supportsUrgent && ad.isUrgent;
     }
@@ -341,7 +339,6 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
       (_JobsTypeFilter.work, '🔨 Иш бор'),
       (_JobsTypeFilter.service, '🛠️ Хизмат'),
       (_JobsTypeFilter.ad, '📢 Эълон'),
-      (_JobsTypeFilter.sell, '🛒 Сотаман'),
       (_JobsTypeFilter.urgent, '🚨 Шошилинч'),
     ];
     return Wrap(
@@ -521,8 +518,6 @@ Color _kindColor(AdKind kind) {
     case AdKind.service:
       return AppColors.primary;
     case AdKind.ad:
-      return AppColors.primary;
-    case AdKind.sell:
       return AppColors.primary;
   }
 }

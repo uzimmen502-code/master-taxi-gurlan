@@ -9,29 +9,20 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/sell_offer_item.dart';
 import '../../../models/sell_submission.dart';
 import '../../../models/user_address.dart';
-import '../../../repositories/jobs_repository.dart';
 import '../../../repositories/sell_offers_repository.dart';
 import '../../../repositories/user_repository.dart';
 import 'sell_submission_tile.dart';
 
-/// Бирлашган сотиш формаси — платформа ва/ёки «Сотаман» (P2P).
+/// Платформага сотиш таклифи формаси (`sell_submissions`).
 class SellOfferForm extends StatefulWidget {
   const SellOfferForm({
     super.key,
     required this.phone,
     required this.phoneOk,
-    this.defaultToPlatform = true,
-    this.defaultToPublic = false,
   });
 
   final String phone;
   final bool phoneOk;
-
-  /// Профил «Сотиш» — платформа асосий.
-  final bool defaultToPlatform;
-
-  /// Иш топ «Сотаман» — омма эълони асосий.
-  final bool defaultToPublic;
 
   @override
   State<SellOfferForm> createState() => _SellOfferFormState();
@@ -43,15 +34,6 @@ class _SellOfferFormState extends State<SellOfferForm> {
 
   final List<_DraftRow> _rows = [_DraftRow()];
   bool _submitting = false;
-  late bool _toPlatform;
-  late bool _toPublic;
-
-  @override
-  void initState() {
-    super.initState();
-    _toPlatform = widget.defaultToPlatform;
-    _toPublic = widget.defaultToPublic;
-  }
 
   @override
   void dispose() {
@@ -78,10 +60,6 @@ class _SellOfferFormState extends State<SellOfferForm> {
       _snack('Аввал профилда телефонни киритинг', error: true);
       return;
     }
-    if (!_toPlatform && !_toPublic) {
-      _snack('Камida битта йўналишни белгиланг', error: true);
-      return;
-    }
 
     final items = <SellOfferItem>[];
     for (var i = 0; i < _rows.length; i++) {
@@ -95,7 +73,6 @@ class _SellOfferFormState extends State<SellOfferForm> {
 
     setState(() => _submitting = true);
     final sellRepo = context.read<SellOffersRepository>();
-    final jobsRepo = context.read<JobsRepository>();
     final userRepo = context.read<UserRepository>();
 
     try {
@@ -110,9 +87,6 @@ class _SellOfferFormState extends State<SellOfferForm> {
         final user = await userRepo.getById(uid);
         if (user != null) {
           structured = user.address;
-          if (legacyAddress.isEmpty && user.addressLegacy.isNotEmpty) {
-            // legacy fallback below
-          }
         }
       } catch (_) {}
 
@@ -122,70 +96,32 @@ class _SellOfferFormState extends State<SellOfferForm> {
       );
       final pickupText = (pickupFields['pickupAddress'] as String?) ?? '';
 
-      if (_toPlatform && pickupText.isEmpty) {
+      if (pickupText.isEmpty) {
         _snack(
-          'Платформа таклифи учун профилда тўliq манzil (GPS) киритинг',
+          'Платформа таклифи учун профилда тўлиқ манзил (GPS) киритинг',
           error: true,
         );
         setState(() => _submitting = false);
         return;
       }
 
-      var publishedPlatform = false;
-      var publishedPublic = false;
-
-      if (_toPlatform) {
-        final draft = SellSubmission(
-          id: '',
-          userId: uid,
-          userPhone: uid,
-          userName: name,
-          items: items,
-          status: 'pending',
-          createdAt: DateTime.now(),
-          pickupAddress: pickupText,
-          pickupLat: (pickupFields['pickupLat'] as num?)?.toDouble(),
-          pickupLng: (pickupFields['pickupLng'] as num?)?.toDouble(),
-          pickupNote: structured.note,
-        );
-        await sellRepo.createWithPickup(draft, pickupFields);
-        publishedPlatform = true;
-      }
-
-      if (_toPublic) {
-        final daily = await jobsRepo.dailyCountByAuthor(uid);
-        if (daily >= SellOffersRepository.dailyPublicAdLimit) {
-          if (!publishedPlatform) {
-            _snack(
-              'Кунига максимум ${SellOffersRepository.dailyPublicAdLimit} та «Сотаман» эълони!',
-              error: true,
-            );
-            return;
-          }
-        } else {
-          await sellRepo.publishAsPublicAd(
-            jobsRepo: jobsRepo,
-            items: items,
-            authorName: name,
-            authorPhone: uid,
-            address: pickupText.isNotEmpty ? pickupText : legacyAddress,
-          );
-          publishedPublic = true;
-        }
-      }
+      final draft = SellSubmission(
+        id: '',
+        userId: uid,
+        userPhone: uid,
+        userName: name,
+        items: items,
+        status: 'pending',
+        createdAt: DateTime.now(),
+        pickupAddress: pickupText,
+        pickupLat: (pickupFields['pickupLat'] as num?)?.toDouble(),
+        pickupLng: (pickupFields['pickupLng'] as num?)?.toDouble(),
+        pickupNote: structured.note,
+      );
+      await sellRepo.createWithPickup(draft, pickupFields);
 
       if (!mounted) return;
-      final parts = <String>[];
-      if (publishedPlatform) parts.add('платформа');
-      if (publishedPublic) parts.add('«Сотаман» (текширувда)');
-      if (_toPublic && !publishedPublic && publishedPlatform) {
-        parts.add('«Сотаман» лимити тўлди');
-      }
-      _snack(
-        parts.isEmpty
-            ? 'Юборилмади'
-            : 'Таклиф юборилди: ${parts.join(' · ')}',
-      );
+      _snack('Таклиф юборилди: платформа');
 
       setState(() {
         for (final r in _rows) {
@@ -228,44 +164,17 @@ class _SellOfferFormState extends State<SellOfferForm> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _green.withValues(alpha: 0.35)),
           ),
-          child: Column(
-            children: [
-              CheckboxListTile(
-                value: _toPlatform,
-                onChanged: widget.phoneOk && !_submitting
-                    ? (v) => setState(() => _toPlatform = v ?? false)
-                    : null,
-                title: const Text(
-                  'Платформага таклиф',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                subtitle: const Text(
-                  'AVA Gurlan харид қилиши мумкин — оператор боғланади',
-                  style: TextStyle(fontSize: 12),
-                ),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                activeColor: _green,
-              ),
-              const Divider(height: 1),
-              CheckboxListTile(
-                value: _toPublic,
-                onChanged: widget.phoneOk && !_submitting
-                    ? (v) => setState(() => _toPublic = v ?? false)
-                    : null,
-                title: const Text(
-                  'Барча фойдаланувчига (Сотаман)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                subtitle: const Text(
-                  'Иш топ — «Сотаман» бўлимида эълон (модерациядан кейин)',
-                  style: TextStyle(fontSize: 12),
-                ),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                activeColor: _brown,
-              ),
-            ],
+          child: const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.storefront_outlined, color: _green),
+            title: Text(
+              'Платформага таклиф',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            subtitle: Text(
+              'AVA Gurlan харид қилиши мумкин — оператор боғланади',
+              style: TextStyle(fontSize: 12),
+            ),
           ),
         ),
         const SizedBox(height: 14),
@@ -280,7 +189,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
         const SizedBox(height: 6),
         Text(
           widget.phoneOk
-              ? 'Номи, миқдори, такlif нархи. «+» билан яна қўшинг.'
+              ? 'Номи, миқдори, таклиф нархи. «+» билан яна қўшинг.'
               : 'Телефон киритилгандан кейин юбориш мумкин.',
           style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
         ),
@@ -488,7 +397,7 @@ class _OfferCardState extends State<_OfferCard> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: const InputDecoration(
-              labelText: 'Такlif нархи (сўм)',
+              labelText: 'Таклиф нархи (сўм)',
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -517,4 +426,3 @@ class _OfferCardState extends State<_OfferCard> {
     );
   }
 }
-

@@ -6,7 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
 import 'urgent_toggle.dart';
 
-/// Янги эълон қўшиш bottom sheet — 3 турдан танлаш.
+/// Янги эълон қўшиш bottom sheet — тур танлаш.
 ///
 /// Хато йўли: турни танлашсиз эълон юбормайди. Ҳар бир тур ўз муддатига эга.
 Future<void> showAddAdSheet({
@@ -54,8 +54,6 @@ class _AddAdViewState extends State<_AddAdView> {
         return AppColors.primary;
       case AdKind.ad:
         return AppColors.primary;
-      case AdKind.sell:
-        return AppColors.primary;
     }
   }
 
@@ -66,9 +64,7 @@ class _AddAdViewState extends State<_AddAdView> {
       case AdKind.service:
         return 'Масалан: Электрикман, бригадам бор';
       case AdKind.ad:
-        return 'Масалан: Сотилади: Damas 2018, ҳолати яхши';
-      case AdKind.sell:
-        return 'Масалан: Сут сотаман — 5 кг/кун, Гурлан';
+        return 'Масалан: Ҳайдовчи керак — Гурлан–Урганч';
     }
   }
 
@@ -311,8 +307,6 @@ class _AddAdViewState extends State<_AddAdView> {
       case AdKind.service:
         return AppColors.primary;
       case AdKind.ad:
-        return AppColors.primary;
-      case AdKind.sell:
         return AppColors.primary;
     }
   }

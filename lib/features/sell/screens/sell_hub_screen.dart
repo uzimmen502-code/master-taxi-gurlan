@@ -89,8 +89,6 @@ class _SellHubScreenState extends State<SellHubScreen>
                             MaterialPageRoute(
                               builder: (_) => SellOfferScreen(
                                 phone: widget.phone,
-                                defaultToPlatform: true,
-                                defaultToPublic: false,
                               ),
                             ),
                           )

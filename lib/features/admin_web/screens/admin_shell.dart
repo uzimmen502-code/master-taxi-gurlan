@@ -688,7 +688,6 @@ class _Sidebar extends StatelessWidget {
                       t == 'work' ||
                       t == 'service' ||
                       t == 'ad' ||
-                      t == 'sell' ||
                       t == 'announcement';
                 }).length);
       case 'Онлайн бозор':

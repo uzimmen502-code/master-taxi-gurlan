@@ -3,19 +3,13 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/utils/formatters.dart';
-import '../models/job_ad.dart';
-import '../models/sell_offer_item.dart';
 import '../models/sell_submission.dart';
-import '../models/sell_offer_formatters.dart';
 import '../services/sell_submission_service.dart';
-import 'jobs_repository.dart';
 
 /// `sell_submissions` — сотиш таклифлари.
 class SellOffersRepository {
   SellOffersRepository({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
-
-  static const int dailyPublicAdLimit = 10;
 
   final FirebaseFirestore _db;
 
@@ -127,29 +121,6 @@ class SellOffersRepository {
           : null,
     );
     return _col.doc(submissionId);
-  }
-
-  /// «Сотаман» — `ads` коллекциясига (moderatsiya: pending).
-  Future<void> publishAsPublicAd({
-    required JobsRepository jobsRepo,
-    required List<SellOfferItem> items,
-    required String authorName,
-    required String authorPhone,
-    required String address,
-  }) async {
-    if (items.isEmpty) return;
-    final days = AdKind.sell.expiresInDays;
-    await jobsRepo.addAd(
-      type: AdKind.sell.key,
-      title: SellOfferFormatters.adTitle(items),
-      text: SellOfferFormatters.adBody(items),
-      priceText: SellOfferFormatters.adPriceSummary(items),
-      authorName: authorName,
-      authorPhone: authorPhone,
-      address: address,
-      isUrgent: false,
-      expiresAt: DateTime.now().add(Duration(days: days)),
-    );
   }
 
   Future<void> updateStatus({

@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
+import '../data/oil_l10n.dart';
 import '../data/oil_ref_catalog.dart';
 import 'oil_car_setup_screen.dart';
 
@@ -264,7 +265,7 @@ class _OilRefScreenState extends State<OilRefScreen>
   }
 }
 
-class _RecoTab extends StatefulWidget {
+class _RecoTab extends StatelessWidget {
   const _RecoTab({
     required this.uid,
     required this.vehicles,
@@ -280,58 +281,7 @@ class _RecoTab extends StatefulWidget {
   final ValueChanged<OilVehicle?> onSetup;
 
   @override
-  State<_RecoTab> createState() => _RecoTabState();
-}
-
-class _RecoTabState extends State<_RecoTab> {
-  String? _model;
-  int _mileage = 50000;
-  bool _isLpg = false;
-  List<OilRefProduct>? _results;
-  String? _boundVehicleId;
-
-  @override
-  void didUpdateWidget(covariant _RecoTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncFromVehicle();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _syncFromVehicle();
-  }
-
-  void _syncFromVehicle() {
-    final v = widget.selected;
-    if (v == null || v.id == _boundVehicleId) return;
-    _boundVehicleId = v.id;
-    final modelName = v.model.trim();
-    String? matched;
-    for (final r in OilRefCatalog.modelRecos) {
-      if (modelName.toLowerCase().contains(r.model.toLowerCase()) ||
-          r.model.toLowerCase().contains(modelName.toLowerCase())) {
-        matched = r.model;
-        break;
-      }
-    }
-    final km = v.currentOdometerKm > 0
-        ? v.currentOdometerKm
-        : (v.lastOdometerKm > 0 ? v.lastOdometerKm : 50000);
-    final fuel = v.fuelType.trim().toLowerCase();
-    setState(() {
-      _model = matched;
-      _mileage = km.clamp(0, 400000);
-      _isLpg = fuel == 'lpg' || fuel == 'cng';
-      _results = null;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final vehicles = widget.vehicles;
-    final selected = widget.selected;
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
@@ -363,9 +313,9 @@ class _RecoTabState extends State<_RecoTab> {
                   selected: on,
                   selectedColor: AppColors.primary,
                   onSelected: (_) {
-                    widget.onSelect(v);
+                    onSelect(v);
                     if (!v.isRecommendationReady) {
-                      widget.onSetup(v);
+                      onSetup(v);
                     }
                   },
                 );
@@ -374,7 +324,7 @@ class _RecoTabState extends State<_RecoTab> {
           ),
           const SizedBox(height: 12),
         ],
-        if (selected != null && !selected.isRecommendationReady)
+        if (selected != null && !selected!.isRecommendationReady)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -389,11 +339,14 @@ class _RecoTabState extends State<_RecoTab> {
               children: [
                 Text(
                   context.tr('oil_ref_car_incomplete'),
-                  style: const TextStyle(fontWeight: FontWeight.w700, height: 1.35),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 FilledButton(
-                  onPressed: () => widget.onSetup(selected),
+                  onPressed: () => onSetup(selected),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                   ),
@@ -402,167 +355,263 @@ class _RecoTabState extends State<_RecoTab> {
               ],
             ),
           ),
-        if (selected != null && selected.isRecommendationReady)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF6EB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFB7DFB9)),
-            ),
-            child: Text(
-              selected.setupTitle,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-            ),
-          ),
-        Text(
-          context.tr('oil_ref_reco_title'),
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          context.tr('oil_ref_model'),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          children: OilRefCatalog.modelRecos.map((r) {
-            final on = _model == r.model;
-            return ChoiceChip(
-              label: Text(r.model),
-              selected: on,
-              selectedColor: AppColors.primary.withValues(alpha: 0.2),
-              onSelected: (_) => setState(() {
-                _model = r.model;
-                _results = null;
-              }),
-            );
-          }).toList(),
-        ),
-        if (_model != null) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF6EB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFB7DFB9)),
-            ),
-            child: Text(
-              '$_model: ${OilRefCatalog.modelRecos.firstWhere((r) => r.model == _model).recommendation}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-          ),
-          Builder(builder: (_) {
-            final cap = OilRefCatalog.modelCapacity(_model!);
-            if (cap == null) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                context
-                    .tr('oil_ref_capacity')
-                    .replaceAll('{total}', cap.total)
-                    .replaceAll('{engine}', cap.engine),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Color(0xFF2E7D32),
-                ),
-              ),
-            );
-          }),
-        ],
-        const SizedBox(height: 16),
-        Text(
-          context
-              .tr('oil_ref_mileage')
-              .replaceAll('{km}', (_mileage / 1000).toStringAsFixed(0)),
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-        ),
-        Slider(
-          value: _mileage.toDouble(),
-          min: 0,
-          max: 400000,
-          divisions: 40,
-          activeColor: AppColors.primary,
-          label: (_mileage / 1000).toStringAsFixed(0),
-          onChanged: (v) => setState(() {
-            _mileage = v.round();
-            _results = null;
-          }),
-        ),
-        SwitchListTile(
-          title: Text(
-            context.tr('oil_ref_lpg'),
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-          ),
-          value: _isLpg,
-          activeTrackColor: AppColors.primary,
-          contentPadding: EdgeInsets.zero,
-          onChanged: (v) => setState(() {
-            _isLpg = v;
-            _results = null;
-          }),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: () {
-            setState(() {
-              _results = OilRefCatalog.recommend(
-                mileageKm: _mileage,
-                isLpg: _isLpg,
-              );
-            });
-          },
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            minimumSize: const Size.fromHeight(48),
-          ),
-          child: Text(context.tr('oil_ref_get_reco')),
-        ),
-        if (_results != null) ...[
-          const SizedBox(height: 16),
+        const _SaeGuideSection(),
+      ],
+    );
+  }
+}
+
+/// «Мой ҳақида» tabi: SAE qo'llanma (akkordeonlar) + qiyosiy jadval.
+class _SaeGuideSection extends StatelessWidget {
+  const _SaeGuideSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD5E5D6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            context.tr('oil_ref_top_n').replaceAll(
-                  '{n}',
-                  '${_results!.length > 10 ? 10 : _results!.length}',
-                ),
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+            context.tr('oil_sae_guide_title'),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: Color(0xFF1A2E1C),
+            ),
           ),
           const SizedBox(height: 8),
-          ...(_results!.take(10).toList().asMap().entries.map(
-                (e) => _OilRefCard(product: e.value, index: e.key + 1),
-              )),
-          if (_mileage >= 250000)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
+          Text(
+            context.tr('oil_sae_guide_intro'),
+            style: const TextStyle(
+                fontSize: 12.5, height: 1.4, color: Color(0xFF4A5A4C)),
+          ),
+          const SizedBox(height: 12),
+          ...OilRefCatalog.saeGuide.asMap().entries.map(
+                (e) => _SaeAccordion(
+                  entry: e.value,
+                  initiallyExpanded: e.key == 0,
                 ),
-                child: Text(
-                  context.tr('oil_ref_high_mileage_hint'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
+              ),
+          const SizedBox(height: 16),
+          Text(
+            context.tr('oil_sae_compare_title'),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: Color(0xFF1A2E1C),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const _SaeCompareTable(),
+          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+}
+
+class _SaeAccordion extends StatelessWidget {
+  const _SaeAccordion({required this.entry, required this.initiallyExpanded});
+
+  final SaeGuideEntry entry;
+  final bool initiallyExpanded;
+
+  static Color _badgeColor(String badge) => switch (badge) {
+        'ok' => const Color(0xFF2E7D32),
+        'hot' => const Color(0xFFE65100),
+        'warn' => const Color(0xFFF9A825),
+        'old' => const Color(0xFF6D4C41),
+        'min' => const Color(0xFF546E7A),
+        _ => const Color(0xFF546E7A),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _badgeColor(entry.badge);
+    final lang = oilLangOf(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAF7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE0EBE0)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          shape: const RoundedRectangleBorder(side: BorderSide.none),
+          collapsedShape:
+              const RoundedRectangleBorder(side: BorderSide.none),
+          leading: Container(
+            width: 54,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              entry.sae,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          title: Text(
+            entry.sae,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+          subtitle: Text(
+            entry.subtitle.t(lang),
+            style: const TextStyle(fontSize: 11.5, color: Color(0xFF6B7C6E)),
+          ),
+          children: [
+            _param(context.tr('oil_sae_param_thickness'), entry.thickness.t(lang)),
+            _param(context.tr('oil_sae_param_hot'), entry.hotProtect.t(lang)),
+            _param(context.tr('oil_sae_param_main'), entry.main.t(lang)),
+            _param(context.tr('oil_sae_param_engines'), entry.engines.t(lang)),
+            _param(context.tr('oil_sae_param_chevy'), entry.chevy.t(lang)),
+            _param(context.tr('oil_sae_param_pros'), entry.pros.t(lang)),
+            _param(context.tr('oil_sae_param_cons'), entry.cons.t(lang)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: entry.lpgBad
+                    ? const Color(0xFFFFF0F0)
+                    : const Color(0xFFEAF6EB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: entry.lpgBad
+                      ? const Color(0xFFFFCDD2)
+                      : const Color(0xFFB7DFB9),
+                ),
+              ),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: context.tr('oil_sae_gas_prefix'),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    TextSpan(text: entry.lpg.t(lang)),
+                  ],
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: entry.lpgBad
+                      ? const Color(0xFFB71C1C)
+                      : const Color(0xFF1B5E20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _param(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              color: Color(0xFF2E7D32),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: Color(0xFF1A2E1C),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SaeCompareTable extends StatelessWidget {
+  const _SaeCompareTable();
+
+  @override
+  Widget build(BuildContext context) {
+    final lang = oilLangOf(context);
+    final headers = [
+      context.tr('oil_sae_compare_metric'),
+      '0W-20',
+      '5W-30',
+      '5W-40',
+      '10W-40',
+      '15W-40',
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowHeight: 40,
+        dataRowMinHeight: 34,
+        dataRowMaxHeight: 48,
+        columnSpacing: 18,
+        horizontalMargin: 10,
+        headingRowColor: WidgetStatePropertyAll(const Color(0xFFEEF6EF)),
+        border: TableBorder.all(color: const Color(0xFFE0EBE0), width: 1),
+        columns: [
+          for (final h in headers)
+            DataColumn(
+              label: Text(
+                h,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11.5,
+                  color: Color(0xFF1A2E1C),
                 ),
               ),
             ),
         ],
-      ],
+        rows: [
+          for (final row in OilRefCatalog.saeCompareRows)
+            DataRow(
+              cells: [
+                for (var i = 0; i < row.length; i++)
+                  DataCell(
+                    Text(
+                      row[i].t(lang),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: i == 0 ? FontWeight.w700 : FontWeight.w500,
+                        color: row[i].t(lang).contains('✅')
+                            ? const Color(0xFF2E7D32)
+                            : const Color(0xFF344736),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

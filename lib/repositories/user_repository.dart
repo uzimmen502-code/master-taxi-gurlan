@@ -454,13 +454,27 @@ class UserRepository {
     required String carColor,
     required String carPlate,
     required int carSeats,
+    String carBrand = '',
+    int carYear = 0,
+    String carEngine = '',
+    String carFuelType = '',
+    List<String> carUsageTags = const [],
   }) async {
     if (uid.isEmpty) return;
+    final tags = carUsageTags
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     await _col.doc(canonicalPhoneId(uid)).update({
       'carModel': carModel.trim(),
       'carColor': carColor.trim(),
       'carPlate': carPlate.trim().toUpperCase(),
       'carSeats': carSeats,
+      'carBrand': carBrand.trim(),
+      'carYear': carYear,
+      'carEngine': carEngine.trim(),
+      'carFuelType': carFuelType.trim(),
+      'carUsageTags': tags,
       'carUpdatedAt': FieldValue.serverTimestamp(),
     });
     final prefs = await SharedPreferences.getInstance();
@@ -468,6 +482,11 @@ class UserRepository {
     await prefs.setString('car_color', carColor.trim());
     await prefs.setString('car_plate', carPlate.trim().toUpperCase());
     await prefs.setInt('car_seats', carSeats);
+    await prefs.setString('car_brand', carBrand.trim());
+    await prefs.setInt('car_year', carYear);
+    await prefs.setString('car_engine', carEngine.trim());
+    await prefs.setString('car_fuel_type', carFuelType.trim());
+    await prefs.setStringList('car_usage_tags', tags);
   }
 
   /// `users/{uid}` ва SharedPreferences'dan avtomobil ma'lumotlarini tozalash.
@@ -478,6 +497,11 @@ class UserRepository {
       'carColor': '',
       'carPlate': '',
       'carSeats': 0,
+      'carBrand': '',
+      'carYear': 0,
+      'carEngine': '',
+      'carFuelType': '',
+      'carUsageTags': <String>[],
       'carUpdatedAt': FieldValue.serverTimestamp(),
     });
     final prefs = await SharedPreferences.getInstance();
@@ -485,6 +509,11 @@ class UserRepository {
     await prefs.remove('car_color');
     await prefs.remove('car_plate');
     await prefs.remove('car_seats');
+    await prefs.remove('car_brand');
+    await prefs.remove('car_year');
+    await prefs.remove('car_engine');
+    await prefs.remove('car_fuel_type');
+    await prefs.remove('car_usage_tags');
   }
 
   Future<Map<String, String>?> getCarInfo(String uid) async {
@@ -497,12 +526,27 @@ class UserRepository {
       final color = d['carColor'] as String? ?? '';
       final plate = d['carPlate'] as String? ?? '';
       final seats = (d['carSeats'] as num?)?.toInt() ?? 0;
-      if (model.isEmpty && plate.isEmpty && seats == 0) return null;
+      final brand = d['carBrand'] as String? ?? '';
+      final year = (d['carYear'] as num?)?.toInt() ?? 0;
+      final engine = d['carEngine'] as String? ?? '';
+      final fuel = d['carFuelType'] as String? ?? '';
+      final rawTags = d['carUsageTags'];
+      final tags = rawTags is List
+          ? rawTags.map((e) => '$e').where((e) => e.trim().isNotEmpty).join(',')
+          : '';
+      if (model.isEmpty && plate.isEmpty && seats == 0 && brand.isEmpty) {
+        return null;
+      }
       return {
         'carModel': model,
         'carColor': color,
         'carPlate': plate,
         'carSeats': seats > 0 ? '$seats' : '',
+        'carBrand': brand,
+        'carYear': year > 0 ? '$year' : '',
+        'carEngine': engine,
+        'carFuelType': fuel,
+        'carUsageTags': tags,
       };
     } catch (_) {
       return null;

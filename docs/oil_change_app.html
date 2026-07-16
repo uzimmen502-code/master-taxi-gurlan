@@ -76,42 +76,109 @@
       padding: 14px; font-weight: 800; font-size: .95rem; line-height: 1.25; margin-bottom: 12px;
     }
     .status {
-      border-radius: 14px; padding: 14px; border: 1px solid rgba(46,125,50,.35);
-      background: rgba(46,125,50,.1); margin-bottom: 14px;
+      border-radius: 12px;
+      padding: 9px 8px 9px 10px;
+      border: 1px solid #D5E5D6;
+      background: #fff;
+      margin-bottom: 12px;
+      box-shadow: none;
     }
     .status-cell .car-head {
-      margin-bottom: 10px;
-    }
-    .status-cell .car-head h2 {
-      font-size: .95rem;
-    }
-    .status-cell .pill-btn {
-      background: rgba(255,255,255,.85);
-      border-color: rgba(46,125,50,.25);
-    }
-    .status-cell .status-top {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .status-cell .status-top .badge {
+      gap: 5px;
       margin-bottom: 0;
     }
-    .status-cell .linkish.in-status {
-      padding: 0;
-      display: inline-block;
-      font-size: .75rem;
-      font-weight: 600;
-      color: #5B8A5E;
-      opacity: .85;
+    .status-cell .car-head h2 {
+      flex: 1;
+      min-width: 0;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: -.25px;
+      line-height: 1.15;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status-edit {
+      width: 28px; height: 28px;
+      border-radius: 999px;
+      border: 0;
+      background: transparent;
+      color: #2E7D32;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
       flex-shrink: 0;
+      font-size: 13px;
+      box-shadow: none;
+      padding: 0;
     }
-    .status-cell .linkish.in-status:hover {
-      opacity: 1;
-      color: var(--primary);
+    .status-fuel {
+      display: inline-block;
+      margin-top: 0;
+      padding: 3px 6px;
+      border-radius: 6px;
+      background: #E8F5E9;
+      color: #1B5E20;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
+    .status-oil {
+      display: flex;
+      gap: 0;
+      margin-top: 7px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid #D7E8D8;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .status-oil .cell {
+      flex: 1;
+      text-align: center;
+      padding: 6px 4px;
+      background: #F7FAF7;
+      border: 0;
+      border-radius: 0;
+      border-right: 1px solid #E8F0E8;
+    }
+    .status-oil .cell:last-child { border-right: 0; }
+    .status-oil .cell .lbl {
+      display: block;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 3px;
+      line-height: 1;
+    }
+    .status-oil .cell .val {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--ink, #1A2E1C);
+      line-height: 1;
+      letter-spacing: -.2px;
+    }
+    .status-oil .cell .val small {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-left: 1px;
+    }
+    .status-oil .cell.total {
+      background: #2E7D32;
+      border-color: transparent;
+      box-shadow: none;
+    }
+    .status-oil .cell.total .lbl { color: rgba(255,255,255,.85); }
+    .status-oil .cell.total .val { color: #fff; font-size: 13px; }
+    .status-oil .cell.total .val small { color: rgba(255,255,255,.8); }
+    .status-oil .sep { display: none; }
     .badge {
       display: inline-block; background: var(--ok); color: #fff; font-size: .75rem;
       font-weight: 800; padding: 4px 8px; border-radius: 8px; margin-bottom: 8px;
@@ -122,6 +189,11 @@
       background: none; border: 0; color: var(--primary); font-weight: 700;
       font-size: .88rem; padding: 8px 0 12px; cursor: pointer;
     }
+    #oilTypeBars > .linkish {
+      margin-top: -10px;
+      padding-top: 0;
+      padding-bottom: 2px;
+    }
     .car-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
     .car-head h2 { flex: 1; font-size: .95rem; font-weight: 800; }
     .pill-btn {
@@ -131,67 +203,106 @@
     .section-h { margin-top: 8px; margin-bottom: 8px; }
     .section-h h3 { font-size: .92rem; font-weight: 800; }
     .section-h .hint { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+    .section-h.doctor-title {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      overflow: hidden;
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1.2;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #B7DFB9;
+      background: linear-gradient(90deg, #E8F5E9, #E3F2FD);
+      color: #1A2E1C;
+    }
+    .section-h.doctor-title .doc-oil { color: #2E7D32; flex-shrink: 0; }
+    .section-h.doctor-title .doc-chev { color: #1565C0; font-weight: 900; flex-shrink: 0; }
+    .section-h.doctor-title span { flex-shrink: 0; }
     .card-box {
       background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
     }
     .type-row { margin-bottom: 10px; cursor: pointer; }
-    .type-row .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .type-row .row { display: flex; justify-content: space-between; gap: 8px; margin-top: -5px; margin-bottom: 6px; }
     .type-row .name { font-weight: 800; font-size: .88rem; }
     .type-row .km { color: var(--green); font-weight: 700; font-size: .78rem; }
     .bar-track {
       height: 12px; background: #E6EEE5; border-radius: 999px; position: relative; overflow: visible;
     }
-    /* Минерал: тўлиқ узунлик = 7 000 км; зоналар */
+    /* Йўл: асфальт + пунктир; зона ранглари сақланади */
     .bar-track.range {
-      height: 14px;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+      height: 5.6px;
+      border-radius: 2px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.18),
+        inset 0 -1px 0 rgba(0,0,0,.28),
+        0 1px 2px rgba(0,0,0,.12);
     }
+    .bar-track.range::after {
+      content: '';
+      position: absolute;
+      left: 4px; right: 4px;
+      top: 50%;
+      height: 1px;
+      margin-top: -0.5px;
+      background: repeating-linear-gradient(
+        90deg,
+        rgba(255,255,255,.95) 0 6px,
+        transparent 6px 12px
+      );
+      pointer-events: none;
+      z-index: 1;
+      opacity: .9;
+    }
+    /* Тўхташ: 5k ~60%, 7k ~70%, 10k ~80% (15k шкала охири сиқилган) */
     .bar-track.range.mineral {
       background: linear-gradient(
         90deg,
-        #c8e6c9 0%,
-        #c8e6c9 57.1%,
-        #66bb6a 57.1%,
-        #66bb6a 71.4%,
-        #fdd835 71.4%,
-        #fdd835 85.7%,
-        #ef6c00 85.7%,
-        #ef6c00 100%
+        #6b736b 0%,
+        #6b736b 45%,
+        #3f8f44 45%,
+        #3f8f44 60%,
+        #c9a412 60%,
+        #c9a412 80%,
+        #c45a12 80%,
+        #c45a12 100%
       );
     }
-    /* Ярим: 0–10 000; хавфсиз ~7k (70%) */
     .bar-track.range.semi {
       background: linear-gradient(
         90deg,
-        #c8e6c9 0%,
-        #c8e6c9 70%,
-        #66bb6a 70%,
-        #66bb6a 80%,
-        #fdd835 80%,
-        #fdd835 90%,
-        #ef6c00 90%,
-        #ef6c00 100%
+        #6b736b 0%,
+        #6b736b 70%,
+        #3f8f44 70%,
+        #3f8f44 80%,
+        #c9a412 80%,
+        #c9a412 90%,
+        #c45a12 90%,
+        #c45a12 100%
       );
     }
-    /* Тўлиқ: 0–15 000; хавфсиз ~10k (66.7%) */
     .bar-track.range.full {
       background: linear-gradient(
         90deg,
-        #c8e6c9 0%,
-        #c8e6c9 66.7%,
-        #66bb6a 66.7%,
-        #66bb6a 80%,
-        #fdd835 80%,
-        #fdd835 90%,
-        #ef6c00 90%,
-        #ef6c00 100%
+        #6b736b 0%,
+        #6b736b 80%,
+        #3f8f44 80%,
+        #3f8f44 88%,
+        #c9a412 88%,
+        #c9a412 92%,
+        #c45a12 92%,
+        #c45a12 100%
       );
     }
     .bar-track.range .zone-marks {
       position: absolute; inset: 0; pointer-events: none;
     }
     .bar-track.range .zone-marks span {
-      position: absolute; top: 16px; font-size: 9px; font-weight: 700; color: var(--muted);
+      position: absolute; top: 10px; font-size: 9px; font-weight: 700; color: var(--muted);
       transform: translateX(-50%);
     }
     .bar-fill {
@@ -201,50 +312,55 @@
     .bar-fill.semi { background-image: linear-gradient(90deg, #69C06D, #2F9E45, #69C06D); }
     .bar-fill.full { background-image: linear-gradient(90deg, #4CAF50, #1B7A28, #4CAF50); }
     .bar-fill.mineral-range {
-      background: linear-gradient(90deg, rgba(27,122,40,.55), rgba(27,122,40,.85));
-      mix-blend-mode: multiply;
+      border-radius: 3px 0 0 3px;
+      background: linear-gradient(
+        180deg,
+        rgba(30,30,30,.42) 0%,
+        rgba(15,15,15,.55) 100%
+      );
+      mix-blend-mode: normal;
+      z-index: 0;
     }
     .safe-mark {
-      position: absolute; top: -2px; bottom: -2px; width: 2px;
-      background: #1B7A28; z-index: 2;
-      box-shadow: 0 0 0 1px rgba(255,255,255,.7);
+      position: absolute; top: -3px; bottom: -3px; width: 2px;
+      background: #fff;
+      z-index: 2;
+      box-shadow: 0 0 0 1px rgba(27,122,40,.85);
     }
     .flag {
-      position: absolute; bottom: 9px; width: 18px; height: 14px;
-      transform-origin: bottom right;
+      position: absolute;
+      bottom: 16px;
+      width: 12px;
+      height: 10px;
+      transform: translateX(-100%);
+      transform-origin: 100% 100%;
       animation: flap .7s ease-in-out infinite alternate;
       pointer-events: none;
-      z-index: 3;
+      z-index: 5;
     }
     .flag svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
-    /* Байроқ + авто: бирга ҳаракатланади */
+    /* Авто — ҳаракатланади; байроқ — финишда туради */
     .racer {
       position: absolute;
-      bottom: -2px;
-      width: 36px;
-      height: 28px;
+      bottom: -1px;
+      width: 34px;
+      height: 16px;
       transform: translateX(-50%);
       pointer-events: none;
       z-index: 4;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-end;
-    }
-    .racer .flag {
-      position: relative;
-      bottom: auto;
-      left: auto !important;
-      margin-bottom: -2px;
     }
     .racer .car {
       width: 34px;
       height: 16px;
+      display: block;
       filter: drop-shadow(0 1px 1px rgba(0,0,0,.2));
     }
-    @keyframes flap { from { transform: rotate(-5deg); } to { transform: rotate(-18deg); } }
+    @keyframes flap {
+      from { transform: translateX(-100%) rotate(-5deg); }
+      to { transform: translateX(-100%) rotate(-18deg); }
+    }
     .range-legend {
-      display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 8px 0 4px;
+      display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 4px;
       font-size: 10px; font-weight: 650; color: var(--muted);
     }
     .range-legend i {
@@ -254,9 +370,15 @@
     .fine { font-size: .72rem; color: var(--muted); line-height: 1.3; margin-top: 4px; }
     .type-row.mineral,
     .type-row.semi-row,
-    .type-row.full-row { margin-bottom: 28px; }
-    .bar-track.range { margin-bottom: 4px; }
+    .type-row.full-row { margin-bottom: 18px; }
+    .type-row.full-row { margin-bottom: 14px; }
+    .bar-track.range { margin-bottom: 6px; }
     .gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+    .reco-tier { margin-bottom: 10px; }
+    .reco-tier-h {
+      font-weight: 800; font-size: .82rem; margin-bottom: 8px; color: var(--ink);
+    }
+    .reco-tier .gallery { margin-bottom: 2px; }
     .gcard { width: 132px; flex: 0 0 auto; }
     .gal-tabs {
       display: flex; background: var(--primary);
@@ -294,7 +416,6 @@
     }
     .rank h4 { font-size: .95rem; font-weight: 800; }
     .rank .meta-line { color: var(--muted); font-size: .82rem; margin-top: 4px; }
-    .actions { display: flex; gap: 10px; margin-top: 12px; }
     .btn-hub {
       flex: 1; min-height: 48px; border-radius: 12px; font-weight: 750; font-size: .9rem; cursor: pointer;
     }
@@ -983,6 +1104,72 @@
   .reco-hint.green { background: var(--green-bg); border: 1px solid var(--green-border); }
   .reco-hint.orange { background: var(--orange-bg); border: 1px solid #FFCC80; }
 
+  .mileage-card-title {
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--ink, #1A2E1C);
+    margin-bottom: 2px;
+    letter-spacing: -.2px;
+  }
+  .mileage-card-hint {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.25;
+    margin-bottom: 8px;
+  }
+  .mileage-table3 {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #D7E8D8;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .mileage-table3 th {
+    font-size: 9.5px;
+    font-weight: 800;
+    color: var(--muted);
+    text-align: left;
+    padding: 6px 8px;
+    vertical-align: middle;
+    line-height: 1.15;
+    background: #EEF6EF;
+    border-bottom: 1px solid #D7E8D8;
+    letter-spacing: -.1px;
+  }
+  .mileage-table3 th.ok { color: #2E7D32; }
+  .mileage-table3 th.bad { color: #EF6C00; }
+  .mileage-table3 td {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1A2E1C;
+    padding: 6px 8px;
+    vertical-align: middle;
+    line-height: 1.2;
+    border-bottom: 1px solid #E8F0E8;
+    letter-spacing: -.15px;
+  }
+  .mileage-table3 tr:nth-child(even) td { background: #F7FAF7; }
+  .mileage-table3 tr:last-child td { border-bottom: 0; }
+  .mileage-table3 td:first-child {
+    font-weight: 800;
+    color: #1B5E20;
+  }
+  .mileage-table3 td + td { border-left: 1px solid #E8F0E8; }
+  .mileage-warn {
+    margin-top: 6px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: #FFF4E8;
+    border: 1px solid #FFCC80;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .mileage-warn .l { color: #E65100; }
+  .mileage-warn .r { color: #BF360C; }
+
   .mileage-table {
     width: 100%;
     border-collapse: collapse;
@@ -1171,46 +1358,52 @@
         <div class="status status-cell">
           <div class="car-head">
             <h2>Chevrolet Cobalt · 1.5 · 2021</h2>
-            <button class="pill-btn" type="button">Модел бўйича</button>
+            <span class="status-fuel">Метан</span>
+            <button class="status-edit" type="button" title="Таҳрирлаш" aria-label="Таҳрирлаш">✎</button>
           </div>
-          <div class="status-top">
-            <div class="badge">Яхши</div>
-            <button class="linkish in-status" type="button">Таҳрирлаш →</button>
-          </div>
-          <div class="big">~2 400 км · ~48 кун</div>
-          <div class="sub">Метан · Такси · Кейинги: 28.08.2026</div>
+          <div class="status-oil" id="hubOilCapacity"></div>
         </div>
 
-        <div class="section-h"><h3>«DOCTOR OIL» тавсияси</h3></div>
+        <div class="section-h doctor-title">
+          <span class="doc-oil">«DOCTOR OIL»</span>
+          <span>тавсияси:</span>
+          <span class="doc-chev">Chevrolet</span>
+          <span>машиналари учун</span>
+        </div>
+        <div class="card-box" style="padding:10px;margin-bottom:10px">
+          <div class="mileage-card-title">Километраж бўйича тавсиялар</div>
+          <div class="mileage-card-hint">Соғлом = яхши ҳолат · Эътиборсиз = ёмон қаралган</div>
+          <div id="hubMileageTable"></div>
+        </div>
         <div class="card-box" id="oilTypeBars">
-          <!-- Минерал: 5–7k, байроқ ~5k -->
-          <div class="type-row mineral" data-mode="range" data-max-km="7000" data-safe-km="5000">
+          <!-- Тўлиқ: 15k шкала; тўхташ 10k@80%; яшил 10–12k, сариқ 12–13k, қизил 13–15k -->
+          <div class="type-row full-row" data-mode="range" data-max-km="12500" data-safe-km="10000">
             <div class="row">
-              <span class="name">🟤 Минерал</span>
+              <span class="name">🟢 Тўлиқ синтетик</span>
               <span class="km" data-km>0 км</span>
             </div>
-            <div class="bar-track range mineral">
-              <div class="safe-mark" style="left:71.4%" title="~5 000 км"></div>
+            <div class="bar-track range full">
+              <div class="safe-mark" style="left:80%" title="~10 000 км"></div>
+              <div class="flag" style="left:80%"><svg viewBox="0 0 20 16"><line x1="18.5" y1="1" x2="18.5" y2="15" stroke="#1a1a1a" stroke-width="1.4" stroke-linecap="round"/><g transform="translate(2,2.5)"><rect width="15.5" height="10" fill="#fff"/><path fill="#e53935" d="M0 0h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 2.5h3.1V5H3.1zm6.2 0h3.1V5H9.3zM0 5h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 7.5h3.1V10H3.1zm6.2 0h3.1V10H9.3z"/></g></svg></div>
               <div class="bar-fill mineral-range" style="width:12%"></div>
               <div class="racer" style="left:8%">
-                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
-                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#2E7D32"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#A5D6A7"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#1B5E20"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
+                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#1B7A28"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#C8E6C9"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#0D5C18"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
               </div>
               <div class="zone-marks">
-                <span style="left:57.1%">4k</span>
-                <span style="left:71.4%">5k</span>
-                <span style="left:85.7%">6k</span>
-                <span style="left:100%">7k</span>
+                <span style="left:80%">10k</span>
+                <span style="left:88%">12k</span>
+                <span style="left:92%">13k</span>
+                <span style="left:100%">15k</span>
               </div>
             </div>
             <div class="range-legend">
-              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~5 000 км · хавфсиз</span>
-              <span><i style="background:#fdd835"></i>5–6k сариқ</span>
-              <span><i style="background:#ef6c00"></i>6–7k огоҳлик</span>
+              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~10 000 км · хавфсиз</span>
+              <span><i style="background:#66bb6a"></i>10–12k яшил</span>
+              <span><i style="background:#fdd835"></i>12–13k сариқ</span>
+              <span><i style="background:#ef6c00"></i>13–15k огоҳлик</span>
             </div>
           </div>
-
-          <!-- Ярим: 7–10k, байроқ ~7k -->
+          <!-- Ярим: 7–10k, байроқ ~7k (~70%) -->
           <div class="type-row semi-row" data-mode="range" data-max-km="10000" data-safe-km="7000">
             <div class="row">
               <span class="name">🟠 Ярим синтетик</span>
@@ -1218,9 +1411,9 @@
             </div>
             <div class="bar-track range semi">
               <div class="safe-mark" style="left:70%" title="~7 000 км"></div>
+              <div class="flag" style="left:70%"><svg viewBox="0 0 20 16"><line x1="18.5" y1="1" x2="18.5" y2="15" stroke="#1a1a1a" stroke-width="1.4" stroke-linecap="round"/><g transform="translate(2,2.5)"><rect width="15.5" height="10" fill="#fff"/><path fill="#e53935" d="M0 0h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 2.5h3.1V5H3.1zm6.2 0h3.1V5H9.3zM0 5h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 7.5h3.1V10H3.1zm6.2 0h3.1V10H9.3z"/></g></svg></div>
               <div class="bar-fill mineral-range" style="width:12%"></div>
               <div class="racer" style="left:8%">
-                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
                 <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#EF6C00"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#FFE0B2"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#E65100"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
               </div>
               <div class="zone-marks">
@@ -1237,32 +1430,33 @@
             </div>
           </div>
 
-          <!-- Тўлиқ: 10–15k, байроқ ~10k -->
-          <div class="type-row full-row" data-mode="range" data-max-km="15000" data-safe-km="10000">
+          <!-- Минерал: 5–7k, байроқ ~5k (~60%) -->
+          <div class="type-row mineral" data-mode="range" data-max-km="8333" data-safe-km="5000">
             <div class="row">
-              <span class="name">🟢 Тўлиқ синтетик</span>
+              <span class="name">🟤 Минерал</span>
               <span class="km" data-km>0 км</span>
             </div>
-            <div class="bar-track range full">
-              <div class="safe-mark" style="left:66.7%" title="~10 000 км"></div>
+            <div class="bar-track range mineral">
+              <div class="safe-mark" style="left:60%" title="~5 000 км"></div>
+              <div class="flag" style="left:60%"><svg viewBox="0 0 20 16"><line x1="18.5" y1="1" x2="18.5" y2="15" stroke="#1a1a1a" stroke-width="1.4" stroke-linecap="round"/><g transform="translate(2,2.5)"><rect width="15.5" height="10" fill="#fff"/><path fill="#e53935" d="M0 0h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 2.5h3.1V5H3.1zm6.2 0h3.1V5H9.3zM0 5h3.1v2.5H0zm6.2 0h3.1v2.5H6.2zm6.2 0h3.1v2.5h-3.1zM3.1 7.5h3.1V10H3.1zm6.2 0h3.1V10H9.3z"/></g></svg></div>
               <div class="bar-fill mineral-range" style="width:12%"></div>
               <div class="racer" style="left:8%">
-                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
-                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#1B7A28"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#C8E6C9"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#0D5C18"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
+                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#2E7D32"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#A5D6A7"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#1B5E20"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
               </div>
               <div class="zone-marks">
-                <span style="left:66.7%">10k</span>
-                <span style="left:80%">12k</span>
-                <span style="left:90%">13.5k</span>
-                <span style="left:100%">15k</span>
+                <span style="left:45%">4k</span>
+                <span style="left:60%">5k</span>
+                <span style="left:80%">6k</span>
+                <span style="left:100%">7k</span>
               </div>
             </div>
             <div class="range-legend">
-              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~10 000 км · хавфсиз</span>
-              <span><i style="background:#fdd835"></i>12–13.5k сариқ</span>
-              <span><i style="background:#ef6c00"></i>13.5–15k огоҳлик</span>
+              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~5 000 км · хавфсиз</span>
+              <span><i style="background:#fdd835"></i>5–6k сариқ</span>
+              <span><i style="background:#ef6c00"></i>6–7k огоҳлик</span>
             </div>
           </div>
+
           <button class="linkish" type="button" data-go="oilTypes">Батафсил →</button>
         </div>
 
@@ -1278,37 +1472,37 @@
         <button class="linkish" type="button" data-go="gallery">Тўлиқ галерея →</button>
 
         <div class="section-h">
-          <h3>Тавсиялар</h3>
-          <div class="hint">1 / 2 / 3 + фильтр бандл</div>
+          <h3>Тавсиялар: нархлари ва сифати бўйича</h3>
         </div>
-        <div class="rank top">
-          <div class="rank-label" style="background:#1B7A28">1 · Энг яхши</div>
-          <h4>Liqui Moly Special Tec DX1 5W-30</h4>
-          <div class="meta-line">Такси + метан · Dexos1 Gen 3 · 185 000 сўм</div>
+        <div class="reco-tier">
+          <div class="reco-tier-h">🟣 Премиум</div>
+          <div class="gallery">
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Mobil 1 ESP</div><div class="m">Full Syn · SP</div><div class="p">210 000</div></div>
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Liqui Moly 5W-30</div><div class="m">Dexos1 · SP</div><div class="p">185 000</div></div>
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Castrol Magnatec</div><div class="m">C2 · SP</div><div class="p">175 000</div></div>
+          </div>
         </div>
-        <div class="rank">
-          <div class="rank-label" style="background:#2F9E45">2 · Яхши</div>
-          <h4>Mobil 1™ 5W-30</h4>
-          <div class="meta-line">API SP · A5/B5, C2 · 210 000 сўм</div>
+        <div class="reco-tier">
+          <div class="reco-tier-h">🟢 Оптимал</div>
+          <div class="gallery">
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Shell Helix HX8</div><div class="m">SN · A3/B4</div><div class="p">165 000</div></div>
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Local Pro 5W-30</div><div class="m">SP · C3</div><div class="p">145 000</div></div>
+          </div>
         </div>
-        <div class="rank">
-          <div class="rank-label" style="background:#69C06D">3 · Мақбул</div>
-          <h4>Shell Helix Ultra SP 5W-30</h4>
-          <div class="meta-line">Dexos1 Gen 3 · 165 000 сўм</div>
-        </div>
-
-        <div class="actions">
-          <button class="btn-hub out" type="button">Ҳайдовчи учун</button>
-          <button class="btn-hub fill" type="button">Брон</button>
+        <div class="reco-tier">
+          <div class="reco-tier-h">✅ Мақбул</div>
+          <div class="gallery">
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Semi City 10W-40</div><div class="m">Semi · SN</div><div class="p">98 000</div></div>
+            <div class="gcard"><div class="gthumb">🛢</div><div class="n">Budget 10W-40</div><div class="m">Mineral</div><div class="p">75 000</div></div>
+          </div>
         </div>
 
         <div style="margin-top:12px">
-          <div class="tile" data-go="ref">📖 Мой маълумотномаси</div>
+          <div class="tile" data-go="ref">📖 Билиб қўйган яхши</div>
           <div class="tile">🕘 Тарих</div>
           <div class="tile">🏪 Сервис пунктлари</div>
           <div class="tile">✏️ Одометрни таҳрирлаш</div>
         </div>
-        <p class="disclaimer">AVA маслаҳати · завод кафолати эмас · сервис билан мослаштиринг.</p>
       </div>
     </div>
 
@@ -1390,11 +1584,10 @@
     <div class="screen" id="ref">
       <div class="appbar">
         <button type="button" data-go="hub">←</button>
-        <h1>Мой маълумотномаси</h1>
+        <h1>Билиб қўйган яхши</h1>
       </div>
-      <div class="car-ok">Chevrolet Cobalt · 1.5 · Метан · Такси</div>
       <div class="tabs">
-        <div class="tab active" data-tab="reco">⭐ Тавсия</div>
+        <div class="tab active" data-tab="reco">Мой ҳақида</div>
         <div class="tab" data-tab="full">Синтетик (50)</div>
         <div class="tab" data-tab="semi">Ярим (20)</div>
         <div class="tab" data-tab="mineral">Минерал (20)</div>
@@ -1411,16 +1604,6 @@
       <div class="section" id="sec-semi"></div>
       <div class="section" id="sec-mineral"></div>
       <div class="section active" id="sec-reco">
-<div class="reco-section">
-    <div class="reco-title">📊 Kilometraj bo'yicha tavsiyalar</div>
-    <table class="mileage-table">
-      <thead>
-        <tr><th>Kilometraj</th><th>Tavsiya</th></tr>
-      </thead>
-      <tbody id="mileageTable"></tbody>
-    </table>
-  </div>
-
   <div class="reco-section" id="saeGuideSection">
     <div class="reco-title">📖 SAE қўлланма — мой қалинлиги</div>
     <p class="sae-intro">
@@ -1431,33 +1614,6 @@
     <div id="saeAccordions"></div>
     <div class="reco-title" style="margin-top:16px;font-size:14px">📊 Қиёсий жадвал</div>
     <div class="compare-wrap" id="saeCompare"></div>
-  </div>
-
-  <div class="reco-section">
-    <div class="reco-title">🚗 Model tanlang</div>
-    <div class="model-chips" id="modelChips"></div>
-    <div id="modelReco"></div>
-  </div>
-
-  <div class="reco-section">
-    <div class="reco-title">🔧 Menga mos moy</div>
-
-    <div class="slider-group">
-      <div class="slider-label">Yurgan masofasi</div>
-      <div class="slider-row">
-        <input type="range" id="mileageSlider" min="0" max="400000" step="10000" value="50000">
-        <span class="slider-val" id="mileageVal">50 ming km</span>
-      </div>
-    </div>
-
-    <div class="switch-row">
-      <input type="checkbox" id="lpgCheck">
-      <label for="lpgCheck">LPG/CNG (metan/propan)</label>
-    </div>
-
-    <button class="btn" onclick="doRecommend()">Tavsiya olish</button>
-
-    <div id="recoResults"></div>
   </div>
       </div>
       <div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
@@ -1586,15 +1742,14 @@ const MODEL_RECOS = [
 ];
 
 const MILEAGE_RECOS = [
-  {range:"0–80 ming km",reco:"0W-20 yoki 5W-30 to'liq sintetik"},
-  {range:"80–150 ming km",reco:"5W-30 to'liq sintetik"},
-  {range:"150–250 ming km",reco:"5W-40 to'liq sintetik"},
-  {range:"250 ming+",reco:"10W-40 yarim sintetik"},
-  {range:"Moy sarflaydi",reco:"10W-40 yoki 15W-40"},
+  {range:"0–80/150 минг",healthy:"0W-20 / 5W-30",neglected:"5W-30"},
+  {range:"150–300 минг",healthy:"5W-30 / 5W-40",neglected:"5W-40"},
+  {range:"300–450 минг",healthy:"5W-30 / 5W-40",neglected:"5W-40"},
+  {range:"450 минг+",healthy:"Ҳолатига қараб",neglected:"5W-40 / 10W-40"},
+  {range:"Мой сарфлайди",healthy:"10W-40 / 15W-40",neglected:"10W-40 / 15W-40",warn:true},
 ];
 
 let currentTab = 'full';
-let selectedModel = null;
 
 const BRAND_LOGOS = {
   'Mobil':        {domain:'exxonmobil.com', color:'#E31837'},
@@ -2127,83 +2282,55 @@ function closeDetail(e) {
   }
 }
 
-function initModelChips() {
-  const el = document.getElementById('modelChips');
-  el.innerHTML = MODEL_RECOS.map(r =>
-    `<div class="model-chip" data-model="${r.model}" onclick="selectModel('${r.model}')">🚗 ${r.model} <span style="font-size:11px;color:#888;font-weight:400">${r.total}L</span></div>`
-  ).join('');
+function resolveModelCapacity(modelName) {
+  const m = (modelName || '').toLowerCase().trim();
+  if (!m) return null;
+  let best = null, bestLen = 0;
+  for (const r of MODEL_RECOS) {
+    const k = r.model.toLowerCase();
+    if (k === m) return r;
+    if (m.includes(k) || k.includes(m)) {
+      if (k.length >= bestLen) { bestLen = k.length; best = r; }
+    }
+  }
+  return best;
 }
 
-function selectModel(m) {
-  selectedModel = selectedModel === m ? null : m;
-  document.querySelectorAll('.model-chip').forEach(c =>
-    c.classList.toggle('active', c.dataset.model === selectedModel)
-  );
-  const el = document.getElementById('modelReco');
-  if (selectedModel) {
-    const r = MODEL_RECOS.find(x => x.model === selectedModel);
-    el.innerHTML = `
-      <div class="reco-hint green" style="margin-bottom:8px">${selectedModel} учун: ${r.reco}</div>
-      <div style="background:#fff;border:1px solid #e0e8e0;border-radius:12px;padding:14px;margin-top:8px">
-        <div style="font-weight:800;font-size:14px;margin-bottom:10px">🛢️ ${selectedModel} мотор мой ҳажми</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:13px;color:#666;width:120px">Мотор:</span>
-          <span style="font-weight:700;font-size:13px">${r.engine}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:13px;color:#666;width:120px">Мой (картерга):</span>
-          <span style="font-weight:700;font-size:13px">${r.oilCapacity} литр</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:13px;color:#666;width:120px">Фильтрга:</span>
-          <span style="font-weight:700;font-size:13px">${r.filterCapacity} литр</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;padding-top:8px;border-top:2px solid #2E7D32">
-          <span style="font-size:14px;font-weight:800;color:#2E7D32;width:120px">ЖАМИ КЕРАК:</span>
-          <span style="font-weight:900;font-size:18px;color:#2E7D32">${r.total} литр</span>
-        </div>
-        <div style="margin-top:10px;font-size:12px;color:#888;line-height:1.4">💡 Тавсия: 4 литрлик банка олинг. Қолган мой навбатдаги текширишда тўлдириш учун ишлатилади.</div>
-      </div>
-    `;
-  } else {
-    el.innerHTML = '';
-  }
+function initHubCapacity(modelName) {
+  const el = document.getElementById('hubOilCapacity');
+  if (!el) return;
+  const r = resolveModelCapacity(modelName || 'Cobalt');
+  if (!r) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = `
+    <div class="cell"><span class="lbl">Картер</span><span class="val">${r.oilCapacity}<small> L</small></span></div>
+    <div class="cell"><span class="lbl">Фильтр</span><span class="val">${r.filterCapacity}<small> L</small></span></div>
+    <div class="cell total"><span class="lbl">Жами</span><span class="val">${r.total}<small> L</small></span></div>
+  `;
 }
 
 function initMileageTable() {
-  const el = document.getElementById('mileageTable');
-  el.innerHTML = MILEAGE_RECOS.map(r =>
-    `<tr><td>${r.range}</td><td>${r.reco}</td></tr>`
+  const el = document.getElementById('hubMileageTable');
+  if (!el) return;
+  const normal = MILEAGE_RECOS.filter(r => !r.warn);
+  const warn = MILEAGE_RECOS.filter(r => r.warn);
+  const body = normal.map(r =>
+    `<tr><td>${r.range}</td><td>${r.healthy}</td><td>${r.neglected}</td></tr>`
   ).join('');
-}
-
-function doRecommend() {
-  const mileage = parseInt(document.getElementById('mileageSlider').value);
-  const isLpg = document.getElementById('lpgCheck').checked;
-
-  let targetType;
-  if (mileage < 250000) targetType = 'full';
-  else targetType = 'semi';
-
-  const all = [...DATA.full.map(p=>({...p,t:'full'})), ...DATA.semi.map(p=>({...p,t:'semi'})), ...DATA.mineral.map(p=>({...p,t:'mineral'}))];
-  let filtered = all.filter(p => {
-    if (targetType === 'full') return p.t === 'full';
-    return p.t === 'semi';
-  });
-  if (isLpg) filtered = filtered.filter(p => p.lpgCngCompat >= 4);
-  filtered.sort((a, b) => b.rating - a.rating);
-
-  const top = filtered.slice(0, 10);
-  const el = document.getElementById('recoResults');
-  el.classList.add('show');
-
-  let html = `<div class="results-title">Top ${top.length} tavsiya</div>`;
-  html += top.map((p, i) => renderCard(p, i + 1, p.t)).join('');
-
-  if (mileage >= 250000) {
-    html += `<div class="reco-hint orange">250 ming km dan oshgan motorlar uchun 10W-40 yarim sintetik tavsiya etiladi.</div>`;
-  }
-  el.innerHTML = html;
+  const warnHtml = warn.map(r =>
+    `<div class="mileage-warn"><span class="l">${r.range}</span><span class="r">${r.healthy}</span></div>`
+  ).join('');
+  el.innerHTML = `
+    <table class="mileage-table3">
+      <thead>
+        <tr>
+          <th>Километраж</th>
+          <th class="ok">Соғлом</th>
+          <th class="bad">Эътиборсиз</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>${warnHtml}`;
 }
 
 document.querySelectorAll('#ref .tab').forEach(t => {
@@ -2214,18 +2341,11 @@ document.getElementById('searchInput').addEventListener('input', e => {
   renderAll(e.target.value);
 });
 
-document.getElementById('mileageSlider').addEventListener('input', e => {
-  const v = parseInt(e.target.value);
-  document.getElementById('mileageVal').textContent = (v / 1000).toFixed(0) + ' ming km';
-  document.getElementById('recoResults').classList.remove('show');
-});
-
 renderAll('');
-initModelChips();
+initHubCapacity('Cobalt');
 initMileageTable();
 initSaeGuide();
 switchRefTab('reco');
-
 
 // Hub navigation + parallel bars
 document.querySelectorAll('[data-go]').forEach((el) => {
@@ -2248,12 +2368,6 @@ const TYPE_DETAILS = {
         <p class="lead">Минерал мотор мойи — бу нефтдан тозаланиб олинадиган энг оддий мотор мойи.</p>
         <p class="plain">Унинг таркиби табиий нефтга асосланган бўлиб, синтетик мойларга қараганда камроқ қайта ишланган.</p>
 
-        <div class="simple-box" style="border-left-color:#6D4C41;background:linear-gradient(135deg,#EFEBE9,#EFEBE9)">
-          <div class="lbl" style="color:#5D4037">Шунинг учун</div>
-          <p><b>нархи арзон;</b></p>
-          <p><b>лекин хизмат муддати қисқароқ;</b></p>
-          <p><b>юқори ҳароратга чидамлилиги пастроқ.</b></p>
-        </div>
         <p class="plain">Минерал мой илгари деярли барча автомобилларда ишлатилган. Ҳозир эса асосан эски автомобиллар ва оддий двигателлар учун тавсия қилинади.</p>
 
         <h3>Нима учун минерал мой қуйилади?</h3>
@@ -2318,7 +2432,7 @@ const TYPE_DETAILS = {
           <div class="tag">МЕТАН / ПРОПАН</div>
           <p class="plain">Газда двигател ҳарорати юқорироқ бўлади. Минерал мой бундай шароитда тезроқ эскиради.</p>
           <p class="plain" style="font-weight:800;color:#BF360C;margin-bottom:8px">Шунинг учун газли автомобилларда минерал мой тавсия этилмайди.</p>
-          <p class="plain" style="margin:0;font-weight:700">Агар бошқа имконият бўлмаса, <span style="color:#E65100">4 000 км</span> атрофида алмаштириш мақсадга мувофиқ.</p>
+          <p class="plain" style="margin:0;font-weight:700">Агар бошқа имконият бўлмаса, <span style="color:#E65100">5 000 км</span> атрофида алмаштириш мақсадга мувофиқ.</p>
         </div>
 
         <h3>Қайси қуюқлик (SAE) кўп учрайди?</h3>
@@ -2345,14 +2459,6 @@ const TYPE_DETAILS = {
           <li><span class="mark">❌</span><span>Двигателни синтетика каби яхши тозаламайди.</span></li>
           <li><span class="mark">❌</span><span>Янги автомобиллар учун кўп ҳолларда мос эмас.</span></li>
         </ul>
-
-        <h3>Қачон минерал мой қуйманг?</h3>
-        <div class="dont">
-          <li>❌ Агар қўлланмада фақат синтетик мой талаб қилинган бўлса.</li>
-          <li>❌ Турбо двигателларда.</li>
-          <li>❌ Янги Chevrolet Tracker, Malibu, Toyota, Hyundai, Kia ва шунга ўхшаш замонавий автомобилларда (агар минерал мойга рухсат берилмаган бўлса).</li>
-          <li>❌ GDI, TSI, TFSI каби замонавий двигатель технологияларида.</li>
-        </div>
 
         <div class="key-tip">
           <div class="eyebrow">Энг муҳим маслаҳат</div>
@@ -2462,14 +2568,6 @@ const TYPE_DETAILS = {
           <li><span class="mark">❌</span><span>Жуда юқори ҳароратда тезроқ эскиради.</span></li>
         </ul>
 
-        <h3>Қайси ҳолатда қуйманг?</h3>
-        <div class="dont">
-          <li>❌ Агар қўлланмада фақат <b>0W-20 Full Synthetic</b> ёки <b>5W-30 Full Synthetic</b> деб ёзилган бўлса.</li>
-          <li>❌ Янги турбо двигателларда.</li>
-          <li>❌ Гибрид автомобилларда (агар ишлаб чиқарувчи бошқача кўрсатмаган бўлса).</li>
-          <p class="plain" style="margin:8px 0 0;font-weight:650">Бу ҳолатларда ишлаб чиқарувчи тавсия қилган тўлиқ синтетик мойни ишлатиш керак.</p>
-        </div>
-
         <div class="key-tip">
           <div class="eyebrow">Энг муҳим маслаҳат</div>
           <div class="quote">Кўпчилик «қайси бренд яхши?» деб сўрайди. Аслида энг муҳими бренд эмас.</div>
@@ -2491,13 +2589,6 @@ const TYPE_DETAILS = {
         <h1 class="hero" style="color:#1B7A28">Тўлиқ синтетик мой нима?</h1>
         <p class="lead">Тўлиқ синтетик мотор мойи (Full Synthetic) — бу замонавий технологиялар асосида ишлаб чиқарилган энг юқори сифатли мотор мойи.</p>
         <p class="plain">У оддий минерал мойдан фарқли равишда махсус тозаланган ва кимёвий жиҳатдан барқарор база мойларидан тайёрланади.</p>
-
-        <div class="simple-box" style="border-left-color:#1B7A28;background:linear-gradient(135deg,#E8F5E9,#C8E6C9)">
-          <div class="lbl" style="color:#1B7A28">Оддий қилиб айтганда</div>
-          <p><b>Минерал мой</b> — энг арзон.</p>
-          <p><b>Ярим синтетик мой</b> — ўртача нарх ва сифат.</p>
-          <p class="balance" style="color:#1B5E20">Тўлиқ синтетик мой — энг юқори ҳимоя ва энг узоқ хизмат муддати.</p>
-        </div>
 
         <h3>Нима учун тўлиқ синтетик мой қуйилади?</h3>
         <ul class="check-list">
@@ -2584,13 +2675,6 @@ const TYPE_DETAILS = {
           <li><span class="mark">❌</span><span>Эски, мой сизиб чиқадиган двигателларда баъзан сизишни аниқроқ намоён қилиши мумкин (мой айби эмас — муҳрлар/сальниклар ҳолати).</span></li>
           <li><span class="mark">❌</span><span>Ҳамма эски автомобилларга ҳам зарур эмас.</span></li>
         </ul>
-
-        <h3>Қачон тўлиқ синтетик мой қуйманг?</h3>
-        <div class="dont">
-          <p class="plain" style="margin-bottom:8px">Сифати пастлиги учун эмас — ишлаб чиқарувчи тавсиясига амал қилиш муҳим:</p>
-          <li>❌ Агар қўлланмада фақат маълум SAE ва спецификациядаги бошқа мой кўрсатилган бўлса.</li>
-          <li>❌ Агар двигател жиддий носоз бўлиб, мой босими билан боғлиқ муаммолар бўлса (аввало носозликни бартараф этиш керак).</li>
-        </div>
 
         <div class="key-tip">
           <div class="eyebrow">Энг муҳим маслаҳат</div>

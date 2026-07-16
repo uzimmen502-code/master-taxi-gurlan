@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/service_area_picker.dart';
@@ -11,6 +12,7 @@ import '../../../models/user_address.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
+import '../../oil_change/data/oil_car_options.dart';
 import '../controllers/onboarding_controller.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -225,7 +227,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   String _formatBirthDate(DateTime value) {
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${value.year}-${two(value.month)}-${two(value.day)}';
+    return '${two(value.day)}.${two(value.month)}.${value.year}';
   }
 
   Future<void> _pickBirthDate() async {
@@ -252,11 +254,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   Future<void> _finish() async {
     final c = context.read<OnboardingController>();
-    // Qisman to'ldirilgan mashina — to'liq talab qilamiz (yoki o'tkazib yuborish).
-    final anyCar = _carModelCtrl.text.trim().isNotEmpty ||
-        _carColorCtrl.text.trim().isNotEmpty ||
-        _carPlateCtrl.text.trim().isNotEmpty;
-    if (anyCar && !c.hasCarDraft && !c.skipCarStep) {
+    // Қисман бошланган авто (2-қадамга ўтилган) — тўлиқ ёки skip.
+    if (!c.skipCarStep && c.carSetupStep >= 1 && !c.hasCarDraft) {
       _showError(
           'Автомобил майдонларини тўлиқ тўлдиринг ёки «ўтказиб юбориш»ни босинг');
       return;
@@ -355,13 +354,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 onPressed: c.isSubmitting || _isLoading
                     ? null
                     : () {
-                        c.setSkipCarStep(true);
-                        _carModelCtrl.clear();
+                        c.clearCarDraft();
                         _carColorCtrl.clear();
                         _carPlateCtrl.clear();
-                        c.setCarModel('');
-                        c.setCarColor('');
-                        c.setCarPlate('');
+                        _carSeatsCtrl.text = '4';
                         _finish();
                       },
                 child: Text(
@@ -744,11 +740,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
               controller: _birthDateCtrl,
               hint: loc.translate('ob_birth_input_hint'),
               icon: Icons.cake_outlined,
-              inputType: TextInputType.datetime,
-              formatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[\d\-]')),
-                LengthLimitingTextInputFormatter(10),
-              ],
+              inputType: TextInputType.number,
+              formatters: [_BirthDateInputFormatter()],
             ),
             const SizedBox(height: 12),
             TextButton.icon(
@@ -818,6 +811,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
   }
 
   Widget _pageCar(OnboardingController c) {
+    final step = c.carSetupStep;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       child: Column(
@@ -825,9 +819,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
         children: [
           const Text('🚗', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 8),
-          const Text(
-            'Автомобилингиз борми?',
-            style: TextStyle(
+          Text(
+            context.tr('onb_car_have'),
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -835,15 +829,33 @@ class _OnboardingViewState extends State<_OnboardingView> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Бир марта киритинг — мой алмаштириш, такси ва бошқа '
-            'авто хизматларда қайта ёзмайсиз.',
+            context.tr('onb_car_hint'),
             style: TextStyle(
               fontSize: 13,
               height: 1.35,
               color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _obStepDot(on: step == 0),
+              const SizedBox(width: 8),
+              _obStepDot(on: step == 1),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            step == 0
+                ? context.tr('onb_car_step1')
+                : context.tr('onb_car_step2'),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -852,78 +864,231 @@ class _OnboardingViewState extends State<_OnboardingView> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Нега ҳозир?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '• Мой муддатини эслатиб турамиз\n'
-                  '• Таксида ҳайдовчи сифатида тезроқ тайёр бўласиз\n'
-                  '• Профилингиз тўлиқроқ — хизматлар қulayроқ',
-                  style: TextStyle(color: Colors.white, height: 1.4),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  '🎁 Бонус: автомобилни киритсангиз — ҳамёнингизга '
-                  '5 000 сўм бонус берилади.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+            child: Text(
+              context.tr('onb_car_bonus'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
             ),
           ),
           const SizedBox(height: 14),
-          _field(
-            controller: _carModelCtrl,
-            hint: 'Марка / модель (масалан Cobalt)',
-            icon: Icons.directions_car_outlined,
-            inputType: TextInputType.text,
-          ),
-          const SizedBox(height: 10),
-          _field(
-            controller: _carColorCtrl,
-            hint: 'Ранг',
-            icon: Icons.palette_outlined,
-            inputType: TextInputType.text,
-          ),
-          const SizedBox(height: 10),
-          _field(
-            controller: _carPlateCtrl,
-            hint: 'Давлат рақами',
-            icon: Icons.pin_outlined,
-            inputType: TextInputType.text,
-            formatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]')),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _field(
-            controller: _carSeatsCtrl,
-            hint: 'Ўриндиқлар сони',
-            icon: Icons.event_seat_outlined,
-            inputType: TextInputType.number,
-            formatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
+          if (step == 0) ..._obCarStep1(c) else ..._obCarStep2(c),
           const SizedBox(height: 10),
           Text(
-            'Мажбурий эмас — кейинроқ профилда ҳам қўшиш мумкин.',
+            context.tr('onb_car_optional'),
             style: TextStyle(
               fontSize: 12,
               color: Colors.white.withValues(alpha: 0.8),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _obStepDot({required bool on}) {
+    return Expanded(
+      child: Container(
+        height: 5,
+        decoration: BoxDecoration(
+          color: on ? Colors.white : Colors.white.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(99),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _obCarStep1(OnboardingController c) {
+    return [
+      _obDropdown<String>(
+        label: context.tr('oil_brand'),
+        value: OilCarOptions.brands.contains(c.carBrand)
+            ? c.carBrand
+            : OilCarOptions.brands.first,
+        items: OilCarOptions.brands,
+        onChanged: (v) => c.setCarBrand(v!),
+      ),
+      _obDropdown<String>(
+        label: context.tr('oil_model'),
+        value: OilCarOptions.models.contains(c.carModel)
+            ? c.carModel
+            : OilCarOptions.models.first,
+        items: OilCarOptions.models,
+        onChanged: (v) {
+          c.setCarModel(v!);
+          _carModelCtrl.text = v;
+        },
+      ),
+      _obDropdown<int>(
+        label: context.tr('oil_year'),
+        value: OilCarOptions.years.contains(c.carYear)
+            ? c.carYear
+            : OilCarOptions.years.first,
+        items: OilCarOptions.years,
+        onChanged: (v) => c.setCarYear(v!),
+      ),
+      _obDropdown<String>(
+        label: context.tr('oil_engine'),
+        value: OilCarOptions.engines.contains(c.carEngine)
+            ? c.carEngine
+            : OilCarOptions.engines[1],
+        items: OilCarOptions.engines,
+        onChanged: (v) => c.setCarEngine(v!),
+      ),
+      const SizedBox(height: 4),
+      SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: ElevatedButton(
+          onPressed: () => c.setCarSetupStep(1),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: _green2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: Text(
+            context.tr('onb_car_continue_fuel'),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _obCarStep2(OnboardingController c) {
+    return [
+      Text(
+        context.tr('oil_fuel'),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: OilCarOptions.fuels.map((key) {
+          final on = c.carFuelType == key;
+          return ChoiceChip(
+            label: Text(context.tr('oil_fuel_$key')),
+            selected: on,
+            selectedColor: Colors.white,
+            labelStyle: TextStyle(
+              color: on ? _green2 : Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+            backgroundColor: Colors.white.withValues(alpha: 0.15),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+            onSelected: (_) => c.setCarFuelType(key),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 14),
+      Text(
+        context.tr('oil_usage'),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: OilCarOptions.usages.map((key) {
+          final on = c.carUsageTags.contains(key);
+          return FilterChip(
+            label: Text(context.tr('oil_usage_$key')),
+            selected: on,
+            selectedColor: Colors.white,
+            checkmarkColor: _green2,
+            labelStyle: TextStyle(
+              color: on ? _green2 : Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+            backgroundColor: Colors.white.withValues(alpha: 0.15),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+            onSelected: (v) {
+              final next = [...c.carUsageTags];
+              if (v) {
+                if (!next.contains(key)) next.add(key);
+              } else if (next.length > 1) {
+                next.remove(key);
+              }
+              c.setCarUsageTags(next);
+            },
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 14),
+      _field(
+        controller: _carColorCtrl,
+        hint: context.tr('onb_car_color_hint'),
+        icon: Icons.palette_outlined,
+        inputType: TextInputType.text,
+      ),
+      const SizedBox(height: 10),
+      _field(
+        controller: _carPlateCtrl,
+        hint: context.tr('onb_car_plate_hint'),
+        icon: Icons.pin_outlined,
+        inputType: TextInputType.text,
+        formatters: [
+          FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]')),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _field(
+        controller: _carSeatsCtrl,
+        hint: context.tr('onb_car_seats_hint'),
+        icon: Icons.event_seat_outlined,
+        inputType: TextInputType.number,
+        formatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: OutlinedButton(
+          onPressed: () => c.setCarSetupStep(0),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Colors.white70),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          child: Text(context.tr('onb_car_back_model')),
+        ),
+      ),
+    ];
+  }
+
+  Widget _obDropdown<T>({
+    required String label,
+    required T value,
+    required List<T> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            value: items.contains(value) ? value : items.first,
+            isExpanded: true,
+            items: items
+                .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
+                .toList(),
+            onChanged: onChanged,
+          ),
+        ),
       ),
     );
   }
@@ -1314,6 +1479,29 @@ class _OnboardingViewState extends State<_OnboardingView> {
           ],
         ]),
       ),
+    );
+  }
+}
+
+/// Tug'ilgan sanani `DD.MM.YYYY` ko'rinishida maskalaydi — foydalanuvchi faqat
+/// raqam kiritadi, nuqtalar avtomatik qo'yiladi (masalan: 15.03.1971).
+class _BirthDateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final capped = digits.length > 8 ? digits.substring(0, 8) : digits;
+    final buf = StringBuffer();
+    for (var i = 0; i < capped.length; i++) {
+      if (i == 2 || i == 4) buf.write('.');
+      buf.write(capped[i]);
+    }
+    final text = buf.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

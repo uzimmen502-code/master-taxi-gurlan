@@ -49,10 +49,27 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
   String _formatBirthDate(DateTime value) {
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${value.year}-${two(value.month)}-${two(value.day)}';
+    return '${two(value.day)}.${two(value.month)}.${value.year}';
   }
 
   DateTime? _parseBirthDate(String value) {
+    // Ikkala formatni ham qo'llaydi: `DD.MM.YYYY` va eski `YYYY-MM-DD`.
+    final dot = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$').firstMatch(value);
+    if (dot != null) {
+      final d = int.tryParse(dot.group(1)!);
+      final mo = int.tryParse(dot.group(2)!);
+      final y = int.tryParse(dot.group(3)!);
+      if (y == null || mo == null || d == null) return null;
+      try {
+        final parsed = DateTime(y, mo, d);
+        if (parsed.year != y || parsed.month != mo || parsed.day != d) {
+          return null;
+        }
+        return parsed;
+      } catch (_) {
+        return null;
+      }
+    }
     final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
     if (m == null) return null;
     final y = int.tryParse(m.group(1)!);

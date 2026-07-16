@@ -72,6 +72,8 @@ functions/firebase
 # Adashib tushgan / log fayllar (root)
 /flutter
 /log.txt
+.tmp_*
+/release/
 .dart_tool/ 
 build/ 
 pubspec.lock 

@@ -9,8 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../models/oil_vehicle.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/device_binding_repository.dart';
+import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
@@ -67,12 +69,19 @@ class OnboardingController extends ChangeNotifier {
   String geoDistrictId = '';
   String geoServiceAreaId = '';
 
-  /// Ixtiyoriy — onboarding oxirida mashina tavsiyasi.
-  String carModel = '';
+  /// Ixtiyoriy — onboarding oxirida mashina tavsiyasi (мой setup билан бир хил).
+  String carBrand = 'Chevrolet';
+  String carModel = 'Cobalt';
+  int carYear = 2021;
+  String carEngine = '1.5';
+  String carFuelType = 'cng';
+  List<String> carUsageTags = const ['taxi'];
   String carColor = '';
   String carPlate = '';
   String carSeats = '4';
   bool skipCarStep = false;
+  /// Онбординг авто саҳифаси ичидаги қадам (0=модель, 1=ёқилғи).
+  int carSetupStep = 0;
 
   double? lat;
   double? lng;
@@ -103,15 +112,49 @@ class OnboardingController extends ChangeNotifier {
   bool get hasCompleteAddress => hasManualParts && hasGps;
 
   bool get hasCarDraft {
+    return carSetupStep >= 1 &&
+        carBrand.trim().isNotEmpty &&
+        carModel.trim().isNotEmpty &&
+        carYear > 0 &&
+        carEngine.trim().isNotEmpty &&
+        carFuelType.trim().isNotEmpty &&
+        carUsageTags.isNotEmpty;
+  }
+
+  bool get hasCarBonusFields {
     final seats = int.tryParse(carSeats.trim()) ?? 0;
-    return carModel.trim().isNotEmpty &&
-        carColor.trim().isNotEmpty &&
+    return carColor.trim().isNotEmpty &&
         carPlate.trim().isNotEmpty &&
         seats > 0;
   }
 
+  void setCarBrand(String v) {
+    carBrand = v;
+    notifyListeners();
+  }
+
   void setCarModel(String v) {
     carModel = v;
+    notifyListeners();
+  }
+
+  void setCarYear(int v) {
+    carYear = v;
+    notifyListeners();
+  }
+
+  void setCarEngine(String v) {
+    carEngine = v;
+    notifyListeners();
+  }
+
+  void setCarFuelType(String v) {
+    carFuelType = v;
+    notifyListeners();
+  }
+
+  void setCarUsageTags(List<String> v) {
+    carUsageTags = v;
     notifyListeners();
   }
 
@@ -135,6 +178,26 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setCarSetupStep(int v) {
+    carSetupStep = v;
+    notifyListeners();
+  }
+
+  void clearCarDraft() {
+    carBrand = 'Chevrolet';
+    carModel = 'Cobalt';
+    carYear = 2021;
+    carEngine = '1.5';
+    carFuelType = 'cng';
+    carUsageTags = const ['taxi'];
+    carColor = '';
+    carPlate = '';
+    carSeats = '4';
+    carSetupStep = 0;
+    skipCarStep = true;
+    notifyListeners();
+  }
+
   bool get hasLowAccuracyGps {
     if (accuracy == null) return false;
     return accuracy! > 100;
@@ -152,13 +215,26 @@ class OnboardingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// `YYYY-MM-DD` — noto'g'ri yoki bo'sh bo'lsa `null`.
+  /// `DD.MM.YYYY` yoki eski `YYYY-MM-DD` — noto'g'ri/bo'sh bo'lsa `null`.
+  /// (Umumiy [parseBirthDate] — `core/utils/formatters.dart`).
   static DateTime? parseBirthDate(String value) {
-    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value.trim());
-    if (m == null) return null;
-    final y = int.tryParse(m.group(1)!);
-    final mo = int.tryParse(m.group(2)!);
-    final d = int.tryParse(m.group(3)!);
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+
+    RegExpMatch? m =
+        RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$').firstMatch(trimmed);
+    int? y, mo, d;
+    if (m != null) {
+      d = int.tryParse(m.group(1)!);
+      mo = int.tryParse(m.group(2)!);
+      y = int.tryParse(m.group(3)!);
+    } else {
+      m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(trimmed);
+      if (m == null) return null;
+      y = int.tryParse(m.group(1)!);
+      mo = int.tryParse(m.group(2)!);
+      d = int.tryParse(m.group(3)!);
+    }
     if (y == null || mo == null || d == null) return null;
     try {
       final parsed = DateTime(y, mo, d);
@@ -644,22 +720,41 @@ class OnboardingController extends ChangeNotifier {
       await prefs.setBool('onboarding_done', true);
       await prefs.setBool('phone_reverified', true);
 
-      if (hasCarDraft) {
+      if (!skipCarStep && hasCarDraft) {
         try {
           final seats = int.tryParse(carSeats.trim()) ?? 4;
-          await _userRepo.saveCarInfo(
+          final color =
+              carColor.trim().isNotEmpty ? carColor.trim() : '—';
+          final plate = carPlate.trim().isNotEmpty
+              ? carPlate.trim().toUpperCase()
+              : 'TMP${DateTime.now().millisecondsSinceEpoch % 100000}';
+          final gasOrTaxi = carFuelType == 'cng' ||
+              carFuelType == 'lpg' ||
+              carUsageTags.contains('taxi');
+          await OilChangeRepository().saveVehicle(
             uid: uid,
-            carModel: carModel,
-            carColor: carColor,
-            carPlate: carPlate,
-            carSeats: seats,
+            vehicle: OilVehicle(
+              id: '',
+              brand: carBrand.trim(),
+              model: carModel.trim(),
+              color: color,
+              plate: plate,
+              year: carYear,
+              engine: carEngine.trim(),
+              fuelType: carFuelType.trim(),
+              usageTags: carUsageTags,
+              seats: seats > 0 ? seats : 4,
+              intervalKm: gasOrTaxi ? 7000 : 10000,
+              isPrimary: true,
+            ),
           );
-          // Bonus CF keyinroq (sessiya tayyor) — xato finishni to'xtatmasin.
-          try {
-            await FirebaseFunctions.instance
-                .httpsCallable('claimCarProfileBonus')
-                .call(<String, dynamic>{'uid': canonicalPhoneId(uid)});
-          } catch (_) {}
+          if (hasCarBonusFields) {
+            try {
+              await FirebaseFunctions.instance
+                  .httpsCallable('claimCarProfileBonus')
+                  .call(<String, dynamic>{'uid': canonicalPhoneId(uid)});
+            } catch (_) {}
+          }
         } catch (e) {
           debugPrint('onboarding car save: $e');
         }

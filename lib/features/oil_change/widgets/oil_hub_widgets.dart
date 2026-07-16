@@ -8,6 +8,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../data/oil_catalog.dart';
+import '../data/oil_l10n.dart';
+import '../data/oil_type_article.dart';
 
 const oilHubBg = Color(0xFFF5F8F3);
 const oilHubInk = Color(0xFF1A2E1C);
@@ -22,124 +24,368 @@ OilBarVariant oilBarVariantFor(String key) => switch (key) {
       _ => OilBarVariant.mineral,
     };
 
-/// Бир полоса: [phase] 0 = бўш, 0..1 = фаол тўлдириш, 1 = тўлдирилган.
-/// Тўлдириш учида оқ–қизил байроқча (тескарига хилпирайди).
+/// Мой тури «трассаси» метрикаси (HTML oilTypeBars билан бир хил).
+class _BarSpec {
+  const _BarSpec({
+    required this.safeFrac,
+    required this.greenStart,
+    required this.yellowStart,
+    required this.orangeStart,
+    required this.marks,
+    required this.carBody,
+    required this.carWindow,
+    required this.carBase,
+    required this.legend,
+  });
+
+  final double safeFrac;
+  final double greenStart;
+  final double yellowStart;
+  final double orangeStart;
+  final List<(double, String)> marks;
+  final Color carBody;
+  final Color carWindow;
+  final Color carBase;
+  final List<(Color, L3)> legend;
+}
+
+// Йўл зона ранглари (CSS .bar-track.range gradient).
+const _zoneGray = Color(0xFF6B736B);
+const _zoneGreen = Color(0xFF3F8F44);
+const _zoneYellow = Color(0xFFC9A412);
+const _zoneOrange = Color(0xFFC45A12);
+// Легенда ранглари.
+const _legGreen = Color(0xFF66BB6A);
+const _legYellow = Color(0xFFFDD835);
+const _legOrange = Color(0xFFEF6C00);
+
+const _barSpecs = <OilBarVariant, _BarSpec>{
+  OilBarVariant.full: _BarSpec(
+    safeFrac: 0.80,
+    greenStart: 0.80,
+    yellowStart: 0.88,
+    orangeStart: 0.92,
+    marks: [(0.80, '10k'), (0.88, '12k'), (0.92, '13k'), (1.0, '15k')],
+    carBody: Color(0xFF1B7A28),
+    carWindow: Color(0xFFC8E6C9),
+    carBase: Color(0xFF0D5C18),
+    legend: [
+      (
+        _legGreen,
+        L3(
+          'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~10 000 км · хавфсиз',
+          'O‘zbekiston sharoitida METAN/PROPANda · ~10 000 km · xavfsiz',
+          'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~10 000 км · безопасно',
+        )
+      ),
+      (_legGreen, L3('10–12k яшил', '10–12k yashil', '10–12k зелёный')),
+      (_legYellow, L3('12–13k сариқ', '12–13k sariq', '12–13k жёлтый')),
+      (_legOrange, L3('13–15k огоҳлик', '13–15k ogohlik', '13–15k предупреждение')),
+    ],
+  ),
+  OilBarVariant.semi: _BarSpec(
+    safeFrac: 0.70,
+    greenStart: 0.70,
+    yellowStart: 0.80,
+    orangeStart: 0.90,
+    marks: [(0.70, '7k'), (0.80, '8k'), (0.90, '9k'), (1.0, '10k')],
+    carBody: Color(0xFFEF6C00),
+    carWindow: Color(0xFFFFE0B2),
+    carBase: Color(0xFFE65100),
+    legend: [
+      (
+        _legGreen,
+        L3(
+          'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~7 000 км · хавфсиз',
+          'O‘zbekiston sharoitida METAN/PROPANda · ~7 000 km · xavfsiz',
+          'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~7 000 км · безопасно',
+        )
+      ),
+      (_legYellow, L3('8–9k сариқ', '8–9k sariq', '8–9k жёлтый')),
+      (_legOrange, L3('9–10k огоҳлик', '9–10k ogohlik', '9–10k предупреждение')),
+    ],
+  ),
+  OilBarVariant.mineral: _BarSpec(
+    safeFrac: 0.60,
+    greenStart: 0.45,
+    yellowStart: 0.60,
+    orangeStart: 0.80,
+    marks: [(0.45, '4k'), (0.60, '5k'), (0.80, '6k'), (1.0, '7k')],
+    carBody: Color(0xFF2E7D32),
+    carWindow: Color(0xFFA5D6A7),
+    carBase: Color(0xFF1B5E20),
+    legend: [
+      (
+        _legGreen,
+        L3(
+          'Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~5 000 км · хавфсиз',
+          'O‘zbekiston sharoitida METAN/PROPANda · ~5 000 km · xavfsiz',
+          'В условиях Узбекистана на МЕТАНЕ/ПРОПАНЕ · ~5 000 км · безопасно',
+        )
+      ),
+      (_legYellow, L3('5–6k сариқ', '5–6k sariq', '5–6k жёлтый')),
+      (_legOrange, L3('6–7k огоҳлик', '6–7k ogohlik', '6–7k предупреждение')),
+    ],
+  ),
+};
+
+/// Мой тури «трассаси»: зона ранглари + пунктир йўл + хавфсиз белги +
+/// қотиб турган байроқ + ҳаракатланувчи машина + км-белгилар (+ легенда).
+/// [phase] 0..1 — машина 8%→хавфсиз нуқтага боради, кейин туради.
 class OilTypeBar extends StatelessWidget {
   const OilTypeBar({
     super.key,
-    required this.widthFraction,
     required this.phase,
     this.variant = OilBarVariant.mineral,
+    this.showLegend = false,
   });
 
-  final double widthFraction;
   final double phase;
   final OilBarVariant variant;
+  final bool showLegend;
 
-  static const _barH = 12.0;
-  static const _flagW = 20.0;
-  static const _flagH = 16.0;
-
-  List<Color> get _colors => switch (variant) {
-        OilBarVariant.mineral => const [
-            Color(0xFF7BC67E),
-            Color(0xFF36A63A),
-            Color(0xFF7BC67E),
-          ],
-        OilBarVariant.semi => const [
-            Color(0xFF69C06D),
-            Color(0xFF2F9E45),
-            Color(0xFF69C06D),
-          ],
-        OilBarVariant.full => const [
-            Color(0xFF4CAF50),
-            Color(0xFF1B7A28),
-            Color(0xFF4CAF50),
-          ],
-      };
+  static const _trackAreaH = 26.0;
+  static const _flagW = 12.0;
 
   @override
   Widget build(BuildContext context) {
-    final target = widthFraction.clamp(0.12, 1.0);
-    double w;
-    var shine = 0.0;
-    if (phase <= 0) {
-      w = 0.12;
-    } else if (phase >= 1) {
-      w = target;
-    } else {
-      // 0–0.7 fill, 0.7–0.85 hold, 0.85–1 soft settle
-      if (phase < 0.7) {
-        w = 0.12 + (target - 0.12) * (phase / 0.7);
-      } else if (phase < 0.85) {
-        w = target;
-      } else {
-        w = target;
-      }
-      shine = (phase * 2) % 1.0;
-    }
+    final s = _barSpecs[variant]!;
+    final lang = oilLangOf(context);
+    final fp = oilBarFillProgress(phase);
+    final w = math.max(0.08, s.safeFrac * fp);
 
-    final moving = phase > 0 && phase < 1;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final barW = constraints.maxWidth;
-        final tipX = barW * w;
-        // Байроқча тики ўңда — мато чапга (тескари) хилпирайди.
-        final flagLeft =
-            (tipX - _flagW + 2).clamp(0.0, math.max(0.0, barW - _flagW)).toDouble();
-
-        return SizedBox(
-          height: _barH + 12,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: _barH,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE6EEE5),
-                    borderRadius: BorderRadius.circular(999),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, c) {
+            final barW = c.maxWidth;
+            return SizedBox(
+              height: _trackAreaH,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _OilRaceTrackPainter(spec: s, w: w),
+                    ),
                   ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: w,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          gradient: LinearGradient(
-                            colors: _colors,
-                            stops: moving
-                                ? [
-                                    (shine - 0.35).clamp(0.0, 1.0),
-                                    shine.clamp(0.0, 1.0),
-                                    (shine + 0.35).clamp(0.0, 1.0),
-                                  ]
-                                : const [0.0, 0.5, 1.0],
+                  Positioned(
+                    left: (s.safeFrac * barW - _flagW)
+                        .clamp(0.0, math.max(0.0, barW - _flagW)),
+                    top: -2,
+                    width: _flagW,
+                    height: 16,
+                    child: const _OilRacingFlag(),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 1),
+        LayoutBuilder(
+          builder: (context, c) {
+            final barW = c.maxWidth;
+            return SizedBox(
+              height: 13,
+              child: Stack(
+                children: [
+                  for (final m in s.marks)
+                    Positioned(
+                      left: (m.$1 * barW - 12).clamp(0.0, math.max(0.0, barW - 24)),
+                      child: SizedBox(
+                        width: 24,
+                        child: Text(
+                          m.$2,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: oilHubMuted,
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                ],
               ),
-              Positioned(
-                left: flagLeft,
-                bottom: _barH - 3,
-                width: _flagW,
-                height: _flagH + 8,
-                child: const _OilRacingFlag(),
-              ),
-            ],
+            );
+          },
+        ),
+        if (showLegend) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 5,
+            children: [for (final l in s.legend) _oilLegendItem(l.$1, l.$2.t(lang))],
           ),
-        );
-      },
+        ],
+      ],
     );
   }
+}
+
+Widget _oilLegendItem(Color c, String text) {
+  return ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 280),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(right: 4, top: 1),
+          decoration: BoxDecoration(
+            color: c,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        Flexible(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: oilHubMuted,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Трассани чизади: зона ранглари, пунктир, қоронғи «босиб ўтилган» қисм,
+/// хавфсиз белги ва машина.
+class _OilRaceTrackPainter extends CustomPainter {
+  const _OilRaceTrackPainter({required this.spec, required this.w});
+
+  final _BarSpec spec;
+  final double w;
+
+  static const _trackTop = 13.0;
+  static const _trackH = 7.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bw = size.width;
+    final rr = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, _trackTop, bw, _trackH),
+      const Radius.circular(2),
+    );
+
+    canvas.save();
+    canvas.clipRRect(rr);
+
+    void band(double a, double b, Color col) {
+      canvas.drawRect(
+        Rect.fromLTWH(bw * a, _trackTop, bw * (b - a), _trackH),
+        Paint()..color = col,
+      );
+    }
+
+    band(0, spec.greenStart, _zoneGray);
+    band(spec.greenStart, spec.yellowStart, _zoneGreen);
+    band(spec.yellowStart, spec.orangeStart, _zoneYellow);
+    band(spec.orangeStart, 1, _zoneOrange);
+
+    // Пунктир йўл чизиғи (ўртада).
+    final cy = _trackTop + _trackH / 2;
+    final dash = Paint()
+      ..color = Colors.white.withValues(alpha: 0.9)
+      ..strokeWidth = 1;
+    var x = 4.0;
+    while (x < bw - 4) {
+      canvas.drawLine(Offset(x, cy), Offset(math.min(x + 6, bw - 4), cy), dash);
+      x += 12;
+    }
+
+    // Босиб ўтилган масофа (қоронғи қатлам).
+    canvas.drawRect(
+      Rect.fromLTWH(0, _trackTop, bw * w, _trackH),
+      Paint()..color = const Color(0xFF141414).withValues(alpha: 0.46),
+    );
+
+    canvas.restore();
+
+    // Хавфсиз белги (клипдан ташқарида — чегарадан чиқади).
+    final sx = bw * spec.safeFrac;
+    canvas.drawRect(
+      Rect.fromLTWH(sx - 2, _trackTop - 3, 4, _trackH + 6),
+      Paint()..color = const Color(0xFF1B7A28).withValues(alpha: 0.85),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(sx - 1, _trackTop - 3, 2, _trackH + 6),
+      Paint()..color = Colors.white,
+    );
+
+    _paintCar(canvas, bw * w, _trackTop + _trackH, spec);
+  }
+
+  void _paintCar(Canvas canvas, double cx, double baseY, _BarSpec s) {
+    const cw = 30.0;
+    const ch = 13.0;
+    final left = cx - cw / 2;
+    final top = baseY - ch;
+
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, baseY + 0.5), width: cw * 0.82, height: 3),
+      Paint()..color = Colors.black.withValues(alpha: 0.12),
+    );
+
+    final body = Paint()..color = s.carBody;
+    // Кабина/том (трапеция).
+    final roof = Path()
+      ..moveTo(left + cw * 0.26, top + 4)
+      ..lineTo(left + cw * 0.34, top)
+      ..lineTo(left + cw * 0.64, top)
+      ..lineTo(left + cw * 0.72, top + 4)
+      ..close();
+    canvas.drawPath(roof, body);
+    // Ойна.
+    final win = Path()
+      ..moveTo(left + cw * 0.30, top + 3.5)
+      ..lineTo(left + cw * 0.36, top + 1)
+      ..lineTo(left + cw * 0.62, top + 1)
+      ..lineTo(left + cw * 0.67, top + 3.5)
+      ..close();
+    canvas.drawPath(win, Paint()..color = s.carWindow);
+    // Асосий кузов.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top + 4, cw, ch - 6),
+        const Radius.circular(3),
+      ),
+      body,
+    );
+    // Пастки чизиқ.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top + ch - 4, cw, 3),
+        const Radius.circular(2),
+      ),
+      Paint()..color = s.carBase,
+    );
+    // Фара.
+    canvas.drawRect(
+      Rect.fromLTWH(left + cw - 3, top + 5.5, 2.5, 2),
+      Paint()..color = const Color(0xFFFFEB3B),
+    );
+    // Ғилдираклар.
+    final wheel = Paint()..color = const Color(0xFF212121);
+    final hub = Paint()..color = const Color(0xFF9E9E9E);
+    final wy = baseY - 1;
+    for (final dx in const [0.28, 0.72]) {
+      canvas.drawCircle(Offset(left + cw * dx, wy), 3.1, wheel);
+      canvas.drawCircle(Offset(left + cw * dx, wy), 1.3, hub);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OilRaceTrackPainter old) =>
+      old.w != w || old.spec != spec;
 }
 
 /// Оқ–қизил байроқча: тик ўңда, мато чапга хилпирайди.
@@ -318,12 +564,11 @@ String oilAnimatedKmLabel(
   OilTypeInfo t,
   double phase,
 ) {
-  final current =
-      (t.targetKm * oilBarFillProgress(phase)).round();
-  return context.tr('oil_km_upto').replaceAll(
-        '{km}',
-        formatPrice(current),
-      );
+  final fp = oilBarFillProgress(phase);
+  final safeKm = t.targetKm;
+  final km = fp >= 1 ? safeKm : (safeKm * fp).round();
+  final prefix = fp >= 1 ? '~' : '';
+  return '$prefix${formatPrice(km)} ${context.tr('oil_km_suffix')}';
 }
 
 void showOilProductSheet(BuildContext context, OilProduct p) {
@@ -444,50 +689,74 @@ void showOilProductSheet(BuildContext context, OilProduct p) {
 }
 
 void showOilTypeDetail(BuildContext context, OilTypeInfo t) {
+  final article = oilTypeArticle(t.key);
   showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.white,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
-    builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          18,
-          16,
-          18,
-          18 + MediaQuery.paddingOf(ctx).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t.detailTitle(ctx),
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: oilHubInk,
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.92,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (_, scroll) => Column(
+        children: [
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD5E5D6),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              t.detail(ctx),
-              style: const TextStyle(height: 1.4, color: oilHubInk),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                minimumSize: const Size.fromHeight(48),
+          ),
+          Expanded(
+            child: ListView(
+              controller: scroll,
+              padding: EdgeInsets.fromLTRB(
+                18,
+                12,
+                18,
+                18 + MediaQuery.paddingOf(ctx).bottom,
               ),
-              child: Text(ctx.tr('close')),
+              children: [
+                if (article != null)
+                  OilTypeArticleView(article: article)
+                else ...[
+                  Text(
+                    t.detailTitle(ctx),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: oilHubInk,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    t.detail(ctx),
+                    style: const TextStyle(height: 1.4, color: oilHubInk),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  child: Text(ctx.tr('close')),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    },
+          ),
+        ],
+      ),
+    ),
   );
 }
 

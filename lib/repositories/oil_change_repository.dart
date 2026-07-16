@@ -67,15 +67,33 @@ class OilChangeRepository {
     final color = (car['carColor'] ?? '').trim();
     final plate = (car['carPlate'] ?? '').trim();
     final seats = int.tryParse(car['carSeats'] ?? '') ?? 0;
-    if (model.isEmpty && plate.isEmpty) return null;
+    final brand = (car['carBrand'] ?? '').trim();
+    final year = int.tryParse(car['carYear'] ?? '') ?? 0;
+    final engine = (car['carEngine'] ?? '').trim();
+    final fuelType = (car['carFuelType'] ?? '').trim();
+    final usageTags = (car['carUsageTags'] ?? '')
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (model.isEmpty && plate.isEmpty && brand.isEmpty) return null;
 
+    final gasOrTaxi = fuelType == 'cng' ||
+        fuelType == 'lpg' ||
+        usageTags.contains('taxi');
     final ref = _vehicles(id).doc();
     final vehicle = OilVehicle(
       id: ref.id,
-      model: model,
+      brand: brand,
+      model: model.isNotEmpty ? model : brand,
       color: color,
       plate: plate,
+      year: year,
+      engine: engine,
+      fuelType: fuelType,
+      usageTags: usageTags,
       seats: seats > 0 ? seats : 4,
+      intervalKm: gasOrTaxi ? 7000 : 10000,
       isPrimary: true,
     );
     await ref.set(vehicle.toMap(forCreate: true));
@@ -121,6 +139,11 @@ class OilChangeRepository {
         carColor: vehicle.color,
         carPlate: vehicle.plate,
         carSeats: vehicle.seats > 0 ? vehicle.seats : 4,
+        carBrand: vehicle.brand,
+        carYear: vehicle.year,
+        carEngine: vehicle.engine,
+        carFuelType: vehicle.fuelType,
+        carUsageTags: vehicle.usageTags,
       );
     }
     return ref.id;

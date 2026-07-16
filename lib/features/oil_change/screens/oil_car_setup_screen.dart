@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -7,6 +7,7 @@ import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/oil_catalog_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/oil_change_service.dart';
+import '../data/oil_car_options.dart';
 import '../data/oil_catalog.dart';
 import '../widgets/oil_hub_widgets.dart';
 
@@ -30,11 +31,6 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
   int _step = 0;
   bool _saving = false;
 
-  static const _brands = ['Chevrolet', 'Daewoo', 'Kia', 'Hyundai'];
-  static const _models = ['Cobalt', 'Spark', 'Tracker', 'Damas', 'Nexia', 'Lacetti'];
-  static const _years = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
-  static const _engines = ['1.2', '1.5', '1.6', '1.8'];
-
   late String _brand;
   late String _model;
   late int _year;
@@ -51,10 +47,16 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
   void initState() {
     super.initState();
     final v = widget.vehicle;
-    _brand = (v?.brand.isNotEmpty == true) ? v!.brand : _brands.first;
-    _model = (v?.model.isNotEmpty == true) ? v!.model : _models.first;
-    _year = (v != null && v.year > 0) ? v.year : _years[2];
-    _engine = (v?.engine.isNotEmpty == true) ? v!.engine : _engines[1];
+    _brand = (v?.brand.isNotEmpty == true)
+        ? v!.brand
+        : OilCarOptions.brands.first;
+    _model = (v?.model.isNotEmpty == true)
+        ? v!.model
+        : OilCarOptions.models.first;
+    _year = (v != null && v.year > 0) ? v.year : OilCarOptions.years[2];
+    _engine = (v?.engine.isNotEmpty == true)
+        ? v!.engine
+        : OilCarOptions.engines[1];
     _modelFreeCtrl = TextEditingController(text: _model);
     if (v != null) {
       if (v.fuelType.isNotEmpty) _fuel = v.fuelType;
@@ -69,8 +71,12 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
     } else {
       _prefillProfile();
     }
-    if (!_brands.contains(_brand)) _brand = _brands.first;
-    if (!_engines.contains(_engine)) _engine = _engines[1];
+    if (!OilCarOptions.brands.contains(_brand)) {
+      _brand = OilCarOptions.brands.first;
+    }
+    if (!OilCarOptions.engines.contains(_engine)) {
+      _engine = OilCarOptions.engines[1];
+    }
   }
 
   @override
@@ -83,14 +89,36 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
     final car = await UserRepository().getCarInfo(widget.uid);
     if (car == null || !mounted) return;
     setState(() {
+      final brand = (car['carBrand'] ?? '').trim();
+      if (brand.isNotEmpty && OilCarOptions.brands.contains(brand)) {
+        _brand = brand;
+      }
       final m = (car['carModel'] ?? '').trim();
       if (m.isNotEmpty) {
         _model = m;
         _modelFreeCtrl.text = m;
       }
+      final year = int.tryParse(car['carYear'] ?? '');
+      if (year != null && OilCarOptions.years.contains(year)) _year = year;
+      final engine = (car['carEngine'] ?? '').trim();
+      if (engine.isNotEmpty && OilCarOptions.engines.contains(engine)) {
+        _engine = engine;
+      }
+      final fuel = (car['carFuelType'] ?? '').trim();
+      if (fuel.isNotEmpty) _fuel = fuel;
+      final tags = (car['carUsageTags'] ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (tags.isNotEmpty) {
+        _usage
+          ..clear()
+          ..addAll(tags);
+      }
       _color = (car['carColor'] ?? '').trim();
       _plate = (car['carPlate'] ?? '').trim();
-      final seats = int.tryParse('${car['carSeats'] ?? ''}');
+      final seats = int.tryParse(car['carSeats'] ?? '');
       if (seats != null && seats > 0) _seats = seats;
     });
   }
@@ -227,14 +255,14 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
       _dropdown<String>(
         context.tr('oil_brand'),
         _brand,
-        _brands,
+        OilCarOptions.brands,
         (v) => setState(() => _brand = v!),
       ),
-      if (_models.contains(_model))
+      if (OilCarOptions.models.contains(_model))
         _dropdown<String>(
           context.tr('oil_model'),
           _model,
-          _models,
+          OilCarOptions.models,
           (v) => setState(() {
             _model = v!;
             _modelFreeCtrl.text = v;
@@ -257,21 +285,24 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
         ),
       _dropdown<int>(
         context.tr('oil_year'),
-        _years.contains(_year) ? _year : _years.first,
-        _years,
+        OilCarOptions.years.contains(_year) ? _year : OilCarOptions.years.first,
+        OilCarOptions.years,
         (v) => setState(() => _year = v!),
       ),
       _dropdown<String>(
         context.tr('oil_engine'),
-          _engines.contains(_engine) ? _engine : _engines[1],
-          _engines,
-          (v) => setState(() => _engine = v!)),
+        OilCarOptions.engines.contains(_engine)
+            ? _engine
+            : OilCarOptions.engines[1],
+        OilCarOptions.engines,
+        (v) => setState(() => _engine = v!),
+      ),
       const SizedBox(height: 8),
       FilledButton(
         onPressed: () {
           final free = _modelFreeCtrl.text.trim();
           if (free.isNotEmpty) _model = free;
-          if (_model.trim().isEmpty) _model = _models.first;
+          if (_model.trim().isEmpty) _model = OilCarOptions.models.first;
           setState(() => _step = 1);
         },
         style: FilledButton.styleFrom(
@@ -539,12 +570,18 @@ class _GalleryGrid extends StatelessWidget {
   }
 }
 
-/// Мой турлари батафсил.
+/// Мой турлари (HTML #oilTypes): оддий статик карталар — карта босилса,
+/// содда тилдаги батафсил мақола очилади (showOilTypeDetail).
 class OilTypesScreen extends StatelessWidget {
   const OilTypesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // HTML tartibi: Mineral → Semi → Full.
+    const order = ['mineral', 'semi', 'full'];
+    final types = [
+      for (final k in order) OilCatalog.types.firstWhere((t) => t.key == k),
+    ];
     return Scaffold(
       backgroundColor: oilHubBg,
       appBar: AppBar(
@@ -552,229 +589,107 @@ class OilTypesScreen extends StatelessWidget {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
-      body: OilSequentialBarsTicker(
-        builder: (context, phaseOf) {
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-            children: [
-              Text(
-                context.tr('oil_types_hint'),
-                style: const TextStyle(color: oilHubMuted),
-              ),
-              const SizedBox(height: 12),
-              ...OilCatalog.types.asMap().entries.map((e) {
-                final i = e.key;
-                final t = e.value;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => showOilTypeDetail(context, t),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    t.title(context),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  oilAnimatedKmLabel(context, t, phaseOf(i)),
-                                  style: const TextStyle(
-                                    color: Color(0xFF1B7A28),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            OilTypeBar(
-                              widthFraction: t.width,
-                              phase: phaseOf(i),
-                              variant: oilBarVariantFor(t.key),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              t.short(context),
-                              style: const TextStyle(height: 1.35),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              context.tr('oil_tap_read'),
-                              style: const TextStyle(
-                                color: oilHubMuted,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              Text(
-                context.tr('oil_fine_print'),
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  color: oilHubMuted,
-                  height: 1.3,
-                ),
-              ),
-            ],
-          );
-        },
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          Text(
+            context.tr('oil_types_hint'),
+            style: const TextStyle(
+              color: oilHubMuted,
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final t in types) ...[
+            _OilTypeCard(type: t),
+            const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 2),
+          Text(
+            context.tr('oil_fine_print'),
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: oilHubMuted,
+              height: 1.3,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Ҳайдовчи маслаҳатлари + эслатма.
-class OilDriverTipsScreen extends StatelessWidget {
-  const OilDriverTipsScreen({super.key});
+class _OilTypeCard extends StatelessWidget {
+  const _OilTypeCard({required this.type});
+
+  final OilTypeInfo type;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: oilHubBg,
-      appBar: AppBar(
-        title: Text(context.tr('oil_driver_title')),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-        children: [
-          _tip(
-            context,
-            '⛽',
-            context.tr('oil_tip_fuel_title'),
-            context.tr('oil_tip_fuel_body'),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => showOilTypeDetail(context, type),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFD5E5D6)),
           ),
-          _tip(
-            context,
-            '🛡',
-            context.tr('oil_tip_repair_title'),
-            context.tr('oil_tip_repair_body'),
-          ),
-          _tip(
-            context,
-            '🔥',
-            context.tr('oil_tip_gas_title'),
-            context.tr('oil_tip_gas_body'),
-          ),
-          _tip(
-            context,
-            '🌫',
-            context.tr('oil_tip_dust_title'),
-            context.tr('oil_tip_dust_body'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('oil_checklist'),
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          ...[
-            context.tr('oil_check_1'),
-            context.tr('oil_check_2'),
-            context.tr('oil_check_3'),
-            context.tr('oil_check_4'),
-            context.tr('oil_check_5'),
-          ].asMap().entries.map((e) {
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                radius: 14,
-                backgroundColor: AppColors.primary,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      type.title(context),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15.5,
+                        color: oilHubInk,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    type.km(context),
+                    style: const TextStyle(
+                      color: Color(0xFF1B7A28),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                type.short(context),
+                style: const TextStyle(
+                  height: 1.35,
+                  color: oilHubInk,
+                  fontSize: 13.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
                 child: Text(
-                  '${e.key + 1}',
+                  '${context.tr('oil_tap_read')} →',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
                   ),
                 ),
               ),
-              title: Text(e.value),
-            );
-          }),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('oil_remind'),
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ],
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFD5E5D6)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.tr('oil_remind_hint'),
-                  style: const TextStyle(color: oilHubMuted),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  context.tr('oil_remind_km'),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  context.tr('oil_remind_time'),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tip(BuildContext context, String ic, String title, String body) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD5E5D6)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(ic, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(body, style: const TextStyle(height: 1.35)),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

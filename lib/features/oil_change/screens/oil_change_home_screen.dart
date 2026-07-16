@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -8,9 +7,10 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/oil_catalog_repository.dart';
+import '../data/oil_car_data.dart';
 import '../data/oil_catalog.dart';
+import '../data/oil_l10n.dart';
 import '../widgets/oil_hub_widgets.dart';
-import 'oil_booking_screen.dart';
 import 'oil_car_setup_screen.dart';
 import 'oil_history_screen.dart';
 import 'oil_prices_screen.dart';
@@ -18,7 +18,7 @@ import 'oil_ref_screen.dart';
 import 'oil_services_screen.dart';
 import 'oil_vehicle_edit_screen.dart';
 
-/// Мой алмаштириш — прототип B хаб (AVA → авто → тур → галерея → 1/2/3).
+/// Мой алмаштириш — прототип B хаб (AVA → авто → тур → галерея → премиум/оптимал/мақбул).
 class OilChangeHomeScreen extends StatefulWidget {
   const OilChangeHomeScreen({super.key});
 
@@ -52,12 +52,6 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       _ready = true;
     });
   }
-
-  Color _levelColor(OilDueLevel level) => switch (level) {
-        OilDueLevel.ok => const Color(0xFF2E7D32),
-        OilDueLevel.soon => const Color(0xFFF9A825),
-        OilDueLevel.overdue => const Color(0xFFC62828),
-      };
 
   Future<void> _openSetup({OilVehicle? vehicle}) async {
     final saved = await Navigator.push<bool>(
@@ -230,12 +224,12 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        _avaPromise(),
-        const SizedBox(height: 12),
         _carBlock(selected),
         const SizedBox(height: 16),
-        _sectionTitle(context.tr('oil_section_types')),
+        _doctorOilSectionTitle(),
         const SizedBox(height: 8),
+        _mileageRecoTable(),
+        const SizedBox(height: 10),
         _oilTypesCompact(),
         const SizedBox(height: 16),
         _sectionTitle(
@@ -260,48 +254,9 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           child: Text(context.tr('oil_full_gallery')),
         ),
         const SizedBox(height: 8),
-        _sectionTitle(
-          context.tr('oil_section_reco'),
-          context.tr('oil_section_reco_hint'),
-        ),
+        _sectionTitle(context.tr('oil_section_reco')),
         const SizedBox(height: 8),
         _reco(selected, catalog),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const OilDriverTipsScreen(),
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                child: Text(context.tr('oil_for_driver')),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        OilBookingScreen(uid: _uid, vehicle: selected),
-                  ),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                child: Text(context.tr('oil_book')),
-              ),
-            ),
-          ],
-        ),
         const SizedBox(height: 12),
         _linkTile(
           Icons.menu_book_outlined,
@@ -340,34 +295,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           context.tr('oil_odometer_edit'),
           () => _openEdit(vehicle: selected),
         ),
-        const SizedBox(height: 8),
-        Text(
-          context.tr('oil_disclaimer'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11.5, color: oilHubMuted, height: 1.35),
-        ),
       ],
-    );
-  }
-
-  Widget _avaPromise() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF6EB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFB7DFB9)),
-      ),
-      child: Text(
-        context.tr('oil_ava_promise_title'),
-        style: const TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 15,
-          color: oilHubInk,
-          height: 1.25,
-        ),
-      ),
     );
   }
 
@@ -409,129 +337,346 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       );
     }
 
-    final due = v.computeDueStatus();
-    final color = _levelColor(due.level);
-    final df = DateFormat('dd.MM.yyyy');
-    String big;
-    if (!v.hasOilTracking) {
-      big = context.tr('oil_fill_tracking');
-    } else {
-      final parts = <String>[];
-      if (due.kmLeft != null) {
-        parts.add(due.kmLeft! > 0
-            ? context.tr('oil_km_left').replaceAll(
-                  '{km}',
-                  formatPrice(due.kmLeft!),
-                )
-            : context.tr('oil_km_overdue'));
-      }
-      if (due.daysLeft != null) {
-        parts.add(due.daysLeft! > 0
-            ? context.tr('oil_days_left').replaceAll(
-                  '{days}',
-                  '${due.daysLeft}',
-                )
-            : context.tr('oil_date_overdue'));
-      }
-      big = parts.isEmpty ? due.levelLabelUz : parts.join(' · ');
-    }
-    final subParts = <String>[
-      if (v.fuelLabelUz.isNotEmpty) v.fuelLabelUz,
-      if (v.usageSummaryUz.isNotEmpty) v.usageSummaryUz,
-      if (due.nextDate != null)
-        context.tr('oil_next_date').replaceAll(
-              '{date}',
-              df.format(due.nextDate!),
-            ),
-    ];
+    final cap = OilCarData.resolveCapacity(v.model);
+    final fuel = v.fuelLabelUz;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                v.setupTitle,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                  color: oilHubInk,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD5E5D6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  v.setupTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: oilHubInk,
+                    height: 1.15,
+                    letterSpacing: -0.25,
+                  ),
                 ),
               ),
-            ),
-            ActionChip(
-              label: Text(context.tr('oil_by_model')),
-              onPressed: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: Text(ctx.tr('oil_by_model')),
-                    content: Text(ctx.tr('oil_by_model_body')),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(ctx.tr('ok')),
+              if (fuel.isNotEmpty) ...[
+                const SizedBox(width: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    fuel,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1B5E20),
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
+              IconButton(
+                onPressed: () => _openSetup(vehicle: v),
+                tooltip: context.tr('oil_edit_car'),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+                iconSize: 15,
+                color: const Color(0xFF2E7D32),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ],
+          ),
+          if (cap != null) ...[
+            const SizedBox(height: 7),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFD7E8D8)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _capCell(
+                          context.tr('oil_capacity_crankcase_short'),
+                          cap.oilCapacity,
+                        ),
+                      ),
+                      Container(width: 1, color: const Color(0xFFE8F0E8)),
+                      Expanded(
+                        child: _capCell(
+                          context.tr('oil_capacity_filter_short'),
+                          cap.filterCapacity,
+                        ),
+                      ),
+                      Container(width: 1, color: const Color(0xFFE8F0E8)),
+                      Expanded(
+                        child: _capCell(
+                          context.tr('oil_capacity_total_label'),
+                          cap.total,
+                          emphasize: true,
+                        ),
                       ),
                     ],
                   ),
-                );
-              },
+                ),
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withValues(alpha: 0.35)),
+        ],
+      ),
+    );
+  }
+
+  Widget _capCell(String label, String liters, {bool emphasize = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      color: emphasize ? const Color(0xFF2E7D32) : const Color(0xFFF7FAF7),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              height: 1,
+              color: emphasize
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : oilHubMuted,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  due.levelLabelUz,
-                  style: const TextStyle(
-                    color: Colors.white,
+          const SizedBox(height: 3),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: liters,
+                  style: TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    fontSize: 12,
+                    height: 1,
+                    letterSpacing: -0.2,
+                    color: emphasize ? Colors.white : oilHubInk,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                big,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: oilHubInk,
-                ),
-              ),
-              if (subParts.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  subParts.join(' · '),
-                  style: const TextStyle(color: oilHubMuted, height: 1.3),
+                TextSpan(
+                  text: ' L',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: emphasize
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : oilHubMuted,
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-        TextButton(
-          onPressed: () => _openSetup(vehicle: v),
-          child: Text(context.tr('oil_edit_car')),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget _mileageRecoTable() {
+    final lang = oilLangOf(context);
+    final rows = OilCarData.mileageRecos;
+    final normal = rows.where((r) => !r.warn).toList();
+    final warn = rows.where((r) => r.warn).toList();
+
+    TextStyle headStyle({Color? color}) => TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+          height: 1.15,
+          color: color ?? oilHubMuted,
+          letterSpacing: -0.1,
+        );
+    TextStyle cellStyle({
+      Color? color,
+      FontWeight weight = FontWeight.w700,
+    }) =>
+        TextStyle(
+          fontSize: 11,
+          fontWeight: weight,
+          height: 1.2,
+          color: color ?? oilHubInk,
+          letterSpacing: -0.15,
+        );
+
+    TableRow buildHeader() => TableRow(
+          decoration: const BoxDecoration(
+            color: Color(0xFFEEF6EF),
+          ),
+          children: [
+            _mileagePad(
+              Text(context.tr('oil_mileage_col_km'), style: headStyle()),
+              first: true,
+            ),
+            _mileagePad(
+              Text(
+                context.tr('oil_mileage_col_healthy_short'),
+                style: headStyle(color: const Color(0xFF2E7D32)),
+              ),
+            ),
+            _mileagePad(
+              Text(
+                context.tr('oil_mileage_col_neglected_short'),
+                style: headStyle(color: const Color(0xFFEF6C00)),
+              ),
+              last: true,
+            ),
+          ],
+        );
+
+    TableRow buildRow(MileageReco r, {required bool zebra}) => TableRow(
+          decoration: BoxDecoration(
+            color: zebra ? const Color(0xFFF7FAF7) : Colors.white,
+          ),
+          children: [
+            _mileagePad(
+              Text(
+                r.range.t(lang),
+                style: cellStyle(
+                  color: const Color(0xFF1B5E20),
+                  weight: FontWeight.w800,
+                ),
+              ),
+              first: true,
+            ),
+            _mileagePad(Text(r.healthy.t(lang), style: cellStyle())),
+            _mileagePad(Text(r.neglected.t(lang), style: cellStyle()), last: true),
+          ],
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD5E5D6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.tr('oil_mileage_reco_title'),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: oilHubInk,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            context.tr('oil_mileage_reco_hint'),
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.25,
+              color: oilHubMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFD7E8D8)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(1.05),
+                  1: FlexColumnWidth(1),
+                  2: FlexColumnWidth(1),
+                },
+                border: TableBorder(
+                  horizontalInside: BorderSide(
+                    color: const Color(0xFFE8F0E8),
+                    width: 1,
+                  ),
+                  verticalInside: BorderSide(
+                    color: const Color(0xFFE8F0E8),
+                    width: 1,
+                  ),
+                ),
+                children: [
+                  buildHeader(),
+                  ...normal.asMap().entries.map(
+                        (e) => buildRow(e.value, zebra: e.key.isOdd),
+                      ),
+                ],
+              ),
+            ),
+          ),
+          ...warn.map(
+            (r) => Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF4E8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      r.range.t(lang),
+                      style: cellStyle(
+                        color: const Color(0xFFE65100),
+                        weight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    r.healthy.t(lang),
+                    style: cellStyle(
+                      color: const Color(0xFFBF360C),
+                      weight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mileagePad(
+    Widget child, {
+    bool first = false,
+    bool last = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(first ? 8 : 6, 6, last ? 8 : 6, 6),
+      child: child,
     );
   }
 
@@ -582,9 +727,9 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                           ),
                           const SizedBox(height: 6),
                           OilTypeBar(
-                            widthFraction: t.width,
                             phase: phaseOf(i),
                             variant: oilBarVariantFor(t.key),
+                            showLegend: true,
                           ),
                         ],
                       ),
@@ -657,13 +802,21 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           reco.intro(context),
           style: const TextStyle(color: oilHubMuted, height: 1.35),
         ),
-        const SizedBox(height: 10),
-        ...List.generate(reco.ranked.length, (i) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: OilRankCard(product: reco.ranked[i], rank: i + 1),
-          );
-        }),
+        const SizedBox(height: 12),
+        _recoTierRow(
+          label: context.tr('oil_tier_premium'),
+          products: reco.premium,
+        ),
+        const SizedBox(height: 12),
+        _recoTierRow(
+          label: context.tr('oil_tier_optimal'),
+          products: reco.optimal,
+        ),
+        const SizedBox(height: 12),
+        _recoTierRow(
+          label: context.tr('oil_tier_acceptable'),
+          products: reco.acceptable,
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Text(
@@ -718,6 +871,98 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _recoTierRow({
+    required String label,
+    required List<OilProduct> products,
+  }) {
+    if (products.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 13.5,
+            color: oilHubInk,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 190,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: products.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, i) {
+              return OilProductCard(product: products[i]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _doctorOilSectionTitle() {
+    const base = TextStyle(
+      fontSize: 12.5,
+      fontWeight: FontWeight.w800,
+      height: 1.2,
+      letterSpacing: 0,
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE8F5E9), Color(0xFFE3F2FD)],
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFB7DFB9)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (context.tr('oil_section_types_prefix').isNotEmpty) ...[
+              Text(
+                context.tr('oil_section_types_prefix').trimRight(),
+                style: base.copyWith(color: oilHubInk),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              '«DOCTOR OIL»',
+              style: base.copyWith(color: const Color(0xFF2E7D32)),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              context.tr('oil_section_types_mid').trim(),
+              style: base.copyWith(color: oilHubInk),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Chevrolet',
+              style: base.copyWith(
+                color: const Color(0xFF1565C0),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            if (context.tr('oil_section_types_end').trim().isNotEmpty) ...[
+              const SizedBox(width: 5),
+              Text(
+                context.tr('oil_section_types_end').trim(),
+                style: base.copyWith(color: oilHubInk),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

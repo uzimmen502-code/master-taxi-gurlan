@@ -1,6 +1,6 @@
 /// Мой/фильтр каталоги ва тавсия мантиғи (прототип B).
 /// Матнлар `assets/lang/{uz_Cyrl,uz_Latn,ru}.json` — `oil_*` калитлар.
-library oil_catalog;
+library;
 
 import 'package:flutter/widgets.dart';
 
@@ -132,11 +132,18 @@ class OilProduct {
 class OilRecoResult {
   const OilRecoResult({
     required this.ranked,
+    required this.premium,
+    required this.optimal,
+    required this.acceptable,
     required this.introKey,
     required this.bundle,
   });
 
+  /// Биринчи танловлар (орқага мослик): премиум / оптимал / мақбул боши.
   final List<OilProduct> ranked;
+  final List<OilProduct> premium;
+  final List<OilProduct> optimal;
+  final List<OilProduct> acceptable;
   final String introKey;
   final List<OilProduct> bundle;
 
@@ -145,9 +152,9 @@ class OilRecoResult {
 
 abstract final class OilCatalog {
   static const types = <OilTypeInfo>[
-    OilTypeInfo(key: 'mineral', width: 0.5, targetKm: 5000),
-    OilTypeInfo(key: 'semi', width: 0.7, targetKm: 7000),
     OilTypeInfo(key: 'full', width: 1, targetKm: 10000),
+    OilTypeInfo(key: 'semi', width: 0.7, targetKm: 7000),
+    OilTypeInfo(key: 'mineral', width: 0.5, targetKm: 5000),
   ];
 
   static const oils = <OilProduct>[
@@ -331,17 +338,27 @@ abstract final class OilCatalog {
     OilProduct pick(List<OilProduct> list, int i) =>
         list[i.clamp(0, list.length - 1)];
 
-    final ranked = gas || heavy
-        ? [
-            pick(O, 0),
-            pick(O, O.length > 2 ? 2 : 1),
-            pick(O, O.length > 4 ? 4 : O.length - 1),
-          ]
-        : [
-            pick(O, O.length > 2 ? 2 : 0),
-            pick(O, O.length > 4 ? 4 : (O.length > 1 ? 1 : 0)),
-            pick(O, O.length > 5 ? 5 : O.length - 1),
-          ];
+    // Қаторларга ажратиш — фақат база/каталогдаги `price` бўйича.
+    final priced = O.where((p) => p.price > 0).toList();
+    final unpriced = O.where((p) => p.price <= 0).toList();
+    final byPriceDesc = [...priced]
+      ..sort((a, b) {
+        final c = b.price.compareTo(a.price);
+        if (c != 0) return c;
+        return a.id.compareTo(b.id);
+      });
+
+    final tiers = _splitRecoTiersByPrice(byPriceDesc);
+    final premium = tiers.$1;
+    final optimal = tiers.$2;
+    // Нархсиз (0) мойлар — мақбул қатори охирига.
+    final acceptable = [...tiers.$3, ...unpriced];
+
+    final rankedOrFallback = <OilProduct>[
+      if (premium.isNotEmpty) premium.first,
+      if (optimal.isNotEmpty) optimal.first,
+      if (acceptable.isNotEmpty) acceptable.first,
+    ];
 
     final introKey = gas
         ? 'oil_reco_intro_gas'
@@ -371,6 +388,91 @@ abstract final class OilCatalog {
       if (!bundle.any((b) => b.id == cabin.id)) bundle.add(cabin);
     }
 
-    return OilRecoResult(ranked: ranked, introKey: introKey, bundle: bundle);
+    return OilRecoResult(
+      ranked: rankedOrFallback,
+      premium: premium,
+      optimal: optimal,
+      acceptable: acceptable,
+      introKey: introKey,
+      bundle: bundle,
+    );
+  }
+
+  /// Базадаги нарх диапазонини 3 қисмга бўлади:
+  /// юқори ⅓ → премиум, ўрта ⅓ → оптимал, паст ⅓ → мақбул.
+  /// [orderedDesc] — `price` камайиш бўйича сараланган (price > 0).
+  static (List<OilProduct>, List<OilProduct>, List<OilProduct>)
+      _splitRecoTiersByPrice(List<OilProduct> orderedDesc) {
+    if (orderedDesc.isEmpty) {
+      return (const [], const [], const []);
+    }
+    if (orderedDesc.length == 1) {
+      return ([orderedDesc.first], const [], const []);
+    }
+
+    final maxP = orderedDesc.first.price;
+    final minP = orderedDesc.last.price;
+    final span = maxP - minP;
+
+    // Барча нархлар тенг → сони бўйича тенг бўлиш (барчаси бир хил қаторда эмас).
+    if (span <= 0) {
+      return _splitRecoTiersByCount(orderedDesc);
+    }
+
+    final highCut = minP + (span * 2 / 3); // >= → премиум
+    final midCut = minP + (span / 3); // >= → оптимал, < → мақбул
+
+    final premium = <OilProduct>[];
+    final optimal = <OilProduct>[];
+    final acceptable = <OilProduct>[];
+    for (final p in orderedDesc) {
+      if (p.price >= highCut) {
+        premium.add(p);
+      } else if (p.price >= midCut) {
+        optimal.add(p);
+      } else {
+        acceptable.add(p);
+      }
+    }
+
+    // Бирор қатор бўш қолмасин — чегаравий нархни қўшни қатордан сурамиз.
+    if (premium.isEmpty && optimal.isNotEmpty) {
+      premium.add(optimal.removeAt(0));
+    }
+    if (acceptable.isEmpty && optimal.isNotEmpty) {
+      acceptable.add(optimal.removeLast());
+    }
+    if (optimal.isEmpty) {
+      if (premium.length > 1) {
+        optimal.add(premium.removeLast());
+      } else if (acceptable.length > 1) {
+        optimal.add(acceptable.removeAt(0));
+      }
+    }
+
+    return (premium, optimal, acceptable);
+  }
+
+  /// Нархлар тенг бўлганда — рўйхат узунлиги бўйича 3 қатор.
+  static (List<OilProduct>, List<OilProduct>, List<OilProduct>)
+      _splitRecoTiersByCount(List<OilProduct> ordered) {
+    if (ordered.isEmpty) {
+      return (const [], const [], const []);
+    }
+    if (ordered.length == 1) {
+      return ([ordered.first], const [], const []);
+    }
+    if (ordered.length == 2) {
+      return ([ordered[0]], [ordered[1]], const []);
+    }
+    final n = ordered.length;
+    final premiumCount = (n / 3).ceil().clamp(1, n - 2);
+    final rest = n - premiumCount;
+    final optimalCount = (rest / 2).ceil().clamp(1, rest - 1);
+    final premium = ordered.sublist(0, premiumCount);
+    final optimal =
+        ordered.sublist(premiumCount, premiumCount + optimalCount);
+    final acceptable = ordered.sublist(premiumCount + optimalCount);
+    return (premium, optimal, acceptable);
   }
 }

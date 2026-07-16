@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/balance_service.dart';
@@ -398,11 +399,10 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
 }
 
 bool _isBirthdayOnDate(String birthDate, DateTime date) {
-  final parts = birthDate.split('-');
-  if (parts.length != 3) return false;
-  final month = int.tryParse(parts[1]);
-  final day = int.tryParse(parts[2]);
-  return month == date.month && day == date.day;
+  // Ikkala formatni ham qo'llaydi: `YYYY-MM-DD` va `DD.MM.YYYY`.
+  final born = parseBirthDate(birthDate);
+  if (born == null) return false;
+  return born.month == date.month && born.day == date.day;
 }
 
 List<_BirthdayColumn> _birthdayColumns(DateTime now, List<UserModel> users) {

@@ -4,7 +4,8 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../painters/calligraphic_border_painter.dart';
 import '../painters/metallic_border_highlight_painter.dart';
 
-/// Hamyon kartasi — yashil fon + oltin ramka + metall yuzasi yorug'ligi.
+/// Hamyon kartasi — yashil fon + kontur bo'ylab to'q ranglar ketma-ket
+/// almashib aylanadigan animatsiyali ramka.
 class WalletCard extends StatefulWidget {
   const WalletCard({
     super.key,
@@ -42,8 +43,8 @@ class _WalletCardState extends State<WalletCard>
   static const _goldDark = Color(0xFFC9A000);
   static const _outerRadius = 19.0;
   static const _innerRadius = 16.0;
-  static const _borderWidth = 3.5;
-  static const _highlightStrokeWidth = 2.4 * 3;
+  static const _borderWidth = 2.5;
+  static const _highlightStrokeWidth = 2.0;
 
   late final AnimationController _highlightCtrl;
 
@@ -71,14 +72,14 @@ class _WalletCardState extends State<WalletCard>
   BoxDecoration get _shellDecoration => BoxDecoration(
         borderRadius: BorderRadius.circular(_outerRadius),
         border: Border.all(
-          color: _goldDark.withValues(alpha: 0.55),
-          width: 1.2,
+          color: Colors.black.withValues(alpha: 0.30),
+          width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: _gold.withValues(alpha: 0.14),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       );
@@ -290,18 +291,18 @@ class _WalletCardState extends State<WalletCard>
                         padding: const EdgeInsets.all(_borderWidth),
                         child: child,
                       ),
-                      if (!motionReduced)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: MetallicBorderHighlightPainter(
-                                progress: _highlightCtrl.value,
-                                borderRadius: _outerRadius,
-                                strokeWidth: _highlightStrokeWidth,
-                              ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: MetallicBorderHighlightPainter(
+                              progress:
+                                  motionReduced ? 0.0 : _highlightCtrl.value,
+                              borderRadius: _outerRadius,
+                              strokeWidth: _highlightStrokeWidth,
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 );

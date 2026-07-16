@@ -1,47 +1,190 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="uz-Cyrl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chevrolet Moy Ma'lumotnomasi — AVA Gurlan</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AVA Gurlan — Мой алмаштириш (ягона · Flutter)</title>
 <style>
-  :root {
-    --green: #1B7A28;
-    --green-bg: #EAF6EB;
-    --green-border: #B7DFB9;
-    --orange: #E65100;
-    --orange-bg: #FFF3E0;
-    --brown: #5D4037;
-    --brown-bg: #EFEBE9;
-    --ink: #1A2E1B;
-    --muted: #6B7C6C;
-    --bg: #F5F7F4;
-    --card: #fff;
-    --primary: #2E7D32;
-    --radius: 14px;
-  }
+
+    :root {
+      --primary: #2E7D32;
+      --green: #1B7A28;
+      --bg: #F5F8F3;
+      --ink: #1A2E1C;
+      --muted: #6B7C6E;
+      --card: #fff;
+      --line: #D5E5D6;
+      --ok: #2E7D32;
+      --soon: #F9A825;
+      --violet: #7B1FA2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Noto Sans", system-ui, sans-serif;
+      background:
+        radial-gradient(900px 480px at 0% -10%, #d7ebd8 0%, transparent 55%),
+        #e4ebe3;
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 18px 12px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .meta {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: .88rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .meta strong { color: var(--ink); }
+    .phone {
+      width: min(420px, 100%);
+      background: var(--bg);
+      border-radius: 28px;
+      border: 1px solid #c5d4c6;
+      box-shadow: 0 18px 48px rgba(26,46,28,.14);
+      overflow: hidden;
+      position: relative;
+    }
+    .appbar {
+      background: var(--primary);
+      color: #fff;
+      padding: 14px 12px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .appbar h1 { flex: 1; font-size: 1.05rem; font-weight: 800; }
+    .appbar button {
+      background: transparent; border: 0; color: #fff; font-size: 1.15rem; cursor: pointer; padding: 4px 6px;
+    }
+    .scroll { padding: 14px 16px 28px; max-height: 78vh; overflow: auto; }
+    .chips { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; flex-wrap: nowrap; }
+    .chip {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 8px 12px; font-weight: 650; font-size: .85rem; white-space: nowrap; cursor: pointer;
+    }
+    .chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .promise {
+      background: #EAF6EB; border: 1px solid #B7DFB9; border-radius: 14px;
+      padding: 14px; font-weight: 800; font-size: .95rem; line-height: 1.25; margin-bottom: 12px;
+    }
+    .car-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .car-head h2 { flex: 1; font-size: .95rem; font-weight: 800; }
+    .pill-btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 10px; font-size: .78rem; font-weight: 650; cursor: pointer;
+    }
+    .status {
+      border-radius: 14px; padding: 14px; border: 1px solid rgba(46,125,50,.35);
+      background: rgba(46,125,50,.1); margin-bottom: 4px;
+    }
+    .badge {
+      display: inline-block; background: var(--ok); color: #fff; font-size: .75rem;
+      font-weight: 800; padding: 4px 8px; border-radius: 8px; margin-bottom: 8px;
+    }
+    .status .big { font-weight: 800; font-size: 1.05rem; }
+    .status .sub { color: var(--muted); margin-top: 4px; font-size: .88rem; line-height: 1.3; }
+    .linkish {
+      background: none; border: 0; color: var(--primary); font-weight: 700;
+      font-size: .88rem; padding: 8px 0 12px; cursor: pointer;
+    }
+    .section-h { margin-top: 8px; margin-bottom: 8px; }
+    .section-h h3 { font-size: .92rem; font-weight: 800; }
+    .section-h .hint { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+    .card-box {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+    }
+    .type-row { margin-bottom: 10px; cursor: pointer; }
+    .type-row .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .type-row .name { font-weight: 800; font-size: .88rem; }
+    .type-row .km { color: var(--green); font-weight: 700; font-size: .78rem; }
+    .bar-track {
+      height: 12px; background: #E6EEE5; border-radius: 999px; position: relative; overflow: visible;
+    }
+    .bar-fill {
+      height: 100%; border-radius: 999px; width: 12%;
+      background: linear-gradient(90deg, #7BC67E, #36A63A, #7BC67E);
+    }
+    .bar-fill.semi { background-image: linear-gradient(90deg, #69C06D, #2F9E45, #69C06D); }
+    .bar-fill.full { background-image: linear-gradient(90deg, #4CAF50, #1B7A28, #4CAF50); }
+    .flag {
+      position: absolute; bottom: 9px; width: 18px; height: 14px;
+      transform-origin: bottom right;
+      animation: flap .7s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+    .flag svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+    @keyframes flap { from { transform: rotate(-5deg); } to { transform: rotate(-18deg); } }
+    .fine { font-size: .72rem; color: var(--muted); line-height: 1.3; margin-top: 4px; }
+    .gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+    .gcard { width: 132px; flex: 0 0 auto; }
+    .gthumb {
+      aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line);
+      background: #E8F5E9; display: grid; place-items: center; font-size: 1.6rem;
+    }
+    .gcard .n { font-weight: 800; font-size: .78rem; margin-top: 6px; line-height: 1.2; }
+    .gcard .m { color: var(--muted); font-size: .72rem; }
+    .gcard .p { color: var(--green); font-weight: 800; font-size: .8rem; margin-top: 2px; }
+    .rank {
+      background: #fff; border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px; margin-bottom: 8px;
+    }
+    .rank.top { border-color: var(--primary); border-width: 1.6px; }
+    .rank-label {
+      display: inline-block; padding: 4px 8px; border-radius: 8px; color: #fff;
+      font-size: .75rem; font-weight: 800; margin-bottom: 8px;
+    }
+    .rank h4 { font-size: .95rem; font-weight: 800; }
+    .rank .meta-line { color: var(--muted); font-size: .82rem; margin-top: 4px; }
+    .actions { display: flex; gap: 10px; margin-top: 12px; }
+    .btn-hub {
+      flex: 1; min-height: 48px; border-radius: 12px; font-weight: 750; font-size: .9rem; cursor: pointer;
+    }
+    .btn-hub.out { background: #fff; border: 1px solid var(--line); color: var(--ink); }
+    .btn-hub.fill { background: var(--primary); border: 0; color: #fff; }
+    .tile {
+      display: flex; align-items: center; gap: 10px; padding: 12px 4px;
+      border-bottom: 1px solid #e8efe7; cursor: pointer; font-weight: 650; font-size: .9rem;
+    }
+    .disclaimer {
+      text-align: center; font-size: .72rem; color: var(--muted); line-height: 1.35; margin-top: 10px;
+    }
+    .screen { display: none; }
+    .screen.on { display: block; }
+    /* Ref embedded: override max-width of old page styles */
+    #ref { background: #F5F7F4; }
+    #ref .tabs { margin: 0; border-radius: 0; }
+    #ref .search-bar, #ref .stats { margin-left: 12px; margin-right: 12px; }
+    #ref .section { padding: 0 12px 20px; max-height: 62vh; overflow: auto; }
+    #ref .bottom-bar { position: sticky; bottom: 0; }
+    .car-ok {
+      background: #EAF6EB; border: 1px solid #B7DFB9; border-radius: 12px; padding: 12px;
+      font-weight: 800; margin: 10px 12px; font-size: .9rem;
+    }
+    .gate {
+      background: #FFF3E0; border: 1px solid #FFCC80; border-radius: 12px; padding: 14px; margin: 0 12px 12px;
+      font-weight: 700; font-size: .88rem; line-height: 1.35;
+    }
+
+/* --- from oil_ref_catalog --- */
+
+  
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--ink);
-    line-height: 1.5;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 0 12px 60px;
-  }
+  
 
-  header {
-    background: var(--primary);
-    color: #fff;
-    padding: 20px 16px 12px;
-    margin: 0 -12px 0;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
+  
+  .sync-banner a { color: #1B7A28; font-weight: 700; }
+
+  
   header h1 { font-size: 18px; font-weight: 800; }
   header p { font-size: 12px; opacity: .8; margin-top: 2px; }
 
@@ -280,15 +423,7 @@
     border-radius: 12px;
     overflow: hidden;
   }
-  .spec-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    background: var(--bg);
-    cursor: pointer;
-    user-select: none;
-  }
+  .spec-
   .spec-header:hover { background: #e8ede8; }
   .spec-badge {
     padding: 3px 10px;
@@ -308,15 +443,8 @@
     transition: transform .2s;
   }
   .spec-block.open .spec-arrow { transform: rotate(180deg); }
-  .spec-body {
-    display: none;
-    padding: 12px 14px 14px;
-    font-size: 13px;
-    line-height: 1.6;
-    color: #333;
-    border-top: 1px solid #e0e8e0;
-  }
-  .spec-block.open .spec-body { display: block; }
+  .spec-
+  .spec-block.open .spec-
   .spec-body h4 {
     font-size: 13px;
     font-weight: 800;
@@ -482,8 +610,8 @@
   .sae-acc-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
   .sae-acc-arrow { color: var(--muted); font-size: 12px; transition: transform .2s; }
   .sae-acc.open .sae-acc-arrow { transform: rotate(180deg); }
-  .sae-acc-body { display: none; padding: 12px; border-top: 1px solid #e0e8e0; font-size: 13px; line-height: 1.55; }
-  .sae-acc.open .sae-acc-body { display: block; }
+  .sae-acc-
+  .sae-acc.open .sae-acc-
   .sae-param {
     display: grid;
     grid-template-columns: 110px 1fr;
@@ -584,44 +712,144 @@
     .card-bottom { font-size: 10px; }
     .detail-sheet { padding: 12px 14px 20px; }
   }
+
 </style>
 </head>
 <body>
+  <div class="meta">
+    <strong>Ягона HTML · Flutter ҳолати · 2026-07-16</strong><br />
+    Хаб (<code>OilChangeHomeScreen</code>) + маълумотнома (<code>OilRefScreen</code>, тўлиқ 90 маҳсулот).
+    Эски алоҳида файллар шу ерга йўналтирилади.
+  </div>
 
-<div style="max-width:900px;margin:12px auto;padding:10px 12px;background:#EAF6EB;border:1px solid #B7DFB9;border-radius:12px;font-size:13px;line-height:1.4">
-  <b>Ягона Flutter-мос HTML:</b>
-  <a href="docs/oil_change_app.html" style="color:#1B7A28;font-weight:700">docs/oil_change_app.html</a>
-  (хаб + тўлиқ маълумотнома). Бу файл — каталог маълумоти манбаси.
-</div>
+  <div class="phone" id="phone">
+    <!-- HUB -->
+    <div class="screen on" id="hub">
+      <div class="appbar">
+        <button type="button" aria-label="back">←</button>
+        <h1>Мой алмаштириш</h1>
+        <button type="button" title="Созлаш">⚙</button>
+        <button type="button" title="Нархлар">🏷</button>
+      </div>
+      <div class="scroll">
+        <div class="chips">
+          <button class="chip on" type="button">01 A 234 BC</button>
+          <button class="chip" type="button">Cobalt</button>
+        </div>
+        <div class="promise">Тўғри танланган мой — ортиқча харажатларнинг олдини олади</div>
+        <div class="car-head">
+          <h2>Chevrolet Cobalt · 1.5 · 2021</h2>
+          <button class="pill-btn" type="button">Модел бўйича</button>
+        </div>
+        <div class="status">
+          <div class="badge">Яхши</div>
+          <div class="big">~2 400 км · ~48 кун</div>
+          <div class="sub">Метан · Такси · Кейинги: 28.08.2026</div>
+        </div>
+        <button class="linkish" type="button">Автомобилни таҳрирлаш →</button>
 
-<header>
-  <h1>🛢️ Moy Ma'lumotnomasi</h1>
-  <p>Chevrolet avtomobillari uchun · AVA Gurlan</p>
-</header>
+        <div class="section-h"><h3>Мой тури</h3></div>
+        <div class="card-box" id="types">
+          
+          <div class="type-row" data-target="0.5" data-km="5000">
+            <div class="row"><span class="name">🟤 Минерал</span><span class="km" data-km>0 км гача*</span></div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:12%"></div>
+              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+            </div>
+          </div>
+          
+          <div class="type-row" data-target="0.7" data-km="7000">
+            <div class="row"><span class="name">🟠 Ярим синтетик</span><span class="km" data-km>0 км гача*</span></div>
+            <div class="bar-track">
+              <div class="bar-fill semi" style="width:12%"></div>
+              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+            </div>
+          </div>
+          
+          <div class="type-row" data-target="1.0" data-km="10000">
+            <div class="row"><span class="name">🟢 Тўлиқ синтетик</span><span class="km" data-km>0 км гача*</span></div>
+            <div class="bar-track">
+              <div class="bar-fill full" style="width:12%"></div>
+              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+            </div>
+          </div>
+          <p class="fine">* Умумий тавсия. Аниқ интервал — завод, мой сифати ва шароитга қараб ўзгаради.</p>
+          <button class="linkish" type="button">Батафсил →</button>
+        </div>
 
-<div class="tabs">
-  <div class="tab active" data-tab="full">To'liq Sintetik (50)</div>
-  <div class="tab" data-tab="semi">Yarim Sintetik (20)</div>
-  <div class="tab" data-tab="mineral">Mineral (20)</div>
-  <div class="tab" data-tab="reco">⭐ Tavsiya</div>
-</div>
+        <div class="section-h" style="margin-top:16px">
+          <h3>Галерея</h3>
+          <div class="hint">Сотув каталоги (Firestore ёки статиқ)</div>
+        </div>
+        <div class="gallery">
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Liqui Moly 5W-30</div><div class="m">Full Syn · SP</div><div class="p">185 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Mobil 1 ESP</div><div class="m">ACEA C3</div><div class="p">210 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Shell Helix</div><div class="m">API SN</div><div class="p">165 000</div></div>
+        </div>
+        <button class="linkish" type="button">Тўлиқ галерея →</button>
 
-<div class="search-bar">
-  <input type="text" id="searchInput" placeholder="Qidirish: brend, nomi, SAE, API, dexos...">
-</div>
+        <div class="section-h">
+          <h3>Тавсиялар</h3>
+          <div class="hint">1 / 2 / 3 + фильтр бандл</div>
+        </div>
+        <div class="rank top">
+          <div class="rank-label" style="background:#1B7A28">1 · Энг яхши</div>
+          <h4>Liqui Moly Special Tec DX1 5W-30</h4>
+          <div class="meta-line">Такси + метан · Dexos1 Gen 3 · 185 000 сўм</div>
+        </div>
+        <div class="rank">
+          <div class="rank-label" style="background:#2F9E45">2 · Яхши</div>
+          <h4>Mobil 1™ 5W-30</h4>
+          <div class="meta-line">API SP · A5/B5, C2 · 210 000 сўм</div>
+        </div>
+        <div class="rank">
+          <div class="rank-label" style="background:#69C06D">3 · Мақбул</div>
+          <h4>Shell Helix Ultra SP 5W-30</h4>
+          <div class="meta-line">Dexos1 Gen 3 · 165 000 сўм</div>
+        </div>
 
-<div class="stats">
-  <span class="stat-badge stat-full" id="countFull">50 ta sintetik</span>
-  <span class="stat-badge stat-semi" id="countSemi">20 ta yarim</span>
-  <span class="stat-badge stat-mineral" id="countMineral">20 ta mineral</span>
-</div>
+        <div class="actions">
+          <button class="btn-hub out" type="button">Ҳайдовчи учун</button>
+          <button class="btn-hub fill" type="button">Брон</button>
+        </div>
 
-<div class="section active" id="sec-full"></div>
-<div class="section" id="sec-semi"></div>
-<div class="section" id="sec-mineral"></div>
-<div class="section" id="sec-reco">
+        <div style="margin-top:12px">
+          <div class="tile" data-go="ref">📖 Мой маълумотномаси</div>
+          <div class="tile">🕘 Тарих</div>
+          <div class="tile">🏪 Сервис пунктлари</div>
+          <div class="tile">✏️ Одометрни таҳрирлаш</div>
+        </div>
+        <p class="disclaimer">AVA маслаҳати · завод кафолати эмас · сервис билан мослаштиринг.</p>
+      </div>
+    </div>
 
-  <div class="reco-section">
+    <!-- REF (full catalog) -->
+    <div class="screen" id="ref">
+      <div class="appbar">
+        <button type="button" data-go="hub">←</button>
+        <h1>Мой маълумотномаси</h1>
+      </div>
+      <div class="car-ok">Chevrolet Cobalt · 1.5 · Метан · Такси</div>
+      <div class="tabs">
+        <div class="tab active" data-tab="reco">⭐ Тавсия</div>
+        <div class="tab" data-tab="full">Синтетик (50)</div>
+        <div class="tab" data-tab="semi">Ярим (20)</div>
+        <div class="tab" data-tab="mineral">Минерал (20)</div>
+      </div>
+      <div class="search-bar" style="display:none">
+        <input type="text" id="searchInput" placeholder="Қидириш: бренд, номи, SAE, dexos..." />
+      </div>
+      <div class="stats" style="display:none">
+        <span class="stat-badge stat-full" id="countFull">50 ta sintetik</span>
+        <span class="stat-badge stat-semi" id="countSemi">20 ta yarim</span>
+        <span class="stat-badge stat-mineral" id="countMineral">20 ta mineral</span>
+      </div>
+      <div class="section" id="sec-full"></div>
+      <div class="section" id="sec-semi"></div>
+      <div class="section" id="sec-mineral"></div>
+      <div class="section active" id="sec-reco">
+<div class="reco-section">
     <div class="reco-title">📊 Kilometraj bo'yicha tavsiyalar</div>
     <table class="mileage-table">
       <thead>
@@ -669,18 +897,19 @@
 
     <div id="recoResults"></div>
   </div>
-
-</div>
-
-<div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+      </div>
+      <div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
   <div class="detail-sheet" id="detailSheet"></div>
 </div>
 
 <div class="bottom-bar" id="bottomBar" style="display:none">
-  <button class="btn" onclick="switchTab('reco')">⭐ Menga mos moy tanlash</button>
+  <button class="btn" onclick="switchRefTab('reco')">⭐ Menga mos moy tanlash</button>
 </div>
+    </div>
+  </div>
 
 <script>
+
 const DATA = {
   full: [
     {brand:'Mobil',name:'Mobil 1™ 5W-30',country:'AQSh',sae:'5W-30',api:'SP',acea:'A5/B5, C2',dexos:'Dexos1 Gen 3',chevCompat:5,lpgCngCompat:5,intervalKm:'10–15',rating:9.5},
@@ -930,16 +1159,16 @@ function renderAll(query) {
   renderList('mineral', query);
 }
 
-function switchTab(tab) {
+function switchRefTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + tab));
+  document.querySelectorAll('#ref .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('#ref .section').forEach(s => s.classList.toggle('active', s.id === 'sec-' + tab));
 
   const bar = document.getElementById('bottomBar');
   bar.style.display = tab === 'reco' ? 'none' : 'flex';
 
-  const search = document.querySelector('.search-bar');
-  const stats = document.querySelector('.stats');
+  const search = document.querySelector('#ref .search-bar');
+  const stats = document.querySelector('#ref .stats');
   if (tab === 'reco') {
     search.style.display = 'none';
     stats.style.display = 'none';
@@ -1118,7 +1347,7 @@ function toggleSaeAcc(sae) {
 
 function openSaeGuide(sae) {
   document.getElementById('detailOverlay').classList.remove('open');
-  switchTab('reco');
+  switchRefTab('reco');
   const section = document.getElementById('saeGuideSection');
   if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.querySelectorAll('.sae-acc').forEach(a => a.classList.remove('open'));
@@ -1415,8 +1644,8 @@ function doRecommend() {
   el.innerHTML = html;
 }
 
-document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => switchTab(t.dataset.tab));
+document.querySelectorAll('#ref .tab').forEach(t => {
+  t.addEventListener('click', () => switchRefTab(t.dataset.tab));
 });
 
 document.getElementById('searchInput').addEventListener('input', e => {
@@ -1433,8 +1662,47 @@ renderAll('');
 initModelChips();
 initMileageTable();
 initSaeGuide();
-document.getElementById('bottomBar').style.display = 'flex';
-</script>
+switchRefTab('reco');
 
+
+// Hub navigation + parallel bars
+document.querySelectorAll('[data-go]').forEach((el) => {
+  el.addEventListener('click', () => {
+    const id = el.getAttribute('data-go');
+    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('on'));
+    document.getElementById(id).classList.add('on');
+    if (id === 'ref') switchRefTab('reco');
+  });
+});
+
+const rows = [...document.querySelectorAll('#types .type-row')];
+const CYCLE = 20000;
+function fillProgress(phase) {
+  if (phase <= 0) return 0;
+  if (phase >= 1) return 1;
+  if (phase < 0.7) return phase / 0.7;
+  return 1;
+}
+function tick(now) {
+  const phase = (now % CYCLE) / CYCLE;
+  const fp = fillProgress(phase);
+  rows.forEach((row) => {
+    const target = +row.dataset.target;
+    const kmMax = +row.dataset.km;
+    const w = 0.12 + (target - 0.12) * fp;
+    row.querySelector('.bar-fill').style.width = (w * 100) + '%';
+    row.querySelector('.flag').style.left = `calc(${w * 100}% - 16px)`;
+    row.querySelector('[data-km]').textContent =
+      Math.round(kmMax * fp).toLocaleString('uz-UZ') + ' км гача*';
+  });
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// Re-bind ref tabs (original listeners use #ref .tab after our patch — init already added)
+document.querySelectorAll('#ref .tab').forEach((t) => {
+  t.addEventListener('click', () => switchRefTab(t.dataset.tab));
+});
+</script>
 </body>
 </html>

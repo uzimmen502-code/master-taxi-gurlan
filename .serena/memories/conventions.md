@@ -8,4 +8,4 @@
 - CFs: callable via `functions.https.onCall`; auth from `context`; RBAC via `requireCallerRoles(context, [roles], msg)`; idempotency via `wallet_idempotency/{key}` docs and/or client `opId`.
 - Ledger collections (journal_entries, ledger_accounts, settlements, period_closings, ledger_exceptions): CF-only writes (rules `allow write: if false`); finance read via `isFinanceReader()`.
 - Dart edits: prefer existing patterns; run `flutter analyze` on changed files.
-- Git commits only when user explicitly asks.
+- Git commit/push/deploy: standing user consent — when needed after work, do them promptly (`mem:task_completion`). Still no force-push, no secrets, no surprise release binaries.

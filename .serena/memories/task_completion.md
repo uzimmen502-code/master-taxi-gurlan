@@ -3,4 +3,4 @@
 - CF JS changes: `node --check` on edited files (no eslint in project).
 - Ledger/money changes: run relevant `functions/tools/*_test.js` (self-cleaning, net-zero) AND verify `reconcile` is green: `balanced && identityOk && projectionOk && mismatches==0`.
 - Deploy only the specific changed functions: `firebase deploy --only "functions:NAME"` with `$env:NODE_OPTIONS="--use-system-ca"`.
-- Commit/push ONLY when the user asks; PowerShell — commit message via temp file + `git commit -F`.
+- **git commit + push + deploy (STANDING CONSENT, 2026-07-13):** user entrusted agent to run these **whenever needed** after completing work — do not leave shippable changes uncommitted/undeployed. Ask only if scope is ambiguous (e.g. which files) or destructive (force push, secrets). Exclude `release/*.aab|apk` and tmp unless user asks. PowerShell — commit via temp file + `git commit -F`. Deploy: only changed targets (`functions:NAME`, `firestore:rules`, indexes, hosting) with `$env:NODE_OPTIONS="--use-system-ca"`.

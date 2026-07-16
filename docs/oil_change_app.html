@@ -258,6 +258,24 @@
     .bar-track.range { margin-bottom: 4px; }
     .gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
     .gcard { width: 132px; flex: 0 0 auto; }
+    .gal-tabs {
+      display: flex; background: var(--primary);
+      border-top: 1px solid rgba(255,255,255,.15);
+    }
+    .gal-tabs button {
+      flex: 1; background: transparent; border: 0; color: rgba(255,255,255,.7);
+      padding: 12px 8px; font-weight: 700; font-size: .9rem; cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .gal-tabs button.on { color: #fff; border-bottom-color: #fff; }
+    .gal-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      padding: 14px 16px 28px;
+    }
+    .gal-grid .gcard { width: auto; flex: none; }
+    .gal-pane { display: none; max-height: 72vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .gal-pane.on { display: block; }
+    .gcard { width: 132px; flex: 0 0 auto; }
     .gthumb {
       aspect-ratio: 1; border-radius: 14px; border: 1px solid var(--line);
       background: #E8F5E9; display: grid; place-items: center; font-size: 1.6rem;
@@ -1257,7 +1275,7 @@
           <div class="gcard"><div class="gthumb">🛢</div><div class="n">Mobil 1 ESP</div><div class="m">ACEA C3</div><div class="p">210 000</div></div>
           <div class="gcard"><div class="gthumb">🛢</div><div class="n">Shell Helix</div><div class="m">API SN</div><div class="p">165 000</div></div>
         </div>
-        <button class="linkish" type="button">Тўлиқ галерея →</button>
+        <button class="linkish" type="button" data-go="gallery">Тўлиқ галерея →</button>
 
         <div class="section-h">
           <h3>Тавсиялар</h3>
@@ -1291,6 +1309,36 @@
           <div class="tile">✏️ Одометрни таҳрирлаш</div>
         </div>
         <p class="disclaimer">AVA маслаҳати · завод кафолати эмас · сервис билан мослаштиринг.</p>
+      </div>
+    </div>
+
+    <!-- GALLERY: Мойлар / Фильтрлар -->
+    <div class="screen" id="gallery">
+      <div class="appbar">
+        <button type="button" data-go="hub">←</button>
+        <h1>Галерея</h1>
+      </div>
+      <div class="gal-tabs" id="galTabs">
+        <button type="button" class="on" data-gal="oils">Мойлар</button>
+        <button type="button" data-gal="filters">Фильтрлар</button>
+      </div>
+      <div class="gal-pane on" id="gal-oils">
+        <div class="gal-grid">
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Liqui Moly 5W-30</div><div class="m">Full Syn · SP</div><div class="p">185 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Mobil 1 ESP</div><div class="m">ACEA C3</div><div class="p">210 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Shell Helix</div><div class="m">API SN</div><div class="p">165 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Castrol EDGE</div><div class="m">5W-30 · SP</div><div class="p">175 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">Motul 8100</div><div class="m">ECO-LITE</div><div class="p">198 000</div></div>
+          <div class="gcard"><div class="gthumb">🛢</div><div class="n">ZIC X7 D1</div><div class="m">Dexos1</div><div class="p">145 000</div></div>
+        </div>
+      </div>
+      <div class="gal-pane" id="gal-filters">
+        <div class="gal-grid">
+          <div class="gcard"><div class="gthumb">🔧</div><div class="n">Мой фильтри</div><div class="m">Мой билан бирга</div><div class="p">45 000</div></div>
+          <div class="gcard"><div class="gthumb">🔧</div><div class="n">Ҳаво фильтри</div><div class="m">Чангга қарши</div><div class="p">55 000</div></div>
+          <div class="gcard"><div class="gthumb">🔧</div><div class="n">Салон фильтри</div><div class="m">Кондиционер</div><div class="p">48 000</div></div>
+          <div class="gcard"><div class="gthumb">🔧</div><div class="n">Ёқилғи фильтри</div><div class="m">CNG / бензин</div><div class="p">70 000</div></div>
+        </div>
       </div>
     </div>
 
@@ -2647,6 +2695,16 @@ document.querySelectorAll('.type-card[data-detail]').forEach((card) => {
 });
 document.getElementById('typeSheet')?.addEventListener('click', (e) => {
   if (e.target.id === 'typeSheet') e.target.classList.remove('open');
+});
+
+document.querySelectorAll('#galTabs button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#galTabs button').forEach((b) => b.classList.remove('on'));
+    btn.classList.add('on');
+    const id = btn.getAttribute('data-gal');
+    document.querySelectorAll('.gal-pane').forEach((p) => p.classList.remove('on'));
+    document.getElementById('gal-' + id)?.classList.add('on');
+  });
 });
 
 const rows = [...document.querySelectorAll('#oilTypeBars .type-row')];

@@ -20,16 +20,15 @@ Foydalanuvchi mashinasidan moy muddatini kuzatadi, tarix yuritadi, punkt/narx ko
 
 ## Flutter
 - `lib/models/oil_vehicle.dart` (+ brand, engine, fuelType, usageTags), repo, service
-- Hub UX (proto B): `OilChangeHomeScreen` — AVA promise → car setup → oil types (animated bars) → gallery → ranked 1/2/3 (+ filter bundle) → book/history
-- Bars ticker: **parallel** 20s cycle (all start together); km label 0→5k/7k/10k synced with flag fill; no «ихчам · босиб» hint.
-- Catalog: static `data/oil_catalog.dart` + Firestore `oil_change_catalog` via `OilCatalogRepository` (app gallery fallback to static)
-- Admin: `OilCatalogAdminScreen` — seed, CRUD, image → Storage `oil_images/` (sotuv katalogi only; rasm optional; «Yangi moy/filtr»)
-- Reference guide: static `data/oil_ref_catalog.dart` (90 products + SAE/model capacity)
-- **Unified HTML (Flutter-synced):** `docs/oil_change_app.html` — hub + full OilRef (90 products, Tavsiya first, SAE, detail). Old paths redirect: `oil_ref_catalog.html`, `docs/oil_change_b_prototype.html`, `docs/oil_change_latest.html`.
-- `OilRefScreen(uid, initialVehicleId?)`: tabs **Tavsiya | Sintetik | Yarim | Mineral**; open gate → `OilCarSetupScreen` if 0 cars or selected `!isRecommendationReady`; 2+ cars → chip picker on Tavsiya; home navigates with uid+vehicleId
-- widgets: `oil_hub_widgets.dart`; setup: `OilCarSetupScreen`
-- Home grid: oil_change after bread (page1); carpet_wash after car_wash (page2). `oil_change` must be `enabled` in `config/module_defaults` when enforce=true (else «Tez orada»).
-- Onboarding: 7-sahifa ixtiyoriy mashina + 5 000 so‘m bonus; finish → saveCarInfo + claimCarProfileBonus
+- Hub UX (proto B): `OilChangeHomeScreen` — car status cell → «DOCTOR OIL» bars → gallery preview → ranked 1/2/3 (+ filter bundle) → book/history
+- Bars ticker: **parallel** 20s cycle; range bars (mineral/semi/full) with safe flag+car
+- **OilGalleryScreen**: TabBar **Мойлар | Фильтрлар**, each tab vertical GridView (2 cols)
+- Catalog: static `data/oil_catalog.dart` + Firestore `oil_change_catalog` via `OilCatalogRepository`
+- Admin: `OilCatalogAdminScreen` — seed, CRUD, image → Storage `oil_images/`
+- Reference: static `data/oil_ref_catalog.dart` + `OilRefScreen` (Tavsiya first + gate)
+- **Unified HTML:** `docs/oil_change_app.html`
+- Home grid: oil_change after bread; module must be `enabled` in `config/module_defaults` when enforce=true
+- Onboarding: optional car + claimCarProfileBonus
 
 ## CF
 - `claimCarProfileBonus` — auth; car complete; idempotent v1; ledger bonus

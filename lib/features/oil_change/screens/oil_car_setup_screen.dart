@@ -442,61 +442,98 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
   }
 }
 
-/// Тўлиқ галерея.
-class OilGalleryScreen extends StatelessWidget {
+/// Тўлиқ галерея — Мойлар / Фильтрлар таблари, вертикал скролл.
+class OilGalleryScreen extends StatefulWidget {
   const OilGalleryScreen({super.key});
 
   @override
+  State<OilGalleryScreen> createState() => _OilGalleryScreenState();
+}
+
+class _OilGalleryScreenState extends State<OilGalleryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+  final _repo = OilCatalogRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final repo = OilCatalogRepository();
     return Scaffold(
       backgroundColor: oilHubBg,
       appBar: AppBar(
         title: Text(context.tr('oil_gallery_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabs,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          tabs: [
+            Tab(text: context.tr('oil_oils')),
+            Tab(text: context.tr('oil_filters')),
+          ],
+        ),
       ),
       body: StreamBuilder<List<OilProduct>>(
-        stream: repo.watchActive(),
+        stream: _repo.watchActive(),
         builder: (context, snap) {
           final catalog = OilCatalogRepository.resolveCatalog(snap.data);
           final oils = catalog.where((p) => p.isOil).toList();
           final filters = catalog.where((p) => p.isFilter).toList();
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          return TabBarView(
+            controller: _tabs,
             children: [
-              Text(
-                context.tr('oil_oils'),
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 180,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: oils.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => OilProductCard(product: oils[i]),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                context.tr('oil_filters'),
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 180,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: filters.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => OilProductCard(product: filters[i]),
-                ),
-              ),
+              _GalleryGrid(products: oils),
+              _GalleryGrid(products: filters),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _GalleryGrid extends StatelessWidget {
+  const _GalleryGrid({required this.products});
+
+  final List<OilProduct> products;
+
+  @override
+  Widget build(BuildContext context) {
+    if (products.isEmpty) {
+      return Center(
+        child: Text(
+          context.tr('oil_ref_empty'),
+          style: const TextStyle(color: oilHubMuted),
+        ),
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.72,
+      ),
+      itemCount: products.length,
+      itemBuilder: (_, i) => Align(
+        alignment: Alignment.topCenter,
+        child: OilProductCard(product: products[i]),
       ),
     );
   }

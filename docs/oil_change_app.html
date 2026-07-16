@@ -108,21 +108,121 @@
     .bar-track {
       height: 12px; background: #E6EEE5; border-radius: 999px; position: relative; overflow: visible;
     }
+    /* Минерал: тўлиқ узунлик = 7 000 км; зоналар */
+    .bar-track.range {
+      height: 14px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+    }
+    .bar-track.range.mineral {
+      background: linear-gradient(
+        90deg,
+        #c8e6c9 0%,
+        #c8e6c9 57.1%,
+        #66bb6a 57.1%,
+        #66bb6a 71.4%,
+        #fdd835 71.4%,
+        #fdd835 85.7%,
+        #ef6c00 85.7%,
+        #ef6c00 100%
+      );
+    }
+    /* Ярим: 0–10 000; хавфсиз ~7k (70%) */
+    .bar-track.range.semi {
+      background: linear-gradient(
+        90deg,
+        #c8e6c9 0%,
+        #c8e6c9 70%,
+        #66bb6a 70%,
+        #66bb6a 80%,
+        #fdd835 80%,
+        #fdd835 90%,
+        #ef6c00 90%,
+        #ef6c00 100%
+      );
+    }
+    /* Тўлиқ: 0–15 000; хавфсиз ~10k (66.7%) */
+    .bar-track.range.full {
+      background: linear-gradient(
+        90deg,
+        #c8e6c9 0%,
+        #c8e6c9 66.7%,
+        #66bb6a 66.7%,
+        #66bb6a 80%,
+        #fdd835 80%,
+        #fdd835 90%,
+        #ef6c00 90%,
+        #ef6c00 100%
+      );
+    }
+    .bar-track.range .zone-marks {
+      position: absolute; inset: 0; pointer-events: none;
+    }
+    .bar-track.range .zone-marks span {
+      position: absolute; top: 16px; font-size: 9px; font-weight: 700; color: var(--muted);
+      transform: translateX(-50%);
+    }
     .bar-fill {
       height: 100%; border-radius: 999px; width: 12%;
       background: linear-gradient(90deg, #7BC67E, #36A63A, #7BC67E);
     }
     .bar-fill.semi { background-image: linear-gradient(90deg, #69C06D, #2F9E45, #69C06D); }
     .bar-fill.full { background-image: linear-gradient(90deg, #4CAF50, #1B7A28, #4CAF50); }
+    .bar-fill.mineral-range {
+      background: linear-gradient(90deg, rgba(27,122,40,.55), rgba(27,122,40,.85));
+      mix-blend-mode: multiply;
+    }
+    .safe-mark {
+      position: absolute; top: -2px; bottom: -2px; width: 2px;
+      background: #1B7A28; z-index: 2;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.7);
+    }
     .flag {
       position: absolute; bottom: 9px; width: 18px; height: 14px;
       transform-origin: bottom right;
       animation: flap .7s ease-in-out infinite alternate;
       pointer-events: none;
+      z-index: 3;
     }
     .flag svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+    /* Байроқ + авто: бирга ҳаракатланади */
+    .racer {
+      position: absolute;
+      bottom: -2px;
+      width: 36px;
+      height: 28px;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .racer .flag {
+      position: relative;
+      bottom: auto;
+      left: auto !important;
+      margin-bottom: -2px;
+    }
+    .racer .car {
+      width: 34px;
+      height: 16px;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,.2));
+    }
     @keyframes flap { from { transform: rotate(-5deg); } to { transform: rotate(-18deg); } }
+    .range-legend {
+      display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 8px 0 4px;
+      font-size: 10px; font-weight: 650; color: var(--muted);
+    }
+    .range-legend i {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+      margin-right: 4px; vertical-align: -1px;
+    }
     .fine { font-size: .72rem; color: var(--muted); line-height: 1.3; margin-top: 4px; }
+    .type-row.mineral,
+    .type-row.semi-row,
+    .type-row.full-row { margin-bottom: 28px; }
+    .bar-track.range { margin-bottom: 4px; }
     .gallery { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
     .gcard { width: 132px; flex: 0 0 auto; }
     .gthumb {
@@ -153,9 +253,294 @@
       display: flex; align-items: center; gap: 10px; padding: 12px 4px;
       border-bottom: 1px solid #e8efe7; cursor: pointer; font-weight: 650; font-size: .9rem;
     }
-    .disclaimer {
-      text-align: center; font-size: .72rem; color: var(--muted); line-height: 1.35; margin-top: 10px;
+    .type-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
     }
+    .type-card h3 { font-size: .95rem; font-weight: 800; }
+    .type-card .short { margin-top: 8px; font-size: .88rem; line-height: 1.35; color: var(--ink); }
+    .type-card .tap { margin-top: 6px; font-size: .78rem; color: var(--primary); font-weight: 700; }
+    .sheet-overlay {
+      display: none;
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,.35);
+      z-index: 20;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .sheet-overlay.open { display: flex; }
+    .sheet {
+      background: #fff;
+      border-radius: 18px 18px 0 0;
+      padding: 16px 18px 20px;
+      width: 100%;
+      max-height: 88%;
+      overflow: auto;
+    }
+    .sheet h2 { font-size: 1.05rem; font-weight: 800; margin-bottom: 10px; }
+    .sheet p, .sheet li { font-size: .9rem; line-height: 1.45; margin-bottom: 8px; }
+    .sheet table {
+      width: 100%; border-collapse: collapse; font-size: .8rem; margin: 10px 0 12px;
+    }
+    .sheet th, .sheet td {
+      border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top;
+    }
+    .sheet th { background: #EAF6EB; }
+    .sheet .note {
+      background: #FFF3E0; border: 1px solid #FFCC80; border-radius: 10px;
+      padding: 10px; font-size: .85rem; line-height: 1.4; margin: 8px 0 12px;
+    }
+    /* Ярим синтетик мақола дизайни */
+    .article { color: #1A2E1C; }
+    .article .hero {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+      color: #E65100;
+    }
+    .article .lead {
+      font-size: 1rem;
+      line-height: 1.5;
+      font-weight: 500;
+      margin: 0 0 14px;
+      color: #2A3D2C;
+    }
+    .article .plain {
+      font-size: .92rem;
+      line-height: 1.55;
+      margin: 0 0 10px;
+    }
+    .article .simple-box {
+      background: linear-gradient(135deg, #FFF8E1, #FFF3E0);
+      border-left: 4px solid #EF6C00;
+      border-radius: 0 12px 12px 0;
+      padding: 12px 14px;
+      margin: 0 0 16px;
+    }
+    .article .simple-box .lbl {
+      font-size: .72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #E65100;
+      margin-bottom: 8px;
+    }
+    .article .simple-box p {
+      margin: 0 0 6px;
+      font-size: .88rem;
+      line-height: 1.45;
+    }
+    .article .simple-box .balance {
+      margin-top: 8px;
+      font-family: Georgia, serif;
+      font-style: italic;
+      font-size: .95rem;
+      color: #BF360C;
+      font-weight: 600;
+    }
+    .article h3 {
+      font-size: 1.02rem;
+      font-weight: 800;
+      margin: 18px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #FFE0B2;
+      color: #1A2E1C;
+    }
+    .article .check-list,
+    .article .pro-list,
+    .article .con-list {
+      list-style: none;
+      margin: 0 0 12px;
+      padding: 0;
+    }
+    .article .check-list li,
+    .article .pro-list li,
+    .article .con-list li {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      font-size: .88rem;
+      line-height: 1.4;
+      background: #F7FAF6;
+    }
+    .article .check-list li { background: #E8F5E9; }
+    .article .pro-list li { background: #E8F5E9; }
+    .article .con-list li { background: #FFEBEE; }
+    .article .mark { flex: 0 0 auto; font-weight: 800; }
+    .article .when-box {
+      background: #F5F8F3;
+      border: 1px solid #D5E5D6;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 12px;
+    }
+    .article .when-box ul {
+      margin: 0 0 8px;
+      padding-left: 1.1em;
+      font-size: .88rem;
+      line-height: 1.5;
+    }
+    .article .when-box .verdict {
+      font-weight: 800;
+      font-size: .9rem;
+      color: #1B7A28;
+    }
+    .article .km-grid {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .article .km-card {
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid #E0E0E0;
+      background: #fff;
+    }
+    .article .km-card .mode {
+      font-size: .75rem;
+      font-weight: 700;
+      color: #6B7C6E;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .article .km-card .val {
+      font-family: Georgia, serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #1B7A28;
+      margin-top: 2px;
+    }
+    .article .safe-rule {
+      background: #1B7A28;
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: .92rem;
+      line-height: 1.4;
+      font-weight: 650;
+      margin: 0 0 14px;
+    }
+    .article .safe-rule strong {
+      display: block;
+      font-family: Georgia, serif;
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+    }
+    .article .gas-box {
+      background: #FFF3E0;
+      border: 1px solid #FFCC80;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 14px;
+    }
+    .article .gas-box .tag {
+      display: inline-block;
+      background: #EF6C00;
+      color: #fff;
+      font-size: .7rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+    .article .sae-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .article .sae-pill {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      background: #EEF7EE;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .article .sae-pill .code {
+      font-family: Consolas, "Courier New", monospace;
+      font-weight: 800;
+      font-size: .95rem;
+      color: #2E7D32;
+      min-width: 4.2em;
+    }
+    .article .sae-pill .desc {
+      font-size: .85rem;
+      line-height: 1.4;
+      color: #334;
+    }
+    .article .brands {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 14px;
+    }
+    .article .brands span {
+      background: #fff;
+      border: 1px solid #D5E5D6;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: .78rem;
+      font-weight: 650;
+    }
+    .article .dont {
+      background: #FFEBEE;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 14px;
+    }
+    .article .dont li {
+      font-size: .88rem;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      list-style: none;
+      padding-left: 0;
+    }
+    .article .key-tip {
+      background: linear-gradient(160deg, #E8F5E9, #C8E6C9);
+      border-radius: 14px;
+      padding: 14px;
+      margin: 4px 0 8px;
+    }
+    .article .key-tip .eyebrow {
+      font-size: .7rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #1B7A28;
+      margin-bottom: 6px;
+    }
+    .article .key-tip .quote {
+      font-family: Georgia, serif;
+      font-size: 1.05rem;
+      font-style: italic;
+      line-height: 1.35;
+      margin-bottom: 10px;
+    }
+    .article .key-tip .specs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .article .key-tip .specs b {
+      background: #fff;
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: .78rem;
+      font-weight: 800;
+      color: #1B5E20;
+    }
+    .hint-top { color: var(--muted); font-size: .88rem; margin-bottom: 12px; }
     .screen { display: none; }
     .screen.on { display: block; }
     /* Ref embedded: override max-width of old page styles */
@@ -749,33 +1134,88 @@
         <button class="linkish" type="button">Автомобилни таҳрирлаш →</button>
 
         <div class="section-h"><h3>Мой тури</h3></div>
-        <div class="card-box" id="types">
-          
-          <div class="type-row" data-target="0.5" data-km="5000">
-            <div class="row"><span class="name">🟤 Минерал</span><span class="km" data-km>0 км гача*</span></div>
-            <div class="bar-track">
-              <div class="bar-fill" style="width:12%"></div>
-              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+        <div class="card-box" id="oilTypeBars">
+          <!-- Минерал: 5–7k, байроқ ~5k -->
+          <div class="type-row mineral" data-mode="range" data-max-km="7000" data-safe-km="5000">
+            <div class="row">
+              <span class="name">🟤 Минерал</span>
+              <span class="km" data-km>0 км</span>
+            </div>
+            <div class="bar-track range mineral">
+              <div class="safe-mark" style="left:71.4%" title="~5 000 км"></div>
+              <div class="bar-fill mineral-range" style="width:12%"></div>
+              <div class="racer" style="left:8%">
+                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#2E7D32"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#A5D6A7"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#1B5E20"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
+              </div>
+              <div class="zone-marks">
+                <span style="left:57.1%">4k</span>
+                <span style="left:71.4%">5k</span>
+                <span style="left:85.7%">6k</span>
+                <span style="left:100%">7k</span>
+              </div>
+            </div>
+            <div class="range-legend">
+              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~5 000 км · хавфсиз</span>
+              <span><i style="background:#fdd835"></i>5–6k сариқ</span>
+              <span><i style="background:#ef6c00"></i>6–7k огоҳлик</span>
             </div>
           </div>
-          
-          <div class="type-row" data-target="0.7" data-km="7000">
-            <div class="row"><span class="name">🟠 Ярим синтетик</span><span class="km" data-km>0 км гача*</span></div>
-            <div class="bar-track">
-              <div class="bar-fill semi" style="width:12%"></div>
-              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+
+          <!-- Ярим: 7–10k, байроқ ~7k -->
+          <div class="type-row semi-row" data-mode="range" data-max-km="10000" data-safe-km="7000">
+            <div class="row">
+              <span class="name">🟠 Ярим синтетик</span>
+              <span class="km" data-km>0 км</span>
+            </div>
+            <div class="bar-track range semi">
+              <div class="safe-mark" style="left:70%" title="~7 000 км"></div>
+              <div class="bar-fill mineral-range" style="width:12%"></div>
+              <div class="racer" style="left:8%">
+                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#EF6C00"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#FFE0B2"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#E65100"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
+              </div>
+              <div class="zone-marks">
+                <span style="left:70%">7k</span>
+                <span style="left:80%">8k</span>
+                <span style="left:90%">9k</span>
+                <span style="left:100%">10k</span>
+              </div>
+            </div>
+            <div class="range-legend">
+              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~7 000 км · хавфсиз</span>
+              <span><i style="background:#fdd835"></i>8–9k сариқ</span>
+              <span><i style="background:#ef6c00"></i>9–10k огоҳлик</span>
             </div>
           </div>
-          
-          <div class="type-row" data-target="1.0" data-km="10000">
-            <div class="row"><span class="name">🟢 Тўлиқ синтетик</span><span class="km" data-km>0 км гача*</span></div>
-            <div class="bar-track">
-              <div class="bar-fill full" style="width:12%"></div>
-              <div class="flag" style="left:0"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+
+          <!-- Тўлиқ: 10–15k, байроқ ~10k -->
+          <div class="type-row full-row" data-mode="range" data-max-km="15000" data-safe-km="10000">
+            <div class="row">
+              <span class="name">🟢 Тўлиқ синтетик</span>
+              <span class="km" data-km>0 км</span>
+            </div>
+            <div class="bar-track range full">
+              <div class="safe-mark" style="left:66.7%" title="~10 000 км"></div>
+              <div class="bar-fill mineral-range" style="width:12%"></div>
+              <div class="racer" style="left:8%">
+                <div class="flag"><svg viewBox="0 0 20 16"><rect width="20" height="16" fill="#111"/><g fill="#fff"><rect x="0" y="0" width="5" height="4"/><rect x="10" y="0" width="5" height="4"/><rect x="5" y="4" width="5" height="4"/><rect x="15" y="4" width="5" height="4"/><rect x="0" y="8" width="5" height="4"/><rect x="10" y="8" width="5" height="4"/><rect x="5" y="12" width="5" height="4"/><rect x="15" y="12" width="5" height="4"/></g><g fill="#e53935"><rect x="5" y="0" width="5" height="4"/><rect x="15" y="0" width="5" height="4"/><rect x="0" y="4" width="5" height="4"/><rect x="10" y="4" width="5" height="4"/><rect x="5" y="8" width="5" height="4"/><rect x="15" y="8" width="5" height="4"/><rect x="0" y="12" width="5" height="4"/><rect x="10" y="12" width="5" height="4"/></g></svg></div>
+                <svg class="car" viewBox="0 0 68 32" aria-hidden="true"><ellipse cx="34" cy="28" rx="22" ry="3" fill="rgba(0,0,0,.12)"/><path d="M10 22 L14 12 Q18 6 28 6 L42 6 Q52 6 56 12 L60 22 Z" fill="#1B7A28"/><path d="M18 12 L22 8 H46 L50 12 Z" fill="#C8E6C9"/><rect x="8" y="20" width="52" height="6" rx="2" fill="#0D5C18"/><circle cx="20" cy="26" r="5" fill="#212121"/><circle cx="20" cy="26" r="2.2" fill="#9E9E9E"/><circle cx="50" cy="26" r="5" fill="#212121"/><circle cx="50" cy="26" r="2.2" fill="#9E9E9E"/><rect x="54" y="14" width="4" height="3" rx="1" fill="#FFEB3B"/></svg>
+              </div>
+              <div class="zone-marks">
+                <span style="left:66.7%">10k</span>
+                <span style="left:80%">12k</span>
+                <span style="left:90%">13.5k</span>
+                <span style="left:100%">15k</span>
+              </div>
+            </div>
+            <div class="range-legend">
+              <span><i style="background:#66bb6a"></i>Ўзбекистон шароитида МЕТАН/ПРОПАНда · ~10 000 км · хавфсиз</span>
+              <span><i style="background:#fdd835"></i>12–13.5k сариқ</span>
+              <span><i style="background:#ef6c00"></i>13.5–15k огоҳлик</span>
             </div>
           </div>
-          <p class="fine">* Умумий тавсия. Аниқ интервал — завод, мой сифати ва шароитга қараб ўзгаради.</p>
-          <button class="linkish" type="button">Батафсил →</button>
+          <button class="linkish" type="button" data-go="oilTypes">Батафсил →</button>
         </div>
 
         <div class="section-h" style="margin-top:16px">
@@ -821,6 +1261,50 @@
           <div class="tile">✏️ Одометрни таҳрирлаш</div>
         </div>
         <p class="disclaimer">AVA маслаҳати · завод кафолати эмас · сервис билан мослаштиринг.</p>
+      </div>
+    </div>
+
+    <!-- TYPES DETAIL (Батафсил) -->
+    <div class="screen" id="oilTypes">
+      <div class="appbar">
+        <button type="button" data-go="hub">←</button>
+        <h1>Мой турлари</h1>
+      </div>
+      <div class="scroll">
+        <p class="hint-top">Карточкани босинг — мой турини содда тилда ўқинг.</p>
+
+        <div class="type-card" data-detail="mineral">
+          <div class="row" style="display:flex;justify-content:space-between;gap:8px">
+            <h3>🟤 Mineral</h3>
+            <span style="color:#1B7A28;font-weight:700;font-size:12px">5–7 минг км*</span>
+          </div>
+          <p class="short">Арзон минерал мой. Эски авто, енгил юклама учун.</p>
+          <div class="tap">Ўқиш →</div>
+        </div>
+
+        <div class="type-card" data-detail="semi">
+          <div class="row" style="display:flex;justify-content:space-between;gap:8px">
+            <h3>🟡 Semi-Synthetic</h3>
+            <span style="color:#1B7A28;font-weight:700;font-size:12px">7–10 минг км*</span>
+          </div>
+          <p class="short">Аралашма. Шаҳарда кундалик фойдаланиш учун мувозанат.</p>
+          <div class="tap">Ўқиш →</div>
+        </div>
+
+        <div class="type-card" data-detail="full">
+          <div class="row" style="display:flex;justify-content:space-between;gap:8px">
+            <h3>🟢 Full Synthetic</h3>
+            <span style="color:#1B7A28;font-weight:700;font-size:12px">10–15 минг км*</span>
+          </div>
+          <p class="short">Энг чидамли. Такси, метан/пропан, узоқ йўл учун.</p>
+          <div class="tap">Ўқиш →</div>
+        </div>
+
+        <p class="fine">* Универсал рақам йўқ. Ўзбекистон / МЕТАН-ПРОПАН шароитида хавфсиз нуқтага қаранг. Завод интервали устун.</p>
+      </div>
+
+      <div class="sheet-overlay" id="typeSheet">
+        <div class="sheet" id="typeSheetBody"></div>
       </div>
     </div>
 
@@ -1672,10 +2156,471 @@ document.querySelectorAll('[data-go]').forEach((el) => {
     document.querySelectorAll('.screen').forEach((s) => s.classList.remove('on'));
     document.getElementById(id).classList.add('on');
     if (id === 'ref') switchRefTab('reco');
+    const sheet = document.getElementById('typeSheet');
+    if (sheet) sheet.classList.remove('open');
   });
 });
 
-const rows = [...document.querySelectorAll('#types .type-row')];
+const TYPE_DETAILS = {
+  mineral: {
+    title: '',
+    body: `
+      <article class="article">
+        <h1 class="hero" style="color:#5D4037">Минерал мой нима?</h1>
+        <p class="lead">Минерал мотор мойи — бу нефтдан тозаланиб олинадиган энг оддий мотор мойи.</p>
+        <p class="plain">Унинг таркиби табиий нефтга асосланган бўлиб, синтетик мойларга қараганда камроқ қайта ишланган.</p>
+
+        <div class="simple-box" style="border-left-color:#6D4C41;background:linear-gradient(135deg,#EFEBE9,#EFEBE9)">
+          <div class="lbl" style="color:#5D4037">Шунинг учун</div>
+          <p><b>нархи арзон;</b></p>
+          <p><b>лекин хизмат муддати қисқароқ;</b></p>
+          <p><b>юқори ҳароратга чидамлилиги пастроқ.</b></p>
+        </div>
+        <p class="plain">Минерал мой илгари деярли барча автомобилларда ишлатилган. Ҳозир эса асосан эски автомобиллар ва оддий двигателлар учун тавсия қилинади.</p>
+
+        <h3>Нима учун минерал мой қуйилади?</h3>
+        <p class="plain" style="font-weight:700;margin-bottom:6px">Минерал мойнинг асосий афзалликлари:</p>
+        <ul class="check-list">
+          <li><span class="mark">✅</span><span>Нархи энг арзон.</span></li>
+          <li><span class="mark">✅</span><span>Эски двигателларда яхши ишлайди.</span></li>
+          <li><span class="mark">✅</span><span>Эски резина сальниклардан сизиб чиқиш эҳтимоли камроқ.</span></li>
+          <li><span class="mark">✅</span><span>Таъмирлаш харажатини камайтиради.</span></li>
+        </ul>
+
+        <h3>Қайси автомобилларга мос?</h3>
+        <p class="plain">Минерал мой асосан қуйидагилар учун мос бўлиши мумкин <span style="color:#6B7C6E">(агар ишлаб чиқарувчи рухсат берган бўлса)</span>:</p>
+        <div class="brands">
+          <span>Damas</span>
+          <span>Labo</span>
+          <span>Matiz (эски)</span>
+          <span>Nexia 1</span>
+          <span>Nexia 2</span>
+          <span>Tico</span>
+          <span>Москвич</span>
+          <span>Жигули (VAZ)</span>
+          <span>Волга</span>
+          <span>УАЗ</span>
+          <span>эски автомобиллар</span>
+        </div>
+
+        <h3>Қачон минерал мой қуйиш мумкин?</h3>
+        <div class="when-box">
+          <ul>
+            <li>автомобил анча эски бўлса;</li>
+            <li>двигател конструкцияси содда бўлса;</li>
+            <li>турбина бўлмаса;</li>
+            <li>ишлаб чиқарувчи минерал мойга рухсат берган бўлса.</li>
+          </ul>
+        </div>
+
+        <h3>Қанча километр юриш мумкин?</h3>
+        <p class="plain">Бу энг кўп бериладиган савол.</p>
+        <p class="plain" style="font-weight:700;margin-bottom:8px">Оддий ҳайдовчи учун:</p>
+        <div class="km-grid">
+          <div class="km-card">
+            <div class="mode">Шаҳарда</div>
+            <div class="val">4 000–5 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Аралаш режим</div>
+            <div class="val">5 000–6 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Асосан трасса</div>
+            <div class="val">6 000–7 000 км</div>
+          </div>
+        </div>
+        <div class="safe-rule">
+          <strong>Энг хавфсиз қоида</strong>
+          Минерал мойни <b>5 000 км</b> дан оширмаслик.
+        </div>
+
+        <h3>Газ бўлсачи?</h3>
+        <div class="gas-box">
+          <div class="tag">МЕТАН / ПРОПАН</div>
+          <p class="plain">Газда двигател ҳарорати юқорироқ бўлади. Минерал мой бундай шароитда тезроқ эскиради.</p>
+          <p class="plain" style="font-weight:800;color:#BF360C;margin-bottom:8px">Шунинг учун газли автомобилларда минерал мой тавсия этилмайди.</p>
+          <p class="plain" style="margin:0;font-weight:700">Агар бошқа имконият бўлмаса, <span style="color:#E65100">4 000 км</span> атрофида алмаштириш мақсадга мувофиқ.</p>
+        </div>
+
+        <h3>Қайси қуюқлик (SAE) кўп учрайди?</h3>
+        <div class="sae-row">
+          <div class="sae-pill"><span class="code">10W-40</span><span class="desc">энг оммабоп вариантлардан</span></div>
+          <div class="sae-pill"><span class="code">15W-40</span><span class="desc">энг оммабоп вариантлардан</span></div>
+          <div class="sae-pill"><span class="code">20W-50</span><span class="desc">энг оммабоп вариантлардан</span></div>
+        </div>
+        <p class="plain">Совуқ ҳудудларда 20W мой қийин айланиши мумкин, шунинг учун иқлимни ҳам ҳисобга олиш лозим.</p>
+
+        <h3>Афзалликлари</h3>
+        <ul class="pro-list">
+          <li><span class="mark">✔</span><span>Энг арзон.</span></li>
+          <li><span class="mark">✔</span><span>Эски двигателлар учун яхши.</span></li>
+          <li><span class="mark">✔</span><span>Мой сарфи юқори бўлган двигателларда баъзан фойдали.</span></li>
+          <li><span class="mark">✔</span><span>Харид қилиш осон.</span></li>
+        </ul>
+
+        <h3>Камчиликлари</h3>
+        <ul class="con-list">
+          <li><span class="mark">❌</span><span>Тез эскиради.</span></li>
+          <li><span class="mark">❌</span><span>Совуқда яхши ишламайди.</span></li>
+          <li><span class="mark">❌</span><span>Иссиқда тезроқ хусусиятини йўқотади.</span></li>
+          <li><span class="mark">❌</span><span>Двигателни синтетика каби яхши тозаламайди.</span></li>
+          <li><span class="mark">❌</span><span>Янги автомобиллар учун кўп ҳолларда мос эмас.</span></li>
+        </ul>
+
+        <h3>Қачон минерал мой қуйманг?</h3>
+        <div class="dont">
+          <li>❌ Агар қўлланмада фақат синтетик мой талаб қилинган бўлса.</li>
+          <li>❌ Турбо двигателларда.</li>
+          <li>❌ Янги Chevrolet Tracker, Malibu, Toyota, Hyundai, Kia ва шунга ўхшаш замонавий автомобилларда (агар минерал мойга рухсат берилмаган бўлса).</li>
+          <li>❌ GDI, TSI, TFSI каби замонавий двигатель технологияларида.</li>
+        </div>
+
+        <div class="key-tip">
+          <div class="eyebrow">Энг муҳим маслаҳат</div>
+          <div class="quote">Кўпчилик «Минерал мой арзон экан, шуни қуя қоламан» деб ўйлайди. Бу ҳар доим ҳам тўғри эмас.</div>
+          <p class="plain" style="margin-bottom:8px">Автомобилингиз учун биринчи ўринда:</p>
+          <div class="specs">
+            <b>тўғри SAE</b>
+            <b>тўғри API</b>
+            <b>тўғри ACEA</b>
+            <b>OEM спецификация</b>
+          </div>
+          <p class="plain" style="margin:12px 0 0;font-weight:650">Арзон мой қуйиб, кейин двигателни таъмирлаш анча қимматга тушиши мумкин.</p>
+        </div>
+      </article>
+    `,
+  },
+  semi: {
+    title: '',
+    body: `
+      <article class="article">
+        <h1 class="hero">Ярим синтетик мой нима?</h1>
+        <p class="lead">Ярим синтетик мой — бу минерал мой билан тўлиқ синтетик мойнинг аралашмаси.</p>
+
+        <div class="simple-box">
+          <div class="lbl">Оддий қилиб айтганда</div>
+          <p><b>Минерал мой</b> — энг арзон, лекин тез эскиради.</p>
+          <p><b>Тўлиқ синтетик мой</b> — энг сифатли, лекин қиммат.</p>
+          <p class="balance">Ярим синтетик мой — шу иккисининг ўртасидаги энг яхши мувозанат.</p>
+        </div>
+        <p class="plain">Шунинг учун кўпчилик ҳайдовчилар айнан ярим синтетик мойдан фойдаланади.</p>
+
+        <h3>Нима учун ярим синтетик мой қуйилади?</h3>
+        <ul class="check-list">
+          <li><span class="mark">✅</span><span>Минерал мойдан яхшироқ ҳимоя қилади.</span></li>
+          <li><span class="mark">✅</span><span>Совуқда двигатель енгилроқ ишга тушади.</span></li>
+          <li><span class="mark">✅</span><span>Иссиқда тез суюлиб кетмайди.</span></li>
+          <li><span class="mark">✅</span><span>Двигател ичидаги кирларни яхши тозалайди.</span></li>
+          <li><span class="mark">✅</span><span>Нархи синтетикадан арзон.</span></li>
+        </ul>
+
+        <h3>Қачон ярим синтетик мой қуйиш керак?</h3>
+        <div class="when-box">
+          <ul>
+            <li>автомобил 5–10 йиллик бўлса;</li>
+            <li>двигател яхши ишлаётган бўлса;</li>
+            <li>кунига оддий юришлар бўлса;</li>
+            <li>спорт режимида юрилмаса,</li>
+          </ul>
+          <div class="verdict">ярим синтетик мой жуда яхши танлов ҳисобланади.</div>
+        </div>
+
+        <h3>Қанча километр юриш мумкин?</h3>
+        <p class="plain">Бу ҳайдовчилар энг кўп берадиган савол.</p>
+        <p class="plain" style="font-weight:700;margin-bottom:8px">Оддий ҳайдовчи учун:</p>
+        <div class="km-grid">
+          <div class="km-card">
+            <div class="mode">Шаҳарда кўп</div>
+            <div class="val">6 000–7 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Аралаш (шаҳар + трасса)</div>
+            <div class="val">7 000–8 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Асосан трасса</div>
+            <div class="val">8 000–10 000 км</div>
+            <div style="font-size:.75rem;color:#6B7C6E;margin-top:4px">агар мой ва автомобил шунга мос бўлса</div>
+          </div>
+        </div>
+        <div class="safe-rule">
+          <strong>Энг хавфсиз қоида</strong>
+          Ярим синтетик мойни <b>7 000 км</b> атрофида алмаштириш.
+        </div>
+
+        <h3>Газ бўлсачи?</h3>
+        <div class="gas-box">
+          <div class="tag">МЕТАН / ПРОПАН</div>
+          <p class="plain">Газда двигатель ҳарорати юқорироқ бўлади.</p>
+          <ul class="check-list" style="margin-bottom:8px">
+            <li><span class="mark">•</span><span>мойни кечиктирмасдан алмаштиринг;</span></li>
+            <li><span class="mark">•</span><span>имкони бўлса, тўлиқ синтетик мойдан фойдаланинг.</span></li>
+          </ul>
+          <p class="plain" style="margin:0;font-weight:700">Газли автомобилда ярим синтетик учун <span style="color:#E65100">6 000–7 000 км</span> атрофида алмаштириш мақсадга мувофиқ.</p>
+        </div>
+
+        <h3>Қайси қуюқлик (SAE) танланади?</h3>
+        <div class="sae-row">
+          <div class="sae-pill"><span class="code">5W-30</span><span class="desc">янги ёки яхши ҳолатдаги двигателлар учун</span></div>
+          <div class="sae-pill"><span class="code">5W-40</span><span class="desc">иссиқ иқлим ва турли шароитлар учун оммабоп вариант</span></div>
+          <div class="sae-pill"><span class="code">10W-40</span><span class="desc">эскироқ автомобиллар учун энг машҳур ярим синтетик мой</span></div>
+        </div>
+
+        <h3>Афзалликлари</h3>
+        <ul class="pro-list">
+          <li><span class="mark">✔</span><span>Нархи арзонроқ.</span></li>
+          <li><span class="mark">✔</span><span>Двигателни яхши ҳимоя қилади.</span></li>
+          <li><span class="mark">✔</span><span>Минерал мойдан узоқроқ хизмат қилади.</span></li>
+          <li><span class="mark">✔</span><span>Совуқда яхши ишлайди.</span></li>
+          <li><span class="mark">✔</span><span>Иссиқда ҳам барқарор.</span></li>
+          <li><span class="mark">✔</span><span>Кўпчилик автомобиллар учун етарли.</span></li>
+        </ul>
+
+        <h3>Камчиликлари</h3>
+        <ul class="con-list">
+          <li><span class="mark">❌</span><span>Синтетикачалик узоқ хизмат қилмайди.</span></li>
+          <li><span class="mark">❌</span><span>Турбо двигателлар учун ҳамма вақт тўғри танлов эмас.</span></li>
+          <li><span class="mark">❌</span><span>Жуда юқори ҳароратда тезроқ эскиради.</span></li>
+        </ul>
+
+        <h3>Қайси ҳолатда қуйманг?</h3>
+        <div class="dont">
+          <li>❌ Агар қўлланмада фақат <b>0W-20 Full Synthetic</b> ёки <b>5W-30 Full Synthetic</b> деб ёзилган бўлса.</li>
+          <li>❌ Янги турбо двигателларда.</li>
+          <li>❌ Гибрид автомобилларда (агар ишлаб чиқарувчи бошқача кўрсатмаган бўлса).</li>
+          <p class="plain" style="margin:8px 0 0;font-weight:650">Бу ҳолатларда ишлаб чиқарувчи тавсия қилган тўлиқ синтетик мойни ишлатиш керак.</p>
+        </div>
+
+        <div class="key-tip">
+          <div class="eyebrow">Энг муҳим маслаҳат</div>
+          <div class="quote">Кўпчилик «қайси бренд яхши?» деб сўрайди. Аслида энг муҳими бренд эмас.</div>
+          <p class="plain" style="margin-bottom:8px">Автомобилингиз учун мос бўлиши керак:</p>
+          <div class="specs">
+            <b>тўғри SAE</b>
+            <b>тўғри API</b>
+            <b>тўғри ACEA</b>
+            <b>OEM спецификация</b>
+          </div>
+        </div>
+      </article>
+    `,
+  },
+  full: {
+    title: '',
+    body: `
+      <article class="article">
+        <h1 class="hero" style="color:#1B7A28">Тўлиқ синтетик мой нима?</h1>
+        <p class="lead">Тўлиқ синтетик мотор мойи (Full Synthetic) — бу замонавий технологиялар асосида ишлаб чиқарилган энг юқори сифатли мотор мойи.</p>
+        <p class="plain">У оддий минерал мойдан фарқли равишда махсус тозаланган ва кимёвий жиҳатдан барқарор база мойларидан тайёрланади.</p>
+
+        <div class="simple-box" style="border-left-color:#1B7A28;background:linear-gradient(135deg,#E8F5E9,#C8E6C9)">
+          <div class="lbl" style="color:#1B7A28">Оддий қилиб айтганда</div>
+          <p><b>Минерал мой</b> — энг арзон.</p>
+          <p><b>Ярим синтетик мой</b> — ўртача нарх ва сифат.</p>
+          <p class="balance" style="color:#1B5E20">Тўлиқ синтетик мой — энг юқори ҳимоя ва энг узоқ хизмат муддати.</p>
+        </div>
+
+        <h3>Нима учун тўлиқ синтетик мой қуйилади?</h3>
+        <ul class="check-list">
+          <li><span class="mark">✅</span><span>Двигателни энг яхши ҳимоя қилади.</span></li>
+          <li><span class="mark">✅</span><span>Совуқда ҳам осон айланади.</span></li>
+          <li><span class="mark">✅</span><span>Иссиқда ҳам қуюқлигини яхши сақлайди.</span></li>
+          <li><span class="mark">✅</span><span>Турбина учун жуда яхши.</span></li>
+          <li><span class="mark">✅</span><span>Мой камроқ буғланади.</span></li>
+          <li><span class="mark">✅</span><span>Двигателни тозароқ сақлайди.</span></li>
+          <li><span class="mark">✅</span><span>Узоқроқ хизмат қилади.</span></li>
+        </ul>
+
+        <h3>Қачон тўлиқ синтетик мой қуйиш керак?</h3>
+        <div class="when-box">
+          <ul>
+            <li>автомобил янги бўлса;</li>
+            <li>турбо двигател бўлса;</li>
+            <li>гибрид автомобил бўлса;</li>
+            <li>GDI (тўғридан-тўғри пуркаш) двигател бўлса;</li>
+            <li>ишлаб чиқарувчи Full Synthetic талаб қилган бўлса.</li>
+          </ul>
+        </div>
+
+        <h3>Қанча километр юриш мумкин?</h3>
+        <p class="plain">Бу мойнинг сифатига ва автомобил ишлаб чиқарувчисининг талабига боғлиқ.</p>
+        <p class="plain" style="font-weight:700;margin-bottom:8px">Оддий ҳайдовчи учун:</p>
+        <div class="km-grid">
+          <div class="km-card">
+            <div class="mode">Шаҳарда</div>
+            <div class="val">8 000–10 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Аралаш режим</div>
+            <div class="val">10 000–12 000 км</div>
+          </div>
+          <div class="km-card">
+            <div class="mode">Асосан трасса</div>
+            <div class="val">12 000–15 000 км</div>
+            <div style="font-size:.75rem;color:#6B7C6E;margin-top:4px">агар ишлаб чиқарувчи рухсат берса</div>
+          </div>
+        </div>
+        <div class="safe-rule">
+          <strong>Энг хавфсиз қоида</strong>
+          Ўзбекистон шароитида тўлиқ синтетик мойни <b>10 000 км</b> атрофида алмаштириш кўпчилик автомобиллар учун яхши амалиёт.
+        </div>
+
+        <h3>Газ бўлсачи?</h3>
+        <div class="gas-box" style="background:#E8F5E9;border-color:#A5D6A7">
+          <div class="tag" style="background:#1B7A28">МЕТАН / ПРОПАН</div>
+          <p class="plain" style="font-weight:700">Газли автомобиллар учун тўлиқ синтетик мой энг яхши танловлардан бири.</p>
+          <ul class="check-list">
+            <li><span class="mark">✅</span><span>юқори ҳароратга чидамли;</span></li>
+            <li><span class="mark">✅</span><span>камроқ буғланади;</span></li>
+            <li><span class="mark">✅</span><span>узоқроқ хизмат қилади;</span></li>
+            <li><span class="mark">✅</span><span>двигателни яхшироқ ҳимоя қилади.</span></li>
+          </ul>
+        </div>
+
+        <h3>Қайси қуюқлик (SAE) кўп учрайди?</h3>
+        <div class="sae-row">
+          <div class="sae-pill"><span class="code">0W-20</span><span class="desc">энг машҳурларидан</span></div>
+          <div class="sae-pill"><span class="code">0W-30</span><span class="desc">энг машҳурларидан</span></div>
+          <div class="sae-pill"><span class="code">5W-30</span><span class="desc">энг машҳурларидан</span></div>
+          <div class="sae-pill"><span class="code">5W-40</span><span class="desc">энг машҳурларидан</span></div>
+          <div class="sae-pill"><span class="code">0W-40</span><span class="desc">энг машҳурларидан</span></div>
+        </div>
+        <p class="plain">Қайси бири тўғри эканини автомобил қўлланмаси белгилайди.</p>
+
+        <h3>Афзалликлари</h3>
+        <ul class="pro-list">
+          <li><span class="mark">✔</span><span>Энг яхши ҳимоя.</span></li>
+          <li><span class="mark">✔</span><span>Совуқда енгил ишга туширади.</span></li>
+          <li><span class="mark">✔</span><span>Иссиқда барқарор.</span></li>
+          <li><span class="mark">✔</span><span>Турбина учун жуда яхши.</span></li>
+          <li><span class="mark">✔</span><span>Камроқ мой сарфлайди.</span></li>
+          <li><span class="mark">✔</span><span>Двигателни тоза сақлайди.</span></li>
+          <li><span class="mark">✔</span><span>Узоқ хизмат қилади.</span></li>
+          <li><span class="mark">✔</span><span>Ёқилғи тежашга ёрдам бериши мумкин.</span></li>
+        </ul>
+
+        <h3>Камчиликлари</h3>
+        <ul class="con-list">
+          <li><span class="mark">❌</span><span>Нархи юқорироқ.</span></li>
+          <li><span class="mark">❌</span><span>Эски, мой сизиб чиқадиган двигателларда баъзан сизишни аниқроқ намоён қилиши мумкин (мой айби эмас — муҳрлар/сальниклар ҳолати).</span></li>
+          <li><span class="mark">❌</span><span>Ҳамма эски автомобилларга ҳам зарур эмас.</span></li>
+        </ul>
+
+        <h3>Қачон тўлиқ синтетик мой қуйманг?</h3>
+        <div class="dont">
+          <p class="plain" style="margin-bottom:8px">Сифати пастлиги учун эмас — ишлаб чиқарувчи тавсиясига амал қилиш муҳим:</p>
+          <li>❌ Агар қўлланмада фақат маълум SAE ва спецификациядаги бошқа мой кўрсатилган бўлса.</li>
+          <li>❌ Агар двигател жиддий носоз бўлиб, мой босими билан боғлиқ муаммолар бўлса (аввало носозликни бартараф этиш керак).</li>
+        </div>
+
+        <div class="key-tip">
+          <div class="eyebrow">Энг муҳим маслаҳат</div>
+          <div class="quote">«Энг қиммат мойни қуйсам, двигател энг яхши ишлайди» — бу ҳар доим ҳам тўғри эмас.</div>
+          <p class="plain" style="margin-bottom:8px">Энг яхши мой — бу:</p>
+          <div class="specs">
+            <b>тўғри SAE</b>
+            <b>тўғри API</b>
+            <b>ACEA / ILSAC</b>
+            <b>OEM спецификация</b>
+          </div>
+          <p class="plain" style="margin:12px 0 0;font-weight:650">Бренд иккинчи ўринда туради.</p>
+        </div>
+
+        <h3>Тўлиқ синтетик мой кимлар учун?</h3>
+        <ul class="check-list">
+          <li><span class="mark">✅</span><span>Янги автомобил эгалари.</span></li>
+          <li><span class="mark">✅</span><span>Турбо двигателли автомобиллар.</span></li>
+          <li><span class="mark">✅</span><span>Газ (LPG/CNG) ўрнатилган автомобиллар.</span></li>
+          <li><span class="mark">✅</span><span>Узоқ сафар қиладиганлар.</span></li>
+          <li><span class="mark">✅</span><span>Иссиқ ва совуқ иқлимда кўп юрадиганлар.</span></li>
+          <li><span class="mark">✅</span><span>Двигателини узоқ йиллар яхши ҳолатда сақлашни истайдиганлар.</span></li>
+        </ul>
+
+        <h3>Минерал · Ярим · Тўлиқ — таққослаш</h3>
+        <div style="overflow-x:auto;margin:0 0 8px">
+          <table style="min-width:520px;font-size:.75rem">
+            <tr>
+              <th>Кўрсаткич</th>
+              <th>Минерал</th>
+              <th>Ярим</th>
+              <th>Тўлиқ</th>
+            </tr>
+            <tr>
+              <td>Нарх</td>
+              <td>⭐⭐⭐⭐⭐ арзон</td>
+              <td>⭐⭐⭐⭐</td>
+              <td>⭐⭐ қимматроқ</td>
+            </tr>
+            <tr>
+              <td>Двигател ҳимояси</td>
+              <td>⭐⭐</td>
+              <td>⭐⭐⭐⭐</td>
+              <td>⭐⭐⭐⭐⭐</td>
+            </tr>
+            <tr>
+              <td>Совуқда ишлаши</td>
+              <td>⭐⭐</td>
+              <td>⭐⭐⭐</td>
+              <td>⭐⭐⭐⭐⭐</td>
+            </tr>
+            <tr>
+              <td>Иссиқда барқарорлик</td>
+              <td>⭐⭐</td>
+              <td>⭐⭐⭐⭐</td>
+              <td>⭐⭐⭐⭐⭐</td>
+            </tr>
+            <tr>
+              <td>Буғланиш</td>
+              <td>Юқорироқ</td>
+              <td>Ўртача</td>
+              <td>Энг паст</td>
+            </tr>
+            <tr>
+              <td>Хизмат муддати</td>
+              <td>5–7 минг км</td>
+              <td>7–10 минг км</td>
+              <td>10–15 минг км*</td>
+            </tr>
+            <tr>
+              <td>Газ (LPG)</td>
+              <td>⭐⭐</td>
+              <td>⭐⭐⭐</td>
+              <td>⭐⭐⭐⭐⭐</td>
+            </tr>
+            <tr>
+              <td>Турбо</td>
+              <td>⭐</td>
+              <td>★★</td>
+              <td>⭐⭐⭐⭐⭐</td>
+            </tr>
+          </table>
+        </div>
+        <p class="plain" style="font-size:.8rem;color:#6B7C6E">* Фақат автомобил ишлаб чиқарувчиси белгилаган интервал ва эксплуатация шароитига мувофиқ.</p>
+      </article>
+    `,
+  },
+};
+
+document.querySelectorAll('.type-card[data-detail]').forEach((card) => {
+  card.addEventListener('click', () => {
+    const key = card.getAttribute('data-detail');
+    const d = TYPE_DETAILS[key];
+    if (!d) return;
+    const body = document.getElementById('typeSheetBody');
+    body.innerHTML = `${d.title ? `<h2>${d.title}</h2>` : ''}${d.body}
+      <button class="btn-hub fill" type="button" id="closeTypeSheet" style="width:100%;margin-top:8px">Ёпиш</button>`;
+    document.getElementById('typeSheet').classList.add('open');
+    document.getElementById('closeTypeSheet').onclick = () =>
+      document.getElementById('typeSheet').classList.remove('open');
+  });
+});
+document.getElementById('typeSheet')?.addEventListener('click', (e) => {
+  if (e.target.id === 'typeSheet') e.target.classList.remove('open');
+});
+
+const rows = [...document.querySelectorAll('#oilTypeBars .type-row')];
+
 const CYCLE = 20000;
 function fillProgress(phase) {
   if (phase <= 0) return 0;
@@ -1687,12 +2632,30 @@ function tick(now) {
   const phase = (now % CYCLE) / CYCLE;
   const fp = fillProgress(phase);
   rows.forEach((row) => {
+    const fill = row.querySelector('.bar-fill');
+    const kmEl = row.querySelector('[data-km]');
+
+    if (row.dataset.mode === 'range') {
+      const maxKm = +row.dataset.maxKm;
+      const safeKm = +row.dataset.safeKm;
+      const safeFrac = safeKm / maxKm;
+      const curKm = Math.round(safeKm * fp);
+      const w = Math.max(0.08, safeFrac * fp);
+      fill.style.width = (w * 100) + '%';
+      const racer = row.querySelector('.racer');
+      if (racer) racer.style.left = (w * 100) + '%';
+      kmEl.textContent = (fp >= 1 ? '~' : '') +
+        (fp >= 1 ? safeKm : curKm).toLocaleString('uz-UZ') + ' км';
+      return;
+    }
+
     const target = +row.dataset.target;
     const kmMax = +row.dataset.km;
     const w = 0.12 + (target - 0.12) * fp;
-    row.querySelector('.bar-fill').style.width = (w * 100) + '%';
-    row.querySelector('.flag').style.left = `calc(${w * 100}% - 16px)`;
-    row.querySelector('[data-km]').textContent =
+    fill.style.width = (w * 100) + '%';
+    const flag = row.querySelector('.flag');
+    if (flag) flag.style.left = `calc(${w * 100}% - 16px)`;
+    kmEl.textContent =
       Math.round(kmMax * fp).toLocaleString('uz-UZ') + ' км гача*';
   });
   requestAnimationFrame(tick);

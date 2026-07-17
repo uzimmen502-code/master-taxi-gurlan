@@ -299,20 +299,28 @@ class _AdminShellState extends State<AdminShell> {
     final media = MediaQuery.of(context);
     final isWide = media.size.width > 1100;
     final isMedium = media.size.width > 700;
+    // Телефон drawer — тўлиқ матн; планшет rail (701–1100) — compact иконка.
+    final sidebarCompact = isMedium && !isWide;
 
     final sidebar = _Sidebar(
       sections: visible,
       selectedIndex: safeIndex,
-      onSelect: (i) => setState(() => _selectedIndex = i),
+      onSelect: (i) {
+        setState(() => _selectedIndex = i);
+        if (!isMedium && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      },
       onLogout: _logout,
-      compact: !isWide,
+      compact: sidebarCompact,
     );
 
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       drawer: isMedium ? null : Drawer(child: sidebar),
       body: Row(children: [
-        if (isMedium) SizedBox(width: isWide ? 240 : 92, child: sidebar),
+        if (isMedium)
+          SizedBox(width: isWide ? 240 : 92, child: sidebar),
         Expanded(
           child: _body(visible, safeIndex),
         ),

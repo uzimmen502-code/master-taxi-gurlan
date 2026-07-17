@@ -3680,6 +3680,44 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     else if (kind === 'card') cardSum += amount;
     else if (kind === 'product') productLines.push(line);
   }
+
+  // Курьер қўлидаги нақд/карта → courier_cash (инкассациягача).
+  // Ҳисоб калити ҳар доим 12 рақам (998…) — receiveCourierCash билан мос.
+  const fieldCash = cashSum + cardSum;
+  if (fieldCash > 0) {
+    try {
+      const courierCashUid = canonicalUid(courierId);
+      await settlementLedger.postEntry(db, {
+        idempotencyKey: `courierCash:${orderId}`,
+        kind: 'courier_field_cash',
+        refType: 'order',
+        refId: orderId,
+        postedBy: courierCashUid,
+        postedRole: 'courier',
+        legs: [
+          {
+            account: settlementLedger.courierCashAccount(courierCashUid),
+            dr: fieldCash,
+          },
+          { account: 'admin_clearing', cr: fieldCash },
+        ],
+      }, {
+        mirrorBonus: false,
+        meta: {
+          module,
+          orderTotal,
+          cashSum,
+          cardSum,
+          method: cardSum > 0 && cashSum > 0
+            ? 'mixed'
+            : (cardSum > 0 ? 'card' : 'cash'),
+        },
+      });
+    } catch (e) {
+      console.error('courierSubmitPayment courier_cash ledger:', e.message || e);
+    }
+  }
+
   let newBalance = 0;
   try {
     const balSnap = await customerRef.get();
@@ -9522,6 +9560,68 @@ exports.reconcileLedger = functions.https.onCall(async (data, context) => {
       'Finance/audit role required',
   );
   return settlementLedger.reconcile(db);
+});
+
+// Пул назорати — битта snapshot (KPI + навбат + бугунги оқим).
+exports.getMoneyControlSnapshot = functions.https.onCall(async (data, context) => {
+  await requireCallerRoles(
+      context,
+      ['superadmin', 'finance', 'auditor'],
+      'Finance/audit role required',
+  );
+  return settlementLedger.moneyControlSnapshot(db);
+});
+
+// Курьер нақдини кассага қабул қилиш (инкассация).
+// Dr admin_cash / Cr courier_cash:{phone}
+exports.receiveCourierCash = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['superadmin', 'finance'], 'Finance role required');
+  const courierPhone = canonicalUid(data && (data.courierPhone || data.courierUid));
+  const amount = Math.trunc(Number((data && data.amount) || 0));
+  const opId = String((data && data.opId) || '').trim();
+  if (!courierPhone || courierPhone.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'courierPhone noto\'g\'ri');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amount musbat butun bo\'lsin');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId (idempotency key) kerak');
+  }
+  const cashAcc = settlementLedger.courierCashAccount(courierPhone);
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `courierInkassa:${opId}`,
+    kind: 'courier_inkassa',
+    refType: 'courier_inkassa',
+    refId: opId,
+    postedBy: callerUid,
+    postedRole: 'finance',
+    legs: [
+      { account: 'admin_cash', dr: amount },
+      { account: cashAcc, cr: amount },
+    ],
+  }, {
+    mirrorBonus: false,
+    meta: { courierPhone, amount },
+    assert: ({ accounts }) => {
+      const ca = accounts.get(cashAcc);
+      if (!ca || ca.prev < amount) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            `Курьерда етарли нақд йўқ (бор: ${ca ? ca.prev : 0})`);
+      }
+    },
+  });
+  const balSnap = await db.collection(settlementLedger.COL_ACCOUNTS).doc(cashAcc).get();
+  const remaining = balSnap.exists ? ((balSnap.data() || {}).balance || 0) : 0;
+  return {
+    ok: true,
+    idempotent: !!res.idempotent,
+    amount,
+    courierPhone,
+    courierCashRemaining: remaining,
+  };
 });
 
 // ─────────────────────────────────────────────────────────────────────

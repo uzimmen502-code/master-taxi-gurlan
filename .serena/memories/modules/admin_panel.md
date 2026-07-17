@@ -14,6 +14,7 @@ Monitoring Center→MonitoringCenterScreen(embedded) · Буюртмалар→A
 ## Auth / RBAC
 - `admin_auth_service.dart`: trusted phone `998912778777` → CF adminWebSignIn (SMS-less custom token); others → Firebase Phone OTP; PIN → CF adminWebSignInWithCode. Role gate `_isPanelRole` ∈ {admin,superadmin,dispatcher,finance,auditor}. Persists prefs user_role/phone/name.
 - **Sidebar access (2026-07)**: `_SectionAccess` — ops (admin/superadmin/dispatcher); finance (finance/auditor/superadmin: Молия+Finance Center); opsAndFinance (Buyurtmalar, Ombor, Харид); users (admin+superadmin); superOnly (Risk, Anomaly). Finance UI label **Buxgalter**.
+- **Finance Center «Назорат» (2026-07)**: first tab `money_control_tab.dart` — phone-first Money Control via `getMoneyControlSnapshot`; inkassa `receiveCourierCash`; pending payout confirm/reject; deep-links to Float/Settlements/Journal/Exceptions.
 - **Role assign SoD**: ordinary `admin` → only `seller`/`user`; `superadmin` → admin/finance/auditor/seller/superadmin/user. CF `setUserRoleByAdmin` enforces.
 - **Иш топ writes**: `AdminJobsService` → CF `adminDeleteJobAd`, `adminUpdateJobAdStatus`, `adminUpdateJobAd`, `adminResolveJobComplaint` (Firestore rules `isAdmin()` unreliable with admin custom token).
 - **Onlayn BOZOR writes**: `AdminMarketService` → CF `adminDeleteMarketAd`, `adminUpdateMarketAdStatus`, `adminUpdateMarketAd`.

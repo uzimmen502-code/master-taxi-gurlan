@@ -1,4 +1,4 @@
-# Cloud Functions Catalog (`functions/index.js`, 117 exports)
+# Cloud Functions Catalog (`functions/index.js`, ~119 exports)
 
 Grep exact name with `^exports\.NAME` to jump to a function (no line numbers — they drift).
 Types: onCall = `functions.https.onCall`; trigger = `functions.firestore`; sched = `functions.pubsub.schedule`; http = `onRequest`; storage = `onObjectFinalized`.
@@ -21,12 +21,15 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - adminUpsertOilCatalogItem / adminDeleteOilCatalogItem / adminSeedOilCatalog — oil catalog CRUD (admin|finance); Storage images client-side.
 
 ## Settlement Ledger / Finance Center (onCall + sched)
-- reconcileLedger — recompute/verify ledger balances.
+- reconcileLedger — recompute/verify ledger balances (+ position breakdowns).
+- getMoneyControlSnapshot — Nazorat KPI + queues + today journal-by-kind.
+- receiveCourierCash — inkassa: Dr admin_cash / Cr courier_cash (finance).
 - closePeriod — daily closing lock+snapshot (`period_closings/{YYYY-MM-DD}`).
 - floatTopUp / floatReturn / driverFloatStatus — driver float (cash advance) mgmt.
 - openSettlement / confirmSettlement / cancelSettlement — trip change-settlement state machine (`settlements`).
 - submitDeferredSettlement — offline-lite deferred settlement submit.
 - settlementDeferredWatch (sched) — process `ledger_exceptions` (negative float / deferred).
+- courierSubmitPayment — also posts `courier_field_cash` for cash+card lines.
 
 ## Orders / Food / Stock
 - onOrderCreate (trigger) / onOrderUpdate (trigger) — order side effects; pickup → FCM sellers (`seller_pickup` / `seller_pos`).
@@ -39,7 +42,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - courierMarkPicked / courierMarkArrived — bread/food `orders` delivery; arrived → `notifyCourierArrivedToCustomer` (ring push `courier_arrived`).
 - courierMarkCollectionArrived — collection_tasks arrived + ring; finalize requires `arrivedAt`.
 - courierGetCustomerWalletBalance — courier reads customer wallet (for payment).
-- courierSubmitPayment — order payment (cash/card/wallet/product lines).
+- courierSubmitPayment — order payment (cash/card/wallet/product lines) + ledger `courier_field_cash`.
 - onDeliveryRouteCreate / onDeliveryRouteAssign (triggers) — route side effects.
 - adminCreateCollectionTask / courierFinalizeCollection / adminGetWarehouseStock — sell-collection + `warehouse_stock`.
 

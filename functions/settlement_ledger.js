@@ -25,6 +25,8 @@ const COL_SETTLEMENTS = 'settlements';
 const ACCOUNT_TYPES = {
   admin_cash: 'asset',
   admin_clearing: 'asset',
+  /** Курьер қўлидаги компания нақд/картаси (инкассациягача). */
+  courier_cash: 'asset',
   driver_float: 'liability',
   passenger_credit: 'liability',
   supplier_payable: 'liability',
@@ -59,6 +61,12 @@ function driverFloatAccount(uid) {
 }
 function supplierPayableAccount(uid) {
   return `supplier_payable:${uid}`;
+}
+/** Курьер телефони (рақамлар) — `courier_cash:{phone}`. */
+function courierCashAccount(courierPhone) {
+  const digits = String(courierPhone || '').replace(/\D/g, '');
+  if (!digits) throw new Error('settlement: courierPhone required');
+  return `courier_cash:${digits}`;
 }
 
 /**
@@ -493,15 +501,37 @@ async function reconcile(db) {
 
   let assets = 0;
   let liabilities = 0;
+  let adminCash = 0;
+  let courierCashSum = 0;
+  let driverFloatSum = 0;
+  let passengerCreditSum = 0;
+  let supplierPayableSum = 0;
+  let adminClearing = 0;
   const pcAccounts = [];
+  const courierCashAccounts = [];
   accSnap.forEach((d) => {
     const a = d.data() || {};
     const t = a.type || accountTypeOf(d.id);
     const bal = a.balance || 0;
     if (t === 'liability') liabilities += bal;
     else assets += bal;
-    if (d.id.startsWith('passenger_credit:')) {
+    if (d.id === 'admin_cash') adminCash = bal;
+    else if (d.id === 'admin_clearing') adminClearing = bal;
+    else if (d.id.startsWith('courier_cash:')) {
+      courierCashSum += bal;
+      if (bal !== 0) {
+        courierCashAccounts.push({
+          courierPhone: ownerUidOf(d.id),
+          balance: bal,
+        });
+      }
+    } else if (d.id.startsWith('driver_float:')) {
+      driverFloatSum += bal;
+    } else if (d.id.startsWith('passenger_credit:')) {
+      passengerCreditSum += bal;
       pcAccounts.push({ uid: ownerUidOf(d.id), balance: bal });
+    } else if (d.id.startsWith('supplier_payable:')) {
+      supplierPayableSum += bal;
     }
   });
 
@@ -521,11 +551,182 @@ async function reconcile(db) {
     identityOk: assets === liabilities,
     assets,
     liabilities,
+    adminCash,
+    courierCashSum,
+    driverFloatSum,
+    passengerCreditSum,
+    supplierPayableSum,
+    adminClearing,
+    courierCashAccounts,
     projectionOk: mismatches.length === 0,
     mismatches,
     accountCount: accSnap.size,
     entryCount: jSnap.size,
     checkedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Пул назорати snapshot — битта чақирувда KPI + навбатлар + бугунги оқим.
+ * Finance Center «Назорат» таби учун (телефонда кам query).
+ */
+async function moneyControlSnapshot(db) {
+  const rec = await reconcile(db);
+
+  const now = new Date();
+  const dayStart = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+  const fromTs = admin.firestore.Timestamp.fromDate(dayStart);
+  const toTs = admin.firestore.Timestamp.fromDate(dayEnd);
+
+  const safeGet = (p, fallback) => p.catch((e) => {
+    console.warn('moneyControlSnapshot query:', e && e.message ? e.message : e);
+    return fallback;
+  });
+  const emptySnap = { forEach: () => {}, size: 0, docs: [] };
+
+  const [
+    pendingSettSnap,
+    pendingPayoutSnap,
+    openExcSnap,
+    todayJournalSnap,
+    criticalFloatSnap,
+  ] = await Promise.all([
+    safeGet(
+        db.collection(COL_SETTLEMENTS).where('state', '==', 'pending').limit(100).get(),
+        emptySnap),
+    safeGet(
+        db.collection('payout_requests').where('status', '==', 'pending').limit(100).get(),
+        emptySnap),
+    safeGet(
+        db.collection('ledger_exceptions').limit(150).get(),
+        emptySnap),
+    safeGet(
+        db.collection(COL_JOURNAL)
+            .where('ts', '>=', fromTs)
+            .where('ts', '<', toTs)
+            .limit(500)
+            .get(),
+        emptySnap),
+    safeGet(
+        db.collection(COL_ACCOUNTS).limit(800).get(),
+        emptySnap),
+  ]);
+
+  let pendingSettlementSum = 0;
+  const pendingSettlements = [];
+  pendingSettSnap.forEach((d) => {
+    const x = d.data() || {};
+    const amount = parseInt(String(x.settlementAmount ?? 0), 10) || 0;
+    pendingSettlementSum += amount;
+    pendingSettlements.push({
+      id: d.id,
+      amount,
+      driverUid: x.driverUid || '',
+      passengerUid: x.passengerUid || '',
+      state: x.state || 'pending',
+    });
+  });
+
+  let pendingPayoutSum = 0;
+  const pendingPayouts = [];
+  pendingPayoutSnap.forEach((d) => {
+    const x = d.data() || {};
+    const amount = parseInt(String(x.amount ?? 0), 10) || 0;
+    pendingPayoutSum += amount;
+    pendingPayouts.push({
+      id: d.id,
+      amount,
+      userPhone: x.userPhone || '',
+      userName: x.userName || x.name || '',
+    });
+  });
+
+  let openExceptionCount = 0;
+  const openExceptions = [];
+  openExcSnap.forEach((d) => {
+    const x = d.data() || {};
+    if (x.resolved === true) return;
+    openExceptionCount += 1;
+    if (openExceptions.length < 20) {
+      openExceptions.push({
+        id: d.id,
+        type: x.type || '',
+        driverUid: x.driverUid || '',
+        balance: x.balance || 0,
+      });
+    }
+  });
+
+  const todayByKind = {};
+  let todayTurnover = 0;
+  let todayCourierFieldCash = 0;
+  let todayCourierInkassa = 0;
+  todayJournalSnap.forEach((d) => {
+    const x = d.data() || {};
+    const k = x.kind || 'unknown';
+    const amt = parseInt(String(x.amount ?? 0), 10) || 0;
+    todayByKind[k] = (todayByKind[k] || 0) + amt;
+    todayTurnover += amt;
+    if (k === 'courier_field_cash') todayCourierFieldCash += amt;
+    if (k === 'courier_inkassa') todayCourierInkassa += amt;
+  });
+
+  const criticalFloats = [];
+  criticalFloatSnap.forEach((d) => {
+    if (!d.id.startsWith('driver_float:')) return;
+    const bal = (d.data() || {}).balance || 0;
+    if (bal < 0 || bal < 20000) {
+      criticalFloats.push({
+        driverUid: ownerUidOf(d.id),
+        balance: bal,
+        blocked: bal < 0,
+      });
+    }
+  });
+  criticalFloats.sort((a, b) => a.balance - b.balance);
+
+  const courierCashList = (rec.courierCashAccounts || [])
+      .slice()
+      .sort((a, b) => b.balance - a.balance)
+      .slice(0, 50);
+
+  return {
+    positions: {
+      adminCash: rec.adminCash || 0,
+      driverFloatSum: rec.driverFloatSum || 0,
+      passengerCreditSum: rec.passengerCreditSum || 0,
+      courierCashSum: rec.courierCashSum || 0,
+      adminClearing: rec.adminClearing || 0,
+      pendingSettlementSum,
+      pendingPayoutSum,
+      pendingPipelineSum: pendingSettlementSum + pendingPayoutSum,
+      openExceptionCount,
+    },
+    reconcile: {
+      balanced: rec.balanced,
+      identityOk: rec.identityOk,
+      projectionOk: rec.projectionOk,
+      assets: rec.assets,
+      liabilities: rec.liabilities,
+    },
+    queues: {
+      pendingSettlements: pendingSettlements.slice(0, 20),
+      pendingPayouts: pendingPayouts.slice(0, 20),
+      openExceptions,
+      criticalFloats: criticalFloats.slice(0, 20),
+      courierCashOutstanding: courierCashList,
+    },
+    today: {
+      periodId: dayStart.toISOString().slice(0, 10),
+      turnover: todayTurnover,
+      byKind: todayByKind,
+      courierFieldCash: todayCourierFieldCash,
+      courierInkassa: todayCourierInkassa,
+      entryCount: todayJournalSnap.size,
+    },
+    checkedAt: rec.checkedAt,
   };
 }
 
@@ -541,6 +742,7 @@ module.exports = {
   passengerCreditAccount,
   driverFloatAccount,
   supplierPayableAccount,
+  courierCashAccount,
   buildEntry,
   postEntry,
   prepareBonusInTx,
@@ -551,4 +753,5 @@ module.exports = {
   settlementEnabled,
   deferredFloor,
   reconcile,
+  moneyControlSnapshot,
 };

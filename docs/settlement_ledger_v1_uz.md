@@ -47,14 +47,15 @@ Settlement орқали бериши мумкин. Settlement қисми ҳай�
 
 | Ҳисоб | Тури | Маъноси |
 |---|---|---|
-| `admin_cash` | Актив | Админ ушлаб турган реал нақд (float депозитлари) |
+| `admin_cash` | Актив | Админ ушлаб турган реал нақд (float депозитлари + инкасса) |
+| `courier_cash:{courierPhone}` | Актив | Курьер қўлидаги компания нақд/картаси (инкассациягача) |
 | `driver_float:{driverUid}` | Мажбурият | Платформанинг ҳайдовчи олдидаги қарзи (фонд) |
 | `passenger_credit:{userUid}` | Мажбурият | Платформанинг йўловчи олдидаги қарзи (= `bonusBalance` проекцияси) |
 | `supplier_payable:{supplierUid}` | Мажбурият | Провайдерга тўланадиган (V2) |
-| `admin_clearing` | Клиринг | Оралиқ/мувозанат (миграция, V1 кредит сарфи) |
+| `admin_clearing` | Клиринг | Оралиқ/мувозанат (миграция, V1 кредит сарфи, field cash) |
 
 **Инвариант:** `Σ барча ёзув оёқлари = 0` ва
-`admin_cash = Σ driver_float + Σ passenger_credit + Σ supplier_payable (± admin_clearing)`.
+`Σ активлар (admin_cash + courier_cash + admin_clearing ± …) = Σ мажбуриятлар`.
 
 ## 5. Асосий оқимлар (double-entry ёзувлари)
 
@@ -74,6 +75,16 @@ Settlement орқали бериши мумкин. Settlement қисми ҳай�
 **D. Ҳайдовчи Float'ини қайтариб олади (депозит қайтими):**
 - Дебет `driver_float:driver` X
 - Кредит `admin_cash` X
+
+**E. Курьер нақд/карта қабул қилди (`courierSubmitPayment`, cash+card):**
+- Дебет `courier_cash:courier` (cash+card сумма)
+- Кредит `admin_clearing`
+- kind: `courier_field_cash`, id: `courierCash:{orderId}`
+
+**F. Инкассация (`receiveCourierCash` — finance):**
+- Дебет `admin_cash`
+- Кредит `courier_cash:courier`
+- kind: `courier_inkassa`
 
 ## 6. Маълумотлар модели (Firestore)
 
@@ -188,11 +199,13 @@ Deferred (манфий float):
 
 ```
 Finance Center
+├── Назорат (Money Control) → getMoneyControlSnapshot KPI + навбат + инкасса/payout
 ├── Settlement Ledger      → journal_entries (ўзгармас журнал)
 ├── Driver Float           → driver_float:* + topUp/return
-├── Passenger Credits      → passenger_credit:*
+├── Passenger Credits      → passenger_credit:* (Назорат KPI)
 ├── Provider Payables      → V1: admin_clearing → V2: supplier_payable:*
-├── Payout Requests        → мавжуд payout оқими
+├── Payout Requests        → Назорат + алоҳида Молия экрани
+├── Courier cash           → courier_cash:* + receiveCourierCash
 ├── Reconciliation         → reconcileLedger натижалари
 ├── Daily Closing          → period_closings (давр қулфи)
 ├── Accounting Reports     → экспорт (CSV/PDF)

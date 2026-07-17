@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import 'money_control_tab.dart';
 
 /// Finance Center — Settlement Ledger (finance/auditor/superadmin, SoD).
+///   • Назорат — пул оқими KPI + навбат + инкасса / payout
 ///   • Driver Float — top-up / return + zona
 ///   • Settlements — holatlar + CSV export
 ///   • Журнал — journal_entries + CSV export
@@ -49,7 +51,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 5, vsync: this);
+    _tabCtrl = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -58,11 +60,17 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
     super.dispose();
   }
 
+  void _goTab(int index) {
+    if (index < 0 || index >= _tabCtrl.length) return;
+    _tabCtrl.animateTo(index);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 700;
     return Column(
       children: [
-        _header(),
+        _header(narrow: narrow),
         Container(
           color: Colors.white,
           child: TabBar(
@@ -71,7 +79,9 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             labelColor: AppColors.primaryDark,
             unselectedLabelColor: Colors.grey,
             indicatorColor: AppColors.primary,
+            labelPadding: EdgeInsets.symmetric(horizontal: narrow ? 12 : 16),
             tabs: const [
+              Tab(text: 'Назорат'),
               Tab(text: 'Driver Float'),
               Tab(text: 'Settlements'),
               Tab(text: 'Аудит журнали'),
@@ -83,12 +93,13 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
         Expanded(
           child: TabBarView(
             controller: _tabCtrl,
-            children: const [
-              _FloatTab(),
-              _SettlementsTab(),
-              _JournalTab(),
-              _ClosingTab(),
-              _ExceptionsTab(),
+            children: [
+              MoneyControlTab(onOpenTab: _goTab),
+              const _FloatTab(),
+              const _SettlementsTab(),
+              const _JournalTab(),
+              const _ClosingTab(),
+              const _ExceptionsTab(),
             ],
           ),
         ),
@@ -96,40 +107,69 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
     );
   }
 
-  Widget _header() {
+  Widget _header({required bool narrow}) {
+    final sverkaBtn = ElevatedButton.icon(
+      onPressed: _reconciling ? null : _runReconcile,
+      icon: _reconciling
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.fact_check, size: 18),
+      label: Text(narrow ? 'Sverka' : 'Sverka'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primaryDark,
+        foregroundColor: Colors.white,
+        visualDensity: narrow ? VisualDensity.compact : VisualDensity.standard,
+      ),
+    );
+
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-      child: Row(
-        children: [
-          const Icon(Icons.account_balance, color: AppColors.primaryDark),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
+      padding: EdgeInsets.fromLTRB(narrow ? 12 : 20, narrow ? 12 : 18,
+          narrow ? 12 : 20, narrow ? 10 : 14),
+      child: narrow
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Finance Center',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('Settlement Ledger — float, settlement, журнал',
+                const Row(
+                  children: [
+                    Icon(Icons.account_balance, color: AppColors.primaryDark),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Finance Center',
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text('Пул назорати · float · settlement · журнал',
                     style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: sverkaBtn),
+              ],
+            )
+          : Row(
+              children: [
+                const Icon(Icons.account_balance, color: AppColors.primaryDark),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Finance Center',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                          'Пул назорати · Settlement Ledger — float, settlement, журнал',
+                          style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                sverkaBtn,
               ],
             ),
-          ),
-          ElevatedButton.icon(
-            onPressed: _reconciling ? null : _runReconcile,
-            icon: _reconciling
-                ? const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.fact_check, size: 18),
-            label: const Text('Sverka'),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryDark,
-                foregroundColor: Colors.white),
-          ),
-        ],
-      ),
     );
   }
 

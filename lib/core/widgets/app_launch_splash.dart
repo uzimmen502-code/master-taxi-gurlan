@@ -4,17 +4,17 @@ import 'package:flutter/material.dart';
 
 import '../splash_taglines_holder.dart';
 
-/// Qora fon: spiral kirish → 3 s pulsatsiya → ekrandan chiqish → UI fade-in.
+/// Qora fon: spiral kirish → 3.5 s pulsatsiya → ekrandan chiqish → UI fade-in.
 class AppLaunchSplash extends StatefulWidget {
   const AppLaunchSplash({super.key, required this.child});
 
   final Widget child;
 
   static const Duration spiralDuration = Duration(milliseconds: 1500);
-  static const Duration pulseDuration = Duration(milliseconds: 3000);
+  static const Duration pulseDuration = Duration(milliseconds: 3500);
   static const Duration exitDuration = Duration(milliseconds: 900);
 
-  static const int spiralTurns = 10;
+  static const int spiralTurns = 15;
 
   static Duration get totalDuration =>
       spiralDuration + pulseDuration + exitDuration;
@@ -27,11 +27,11 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  static const List<double> _pulseStart = [1.0, 1.06, 1.12];
-  static const List<double> _pulsePeak = [1.12, 1.18, 1.24];
-  static const List<double> _pulseEnd = [1.06, 1.12, 1.18];
+  static const List<double> _pulseStart = [1.0, 1.12, 1.20];
+  static const List<double> _pulsePeak = [1.20, 1.30, 1.40];
+  static const List<double> _pulseEnd = [1.12, 1.20, 1.30];
 
-  static const double _exitScaleStart = 1.18;
+  static const double _exitScaleStart = 1.30;
   static const Color _taglineColor = Color(0xFF4CD964);
 
   bool _overlayVisible = true;
@@ -75,8 +75,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
           (_pulsePeak[segment] - _pulseStart[segment]) * p;
     }
     final p = Curves.easeInOutCubic.transform((localT - 0.55) / 0.45);
-    return _pulsePeak[segment] +
-        (_pulseEnd[segment] - _pulsePeak[segment]) * p;
+    return _pulsePeak[segment] + (_pulseEnd[segment] - _pulsePeak[segment]) * p;
   }
 
   ({String? text, double opacity}) _taglineForPulse(double pulseLocal) {
@@ -132,9 +131,8 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
 
     final local = (t - pulseEnd) / (1 - pulseEnd);
     final zoom = Curves.easeInOutCubic.transform(local);
-    final logoFade = local < 0.4
-        ? 1.0
-        : 1 - Curves.easeIn.transform((local - 0.4) / 0.6);
+    final logoFade =
+        local < 0.4 ? 1.0 : 1 - Curves.easeIn.transform((local - 0.4) / 0.6);
     final lastTagline = SplashTaglinesHolder.enabled &&
             SplashTaglinesHolder.sessionWords.isNotEmpty
         ? SplashTaglinesHolder.sessionWords[
@@ -174,13 +172,13 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                 ColoredBox(
                   color: Colors.black,
                   child: IgnorePointer(
-                    child: Center(
-                      child: Opacity(
-                        opacity: frame.logoOpacity.clamp(0, 1),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Transform.rotate(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Center(
+                          child: Opacity(
+                            opacity: frame.logoOpacity.clamp(0, 1),
+                            child: Transform.rotate(
                               angle: frame.rotation,
                               child: Transform.scale(
                                 scale: frame.scale,
@@ -192,30 +190,33 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                                 ),
                               ),
                             ),
-                            if (frame.tagline != null &&
-                                frame.taglineOpacity > 0.01)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 18),
-                                child: Opacity(
-                                  opacity:
-                                      frame.taglineOpacity.clamp(0, 1),
-                                  child: Text(
-                                    frame.tagline!,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: _taglineColor.withValues(
-                                        alpha: 0.95,
-                                      ),
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 2.4,
-                                    ),
+                          ),
+                        ),
+                        if (frame.tagline != null &&
+                            frame.taglineOpacity > 0.01)
+                          Center(
+                            child: Transform.translate(
+                              offset: Offset(
+                                0,
+                                logoWidth.clamp(160, 280) * 0.70 + 18,
+                              ),
+                              child: Opacity(
+                                opacity: frame.taglineOpacity.clamp(0, 1),
+                                child: Text(
+                                  frame.tagline!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color:
+                                        _taglineColor.withValues(alpha: 0.95),
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 2.4,
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),

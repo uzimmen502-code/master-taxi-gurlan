@@ -6572,7 +6572,8 @@ exports.setUserRoleByAdmin = functions.https.onCall(async (data, context) => {
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  return { ok: true, uid: targetPhone, role };
+  // uid = Firestore doc id (998… yoki legacy 9 xona).
+  return { ok: true, uid: ref.id, role };
 });
 
 function normalizeDriverTaxiType(type) {

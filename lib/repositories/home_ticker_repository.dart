@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/home_ticker_ad.dart';
 
@@ -13,18 +16,71 @@ class HomeTickerRepository {
       _db.collection('home_ticker_ads');
 
   /// Berilgan modul (`home_search`) va rol uchun faol matnlar.
-  Stream<List<HomeTickerAd>> watchForModule(String module, String role) {
-    return _col.orderBy('priority', descending: true).snapshots().map((snap) {
+  /// Serverda `module`+`active` filter + priority tartib + limit;
+  /// audience/vaqt oralig'i clientda (OR + interval).
+  /// Index hali tayyor bo'lmasa — priority-only query'ga fallback.
+  Stream<List<HomeTickerAd>> watchForModule(
+    String module,
+    String role, {
+    int limit = 40,
+  }) {
+    List<HomeTickerAd> parse(
+      QuerySnapshot<Map<String, dynamic>> snap, {
+      required bool serverFiltered,
+    }) {
       final now = DateTime.now();
       return snap.docs
           .map(HomeTickerAd.fromDoc)
           .where((a) =>
-              a.module == module &&
-              a.active &&
+              (serverFiltered || a.module == module) &&
+              (serverFiltered || a.active) &&
               a.text.isNotEmpty &&
               a.isVisibleForRole(role) &&
               a.isVisibleNow(now))
           .toList(growable: false);
+    }
+
+    final primary = _col
+        .where('module', isEqualTo: module)
+        .where('active', isEqualTo: true)
+        .orderBy('priority', descending: true)
+        .limit(limit)
+        .snapshots();
+
+    return Stream.multi((controller) {
+      StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? sub;
+
+      void listenLegacy() {
+        sub = _col
+            .orderBy('priority', descending: true)
+            .limit(limit)
+            .snapshots()
+            .listen(
+          (snap) {
+            if (!controller.isClosed) {
+              controller.add(parse(snap, serverFiltered: false));
+            }
+          },
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+      }
+
+      sub = primary.listen(
+        (snap) {
+          if (!controller.isClosed) {
+            controller.add(parse(snap, serverFiltered: true));
+          }
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('HomeTickerRepository.watchForModule primary: $e');
+          unawaited(sub?.cancel());
+          listenLegacy();
+        },
+        onDone: controller.close,
+      );
+
+      controller.onCancel = () => sub?.cancel();
     });
   }
 

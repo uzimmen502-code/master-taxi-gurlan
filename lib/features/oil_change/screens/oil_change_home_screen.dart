@@ -351,16 +351,18 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFFF0FAF2),
-            Color(0xFFEDF6FF),
+            Color(0xFFFCFAFF),
+            Color(0xFFF3ECFF),
+            Color(0xFFE9DDF9),
           ],
+          stops: [0.0, 0.48, 1.0],
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFCFE3DC)),
+        border: Border.all(color: const Color(0xFFDDCFF0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF3B82A0).withValues(alpha: 0.10),
-            blurRadius: 12,
+            color: const Color(0xFF7E57C2).withValues(alpha: 0.13),
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],

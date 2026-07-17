@@ -29,7 +29,6 @@ import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
-import '../relatives/services/tree_service.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../jobs/jobs_tabs.dart';
@@ -145,8 +144,6 @@ class _HomeViewState extends State<_HomeView> {
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
-      unawaited(
-          TreeService.ensureMyTree().catchError((_) => <String, dynamic>{}));
     });
   }
 

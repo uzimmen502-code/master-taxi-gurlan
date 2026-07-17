@@ -29,11 +29,11 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  static const List<double> _pulseStart = [1.0, 1.12, 1.20];
-  static const List<double> _pulsePeak = [1.20, 1.30, 1.40];
-  static const List<double> _pulseEnd = [1.12, 1.20, 1.30];
+  static const List<double> _pulseStart = [1.0, 1.10, 1.25];
+  static const List<double> _pulsePeak = [1.30, 1.45, 1.60];
+  static const List<double> _pulseEnd = [1.10, 1.25, 1.35];
 
-  static const double _exitScaleStart = 1.30;
+  static const double _exitScaleStart = 1.35;
   static const Color _taglineColor = Color(0xFF4CD964);
   static const AssetImage _logoAsset =
       AssetImage('assets/images/splash_logo.png');
@@ -71,7 +71,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
 
     final mediaQuery = MediaQuery.of(context);
     final logoWidth = (mediaQuery.size.width * 0.52).clamp(160.0, 280.0);
-    final cacheWidth = (logoWidth * 1.40 * mediaQuery.devicePixelRatio).ceil();
+    final cacheWidth = (logoWidth * 1.60 * mediaQuery.devicePixelRatio).ceil();
     _logoImage = ResizeImage.resizeIfNeeded(cacheWidth, null, _logoAsset);
     _startAfterLogoDecode();
   }
@@ -241,7 +241,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                           child: Transform.translate(
                             offset: Offset(
                               0,
-                              logoWidth.clamp(160, 280) * 0.70 + 18,
+                              logoWidth.clamp(160, 280) * 0.80 + 18,
                             ),
                             child: Opacity(
                               opacity: frame.taglineOpacity.clamp(0, 1),

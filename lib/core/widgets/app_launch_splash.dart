@@ -31,9 +31,9 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
 
   static const List<double> _pulseStart = [1.0, 1.10, 1.25];
   static const List<double> _pulsePeak = [1.30, 1.45, 1.60];
-  static const List<double> _pulseEnd = [1.10, 1.25, 1.35];
+  static const List<double> _pulseEnd = [1.10, 1.25, 1.60];
 
-  static const double _exitScaleStart = 1.35;
+  static const double _exitScaleStart = 1.60;
   static const Color _taglineColor = Color(0xFF4CD964);
   static const AssetImage _logoAsset =
       AssetImage('assets/images/splash_logo.png');
@@ -96,6 +96,13 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
   double _pulseScale(double t) {
     final segment = math.min((t * 3).floor(), 2);
     final localT = (t * 3) - segment;
+
+    // The third breath does not contract: it flows directly into exit zoom.
+    if (segment == 2) {
+      final p = Curves.easeInOutSine.transform(localT);
+      return _pulseStart[segment] +
+          (_pulsePeak[segment] - _pulseStart[segment]) * p;
+    }
 
     if (localT < 0.55) {
       final p = Curves.easeInOutSine.transform(localT / 0.55);

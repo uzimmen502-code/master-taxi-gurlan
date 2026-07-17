@@ -425,95 +425,66 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           ),
           if (cap != null) ...[
             const SizedBox(height: 7),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFD7E8D8)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IntrinsicHeight(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _capCell(
-                          context.tr('oil_capacity_crankcase_short'),
-                          cap.oilCapacity,
-                        ),
-                      ),
-                      Container(width: 1, color: const Color(0xFFE8F0E8)),
-                      Expanded(
-                        child: _capCell(
-                          context.tr('oil_capacity_filter_short'),
-                          cap.filterCapacity,
-                        ),
-                      ),
-                      Container(width: 1, color: const Color(0xFFE8F0E8)),
-                      Expanded(
-                        child: _capCell(
-                          context.tr('oil_capacity_total_label'),
-                          cap.total,
-                          emphasize: true,
-                        ),
-                      ),
-                    ],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.50),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE3D8F2)),
+              ),
+              child: Text.rich(
+                TextSpan(
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    height: 1.35,
+                    color: oilHubInk,
                   ),
+                  children: [
+                    TextSpan(
+                      text:
+                          '${context.tr('oil_capacity_crankcase_short')}: ',
+                      style: const TextStyle(color: oilHubMuted),
+                    ),
+                    TextSpan(
+                      text: '${cap.oilCapacity} L',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const TextSpan(
+                      text: '  •  ',
+                      style: TextStyle(color: Color(0xFF9A86B8)),
+                    ),
+                    TextSpan(
+                      text: '${context.tr('oil_capacity_filter_short')}: ',
+                      style: const TextStyle(color: oilHubMuted),
+                    ),
+                    TextSpan(
+                      text: '${cap.filterCapacity} L',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const TextSpan(
+                      text: '  •  ',
+                      style: TextStyle(color: Color(0xFF9A86B8)),
+                    ),
+                    TextSpan(
+                      text: '${context.tr('oil_capacity_total_label')}: ',
+                      style: const TextStyle(
+                        color: Color(0xFF2E7D32),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    TextSpan(
+                      text: '${cap.total} L',
+                      style: const TextStyle(
+                        color: Color(0xFF1B5E20),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _capCell(String label, String liters, {bool emphasize = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      color: emphasize ? const Color(0xFF2E7D32) : const Color(0xFFF7FAF7),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              height: 1,
-              color: emphasize
-                  ? Colors.white.withValues(alpha: 0.85)
-                  : oilHubMuted,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: liters,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                    letterSpacing: -0.2,
-                    color: emphasize ? Colors.white : oilHubInk,
-                  ),
-                ),
-                TextSpan(
-                  text: ' L',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: emphasize
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : oilHubMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

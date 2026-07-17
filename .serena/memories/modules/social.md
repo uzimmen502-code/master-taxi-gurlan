@@ -1,6 +1,6 @@
 # Social Module — "Mening yaqinlarim" (relatives + circles + dating + family tree)
 
-Hub: `lib/features/circles/screens/circles_hub_screen.dart` (cards: Sinfdosh / Kursdosh / Hamkasb / Qarindosh). Tanishuv — faqat bosh ekran grid (`home_screen` → `DatingHomeScreen`). Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
+Hub: `lib/features/circles/screens/circles_hub_screen.dart` (cards: Sinfdosh / Kursdosh / Hamkasb / Qarindosh). Tanishuv — faqat bosh ekran grid (`home_screen` → **Telegram** `https://t.me/bilish_tanish_bot`, not in-app `DatingHomeScreen`). Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 
 ## Circles (generic engine: classmates/coursemates/colleagues)
@@ -18,12 +18,13 @@ Dating card title: `'Танишув, мулоқат ва оила қуриш'`.
 - Phone in relatives list → CF maintains `relative_phone_watchers`; on new user profile or owner login (`ensureMyTree`) one-time FCM: owner «қариндош иловада», new user «қариндошлар кутмоқда» → push opens `RelativesScreen`.
 - **L10n (Phase 2 done):** all UI strings in `features/relatives/` use `context.tr('rel_*')` via `l10n_extension.dart` + `relatives/l10n/relatives_l10n.dart` helpers; ~122 keys in `assets/lang/*.json`; merge script `tools/merge_relatives_l10n.js`. Server-side history summaries / RelativeEventType.label (model) still raw where CF-generated.
 
-## Dating (Tanishuv — MVP, CF-only writes)
+## Dating (Tanishuv)
+- **Home entry (2026-07):** `onDating` opens external Telegram bot `https://t.me/bilish_tanish_bot` via `url_launcher` (`LaunchMode.externalApplication`). In-app dating screens/CFs remain in repo for future integration.
 - `features/dating/screens/` incl. `dating_profile_view_screen.dart`. Firestore `dating_profiles/{uid}`, `dating_interests`, `dating_matches`(+messages), `dating_blocks/{uid}/list/{targetId}`.
 - Scope: user-defined; moderation: admin approve (status pending→approved); photos: open; interaction: interest/like; audience: opposite gender.
 - CFs: saveDatingProfile, setDatingActive, setDatingAgePreference, deleteDatingProfile (profile+photos+interests+matches+blocks), adminModerateDatingProfile, ...
 - GOTCHA: report dialog disposes controller in try/finally.
-- **Youth promo push (18–23):** `DatingYouthPromoService.maybeShowOnAppOpen` — local notification on home init + app resume; age from `user_birth_date` / Firestore `users.birthDate`; rotates `dating_youth_promo_1..10` via OfflineL10n (uz_Cyrl/uz_Latn/ru); tap → `DatingHomeScreen` (`type=dating_youth_promo`). Skips driver/courier/admin. Debounce 4s.
+- **Youth promo push (18–23):** `DatingYouthPromoService.maybeShowOnAppOpen` — local notification on home init + app resume; age from `user_birth_date` / Firestore `users.birthDate`; rotates `dating_youth_promo_1..10` via OfflineL10n (uz_Cyrl/uz_Latn/ru); tap → still `DatingHomeScreen` (`type=dating_youth_promo`) via `push_navigation` (not yet Telegram). Skips driver/courier/admin. Debounce 4s.
 
 ## Family Tree (Nasab daraxti — GLOBAL graph, Phases F1–F5 done)
 Architecture: per-user private `relatives/people` + SHARED global `tree_persons` graph keyed by `componentId`. `users/{uid}` carries treeComponentId, treePersonId, treeMigratedAt.

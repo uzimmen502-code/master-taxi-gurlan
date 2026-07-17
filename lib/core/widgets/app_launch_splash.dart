@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../splash_taglines_holder.dart';
 
@@ -16,7 +17,7 @@ class AppLaunchSplash extends StatefulWidget {
 
   // 15 turns in 1.5 seconds gives only ~6 frames per turn on a 60 Hz display
   // and looks like stutter even when no frames are dropped.
-  static const int spiralTurns = 4;
+  static const int spiralTurns = 3;
 
   static Duration get totalDuration =>
       spiralDuration + pulseDuration + exitDuration;
@@ -40,6 +41,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
 
   bool _overlayVisible = true;
   bool _logoPrepared = false;
+  bool _warmingLogo = false;
   ImageProvider<Object> _logoImage = _logoAsset;
 
   late final double _spiralFraction;
@@ -83,6 +85,11 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
       // The Image widget still reports the asset error; never freeze splash.
     }
     if (mounted) {
+      setState(() => _warmingLogo = true);
+      await SchedulerBinding.instance.endOfFrame;
+    }
+    if (mounted) {
+      _warmingLogo = false;
       _controller.forward();
     }
   }
@@ -170,14 +177,14 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         : local >= 0.60
             ? 0.0
             : 1 -
-                Curves.easeInOutCubic.transform(
+                Curves.easeInOutSine.transform(
                   ((local - 0.15) / 0.45).clamp(0.0, 1.0),
                 );
     // splash_logo.png has an opaque black background. Finish its fade before
     // revealing the route below, otherwise its square bounds become visible.
     final contentOpacity = local < 0.55
         ? 0.0
-        : Curves.easeInOutCubic.transform(
+        : Curves.easeInOutSine.transform(
             ((local - 0.55) / 0.45).clamp(0.0, 1.0),
           );
     final lastTagline = SplashTaglinesHolder.enabled &&
@@ -205,7 +212,16 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
       textDirection: TextDirection.ltr,
       child: AnimatedBuilder(
         animation: _controller,
-        builder: (context, _) {
+        child: RepaintBoundary(
+          child: Image(
+            image: _logoImage,
+            width: logoWidth.clamp(160, 280),
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+          ),
+        ),
+        builder: (context, logoChild) {
           final frame = _frameFor(_controller.value);
 
           return Stack(
@@ -226,20 +242,18 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                       children: [
                         Center(
                           child: Opacity(
-                            opacity: frame.logoOpacity.clamp(0, 1),
+                            opacity: math
+                                .max(
+                                  frame.logoOpacity,
+                                  _warmingLogo ? 0.01 : 0.0,
+                                )
+                                .clamp(0.0, 1.0)
+                                .toDouble(),
                             child: Transform.rotate(
                               angle: frame.rotation,
                               child: Transform.scale(
                                 scale: frame.scale,
-                                child: RepaintBoundary(
-                                  child: Image(
-                                    image: _logoImage,
-                                    width: logoWidth.clamp(160, 280),
-                                    fit: BoxFit.contain,
-                                    filterQuality: FilterQuality.medium,
-                                    gaplessPlayback: true,
-                                  ),
-                                ),
+                                child: logoChild,
                               ),
                             ),
                           ),
@@ -253,7 +267,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                             child: Opacity(
                               opacity: frame.taglineOpacity.clamp(0, 1),
                               child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 240),
+                                duration: const Duration(milliseconds: 280),
                                 switchInCurve: Curves.easeOutCubic,
                                 switchOutCurve: Curves.easeInCubic,
                                 child: frame.tagline == null

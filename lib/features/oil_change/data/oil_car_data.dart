@@ -109,35 +109,44 @@ abstract final class OilCarData {
     ),
   };
 
+  /// Кирилл / ностандарт ёзилган модел номлари → каталог калити.
+  static const _modelAliases = <String, String>{
+    'damas': 'Damas',
+    'дамас': 'Damas',
+    'matiz': 'Matiz',
+    'матиз': 'Matiz',
+    'nexia': 'Nexia',
+    'нексия': 'Nexia',
+    'nexia 3': 'Nexia 3',
+    'нексия 3': 'Nexia 3',
+    'spark': 'Spark',
+    'спарк': 'Spark',
+    'cobalt': 'Cobalt',
+    'кобальт': 'Cobalt',
+    'gentra': 'Gentra',
+    'гентра': 'Gentra',
+    'джентра': 'Gentra',
+    'lacetti': 'Lacetti',
+    'лачетти': 'Lacetti',
+    'лачети': 'Lacetti',
+    'malibu': 'Malibu',
+    'малибу': 'Malibu',
+    'tracker': 'Tracker',
+    'трекер': 'Tracker',
+  };
+
   static OilModelCapacity? modelCapacity(String model) =>
       modelCapacities[model];
 
-  /// Сақланган модел номи бўйича ҳажм (fuzzy: «Nexia» → энг узун мос калит).
-  static OilModelCapacity? resolveCapacity(String model) {
-    final m = model.trim().toLowerCase();
-    if (m.isEmpty) return null;
-    final exact = modelCapacities[model.trim()];
-    if (exact != null) return exact;
-    OilModelCapacity? best;
-    var bestLen = 0;
-    for (final e in modelCapacities.entries) {
-      final k = e.key.toLowerCase();
-      if (k == m) return e.value;
-      if (m.contains(k) || k.contains(m)) {
-        if (k.length >= bestLen) {
-          bestLen = k.length;
-          best = e.value;
-        }
-      }
+  static String? _canonicalModelKey(String model) {
+    final raw = model.trim();
+    if (raw.isEmpty) return null;
+    if (modelCapacities.containsKey(raw)) return raw;
+    final aliased = _modelAliases[raw.toLowerCase()];
+    if (aliased != null && modelCapacities.containsKey(aliased)) {
+      return aliased;
     }
-    return best;
-  }
-
-  /// Модел номи бўйича каталог калити (ҳажм картаси учун).
-  static String? resolveCapacityModelKey(String model) {
-    final m = model.trim().toLowerCase();
-    if (m.isEmpty) return null;
-    if (modelCapacities.containsKey(model.trim())) return model.trim();
+    final m = raw.toLowerCase();
     String? best;
     var bestLen = 0;
     for (final key in modelCapacities.keys) {
@@ -150,8 +159,28 @@ abstract final class OilCarData {
         }
       }
     }
+    // Alias fuzzy: «малибу 1.5» → малибу
+    for (final e in _modelAliases.entries) {
+      if (m.contains(e.key) || e.key.contains(m)) {
+        if (e.key.length >= bestLen) {
+          bestLen = e.key.length;
+          best = e.value;
+        }
+      }
+    }
     return best;
   }
+
+  /// Сақланган модел номи бўйича ҳажм (Latin/Cyrillic + fuzzy).
+  static OilModelCapacity? resolveCapacity(String model) {
+    final key = _canonicalModelKey(model);
+    if (key == null) return null;
+    return modelCapacities[key];
+  }
+
+  /// Модел номи бўйича каталог калити (ҳажм картаси учун).
+  static String? resolveCapacityModelKey(String model) =>
+      _canonicalModelKey(model);
 
   // ─── KILOMETRAJ BO'YICHA TAVSIYALAR ────────────────────────
 

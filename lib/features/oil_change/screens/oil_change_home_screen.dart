@@ -337,7 +337,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       );
     }
 
-    final cap = OilCarData.resolveCapacity(v.model);
+    final cap = OilCarData.resolveCapacity(v.model, engine: v.engine);
     final fuelKey = v.fuelType.trim().toLowerCase();
     final fuel = fuelKey.isEmpty
         ? ''

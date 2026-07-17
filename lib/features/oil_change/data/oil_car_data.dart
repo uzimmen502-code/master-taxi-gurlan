@@ -171,16 +171,75 @@ abstract final class OilCarData {
     return best;
   }
 
-  /// Сақланган модел номи бўйича ҳажм (Latin/Cyrillic + fuzzy).
-  static OilModelCapacity? resolveCapacity(String model) {
+  /// Сақланган модел (+ иxtiyoriy двигатель) бўйича ҳажм.
+  /// `1.5T / 2.0T` ва `4.3 / 5.0` каби қўшма қийматларда двигательга
+  /// мос вариант танланади (масалан Malibu 1.5 → Жами 4.3).
+  static OilModelCapacity? resolveCapacity(String model, {String engine = ''}) {
     final key = _canonicalModelKey(model);
     if (key == null) return null;
-    return modelCapacities[key];
+    final base = modelCapacities[key];
+    if (base == null) return null;
+    return _pickEngineVariant(base, engine);
   }
 
   /// Модел номи бўйича каталог калити (ҳажм картаси учун).
   static String? resolveCapacityModelKey(String model) =>
       _canonicalModelKey(model);
+
+  /// `a / b` форматли майдонлардан двигательга мос индексни танлайди.
+  static OilModelCapacity _pickEngineVariant(
+    OilModelCapacity base,
+    String engine,
+  ) {
+    final engParts = _slashParts(base.engine);
+    final oilParts = _slashParts(base.oilCapacity);
+    final filterParts = _slashParts(base.filterCapacity);
+    final totalParts = _slashParts(base.total);
+    final multi = engParts.length > 1 ||
+        oilParts.length > 1 ||
+        filterParts.length > 1 ||
+        totalParts.length > 1;
+    if (!multi) return base;
+
+    final idx = _engineIndex(engParts, engine);
+    String at(List<String> parts, String fallback) {
+      if (parts.isEmpty) return fallback;
+      if (parts.length == 1) return parts.first;
+      return parts[idx.clamp(0, parts.length - 1)];
+    }
+
+    return OilModelCapacity(
+      engine: at(engParts, base.engine),
+      oilCapacity: at(oilParts, base.oilCapacity),
+      filterCapacity: at(filterParts, base.filterCapacity),
+      total: at(totalParts, base.total),
+    );
+  }
+
+  static List<String> _slashParts(String raw) => raw
+      .split('/')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList(growable: false);
+
+  /// Двигатель матнidan (`1.5`, `1.5T`, `2.0`) мос slash-индекс.
+  static int _engineIndex(List<String> engParts, String engine) {
+    if (engParts.length <= 1) return 0;
+    final e = _engineToken(engine);
+    if (e.isEmpty) return 0; // номаълум → биринчи (кичик) вариант
+    for (var i = 0; i < engParts.length; i++) {
+      final p = _engineToken(engParts[i]);
+      if (p.isEmpty) continue;
+      if (e == p || e.startsWith(p) || p.startsWith(e)) return i;
+    }
+    return 0;
+  }
+
+  /// `1.5T (LFV)` → `1.5`
+  static String _engineToken(String raw) {
+    final m = RegExp(r'(\d+(?:\.\d+)?)').firstMatch(raw.trim());
+    return m?.group(1) ?? '';
+  }
 
   // ─── KILOMETRAJ BO'YICHA TAVSIYALAR ────────────────────────
 

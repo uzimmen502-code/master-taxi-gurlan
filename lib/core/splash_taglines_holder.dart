@@ -21,9 +21,17 @@ class SplashTaglinesHolder {
 
   static List<String> get sessionWords => List.unmodifiable(_sessionWords);
 
+  /// Birinchi frame / splash uchun: default pool dan session so'zlarni sync tayyorlash.
+  /// Remote/kesh yangilash [load] orqali fonida ketadi.
+  static void prepareSessionSync() {
+    _prepareSessionWords();
+  }
+
   static Future<void> load() async {
     await _loadFromCache();
-    _prepareSessionWords();
+    if (_sessionWords.isEmpty) {
+      _prepareSessionWords();
+    }
 
     try {
       final snap = await FirebaseFirestore.instance
@@ -35,7 +43,10 @@ class SplashTaglinesHolder {
       _enabled = settings.enabled;
       _pool = List<String>.from(settings.taglines);
       await _saveToCache();
-      _prepareSessionWords();
+      // Session so'zlarni qayta aralashtirmaymiz — splash o'rtasida o'zgarib ketmasin.
+      if (_sessionWords.isEmpty) {
+        _prepareSessionWords();
+      }
     } catch (e, st) {
       debugPrint('SplashTaglinesHolder.load: $e\n$st');
     }

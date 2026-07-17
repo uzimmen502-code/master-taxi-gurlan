@@ -102,12 +102,16 @@ class OilVehicle {
   String get usageSummaryUz =>
       usageTags.map(usageLabelUz).where((s) => s.isNotEmpty).join(' · ');
 
+  /// HTML hub format: `Chevrolet Cobalt · 1.5 · 2021`
   String get setupTitle {
-    final parts = <String>[
+    final head = [
       if (brand.trim().isNotEmpty) brand.trim(),
       if (model.trim().isNotEmpty) model.trim(),
-      if (year > 0) '$year',
+    ].join(' ');
+    final parts = <String>[
+      if (head.isNotEmpty) head,
       if (engine.trim().isNotEmpty) engine.trim(),
+      if (year > 0) '$year',
     ];
     return parts.isEmpty ? displayTitle : parts.join(' · ');
   }

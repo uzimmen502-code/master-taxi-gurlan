@@ -14,6 +14,11 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 ## profile (`features/profile/`)
 - profile_controller.dart (wraps CF changeDevicePhone); screens profile/user_info/wallet/wallet_partner_program/wallet_operations_tab/address_edit/news_hub/news/*_news_detail/messages_tab; widgets wallet_section/wallet_ledger_list/order_card/trip_card/language_settings_tile. Role via UserRoleSync. wallet uses wallet_ledger_entry model + `core/utils/wallet_ledger_labels.dart`.
 
+## Cold-start (`lib/main.dart`)
+- Blocking before `runApp`: Firebase + Firestore settings, SharedPreferences routing flags, `ServiceConfigHolder.loadCacheOnly()`, `SplashTaglinesHolder.prepareSessionSync()`.
+- Parallel unawaited: splash network `load()`, `PassengerCancelRulesHolder.load()`, daily report.
+- Post-frame deferred (`_deferredMobileBootstrap`): UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init. Home still refreshes `ServiceConfigHolder.bootstrap()` post-frame.
+
 ## Core services (`lib/services/`)
 - user_role_sync.dart UserRoleSync — server-authoritative role; `users/{uid}.role` vs prefs; privilegedRoles{admin,superadmin,dispatcher} Firestore wins; reconcile/forceSyncDriver; isClientAssignableRole{user,driver,courier}.
 - background_gps_service.dart — foreground service, driver GPS every 20s → `drivers/{id}`; channel gps_channel; stops when pref driver_online=false.

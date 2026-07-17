@@ -338,7 +338,10 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
     }
 
     final cap = OilCarData.resolveCapacity(v.model);
-    final fuel = v.fuelLabelUz;
+    final fuelKey = v.fuelType.trim().toLowerCase();
+    final fuel = fuelKey.isEmpty
+        ? ''
+        : context.tr('oil_fuel_$fuelKey');
 
     return Container(
       width: double.infinity,

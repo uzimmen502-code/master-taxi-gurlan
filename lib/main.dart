@@ -45,6 +45,7 @@ import 'services/daily_report_service.dart';
 import 'services/fcm_service.dart';
 import 'services/background_gps_service.dart';
 import 'services/location_service.dart';
+import 'services/notification_delivery.dart';
 import 'services/notification_service.dart';
 import 'features/dating/services/dating_youth_promo_service.dart';
 import 'core/theme/app_theme.dart';
@@ -70,6 +71,7 @@ void main() async {
   // Firestore veb SDK "Unexpected state" bug'idan avto-tiklash (faqat web).
   installFirestoreCrashGuard();
 
+  // —— Stage A: birinchi frame uchun majburiy ——
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -78,46 +80,6 @@ void main() async {
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
-
-  await PassengerCancelRulesHolder.load();
-  await SplashTaglinesHolder.load();
-  await ServiceConfigHolder.bootstrap();
-
-  // Web'da notification permission / messaging init ayrim браузерларда
-  // birinchi frame'dan oldin osilib qolishi мумкин. UI аввал чиқсин.
-  if (!kIsWeb) {
-    try {
-      await FCMService().init();
-      await FCMService().startListeners(); // Firestore listeners
-    } catch (e, st) {
-      debugPrint('FCM init: $e\n$st');
-    }
-  }
-
-  // flutter_background_service фақат Android/iOS (веб/Windowsда configure хато).
-  if (!kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS)) {
-    try {
-      await BackgroundGpsService.init();
-    } catch (e, st) {
-      debugPrint('BackgroundGpsService.init: $e\n$st');
-    }
-  }
-
-  if (!kIsWeb) {
-    try {
-      await NotificationService.instance.setup();
-    } catch (e, st) {
-      debugPrint('NotificationService.setup: $e\n$st');
-    }
-  }
-
-  // Кундалик ҳисобот xizmati: 20:00 фdа лoкал генерация
-  // (Cloud Function ҳам худди шу вақтда серверда ишлайди).
-  final analyticsRepo = AnalyticsRepository();
-  final reportService = DailyReportService(analyticsRepo);
-  unawaited(reportService.ensureToday());
 
   final prefs = await SharedPreferences.getInstance();
   final languageSelected = prefs.containsKey('saved_language');
@@ -132,14 +94,18 @@ void main() async {
     await prefs.setBool('phone_reverified', false);
   }
 
-  // APK yangilanganda ham: admin faqat Firestore'dagi role bo'lsa qoladi.
-  if (onboarding) {
-    try {
-      await UserRoleSync().syncToPreferences();
-    } catch (e, st) {
-      debugPrint('UserRoleSync: $e\n$st');
-    }
-  }
+  // Module gating — oxirgi kesh; Firestore refresh Home post-frame'da.
+  await ServiceConfigHolder.loadCacheOnly();
+  // Splash tagline'lar darhol ko'rinsin (default/pool).
+  SplashTaglinesHolder.prepareSessionSync();
+
+  // —— Stage B: splash/UI bilan parallel (Firestore network) ——
+  unawaited(SplashTaglinesHolder.load());
+  unawaited(PassengerCancelRulesHolder.load());
+
+  final analyticsRepo = AnalyticsRepository();
+  final reportService = DailyReportService(analyticsRepo);
+  unawaited(reportService.ensureToday());
 
   final userId = prefs.getString('userId') ?? '';
   runApp(MyApp(
@@ -149,7 +115,50 @@ void main() async {
     userId: userId,
     analyticsRepo: analyticsRepo,
     reportService: reportService,
+    deferRoleSync: onboarding,
   ));
+}
+
+/// Birinchi frame'dan keyin: FCM / GPS / notification / role sync.
+Future<void> _deferredMobileBootstrap({required bool deferRoleSync}) async {
+  if (deferRoleSync) {
+    try {
+      await UserRoleSync().syncToPreferences();
+    } catch (e, st) {
+      debugPrint('UserRoleSync (deferred): $e\n$st');
+    }
+  }
+
+  if (kIsWeb) return;
+
+  try {
+    await NotificationDelivery.ensureInitialized();
+  } catch (e, st) {
+    debugPrint('NotificationDelivery (deferred): $e\n$st');
+  }
+
+  try {
+    await NotificationService.instance.setup();
+  } catch (e, st) {
+    debugPrint('NotificationService.setup (deferred): $e\n$st');
+  }
+
+  // navigatorKey tayyor — cold-start push navigation ishlaydi.
+  try {
+    await FCMService().init();
+    await FCMService().startListeners();
+  } catch (e, st) {
+    debugPrint('FCM init (deferred): $e\n$st');
+  }
+
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    try {
+      await BackgroundGpsService.init();
+    } catch (e, st) {
+      debugPrint('BackgroundGpsService.init (deferred): $e\n$st');
+    }
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -161,6 +170,7 @@ class MyApp extends StatefulWidget {
     required this.userId,
     required this.analyticsRepo,
     required this.reportService,
+    this.deferRoleSync = false,
   });
 
   final bool isReturningUser;
@@ -170,6 +180,9 @@ class MyApp extends StatefulWidget {
   final AnalyticsRepository analyticsRepo;
   final DailyReportService reportService;
 
+  /// Onboarding tugagan bo'lsa — Firestore role sync birinchi frame'dan keyin.
+  final bool deferRoleSync;
+
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
@@ -178,10 +191,19 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  bool _deferredBootstrapped = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_deferredBootstrapped) return;
+      _deferredBootstrapped = true;
+      unawaited(_deferredMobileBootstrap(
+        deferRoleSync: widget.deferRoleSync,
+      ));
+    });
   }
 
   @override

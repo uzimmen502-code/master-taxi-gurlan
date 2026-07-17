@@ -25,6 +25,7 @@ Boshqa parallel home entry yo‘q. HTML prototip (source of truth): `docs/oil_ch
 - `data/oil_l10n.dart` — 3 tilli kontent yordamchisi: `class L3(cyrl, latn, ru)` + `oilLangOf(context)` (`AppLocalizations.locale` → OilLang). Og'ir kontent (maqola/SAE/mileage/legenda) endi to'liq 3 tilli: `mileageRecos`, `SaeGuideEntry` maydonlari, `saeCompareRows`, `OilArtBlock` matnlari, `oil_hub_widgets` legendasi — hammasi `L3` va `.t(lang)` orqali renderlanadi (JSON kalit emas, co-located).
 - Qisqa UI matnlar (SAE bo'lim sarlavha/label, km suffix, key-tip label, tier/km) esa l10n kalit orqali. Oil l10n kalitlarining SOURCE OF TRUTH: `tools/merge_oil_l10n.py` (KEYS dict → 3 JSON). JSON'ni qo'lda emas, shu skript orqali yangilang (`py tools\merge_oil_l10n.py`). Windows'da `python` Store-alias — `py` ishlating.
 - Onboarding car step (`onboarding_screen.dart`, `_pageCar`/`_obCarStep1`/`_obCarStep2`) endi to'liq 3 tilli: `context.tr` orqali. `OilCarOptions.fuels/usages` endi `List<String>` (faqat kalit: petrol/cng/lpg, personal/taxi/corp/dust/long); label `oil_fuel_${key}`/`oil_usage_${key}`, boshqa label/hint/sarlavhalar `onb_car_*` kalitlar (SOURCE OF TRUTH: `merge_oil_l10n.py`). `oil_car_options.dart` da endi hardcoded uz_Cyrl label yo'q.
+- Hub avto kartasi: `OilVehicle.setupTitle` = `Chevrolet Cobalt · 1.5 · 2021` (brand+model space, then engine, then year). Fuel chip hubda `oil_fuel_${fuelType}` l10n; capacity strip `_capCell` (Картер/Фильтр/Жами) HTML `.status-oil` bilan mos.
 
 ## Collections
 - `users/{uid}/vehicles/{id}` (+ oil_history)

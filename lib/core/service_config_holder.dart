@@ -78,6 +78,12 @@ class ServiceConfigHolder {
         if (_serviceAreaId.isNotEmpty) 'serviceAreaId': _serviceAreaId,
       };
 
+  /// Faqat SharedPreferences keshidan tiklash — Firestore'siz, cold-start uchun tez.
+  static Future<void> loadCacheOnly() async {
+    await _loadFromCache();
+    _notifyRevision();
+  }
+
   /// Startda: keshdan tez tiklash + `config/module_defaults` ni yangilash.
   /// Kesh'da serviceAreaId bo'lsa (qaytgan foydalanuvchi) — override ham yangilanadi.
   static Future<void> bootstrap() async {

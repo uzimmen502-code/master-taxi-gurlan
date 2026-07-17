@@ -30,11 +30,12 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  static const List<double> _pulseStart = [1.0, 1.10, 1.25];
-  static const List<double> _pulsePeak = [1.30, 1.45, 1.60];
-  static const List<double> _pulseEnd = [1.10, 1.25, 1.60];
+  static const List<double> _pulseStart = [1.0, 1.10];
+  static const List<double> _pulsePeak = [1.30, 1.45];
+  static const List<double> _pulseEnd = [1.10, 1.25];
 
-  static const double _exitScaleStart = 1.60;
+  static const double _thirdGrowthStart = 1.25;
+  static const double _exitScaleEnd = 5.60;
   static const Color _taglineColor = Color(0xFF4CD964);
   static const AssetImage _logoAsset =
       AssetImage('assets/images/splash_logo.png');
@@ -104,11 +105,9 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     final segment = math.min((t * 3).floor(), 2);
     final localT = (t * 3) - segment;
 
-    // The third breath does not contract: it flows directly into exit zoom.
+    // The third breath and exit use one curve, so there is no pause at 1.60.
     if (segment == 2) {
-      final p = Curves.easeInOutSine.transform(localT);
-      return _pulseStart[segment] +
-          (_pulsePeak[segment] - _pulseStart[segment]) * p;
+      return _thirdGrowthScale(localT * _thirdGrowthPulseFraction);
     }
 
     if (localT < 0.55) {
@@ -118,6 +117,19 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     }
     final p = Curves.easeInOutSine.transform((localT - 0.55) / 0.45);
     return _pulsePeak[segment] + (_pulseEnd[segment] - _pulsePeak[segment]) * p;
+  }
+
+  double get _thirdGrowthPulseFraction {
+    final thirdPulseMs = AppLaunchSplash.pulseDuration.inMilliseconds / 3;
+    return thirdPulseMs /
+        (thirdPulseMs + AppLaunchSplash.exitDuration.inMilliseconds);
+  }
+
+  double _thirdGrowthScale(double progress) {
+    final eased = Curves.easeInCubic.transform(
+      progress.clamp(0.0, 1.0).toDouble(),
+    );
+    return _thirdGrowthStart + (_exitScaleEnd - _thirdGrowthStart) * eased;
   }
 
   ({String? text, double opacity}) _taglineForPulse(double pulseLocal) {
@@ -171,7 +183,8 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     }
 
     final local = (t - pulseEnd) / (1 - pulseEnd);
-    final zoom = Curves.easeInCubic.transform(local);
+    final growthProgress =
+        _thirdGrowthPulseFraction + (1 - _thirdGrowthPulseFraction) * local;
     final logoFade = local < 0.15
         ? 1.0
         : local >= 0.60
@@ -194,7 +207,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         : null;
 
     return _SplashFrame(
-      scale: _exitScaleStart + 4.0 * zoom,
+      scale: _thirdGrowthScale(growthProgress),
       rotation: 0,
       logoOpacity: logoFade,
       contentOpacity: contentOpacity,
@@ -262,7 +275,10 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                           child: Transform.translate(
                             offset: Offset(
                               0,
-                              logoWidth.clamp(160, 280) * 0.80 + 18,
+                              logoWidth.clamp(160, 280) *
+                                      math.max(frame.scale, 1.60) /
+                                      2 +
+                                  18,
                             ),
                             child: Opacity(
                               opacity: frame.taglineOpacity.clamp(0, 1),

@@ -32,6 +32,12 @@ class UserModel {
   /// «Хабарлар» таби (мурожаат + чат) охирги марта ўқилган вақт.
   final DateTime? lastMessagesReadAt;
 
+  /// Home badge: шахсий (dialog/order/support) ўқилмаганлар сони (CF + recompute).
+  final int? homeBadgePersonal;
+
+  /// Home badge: охирги кўрилган broadcastSeq (`config/home_news_badge`).
+  final int? lastSeenBroadcastSeq;
+
   /// Configuration-driven platforma geo ID'lari.
   /// [regionId]/[districtId] — hisobot/dashboard; [serviceAreaId] — FAQAT
   /// xizmat mavjudligini aniqlash (Home dinamik).
@@ -54,6 +60,8 @@ class UserModel {
     this.lastNewsReadAt,
     this.lastOrderNewsReadAt,
     this.lastMessagesReadAt,
+    this.homeBadgePersonal,
+    this.lastSeenBroadcastSeq,
     this.regionId = '',
     this.districtId = '',
     this.serviceAreaId = '',
@@ -89,6 +97,8 @@ class UserModel {
       lastNewsReadAt: (d['lastNewsReadAt'] as Timestamp?)?.toDate(),
       lastOrderNewsReadAt: (d['lastOrderNewsReadAt'] as Timestamp?)?.toDate(),
       lastMessagesReadAt: (d['lastMessagesReadAt'] as Timestamp?)?.toDate(),
+      homeBadgePersonal: (d['homeBadgePersonal'] as num?)?.toInt(),
+      lastSeenBroadcastSeq: (d['lastSeenBroadcastSeq'] as num?)?.toInt(),
       regionId: (d['regionId'] ?? '') as String,
       districtId: (d['districtId'] ?? '') as String,
       serviceAreaId: (d['serviceAreaId'] ?? '') as String,

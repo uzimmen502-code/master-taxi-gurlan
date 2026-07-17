@@ -77,7 +77,8 @@ class NewsRepository {
       final merged = _mergeDedupe(
         _filterForUser(global!, audiences: audiences, userId: uid, feed: feed),
         personal != null
-            ? _filterForUser(personal!, audiences: audiences, userId: uid, feed: feed)
+            ? _filterForUser(personal!,
+                audiences: audiences, userId: uid, feed: feed)
             : const [],
       );
       if (!controller.isClosed) controller.add(merged.take(limit).toList());
@@ -194,7 +195,9 @@ class NewsRepository {
     return ids.where((id) => id.length >= 9).toList(growable: false);
   }
 
-  /// Жонли ўқилмаганлар (Янгилик + Хабарлар + Буюртма) — пастки badge учун.
+  /// Жонли ўқилмаганлар — пастки badge.
+  /// Фақат 2 ta stream: `users/{uid}` + `config/home_news_badge`
+  /// (эски вариант 6–8 ta admin_news/support stream очарди).
   Stream<int> watchUnreadTotal({
     required String userId,
     required List<String> audiences,
@@ -206,87 +209,36 @@ class NewsRepository {
 
     final controller = StreamController<int>.broadcast();
     UserModel? user;
-    List<NewsItem> broadcast = const [];
-    List<NewsItem> dialog = const [];
-    List<NewsItem> orders = const [];
-    var messagesExtraCount = messagesExtra;
-    var supportChatUnread = false;
-    final docIds = _userDocIdsForNews(userId);
-    final primaryId = docIds.isNotEmpty ? docIds.first : uid;
-    final fallbackId = docIds.length > 1 ? docIds[1] : null;
+    var broadcastSeq = 0;
+    var personalBootstrapStarted = false;
 
     void emit() {
       if (controller.isClosed) return;
-      final b = countUnreadInList(broadcast, user?.lastNewsReadAt);
-      final d = countUnreadInList(dialog, user?.lastMessagesReadAt);
-      final o = countUnreadInList(orders, user?.lastOrderNewsReadAt);
-      final chatExtra = supportChatUnread ? 1 : 0;
-      controller.add(b + d + o + messagesExtraCount + chatExtra);
+      final personal = user?.homeBadgePersonal;
+      if (personal == null && !personalBootstrapStarted) {
+        personalBootstrapStarted = true;
+        unawaited(recomputeHomeBadgePersonal(uid).catchError((_) => 0));
+      }
+      final personalN = personal ?? 0;
+      // null lastSeen → ретроактив badge чиқармаслик (биринчи deploy).
+      final lastSeen = user?.lastSeenBroadcastSeq;
+      final broadcastN =
+          lastSeen == null ? 0 : (broadcastSeq - lastSeen).clamp(0, 999);
+      controller.add(personalN + broadcastN + messagesExtra);
     }
 
-    DocumentSnapshot<Map<String, dynamic>>? primarySnap;
-    DocumentSnapshot<Map<String, dynamic>>? fallbackSnap;
-
-    void emitUser() {
-      user = _userFromSnapshots(primarySnap, fallbackSnap);
-      emit();
-    }
-
-    final subUser = _db.collection('users').doc(primaryId).snapshots().listen(
+    final subUser = _db.collection('users').doc(uid).snapshots().listen(
       (snap) {
-        primarySnap = snap;
-        emitUser();
-      },
-      onError: controller.addError,
-    );
-
-    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? subUserAlt;
-    if (fallbackId != null) {
-      subUserAlt = _db.collection('users').doc(fallbackId).snapshots().listen(
-        (snap) {
-          fallbackSnap = snap;
-          emitUser();
-        },
-        onError: controller.addError,
-      );
-    }
-
-    final subBroadcast = watchBroadcastNews(
-      audiences: audiences,
-      userId: uid,
-      limit: limit,
-    ).listen(
-      (list) {
-        broadcast = list;
+        user = snap.exists ? UserModel.fromDoc(snap) : null;
         emit();
       },
       onError: controller.addError,
     );
 
-    final subDialog = watchDialogNews(userId: uid, limit: limit).listen(
-      (list) {
-        dialog = list;
-        emit();
-      },
-      onError: controller.addError,
-    );
-
-    final subOrders = watchOrderNews(userId: uid, limit: limit).listen(
-      (list) {
-        orders = list;
-        emit();
-      },
-      onError: controller.addError,
-    );
-
-    final subSupportChat = _db
-        .collection('support_chats')
-        .doc(uid)
-        .snapshots()
-        .listen(
+    final subBadge =
+        _db.collection('config').doc('home_news_badge').snapshots().listen(
       (snap) {
-        final d = snap.data();
-        supportChatUnread = d != null && (d['lastFromAdmin'] ?? false) == true;
+        broadcastSeq = (snap.data()?['broadcastSeq'] as num?)?.toInt() ?? 0;
         emit();
       },
       onError: controller.addError,
@@ -294,14 +246,53 @@ class NewsRepository {
 
     controller.onCancel = () async {
       await subUser.cancel();
-      await subUserAlt?.cancel();
-      await subBroadcast.cancel();
-      await subDialog.cancel();
-      await subOrders.cancel();
-      await subSupportChat.cancel();
+      await subBadge.cancel();
     };
 
     return controller.stream;
+  }
+
+  /// Dialog + order + support chat → `users.homeBadgePersonal`.
+  Future<int> recomputeHomeBadgePersonal(String userId) async {
+    final uid = canonicalPhoneId(userId);
+    if (uid.length < 9) return 0;
+
+    UserModel? user;
+    try {
+      final snap = await _db.collection('users').doc(uid).get();
+      if (snap.exists) user = UserModel.fromDoc(snap);
+    } catch (_) {}
+
+    final dialog = await countUnreadDialog(uid, user?.lastMessagesReadAt);
+    final orders = await countUnreadOrders(uid, user?.lastOrderNewsReadAt);
+    var support = 0;
+    try {
+      final chat = await _db.collection('support_chats').doc(uid).get();
+      if (chat.exists && (chat.data()?['lastFromAdmin'] ?? false) == true) {
+        support = 1;
+      }
+    } catch (_) {}
+
+    final total = dialog + orders + support;
+    for (final id in _userDocIdsForNews(uid)) {
+      await _db.collection('users').doc(id).set(
+        {
+          'homeBadgePersonal': total,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+    return total;
+  }
+
+  Future<int> _currentBroadcastSeq() async {
+    try {
+      final snap = await _db.collection('config').doc('home_news_badge').get();
+      return (snap.data()?['broadcastSeq'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// Битта бўлим учун жонли ўқилмаганлар (таб badge).
@@ -371,8 +362,7 @@ class NewsRepository {
           userId: uid,
           limit: limit,
         ),
-      NewsFeedKind.dialog =>
-        watchDialogNews(userId: uid, limit: limit),
+      NewsFeedKind.dialog => watchDialogNews(userId: uid, limit: limit),
       NewsFeedKind.order => watchOrderNews(userId: uid, limit: limit),
     };
     final subNews = newsStream.listen(
@@ -385,14 +375,12 @@ class NewsRepository {
 
     StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? subSupportChat;
     if (feed == NewsFeedKind.dialog) {
-      subSupportChat = _db
-          .collection('support_chats')
-          .doc(uid)
-          .snapshots()
-          .listen(
+      subSupportChat =
+          _db.collection('support_chats').doc(uid).snapshots().listen(
         (snap) {
           final d = snap.data();
-          supportChatUnread = d != null && (d['lastFromAdmin'] ?? false) == true;
+          supportChatUnread =
+              d != null && (d['lastFromAdmin'] ?? false) == true;
           emit();
         },
         onError: controller.addError,
@@ -504,7 +492,11 @@ class NewsRepository {
 
   Future<void> markGeneralRead(String userId) async {
     if (userId.isEmpty) return;
-    final patch = {'lastNewsReadAt': FieldValue.serverTimestamp()};
+    final seq = await _currentBroadcastSeq();
+    final patch = {
+      'lastNewsReadAt': FieldValue.serverTimestamp(),
+      'lastSeenBroadcastSeq': seq,
+    };
     for (final id in _userDocIdsForNews(userId)) {
       await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
     }
@@ -516,6 +508,7 @@ class NewsRepository {
     for (final id in _userDocIdsForNews(userId)) {
       await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
     }
+    await recomputeHomeBadgePersonal(userId);
   }
 
   Future<void> markMessagesRead(String userId) async {
@@ -524,6 +517,9 @@ class NewsRepository {
     for (final id in _userDocIdsForNews(userId)) {
       await _db.collection('users').doc(id).set(patch, SetOptions(merge: true));
     }
+    // Support chat "lastFromAdmin" client markUserRead орқали тўғриланади;
+    // badge қайта ҳисобланади.
+    await recomputeHomeBadgePersonal(userId);
   }
 
   Future<void> markAllRead(String userId) async => markGeneralRead(userId);
@@ -581,10 +577,8 @@ class NewsRepository {
   }
 
   Future<List<NewsItem>> fetchRecent({int limit = 50}) async {
-    final snap = await _col
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
+    final snap =
+        await _col.orderBy('createdAt', descending: true).limit(limit).get();
     return snap.docs.map(NewsItem.fromDoc).toList(growable: false);
   }
 

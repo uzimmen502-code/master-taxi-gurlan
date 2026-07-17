@@ -354,6 +354,41 @@ function canonicalUid(v) {
   return d;
 }
 
+/**
+ * Home bottom badge — denormalized counters (client watches 2 docs, not 6–8 news streams).
+ * - Broadcast: increment config/home_news_badge.broadcastSeq
+ * - Personal (dialog/order): increment users/{uid}.homeBadgePersonal
+ */
+async function bumpHomeNewsBadge(newsData) {
+  const d = newsData || {};
+  const target = canonicalUid(d.targetUserId || '');
+  const source = String(d.source || '').trim();
+  const category = String(d.category || '').trim();
+  const isOrder =
+    source === 'order_status' ||
+    source === 'order_placed' ||
+    category === 'order';
+  const isPersonal = target.length >= 9;
+  const isBroadcast =
+    !isOrder &&
+    !isPersonal &&
+    (source === '' || source === 'admin_compose' || source === 'broadcast');
+
+  if (isBroadcast) {
+    await db.collection('config').doc('home_news_badge').set({
+      broadcastSeq: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return;
+  }
+  if (isPersonal) {
+    await db.collection('users').doc(target).set({
+      homeBadgePersonal: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+}
+
 /** Админ номи билан мижоз чатига (support_chats) — systemOrder: такрор push йўқ */
 async function appendSystemSupportChatMessage(userDigits, text) {
   const d = digits(userDigits);
@@ -1302,6 +1337,15 @@ exports.onSupportChatMessageCreate = functions.firestore
     const chatId = context.params.chatId;
     const userUid = digits(chatId);
     if (!userUid) return;
+
+    if (fromAdmin && userUid) {
+      await db.collection('users').doc(userUid).set({
+        homeBadgePersonal: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true }).catch((err) => {
+        console.error('support chat homeBadgePersonal:', err.message || err);
+      });
+    }
 
     // Ҳозирча админ токени users коллекциясида role=admin бўлса шу ердан олинади.
     let targetToken = '';
@@ -8284,7 +8328,12 @@ exports.onAdminNewsCreate = functions
   .document('admin_news/{newsId}')
   .onCreate(async (snap) => {
     const d = snap.data() || {};
-    await deliverAdminNewsPush(snap.ref, d);
+    await Promise.all([
+      deliverAdminNewsPush(snap.ref, d),
+      bumpHomeNewsBadge(d).catch((err) => {
+        console.error('bumpHomeNewsBadge:', err.message || err);
+      }),
+    ]);
     return null;
   });
 

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/chat_message.dart';
+import 'news_repository.dart';
 
 /// `support_chats` collection — admin va foydalanuvchi orasidagi yordam chati.
 class ChatRepository {
@@ -13,9 +14,8 @@ class ChatRepository {
       _db.collection('support_chats').doc(chatId);
 
   /// Админдан ўқилмаган хабар борми (`support_chats.lastFromAdmin`).
-  Stream<bool> watchUnreadFromAdmin(String chatId) => _chatRef(chatId)
-      .snapshots()
-      .map((s) {
+  Stream<bool> watchUnreadFromAdmin(String chatId) =>
+      _chatRef(chatId).snapshots().map((s) {
         if (!s.exists) return false;
         return (s.data()?['lastFromAdmin'] ?? false) == true;
       });
@@ -27,6 +27,9 @@ class ChatRepository {
       {'lastFromAdmin': false},
       SetOptions(merge: true),
     );
+    await NewsRepository(db: _db)
+        .recomputeHomeBadgePersonal(chatId)
+        .catchError((_) => 0);
   }
 
   /// Bitta chatdagi barcha xabarlar (real-time, vaqt bo'yicha tartiblangan).

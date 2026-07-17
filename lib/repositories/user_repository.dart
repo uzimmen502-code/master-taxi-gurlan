@@ -7,6 +7,7 @@ import '../models/risk_event.dart';
 import '../models/user_address.dart';
 import '../models/user_model.dart';
 import '../models/wallet_ledger_entry.dart';
+import 'news_repository.dart';
 
 /// `users` collection bilan ishlash.
 ///
@@ -125,8 +126,11 @@ class UserRepository {
     required int year,
   }) async {
     if (uid.isEmpty) return false;
-    final snap =
-        await _col.doc(uid).collection('birthday_bonus_claims').doc('$year').get();
+    final snap = await _col
+        .doc(uid)
+        .collection('birthday_bonus_claims')
+        .doc('$year')
+        .get();
     return snap.exists;
   }
 
@@ -315,11 +319,14 @@ class UserRepository {
     await _db.runTransaction((tx) async {
       final snap = await tx.get(requestRef);
       if ((snap.data()?['status'] ?? '') != 'pending') return;
-      tx.set(userRef, {
-        'birthDate': request.requestedBirthDate.trim(),
-        'birthDateApprovedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      tx.set(
+          userRef,
+          {
+            'birthDate': request.requestedBirthDate.trim(),
+            'birthDateApprovedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
       tx.update(requestRef, {
         'status': 'approved',
         'reviewedAt': FieldValue.serverTimestamp(),
@@ -420,32 +427,19 @@ class UserRepository {
   /// Умумий янгиликлар ўқилди.
   Future<void> markNewsRead(String uid) async {
     if (uid.isEmpty) return;
-    await _col.doc(canonicalPhoneId(uid)).set(
-        {'lastNewsReadAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true));
+    await NewsRepository(db: _db).markGeneralRead(uid);
   }
 
   /// Буюртма хабарлари ўқилди.
   Future<void> markOrderNewsRead(String uid) async {
     if (uid.isEmpty) return;
-    await _col.doc(canonicalPhoneId(uid)).set(
-        {'lastOrderNewsReadAt': FieldValue.serverTimestamp()},
-        SetOptions(merge: true));
+    await NewsRepository(db: _db).markOrderNewsRead(uid);
   }
 
   /// «Хабарлар» таби (мурожаатлар) ўқилди.
   Future<void> markMessagesRead(String uid) async {
     if (uid.isEmpty) return;
-    final patch = {'lastMessagesReadAt': FieldValue.serverTimestamp()};
-    final canon = canonicalPhoneId(uid);
-    final raw = phoneDigits(uid);
-    final ids = <String>{canon, raw};
-    if (raw.length >= 12 && raw.startsWith('998')) {
-      ids.add(raw.substring(3));
-    }
-    for (final id in ids.where((x) => x.length >= 9)) {
-      await _col.doc(id).set(patch, SetOptions(merge: true));
-    }
+    await NewsRepository(db: _db).markMessagesRead(uid);
   }
 
   Future<void> saveCarInfo({
@@ -461,10 +455,8 @@ class UserRepository {
     List<String> carUsageTags = const [],
   }) async {
     if (uid.isEmpty) return;
-    final tags = carUsageTags
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    final tags =
+        carUsageTags.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
     await _col.doc(canonicalPhoneId(uid)).update({
       'carModel': carModel.trim(),
       'carColor': carColor.trim(),

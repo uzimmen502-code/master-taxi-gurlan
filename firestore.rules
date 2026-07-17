@@ -111,7 +111,8 @@ service cloud.firestore {
                 'addressUpdatedAt', 'updatedAt', 'createdAt',
                 'birthDate', 'birthDateSetAt',
                 'fcmToken', 'cancelCount', 'blockedUntil',
-                'lastNewsReadAt', 'lastOrderNewsReadAt'
+                'lastNewsReadAt', 'lastOrderNewsReadAt', 'lastMessagesReadAt',
+                'homeBadgePersonal', 'lastSeenBroadcastSeq'
               ]);
     }
 

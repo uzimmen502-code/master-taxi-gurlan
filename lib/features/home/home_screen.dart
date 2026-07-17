@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
@@ -43,7 +44,6 @@ import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_hub_screen.dart';
 import '../circles/screens/circles_hub_screen.dart';
-import '../dating/screens/dating_home_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
@@ -335,6 +335,26 @@ class _HomeViewState extends State<_HomeView> {
         transitionDuration: const Duration(milliseconds: 280),
       ),
     );
+  }
+
+  static const _datingTelegramBotUrl = 'https://t.me/bilish_tanish_bot';
+
+  Future<void> _openDatingTelegramBot() async {
+    final uri = Uri.parse(_datingTelegramBotUrl);
+    try {
+      final opened =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Telegram очилмади')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telegram очилмади')),
+      );
+    }
   }
 
   Future<void> _openModule(HomeModule m) async {
@@ -654,8 +674,7 @@ class _HomeViewState extends State<_HomeView> {
                                   ),
                                   onCircles: () =>
                                       _push(const CirclesHubScreen()),
-                                  onDating: () =>
-                                      _push(const DatingHomeScreen()),
+                                  onDating: () => _openDatingTelegramBot(),
                                 ),
                                 const SizedBox(height: 16),
                                 FeaturedProductsSection(

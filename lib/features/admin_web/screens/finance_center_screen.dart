@@ -23,10 +23,6 @@ class FinanceCenterScreen extends StatefulWidget {
   State<FinanceCenterScreen> createState() => _FinanceCenterScreenState();
 }
 
-// settings/settlement default'lari bilan sinxron (faqat ko'rsatish uchun).
-const int _floatMin = 100000;
-const int _floatCritical = 20000;
-
 void _downloadCsv(String filename, String content) {
   final blob = html.Blob([content], 'text/csv;charset=utf-8');
   final url = html.Url.createObjectUrlFromBlob(blob);
@@ -82,7 +78,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             labelPadding: EdgeInsets.symmetric(horizontal: narrow ? 12 : 16),
             tabs: const [
               Tab(text: 'Назорат'),
-              Tab(text: 'Driver Float'),
+              Tab(text: 'Cash Exchange'),
               Tab(text: 'Settlements'),
               Tab(text: 'Аудит журнали'),
               Tab(text: 'Давр қулфи'),
@@ -95,7 +91,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             controller: _tabCtrl,
             children: [
               MoneyControlTab(onOpenTab: _goTab),
-              const _FloatTab(),
+              const _CashExchangeTab(),
               const _SettlementsTab(),
               const _JournalTab(),
               const _ClosingTab(),
@@ -251,10 +247,10 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
 }
 
 // ════════════════════════════════════════════════════════════
-// DRIVER FLOAT
+// CASH EXCHANGE (нақд ↔ ҳамён)
 // ════════════════════════════════════════════════════════════
-class _FloatTab extends StatelessWidget {
-  const _FloatTab();
+class _CashExchangeTab extends StatelessWidget {
+  const _CashExchangeTab();
 
   @override
   Widget build(BuildContext context) {
@@ -262,29 +258,42 @@ class _FloatTab extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _floatDialog(context, isTopUp: true),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Float тўлдириш'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white),
-                ),
+              ElevatedButton.icon(
+                onPressed: () => _cashExchangeDialog(context, toWallet: true),
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text('Cash Exchange (нақд → ҳамён)'),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _floatDialog(context, isTopUp: false),
-                  icon: const Icon(Icons.remove),
-                  label: const Text('Float қайтариш'),
-                ),
+              OutlinedButton.icon(
+                onPressed: () => _cashExchangeDialog(context, toWallet: false),
+                icon: const Icon(Icons.account_balance_outlined),
+                label: const Text('Wallet → Cash'),
+              ),
+              TextButton.icon(
+                onPressed: () => _migrateFloatDialog(context),
+                icon: const Icon(Icons.sync_alt, size: 18),
+                label: const Text('Float → ҳамён миграция'),
               ),
             ],
           ),
         ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Ҳамёнлар (passenger_credit)',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
@@ -298,23 +307,23 @@ class _FloatTab extends StatelessWidget {
                 return _err('${snap.error}');
               }
               final docs = (snap.data?.docs ?? [])
-                  .where((d) => d.id.startsWith('driver_float:'))
+                  .where((d) => d.id.startsWith('passenger_credit:'))
+                  .where((d) => ((d.data()['balance'] as num?) ?? 0) != 0)
                   .toList()
                 ..sort((a, b) => ((b.data()['balance'] as num?) ?? 0)
                     .compareTo((a.data()['balance'] as num?) ?? 0));
               if (docs.isEmpty) {
-                return _empty('Hali float yo\'q',
-                    'Haydovchi depozit topshirgach paydo bo\'ladi');
+                return _empty('Ҳамён қолдиғи йўқ',
+                    'Cash Exchange қилгач шу ерда кўринади');
               }
               return ListView.separated(
                 padding: const EdgeInsets.all(12),
                 itemCount: docs.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  final d = docs[i].data();
-                  final uid = docs[i].id.split(':').last;
-                  final bal = ((d['balance'] as num?) ?? 0).toInt();
-                  return _floatRow(context, uid, bal);
+                  final bal = ((docs[i].data()['balance'] as num?) ?? 0).toInt();
+                  final uid = docs[i].id.split(':').skip(1).join(':');
+                  return _walletRow(context, uid, bal);
                 },
               );
             },
@@ -324,8 +333,7 @@ class _FloatTab extends StatelessWidget {
     );
   }
 
-  Widget _floatRow(BuildContext context, String uid, int bal) {
-    final (zoneLabel, zoneColor) = _zoneOf(bal);
+  Widget _walletRow(BuildContext context, String uid, int bal) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -338,8 +346,9 @@ class _FloatTab extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: zoneColor.withValues(alpha: 0.15),
-            child: Icon(Icons.local_taxi, color: zoneColor),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+            child: const Icon(Icons.account_balance_wallet,
+                color: AppColors.primaryDark),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -349,38 +358,22 @@ class _FloatTab extends StatelessWidget {
                 Text('+$uid',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text('${formatPrice(bal)} сўм',
-                    style: TextStyle(color: zoneColor, fontSize: 13)),
+                    style: const TextStyle(
+                        color: AppColors.primaryDark, fontSize: 13)),
               ],
             ),
           ),
-          if (bal < 0)
-            Container(
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8)),
-              child: const Text('Блок (қарз)',
-                  style: TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700)),
-            ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-                color: zoneColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8)),
-            child: Text(zoneLabel,
-                style: TextStyle(
-                    color: zoneColor, fontSize: 12, fontWeight: FontWeight.w600)),
-          ),
           PopupMenuButton<String>(
-            onSelected: (v) => _floatDialog(context,
-                isTopUp: v == 'topup', presetPhone: uid),
+            onSelected: (v) => _cashExchangeDialog(
+              context,
+              toWallet: v == 'in',
+              presetPhone: uid,
+            ),
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'topup', child: Text('Тўлдириш')),
-              PopupMenuItem(value: 'return', child: Text('Қайтариш')),
+              PopupMenuItem(
+                  value: 'in', child: Text('Cash Exchange')),
+              PopupMenuItem(
+                  value: 'out', child: Text('Wallet → Cash')),
             ],
           ),
         ],
@@ -389,33 +382,39 @@ class _FloatTab extends StatelessWidget {
   }
 }
 
-(String, Color) _zoneOf(int bal) {
-  if (bal < _floatCritical) return ('Критик', Colors.red);
-  if (bal < _floatMin) return ('Паст', Colors.orange);
-  return ('Соғлом', Colors.green);
-}
-
-Future<void> _floatDialog(BuildContext context,
-    {required bool isTopUp, String? presetPhone}) async {
+Future<void> _cashExchangeDialog(
+  BuildContext context, {
+  required bool toWallet,
+  String? presetPhone,
+}) async {
   final phoneCtrl = TextEditingController(text: presetPhone ?? '');
   final amountCtrl = TextEditingController();
-  final opId = '${isTopUp ? 'topup' : 'return'}_'
-      '${DateTime.now().microsecondsSinceEpoch}';
+  final opId =
+      '${toWallet ? 'cex' : 'w2c'}_${DateTime.now().microsecondsSinceEpoch}';
   await showDialog<void>(
     context: context,
     builder: (ctx) {
       var busy = false;
       return StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: Text(isTopUp ? 'Float тўлдириш' : 'Float қайтариш'),
+          title: Text(toWallet
+              ? 'Cash Exchange (нақд → ҳамён)'
+              : 'Wallet → Cash (ҳамён → касса)'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                toWallet
+                    ? 'Нақд кассага киради ва фойдаланувчи ҳамёнига ўтади.'
+                    : 'Ҳамёндан кассага қайтариш. Манфий тақиқланади.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: phoneCtrl,
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
-                    labelText: 'Ҳайдовчи телефони (998…)',
+                    labelText: 'Телефон (998…)',
                     border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
@@ -435,9 +434,10 @@ Future<void> _floatDialog(BuildContext context,
               onPressed: busy
                   ? null
                   : () async {
-                      final phone = phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
-                      final amount = int.tryParse(
-                              amountCtrl.text.replaceAll(RegExp(r'\D'), '')) ??
+                      final phone =
+                          phoneCtrl.text.replaceAll(RegExp(r'\D'), '');
+                      final amount = int.tryParse(amountCtrl.text
+                              .replaceAll(RegExp(r'\D'), '')) ??
                           0;
                       if (phone.length < 9 || amount <= 0) {
                         ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
@@ -450,9 +450,9 @@ Future<void> _floatDialog(BuildContext context,
                       try {
                         final res = await FirebaseFunctions.instance
                             .httpsCallable(
-                                isTopUp ? 'floatTopUp' : 'floatReturn')
+                                toWallet ? 'cashExchange' : 'walletToCash')
                             .call({
-                          'driverPhone': phone,
+                          'phone': phone,
                           'amount': amount,
                           'opId': opId,
                         });
@@ -461,35 +461,76 @@ Future<void> _floatDialog(BuildContext context,
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
                           content: Text(
-                              'Float: ${formatPrice((m['balance'] as num?) ?? 0)}'
-                              ' сўм (${m['zone']})'),
+                              'Ҳамён: ${formatPrice((m['bonusBalance'] as num?) ?? 0)} сўм'),
                           backgroundColor: Colors.green,
                         ));
                       } on FirebaseFunctionsException catch (e) {
                         setLocal(() => busy = false);
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                          content: Text('Хатoлик: ${e.message ?? e.code}'),
+                          content: Text('Хатолик: ${e.message ?? e.code}'),
                           backgroundColor: Colors.red,
                         ));
                       } catch (e) {
                         setLocal(() => busy = false);
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                          content: Text('Хатoлик: $e'),
+                          content: Text('Хатолик: $e'),
                           backgroundColor: Colors.red,
                         ));
                       }
                     },
               child: busy
                   ? const SizedBox(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(isTopUp ? 'Тўлдириш' : 'Қайтариш'),
+                  : Text(toWallet ? 'Ўтказиш' : 'Қайтариш'),
             ),
           ],
         ),
       );
     },
   );
+}
+
+Future<void> _migrateFloatDialog(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Float → ҳамён миграция'),
+      content: const Text(
+        'Барча мусбат driver_float қолдиқлари ҳамёнга ўтказилади. '
+        'Манфий float истиснога ёзилади. Давом?',
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Бекор')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Миграция')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    final res = await FirebaseFunctions.instance
+        .httpsCallable('migrateFloatToWallet')
+        .call({'dryRun': false});
+    final m = Map<String, dynamic>.from(res.data as Map);
+    if (!context.mounted) return;
+    final n = (m['migratedCount'] as num?)?.toInt() ?? 0;
+    final neg = (m['skippedNegative'] as List?)?.length ?? 0;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Миграция: $n та · манфий қолди: $neg'),
+      backgroundColor: Colors.green,
+    ));
+  } on FirebaseFunctionsException catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(e.message ?? e.code),
+      backgroundColor: Colors.red,
+    ));
+  }
 }
 
 // ════════════════════════════════════════════════════════════

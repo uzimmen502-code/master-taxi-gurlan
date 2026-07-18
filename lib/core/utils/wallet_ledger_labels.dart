@@ -10,6 +10,18 @@ String walletLedgerTitle(WalletLedgerEntry e) {
       return module.isEmpty ? 'Қaytim' : '$module — qaytim';
     case 'settlement_credit':
       return module.isEmpty ? 'Қaytim (settlement)' : '$module — qaytim';
+    case 'settlement_debit':
+      return module.isEmpty ? 'Қaytim berildi' : '$module — qaytim berildi';
+    case 'cash_to_wallet':
+      return 'Cash Exchange (нақд → ҳамён)';
+    case 'wallet_to_cash':
+      return 'Wallet → Cash';
+    case 'float_to_wallet_migration':
+      return 'Float → ҳамён миграция';
+    case 'wallet_p2p_credit':
+      return 'Ўтказма қабул';
+    case 'wallet_p2p_debit':
+      return 'Ўтказма юборилди';
     case 'supplier_credit':
       return module.isEmpty ? 'Kredit' : '$module — kredit';
     case 'payout_request':

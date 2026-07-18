@@ -9760,89 +9760,222 @@ async function floatStatusOf(driverUid) {
   };
 }
 
-exports.floatTopUp = functions.https.onCall(async (data, context) => {
+/** Float top-up deprecated — Cash Exchange (cashExchange) ishlatilsin. */
+exports.floatTopUp = functions.https.onCall(async () => {
+  throw new functions.https.HttpsError(
+      'failed-precondition',
+      'floatTopUp yopilgan. cashExchange (Cash In → Wallet) ishlating');
+});
+
+/** Float return deprecated — walletToCash ishlatilsin. */
+exports.floatReturn = functions.https.onCall(async () => {
+  throw new functions.https.HttpsError(
+      'failed-precondition',
+      'floatReturn yopilgan. walletToCash (Wallet → Cash) ishlating');
+});
+
+/**
+ * Cash Exchange — bitta UI amali, orqada 2 journal:
+ *   1) cash_in:        Dr admin_cash / Cr admin_clearing
+ *   2) cash_to_wallet: Dr admin_clearing / Cr passenger_credit:{uid}
+ * Net: admin_cash +, passenger_credit +, clearing 0. Manfiy wallet yo'q.
+ */
+exports.cashExchange = functions.https.onCall(async (data, context) => {
   const callerUid = await requireCallerRoles(
       context, ['superadmin', 'finance'], 'Finance role required');
-  const { driverUid, amount, opId } = parseFloatOpInput(data);
-  const config = await settlementLedger.getConfig(db);
-  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
+  const userUid12 = canonicalUid(data && (data.phone || data.userPhone || data.uid));
+  const amount = Math.trunc(Number((data && data.amount) || 0));
+  const opId = String((data && data.opId) || '').trim();
+  if (!userUid12 || userUid12.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'phone noto\'g\'ri');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amount musbat butun bo\'lsin');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId kerak');
+  }
+  if (!(await isIdentifiedUser(userUid12))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Foydalanuvchi Firestore\'da yo\'q — avval ilovada ro\'yxatdan o\'ting');
+  }
 
-  const res = await settlementLedger.postEntry(db, {
-    idempotencyKey: `floatTopUp:${opId}`,
-    kind: 'float_topup',
-    refType: 'float_topup',
+  const pcAcc = settlementLedger.passengerCreditAccount(userUid12);
+  const inRes = await settlementLedger.postEntry(db, {
+    idempotencyKey: `cashExchange_in:${opId}`,
+    kind: 'cash_in',
+    refType: 'cash_exchange',
     refId: opId,
     postedBy: callerUid,
     postedRole: 'finance',
     legs: [
       { account: 'admin_cash', dr: amount },
-      { account: floatAcc, cr: amount },
+      { account: 'admin_clearing', cr: amount },
     ],
   }, {
     mirrorBonus: false,
-    meta: { driverUid, amount },
-    assert: ({ accounts }) => {
-      const fa = accounts.get(floatAcc);
-      if (fa && fa.next > config.floatMax) {
-        throw new functions.https.HttpsError(
-            'failed-precondition',
-            `Float chegarasidan oshib ketadi (max ${config.floatMax})`);
-      }
-    },
-    // Depozit: oxirgi summa eslab qolinadi (deferred floor uchun). Balans >= 0
-    // bo'lsa, deferred blok yechiladi.
-    accountExtras: (id, st) => {
-      if (id !== floatAcc) return null;
-      const cleared = st.next >= 0;
-      return {
-        lastTopUpAmount: amount,
-        blocked: !cleared,
-        ...(cleared ? { blockedReason: '', deferredTimeoutAt: null } : {}),
-      };
-    },
-    onCommit: (tx, { balances }) => {
-      const next = balances[floatAcc] || 0;
-      tx.set(db.collection('users').doc(driverUid),
-          { settlementBlocked: next < 0 }, { merge: true });
-    },
+    meta: { userUid: userUid12, amount, step: 'cash_in' },
   });
 
-  const status = await floatStatusOf(driverUid);
-  return { ok: true, idempotent: res.idempotent, ...status };
-});
-
-exports.floatReturn = functions.https.onCall(async (data, context) => {
-  const callerUid = await requireCallerRoles(
-      context, ['superadmin', 'finance'], 'Finance role required');
-  const { driverUid, amount, opId } = parseFloatOpInput(data);
-  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
-
-  const res = await settlementLedger.postEntry(db, {
-    idempotencyKey: `floatReturn:${opId}`,
-    kind: 'float_return',
-    refType: 'float_return',
+  const wRes = await settlementLedger.postEntry(db, {
+    idempotencyKey: `cashExchange_wallet:${opId}`,
+    kind: 'cash_to_wallet',
+    refType: 'cash_exchange',
     refId: opId,
     postedBy: callerUid,
     postedRole: 'finance',
     legs: [
-      { account: floatAcc, dr: amount },
+      { account: 'admin_clearing', dr: amount },
+      { account: pcAcc, cr: amount },
+    ],
+  }, {
+    mirrorBonus: true,
+    walletLedgerType: 'cash_to_wallet',
+    meta: { userUid: userUid12, amount, step: 'cash_to_wallet' },
+  });
+
+  const userSnap = await db.collection('users').doc(userUid12).get();
+  const bonusBalance = userSnap.exists
+      ? (parseInt(String((userSnap.data() || {}).bonusBalance ?? 0), 10) || 0)
+      : 0;
+  return {
+    ok: true,
+    uid: userUid12,
+    amount,
+    bonusBalance,
+    idempotent: !!(inRes.idempotent && wRes.idempotent),
+  };
+});
+
+/** Wallet → Cash: Dr passenger_credit / Cr admin_cash. Manfiy taqiqlangan. */
+exports.walletToCash = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['superadmin', 'finance'], 'Finance role required');
+  const userUid12 = canonicalUid(data && (data.phone || data.userPhone || data.uid));
+  const amount = Math.trunc(Number((data && data.amount) || 0));
+  const opId = String((data && data.opId) || '').trim();
+  if (!userUid12 || userUid12.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'phone noto\'g\'ri');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amount musbat butun bo\'lsin');
+  }
+  if (!opId || opId.length < 6) {
+    throw new functions.https.HttpsError('invalid-argument', 'opId kerak');
+  }
+  if (!(await isIdentifiedUser(userUid12))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Foydalanuvchi topilmadi');
+  }
+
+  const pcAcc = settlementLedger.passengerCreditAccount(userUid12);
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `walletToCash:${opId}`,
+    kind: 'wallet_to_cash',
+    refType: 'wallet_to_cash',
+    refId: opId,
+    postedBy: callerUid,
+    postedRole: 'finance',
+    legs: [
+      { account: pcAcc, dr: amount },
       { account: 'admin_cash', cr: amount },
     ],
   }, {
-    mirrorBonus: false,
-    meta: { driverUid, amount },
+    mirrorBonus: true,
+    walletLedgerType: 'wallet_to_cash',
+    meta: { userUid: userUid12, amount },
     assert: ({ accounts }) => {
-      const fa = accounts.get(floatAcc);
-      if (fa && fa.next < 0) {
+      const pc = accounts.get(pcAcc);
+      if (pc && pc.next < 0) {
         throw new functions.https.HttpsError(
             'failed-precondition',
-            'Float yetarli emas (qaytarish balansdan oshmasin)');
+            'Hamyon yetarli emas (manfiy taqiqlangan)');
       }
     },
   });
 
-  const status = await floatStatusOf(driverUid);
-  return { ok: true, idempotent: res.idempotent, ...status };
+  const userSnap = await db.collection('users').doc(userUid12).get();
+  const bonusBalance = userSnap.exists
+      ? (parseInt(String((userSnap.data() || {}).bonusBalance ?? 0), 10) || 0)
+      : 0;
+  return {
+    ok: true,
+    uid: userUid12,
+    amount,
+    bonusBalance,
+    idempotent: !!res.idempotent,
+  };
+});
+
+/**
+ * Bir martalik: driver_float:* > 0 → passenger_credit (xuddi shu uid).
+ * Manfiy float → ledger_exceptions, migratsiya qilinmaydi.
+ */
+exports.migrateFloatToWallet = functions.https.onCall(async (data, context) => {
+  const callerUid = await requireCallerRoles(
+      context, ['superadmin', 'finance'], 'Finance role required');
+  const dryRun = !!(data && data.dryRun);
+  const snap = await db.collection(settlementLedger.COL_ACCOUNTS).get();
+  const migrated = [];
+  const skippedNegative = [];
+  const skippedZero = [];
+
+  for (const d of snap.docs) {
+    if (!d.id.startsWith('driver_float:')) continue;
+    const bal = parseInt(String((d.data() || {}).balance ?? 0), 10) || 0;
+    const uid = settlementLedger.ownerUidOf(d.id);
+    if (!uid) continue;
+    if (bal < 0) {
+      skippedNegative.push({ uid, balance: bal });
+      if (!dryRun) {
+        await db.collection('ledger_exceptions').doc(`float_neg_migrate:${uid}`).set({
+          type: 'float_negative_migration_blocked',
+          driverUid: uid,
+          balance: bal,
+          detectedAt: admin.firestore.FieldValue.serverTimestamp(),
+          resolved: false,
+        }, { merge: true });
+      }
+      continue;
+    }
+    if (bal === 0) {
+      skippedZero.push({ uid });
+      continue;
+    }
+    if (dryRun) {
+      migrated.push({ uid, balance: bal, dryRun: true });
+      continue;
+    }
+    const floatAcc = settlementLedger.driverFloatAccount(uid);
+    const pcAcc = settlementLedger.passengerCreditAccount(uid);
+    await settlementLedger.postEntry(db, {
+      idempotencyKey: `floatToWallet:${uid}`,
+      kind: 'float_to_wallet_migration',
+      refType: 'migration',
+      refId: uid,
+      postedBy: callerUid,
+      postedRole: 'finance',
+      legs: [
+        { account: floatAcc, dr: bal },
+        { account: pcAcc, cr: bal },
+      ],
+    }, {
+      mirrorBonus: true,
+      walletLedgerType: 'float_to_wallet_migration',
+      meta: { uid, amount: bal },
+    });
+    migrated.push({ uid, balance: bal });
+  }
+
+  return {
+    ok: true,
+    dryRun,
+    migratedCount: migrated.length,
+    migrated,
+    skippedNegative,
+    skippedZeroCount: skippedZero.length,
+  };
 });
 
 exports.driverFloatStatus = functions.https.onCall(async (data, context) => {
@@ -9896,6 +10029,233 @@ function payoutKycOk(userData) {
   const birthDate = userData.birthDate;
   return name.length >= 2 && birthDate != null && String(birthDate).length >= 4;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Wallet P2P — so'rov + tasdiq (kunlik ceiling 100_000 so'm).
+// requestWalletTransfer: A → B dan pul SO'RAYDI (B tasdiqlasa B→A o'tadi).
+// respondWalletTransfer: B approve/reject.
+// ─────────────────────────────────────────────────────────────────────
+const WALLET_P2P_DAILY_CEILING = 100000;
+const WALLET_P2P_TTL_MS = 24 * 3600 * 1000;
+
+async function walletP2pApprovedTodaySum(fromUid) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const startTs = admin.firestore.Timestamp.fromDate(start);
+  const snap = await db.collection('wallet_transfer_requests')
+      .where('fromUid', '==', fromUid)
+      .where('status', '==', 'approved')
+      .where('resolvedAt', '>=', startTs)
+      .get()
+      .catch(async () => {
+        // Index yo'q bo'lsa — kengroq o'qib filtrlash.
+        const all = await db.collection('wallet_transfer_requests')
+            .where('fromUid', '==', fromUid)
+            .where('status', '==', 'approved')
+            .limit(200)
+            .get();
+        return all;
+      });
+  let sum = 0;
+  const startMs = start.getTime();
+  snap.forEach((d) => {
+    const x = d.data() || {};
+    const ra = x.resolvedAt && x.resolvedAt.toMillis ? x.resolvedAt.toMillis() : 0;
+    if (ra && ra < startMs) return;
+    sum += parseInt(String(x.amount ?? 0), 10) || 0;
+  });
+  return sum;
+}
+
+exports.requestWalletTransfer = functions.https.onCall(async (data, context) => {
+  const requesterUid = requireCallerUid(context);
+  // requester so'raydi; fromUid = pul egasi (tasdiqlovchi), toUid = oluvchi (so'rovchi).
+  const fromUid = canonicalUid(data && (data.fromPhone || data.fromUid));
+  const amount = Math.trunc(Number((data && data.amount) || 0));
+  if (!fromUid || fromUid.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'fromPhone noto\'g\'ri');
+  }
+  if (fromUid === requesterUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'O\'zingizdan so\'rab bo\'lmaydi');
+  }
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'amount musbat bo\'lsin');
+  }
+  if (amount > WALLET_P2P_DAILY_CEILING) {
+    throw new functions.https.HttpsError(
+        'invalid-argument',
+        `Bir so\'rovda max ${WALLET_P2P_DAILY_CEILING} so\'m`);
+  }
+  if (!(await isIdentifiedUser(fromUid)) || !(await isIdentifiedUser(requesterUid))) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'Ikkala tomon identifikatsiyadan o\'tgan bo\'lsin');
+  }
+
+  const spent = await walletP2pApprovedTodaySum(fromUid);
+  if (spent + amount > WALLET_P2P_DAILY_CEILING) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Kunlik limit: ${WALLET_P2P_DAILY_CEILING} so\'m (bugun ${spent})`);
+  }
+
+  const ref = db.collection('wallet_transfer_requests').doc();
+  const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + WALLET_P2P_TTL_MS);
+  await ref.set({
+    fromUid,
+    toUid: requesterUid,
+    amount,
+    status: 'pending',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt,
+    requestedBy: requesterUid,
+  });
+
+  try {
+    await notifyUserInApp({
+      userId: fromUid,
+      title: 'Ҳамён ўтказма сўрови',
+      body: `+${requesterUid} ${amount} сўм сўрамоқда. Тасдиқланг ёки рад этинг.`,
+      category: 'wallet',
+      source: 'wallet_p2p',
+      dataType: 'wallet_transfer_request',
+      screen: 'wallet',
+      extraData: { requestId: ref.id, amount: String(amount) },
+    });
+  } catch (e) {
+    console.error('requestWalletTransfer notify:', e.message || e);
+  }
+
+  return { ok: true, requestId: ref.id, status: 'pending', expiresAt: expiresAt.toDate().toISOString() };
+});
+
+exports.respondWalletTransfer = functions.https.onCall(async (data, context) => {
+  const callerUid = requireCallerUid(context);
+  const requestId = String((data && data.requestId) || '').trim();
+  const accept = !!(data && (data.accept === true || data.approve === true));
+  if (!requestId) {
+    throw new functions.https.HttpsError('invalid-argument', 'requestId kerak');
+  }
+
+  const ref = db.collection('wallet_transfer_requests').doc(requestId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'So\'rov topilmadi');
+  }
+  const req = snap.data() || {};
+  if (req.fromUid !== callerUid) {
+    throw new functions.https.HttpsError(
+        'permission-denied', 'Faqat pul egasi javob beradi');
+  }
+  if (req.status !== 'pending') {
+    throw new functions.https.HttpsError(
+        'failed-precondition', `So\'rov holati: ${req.status}`);
+  }
+  const exp = req.expiresAt && req.expiresAt.toMillis ? req.expiresAt.toMillis() : 0;
+  if (exp && exp < Date.now()) {
+    await ref.set({
+      status: 'expired',
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    throw new functions.https.HttpsError('failed-precondition', 'So\'rov muddati o\'tgan');
+  }
+
+  if (!accept) {
+    await ref.set({
+      status: 'rejected',
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedBy: callerUid,
+    }, { merge: true });
+    return { ok: true, status: 'rejected' };
+  }
+
+  const amount = Math.trunc(Number(req.amount || 0));
+  const toUid = String(req.toUid || '');
+  if (!Number.isInteger(amount) || amount <= 0 || toUid.length < 12) {
+    throw new functions.https.HttpsError('failed-precondition', 'So\'rov buzilgan');
+  }
+
+  const spent = await walletP2pApprovedTodaySum(callerUid);
+  if (spent + amount > WALLET_P2P_DAILY_CEILING) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Kunlik limit: ${WALLET_P2P_DAILY_CEILING} so\'m`);
+  }
+
+  const fromPc = settlementLedger.passengerCreditAccount(callerUid);
+  const toPc = settlementLedger.passengerCreditAccount(toUid);
+  const res = await settlementLedger.postEntry(db, {
+    idempotencyKey: `walletP2p:${requestId}`,
+    kind: 'wallet_p2p',
+    refType: 'wallet_transfer_request',
+    refId: requestId,
+    postedBy: callerUid,
+    postedRole: 'user',
+    legs: [
+      { account: fromPc, dr: amount },
+      { account: toPc, cr: amount },
+    ],
+  }, {
+    mirrorBonus: true,
+    meta: { fromUid: callerUid, toUid, amount },
+    assert: ({ accounts }) => {
+      const fa = accounts.get(fromPc);
+      if (fa && fa.next < 0) {
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'Hamyon yetarli emas');
+      }
+    },
+    onCommit: (tx) => {
+      tx.set(ref, {
+        status: 'approved',
+        resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        resolvedBy: callerUid,
+        journalEntryId: `walletP2p:${requestId}`,
+      }, { merge: true });
+      tx.set(db.collection('users').doc(callerUid).collection('wallet_ledger').doc(), {
+        type: 'wallet_p2p_debit',
+        amount: -amount,
+        module: 'wallet',
+        refType: 'wallet_transfer_request',
+        refId: requestId,
+        meta: { toUid },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'respondWalletTransfer',
+      });
+      tx.set(db.collection('users').doc(toUid).collection('wallet_ledger').doc(), {
+        type: 'wallet_p2p_credit',
+        amount,
+        module: 'wallet',
+        refType: 'wallet_transfer_request',
+        refId: requestId,
+        meta: { fromUid: callerUid },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'respondWalletTransfer',
+      });
+    },
+  });
+
+  try {
+    await notifyUserInApp({
+      userId: toUid,
+      title: 'Ўтказма тасдиқланди',
+      body: `+${callerUid} ${amount} сўм ўтказди.`,
+      category: 'wallet',
+      source: 'wallet_p2p',
+      dataType: 'wallet_transfer_approved',
+      screen: 'wallet',
+      extraData: { requestId, amount: String(amount) },
+    });
+  } catch (e) {
+    console.error('respondWalletTransfer notify:', e.message || e);
+  }
+
+  return {
+    ok: true,
+    status: 'approved',
+    amount,
+    idempotent: !!res.idempotent,
+  };
+});
 
 /**
  * Mahalliy taksi — haydovchi safarni yakunlaydi, yo'lovchi hamyon intent'i bo'yicha
@@ -10102,14 +10462,15 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
         'failed-precondition', 'Yo\'lovchi identifikatsiyadan o\'tmagan');
   }
 
-  const status = await floatStatusOf(driverUid);
-  if (!status.settlementEnabled) {
+  // Qaytim haydovchi HAMYONIDAN (passenger_credit) — manfiy taqiqlangan.
+  const driverUser = await db.collection('users').doc(driverUid).get();
+  const walletBalance = driverUser.exists
+      ? (parseInt(String((driverUser.data() || {}).bonusBalance ?? 0), 10) || 0)
+      : 0;
+  if (walletBalance < settlementAmount) {
     throw new functions.https.HttpsError(
-        'failed-precondition', 'Float kritik — settlement o\'chiq, faqat naqd');
-  }
-  if (status.balance < settlementAmount) {
-    throw new functions.https.HttpsError(
-        'failed-precondition', 'Float yetarli emas — qolganini naqd qaytaring');
+        'failed-precondition',
+        'Hamyon yetarli emas — qolganini naqd qaytaring yoki Cash Exchange qiling');
   }
 
   const ref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
@@ -10152,8 +10513,7 @@ exports.openSettlement = functions.https.onCall(async (data, context) => {
     settlementId: opId,
     state: 'pending',
     settlementAmount,
-    floatBalance: status.balance,
-    floatZone: status.zone,
+    walletBalance,
   };
 });
 
@@ -10183,7 +10543,9 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('failed-precondition', 'settlementAmount noto\'g\'ri');
   }
 
-  const floatAcc = settlementLedger.driverFloatAccount(s.driverUid);
+  // Haydovchi hamyonidan → yo'lovchi hamyoniga (ikkala passenger_credit).
+  const driverPc = settlementLedger.passengerCreditAccount(s.driverUid);
+  const passPc = settlementLedger.passengerCreditAccount(s.passengerUid);
   const res = await settlementLedger.postEntry(db, {
     idempotencyKey: `settle:${settlementId}`,
     kind: 'trip_settlement',
@@ -10192,12 +10554,11 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
     postedBy: callerUid,
     postedRole: 'passenger',
     legs: [
-      { account: floatAcc, dr: amount },
-      { account: settlementLedger.passengerCreditAccount(s.passengerUid), cr: amount },
+      { account: driverPc, dr: amount },
+      { account: passPc, cr: amount },
     ],
   }, {
     mirrorBonus: true,
-    walletLedgerType: 'settlement_credit',
     meta: { tripId: s.tripId, settlementId, driverUid: s.driverUid },
     precheck: async (tx) => {
       const fresh = await tx.get(sref);
@@ -10219,10 +10580,11 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
       return { fd, hostPatchRef };
     },
     assert: ({ accounts }) => {
-      const fa = accounts.get(floatAcc);
-      if (fa && fa.next < 0) {
+      const da = accounts.get(driverPc);
+      if (da && da.next < 0) {
         throw new functions.https.HttpsError(
-            'failed-precondition', 'Float yetarli emas (online: manfiylik mumkin emas)');
+            'failed-precondition',
+            'Haydovchi hamyoni yetarli emas (manfiy taqiqlangan)');
       }
     },
     onCommit: (tx, { entryId, pre }) => {
@@ -10236,6 +10598,28 @@ exports.confirmSettlement = functions.https.onCall(async (data, context) => {
       if (hostPatchRef) {
         tx.set(hostPatchRef, { settlementState: 'completed' }, { merge: true });
       }
+      const passRef = db.collection('users').doc(s.passengerUid);
+      const drvRef = db.collection('users').doc(s.driverUid);
+      tx.set(passRef.collection('wallet_ledger').doc(), {
+        type: 'settlement_credit',
+        amount,
+        module: 'taxi',
+        refType: 'settlement',
+        refId: settlementId,
+        meta: { tripId: s.tripId, driverUid: s.driverUid },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'confirmSettlement',
+      });
+      tx.set(drvRef.collection('wallet_ledger').doc(), {
+        type: 'settlement_debit',
+        amount: -amount,
+        module: 'taxi',
+        refType: 'settlement',
+        refId: settlementId,
+        meta: { tripId: s.tripId, passengerUid: s.passengerUid },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'confirmSettlement',
+      });
     },
   });
 
@@ -10346,18 +10730,22 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
         'failed-precondition', 'Yo\'lovchi identifikatsiyadan o\'tmagan');
   }
 
-  const config = await settlementLedger.getConfig(db);
-  const floatAcc = settlementLedger.driverFloatAccount(driverUid);
-  const faRef = db.collection(settlementLedger.COL_ACCOUNTS).doc(floatAcc);
-  const faSnap = await faRef.get();
-  const lastTopUpAmount = faSnap.exists ? (faSnap.data().lastTopUpAmount || 0) : 0;
-  const floor = settlementLedger.deferredFloor(lastTopUpAmount, config);
+  // Deferred ham hamyondan — manfiy taqiqlangan (float headroom yo'q).
+  const driverUser = await db.collection('users').doc(driverUid).get();
+  const walletBalance = driverUser.exists
+      ? (parseInt(String((driverUser.data() || {}).bonusBalance ?? 0), 10) || 0)
+      : 0;
+  if (walletBalance < settlementAmount) {
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Hamyon yetarli emas — manfiy deferred taqiqlangan');
+  }
 
   const sref = db.collection(settlementLedger.COL_SETTLEMENTS).doc(opId);
   const tripRef = db.collection('trips').doc(tripId);
   const bookingRef = db.collection('intercity_bookings').doc(tripId);
-  const timeoutAt = admin.firestore.Timestamp.fromMillis(
-      Date.now() + (config.deferredTimeoutHours * 3600 * 1000));
+  const driverPc = settlementLedger.passengerCreditAccount(driverUid);
+  const passPc = settlementLedger.passengerCreditAccount(passengerUid);
 
   let resultNext = 0;
   const res = await settlementLedger.postEntry(db, {
@@ -10368,12 +10756,11 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
     postedBy: driverUid,
     postedRole: 'driver',
     legs: [
-      { account: floatAcc, dr: settlementAmount },
-      { account: settlementLedger.passengerCreditAccount(passengerUid), cr: settlementAmount },
+      { account: driverPc, dr: settlementAmount },
+      { account: passPc, cr: settlementAmount },
     ],
   }, {
     mirrorBonus: true,
-    walletLedgerType: 'settlement_credit',
     meta: { tripId, settlementId: opId, driverUid, deferred: true },
     precheck: async (tx) => {
       const [tripSnap, bookSnap] = await Promise.all([
@@ -10384,26 +10771,16 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
       else if (bookSnap.exists) hostPatchRef = bookingRef;
       return { hostPatchRef };
     },
-    // Headroom: float floordan past tushmasin (deferred chegarasi).
     assert: ({ accounts }) => {
-      const fa = accounts.get(floatAcc);
-      if (fa && fa.next < floor) {
+      const da = accounts.get(driverPc);
+      if (da && da.next < 0) {
         throw new functions.https.HttpsError(
             'failed-precondition',
-            `Deferred chegarasidan oshdi (eng past float ${floor}) — naqd/top-up shart`);
+            'Hamyon yetarli emas (manfiy taqiqlangan)');
       }
     },
-    // Float manfiy bo'lsa → blok + reconcile taymeri; aks holda toza.
-    accountExtras: (id, st) => {
-      if (id !== floatAcc) return null;
-      const blocked = st.next < 0;
-      return blocked
-        ? { blocked: true, blockedReason: 'deferred_debt', deferredTimeoutAt: timeoutAt }
-        : { blocked: false, blockedReason: '', deferredTimeoutAt: null };
-    },
     onCommit: (tx, { entryId, balances, pre }) => {
-      const next = balances[floatAcc] || 0;
-      resultNext = next;
+      resultNext = balances[driverPc] || 0;
       tx.set(sref, {
         tripId,
         driverUid,
@@ -10428,20 +10805,38 @@ exports.submitDeferredSettlement = functions.https.onCall(async (data, context) 
         }, { merge: true });
       }
       tx.set(db.collection('users').doc(driverUid),
-          { settlementBlocked: next < 0 }, { merge: true });
+          { settlementBlocked: false }, { merge: true });
+      tx.set(db.collection('users').doc(passengerUid).collection('wallet_ledger').doc(), {
+        type: 'settlement_credit',
+        amount: settlementAmount,
+        module: 'taxi',
+        refType: 'settlement',
+        refId: opId,
+        meta: { tripId, driverUid, deferred: true },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'submitDeferredSettlement',
+      });
+      tx.set(db.collection('users').doc(driverUid).collection('wallet_ledger').doc(), {
+        type: 'settlement_debit',
+        amount: -settlementAmount,
+        module: 'taxi',
+        refType: 'settlement',
+        refId: opId,
+        meta: { tripId, passengerUid, deferred: true },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'submitDeferredSettlement',
+      });
     },
   });
 
-  const status = await floatStatusOf(driverUid);
   return {
     ok: true,
     idempotent: res.idempotent,
     settlementId: opId,
     state: 'completed',
     amount: settlementAmount,
-    floatBalance: res.idempotent ? status.balance : resultNext,
-    blocked: status.blocked,
-    deferredFloor: floor,
+    walletBalance: res.idempotent ? walletBalance : resultNext,
+    blocked: false,
   };
 });
 

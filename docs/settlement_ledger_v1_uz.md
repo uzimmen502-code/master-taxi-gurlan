@@ -47,10 +47,10 @@ Settlement орқали бериши мумкин. Settlement қисми ҳай�
 
 | Ҳисоб | Тури | Маъноси |
 |---|---|---|
-| `admin_cash` | Актив | Админ ушлаб турган реал нақд (float депозитлари + инкасса) |
+| `admin_cash` | Актив | Касса (Cash In / Wallet→Cash / инкасса) |
 | `courier_cash:{courierPhone}` | Актив | Курьер қўлидаги компания нақд/картаси (инкассациягача) |
-| `driver_float:{driverUid}` | Мажбурият | Платформанинг ҳайдовчи олдидаги қарзи (фонд) |
-| `passenger_credit:{userUid}` | Мажбурият | Платформанинг йўловчи олдидаги қарзи (= `bonusBalance` проекцияси) |
+| `driver_float:{driverUid}` | Мажбурият | **DEPRECATED** — `migrateFloatToWallet` орқали ҳамёнга кўчирилади |
+| `passenger_credit:{userUid}` | Мажбурият | Фойдаланувчи ҳамёни (= `bonusBalance`) — қайтим, хизмат, P2P |
 | `supplier_payable:{supplierUid}` | Мажбурият | Провайдерга тўланадиган (V2) |
 | `admin_clearing` | Клиринг | Оралиқ/мувозанат (миграция, V1 кредит сарфи, field cash) |
 
@@ -85,6 +85,22 @@ Settlement орқали бериши мумкин. Settlement қисми ҳай�
 - Дебет `admin_cash`
 - Кредит `courier_cash:courier`
 - kind: `courier_inkassa`
+
+**G. Cash Exchange (`cashExchange` — finance):**
+1. `cash_in`: Dr `admin_cash` / Cr `admin_clearing`
+2. `cash_to_wallet`: Dr `admin_clearing` / Cr `passenger_credit:{uid}`
+- Манфий ҳамён тақиқланади. `floatTopUp` / `floatReturn` ёпилган.
+
+**H. Wallet → Cash (`walletToCash`):**
+- Dr `passenger_credit` / Cr `admin_cash`
+
+**I. Сафар қайтими (`confirmSettlement`):**
+- Dr `passenger_credit:{driver}` / Cr `passenger_credit:{passenger}`
+- (эски: driver_float → passenger_credit)
+
+**J. P2P (`respondWalletTransfer` approve):**
+- Dr `passenger_credit:{from}` / Cr `passenger_credit:{to}`
+- Кунлик ceiling 100 000; сўров + тасдиқ; 24с TTL
 
 ## 6. Маълумотлар модели (Firestore)
 

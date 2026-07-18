@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "wallet_transfer_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fromUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "dating_profiles",
       "queryScope": "COLLECTION",
       "fields": [

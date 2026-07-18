@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../widgets/wallet_p2p_panel.dart';
 import '../widgets/wallet_section.dart';
 
-/// Кошелёк — баланс (тарихсиз).
+/// Кошелёк — баланс + P2P сўровлар.
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key, required this.phone});
 
@@ -19,7 +20,15 @@ class WalletScreen extends StatelessWidget {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: WalletSection(phone: phone, showTitle: false),
+        child: Column(
+          children: [
+            WalletSection(phone: phone, showTitle: false),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: WalletP2pPanel(phone: phone),
+            ),
+          ],
+        ),
       ),
     );
   }

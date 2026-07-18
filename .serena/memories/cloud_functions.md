@@ -24,11 +24,14 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - reconcileLedger — recompute/verify ledger balances (+ position breakdowns).
 - getMoneyControlSnapshot — Nazorat KPI + queues + today journal-by-kind.
 - receiveCourierCash — inkassa: Dr admin_cash / Cr courier_cash (finance).
+- cashExchange / walletToCash — Cash In→Wallet / Wallet→Cash (finance); floatTopUp/floatReturn deprecated.
+- migrateFloatToWallet — one-shot driver_float → passenger_credit.
+- requestWalletTransfer / respondWalletTransfer — P2P pull-request, 100k/day.
 - closePeriod — daily closing lock+snapshot (`period_closings/{YYYY-MM-DD}`).
-- floatTopUp / floatReturn / driverFloatStatus — driver float (cash advance) mgmt.
-- openSettlement / confirmSettlement / cancelSettlement — trip change-settlement state machine (`settlements`).
-- submitDeferredSettlement — offline-lite deferred settlement submit.
-- settlementDeferredWatch (sched) — process `ledger_exceptions` (negative float / deferred).
+- driverFloatStatus — legacy read (float accounts).
+- openSettlement / confirmSettlement / cancelSettlement — trip change via driver wallet → passenger wallet.
+- submitDeferredSettlement — wallet-based; no negative.
+- settlementDeferredWatch (sched) — legacy negative float timeouts.
 - courierSubmitPayment — also posts `courier_field_cash` for cash+card lines.
 
 ## Orders / Food / Stock

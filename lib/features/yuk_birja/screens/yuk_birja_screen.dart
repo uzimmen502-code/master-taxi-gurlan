@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../utils/intercity_places.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
 import '../yuk_vehicle_types.dart';
@@ -27,23 +28,41 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   static const _green = Color(0xFF22C55E);
 
   final _store = YukBirjaStore();
+  final _listCtrl = ScrollController();
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
-  final _weightCtrl = TextEditingController();
+  final _fromFocus = FocusNode();
+  final _toFocus = FocusNode();
 
   String _ownerId = '';
   String _ownerName = '';
   String _ownerPhone = '';
   String _tab = 'all';
-  String _vehicleFilter = '';
-  Set<String> _matchedIds = {};
-  List<YukMatchPair> _pairs = [];
-  bool _smartActive = false;
+
+  /// Драфт (ёзилмоқда) — «Қидируш»гача рўйхатга таъсир қилмайди.
+  String _draftVehicle = '';
+
+  /// Қўлланилган фильтр (фақат «Қидируш»дан кейин).
+  String _appliedFrom = '';
+  String _appliedTo = '';
+  String _appliedVehicle = '';
+
+  /// Пастга скроллда эълон/қидирув яширилади; юқорига — қайта очилади.
+  bool _toolsExpanded = true;
+
+  List<String> _fromSuggestions = [];
+  List<String> _toSuggestions = [];
 
   @override
   void initState() {
     super.initState();
     _bootstrap();
+    _fromFocus.addListener(() {
+      if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
+    });
+    _toFocus.addListener(() {
+      if (!_toFocus.hasFocus) setState(() => _toSuggestions = []);
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -61,27 +80,96 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   @override
   void dispose() {
+    _listCtrl.dispose();
     _fromCtrl.dispose();
     _toCtrl.dispose();
-    _weightCtrl.dispose();
+    _fromFocus.dispose();
+    _toFocus.dispose();
     _store.dispose();
     super.dispose();
   }
 
-  double? get _filterWeight {
-    final t = _weightCtrl.text.trim();
-    if (t.isEmpty) return null;
-    return double.tryParse(t);
+  void _onTabTap(String tab) {
+    setState(() {
+      _tab = tab;
+      _toolsExpanded = true;
+    });
+    if (_listCtrl.hasClients) {
+      _listCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
+
+  Locale get _locale => Localizations.localeOf(context);
 
   List<YukListing> get _visible => _store.filtered(
         tab: _tab,
-        from: _fromCtrl.text,
-        to: _toCtrl.text,
-        maxWeightTons: _filterWeight,
-        vehicleType: _vehicleFilter,
-        matchedIds: _matchedIds,
+        from: _appliedFrom,
+        to: _appliedTo,
+        vehicleType: _appliedVehicle,
       );
+
+  void _refreshFromSuggestions(String q) {
+    setState(() {
+      _fromSuggestions = IntercityPlaces.search(q, locale: _locale);
+    });
+  }
+
+  void _refreshToSuggestions(String q) {
+    setState(() {
+      _toSuggestions = IntercityPlaces.search(q, locale: _locale);
+    });
+  }
+
+  void _pickFrom(String display) {
+    final canonical = IntercityPlaces.normalizeLocation(display);
+    _fromCtrl.text = IntercityPlaces.displayForLocale(canonical, _locale);
+    setState(() => _fromSuggestions = []);
+    _fromFocus.unfocus();
+  }
+
+  void _pickTo(String display) {
+    final canonical = IntercityPlaces.normalizeLocation(display);
+    _toCtrl.text = IntercityPlaces.displayForLocale(canonical, _locale);
+    setState(() => _toSuggestions = []);
+    _toFocus.unfocus();
+  }
+
+  void _runSearch() {
+    setState(() {
+      _appliedFrom = IntercityPlaces.normalizeLocation(_fromCtrl.text);
+      _appliedTo = IntercityPlaces.normalizeLocation(_toCtrl.text);
+      _appliedVehicle = _draftVehicle;
+      _fromSuggestions = [];
+      _toSuggestions = [];
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  bool _onListScroll(ScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+    if (n is! ScrollUpdateNotification) return false;
+    final delta = n.scrollDelta ?? 0;
+    final pixels = n.metrics.pixels;
+    if (pixels <= 8) {
+      if (!_toolsExpanded) setState(() => _toolsExpanded = true);
+      return false;
+    }
+    if (delta > 6 && _toolsExpanded) {
+      setState(() {
+        _toolsExpanded = false;
+        _fromSuggestions = [];
+        _toSuggestions = [];
+      });
+      FocusScope.of(context).unfocus();
+    } else if (delta < -6 && !_toolsExpanded) {
+      setState(() => _toolsExpanded = true);
+    }
+    return false;
+  }
 
   bool _isMine(YukListing item) =>
       _ownerId.isNotEmpty && item.ownerId == _ownerId;
@@ -135,106 +223,6 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     setState(() {});
   }
 
-  void _runSmartMatch() {
-    final pairs = _store.smartMatch();
-    final ids = <String>{};
-    for (final p in pairs) {
-      ids.add(p.cargo.id);
-      ids.add(p.truck.id);
-    }
-    setState(() {
-      _pairs = pairs;
-      _matchedIds = ids;
-      _smartActive = true;
-      _tab = 'matched';
-    });
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: _card,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.55,
-        maxChildSize: 0.9,
-        builder: (_, scroll) {
-          if (_pairs.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(context.tr('yuk_match_empty'),
-                  style: const TextStyle(color: _muted)),
-            );
-          }
-          return ListView.separated(
-            controller: scroll,
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-            itemCount: _pairs.length + 1,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
-              if (i == 0) {
-                return Text(
-                  context.tr('yuk_smart_match'),
-                  style: const TextStyle(
-                    color: _accent,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                );
-              }
-              final p = _pairs[i - 1];
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _bg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${p.cargo.from} → ${p.cargo.to}  ×  ${p.truck.from} → ${p.truck.to}',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${p.score}% · ${p.cargo.weight ?? 0}${context.tr('yuk_ton_short')} / ${(p.truck.freeSpace ?? 0)}${context.tr('yuk_ton_short')} · ${context.tr(yukVehicleLabelKey(p.cargo.vehicleType))}',
-                      style: const TextStyle(color: _muted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _call(p.cargo);
-                          },
-                          icon: const Icon(Icons.phone, size: 16),
-                          label: Text(context.tr('yuk_call_cargo')),
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _call(p.truck);
-                          },
-                          icon: const Icon(Icons.phone, size: 16),
-                          label: Text(context.tr('yuk_call_truck')),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
@@ -263,11 +251,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     if (created == null) return;
     await _store.addListing(created);
     if (!mounted) return;
-    setState(() {
-      _tab = 'all';
-      _smartActive = false;
-      _matchedIds = {};
-    });
+    setState(() => _tab = 'all');
     _snack(context.tr('yuk_posted_ok'));
   }
 
@@ -288,18 +272,6 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
           backgroundColor: _bg,
           foregroundColor: Colors.white,
           title: Text(context.tr('home_module_yuk_birja')),
-          actions: [
-            if (_smartActive)
-              TextButton(
-                onPressed: () => setState(() {
-                  _smartActive = false;
-                  _matchedIds = {};
-                  _tab = 'all';
-                }),
-                child: Text(context.tr('yuk_clear_match'),
-                    style: const TextStyle(color: _accent)),
-              ),
-          ],
         ),
         body: !_store.ready
             ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -311,114 +283,137 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
                       _store.listings.where((e) => e.isActive).length;
                   return Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _BigAction(
-                                color: const Color(0xFF1E2A3A),
-                                border: _blue,
-                                icon: Icons.inventory_2_outlined,
-                                label: context.tr('yuk_i_have_cargo'),
-                                onTap: () => _openCreate(cargo: true),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _BigAction(
-                                color: const Color(0xFF1E2A1E),
-                                border: _green,
-                                icon: Icons.local_shipping_outlined,
-                                label: context.tr('yuk_i_have_truck'),
-                                onTap: () => _openCreate(cargo: false),
-                              ),
-                            ),
-                          ],
+                      ClipRect(
+                        child: AnimatedSize(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          alignment: Alignment.topCenter,
+                          child: _toolsExpanded
+                              ? Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          16, 0, 16, 8),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: _BigAction(
+                                              color: const Color(0xFF1E2A3A),
+                                              border: _blue,
+                                              label: context
+                                                  .tr('yuk_send_cargo'),
+                                              onTap: () =>
+                                                  _openCreate(cargo: true),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: _BigAction(
+                                              color: const Color(0xFF1E2A1E),
+                                              border: _green,
+                                              label: context
+                                                  .tr('yuk_take_cargo'),
+                                              onTap: () =>
+                                                  _openCreate(cargo: false),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    _FiltersBar(
+                                      fromCtrl: _fromCtrl,
+                                      toCtrl: _toCtrl,
+                                      fromFocus: _fromFocus,
+                                      toFocus: _toFocus,
+                                      fromSuggestions: _fromSuggestions,
+                                      toSuggestions: _toSuggestions,
+                                      vehicleFilter: _draftVehicle,
+                                      onVehicle: (v) =>
+                                          setState(() => _draftVehicle = v),
+                                      onFromChanged: _refreshFromSuggestions,
+                                      onToChanged: _refreshToSuggestions,
+                                      onPickFrom: _pickFrom,
+                                      onPickTo: _pickTo,
+                                      onSearch: _runSearch,
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox(width: double.infinity),
                         ),
                       ),
-                      _FiltersBar(
-                        fromCtrl: _fromCtrl,
-                        toCtrl: _toCtrl,
-                        weightCtrl: _weightCtrl,
-                        vehicleFilter: _vehicleFilter,
-                        onVehicle: (v) => setState(() => _vehicleFilter = v),
-                        onChanged: () => setState(() {}),
-                        onReset: () {
-                          _fromCtrl.clear();
-                          _toCtrl.clear();
-                          _weightCtrl.clear();
-                          setState(() {
-                            _vehicleFilter = '';
-                            _tab = 'all';
-                          });
-                        },
-                        onSmart: _runSmartMatch,
-                      ),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Row(
-                          children: [
-                            for (final t in [
-                              ('all', 'yuk_tab_all'),
-                              ('cargo', 'yuk_tab_cargo'),
-                              ('truck', 'yuk_tab_truck'),
-                              ('matched', 'yuk_tab_matched'),
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: ChoiceChip(
-                                  label: Text(context.tr(t.$2)),
-                                  selected: _tab == t.$1,
-                                  selectedColor: _accent.withValues(alpha: 0.25),
-                                  labelStyle: TextStyle(
-                                    color: _tab == t.$1 ? _accent : _muted,
-                                    fontWeight: FontWeight.w600,
+                      Material(
+                        color: _bg,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                          child: Row(
+                            children: [
+                              for (final t in [
+                                ('all', 'yuk_tab_all'),
+                                ('cargo', 'yuk_tab_cargo'),
+                                ('truck', 'yuk_tab_truck'),
+                              ])
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: ChoiceChip(
+                                    label: Text(context.tr(t.$2)),
+                                    selected: _tab == t.$1,
+                                    selectedColor:
+                                        _accent.withValues(alpha: 0.25),
+                                    labelStyle: TextStyle(
+                                      color: _tab == t.$1 ? _accent : _muted,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    side: BorderSide(
+                                      color: _tab == t.$1 ? _accent : _border,
+                                    ),
+                                    backgroundColor: _card,
+                                    onSelected: (_) => _onTabTap(t.$1),
                                   ),
-                                  side: BorderSide(
-                                    color: _tab == t.$1 ? _accent : _border,
-                                  ),
-                                  backgroundColor: _card,
-                                  onSelected: (_) => setState(() => _tab = t.$1),
                                 ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${items.length} ${context.tr('yuk_showing')} · $activeCount ${context.tr('yuk_active')}',
-                            style: const TextStyle(color: _muted, fontSize: 13),
+                            ],
                           ),
                         ),
                       ),
+                      if (_toolsExpanded)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${items.length} ${context.tr('yuk_showing')} · $activeCount ${context.tr('yuk_active')}',
+                              style:
+                                  const TextStyle(color: _muted, fontSize: 13),
+                            ),
+                          ),
+                        ),
                       Expanded(
-                        child: items.isEmpty
-                            ? Center(
-                                child: Text(context.tr('yuk_empty'),
-                                    style: const TextStyle(color: _muted)),
-                              )
-                            : ListView.separated(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                                itemCount: items.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (_, i) {
-                                  final item = items[i];
-                                  return _ListingCard(
-                                    item: item,
-                                    mine: _isMine(item),
-                                    matched: _matchedIds.contains(item.id),
-                                    onCall: () => _call(item),
-                                    onClose: () => _close(item),
-                                  );
-                                },
-                              ),
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _onListScroll,
+                          child: items.isEmpty
+                              ? Center(
+                                  child: Text(context.tr('yuk_empty'),
+                                      style: const TextStyle(color: _muted)),
+                                )
+                              : ListView.separated(
+                                  controller: _listCtrl,
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 4, 16, 24),
+                                  itemCount: items.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 12),
+                                  itemBuilder: (_, i) {
+                                    final item = items[i];
+                                    return _ListingCard(
+                                      item: item,
+                                      mine: _isMine(item),
+                                      onCall: () => _call(item),
+                                      onClose: () => _close(item),
+                                    );
+                                  },
+                                ),
+                        ),
                       ),
                     ],
                   );
@@ -433,14 +428,12 @@ class _BigAction extends StatelessWidget {
   const _BigAction({
     required this.color,
     required this.border,
-    required this.icon,
     required this.label,
     required this.onTap,
   });
 
   final Color color;
   final Color border;
-  final IconData icon;
   final String label;
   final VoidCallback onTap;
 
@@ -460,8 +453,17 @@ class _BigAction extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Icon(icon, color: border, size: 28),
-              const SizedBox(height: 6),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: border.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: border, width: 1.5),
+                ),
+                child: Icon(Icons.add, color: border, size: 26),
+              ),
+              const SizedBox(height: 8),
               Text(
                 label,
                 textAlign: TextAlign.center,
@@ -483,43 +485,97 @@ class _FiltersBar extends StatelessWidget {
   const _FiltersBar({
     required this.fromCtrl,
     required this.toCtrl,
-    required this.weightCtrl,
+    required this.fromFocus,
+    required this.toFocus,
+    required this.fromSuggestions,
+    required this.toSuggestions,
     required this.vehicleFilter,
     required this.onVehicle,
-    required this.onChanged,
-    required this.onReset,
-    required this.onSmart,
+    required this.onFromChanged,
+    required this.onToChanged,
+    required this.onPickFrom,
+    required this.onPickTo,
+    required this.onSearch,
   });
 
   final TextEditingController fromCtrl;
   final TextEditingController toCtrl;
-  final TextEditingController weightCtrl;
+  final FocusNode fromFocus;
+  final FocusNode toFocus;
+  final List<String> fromSuggestions;
+  final List<String> toSuggestions;
   final String vehicleFilter;
   final ValueChanged<String> onVehicle;
-  final VoidCallback onChanged;
-  final VoidCallback onReset;
-  final VoidCallback onSmart;
+  final ValueChanged<String> onFromChanged;
+  final ValueChanged<String> onToChanged;
+  final ValueChanged<String> onPickFrom;
+  final ValueChanged<String> onPickTo;
+  final VoidCallback onSearch;
+
+  InputDecoration _deco(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        filled: true,
+        fillColor: const Color(0xFF0B0E14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0xFF2D3748)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0xFF2D3748)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0xFFFACC15)),
+        ),
+      );
+
+  Widget _suggestions(List<String> items, ValueChanged<String> onPick) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      constraints: const BoxConstraints(maxHeight: 180),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2D3748)),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        itemCount: items.length,
+        separatorBuilder: (_, __) =>
+            const Divider(height: 1, color: Color(0xFF252B36)),
+        itemBuilder: (_, i) {
+          final label = items[i];
+          return InkWell(
+            onTap: () => onPick(label),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 16, color: Color(0xFFFACC15)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(label,
+                        style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    InputDecoration deco(String hint) => InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          filled: true,
-          fillColor: const Color(0xFF0B0E14),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
-            borderSide: const BorderSide(color: Color(0xFF2D3748)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
-            borderSide: const BorderSide(color: Color(0xFF2D3748)),
-          ),
-        );
-
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.all(12),
@@ -530,87 +586,60 @@ class _FiltersBar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: fromCtrl,
-                  onChanged: (_) => onChanged(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: deco(context.tr('yuk_from')),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: toCtrl,
-                  onChanged: (_) => onChanged(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: deco(context.tr('yuk_to')),
-                ),
-              ),
-            ],
+          TextField(
+            controller: fromCtrl,
+            focusNode: fromFocus,
+            onChanged: onFromChanged,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: _deco(context.tr('yuk_from')),
           ),
+          _suggestions(fromSuggestions, onPickFrom),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              SizedBox(
-                width: 88,
-                child: TextField(
-                  controller: weightCtrl,
-                  onChanged: (_) => onChanged(),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  ],
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: deco(context.tr('yuk_weight')),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  // ignore: deprecated_member_use
-                  value: vehicleFilter.isEmpty ? '' : vehicleFilter,
-                  dropdownColor: const Color(0xFF1A232E),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: deco(context.tr('yuk_vehicle_type')),
-                  items: [
-                    DropdownMenuItem(
-                      value: '',
-                      child: Text(context.tr('yuk_vehicle_all')),
-                    ),
-                    ...kYukVehicleTypes.map(
-                      (t) => DropdownMenuItem(
-                        value: t.value,
-                        child: Text(context.tr(t.labelKey)),
-                      ),
-                    ),
-                  ],
-                  onChanged: (v) => onVehicle(v ?? ''),
-                ),
-              ),
-            ],
+          TextField(
+            controller: toCtrl,
+            focusNode: toFocus,
+            onChanged: onToChanged,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: _deco(context.tr('yuk_to')),
           ),
+          _suggestions(toSuggestions, onPickTo),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              TextButton(
-                onPressed: onReset,
-                child: Text(context.tr('yuk_reset')),
+          DropdownButtonFormField<String>(
+            // ignore: deprecated_member_use
+            value: vehicleFilter.isEmpty ? '' : vehicleFilter,
+            dropdownColor: const Color(0xFF1A232E),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: _deco(context.tr('yuk_vehicle_type')),
+            items: [
+              DropdownMenuItem(
+                value: '',
+                child: Text(context.tr('yuk_vehicle_all')),
               ),
-              const Spacer(),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFFACC15),
-                  foregroundColor: const Color(0xFF0B0E14),
+              ...kYukVehicleTypes.map(
+                (t) => DropdownMenuItem(
+                  value: t.value,
+                  child: Text(context.tr(t.labelKey)),
                 ),
-                onPressed: onSmart,
-                icon: const Icon(Icons.psychology_alt, size: 18),
-                label: Text(context.tr('yuk_smart_match')),
               ),
             ],
+            onChanged: (v) => onVehicle(v ?? ''),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFACC15),
+                foregroundColor: const Color(0xFF0B0E14),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: onSearch,
+              icon: const Icon(Icons.search, size: 20),
+              label: Text(
+                context.tr('yuk_search'),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
           ),
         ],
       ),
@@ -622,14 +651,12 @@ class _ListingCard extends StatelessWidget {
   const _ListingCard({
     required this.item,
     required this.mine,
-    required this.matched,
     required this.onCall,
     required this.onClose,
   });
 
   final YukListing item;
   final bool mine;
-  final bool matched;
   final VoidCallback onCall;
   final VoidCallback onClose;
 
@@ -651,11 +678,9 @@ class _ListingCard extends StatelessWidget {
         color: const Color(0xFF131A22),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: matched
-              ? const Color(0xFF22C55E)
-              : mine
-                  ? const Color(0xFFFACC15).withValues(alpha: 0.45)
-                  : const Color(0xFF252B36),
+          color: mine
+              ? const Color(0xFFFACC15).withValues(alpha: 0.45)
+              : const Color(0xFF252B36),
         ),
       ),
       child: Column(
@@ -675,19 +700,6 @@ class _ListingCard extends StatelessWidget {
                   child: Text(context.tr('yuk_mine'),
                       style: const TextStyle(
                           color: Color(0xFFFACC15), fontSize: 11)),
-                ),
-              if (matched)
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF14532D),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(context.tr('yuk_match_pill'),
-                      style: const TextStyle(
-                          color: Color(0xFF4ADE80), fontSize: 11)),
                 ),
               const Spacer(),
               Text(
@@ -802,6 +814,8 @@ class _CreateListingSheet extends StatefulWidget {
 class _CreateListingSheetState extends State<_CreateListingSheet> {
   final _from = TextEditingController();
   final _to = TextEditingController();
+  final _fromFocus = FocusNode();
+  final _toFocus = FocusNode();
   final _cargo = TextEditingController();
   final _weight = TextEditingController();
   final _capacity = TextEditingController();
@@ -810,11 +824,26 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
   final _comment = TextEditingController();
   final _stopCtrls = <TextEditingController>[];
   String _vehicle = 'fura';
+  List<String> _fromSuggestions = [];
+  List<String> _toSuggestions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fromFocus.addListener(() {
+      if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
+    });
+    _toFocus.addListener(() {
+      if (!_toFocus.hasFocus) setState(() => _toSuggestions = []);
+    });
+  }
 
   @override
   void dispose() {
     _from.dispose();
     _to.dispose();
+    _fromFocus.dispose();
+    _toFocus.dispose();
     _cargo.dispose();
     _weight.dispose();
     _capacity.dispose();
@@ -827,8 +856,10 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
     super.dispose();
   }
 
+  Locale get _locale => Localizations.localeOf(context);
+
   List<String> get _stops => _stopCtrls
-      .map((c) => c.text.trim())
+      .map((c) => IntercityPlaces.normalizeLocation(c.text))
       .where((s) => s.isNotEmpty)
       .toList();
 
@@ -840,9 +871,36 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       );
 
+  Widget _placeSuggestions(List<String> items, ValueChanged<String> onPick) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 6, bottom: 4),
+      constraints: const BoxConstraints(maxHeight: 160),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E14),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2D3748)),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        itemCount: items.length,
+        separatorBuilder: (_, __) =>
+            const Divider(height: 1, color: Color(0xFF252B36)),
+        itemBuilder: (_, i) => ListTile(
+          dense: true,
+          leading: const Icon(Icons.location_on_outlined,
+              size: 16, color: Color(0xFFFACC15)),
+          title: Text(items[i],
+              style: const TextStyle(color: Colors.white, fontSize: 13)),
+          onTap: () => onPick(items[i]),
+        ),
+      ),
+    );
+  }
+
   void _submit() {
-    final from = _from.text.trim();
-    final to = _to.text.trim();
+    final from = IntercityPlaces.normalizeLocation(_from.text);
+    final to = IntercityPlaces.normalizeLocation(_to.text);
     if (from.isEmpty || to.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('yuk_need_route'))),
@@ -928,8 +986,8 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
           children: [
             Text(
               widget.isCargo
-                  ? context.tr('yuk_create_cargo')
-                  : context.tr('yuk_create_truck'),
+                  ? context.tr('yuk_send_cargo')
+                  : context.tr('yuk_take_cargo'),
               style: const TextStyle(
                   color: Color(0xFFFACC15),
                   fontSize: 18,
@@ -938,15 +996,35 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _from,
+              focusNode: _fromFocus,
+              onChanged: (q) => setState(() {
+                _fromSuggestions = IntercityPlaces.search(q, locale: _locale);
+              }),
               style: const TextStyle(color: Colors.white),
               decoration: _deco(context.tr('yuk_from')),
             ),
+            _placeSuggestions(_fromSuggestions, (s) {
+              final c = IntercityPlaces.normalizeLocation(s);
+              _from.text = IntercityPlaces.displayForLocale(c, _locale);
+              setState(() => _fromSuggestions = []);
+              _fromFocus.unfocus();
+            }),
             const SizedBox(height: 10),
             TextField(
               controller: _to,
+              focusNode: _toFocus,
+              onChanged: (q) => setState(() {
+                _toSuggestions = IntercityPlaces.search(q, locale: _locale);
+              }),
               style: const TextStyle(color: Colors.white),
               decoration: _deco(context.tr('yuk_to')),
             ),
+            _placeSuggestions(_toSuggestions, (s) {
+              final c = IntercityPlaces.normalizeLocation(s);
+              _to.text = IntercityPlaces.displayForLocale(c, _locale);
+              setState(() => _toSuggestions = []);
+              _toFocus.unfocus();
+            }),
             const SizedBox(height: 10),
             Text(context.tr('yuk_stops'),
                 style: const TextStyle(color: Color(0xFF94A3B8))),
@@ -976,8 +1054,8 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: () => setState(
-                    () => _stopCtrls.add(TextEditingController())),
+                onPressed: () =>
+                    setState(() => _stopCtrls.add(TextEditingController())),
                 icon: const Icon(Icons.add),
                 label: Text(context.tr('yuk_add_stop')),
               ),
@@ -1043,9 +1121,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
             TextField(
               controller: _price,
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-              ],
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               style: const TextStyle(color: Colors.white),
               decoration: _deco(context.tr('yuk_price_optional')),
             ),

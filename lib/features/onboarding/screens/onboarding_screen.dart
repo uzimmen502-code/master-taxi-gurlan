@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
+import '../../../services/mfy_service.dart';
 import '../../oil_change/data/oil_car_options.dart';
 import '../controllers/onboarding_controller.dart';
 
@@ -52,8 +55,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
-  final _districtCtrl = TextEditingController(text: 'Гурлан');
-  final _noteCtrl = TextEditingController();
   final _carPlateCtrl = TextEditingController();
 
   bool _isLoading = false;
@@ -62,6 +63,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
   @override
   void initState() {
     super.initState();
+    unawaited(MfyService.loadMfyData());
     _phoneCtrl.text = '+998 ';
     _phoneCtrl.addListener(_enforcePhonePrefix);
     _mfyCtrl.addListener(
@@ -70,10 +72,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
         () => context.read<OnboardingController>().setStreet(_streetCtrl.text));
     _houseCtrl.addListener(
         () => context.read<OnboardingController>().setHouse(_houseCtrl.text));
-    _districtCtrl.addListener(() =>
-        context.read<OnboardingController>().setDistrict(_districtCtrl.text));
-    _noteCtrl.addListener(
-        () => context.read<OnboardingController>().setNote(_noteCtrl.text));
     _birthDateCtrl.addListener(() => context
         .read<OnboardingController>()
         .setBirthDate(_birthDateCtrl.text));
@@ -99,8 +97,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _mfyCtrl.dispose();
     _streetCtrl.dispose();
     _houseCtrl.dispose();
-    _districtCtrl.dispose();
-    _noteCtrl.dispose();
     _carPlateCtrl.dispose();
     super.dispose();
   }
@@ -697,16 +693,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
                     tilePadding: EdgeInsets.zero,
                     childrenPadding: const EdgeInsets.only(bottom: 4),
                     title: const Text(
-                      'Яшаш манзилини киритиш',
+                      'Яшаш манзилингизни киритинг',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         color: _greenDark,
                         fontSize: 14,
                       ),
-                    ),
-                    subtitle: const Text(
-                      'ихтиёрий',
-                      style: TextStyle(fontSize: 11, color: _muted),
                     ),
                     children: [
                       _benefit(
@@ -715,12 +707,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                             'Аниқ манзил бўлса — нон ва бошқа буюртмалар тўғри эшигингизга етиб боради.',
                       ),
                       const SizedBox(height: 10),
-                      _manualField(
-                        ctrl: _mfyCtrl,
-                        label: loc.translate('ob_mfy_label'),
-                        icon: Icons.location_city,
-                        hint: 'Масалан: «Бахт» МФЙ',
-                      ),
+                      _mfyAutocomplete(c, loc),
                       const SizedBox(height: 8),
                       _manualField(
                         ctrl: _streetCtrl,
@@ -729,35 +716,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
                         hint: 'Кўча номи',
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _manualField(
-                              ctrl: _houseCtrl,
-                              label: 'Уй №',
-                              icon: Icons.home,
-                              hint: '12',
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: _manualField(
-                              ctrl: _districtCtrl,
-                              label: 'Туман',
-                              icon: Icons.map,
-                              hint: 'Гурлан',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
                       _manualField(
-                        ctrl: _noteCtrl,
-                        label: 'Қўшимча',
-                        icon: Icons.notes,
-                        hint: 'Подъезд, ориентир...',
-                        maxLines: 2,
+                        ctrl: _houseCtrl,
+                        label: 'Уй №',
+                        icon: Icons.home,
+                        hint: '12',
                       ),
                     ],
                   ),
@@ -1046,6 +1009,93 @@ class _OnboardingViewState extends State<_OnboardingView> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       ),
+    );
+  }
+
+  Widget _mfyAutocomplete(OnboardingController c, AppLocalizations loc) {
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: _mfyCtrl.text),
+      optionsBuilder: (TextEditingValue tev) async {
+        await MfyService.loadMfyData();
+        final q = tev.text.trim();
+        final districtId = c.geoDistrictId.trim();
+        if (q.isEmpty) {
+          final list = districtId.isNotEmpty
+              ? MfyService.getMfyByDistrict(districtId)
+              : MfyService.getAllMfy();
+          if (list.isEmpty) return MfyService.getAllMfy().take(12);
+          return list.take(12);
+        }
+        var hits = MfyService.searchMfy(
+          q,
+          district: districtId.isEmpty ? null : districtId,
+        );
+        if (hits.isEmpty) hits = MfyService.searchMfy(q);
+        return hits.take(12);
+      },
+      onSelected: (value) {
+        _mfyCtrl.text = value;
+        c.setMfy(value);
+      },
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return TextField(
+          controller: textController,
+          focusNode: focusNode,
+          onSubmitted: (_) => onFieldSubmitted(),
+          onChanged: (v) {
+            _mfyCtrl.text = v;
+            c.setMfy(v);
+          },
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            labelText: loc.translate('ob_mfy_label'),
+            hintText: 'МФЙ номини ёзинг — рўйхатдан танланг',
+            prefixIcon:
+                const Icon(Icons.location_city, size: 18, color: _green),
+            isDense: true,
+            filled: true,
+            fillColor: const Color(0xFFF7FBF7),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: _green, width: 1.5),
+            ),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 6,
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 360),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options.elementAt(index);
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      option,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _ink,
+                      ),
+                    ),
+                    onTap: () => onSelected(option),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -63,9 +63,19 @@ class ServiceConfigHolder {
   }
 
   /// Gating o'chiq bo'lsa — har doim [ModuleStatus.enabled] (regressiyasiz).
+  /// Enforce yoqilganda: remote defaults/areada hali yo‘q yangi [kKnownModuleIds]
+  /// → [enabled] (admin yashirmaguncha ko‘rinadi).
   static ModuleStatus statusOf(String moduleId) {
     if (!_enforce) return ModuleStatus.enabled;
-    return effective.statusOf(moduleId, fallback: ModuleStatus.hidden);
+    final status =
+        effective.statusOf(moduleId, fallback: ModuleStatus.hidden);
+    if (status == ModuleStatus.hidden &&
+        !_defaults.modules.containsKey(moduleId) &&
+        !_areaOverride.modules.containsKey(moduleId) &&
+        kKnownModuleIds.contains(moduleId)) {
+      return ModuleStatus.enabled;
+    }
+    return status;
   }
 
   static bool isVisible(String moduleId) => statusOf(moduleId).isVisible;

@@ -29,6 +29,7 @@ import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
+import '../yuk_birja/screens/yuk_birja_screen.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../jobs/jobs_tabs.dart';
@@ -46,11 +47,9 @@ import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
-import 'widgets/home_header.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
-import 'widgets/seller_pos_home_pin.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -466,9 +465,7 @@ class _HomeViewState extends State<_HomeView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(height: _sectionGap(context, base: 6)),
-                            const HomeHeader(),
-                            SizedBox(height: _sectionGap(context, base: 8)),
+                            SizedBox(height: _sectionGap(context, base: 10)),
                             WalletCard(
                               balance: _formatBalance(
                                   context, user?.bonusBalance ?? 0),
@@ -491,11 +488,6 @@ class _HomeViewState extends State<_HomeView> {
                                 );
                               },
                             ),
-                            if (home.role == 'seller' ||
-                                home.isAdminOrSuperadmin) ...[
-                              SizedBox(height: _sectionGap(context, base: 10)),
-                              const SellerPosHomePin(),
-                            ],
                             SizedBox(height: _sectionGap(context, base: 10)),
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
@@ -578,6 +570,21 @@ class _HomeViewState extends State<_HomeView> {
                               onMarshrut: () => _openModule(
                                 HomeModulesCatalog.byId('marshrut'),
                               ),
+                              onYukBirja: () async {
+                                if (!ServiceConfigHolder.isOpenable(
+                                    'yuk_birja')) {
+                                  _showTezKundaSnack();
+                                  return;
+                                }
+                                final phone = phoneDigits(
+                                  context.read<HomeController>().phone,
+                                );
+                                if (phone.length < 9) {
+                                  _HomeBottomNav.needPhone(context);
+                                  return;
+                                }
+                                await _push(const YukBirjaScreen());
+                              },
                               onCourier: () async {
                                 if (!ServiceConfigHolder.isOpenable(
                                     'courier')) {
@@ -693,6 +700,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
     required this.onLocal,
     required this.onIntercity,
     required this.onMarshrut,
+    required this.onYukBirja,
     required this.onCourier,
     required this.onSell,
     required this.onFood,
@@ -711,6 +719,7 @@ class _UnifiedServicesGrid extends StatefulWidget {
   final VoidCallback onLocal;
   final VoidCallback onIntercity;
   final VoidCallback onMarshrut;
+  final VoidCallback onYukBirja;
   final VoidCallback onCourier;
   final VoidCallback onSell;
   final VoidCallback onFood;
@@ -760,8 +769,11 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
           widget.onIntercity),
       _GridItemData('marshrut', 'assets/images/services/service_marshrut.png',
           context.tr('home_module_marshrut'), widget.onMarshrut),
-      _GridItemData('courier', 'assets/images/services/service_courier.png',
-          context.tr('home_module_courier'), widget.onCourier),
+      _GridItemData(
+          'yuk_birja',
+          'assets/images/services/service_yuk_birja.png',
+          context.tr('home_module_yuk_birja'),
+          widget.onYukBirja),
       _GridItemData('sell', 'assets/images/services/service_sell.png',
           context.tr('home_module_sell'), widget.onSell),
       _GridItemData('food', 'assets/images/services/service_food.png',
@@ -785,6 +797,9 @@ class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
       _GridItemData(
           'dating', null, context.tr('dating_short_label'), widget.onDating,
           emoji: '❤️', iconScale: 0.85),
+      // 2-саҳифа
+      _GridItemData('courier', 'assets/images/services/service_courier.png',
+          context.tr('home_module_courier'), widget.onCourier),
       _GridItemData('milk', 'assets/images/services/service_milk.png',
           context.tr('milk_short_label'), widget.onSut),
       _GridItemData('tire', 'assets/images/services/service_tire.png',

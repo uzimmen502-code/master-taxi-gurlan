@@ -4,7 +4,14 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 
 ## home (`features/home/`)
 - Entry `home_screen.dart` (re-exported by screens/home_screen.dart); home_controller.dart, home_grid_layout.dart, home_modules_catalog.dart (HomeModulesCatalog.modules: bread,food,sell,cheap_products_home,marshrut,local_taxi,intercity,jobs).
-- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile).
+- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile, **yuk_birja**).
+- `_UnifiedServicesGrid`: 4×3 per page. **1-page**: local, intercity, marshrut, **yuk_birja** (was courier), sell, food, jobs, market, bread, oil, circles, dating. **2-page**: **courier**, milk, tire, car_wash, carpet.
+- Module id `yuk_birja` in `kKnownModuleIds`; icon `assets/images/services/service_yuk_birja.png`.
+
+## yuk_birja (`features/yuk_birja/`) — MVP 2026-07
+- Native load marketplace; UI + vehicle types via AppLocalizations (`yuk_*`, `yuk_vehicle_*`); vehicle codes latin (`fura`,`ref`,…) with Cyrillic legacy map: `YukBirjaScreen`, `YukBirjaStore` (SharedPreferences `yuk_birja_listings_v1` + demo seed), models, vehicle types list.
+- Flows: cargo/truck posts, intermediate stops, filters, Smart Match, call via `callPhone`, close **only own** listing (`ownerId` = phone digits).
+- No Firestore yet; dark/yellow UI. HTML proto still in `docs/yuk_birjasi_prototype.html`.
 
 ## onboarding (`features/onboarding/`)
 - onboarding_controller.dart (3 soft pages: identity+birth → admin OTP → zone/GPS + optional address/car); LanguageSelectScreen soft pills; finish allows empty MFY/street/house; screens onboarding/phone_reverify/auth_restore/language_select.

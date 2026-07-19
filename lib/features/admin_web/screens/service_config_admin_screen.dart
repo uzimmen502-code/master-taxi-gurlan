@@ -10,7 +10,7 @@ import '../services/admin_auth_service.dart';
 /// Admin — "Ҳудудлар ва хизматлар".
 ///
 /// Matritsa ko'rinishi:
-///   - Qatorlar: 16 ta xizmat moduli
+///   - Qatorlar: 17 ta xizmat moduli
 ///   - Ustunlar: tuman markazlari (default); tuman bosilsa MFY ustunlari ochiladi
 ///   - Yuqorida: global baseline + enforce kill-switch
 class ServiceConfigAdminScreen extends StatefulWidget {
@@ -25,6 +25,7 @@ const Map<String, String> _moduleLabels = {
   'local_taxi': 'Mahalliy taksi',
   'intercity': 'Shaharlararo',
   'marshrut': 'Marshrutka',
+  'yuk_birja': 'Yuk birjasi',
   'courier': 'Kuryer',
   'sell': 'Sotish',
   'food': 'Ovqat',

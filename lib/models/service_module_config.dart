@@ -1,9 +1,10 @@
 /// Ilovadagi barcha mumkin bo'lgan modul ID'lari (fallback va admin ro'yxati uchun).
-/// Home xizmatlar grididagi 16 ta xizmat bilan sinxron.
+/// Home xizmatlar grididagi 17 ta xizmat bilan sinxron.
 const List<String> kKnownModuleIds = [
   'local_taxi',
   'intercity',
   'marshrut',
+  'yuk_birja',
   'courier',
   'sell',
   'food',

@@ -24,18 +24,20 @@ class MfyService {
     }
   }
 
-  // Туман бўйича МФЙ ларни олиш
+  // Туман бўйича МФЙ ларни олиш (`gurlan` / `Gurlan` / `Гурлан`).
   static List<String> getMfyByDistrict(String district) {
     if (_mfyData == null) return [];
+    final needle = district.trim().toLowerCase();
+    if (needle.isEmpty) return [];
 
     for (var region in _mfyData!.values) {
-      // Туман номини кирилл/лотинда ҳам текшириш
-      final districtKey = region.keys.firstWhere(
-            (key) => key.toLowerCase() == district.toLowerCase(),
-        orElse: () => '',
-      );
-      if (districtKey.isNotEmpty) {
-        return region[districtKey]!;
+      for (final entry in region.entries) {
+        final key = entry.key.toLowerCase();
+        if (key == needle ||
+            key.replaceAll('ʻ', '').replaceAll("'", '') ==
+                needle.replaceAll('_', '')) {
+          return entry.value;
+        }
       }
     }
     return [];

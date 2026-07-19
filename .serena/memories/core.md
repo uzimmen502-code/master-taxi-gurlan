@@ -32,5 +32,5 @@ Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bre
 - Admin web panel + analytics (main_admin.dart, shell sections, RBAC): `mem:modules/admin_panel`
 - Jobs board + cheap-product marketplace (both `ads`) + entertainment: `mem:modules/jobs_ads_entertainment`
 - Sell hub (platform + online market + forwarded + collection progress; Jobs P2P Sotaman removed): `mem:modules/sell`
-- Foundation: home + onboarding (admin-code phone auth) + profile + core services: `mem:modules/foundation`
+- Foundation: home + onboarding (+ yuk_birja MVP on home grid page1; courier page2) (admin-code phone auth) + profile + core services: `mem:modules/foundation`
 - Oil change (moy almashtirish — vehicles, due reminder, booking, car-profile bonus): `mem:modules/oil_change`

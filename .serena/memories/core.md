@@ -1,6 +1,6 @@
-# ava_gurlan (brand: AVA Gurlan)
+﻿# ava_gurlan (brand display: AVA Zona; package/applicationId unchanged)
 
-Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bread) with Firebase backend. Brand name shown is "AVA Gurlan"; pubspec `name: ava_gurlan` (renamed from `master_taxi_gurlan` 2026-06). Windows folder `C:\projects\ava_gurlan`, Serena project_name `ava_gurlan`, Android applicationId `uz.ava.gurlan` (all renamed 2026-06). Legacy `com.example.master_taxi_gurlan` kept only as a google-services.json client for migration.
+Flutter multi-service app (taxi: local + marshrut + intercity; delivery/food/bread) with Firebase backend. Brand display is "AVA Zona" (+ district context); package still ava_gurlan; pubspec `name: ava_gurlan` (renamed from `master_taxi_gurlan` 2026-06). Windows folder `C:\projects\ava_gurlan`, Serena project_name `ava_gurlan`, Android applicationId `uz.ava.gurlan` (all renamed 2026-06). Legacy `com.example.master_taxi_gurlan` kept only as a google-services.json client for migration.
 
 ## Source map
 - `lib/` — Flutter app (Dart)

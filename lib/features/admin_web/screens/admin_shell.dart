@@ -573,7 +573,7 @@ class _Sidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AVA Gurlan',
+                Text('AVA Zona',
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,

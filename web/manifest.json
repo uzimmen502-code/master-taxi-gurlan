@@ -1,11 +1,11 @@
 {
-    "name": "AVA Gurlan",
-    "short_name": "AVA Gurlan",
+    "name": "AVA Zona",
+    "short_name": "AVA Zona",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E65100",
     "theme_color": "#E65100",
-    "description": "AVA Gurlan — фойдаланувчи иловаси",
+    "description": "AVA Zona — фойдаланувчи иловаси",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -3,20 +3,26 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../splash_taglines_holder.dart';
+import '../brand_labels.dart';
 
-/// Qora fon: spiral kirish → 3.5 s pulsatsiya → ekrandan chiqish → UI fade-in.
+/// Qora fon: spiral → pulsatsiya → chiqish (~3.0 s) → UI fade-in.
 class AppLaunchSplash extends StatefulWidget {
-  const AppLaunchSplash({super.key, required this.child});
+  const AppLaunchSplash({
+    super.key,
+    required this.child,
+    this.onFinished,
+  });
 
   final Widget child;
 
-  static const Duration spiralDuration = Duration(milliseconds: 1500);
-  static const Duration pulseDuration = Duration(milliseconds: 3500);
-  static const Duration exitDuration = Duration(milliseconds: 900);
+  /// Splash overlay yopilganda (bir marta) — FCM/notification shu paytda.
+  final VoidCallback? onFinished;
 
-  // 15 turns in 1.5 seconds gives only ~6 frames per turn on a 60 Hz display
-  // and looks like stutter even when no frames are dropped.
+  static const Duration spiralDuration = Duration(milliseconds: 900);
+  static const Duration pulseDuration = Duration(milliseconds: 1600);
+  static const Duration exitDuration = Duration(milliseconds: 500);
+
+  // Too many turns in a short window looks like stutter on 60 Hz.
   static const int spiralTurns = 3;
 
   static Duration get totalDuration =>
@@ -62,6 +68,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
           setState(() => _overlayVisible = false);
+          widget.onFinished?.call();
         }
       });
   }
@@ -133,24 +140,12 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
   }
 
   ({String? text, double opacity}) _taglineForPulse(double pulseLocal) {
-    if (!SplashTaglinesHolder.enabled) {
-      return (text: null, opacity: 0);
+    // Brand+district hierarchy; marketing splash words no longer used here.
+    final revealAt = 0.55 / 3.0;
+    if (pulseLocal < revealAt) {
+      return (text: BrandLabels.brand, opacity: 0);
     }
-
-    final words = SplashTaglinesHolder.sessionWords;
-    if (words.isEmpty) return (text: null, opacity: 0);
-
-    String? text;
-    double opacity = 0;
-
-    for (var i = 0; i < 3 && i < words.length; i++) {
-      final revealAt = (i + 0.55) / 3.0;
-      if (pulseLocal < revealAt) break;
-      text = words[i];
-      opacity = 1;
-    }
-
-    return (text: text, opacity: opacity);
+    return (text: BrandLabels.brand, opacity: 1);
   }
 
   _SplashFrame _frameFor(double t) {
@@ -200,11 +195,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         : Curves.easeInOutSine.transform(
             ((local - 0.55) / 0.45).clamp(0.0, 1.0),
           );
-    final lastTagline = SplashTaglinesHolder.enabled &&
-            SplashTaglinesHolder.sessionWords.isNotEmpty
-        ? SplashTaglinesHolder.sessionWords[
-            math.min(2, SplashTaglinesHolder.sessionWords.length - 1)]
-        : null;
+    final lastTagline = BrandLabels.brand;
 
     return _SplashFrame(
       scale: _thirdGrowthScale(growthProgress),
@@ -282,28 +273,26 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                             ),
                             child: Opacity(
                               opacity: frame.taglineOpacity.clamp(0, 1),
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 280),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                child: frame.tagline == null
-                                    ? const SizedBox.shrink(
-                                        key: ValueKey('empty'),
-                                      )
-                                    : Text(
-                                        frame.tagline!,
-                                        key: ValueKey(frame.tagline),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: _taglineColor.withValues(
-                                            alpha: 0.95,
-                                          ),
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 2.4,
-                                        ),
+                              child: frame.tagline == null
+                                  ? const SizedBox.shrink()
+                                  : BrandTitleColumn(
+                                      listenToConfig: true,
+                                      spacing: 6,
+                                      brandStyle: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.2,
                                       ),
-                              ),
+                                      districtStyle: TextStyle(
+                                        color: _taglineColor.withValues(
+                                          alpha: 0.95,
+                                        ),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 1.6,
+                                      ),
+                                    ),
                             ),
                           ),
                         ),

@@ -16,7 +16,7 @@ const before = JSON.parse(fs.readFileSync(cyrlPath, 'utf8'));
 
 /** Lotin qoldiriladi. */
 const MANUAL = {
-  app_name: 'AVA Gurlan',
+  app_name: 'AVA Zona',
   ok: 'ОК',
 };
 

@@ -1,22 +1,40 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/utils/daily_duas.dart';
 
-/// Bugungi duo — 1-qator arabcha, 2-qator o‘zbekcha.
+/// Home yuqori: AVA Zona + tuman, keyin bugungi duo (ochiq fon).
 class HomeHeader extends StatelessWidget {
   const HomeHeader({super.key});
 
-  static const _textPrimary = Color(0xFFF5F5FA);
-  static const _textArabic = Color(0xFFB8B8D0);
+  static const _brand = Color(0xFF1A3A20);
+  static const _district = Color(0xFF2E7D32);
+  static const _textPrimary = Color(0xFF1A3A20);
+  static const _textSecondary = Color(0xFF4A6741);
 
   @override
   Widget build(BuildContext context) {
     final dua = todayDua();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          BrandTitleColumn(
+            brandStyle: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: _brand,
+            ),
+            districtStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: _district,
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
             dua.ar,
             textDirection: TextDirection.rtl,
@@ -26,7 +44,7 @@ class HomeHeader extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: _textArabic,
+              color: _textSecondary,
               height: 1.25,
             ),
           ),

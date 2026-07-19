@@ -16,7 +16,7 @@ const cyrl = JSON.parse(fs.readFileSync(cyrlPath, 'utf8'));
 
 /** Lotin qoldiriladigan yoki qo'lda yozilgan qiymatlar. */
 const MANUAL = {
-  app_name: 'AVA Gurlan',
+  app_name: 'AVA Zona',
   ok: 'ОК',
   auto_accept_bookings: 'Авто-тасдиқ (бронлар дарҳол tasdiqlanadi)',
   complete_trip_confirm:

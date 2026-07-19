@@ -550,9 +550,9 @@ KEYS = {
     "{date} · {km} км",
   ),
   "oil_service_default_name": (
-    "AVA Gurlan — мой сервиси",
-    "AVA Gurlan — moy servisi",
-    "AVA Gurlan — сервис масла",
+    "AVA Zona — мой сервиси",
+    "AVA Zona — moy servisi",
+    "AVA Zona — сервис масла",
   ),
   "oil_service_default_address": (
     "Гурлан тумани",

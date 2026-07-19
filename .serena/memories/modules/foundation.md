@@ -17,7 +17,8 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 ## Cold-start (`lib/main.dart`)
 - Blocking before `runApp`: Firebase + Firestore settings, SharedPreferences routing flags, `ServiceConfigHolder.loadCacheOnly()`, `SplashTaglinesHolder.prepareSessionSync()`.
 - Parallel unawaited: splash network `load()`, `PassengerCancelRulesHolder.load()`, daily report.
-- Post-frame deferred (`_deferredMobileBootstrap`): UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init. Home still refreshes `ServiceConfigHolder.bootstrap()` post-frame.
+- `AppLaunchSplash` ~3.0s (900+1600+500ms); `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init (ruxsat dialog splash ustida chiqmasin). Home still refreshes `ServiceConfigHolder.bootstrap()` post-frame.
+- Brand hierarchy: display `AVA Zona` + short district context (`BrandLabels` / `ServiceConfigHolder.districtLabel`); package/applicationId stay `ava_gurlan` / `uz.ava.gurlan`.
 
 ## Core services (`lib/services/`)
 - user_role_sync.dart UserRoleSync — server-authoritative role; `users/{uid}.role` vs prefs; privilegedRoles{admin,superadmin,dispatcher} Firestore wins; reconcile/forceSyncDriver; isClientAssignableRole{user,driver,courier}.

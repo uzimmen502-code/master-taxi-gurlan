@@ -46,6 +46,7 @@ import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import 'widgets/featured_products_section.dart';
+import 'widgets/home_header.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
@@ -465,17 +466,16 @@ class _HomeViewState extends State<_HomeView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(height: _sectionGap(context, base: 10)),
+                            SizedBox(height: _sectionGap(context, base: 6)),
+                            const HomeHeader(),
+                            SizedBox(height: _sectionGap(context, base: 8)),
                             WalletCard(
                               balance: _formatBalance(
                                   context, user?.bonusBalance ?? 0),
                               lastTxAmount: '—',
                               displayName: _displayName(context, user, home),
                               dateText: _todayText(context),
-                              locationText:
-                                  ServiceConfigHolder.districtId.isNotEmpty
-                                      ? ServiceConfigHolder.districtId
-                                      : context.tr('home_location_gurlan'),
+                              locationText: ServiceConfigHolder.districtLabel,
                               lastTxIsCredit: null,
                               onHistoryTap: () {
                                 if (uid.length < 9) {

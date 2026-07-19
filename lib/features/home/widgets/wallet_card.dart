@@ -217,7 +217,9 @@ class _WalletCardState extends State<WalletCard>
                       ),
                       const SizedBox(width: 8),
                       Flexible(
-                        child: Container(
+                        child: widget.locationText.trim().isEmpty
+                            ? const SizedBox.shrink()
+                            : Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,

@@ -6,8 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
@@ -122,7 +124,27 @@ class _ProfileViewState extends State<_ProfileView> {
     final scaffold = Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: Text(loc.translate('profile')),
+        title: ValueListenableBuilder<int>(
+          valueListenable: ServiceConfigHolder.revision,
+          builder: (_, __, ___) {
+            final district = ServiceConfigHolder.districtLabel;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(loc.translate('profile')),
+                if (district.isNotEmpty)
+                  Text(
+                    '${BrandLabels.brand} · $district',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,

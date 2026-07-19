@@ -6,7 +6,7 @@ class GedcomExporter {
 
   static String build({
     required List<RelativePerson> people,
-    String appName = 'AVA Gurlan',
+    String appName = 'AVA Zona',
   }) {
     final byId = {for (final p in people) p.id: p};
     final famIds = <String, String>{};

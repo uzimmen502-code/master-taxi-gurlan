@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/widgets/service_area_picker.dart';
@@ -274,7 +275,22 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('Яшаш манзили'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Яшаш манзили'),
+            Text(
+              BrandLabels.districtContext == null
+                  ? BrandLabels.brand
+                  : '${BrandLabels.brand} · ${BrandLabels.districtContext}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.75),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),

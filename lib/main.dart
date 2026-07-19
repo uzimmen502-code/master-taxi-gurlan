@@ -119,7 +119,7 @@ void main() async {
   ));
 }
 
-/// Birinchi frame'dan keyin: FCM / GPS / notification / role sync.
+/// Splash tugagach: FCM / GPS / notification / role sync.
 Future<void> _deferredMobileBootstrap({required bool deferRoleSync}) async {
   if (deferRoleSync) {
     try {
@@ -180,7 +180,7 @@ class MyApp extends StatefulWidget {
   final AnalyticsRepository analyticsRepo;
   final DailyReportService reportService;
 
-  /// Onboarding tugagan bo'lsa — Firestore role sync birinchi frame'dan keyin.
+  /// Onboarding tugagan bo'lsa — Firestore role sync splash'dan keyin.
   final bool deferRoleSync;
 
   static final GlobalKey<NavigatorState> navigatorKey =
@@ -197,13 +197,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_deferredBootstrapped) return;
-      _deferredBootstrapped = true;
-      unawaited(_deferredMobileBootstrap(
-        deferRoleSync: widget.deferRoleSync,
-      ));
-    });
+    // FCM/notification/GPS — splash tugagach (ruxsat dialog splash ustida chiqmasin).
+  }
+
+  void _onSplashFinished() {
+    if (_deferredBootstrapped) return;
+    _deferredBootstrapped = true;
+    unawaited(_deferredMobileBootstrap(
+      deferRoleSync: widget.deferRoleSync,
+    ));
   }
 
   @override
@@ -270,6 +272,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: Consumer<LocaleNotifier>(
         builder: (context, localeNotifier, _) {
           return AppLaunchSplash(
+            onFinished: _onSplashFinished,
             child: MaterialApp(
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -282,7 +285,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             localeResolutionCallback: LocaleUtils.localeResolutionCallback,
             navigatorKey: MyApp.navigatorKey,
             debugShowCheckedModeBanner: false,
-            title: 'AVA Gurlan',
+            title: 'AVA Zona',
             theme: AppTheme.light,
             home: !widget.languageSelected
                 ? const LanguageSelectScreen()

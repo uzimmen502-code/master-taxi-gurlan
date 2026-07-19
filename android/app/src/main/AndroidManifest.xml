@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
-        android:label="AVA Gurlan"
+        android:label="AVA Zona"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

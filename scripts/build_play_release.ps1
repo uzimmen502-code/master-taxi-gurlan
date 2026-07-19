@@ -1,4 +1,4 @@
-# AVA Gurlan — Google Play App Bundle build
+# AVA Zona — Google Play App Bundle build
 # Ishlatish: powershell -ExecutionPolicy Bypass -File scripts/build_play_release.ps1
 
 $ErrorActionPreference = "Stop"

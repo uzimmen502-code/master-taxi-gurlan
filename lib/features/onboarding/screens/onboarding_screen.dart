@@ -1,20 +1,21 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/service_area_picker.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../models/user_address.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
 import '../../oil_change/data/oil_car_options.dart';
 import '../controllers/onboarding_controller.dart';
 
+/// Ихчам soft онбординг: танишув → админ код → ҳудуд → Home.
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
@@ -38,38 +39,31 @@ class _OnboardingView extends StatefulWidget {
 }
 
 class _OnboardingViewState extends State<_OnboardingView> {
-  static const _green1 = AppColors.primaryDark;
-  static const _green2 = AppColors.primary;
-  static const _green3 = AppColors.primaryMid;
+  static const _ink = Color(0xFF102418);
+  static const _muted = Color(0xFF4A6741);
+  static const _green = AppColors.primary;
+  static const _greenDark = AppColors.primaryDark;
 
   final _pageController = PageController();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
-
-  // Manzil maydonlari — onboarding'ning 4-sahifasida shu yerda to'liq
-  // to'ldiriladi. Profilga keyin qaytib to'ldirish KERAK EMAS.
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
   final _districtCtrl = TextEditingController(text: 'Гурлан');
   final _noteCtrl = TextEditingController();
-  final _carModelCtrl = TextEditingController();
-  final _carColorCtrl = TextEditingController();
   final _carPlateCtrl = TextEditingController();
-  final _carSeatsCtrl = TextEditingController(text: '4');
 
   bool _isLoading = false;
+  bool _carExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _phoneCtrl.text = '+998 ';
     _phoneCtrl.addListener(_enforcePhonePrefix);
-
-    // Controller'dagi maydonlarni text controller'lar bilan ikki tomonlama
-    // sinxronlash.
     _mfyCtrl.addListener(
         () => context.read<OnboardingController>().setMfy(_mfyCtrl.text));
     _streetCtrl.addListener(
@@ -83,14 +77,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _birthDateCtrl.addListener(() => context
         .read<OnboardingController>()
         .setBirthDate(_birthDateCtrl.text));
-    _carModelCtrl.addListener(() =>
-        context.read<OnboardingController>().setCarModel(_carModelCtrl.text));
-    _carColorCtrl.addListener(() =>
-        context.read<OnboardingController>().setCarColor(_carColorCtrl.text));
     _carPlateCtrl.addListener(() =>
         context.read<OnboardingController>().setCarPlate(_carPlateCtrl.text));
-    _carSeatsCtrl.addListener(() =>
-        context.read<OnboardingController>().setCarSeats(_carSeatsCtrl.text));
   }
 
   void _enforcePhonePrefix() {
@@ -113,32 +101,38 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _houseCtrl.dispose();
     _districtCtrl.dispose();
     _noteCtrl.dispose();
-    _carModelCtrl.dispose();
-    _carColorCtrl.dispose();
     _carPlateCtrl.dispose();
-    _carSeatsCtrl.dispose();
     super.dispose();
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: Colors.red,
+      backgroundColor: Colors.red.shade700,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
   }
 
+  Future<void> _goPage(int page) async {
+    context.read<OnboardingController>().goToPage(page);
+    await _pageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
+  }
+
   Future<void> _next() async {
     final c = context.read<OnboardingController>();
-    final loc = AppLocalizations.of(context)!;
 
-    if (c.currentPage == 1) {
-      final raw = _phoneCtrl.text.trim();
-      if (raw.length < 9) {
-        _showError(loc.translate('ob_phone_required'));
+    if (c.currentPage == 0) {
+      final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
+      if (err != null) {
+        _showError(err);
         return;
       }
+      final raw = _phoneCtrl.text.trim();
       setState(() => _isLoading = true);
       try {
         final ok = await c.checkPhoneDeviceLock(raw);
@@ -147,13 +141,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         final fullPhone = '+${phoneDigits(raw)}';
 
         if (c.otpVerified || c.skipSmsVerification) {
-          c.advance();
-          c.advance();
-          await _pageController.animateToPage(
-            3,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOut,
-          );
+          await _goPage(2);
           return;
         }
 
@@ -162,13 +150,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
             current.phoneNumber == fullPhone &&
             current.phoneNumber != null) {
           c.otpVerified = true;
-          c.advance();
-          c.advance();
-          await _pageController.animateToPage(
-            3,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOut,
-          );
+          await _goPage(2);
           return;
         }
 
@@ -189,30 +171,29 @@ class _OnboardingViewState extends State<_OnboardingView> {
       return;
     }
 
-    if (c.currentPage == 4) {
-      final bd = _birthDateCtrl.text.trim();
-      c.setBirthDate(bd);
-      if (bd.isNotEmpty && OnboardingController.parseBirthDate(bd) == null) {
-        _showError(loc.translate('ob_birth_invalid_format'));
-        return;
-      }
-    }
-
     final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
     if (err != null) {
       _showError(err);
       return;
     }
+    if (c.isLastPage) {
+      await _finish();
+      return;
+    }
     c.advance();
     await _pageController.nextPage(
-        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _prev() {
     final c = context.read<OnboardingController>();
     c.back();
     _pageController.previousPage(
-        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _fetchGps() async {
@@ -225,18 +206,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
     }
   }
 
-  String _formatBirthDate(DateTime value) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(value.day)}.${two(value.month)}.${value.year}';
-  }
-
   Future<void> _pickBirthDate() async {
     final loc = AppLocalizations.of(context)!;
     final c = context.read<OnboardingController>();
     final now = DateTime.now();
-    final initial =
-        OnboardingController.parseBirthDate(c.birthDate) ??
-            DateTime(now.year - 25);
+    final initial = OnboardingController.parseBirthDate(c.birthDate) ??
+        DateTime(now.year - 25);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -247,27 +222,43 @@ class _OnboardingViewState extends State<_OnboardingView> {
       confirmText: loc.translate('ob_date_picker_confirm'),
     );
     if (picked == null) return;
-    final formatted = _formatBirthDate(picked);
+    String two(int n) => n.toString().padLeft(2, '0');
+    final formatted =
+        '${two(picked.day)}.${two(picked.month)}.${picked.year}';
     _birthDateCtrl.text = formatted;
     c.setBirthDate(formatted);
   }
 
+  void _prepareCarBeforeFinish(OnboardingController c) {
+    final plate = _carPlateCtrl.text.trim();
+    final wantsCar = _carExpanded &&
+        (plate.isNotEmpty ||
+            c.carBrand.trim().isNotEmpty && c.carModel.trim().isNotEmpty);
+    if (wantsCar) {
+      c.setSkipCarStep(false);
+      c.setCarSetupStep(1);
+      if (c.carUsageTags.isEmpty) {
+        c.setCarUsageTags(const ['taxi']);
+      }
+    } else {
+      c.clearCarDraft();
+    }
+  }
+
   Future<void> _finish() async {
     final c = context.read<OnboardingController>();
-    // Қисман бошланган авто (2-қадамга ўтилган) — тўлиқ ёки skip.
-    if (!c.skipCarStep && c.carSetupStep >= 1 && !c.hasCarDraft) {
-      _showError(
-          'Автомобил майдонларини тўлиқ тўлдиринг ёки «ўтказиб юбориш»ни босинг');
+    final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
+    if (err != null) {
+      _showError(err);
       return;
     }
+    _prepareCarBeforeFinish(c);
     final ok = await c.finish(
       name: _nameCtrl.text,
       phone: _phoneCtrl.text,
     );
-    final err = c.consumeError();
-    if (err != null && mounted) {
-      _showError(err);
-    }
+    final finishErr = c.consumeError();
+    if (finishErr != null && mounted) _showError(finishErr);
     if (!ok || !mounted) return;
     pushAppHome(context);
   }
@@ -282,399 +273,361 @@ class _OnboardingViewState extends State<_OnboardingView> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [_green1, _green2, _green3],
+            colors: [Color(0xFFE8F5E9), Color(0xFFF4FAF2), Color(0xFFDCEDC8)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
-          child: Column(children: [
-            _progressBar(c.currentPage),
-            const SizedBox(height: 8),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: c.goToPage,
-                children: [
-                  _page1(loc),
-                  _page2(loc),
-                  _pageOtp(loc, c),
-                  _page3(loc, c),
-                  _pageBirthDate(loc, c),
-                  _pageAddress(loc, c),
-                  _pageCar(c),
-                ],
-              ),
-            ),
-            _footerButtons(c, loc),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // PROGRESS + FOOTER
-  // ────────────────────────────────────────────────────────────────────
-  Widget _progressBar(int currentPage) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
-      child: Row(
-        children: List.generate(
-          OnboardingController.totalPages,
-          (i) => Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              height: 4,
-              decoration: BoxDecoration(
-                color: i <= currentPage
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _footerButtons(OnboardingController c, AppLocalizations loc) {
-    final isCarPage = c.currentPage == OnboardingController.totalPages - 1;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isCarPage)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: TextButton(
-                onPressed: c.isSubmitting || _isLoading
-                    ? null
-                    : () {
-                        c.clearCarDraft();
-                        _carColorCtrl.clear();
-                        _carPlateCtrl.clear();
-                        _carSeatsCtrl.text = '4';
-                        _finish();
-                      },
-                child: Text(
-                  'Ҳозирча ўтказиб юбориш',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          Row(children: [
-            if (c.currentPage > 0)
-              GestureDetector(
-                onTap: _prev,
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white),
-                ),
-              ),
-            Expanded(
-              child: SizedBox(
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
-                      ? null
-                      : (c.isLastPage ? _finish : _next),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: _green2,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
-                  ),
-                  child: c.isSubmitting
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppColors.primary))
-                      : Text(
-                          c.isLastPage
-                              ? (c.hasCarDraft
-                                  ? 'Сақлаш ва бошлаш'
-                                  : loc.translate('start'))
-                              : loc.translate('continue'),
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                child: Column(
+                  children: [
+                    Text(
+                      BrandLabels.brand,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: _greenDark,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _progressBar(c.currentPage),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Қадам ${c.currentPage + 1} / ${OnboardingController.totalPages}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _muted,
                         ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // PAGES
-  // ────────────────────────────────────────────────────────────────────
-  Widget _page1(AppLocalizations loc) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('👋', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text(loc.translate('onboarding_welcome'),
-                style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 6),
-            Text(loc.translate('onboarding_name'),
-                style: TextStyle(
-                    fontSize: 14, color: Colors.white.withValues(alpha: 0.8))),
-            const SizedBox(height: 28),
-            _field(
-              controller: _nameCtrl,
-              hint: loc.translate('enter_name'),
-              icon: Icons.person_outline,
-              inputType: TextInputType.name,
-            ),
-            const SizedBox(height: 28),
-            _duaBox(loc.translate('allah_protect')),
-          ],
-        ),
-      );
-
-  Widget _page2(AppLocalizations loc) {
-    final c = context.watch<OnboardingController>();
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('📱', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 12),
-          Text(
-            loc.translate('onboarding_phone'),
-            style: const TextStyle(
-                fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            loc.translate('ob_phone_lock_hint'),
-            style: TextStyle(
-                fontSize: 14, color: Colors.white.withValues(alpha: 0.8)),
-          ),
-          const SizedBox(height: 28),
-          _field(
-            controller: _phoneCtrl,
-            hint: loc.translate('enter_phone'),
-            icon: Icons.phone_outlined,
-            inputType: TextInputType.phone,
-            formatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: c.goToPage,
+                  children: [
+                    _pageIdentity(loc, c),
+                    _pageOtp(loc, c),
+                    _pageZone(loc, c),
+                  ],
+                ),
+              ),
+              _footer(c, loc),
             ],
           ),
-          if (c.phoneStepError != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.red.shade900.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(c.phoneStepError!,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 13)),
+        ),
+      ),
+    );
+  }
+
+  Widget _progressBar(int currentPage) {
+    return Row(
+      children: List.generate(
+        OnboardingController.totalPages,
+        (i) => Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            height: 6,
+            decoration: BoxDecoration(
+              color: i <= currentPage
+                  ? _green
+                  : _green.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _footer(OnboardingController c, AppLocalizations loc) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+      child: Row(
+        children: [
+          if (c.currentPage > 0)
+            TextButton(
+              onPressed: _isLoading ? null : _prev,
+              child: const Text(
+                'Ортга',
+                style: TextStyle(
+                  color: _muted,
+                  fontWeight: FontWeight.w700,
                 ),
-              ]),
-            ),
-          ],
-          if (c.isCheckingDevice) ...[
-            const SizedBox(height: 16),
-            Center(
-              child: Column(
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 10),
-                  Text(
-                    loc.translate('ob_device_checking'),
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ],
               ),
             ),
-          ],
+          if (c.currentPage > 0) const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
+                    ? null
+                    : _next,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _greenDark,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: c.isSubmitting || _isLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        c.isLastPage
+                            ? 'Бошлаш'
+                            : loc.translate('continue'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _pageOtp(AppLocalizations loc, OnboardingController c) {
+  // ── Page 0 ───────────────────────────────────────────────────────────
+  Widget _pageIdentity(AppLocalizations loc, OnboardingController c) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('🔐', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 12),
+          const Text('👋', style: TextStyle(fontSize: 40)),
+          const SizedBox(height: 8),
+          const Text(
+            'Танишайлик',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Исм, телефон ва жинс — битта экранда.',
+            style: TextStyle(fontSize: 14, color: _muted, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 16),
+          _card(
+            child: Column(
+              children: [
+                _field(
+                  controller: _nameCtrl,
+                  hint: loc.translate('enter_name'),
+                  icon: Icons.person_outline,
+                  inputType: TextInputType.name,
+                ),
+                const SizedBox(height: 12),
+                _field(
+                  controller: _phoneCtrl,
+                  hint: loc.translate('enter_phone'),
+                  icon: Icons.phone_outlined,
+                  inputType: TextInputType.phone,
+                  formatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
+                  ],
+                ),
+                if (c.phoneStepError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(c.phoneStepError!,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                ],
+                if (c.isCheckingDevice) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(color: _green),
+                ],
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _genderPill(
+                          c, 'male', '👨', loc.translate('gender_male')),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _genderPill(
+                          c, 'female', '👩', loc.translate('gender_female')),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _field(
+                  controller: _birthDateCtrl,
+                  hint: loc.translate('ob_birth_input_hint'),
+                  icon: Icons.cake_outlined,
+                  inputType: TextInputType.number,
+                  formatters: [_BirthDateInputFormatter()],
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _pickBirthDate,
+                    icon: const Icon(Icons.calendar_month, size: 18),
+                    label: Text(loc.translate('ob_birth_calendar')),
+                    style: TextButton.styleFrom(foregroundColor: _greenDark),
+                  ),
+                ),
+                _benefit(
+                  icon: '🎂',
+                  text:
+                      'Киритсангиз — AVA Zona туғилган кунда табрик ва бонус беради.',
+                  warm: true,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Page 1 ───────────────────────────────────────────────────────────
+  Widget _pageOtp(AppLocalizations loc, OnboardingController c) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('🔐', style: TextStyle(fontSize: 40)),
+          const SizedBox(height: 8),
           Text(
             loc.translate('ob_otp_title'),
             style: const TextStyle(
-                fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             c.isAdminCodeReady
                 ? 'Админ код тайёр — киритинг ёки автоматик тўлдирилади'
-                : 'Админ код яратmoqda... (${_phoneCtrl.text})',
-            style: TextStyle(
-                fontSize: 14,
-                color: Colors.white.withValues(alpha: 0.8)),
-          ),
-          if (c.isAdminCodeReady && c.generatedAdminCode != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Код: ${c.generatedAdminCode}',
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 6,
-              ),
-            ),
-          ],
-          const SizedBox(height: 28),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3)),
-              ],
-            ),
-            child: TextField(
-              controller: _otpCtrl,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              autofocus: true,
-              style: const TextStyle(
-                  fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 8),
-              decoration: const InputDecoration(
-                hintText: '------',
-                counterText: '',
-                border: InputBorder.none,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-              ),
-              onChanged: (val) async {
-                if (c.isAdminCodeReady &&
-                    c.generatedAdminCode != null &&
-                    val.trim().isEmpty) {
-                  _otpCtrl.text = c.generatedAdminCode!;
-                  _otpCtrl.selection = TextSelection.collapsed(
-                    offset: c.generatedAdminCode!.length,
-                  );
-                }
-                if (val.trim().length == 6) {
-                  final ok = await c.verifyAdminCode(
-                    _phoneCtrl.text,
-                    val.trim(),
-                  );
-                  if (ok && mounted) {
-                    c.advance();
-                    await _pageController.nextPage(
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeInOut);
-                  }
-                }
-              },
+                : 'Админ код яратилмоқда... (${_phoneCtrl.text})',
+            style: const TextStyle(
+              fontSize: 14,
+              color: _muted,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 20),
-          if (c.isSendingOtp || (!c.isAdminCodeReady && !c.otpVerified))
-            Center(
-              child: Column(children: [
-                const CircularProgressIndicator(color: Colors.white),
-                const SizedBox(height: 8),
-                Text(
-                  c.isSendingOtp
-                      ? 'Сўров юборилмоқда...'
-                      : 'Админ код кутилмоқда...',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ]),
-            ),
-          if (c.isVerifyingOtp)
-            Center(
-              child: Column(children: [
-                const CircularProgressIndicator(color: Colors.white),
-                const SizedBox(height: 8),
-                Text(loc.translate('ob_otp_verifying'),
-                    style: const TextStyle(color: Colors.white, fontSize: 13)),
-              ]),
-            ),
-          if (c.otpVerified)
-            Row(children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Text(loc.translate('ob_otp_verified'),
+          const SizedBox(height: 16),
+          _card(
+            child: Column(
+              children: [
+                if (c.isAdminCodeReady && c.generatedAdminCode != null) ...[
+                  Text(
+                    'Код: ${c.generatedAdminCode}',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: _greenDark,
+                      letterSpacing: 4,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                TextField(
+                  controller: _otpCtrl,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  autofocus: true,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15)),
-            ]),
-          if (c.otpError != null)
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade900.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.error_outline,
-                      color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(c.otpError!,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 13)),
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 8,
+                    color: _ink,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '------',
+                    counterText: '',
+                    filled: true,
+                    fillColor: const Color(0xFFF3F4F6),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 16),
+                  ),
+                  onChanged: (val) async {
+                    if (c.isAdminCodeReady &&
+                        c.generatedAdminCode != null &&
+                        val.trim().isEmpty) {
+                      _otpCtrl.text = c.generatedAdminCode!;
+                      _otpCtrl.selection = TextSelection.collapsed(
+                        offset: c.generatedAdminCode!.length,
+                      );
+                    }
+                    if (val.trim().length == 6) {
+                      final ok = await c.verifyAdminCode(
+                        _phoneCtrl.text,
+                        val.trim(),
+                      );
+                      if (ok && mounted) {
+                        c.advance();
+                        await _pageController.nextPage(
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeInOut,
+                        );
+                      } else if (mounted && c.otpError != null) {
+                        _showError(c.otpError!);
+                      }
+                    }
+                  },
+                ),
+                if (c.isSendingOtp ||
+                    (!c.isAdminCodeReady && !c.otpVerified)) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(color: _green),
+                  const SizedBox(height: 8),
+                  Text(
+                    c.isSendingOtp
+                        ? 'Сўров юборилмоқда...'
+                        : 'Админ код кутилмоқда...',
+                    style: const TextStyle(color: _muted, fontSize: 13),
                   ),
                 ],
-              ),
-            ),
-          const SizedBox(height: 24),
-          TextButton.icon(
-            onPressed: c.isSendingOtp
-                ? null
-                : () {
-                    _otpCtrl.clear();
-                    c.requestAdminCode(_phoneCtrl.text);
-                  },
-            icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
-            label: const Text(
-              'Қайта сўров юбориш',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+                if (c.otpVerified) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: _green, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        loc.translate('ob_otp_verified'),
+                        style: const TextStyle(
+                          color: _greenDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -682,205 +635,195 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  Widget _page3(AppLocalizations loc, OnboardingController c) =>
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('🙍', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text(loc.translate('onboarding_gender'),
-                style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 6),
-            Text(loc.translate('onboarding_gender_sub'),
-                style: TextStyle(
-                    fontSize: 14, color: Colors.white.withValues(alpha: 0.8))),
-            const SizedBox(height: 28),
-            Row(children: [
-              Expanded(
-                  child: _genderCard(
-                      c, 'male', '👨', loc.translate('gender_male'))),
-              const SizedBox(width: 14),
-              Expanded(
-                  child: _genderCard(
-                      c, 'female', '👩', loc.translate('gender_female'))),
-            ]),
-          ],
-        ),
-      );
-
-  Widget _pageBirthDate(AppLocalizations loc, OnboardingController c) =>
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('🎂', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text(loc.translate('ob_birth_title'),
-                style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 6),
-            Text(
-              loc.translate('ob_birth_hint'),
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.4,
-                color: Colors.white.withValues(alpha: 0.86),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _field(
-              controller: _birthDateCtrl,
-              hint: loc.translate('ob_birth_input_hint'),
-              icon: Icons.cake_outlined,
-              inputType: TextInputType.number,
-              formatters: [_BirthDateInputFormatter()],
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: _pickBirthDate,
-              icon: const Icon(Icons.calendar_month, color: Colors.white),
-              label: Text(
-                loc.translate('ob_birth_calendar'),
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            if (c.birthDate.isEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                loc.translate('ob_birth_optional'),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.75),
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-
-  /// **Manzil sahifasi** — onboarding'ning ГСП + qo'lda to'lдiriladigan toliq
-  /// shakli. AddressEditScreen bilan bir xil maydonlar — buyurtmalardan keyin
-  /// qayta to'ldirish KERAK EMAS.
-  Widget _pageAddress(AppLocalizations loc, OnboardingController c) {
+  // ── Page 2 ───────────────────────────────────────────────────────────
+  Widget _pageZone(AppLocalizations loc, OnboardingController c) {
     final gpsRequired = c.isGpsRequiredForPhone(_phoneCtrl.text);
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('📍', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 8),
-          Text(loc.translate('ob_address_title'),
-              style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          const Text(
+            'Ҳудудингиз',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: _ink,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(
-            gpsRequired
-                ? loc.translate('ob_address_hint_both')
-                : loc.translate('ob_address_hint_manual'),
+          const Text(
+            'Вилоят, туман ва GPS — хизматлар учун. Аниқ манзил — ихтиёрий.',
             style: TextStyle(
-                fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
-          ),
-          const SizedBox(height: 14),
-
-          // GPS блоки.
-          if (gpsRequired) ...[
-            _gpsCard(c, loc),
-            const SizedBox(height: 12),
-          ],
-
-          // Қўлдa тўлдириш — МФЙ, кўча, уй.
-          _manualCard(loc),
-          const SizedBox(height: 12),
-
-          // Config-driven zona (ixtiyoriy) — xizmat mavjudligini aniqlaydi.
-          _serviceAreaCard(c),
-        ],
-      ),
-    );
-  }
-
-  Widget _pageCar(OnboardingController c) {
-    final step = c.carSetupStep;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('🚗', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('onb_car_have'),
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('onb_car_hint'),
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.35,
-              color: Colors.white.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _obStepDot(on: step == 0),
-              const SizedBox(width: 8),
-              _obStepDot(on: step == 1),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            step == 0
-                ? context.tr('onb_car_step1')
-                : context.tr('onb_car_step2'),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-            ),
-            child: Text(
-              context.tr('onb_car_bonus'),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                height: 1.35,
-              ),
+              fontSize: 14,
+              color: _muted,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 14),
-          if (step == 0) ..._obCarStep1(c) else ..._obCarStep2(c),
-          const SizedBox(height: 10),
-          Text(
-            context.tr('onb_car_optional'),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withValues(alpha: 0.8),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Хизмат зонаси *',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ServiceAreaPicker(
+                  initialRegionId: c.geoRegionId,
+                  initialDistrictId: c.geoDistrictId,
+                  initialServiceAreaId: c.geoServiceAreaId,
+                  showAreaDropdown: false,
+                  onChanged: (region, district, area) {
+                    c.setGeoArea(region, district, area);
+                  },
+                ),
+                if (gpsRequired) ...[
+                  const SizedBox(height: 14),
+                  _gpsCard(c, loc),
+                ],
+                const SizedBox(height: 10),
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 4),
+                    title: const Text(
+                      'Яшаш манзилини киритиш',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _greenDark,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'ихтиёрий',
+                      style: TextStyle(fontSize: 11, color: _muted),
+                    ),
+                    children: [
+                      _benefit(
+                        icon: '🍞',
+                        text:
+                            'Аниқ манзил бўлса — нон ва бошқа буюртмалар тўғри эшигингизга етиб боради.',
+                      ),
+                      const SizedBox(height: 10),
+                      _manualField(
+                        ctrl: _mfyCtrl,
+                        label: loc.translate('ob_mfy_label'),
+                        icon: Icons.location_city,
+                        hint: 'Масалан: «Бахт» МФЙ',
+                      ),
+                      const SizedBox(height: 8),
+                      _manualField(
+                        ctrl: _streetCtrl,
+                        label: 'Кўча / гузар',
+                        icon: Icons.signpost,
+                        hint: 'Кўча номи',
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _manualField(
+                              ctrl: _houseCtrl,
+                              label: 'Уй №',
+                              icon: Icons.home,
+                              hint: '12',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: _manualField(
+                              ctrl: _districtCtrl,
+                              label: 'Туман',
+                              icon: Icons.map,
+                              hint: 'Гурлан',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _manualField(
+                        ctrl: _noteCtrl,
+                        label: 'Қўшимча',
+                        icon: Icons.notes,
+                        hint: 'Подъезд, ориентир...',
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 4),
+                    onExpansionChanged: (v) =>
+                        setState(() => _carExpanded = v),
+                    title: const Text(
+                      'Автомобил маълумоти',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _greenDark,
+                        fontSize: 14,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'ихтиёрий',
+                      style: TextStyle(fontSize: 11, color: _muted),
+                    ),
+                    children: [
+                      _benefit(
+                        icon: '🚗',
+                        text:
+                            'Киритсангиз — AVA service хизматларини 5%–20% арзонроқ таклиф қиламиз.',
+                        warm: true,
+                      ),
+                      const SizedBox(height: 10),
+                      _dropdownStr(
+                        label: context.tr('oil_brand'),
+                        value: OilCarOptions.brands.contains(c.carBrand)
+                            ? c.carBrand
+                            : OilCarOptions.brands.first,
+                        items: OilCarOptions.brands,
+                        onChanged: c.setCarBrand,
+                      ),
+                      _dropdownStr(
+                        label: context.tr('oil_model'),
+                        value: OilCarOptions.models.contains(c.carModel)
+                            ? c.carModel
+                            : OilCarOptions.models.first,
+                        items: OilCarOptions.models,
+                        onChanged: c.setCarModel,
+                      ),
+                      _dropdownInt(
+                        label: context.tr('oil_year'),
+                        value: OilCarOptions.years.contains(c.carYear)
+                            ? c.carYear
+                            : OilCarOptions.years.first,
+                        items: OilCarOptions.years,
+                        onChanged: c.setCarYear,
+                      ),
+                      _manualField(
+                        ctrl: _carPlateCtrl,
+                        label: context.tr('onb_car_plate_hint'),
+                        icon: Icons.pin_outlined,
+                        hint: '01 A 123 BC',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -888,478 +831,221 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  Widget _obStepDot({required bool on}) {
-    return Expanded(
-      child: Container(
-        height: 5,
-        decoration: BoxDecoration(
-          color: on ? Colors.white : Colors.white.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(99),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _obCarStep1(OnboardingController c) {
-    return [
-      _obDropdown<String>(
-        label: context.tr('oil_brand'),
-        value: OilCarOptions.brands.contains(c.carBrand)
-            ? c.carBrand
-            : OilCarOptions.brands.first,
-        items: OilCarOptions.brands,
-        onChanged: (v) => c.setCarBrand(v!),
-      ),
-      _obDropdown<String>(
-        label: context.tr('oil_model'),
-        value: OilCarOptions.models.contains(c.carModel)
-            ? c.carModel
-            : OilCarOptions.models.first,
-        items: OilCarOptions.models,
-        onChanged: (v) {
-          c.setCarModel(v!);
-          _carModelCtrl.text = v;
-        },
-      ),
-      _obDropdown<int>(
-        label: context.tr('oil_year'),
-        value: OilCarOptions.years.contains(c.carYear)
-            ? c.carYear
-            : OilCarOptions.years.first,
-        items: OilCarOptions.years,
-        onChanged: (v) => c.setCarYear(v!),
-      ),
-      _obDropdown<String>(
-        label: context.tr('oil_engine'),
-        value: OilCarOptions.engines.contains(c.carEngine)
-            ? c.carEngine
-            : OilCarOptions.engines[1],
-        items: OilCarOptions.engines,
-        onChanged: (v) => c.setCarEngine(v!),
-      ),
-      const SizedBox(height: 4),
-      SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: ElevatedButton(
-          onPressed: () => c.setCarSetupStep(1),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: _green2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          child: Text(
-            context.tr('onb_car_continue_fuel'),
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _obCarStep2(OnboardingController c) {
-    return [
-      Text(
-        context.tr('oil_fuel'),
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: OilCarOptions.fuels.map((key) {
-          final on = c.carFuelType == key;
-          return ChoiceChip(
-            label: Text(context.tr('oil_fuel_$key')),
-            selected: on,
-            selectedColor: Colors.white,
-            labelStyle: TextStyle(
-              color: on ? _green2 : Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-            backgroundColor: Colors.white.withValues(alpha: 0.15),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
-            onSelected: (_) => c.setCarFuelType(key),
-          );
-        }).toList(),
-      ),
-      const SizedBox(height: 14),
-      Text(
-        context.tr('oil_usage'),
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: OilCarOptions.usages.map((key) {
-          final on = c.carUsageTags.contains(key);
-          return FilterChip(
-            label: Text(context.tr('oil_usage_$key')),
-            selected: on,
-            selectedColor: Colors.white,
-            checkmarkColor: _green2,
-            labelStyle: TextStyle(
-              color: on ? _green2 : Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-            backgroundColor: Colors.white.withValues(alpha: 0.15),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
-            onSelected: (v) {
-              final next = [...c.carUsageTags];
-              if (v) {
-                if (!next.contains(key)) next.add(key);
-              } else if (next.length > 1) {
-                next.remove(key);
-              }
-              c.setCarUsageTags(next);
-            },
-          );
-        }).toList(),
-      ),
-      const SizedBox(height: 14),
-      _field(
-        controller: _carColorCtrl,
-        hint: context.tr('onb_car_color_hint'),
-        icon: Icons.palette_outlined,
-        inputType: TextInputType.text,
-      ),
-      const SizedBox(height: 10),
-      _field(
-        controller: _carPlateCtrl,
-        hint: context.tr('onb_car_plate_hint'),
-        icon: Icons.pin_outlined,
-        inputType: TextInputType.text,
-        formatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\- ]')),
-        ],
-      ),
-      const SizedBox(height: 10),
-      _field(
-        controller: _carSeatsCtrl,
-        hint: context.tr('onb_car_seats_hint'),
-        icon: Icons.event_seat_outlined,
-        inputType: TextInputType.number,
-        formatters: [FilteringTextInputFormatter.digitsOnly],
-      ),
-      const SizedBox(height: 10),
-      SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: OutlinedButton(
-          onPressed: () => c.setCarSetupStep(0),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: const BorderSide(color: Colors.white70),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          child: Text(context.tr('onb_car_back_model')),
-        ),
-      ),
-    ];
-  }
-
-  Widget _obDropdown<T>({
-    required String label,
-    required T value,
-    required List<T> items,
-    required ValueChanged<T?> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<T>(
-            value: items.contains(value) ? value : items.first,
-            isExpanded: true,
-            items: items
-                .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
-                .toList(),
-            onChanged: onChanged,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _serviceAreaCard(OnboardingController c) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.holiday_village, color: _green2, size: 18),
-          const SizedBox(width: 6),
-          const Expanded(
-            child: Text('Xizmat zonasi *',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-          ),
-        ]),
-        const SizedBox(height: 4),
-        Text(
-          'Viloyat va tumaningizni tanlang — bu hududingizda mavjud '
-          'xizmatlarni aniqlaydi.',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 10),
-        ServiceAreaPicker(
-          initialRegionId: c.geoRegionId,
-          initialDistrictId: c.geoDistrictId,
-          initialServiceAreaId: c.geoServiceAreaId,
-          showAreaDropdown: false,
-          onChanged: c.setGeoArea,
-        ),
-      ]),
-    );
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  // GPS CARD
-  // ────────────────────────────────────────────────────────────────────
   Widget _gpsCard(OnboardingController c, AppLocalizations loc) {
     final hasGps = c.hasGps;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFF7FBF7),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color:
-              hasGps ? _green2.withValues(alpha: 0.4) : Colors.orange.shade300,
-          width: 1.2,
+          color: hasGps ? _green.withValues(alpha: 0.45) : Colors.orange.shade200,
         ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.gps_fixed, color: _green2, size: 18),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(loc.translate('ob_gps_required'),
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-          ),
-          _gpsStatusBadge(c, loc),
-        ]),
-        const SizedBox(height: 8),
-        if (hasGps) ...[
-          Row(children: [
-            const Icon(Icons.place, size: 14, color: _green2),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                '${c.lat!.toStringAsFixed(5)}, ${c.lng!.toStringAsFixed(5)}',
-                style: const TextStyle(
-                    fontSize: 12, color: _green2, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ]),
-          if (c.accuracy != null) ...[
-            const SizedBox(height: 2),
-            Row(children: [
-              const Icon(Icons.adjust, size: 11, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text(
-                'Аниқлик: ±${c.accuracy!.toStringAsFixed(0)} м',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: c.hasLowAccuracyGps
-                      ? Colors.orange.shade800
-                      : Colors.grey.shade600,
-                  fontWeight:
-                      c.hasLowAccuracyGps ? FontWeight.w600 : FontWeight.normal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.gps_fixed, color: _green, size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  loc.translate('ob_gps_required'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: _ink,
+                  ),
                 ),
               ),
-            ]),
-          ],
-          if (c.gpsFromLastKnown) ...[
-            const SizedBox(height: 4),
-            Text(
-              loc.translate('ob_gps_fast_mode'),
-              style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
-            ),
-          ],
-          if (c.hasLowAccuracyGps) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Паст аниқлик (±${c.accuracy!.toStringAsFixed(0)} м). Очиқ жойда қайта урининг.',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.orange.shade800,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          if (c.isGeoHintLoading) ...[
-            const SizedBox(height: 6),
-            Text(
-              loc.translate('ob_gps_geocoding'),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-            ),
-          ] else if (c.geoHint != null && c.geoHint!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Атроф (маълумот): ${c.geoHint}',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade700,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-        ] else
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              loc.translate('ob_gps_not_obtained'),
-              style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w500),
-            ),
+            ],
           ),
-        SizedBox(
-          width: double.infinity,
-          height: 38,
-          child: ElevatedButton.icon(
-            onPressed: c.isGpsLoading ? null : _fetchGps,
-            icon: c.isGpsLoading
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : Icon(hasGps ? Icons.refresh : Icons.my_location, size: 16),
-            label: Text(
+          const SizedBox(height: 8),
+          if (hasGps)
+            Text(
+              '${c.lat!.toStringAsFixed(5)}, ${c.lng!.toStringAsFixed(5)}'
+              '${c.accuracy != null ? ' · ±${c.accuracy!.toStringAsFixed(0)} м' : ''}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _greenDark,
+              ),
+            )
+          else
+            Text(
+              loc.translate('ob_gps_not_obtained'),
+              style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton.icon(
+              onPressed: c.isGpsLoading ? null : _fetchGps,
+              icon: c.isGpsLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(hasGps ? Icons.refresh : Icons.my_location, size: 18),
+              label: Text(
                 hasGps
                     ? loc.translate('ob_gps_update')
-                    : loc.translate('ob_gps_get'),
-                style: const TextStyle(fontSize: 13)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _green2,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                    : 'Жойлашувни олиш (GPS)',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ),
-        ),
-      ]),
-    );
-  }
-
-  Widget _gpsStatusBadge(OnboardingController c, AppLocalizations loc) {
-    final addr = UserAddress(lat: c.lat, lng: c.lng, accuracy: c.accuracy);
-    final q = addr.gpsQuality;
-    final (label, bg, fg) = switch (q) {
-      GpsQuality.high => (
-          loc.translate('gps_quality_excellent'),
-          Colors.green.shade50,
-          _green2
-        ),
-      GpsQuality.medium => (
-          loc.translate('gps_quality_medium'),
-          Colors.amber.shade50,
-          AppColors.primary
-        ),
-      GpsQuality.low => (
-          loc.translate('gps_quality_low'),
-          Colors.red.shade50,
-          Colors.red.shade700
-        ),
-      GpsQuality.unknown => ('OK', Colors.blue.shade50, Colors.blue.shade700),
-      GpsQuality.none => (
-          loc.translate('gps_quality_none'),
-          Colors.grey.shade100,
-          Colors.grey
-        ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: fg.withValues(alpha: 0.4)),
+        ],
       ),
-      child: Text(label,
-          style:
-              TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: fg)),
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // MANUAL CARD (МФЙ, кўча, уй, туман, изоҳ)
-  // ────────────────────────────────────────────────────────────────────
-  Widget _manualCard(AppLocalizations loc) {
+  Widget _card({required Widget child}) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.edit_location_alt, color: _green2, size: 18),
-          const SizedBox(width: 6),
-          Text(loc.translate('ob_manual_fill'),
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-        ]),
-        const SizedBox(height: 10),
-        _manualField(
-          ctrl: _mfyCtrl,
-          label: '${loc.translate('ob_mfy_label')} *',
-          icon: Icons.location_city,
-          hint: 'Масалан: «Бахт» МФЙ',
-        ),
-        const SizedBox(height: 10),
-        _manualField(
-          ctrl: _streetCtrl,
-          label: 'Кўча / гузар *',
-          icon: Icons.signpost,
-          hint: 'Кўча / гузар номи',
-        ),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(
-            child: _manualField(
-              ctrl: _houseCtrl,
-              label: 'Уй № *',
-              icon: Icons.home,
-              hint: '12',
-            ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _benefit({
+    required String icon,
+    required String text,
+    bool warm = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: warm
+              ? const [Color(0xFFFFF8E1), Color(0xFFE8F5E9)]
+              : const [Color(0xFFE3F2FD), Color(0xFFE8F5E9)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: warm
+              ? const Color(0x338D6E00)
+              : const Color(0x331565C0),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 18)),
           const SizedBox(width: 10),
           Expanded(
-            flex: 2,
-            child: _manualField(
-              ctrl: _districtCtrl,
-              label: 'Туман',
-              icon: Icons.map,
-              hint: 'Гурлан',
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+                color: warm ? const Color(0xFF5D4037) : const Color(0xFF1A3A5C),
+              ),
             ),
           ),
-        ]),
-        const SizedBox(height: 10),
-        _manualField(
-          ctrl: _noteCtrl,
-          label: 'Қўшимча (ихтиёрий)',
-          icon: Icons.notes,
-          hint: 'Подъезд, қават, ориентир...',
-          maxLines: 2,
+        ],
+      ),
+    );
+  }
+
+  Widget _genderPill(
+    OnboardingController c,
+    String value,
+    String emoji,
+    String label,
+  ) {
+    final on = c.gender == value;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => c.setGender(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: on ? const Color(0xFFE8F5E9) : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: on ? _green : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: on ? _greenDark : _ink,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
         ),
-      ]),
+      ),
+    );
+  }
+
+  Widget _field({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required TextInputType inputType,
+    List<TextInputFormatter>? formatters,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: inputType,
+      inputFormatters: formatters,
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _ink),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+        prefixIcon: Icon(icon, color: _green),
+        filled: true,
+        fillColor: const Color(0xFFF3F4F6),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _green, width: 1.5),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
     );
   }
 
@@ -1373,118 +1059,88 @@ class _OnboardingViewState extends State<_OnboardingView> {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-        prefixIcon: Icon(icon, size: 16, color: _green2),
+        prefixIcon: Icon(icon, size: 18, color: _green),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: Colors.grey.shade300)),
+        filled: true,
+        fillColor: const Color(0xFFF7FBF7),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _green2, width: 1.5)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _green, width: 1.5),
+        ),
       ),
     );
   }
 
-  // ────────────────────────────────────────────────────────────────────
-  // SMALL WIDGETS
-  // ────────────────────────────────────────────────────────────────────
-  Widget _field({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    required TextInputType inputType,
-    List<TextInputFormatter>? formatters,
+  Widget _dropdownStr({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String> onChanged,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 3)),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        keyboardType: inputType,
-        inputFormatters: formatters,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InputDecorator(
         decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-          prefixIcon: Icon(icon, color: _green2),
-          border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF7FBF7),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          isDense: true,
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: items.contains(value) ? value : items.first,
+            isExpanded: true,
+            items: items
+                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _duaBox(String text) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(14),
+  Widget _dropdownInt({
+    required String label,
+    required int value,
+    required List<int> items,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF7FBF7),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          isDense: true,
         ),
-        child: Row(children: [
-          const Text('🤲', style: TextStyle(fontSize: 18)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white,
-                    fontStyle: FontStyle.italic)),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<int>(
+            value: items.contains(value) ? value : items.first,
+            isExpanded: true,
+            items: items
+                .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
           ),
-        ]),
-      );
-
-  Widget _genderCard(
-      OnboardingController c, String value, String emoji, String label) {
-    final sel = c.gender == value;
-    return GestureDetector(
-      onTap: () => c.setGender(value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: sel ? Colors.white : Colors.white.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: sel ? Colors.white : Colors.transparent, width: 2),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(emoji, style: const TextStyle(fontSize: 38)),
-          const SizedBox(height: 8),
-          Text(label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: sel ? _green2 : Colors.white,
-              )),
-          if (sel) ...[
-            const SizedBox(height: 4),
-            const Icon(Icons.check_circle, color: _green2, size: 18),
-          ],
-        ]),
       ),
     );
   }
 }
 
-/// Tug'ilgan sanani `DD.MM.YYYY` ko'rinishida maskalaydi — foydalanuvchi faqat
-/// raqam kiritadi, nuqtalar avtomatik qo'yiladi (masalan: 15.03.1971).
 class _BirthDateInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(

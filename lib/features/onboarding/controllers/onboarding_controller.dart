@@ -52,7 +52,8 @@ class OnboardingController extends ChangeNotifier {
   bool _bindingRegistered = false;
   String _deviceLockedUid = '';
 
-  static const totalPages = 7;
+  /// Ихчам онбординг: 0=танишув, 1=админ код, 2=ҳудуд (+ихтиёрий манзил/авто).
+  static const totalPages = 3;
 
   int currentPage = 0;
   String gender = 'male';
@@ -79,7 +80,8 @@ class OnboardingController extends ChangeNotifier {
   String carColor = '';
   String carPlate = '';
   String carSeats = '4';
-  bool skipCarStep = false;
+  /// Default: автони ўтказиб юбориш; фойдаланувчи тўлдирса `false`.
+  bool skipCarStep = true;
   /// Онбординг авто саҳифаси ичидаги қадам (0=модель, 1=ёқилғи).
   int carSetupStep = 0;
 
@@ -286,21 +288,20 @@ class OnboardingController extends ChangeNotifier {
     switch (currentPage) {
       case 0:
         if (name.trim().isEmpty) return 'Исмингизни киритинг';
-        break;
-      case 1:
         final d = phoneDigits(phone);
         if (d.length < 12) return 'Телефон рақамини тўлиқ киритинг';
+        if (birthDate.trim().isNotEmpty &&
+            parseBirthDate(birthDate.trim()) == null) {
+          return 'Туғилган кун формати: КК.ОО.ЙЙЙЙ';
+        }
         break;
-      case 2:
+      case 1:
         if (!otpVerified) return 'Телефон рақамини тасдиқланг';
         break;
-      case 5:
+      case 2:
         final gpsRequired = isGpsRequiredForPhone(phone);
         if (gpsRequired && !hasGps) {
           return 'GPS манзилни олинг — "Жорий GPS манзилни олиш" тугмасини босинг';
-        }
-        if (!hasManualParts) {
-          return 'МФЙ, кўча ва уй рақамини тўлдиринг';
         }
         if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
           return 'Xizmat zonasi — viloyat va tumaningizni tanlang';
@@ -323,14 +324,14 @@ class OnboardingController extends ChangeNotifier {
   }
 
   void back() {
-    if (currentPage == 2) {
+    if (currentPage == 1) {
       cancelPendingCodeWatch();
       otpVerified = false;
       otpError = null;
       isAdminCodeReady = false;
       generatedAdminCode = null;
+      resetPhoneStepError();
     }
-    if (currentPage == 1) resetPhoneStepError();
     if (currentPage > 0) {
       currentPage--;
       notifyListeners();
@@ -645,11 +646,7 @@ class OnboardingController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    if (!hasManualParts) {
-      errorMessage = 'MFY, ko\'cha va uy raqamini to\'ldiring';
-      notifyListeners();
-      return false;
-    }
+    // МФЙ/кўча/уй — ихтиёрий; кейинроқ профилда тўлдириш мумкин.
     if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
       errorMessage = 'Xizmat zonasi — viloyat va tumaningizni tanlang';
       notifyListeners();

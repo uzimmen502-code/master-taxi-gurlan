@@ -7,7 +7,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile).
 
 ## onboarding (`features/onboarding/`)
-- onboarding_controller.dart (7 pages name→phone→OTP→...→address→optional car+bonus); screens onboarding/phone_reverify/auth_restore/language_select.
+- onboarding_controller.dart (3 soft pages: identity+birth → admin OTP → zone/GPS + optional address/car); LanguageSelectScreen soft pills; finish allows empty MFY/street/house; screens onboarding/phone_reverify/auth_restore/language_select.
 - Phone auth = ADMIN-CODE flow (NOT Firebase SMS): DeviceFingerprintService → checkDeviceBinding (CF) → trustedDevice signInWithCustomToken; else requestPendingCode (CF) → watch PendingCodeRepository → verifyPendingCodeAndRegister (CF) → customToken sign-in.
 - finish(): UserRepository.createOrMergeProfileWithAddress, prefs (user_phone/name/role via canonicalPhoneId, onboarding_done, phone_reverified), refresh FCM. District default Гурлан/Gurlan; MfyService autocomplete.
 

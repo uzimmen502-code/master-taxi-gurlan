@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AVA Zona — Онбординг прототип</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --green: #2f9e44;
+      --green-deep: #1b5e20;
+      --green-soft: #e8f5e9;
+      --lime: #8bc34a;
+      --ink: #102418;
+      --muted: #4a6741;
+      --card: rgba(255, 255, 255, 0.92);
+      --stroke: rgba(27, 94, 32, 0.12);
+      --shadow: 0 18px 40px rgba(16, 36, 24, 0.18);
+      --radius: 22px;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Manrope", "Noto Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(120% 80% at 10% -10%, #c8e6c9 0%, transparent 55%),
+        radial-gradient(90% 70% at 100% 0%, #a5d6a7 0%, transparent 45%),
+        linear-gradient(165deg, #e8f5e9 0%, #f4faf2 42%, #dcedc8 100%);
+      overflow-x: hidden;
+    }
+
+    .phone {
+      width: min(420px, 100%);
+      min-height: 100%;
+      margin: 0 auto;
+      padding: 18px 18px calc(18px + var(--safe-b));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+    }
+
+    .brand {
+      text-align: center;
+      padding-top: 8px;
+      animation: rise 0.55s ease-out both;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--green-deep);
+    }
+    .brand .district {
+      margin-top: 2px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.06em;
+      min-height: 1.2em;
+    }
+
+    .progress {
+      display: flex;
+      gap: 8px;
+      padding: 0 4px;
+      animation: rise 0.55s ease-out 0.05s both;
+    }
+    .progress span {
+      flex: 1;
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(27, 94, 32, 0.12);
+      overflow: hidden;
+      position: relative;
+    }
+    .progress span::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, var(--green), var(--lime));
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.35s ease;
+    }
+    .progress span.on::after { transform: scaleX(1); }
+
+    .step-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 0 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      animation: rise 0.55s ease-out 0.08s both;
+    }
+
+    .stage {
+      flex: 1;
+      display: none;
+      animation: rise 0.45s ease-out both;
+    }
+    .stage.active { display: flex; flex-direction: column; gap: 14px; }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 4px 2px 0;
+    }
+    .hero .emoji {
+      font-size: 2.4rem;
+      line-height: 1;
+      filter: drop-shadow(0 6px 10px rgba(27, 94, 32, 0.15));
+    }
+    .hero h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.4;
+      font-weight: 500;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      backdrop-filter: blur(10px);
+    }
+
+    label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    label.field:last-child { margin-bottom: 0; }
+    label.field span {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    input, select {
+      width: 100%;
+      border: 1.5px solid rgba(27, 94, 32, 0.18);
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px 14px;
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 0 4px rgba(47, 158, 68, 0.15);
+    }
+    .phone-row {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 8px;
+    }
+    .prefix {
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: var(--green-soft);
+      color: var(--green-deep);
+      font-weight: 800;
+      border: 1.5px solid rgba(47, 158, 68, 0.25);
+    }
+
+    .gender {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .gender button {
+      border: 1.5px solid rgba(27, 94, 32, 0.16);
+      background: #fff;
+      border-radius: 16px;
+      padding: 14px 10px;
+      font: inherit;
+      font-weight: 700;
+      color: var(--ink);
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+    .gender button .g-emoji { display: block; font-size: 1.6rem; margin-bottom: 4px; }
+    .gender button.on {
+      background: linear-gradient(160deg, #e8f5e9, #c8e6c9);
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(47, 158, 68, 0.18);
+      color: var(--green-deep);
+    }
+
+    .code-box {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .code-box input {
+      width: 48px;
+      text-align: center;
+      font-size: 1.35rem;
+      font-weight: 800;
+      padding: 12px 0;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+    .status.wait { background: #fff8e1; color: #8d6e00; }
+    .status.ready { background: #e8f5e9; color: var(--green-deep); }
+    .status.ok { background: #e3f2fd; color: #1565c0; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .status.ready .dot, .status.ok .dot { animation: none; }
+
+    .gps-btn {
+      width: 100%;
+      border: 0;
+      border-radius: 16px;
+      padding: 16px;
+      font: inherit;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--green) 0%, #43a047 55%, var(--lime) 100%);
+      box-shadow: 0 10px 22px rgba(47, 158, 68, 0.35);
+      transition: transform 0.15s ease, filter 0.15s;
+    }
+    .gps-btn:active { transform: scale(0.98); }
+    .gps-btn.done {
+      background: linear-gradient(135deg, #1b5e20, #2e7d32);
+    }
+    .hint {
+      margin: 8px 0 0;
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--green-soft);
+      color: var(--green-deep);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .benefit {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 10px;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(255, 248, 225, 0.95), rgba(232, 245, 233, 0.95));
+      border: 1px solid rgba(141, 110, 0, 0.18);
+      color: #5d4037;
+      font-size: 0.84rem;
+      font-weight: 650;
+      line-height: 1.35;
+    }
+    .benefit.delivery {
+      background: linear-gradient(135deg, rgba(227, 242, 253, 0.95), rgba(232, 245, 233, 0.95));
+      border-color: rgba(21, 101, 192, 0.18);
+      color: #1a3a5c;
+    }
+    .benefit .ico { font-size: 1.25rem; line-height: 1.1; flex-shrink: 0; }
+    .optional-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(27, 94, 32, 0.1);
+      color: var(--green-deep);
+      font-size: 0.7rem;
+      font-weight: 800;
+      vertical-align: middle;
+    }
+    .addr-extra {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(27, 94, 32, 0.18);
+    }
+    .addr-extra summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: var(--green-deep);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .addr-extra summary::-webkit-details-marker { display: none; }
+    .addr-extra summary::after {
+      content: "▾";
+      font-size: 0.9rem;
+      opacity: 0.7;
+    }
+    .addr-extra[open] summary::after { content: "▴"; }
+    .addr-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .addr-grid .field.full { grid-column: 1 / -1; }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 8px;
+      animation: rise 0.55s ease-out 0.12s both;
+    }
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 16px 18px;
+      font: inherit;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.15s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--green-deep), var(--green) 60%, #66bb6a);
+      box-shadow: 0 12px 24px rgba(27, 94, 32, 0.28);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      font-weight: 700;
+      padding: 10px;
+    }
+    .btn:disabled {
+      filter: grayscale(0.35) brightness(0.95);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .home-shell { gap: 12px; }
+    .wallet-mock {
+      border-radius: 20px;
+      padding: 16px 18px;
+      color: #fff;
+      background: linear-gradient(145deg, #2e7d32, #43a047 55%, #7cb342);
+      box-shadow: 0 12px 28px rgba(46, 125, 50, 0.28);
+    }
+    .wallet-mock .w-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    .wallet-mock .w-bal {
+      margin-top: 8px;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .wallet-mock .w-name {
+      margin-top: 4px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      opacity: 0.95;
+    }
+    .modules {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .mod {
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      padding: 14px 8px;
+      text-align: center;
+      box-shadow: 0 8px 18px rgba(16, 36, 24, 0.08);
+      font-weight: 700;
+      font-size: 0.78rem;
+      color: var(--ink);
+    }
+    .mod .m-ico { display: block; font-size: 1.45rem; margin-bottom: 6px; }
+    .phone.app-mode .progress,
+    .phone.app-mode .step-meta,
+    .phone.app-mode #actions { display: none; }
+
+    /* Soft language pills (кириш оқими) */
+    .lang-sheet {
+      background: #fff;
+      border-radius: 28px;
+      padding: 22px 18px 10px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255,255,255,0.8);
+    }
+    .lang-sheet h2 {
+      margin: 0 0 16px;
+      font-size: 1.2rem;
+      font-weight: 800;
+      text-align: center;
+      color: var(--ink);
+    }
+    .lang-list { display: grid; gap: 10px; }
+    .lang-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      border: 1.5px solid transparent;
+      background: #f3f4f6;
+      border-radius: 999px;
+      padding: 14px 18px;
+      font: inherit;
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      transition: 0.2s ease;
+    }
+    .lang-btn .flag {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      font-size: 1.25rem;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .lang-btn.on {
+      background: #e8f5e9;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(47, 158, 68, 0.15);
+      color: var(--green-deep);
+    }
+    .gender button {
+      border-radius: 999px;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.35; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pop {
+      from { transform: scale(0.6); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    @media (min-width: 480px) {
+      body { padding: 24px 0; }
+      .phone {
+        min-height: calc(100vh - 48px);
+        border-radius: 28px;
+        box-shadow: 0 24px 60px rgba(16, 36, 24, 0.16);
+        border: 1px solid rgba(255,255,255,0.5);
+        background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.08));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <header class="brand">
+      <h1>AVA Zona</h1>
+      <div class="district" id="districtLabel"></div>
+    </header>
+
+    <div class="progress" id="progress" aria-hidden="true">
+      <span data-i="0"></span>
+      <span data-i="1"></span>
+      <span data-i="2"></span>
+      <span data-i="3"></span>
+    </div>
+    <div class="step-meta">
+      <span id="stepLabel">Қадам 1 / 4</span>
+      <span>Кириш · юмшоқ UI</span>
+    </div>
+
+    <!-- 0: Тил (бир марта, soft pills) -->
+    <section class="stage active" data-step="0">
+      <div class="hero">
+        <div class="emoji">🌐</div>
+        <h2>Тилни танланг</h2>
+        <p>Интерфейс тили — фақат бир марта. Кейин профилда ўзгартириш мумкин.</p>
+      </div>
+      <div class="lang-sheet">
+        <h2>Интерфейс тилини танланг</h2>
+        <div class="lang-list">
+          <button type="button" class="lang-btn" data-lang="uz_Latn">
+            <span class="flag">🇺🇿</span>
+            <span>O'zbekcha</span>
+          </button>
+          <button type="button" class="lang-btn on" data-lang="uz_Cyrl">
+            <span class="flag">🇺🇿</span>
+            <span>Ўзбекча</span>
+          </button>
+          <button type="button" class="lang-btn" data-lang="ru">
+            <span class="flag">🇷🇺</span>
+            <span>Русский</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1: Исм + телефон + жинс -->
+    <section class="stage" data-step="1">
+      <div class="hero">
+        <div class="emoji">👋</div>
+        <h2>Танишайлик</h2>
+        <p>Исм, телефон ва жинс — битта экранда. Тез ва оддий.</p>
+      </div>
+      <div class="card">
+        <label class="field">
+          <span>Исмингиз</span>
+          <input id="name" type="text" placeholder="Масалан: Азиз" autocomplete="name" />
+        </label>
+        <label class="field">
+          <span>Телефон</span>
+          <div class="phone-row">
+            <div class="prefix">+998</div>
+            <input id="phone" type="tel" inputmode="numeric" placeholder="90 123 45 67" maxlength="12" />
+          </div>
+        </label>
+        <label class="field">
+          <span>Жинс</span>
+          <div class="gender">
+            <button type="button" data-gender="male" class="on"><span class="g-emoji">👨</span>Эркак</button>
+            <button type="button" data-gender="female"><span class="g-emoji">👩</span>Аёл</button>
+          </div>
+        </label>
+        <label class="field" style="margin-bottom:0">
+          <span>Туғилган кун <em class="optional-tag">ихтиёрий</em></span>
+          <input id="birth" type="text" inputmode="numeric" placeholder="КК.ОО.ЙЙЙЙ" maxlength="10" />
+          <div class="benefit">
+            <span class="ico">🎂</span>
+            <span>Киритсангиз — AVA Zona туғилган кунда <strong>табрик</strong> ва <strong>бонус</strong> беради.</span>
+          </div>
+        </label>
+      </div>
+    </section>
+
+    <!-- 2: Админ код -->
+    <section class="stage" data-step="2">
+      <div class="hero">
+        <div class="emoji">🔐</div>
+        <h2>Телефонни тасдиқланг</h2>
+        <p>Админ код тайёр бўлгач автоматик тўлдирилади ёки қўлда киритасиз.</p>
+      </div>
+      <div class="card">
+        <div class="status wait" id="codeStatus">
+          <span class="dot"></span>
+          <span id="codeStatusText">Админ код кутилмоқда…</span>
+        </div>
+        <div style="height:14px"></div>
+        <div class="code-box" id="codeBox">
+          <input maxlength="1" inputmode="numeric" />
+          <input maxlength="1" inputmode="numeric" />
+          <input maxlength="1" inputmode="numeric" />
+          <input maxlength="1" inputmode="numeric" />
+        </div>
+        <p class="hint">Прототипда 2 сониядан кейин код «тайёр» бўлади (демо: 2 0 2 4).</p>
+      </div>
+    </section>
+
+    <!-- 3: Ҳудуд + GPS + ихтиёрий манзил -->
+    <section class="stage" data-step="3">
+      <div class="hero">
+        <div class="emoji">📍</div>
+        <h2>Ҳудудингиз</h2>
+        <p>Вилоят, туман ва GPS — хизматлар учун. Аниқ манзил — ихтиёрий, лекин фойдали.</p>
+      </div>
+      <div class="card">
+        <label class="field">
+          <span>Вилоят</span>
+          <select id="region">
+            <option value="xorazm">Хоразм</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Туман</span>
+          <select id="district">
+            <option value="">Танланг…</option>
+            <option value="gurlan">Гурлан</option>
+            <option value="shovot">Шовот</option>
+            <option value="yangibozor">Янгибозор</option>
+            <option value="urganch">Урганч</option>
+            <option value="xonqa">Хонқа</option>
+          </select>
+        </label>
+        <button type="button" class="gps-btn" id="gpsBtn">Жойлашувни олиш (GPS)</button>
+        <p class="hint" id="gpsHint">GPS демо режимида — тугмани босинг.</p>
+
+        <details class="addr-extra" id="addrExtra">
+          <summary>Яшаш манзилини киритиш <em class="optional-tag">ихтиёрий</em></summary>
+          <div class="benefit delivery">
+            <span class="ico">🍞</span>
+            <span>Аниқ манзил бўлса — <strong>нон</strong> ва бошқа буюртмалар тўғри эшигингизга етиб боради.</span>
+          </div>
+          <div class="addr-grid">
+            <label class="field full">
+              <span>МФЙ / маҳалла</span>
+              <input id="mfy" type="text" placeholder="Масалан: Навбаҳор МФЙ" />
+            </label>
+            <label class="field">
+              <span>Кўча</span>
+              <input id="street" type="text" placeholder="Кўча номи" />
+            </label>
+            <label class="field">
+              <span>Уй</span>
+              <input id="house" type="text" placeholder="12" />
+            </label>
+          </div>
+          <p class="hint">Хоҳласангиз ҳозир тўлдиринг — ёки кейинроқ профилда.</p>
+        </details>
+
+        <details class="addr-extra" id="carExtra">
+          <summary>Автомобил маълумоти <em class="optional-tag">ихтиёрий</em></summary>
+          <div class="benefit" style="background:linear-gradient(135deg,rgba(255,236,179,0.95),rgba(232,245,233,0.95));border-color:rgba(245,158,11,0.28);color:#5d4037;">
+            <span class="ico">🚗</span>
+            <span>Киритсангиз — AVA service хизматларини <strong>5%–20% арзонроқ</strong> таклиф қиламиз (мой, шина, ювиш ва бошқалар).</span>
+          </div>
+          <div class="addr-grid">
+            <label class="field">
+              <span>Марка</span>
+              <input id="carBrand" type="text" placeholder="Chevrolet" />
+            </label>
+            <label class="field">
+              <span>Модел</span>
+              <input id="carModel" type="text" placeholder="Cobalt" />
+            </label>
+            <label class="field">
+              <span>Йил</span>
+              <input id="carYear" type="text" inputmode="numeric" placeholder="2021" maxlength="4" />
+            </label>
+            <label class="field">
+              <span>Давлат рақами</span>
+              <input id="carPlate" type="text" placeholder="01 A 123 BC" />
+            </label>
+          </div>
+          <p class="hint">Тўлиқ тўлдириш шарт эмас — кейинроқ профилда ҳам қўшиш мумкин.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Home (онбордингдан кейин тўғридан-тўғри) -->
+    <section class="stage home-shell" data-step="4">
+      <div class="wallet-mock">
+        <div class="w-top">
+          <span id="homeDate">Бугун</span>
+          <span>Фаол</span>
+        </div>
+        <div class="w-bal">0 сўм</div>
+        <div class="w-name" id="homeName">—</div>
+      </div>
+      <div class="modules">
+        <div class="mod"><span class="m-ico">🍞</span>Нон</div>
+        <div class="mod"><span class="m-ico">🚕</span>Такси</div>
+        <div class="mod"><span class="m-ico">🚌</span>Маршрут</div>
+        <div class="mod"><span class="m-ico">🛒</span>Бозор</div>
+        <div class="mod"><span class="m-ico">💼</span>Иш</div>
+        <div class="mod"><span class="m-ico">🛢️</span>Мой</div>
+      </div>
+    </section>
+
+    <div class="actions" id="actions">
+      <button type="button" class="btn btn-primary" id="nextBtn">Давом этиш</button>
+      <button type="button" class="btn btn-ghost" id="backBtn" hidden>Ортга</button>
+    </div>
+  </div>
+
+  <script>
+    let step = 0;
+    let gender = "male";
+    let lang = "uz_Cyrl";
+    let gpsOk = false;
+    let codeReady = false;
+
+    const phoneEl = document.querySelector(".phone");
+    const stages = [...document.querySelectorAll(".stage")];
+    const bars = [...document.querySelectorAll(".progress span")];
+    const stepLabel = document.getElementById("stepLabel");
+    const nextBtn = document.getElementById("nextBtn");
+    const backBtn = document.getElementById("backBtn");
+    const districtLabel = document.getElementById("districtLabel");
+    const districtSelect = document.getElementById("district");
+    const codeInputs = [...document.querySelectorAll("#codeBox input")];
+    const codeStatus = document.getElementById("codeStatus");
+    const codeStatusText = document.getElementById("codeStatusText");
+
+    document.querySelectorAll(".lang-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".lang-btn").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        lang = btn.dataset.lang;
+      });
+    });
+
+    document.querySelectorAll(".gender button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".gender button").forEach((b) => b.classList.remove("on"));
+        btn.classList.add("on");
+        gender = btn.dataset.gender;
+      });
+    });
+
+    districtSelect.addEventListener("change", () => {
+      const opt = districtSelect.selectedOptions[0];
+      districtLabel.textContent = opt && opt.value ? opt.textContent : "";
+    });
+
+    document.getElementById("gpsBtn").addEventListener("click", () => {
+      const btn = document.getElementById("gpsBtn");
+      btn.textContent = "Аниқланмоқда…";
+      setTimeout(() => {
+        gpsOk = true;
+        btn.classList.add("done");
+        btn.textContent = "Жойлашув олинди ✓";
+        document.getElementById("gpsHint").textContent =
+          "Демо: 41.84°, 60.39° · аниқлик ~25 м";
+      }, 700);
+    });
+
+    codeInputs.forEach((input, i) => {
+      input.addEventListener("input", () => {
+        input.value = input.value.replace(/\D/g, "").slice(0, 1);
+        if (input.value && i < codeInputs.length - 1) codeInputs[i + 1].focus();
+        checkCodeComplete();
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !input.value && i > 0) codeInputs[i - 1].focus();
+      });
+    });
+
+    function checkCodeComplete() {
+      const code = codeInputs.map((i) => i.value).join("");
+      if (code.length === 4) {
+        codeStatus.className = "status ok";
+        codeStatusText.textContent = "Код қабул қилинди (демо)";
+      }
+    }
+
+    function simulateCodeReady() {
+      codeReady = false;
+      codeStatus.className = "status wait";
+      codeStatusText.textContent = "Админ код кутилмоқда…";
+      codeInputs.forEach((i) => (i.value = ""));
+      setTimeout(() => {
+        if (step !== 2) return;
+        codeReady = true;
+        codeStatus.className = "status ready";
+        codeStatusText.textContent = "Админ код тайёр — киритинг ёки авто";
+        const demo = ["2", "0", "2", "4"];
+        demo.forEach((d, i) => (codeInputs[i].value = d));
+        checkCodeComplete();
+      }, 2000);
+    }
+
+    function render() {
+      const inApp = step === 4;
+      phoneEl.classList.toggle("app-mode", inApp);
+      stages.forEach((s, i) => s.classList.toggle("active", i === step));
+      bars.forEach((b, i) => b.classList.toggle("on", i <= Math.min(step, 3)));
+      stepLabel.textContent = `Қадам ${Math.min(step + 1, 4)} / 4`;
+      backBtn.hidden = step === 0 || inApp;
+      nextBtn.hidden = inApp;
+      if (step === 0) nextBtn.textContent = "Давом этиш";
+      else if (step === 3) nextBtn.textContent = "Бошлаш";
+      else nextBtn.textContent = "Давом этиш";
+      if (inApp) {
+        const name = document.getElementById("name").value.trim() || "Фойдаланувчи";
+        document.getElementById("homeName").textContent = name.toUpperCase();
+        const now = new Date();
+        document.getElementById("homeDate").textContent = now.toLocaleDateString("uz-UZ", {
+          day: "numeric",
+          month: "long",
+        });
+      }
+      if (step === 2) simulateCodeReady();
+    }
+
+    function validate() {
+      if (step === 0) {
+        if (!document.querySelector(".lang-btn.on")) return alert("Тилни танланг");
+      }
+      if (step === 1) {
+        const name = document.getElementById("name").value.trim();
+        const phone = document.getElementById("phone").value.replace(/\D/g, "");
+        if (!name) return alert("Исмингизни киритинг");
+        if (phone.length < 9) return alert("Телефон рақамини тўлиқ киритинг");
+      }
+      if (step === 2) {
+        const code = codeInputs.map((i) => i.value).join("");
+        if (code.length < 4) return alert("4 хонали кодни киритинг");
+      }
+      if (step === 3) {
+        if (!districtSelect.value) return alert("Туманни танланг");
+        if (!gpsOk) return alert("Аввал GPS жойлашувини олинг (демо тугма)");
+      }
+      return true;
+    }
+
+    nextBtn.addEventListener("click", () => {
+      if (!validate()) return;
+      step += 1;
+      render();
+    });
+
+    backBtn.addEventListener("click", () => {
+      if (step > 0 && step < 4) {
+        step -= 1;
+        render();
+      }
+    });
+
+    // Туғилган кун: КК.ОО.ЙЙЙЙ
+    const birthInput = document.getElementById("birth");
+    birthInput.addEventListener("input", () => {
+      let v = birthInput.value.replace(/\D/g, "").slice(0, 8);
+      if (v.length >= 5) v = v.slice(0, 2) + "." + v.slice(2, 4) + "." + v.slice(4);
+      else if (v.length >= 3) v = v.slice(0, 2) + "." + v.slice(2);
+      birthInput.value = v;
+    });
+
+    render();
+  </script>
+</body>
+</html>

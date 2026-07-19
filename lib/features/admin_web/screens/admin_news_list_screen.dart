@@ -178,7 +178,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               return _emptyState(
                 icon: Icons.campaign_outlined,
                 color: Colors.blue,
-                title: 'Ҳaли хабaр йоq',
+                title: 'Ҳали хабар ёқ',
                 message: 'Янги хабaр ёзиш учун юқoри ўнгдaги "+ Янги хабaр" '
                     'тугмaсини бoсинг.',
               );

@@ -84,7 +84,7 @@ class BreadExtraProduct {
     if (raw == 'kg' || raw == 'кг') return 'kg';
     if (raw == 'l' || raw == 'л' || raw == 'liter' || raw == 'litre') return 'l';
     final n = name.toLowerCase();
-    if (RegExp(r'сут|қатиқ|шарбат|сок|йогурт|йоғурт').hasMatch(n)) {
+    if (RegExp(r'сут|қатиқ|шарбат|сок|ёгурт|ёғурт').hasMatch(n)) {
       return 'l';
     }
     return 'dona';

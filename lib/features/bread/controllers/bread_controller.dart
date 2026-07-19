@@ -585,7 +585,7 @@ class BreadController extends ChangeNotifier {
     cart.forEach((id, qty) {
       final p = _findProduct(id);
       if (p == null) return;
-      if (!p.isReady) return; // йопиш/той учун inventory йўқ
+      if (!p.isReady) return; // ёпиш/той учун inventory йўқ
       final fid = p.firestoreId;
       if (fid == null || fid.isEmpty) return;
       list.add(StockChange(

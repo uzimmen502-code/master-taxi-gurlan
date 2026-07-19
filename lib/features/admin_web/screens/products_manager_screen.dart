@@ -1424,7 +1424,7 @@ class _ExtraProductsTab extends StatelessWidget {
           return _empty(
             icon: Icons.local_drink_outlined,
             color: Colors.grey,
-            title: 'Қўшимчa маҳсулoт йоq',
+            title: 'Қўшимча маҳсулот ёқ',
             msg: 'Юқoри ўнгдaги "+ Янги мaҳсулoт" тугмaсини бoсинг.',
           );
         }

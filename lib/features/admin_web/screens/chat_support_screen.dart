@@ -151,7 +151,7 @@ class _ChatsList extends StatelessWidget {
                   Icon(Icons.chat_outlined,
                       size: 60, color: Colors.grey.shade400),
                   const SizedBox(height: 12),
-                  Text('Чaт йоq',
+                  Text('Чат ёқ',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

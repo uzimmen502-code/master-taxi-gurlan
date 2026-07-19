@@ -164,10 +164,10 @@ class _PayoutsList extends StatelessWidget {
                     ? AppColors.primary
                     : Colors.red,
             title: status == 'pending'
-                ? 'Кутaётгaн pаyout йоq'
+                ? 'Кутаётган payout ёқ'
                 : status == 'completed'
-                    ? 'Тўлaнгaнлaр йоq'
-                    : 'Рaд этилгaнлaр йоq',
+                    ? 'Тўланганлар ёқ'
+                    : 'Рад этилганлар ёқ',
             msg: 'Бу бўлим бўш.',
           );
         }
@@ -391,7 +391,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                 Row(children: [
                   Expanded(
                     child: Text(
-                      name.isEmpty ? 'Нoм йоq' : name,
+                      name.isEmpty ? 'Ном ёқ' : name,
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 15),
                       maxLines: 1,

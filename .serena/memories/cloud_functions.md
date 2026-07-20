@@ -58,7 +58,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 ## Taxi (local + marshrut)
 - completeLocalTrip (onCall) — driver completes local/alone trip: debit passenger wallet per `passengerWalletIntent` (idem `local_trip_complete_{tripId}`), set `completed`+`walletPaid`; returns `{fare,cashPaid,walletPaid,cashDue,change}`.
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
-- expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds.
+- expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; also closes expired `yuk_listings` (active→closed).
 - cleanupStaleDrivers (sched) — offline stale drivers.
 - marshrutDriverAutoOffline (sched) — auto-offline marshrut drivers.
 - marshrutPassengerCancelAfterAccept — passenger cancel after accept (block logic).

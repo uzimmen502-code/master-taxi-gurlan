@@ -63,7 +63,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     super.initState();
     _bootstrap();
     _expiryTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
-      await _store.closeExpired();
+      await _store.closeExpired(ownerId: _ownerId);
       if (mounted) setState(() {});
     });
     _fromFocus.addListener(() {
@@ -86,6 +86,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
       _ownerName = name.isEmpty ? context.tr('yuk_you') : name;
       _ownerPhone = phone.length >= 9 ? '+$phone' : '';
     });
+    await _store.closeExpired(ownerId: ownerId);
     await YukListingNotifier.syncOwner(
       ownerId: ownerId,
       listings: _store.listings,
@@ -264,10 +265,16 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
       ),
     );
     if (created == null) return;
-    await _store.addListing(created);
-    if (!mounted) return;
-    setState(() => _tab = 'all');
-    _snack(context.tr('yuk_posted_ok'));
+    try {
+      await _store.addListing(created);
+      if (!mounted) return;
+      setState(() => _tab = 'all');
+      _snack(context.tr('yuk_posted_ok'));
+    } catch (e) {
+      if (!mounted) return;
+      _snack(context.tr('yuk_need_phone'));
+      debugPrint('yuk create failed: $e');
+    }
   }
 
   Future<void> _openEdit(YukListing item) async {

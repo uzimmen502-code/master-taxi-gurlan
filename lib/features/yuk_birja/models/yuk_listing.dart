@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../yuk_vehicle_types.dart';
 
 enum YukListingType { cargo, truck }
@@ -87,13 +89,17 @@ class YukListing {
         'expiresAt': expiresAt.toIso8601String(),
       };
 
-  factory YukListing.fromJson(Map<String, dynamic> j) {
-    final created = DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
-        DateTime.now();
-    final expires = DateTime.tryParse(j['expiresAt']?.toString() ?? '') ??
-        created.add(ttl);
+  static DateTime _asDate(dynamic v, DateTime fallback) {
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    return DateTime.tryParse(v?.toString() ?? '') ?? fallback;
+  }
+
+  factory YukListing.fromFirestore(String id, Map<String, dynamic> j) {
+    final created = _asDate(j['createdAt'], DateTime.now());
+    final expires = _asDate(j['expiresAt'], created.add(ttl));
     return YukListing(
-      id: (j['id'] ?? '').toString(),
+      id: id,
       type: (j['type']?.toString() == 'truck')
           ? YukListingType.truck
           : YukListingType.cargo,
@@ -120,6 +126,10 @@ class YukListing {
       createdAt: created,
       expiresAt: expires,
     );
+  }
+
+  factory YukListing.fromJson(Map<String, dynamic> j) {
+    return YukListing.fromFirestore((j['id'] ?? '').toString(), j);
   }
 
   YukListing copyWith({

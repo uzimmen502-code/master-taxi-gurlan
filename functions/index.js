@@ -8631,6 +8631,12 @@ exports.expirePendingTrips = functions.pubsub
       .where('expiresAt', '<', now)
       .get();
 
+    // 3b. yuk_listings — 48 soat muddati o'tgan active → closed
+    const expiredYukSnap = await db.collection('yuk_listings')
+      .where('status', '==', 'active')
+      .where('expiresAt', '<', now)
+      .get();
+
     const allDocs = [
       ...pendingSnap.docs,
       ...searchingSnap.docs,
@@ -8676,6 +8682,21 @@ exports.expirePendingTrips = functions.pubsub
         status: 'completed',
         autoExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
         editedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      writes++;
+      if (writes >= 450) {
+        await batch.commit();
+        batch = db.batch();
+        writes = 0;
+      }
+    }
+
+    for (const doc of expiredYukSnap.docs) {
+      batch.update(doc.ref, {
+        status: 'closed',
+        closedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        autoExpired: true,
       });
       writes++;
       if (writes >= 450) {

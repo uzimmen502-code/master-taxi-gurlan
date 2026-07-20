@@ -2052,5 +2052,45 @@ service cloud.firestore {
       allow create, update, delete: if false; // CF (Admin SDK) only
     }
 
+    // ─── Юк биржаси (умумий эълонлар) ─────────────────────────────────
+    function yukListingCreateOk() {
+      let d = request.resource.data;
+      return isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.ownerId)
+          && d.status == 'active'
+          && d.type in ['cargo', 'truck']
+          && d.from is string && d.from.size() > 0
+          && d.to is string && d.to.size() > 0
+          && d.vehicleType is string
+          && d.ownerName is string
+          && d.phone is string
+          && d.createdAt is timestamp
+          && d.expiresAt is timestamp;
+    }
+
+    function yukListingOwnerUpdateOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId)
+          && notChanged('ownerId')
+          && notChanged('createdAt')
+          && notChanged('expiresAt')
+          && notChanged('type')
+          && notChanged('stars')
+          && changed.hasOnly([
+            'from', 'to', 'stops', 'vehicleType', 'cargo', 'weight',
+            'capacity', 'freeSpace', 'price', 'comment', 'status',
+            'updatedAt', 'closedAt', 'ownerName', 'phone'
+          ])
+          && request.resource.data.status in ['active', 'closed'];
+    }
+
+    match /yuk_listings/{id} {
+      allow read: if isAuth();
+      allow create: if yukListingCreateOk();
+      allow update: if isAdmin() || yukListingOwnerUpdateOk();
+      allow delete: if isAdmin();
+    }
+
   }
 }

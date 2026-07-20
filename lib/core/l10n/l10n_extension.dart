@@ -29,6 +29,7 @@ extension L10nExtension on BuildContext {
           break;
         case 'ghost_blocked':
         case 'retry_after_minutes':
+        case 'local_taxi_block_active':
           merged['minutes'] = tail;
           break;
         default:

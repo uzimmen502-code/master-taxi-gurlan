@@ -12,6 +12,7 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../../models/map_picker_result.dart';
 import '../../../../models/saved_place.dart';
 import '../../../../repositories/driver_repository.dart';
+import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -281,6 +282,19 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       if (_fromCtrl.text.trim().isEmpty) {
         _showGpsDialog();
         return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      final phone = phoneDigits(prefs.getString('user_phone') ?? '');
+      if (phone.length >= 9) {
+        final until =
+            await LocalTaxiBlockRepository().getBlockedUntil(phone);
+        if (!mounted) return;
+        if (until != null) {
+          final mins =
+              until.difference(DateTime.now()).inMinutes.clamp(1, 9999) + 1;
+          _snack(context.trMsg('local_taxi_block_active|$mins'));
+          return;
+        }
       }
       try {
         final loc = context.read<LocationService>();

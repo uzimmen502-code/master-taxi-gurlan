@@ -586,6 +586,7 @@
   "local_gps_required_for_search": "Qidiruv uchun GPS koordinatalari kerak. Joylashuvni yoqing.",
   "local_search_ended_cancelled": "Qidiruv bekor qilindi",
   "local_taxi": "Mahalliy taksi",
+  "local_taxi_block_active": "🚫 Qabuldan keyingi bekor qilishlar tufayli mahalliy taksi {minutes} daqiqaga cheklandi",
   "local_trip_already_active": "Faol safaringiz mavjud",
   "location_detect_body": "\"Qayerdan\" maydoni bo'sh.\nGPS orqali joylashuvingizni aniqlang.",
   "location_detect_title": "📍 Joylashuvni aniqlang",

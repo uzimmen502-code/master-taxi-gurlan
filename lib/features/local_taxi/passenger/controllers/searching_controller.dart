@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/utils/formatters.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/nearby_driver.dart';
 import '../../../../repositories/driver_repository.dart';
+import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../utils/fare_calculator.dart';
@@ -29,9 +31,11 @@ class SearchingController extends ChangeNotifier {
     this.existingTripId,
     this.pickupLat,
     this.pickupLng,
+    LocalTaxiBlockRepository? blockRepo,
   })  : _ridesRepo = ridesRepo,
         _driverRepo = driverRepo,
-        _locationService = locationService;
+        _locationService = locationService,
+        _blockRepo = blockRepo ?? LocalTaxiBlockRepository();
 
   /// Mavjud qidiruv tripini tiklash (yangi trip yaratilmaydi).
   final String? existingTripId;
@@ -43,6 +47,7 @@ class SearchingController extends ChangeNotifier {
   final RidesRepository _ridesRepo;
   final DriverRepository _driverRepo;
   final LocationService _locationService;
+  final LocalTaxiBlockRepository _blockRepo;
 
   final String from;
   final String to;
@@ -97,6 +102,18 @@ class SearchingController extends ChangeNotifier {
     _userBirthDate = prefs.getString('user_birth_date') ?? '';
 
     try {
+      final phone = phoneDigits(_userPhone);
+      if (phone.length >= 9 && await _blockRepo.isBlocked(phone)) {
+        final until = await _blockRepo.getBlockedUntil(phone);
+        final mins = until == null
+            ? 1
+            : until.difference(DateTime.now()).inMinutes.clamp(1, 9999) + 1;
+        errorMessage = 'local_taxi_block_active|$mins';
+        isSearching = false;
+        notifyListeners();
+        return;
+      }
+
       final resumeId = existingTripId?.trim() ?? '';
       if (resumeId.isNotEmpty) {
         tripId = resumeId;

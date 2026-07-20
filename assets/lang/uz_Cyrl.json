@@ -586,6 +586,7 @@
   "local_gps_required_for_search": "Қидирув учун ГПС координаталари керак. Жойлашувни ёқинг.",
   "local_search_ended_cancelled": "Қидирув бекор қилинди",
   "local_taxi": "Маҳаллий такси",
+  "local_taxi_block_active": "🚫 Қабулдан кейинги бекор қилишлар туфайли маҳаллий такси {minutes} дақиқага чекланди",
   "local_trip_already_active": "Фаол сафарингиз мавжуд",
   "location_detect_body": "\"Қайердан\" майдони бўш.\nГПС орқали жойлашувингизни аниқланг.",
   "location_detect_title": "📍 Жойлашувни аниқланг",

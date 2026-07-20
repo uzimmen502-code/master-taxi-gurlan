@@ -586,6 +586,7 @@
   "local_gps_required_for_search": "Для поиска нужны GPS-координаты. Включите геолокацию.",
   "local_search_ended_cancelled": "Поиск отменён",
   "local_taxi": "Местное такси",
+  "local_taxi_block_active": "🚫 Из-за отмен после принятия локальное такси ограничено на {minutes} мин",
   "local_trip_already_active": "У вас уже есть активная поездка",
   "location_detect_body": "Поле «Откуда» пустое.\nОпределите местоположение через GPS.",
   "location_detect_title": "📍 Определите местоположение",

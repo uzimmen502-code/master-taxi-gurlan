@@ -84,7 +84,7 @@ async function applyPassengerCancelBlock(stateRef) {
     cancelCount = d.cancelCount ?? 0;
 
     if (blockedUntil && now < blockedUntil) {
-      return;
+      return { blocked: true, cancelCount };
     }
 
     if (now - firstCancelAt > rules.windowMs) {
@@ -103,14 +103,26 @@ async function applyPassengerCancelBlock(stateRef) {
           now + rules.blockMs),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-  } else {
-    await stateRef.set({
-      cancelCount,
-      firstCancelAt: admin.firestore.Timestamp.fromMillis(firstCancelAt),
-      blockedUntil: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    return { blocked: true, cancelCount };
   }
+  await stateRef.set({
+    cancelCount,
+    firstCancelAt: admin.firestore.Timestamp.fromMillis(firstCancelAt),
+    blockedUntil: null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { blocked: false, cancelCount };
+}
+
+/** Local taxi: accepted safardan keyin yo'lovchi bekor → `local_taxi_block/state`. */
+async function applyLocalTaxiCancelBlock(userPhone) {
+  const phone = digits(userPhone);
+  if (phone.length < 9) {
+    return { blocked: false, cancelCount: 0 };
+  }
+  const stateRef = db.collection('users').doc(phone)
+      .collection('local_taxi_block').doc('state');
+  return applyPassengerCancelBlock(stateRef);
 }
 
 const MARSHRUT_CANCEL_WARN_AT = 5;
@@ -1235,17 +1247,36 @@ exports.onTripUpdate = functions.firestore
 
     if (
       after.status === 'cancelled' &&
-      after.taxiType === 'local' &&
-      after.cancelledBy === 'passenger' &&
-      after.driverId
+      (after.taxiType === 'local' || after.taxiType === 'alone') &&
+      (after.cancelledBy === 'passenger' || after.cancelledBy === 'user')
     ) {
-      try {
-        await db.collection('drivers').doc(after.driverId).update({
-          isBusy: false,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        console.error('release driver isBusy failed:', e);
+      const localDriverId = String(
+          after.acceptedDriverId || after.driverId || '');
+      if (localDriverId) {
+        try {
+          await db.collection('drivers').doc(localDriverId).update({
+            isBusy: false,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          console.error('release driver isBusy failed:', e);
+        }
+      }
+
+      // Faqat qabuldan keyingi bekor — qidiruv bekorida blok yo'q.
+      if (
+        before.status === 'accepted' &&
+        after.localTaxiBlockCounted !== true
+      ) {
+        const userPhone = digits(after.userPhone || '');
+        if (userPhone.length >= 9) {
+          try {
+            await applyLocalTaxiCancelBlock(userPhone);
+            await change.after.ref.update({ localTaxiBlockCounted: true });
+          } catch (e) {
+            console.error('applyLocalTaxiCancelBlock failed:', e);
+          }
+        }
       }
     }
 

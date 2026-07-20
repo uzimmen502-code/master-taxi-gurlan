@@ -8,17 +8,13 @@ KEY: jobs board and cheap-product marketplace BOTH live in Firestore `ads` colle
 - Model `models/job_ad.dart` JobAd + `enum AdKind{work,service,ad}` + AdKindX. Repo `repositories/jobs_repository.dart` JobsRepository (collection `ads`, `type`∈work|service|ad). Complaints → `complaints`.
 - AdKindX: expiresInDays work=3/service=30/ad=14; urgentExpiryDays=2; supportsUrgent=work|ad; userPanelKinds=[ad,service]. Legacy `type:sell` filtered out (`isJobsBoardType` false); new create blocked in rules/CF.
 - JobAd: type,text,title,priceText,authorName,authorPhone,address,isUrgent,status(pending|active|completed|blocked),expiresAt.
-- Flow: create→status `pending` (admin moderation, UI admin_web/jobs_moderation_screen.dart); daily limit 10; owner edit gated by authorPhone. NO CF (pure Firestore).
+- Flow: create via CF `submitJobAd` (auth + `authorPhone`=token canonical, text 3..2000, server TTL, daily limit 10 across 9/998 aliases) → status `pending`; complaints via CF `submitJobComplaint` (auth, daily 20, no own-ad, open-dupe). Client create on `ads`/`complaints` blocked (jobs CF `submitJobAd`/`submitJobComplaint`; market CF `submitMarketAd`). Owner edit gated by `phonesMatch`; feed limits 300/500; `watchAdsByAuthor` uses `phoneAliases` whereIn. Admin UI role via `UserRoleSync.syncToPreferences`. Expire: `expirePendingTrips` — jobs active|pending → completed; cheap_product → inactive.
 - **JobsTabs = 2 tabs** (Иш бор=ad / Хизмат=service). P2P «Сотаман» Jobs tab removed — selling is Sell hub + Online market (`mem:modules/sell`).
 - CF `onAdUpdate`: Jobs → `authorPhone` + screen `jobs`.
 
 ## Ads marketplace / cheap products (`features/ads/`)
 - model `ad_model.dart` AdModel (typeKey='cheap_product'); repo `ads_repository.dart`; `ads_storage_service.dart`. screens cheap_products/ad_details/create_ad/edit_ad/my_ads (Фаол/Текширувда/Яширилган); widgets my_ad_actions.
-- Firestore `ads` type==`cheap_product`; status **`pending|active|inactive`**. Create: repo forces `pending` (rules require pending). `publishedAt` only on admin activate.
-- Owner rules (`cheapProductOwnerUpdateOk`): content + status **inactive** (hide) or **pending** (republish from inactive **or remode after edit of active**) — **never `active`**. Edit active → pending. `requestRepublish`. Sell hub: `mem:modules/sell`.
-- Admin: `market_moderation_screen` + CF `adminUpdateMarketAdStatus` / `adminUpdateMarketAd` / `adminDeleteMarketAd` / `adminListMarketAds`.
-- CF `onAdUpdate`: market → `ownerId`, screen `my_ads`, types `market_ad_published` / `market_ad_moderation` (inactive notify only admin reject/hide).
-- Limits: maxActivePerUser=50. getMyAds client-sort (pending may lack publishedAt).
+- Firestore `ads` type==`cheap_product`; status **`pending|active|inactive`**. Create CF-only `submitMarketAd` (auth, ownerId/phone=canonical token, validation, daily 10, pending<=20, active<=50, expiresAt). Client create false. Complaints CF `submitMarketComplaint` -> reports market_ad. Views auth +1. Storage ads image <=8MB. Feed limit 200; my ads phoneAliases. expirePendingTrips cheap_product -> inactive. Owner phone locked; never self-activate.
 
 ## Entertainment (`features/entertainment/`)
 - passenger entertainment_list/entertainment_player; driver driver_entertainment_picker; services entertainment_storage/entertainment_cache_service. model `entertainment_video.dart`. repo `entertainment_repository.dart`.

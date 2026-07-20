@@ -21,6 +21,18 @@ class OrderPaymentService {
     return Map<String, dynamic>.from(result.data as Map);
   }
 
+  /// Мижоз: эрта ҳолатдаги food/bread буюртмани бекор (+ захира/ҳамён).
+  static Future<Map<String, dynamic>> customerCancelOrder({
+    required String orderId,
+    String reason = '',
+  }) async {
+    final result = await _fn.httpsCallable('customerCancelOrder').call({
+      'orderId': orderId,
+      if (reason.isNotEmpty) 'reason': reason,
+    });
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
   static Future<void> courierMarkPicked({
     required String orderId,
     required String courierPhone,

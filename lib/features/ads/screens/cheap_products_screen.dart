@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../repositories/ads_repository.dart';
@@ -24,8 +23,6 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   Timer? _debounce;
   String _searchQuery = '';
 
-  static const _migrationPrefsKey = 'cheap_product_title_lower_migrated_v1';
-
   static const _loadErrorMessage =
       'Маълумотларни юклашда хатолик юз берди. Илтимос кейинроқ қайта уриниб кўринг.';
 
@@ -35,29 +32,6 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       if (stackTrace != null) {
         debugPrintStack(stackTrace: stackTrace);
       }
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runTitleLowerMigration());
-  }
-
-  Future<void> _runTitleLowerMigration() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(_migrationPrefsKey) == true) return;
-      if (!mounted) return;
-      final n = await context
-          .read<AdsRepository>()
-          .migrateTitleLowerForCheapProducts();
-      await prefs.setBool(_migrationPrefsKey, true);
-      if (n > 0 && mounted) {
-        debugPrint('Cheap ads titleLower migrated: $n');
-      }
-    } catch (_) {
-      // Non-blocking; admin can run Cloud Function migrateCheapProductTitleLower.
     }
   }
 

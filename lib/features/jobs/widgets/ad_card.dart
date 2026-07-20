@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../controllers/jobs_controller.dart';
+import 'complaint_sheet.dart';
 
 /// Эълонлар (mini-OLX) рўйхатидаги бир карта.
 class AdCard extends StatelessWidget {
@@ -41,6 +44,23 @@ class AdCard extends StatelessWidget {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ));
     }
+  }
+
+  Future<void> _report(BuildContext context) async {
+    final c = context.read<JobsController>();
+    if (c.isOwner(ad)) return;
+    final reason = await showComplaintSheet(context);
+    if (reason == null || reason.isEmpty || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await c.submitComplaint(adId: ad.id, reason: reason);
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(
+      content: Text(result.success
+          ? 'Шикоят юборилди'
+          : (result.error ?? 'Хатолик')),
+      backgroundColor: result.success ? AppColors.primary : Colors.red.shade700,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   String get _body => ad.text;
@@ -99,6 +119,15 @@ class AdCard extends StatelessWidget {
                   color: Colors.grey.shade600,
                 ),
               ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: 'Шикоят',
+              icon: Icon(Icons.flag_outlined,
+                  size: 18, color: Colors.grey.shade500),
+              onPressed: () => _report(context),
+            ),
           ]),
           const SizedBox(height: 6),
           Text(

@@ -247,7 +247,9 @@ class PushNavigation {
       return;
     }
 
-    if (screen == 'yuk_birja' || type == 'yuk_listing_closed') {
+    if (screen == 'yuk_birja' ||
+        type == 'yuk_listing_closed' ||
+        type == 'yuk_listing_expire_soon') {
       await nav.push(
         MaterialPageRoute(builder: (_) => const YukBirjaScreen()),
       );

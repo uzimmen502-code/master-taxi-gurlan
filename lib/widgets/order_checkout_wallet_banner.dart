@@ -4,20 +4,26 @@ import '../l10n/app_localizations.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/formatters.dart';
 
-/// Буюртма беришда: кошелёк баланси + жами сумма. Тўлов майдони йўқ.
+/// Буюртма: ҳамён ечилиши + қолган нақд (сервер clamp қилади).
 class OrderCheckoutWalletBanner extends StatelessWidget {
   const OrderCheckoutWalletBanner({
     super.key,
     required this.orderTotal,
     required this.walletBalance,
+    this.walletApply = 0,
+    this.cashDue,
   });
 
   final int orderTotal;
   final int walletBalance;
+  final int walletApply;
+  final int? cashDue;
 
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
+    final apply = walletApply.clamp(0, orderTotal);
+    final due = cashDue ?? (orderTotal - apply);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -58,9 +64,37 @@ class OrderCheckoutWalletBanner extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
+          if (apply > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              loc
+                  .translate('bread_wallet_will_apply')
+                  .replaceAll('{amount}', formatPrice(apply)),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            loc
+                .translate('bread_wallet_cash_due')
+                .replaceAll('{amount}', formatPrice(due < 0 ? 0 : due)),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade800,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
-            loc.translate('bread_wallet_payment_note'),
+            loc.translate(
+              apply > 0
+                  ? 'bread_wallet_payment_note_applied'
+                  : 'bread_wallet_payment_note',
+            ),
             style: TextStyle(
               fontSize: 11,
               height: 1.35,

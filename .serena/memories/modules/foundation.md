@@ -8,10 +8,11 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - `_UnifiedServicesGrid`: 4×3 per page. **1-page**: local, intercity, marshrut, **yuk_birja** (was courier), sell, food, jobs, market, bread, oil, circles, dating. **2-page**: **courier**, milk, tire, car_wash, carpet.
 - Module id `yuk_birja` in `kKnownModuleIds`; icon `assets/images/services/service_yuk_birja.png`.
 
-## yuk_birja (`features/yuk_birja/`) — MVP 2026-07
-- Native load marketplace; UI + vehicle types via AppLocalizations (`yuk_*`, `yuk_vehicle_*`); vehicle codes latin (`fura`,`ref`,…) with Cyrillic legacy map: `YukBirjaScreen`, `YukBirjaStore` (SharedPreferences `yuk_birja_listings_v1` + demo seed), models, vehicle types list.
-- Flows: cargo/truck posts, intermediate stops, filters, Smart Match, call via `callPhone`, close **only own** listing (`ownerId` = phone digits).
-- Firestore `yuk_listings` (shared); repo `YukListingsRepository`; store watches active stream. TTL 48h; CF `expirePendingTrips` + client close own expired. Owner edit/close; local notify 6h + closed (`YukListingNotifier`). Search-on-submit; tools collapse; IntercityPlaces.
+## yuk_birja (`features/yuk_birja/`) — shared Firestore 2026-07
+- UI + vehicle types via AppLocalizations (`yuk_*`, `yuk_vehicle_*`); latin vehicle codes + Cyrillic legacy map.
+- Firestore `yuk_listings`; `YukListingsRepository.watchActive(limit: 10000)`; store waits first snapshot then screen runs `closeExpired` + `YukListingNotifier.syncOwner`. Owner id = `canonicalPhoneId`; ownership via `phonesMatch`.
+- TTL 48h; CF `expirePendingTrips` closes expired + `notifications` (`yuk_listing_closed`); T−6h → `yuk_listing_expire_soon` once (`expireSoonNotified`). Local schedule still in `YukListingNotifier`.
+- Report → `reports` type `yuk_listing`; load error banner + retry; search-on-submit; tools collapse; IntercityPlaces.
 - Dark/yellow UI; HTML proto `docs/yuk_birjasi_prototype.html`.
 
 ## onboarding (`features/onboarding/`)

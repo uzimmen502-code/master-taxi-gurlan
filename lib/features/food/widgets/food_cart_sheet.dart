@@ -335,6 +335,8 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                     OrderCheckoutWalletBanner(
                       orderTotal: c.cartTotal,
                       walletBalance: c.walletBalance,
+                      walletApply: c.walletApplyAmount,
+                      cashDue: c.cashDuePreview,
                     ),
                   ]),
                 ),

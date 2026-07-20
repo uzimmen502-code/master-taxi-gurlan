@@ -23,8 +23,11 @@ class CustomerOrderEntry {
   factory CustomerOrderEntry.food(OrderModel order) => CustomerOrderEntry._(
         kind: CustomerOrderKind.food,
         createdAt: order.createdAt,
-        isActive: const {'new', 'accepted', 'ready', 'in_delivery'}
-            .contains(order.status),
+        isActive: order.status != 'cancelled' &&
+            order.status != 'rejected' &&
+            order.status != 'delivered' &&
+            order.effectiveFulfillment != 'cancelled' &&
+            order.effectiveFulfillment != 'completed',
         food: order,
       );
 

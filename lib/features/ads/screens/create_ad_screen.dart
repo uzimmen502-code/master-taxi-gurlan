@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../onboarding/screens/phone_reverify_screen.dart';
-import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
 
@@ -27,7 +27,6 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final _titleCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
 
   final List<XFile> _newImages = [];
   bool _loading = false;
@@ -69,16 +68,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       return;
     }
     setState(() => _checkedLimit = true);
-    final prefs = await SharedPreferences.getInstance();
-    final phone = phoneDigits(prefs.getString('user_phone') ?? '');
-    if (phone.length >= 9 && _phoneCtrl.text.isEmpty) {
-      _phoneCtrl.text = phone;
-    }
   }
 
   Future<String> _ownerId() async {
     final prefs = await SharedPreferences.getInstance();
-    return phoneDigits(prefs.getString('user_phone') ?? '');
+    return canonicalPhoneId(prefs.getString('user_phone') ?? '');
   }
 
   String _sellerName() {
@@ -111,14 +105,34 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     });
   }
 
+  String _cfError(Object e) {
+    if (e is FirebaseFunctionsException) {
+      switch (e.code) {
+        case 'unauthenticated':
+          return 'Аввал тизимга киринг';
+        case 'resource-exhausted':
+          return e.message ?? 'Лимит тугади';
+        case 'invalid-argument':
+          return e.message ?? 'Маълумотлар нотўғри';
+        case 'permission-denied':
+          return 'Рухсат йўқ — профилда телефонни текширинг';
+        default:
+          return e.message ?? 'Хатолик: ${e.code}';
+      }
+    }
+    return 'Хатолик: $e';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_newImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Расм жойлаштириш тавсия қилинади'),
+          content: Text('Камида 1 та расм жойлаштиринг'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
     }
 
     final user = FirebaseAuth.instance.currentUser;
@@ -137,9 +151,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final userPhone = prefs.getString('user_phone') ?? '';
-    final ownerId = canonicalPhoneId(userPhone);
+    final ownerId = await _ownerId();
     if (phoneDigits(ownerId).length < 9) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,21 +172,13 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         ownerId: ownerId,
         images: _newImages,
       );
-      final title = _titleCtrl.text.trim();
-      final ad = AdModel(
-        id: '',
-        ownerId: ownerId,
-        title: title,
-        titleLower: title.toLowerCase(),
+      await repo.createAd(
+        title: _titleCtrl.text.trim(),
         description: _descCtrl.text.trim(),
         price: int.parse(_priceCtrl.text.trim()),
-        phone: _phoneCtrl.text.trim(),
         sellerName: _sellerName(),
         imageUrls: urls,
-        status: 'pending',
-        views: 0,
       );
-      await repo.createAd(ad);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -188,7 +192,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Хатолик: $e'),
+            content: Text(_cfError(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -203,7 +207,6 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     _titleCtrl.dispose();
     _priceCtrl.dispose();
     _descCtrl.dispose();
-    _phoneCtrl.dispose();
     super.dispose();
   }
 
@@ -266,16 +269,20 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                 OutlinedButton.icon(
                   onPressed: _loading ? null : _pickImages,
                   icon: const Icon(Icons.add_photo_alternate),
-                  label: const Text('Расм (1–5)'),
+                  label: const Text('Расм (1–5) *'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _titleCtrl,
+              maxLength: 120,
               decoration: const InputDecoration(labelText: 'Номи *'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Номини киритинг' : null,
+              validator: (v) {
+                final t = v?.trim() ?? '';
+                if (t.length < 3) return 'Камида 3 белги';
+                return null;
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -284,7 +291,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
               decoration: const InputDecoration(labelText: 'Нархи (so\'m) *'),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Нархни киритинг';
-                if (int.tryParse(v.trim()) == null) return 'Фақат рақам';
+                final n = int.tryParse(v.trim());
+                if (n == null) return 'Фақат рақам';
+                if (n < 1) return 'Нарх 0 дан катта бўлсин';
                 return null;
               },
             ),
@@ -292,20 +301,18 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             TextFormField(
               controller: _descCtrl,
               maxLines: 4,
+              maxLength: 2000,
               decoration: const InputDecoration(labelText: 'Тавсиф *'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Тавсифни киритинг' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Телефон *'),
               validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Телефонни киритинг';
-                if (phoneDigits(v).length < 9) return 'Телефон нотўғри';
+                final t = v?.trim() ?? '';
+                if (t.length < 3) return 'Камида 3 белги';
                 return null;
               },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Қўнғироқ рақами — профилингиздаги телефон (ўзгартирилмайди).',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
             FilledButton(

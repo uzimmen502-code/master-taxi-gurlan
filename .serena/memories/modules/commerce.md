@@ -11,14 +11,15 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Order placement ALWA
 - `food_screen.dart`,`food_controller.dart`,`product_card.dart`,`food_cart_sheet.dart`. fallback `utils/food_catalog.dart`; model `models/food_product.dart` (inventoryId,minQty,step,unit).
 - FoodController(ordersRepo,inventoryRepo). cart = Map<int,double> productId→qty (0.5 multiples).
 - reads: streams `food_catalog` (orderBy id); remaining via `food_inventory/{inventoryId}`; `users/{uid}.bonusBalance`.
-- orderBase: type:'food',items[{name,emoji,price,qty,unit,total,inventoryId}],total,balanceApplied:0,cashDue:total,status:'new',fulfillmentStatus:'pending',paymentStatus:'unpaid',fulfillmentMode:'delivery'.
-- GOTCHA: offline → pref `food_pending_orders`, flushed on connectivity. stock clamp `_wouldExceedStock`.
+- orderBase food/bread: CF `placeOrderPostPaid` **reprices server-side** — food←`food_catalog`; bread←`bread_products`+`extra_products`+`settings/prices` (flour/milk, salt×50, extras bonus); client price ignored. Wallet ledger `balanceApplied`/`cashDue`. Stock batch `getRemainingMap`.
+- Cancel: CF `customerCancelOrder` (early states only; restore stock + wallet refund). Rules: orders create false; update isAdmin|isStaff only. `settings/*` write isAdmin (prices locked). `placeOrderWithWallet` deprecated. placeOrderPostPaid PII caps (name≤80, address≤300); phone=token.
+- GOTCHA: offline → shared pref `commerce_pending_orders` (migrates legacy `pending_orders` / `food_pending_orders`). stock clamp `_wouldExceedStock`.
 
 ## bread (`features/bread/`)
 - `bread_screen.dart`,`bread_controller.dart`,widgets bread_product_card/bread_extra_product_card/bread_cart_sheet,`services/bread_image_storage.dart`. models bread_product.dart (BreadProduct type tayyor|yopish|toy; flourG/milkMl/milkRatio), bread_extra_product.dart (qtyStep,tieToYopishBread,bonusPercent,effectiveMaxQtyValue).
 - BreadController(breadRepo,ordersRepo,inventoryRepo). BreadRepository: `bread_products`,`extra_products` (orderBy createdAt), `settings/prices`.
 - carts: cart Map<int,int>, extraProductsCart Map<int,double>, flourMilkChoice Map<int,String>('ours'|'yours').
-- GOTCHAS: flourMilk 'ours' adds flourMilkCost = flourG/1000*flour_price + milkMl/1000*milk_price (default milkMl=milkRatio*flourG, ratio 0.575; flour≈8000, milk≈7000). saltYeastCost = 50 × (yopish+toy count). grandTotal=breadTotal+extrasTotal+saltYeastCost. Inventory decrements ONLY isReady bread (with firestoreId) + extras; yopish/toy NOT inventoried. tieToYopishBread extras clamped via `_clampTiedExtras`. offline key `pending_orders` (NOT food's key).
+- GOTCHAS: flourMilk 'ours' adds flourMilkCost = flourG/1000*flour_price + milkMl/1000*milk_price (default milkMl=milkRatio*flourG, ratio 0.575; flour≈8000, milk≈7000). saltYeastCost = 50 × (yopish+toy count). grandTotal=breadTotal+extrasTotal+saltYeastCost. Inventory decrements ONLY isReady bread (with firestoreId) + extras; yopish/toy NOT inventoried. tieToYopishBread extras clamped via `_clampTiedExtras`. offline shared key `commerce_pending_orders` (same as food).
 
 ## orders (`features/orders/`)
 - `orders_screen.dart` only; uses OrdersRepository.watchByUser + `profile/widgets/order_card.dart`.

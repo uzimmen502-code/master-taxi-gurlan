@@ -696,6 +696,8 @@ class _PriceSummary extends StatelessWidget {
         OrderCheckoutWalletBanner(
           orderTotal: c.grandTotal,
           walletBalance: c.walletBalance,
+          walletApply: c.walletApplyAmount,
+          cashDue: c.cashDuePreview,
         ),
       ]),
     );

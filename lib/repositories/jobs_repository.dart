@@ -3,8 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/utils/formatters.dart';
 import '../models/job_ad.dart';
 import '../models/job_complaint.dart';
+import '../services/job_ad_service.dart';
 
-/// `ads` ва `complaints` collection'лар билан ишлайди.
+/// `ads` ва `complaints` — Иш топ doskasi.
 class JobsRepository {
   JobsRepository({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -15,7 +16,7 @@ class JobsRepository {
   CollectionReference<Map<String, dynamic>> get _complaints =>
       _db.collection('complaints');
 
-  static String _normPhone(String raw) => phoneDigits(raw.trim());
+  static String _normPhone(String raw) => canonicalPhoneId(raw);
 
   static bool _urgentForType(String type, bool isUrgent) {
     if (!isUrgent) return false;
@@ -24,7 +25,7 @@ class JobsRepository {
 
   void _assertOwner(JobAd ad, String callerPhone) {
     final caller = _normPhone(callerPhone);
-    if (caller.isEmpty) {
+    if (phoneDigits(caller).length < 9) {
       throw StateError('Телефон киритилмаган');
     }
     if (!phonesMatch(ad.authorPhone, caller)) {
@@ -32,8 +33,8 @@ class JobsRepository {
     }
   }
 
-  /// Берилган тип ва active статусга эга охирги 50 та эълонни кузатиш.
-  Stream<List<JobAd>> watchActiveByType(String type, {int limit = 50}) {
+  /// Берилган тип ва active статусга эга охирги эълонлар.
+  Stream<List<JobAd>> watchActiveByType(String type, {int limit = 300}) {
     return _ads
         .where('type', isEqualTo: type)
         .where('status', isEqualTo: 'active')
@@ -43,7 +44,7 @@ class JobsRepository {
   }
 
   /// Иш / хизмат / эълон feed (актив).
-  Stream<List<JobAd>> watchAllActive({int limit = 100}) {
+  Stream<List<JobAd>> watchAllActive({int limit = 500}) {
     return _ads
         .where('type', whereIn: ['work', 'service', 'ad'])
         .where('status', isEqualTo: 'active')
@@ -52,12 +53,18 @@ class JobsRepository {
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
   }
 
-  /// Муаллифнинг барча эълонлари (pending, active, …) — фақат Иш топ турлари.
-  Stream<List<JobAd>> watchAdsByAuthor(String authorPhone, {int limit = 30}) {
-    final phone = _normPhone(authorPhone);
-    if (phone.isEmpty) return Stream.value(const []);
+  /// Муаллифнинг барча эълонлари — 9 / 998 алиаслар.
+  Stream<List<JobAd>> watchAdsByAuthor(String authorPhone, {int limit = 50}) {
+    final aliases = phoneAliases(authorPhone)
+        .map(phoneDigits)
+        .where((p) => p.length >= 9)
+        .toSet()
+        .take(10)
+        .toList(growable: false);
+    if (aliases.isEmpty) return Stream.value(const []);
+
     return _ads
-        .where('authorPhone', isEqualTo: phone)
+        .where('authorPhone', whereIn: aliases)
         .limit(limit)
         .snapshots()
         .map((snap) {
@@ -114,25 +121,34 @@ class JobsRepository {
     return JobAd.fromDoc(snap);
   }
 
-  /// Бугун ушбу муаллиф томонидан қўшилган эълонлар сони (кунлик лимит).
+  /// Бугунги эълонлар сони (UI hint; сервер ҳам текширади).
   Future<int> dailyCountByAuthor(String authorPhone) async {
-    final phone = _normPhone(authorPhone);
-    if (phone.isEmpty) return 0;
+    final aliases = phoneAliases(authorPhone)
+        .map(phoneDigits)
+        .where((p) => p.length >= 9)
+        .toSet()
+        .take(10)
+        .toList(growable: false);
+    if (aliases.isEmpty) return 0;
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     try {
-      final snap = await _ads
-          .where('authorPhone', isEqualTo: phone)
-          .where('createdAt',
-              isGreaterThan: Timestamp.fromDate(startOfDay))
-          .get();
-      return snap.docs.length;
+      var total = 0;
+      for (final phone in aliases) {
+        final snap = await _ads
+            .where('authorPhone', isEqualTo: phone)
+            .where('createdAt',
+                isGreaterThan: Timestamp.fromDate(startOfDay))
+            .get();
+        total += snap.docs.length;
+      }
+      return total;
     } catch (e) {
       throw StateError('Индекс ёки сўров хатоси: $e');
     }
   }
 
-  /// Янги эълон — муаллиф телефони нормализация қилинади.
+  /// Янги эълон — CF `submitJobAd` (auth + canonical phone + лимит).
   Future<void> addAd({
     required String type,
     required String text,
@@ -144,27 +160,18 @@ class JobsRepository {
     String title = '',
     String priceText = '',
   }) async {
-    final phone = _normPhone(authorPhone);
-    if (phone.length < 9) {
-      throw StateError('Телефон рақами нотўғри');
-    }
     if (!JobAd.isJobsBoardType(type)) {
       throw StateError('Номаълум эълон тури');
     }
-    await _ads.add({
-      'type': type,
-      'text': text,
-      if (title.isNotEmpty) 'title': title,
-      if (priceText.isNotEmpty) 'priceText': priceText,
-      'authorName': authorName.trim(),
-      'authorPhone': phone,
-      'address': address.trim(),
-      'isUrgent': _urgentForType(type, isUrgent),
-      'status': 'pending',
-      'expiresAt': Timestamp.fromDate(expiresAt),
-      'createdAt': FieldValue.serverTimestamp(),
-      'editedAt': null,
-    });
+    await JobAdService.submitAd(
+      type: type,
+      text: text,
+      authorName: authorName,
+      title: title,
+      priceText: priceText,
+      address: address,
+      isUrgent: isUrgent,
+    );
   }
 
   /// Муаллиф ўз эълони (authorPhone текшируви).
@@ -279,18 +286,12 @@ class JobsRepository {
     });
   }
 
-  /// Эълонга шикоят.
+  /// Эълонга шикоят — CF `submitJobComplaint`.
   Future<void> addComplaint({
     required String adId,
     required String reason,
     String reporterPhone = '',
   }) async {
-    final phone = _normPhone(reporterPhone);
-    await _complaints.add({
-      'adId': adId,
-      'reason': reason,
-      if (phone.isNotEmpty) 'reporterPhone': phone,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await JobAdService.submitComplaint(adId: adId, reason: reason);
   }
 }

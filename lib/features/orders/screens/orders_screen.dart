@@ -10,7 +10,9 @@ import '../../../models/agro_pickup_order.dart';
 import '../../../models/carpet_wash_order.dart';
 import '../../../repositories/agro_pickup_orders_repository.dart';
 import '../../../repositories/carpet_wash_orders_repository.dart';
+import '../../../models/order_model.dart';
 import '../../../repositories/orders_repository.dart';
+import '../../../services/order_payment_service.dart';
 import '../../profile/widgets/order_card.dart';
 import '../customer_orders_hub.dart';
 
@@ -30,6 +32,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   String _phone = '';
   bool _phoneLoaded = false;
   late final CustomerOrdersHub _hub;
+  String? _cancellingOrderId;
 
   @override
   void initState() {
@@ -175,12 +178,57 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Widget _entryBody(BuildContext context, CustomerOrderEntry entry) {
     return switch (entry.kind) {
-      CustomerOrderKind.food => OrderCard(order: entry.food!),
+      CustomerOrderKind.food => OrderCard(
+          order: entry.food!,
+          cancelling: _cancellingOrderId == entry.food!.id,
+          onCancel: entry.food!.canCustomerCancel
+              ? () => _cancelFoodOrder(entry.food!)
+              : null,
+        ),
       CustomerOrderKind.carpet =>
         _CarpetOrderTile(order: entry.carpet!, dateFmt: _dateFmt),
       CustomerOrderKind.milk =>
         _MilkOrderTile(order: entry.milk!, dateFmt: _dateFmt),
     };
+  }
+
+  Future<void> _cancelFoodOrder(OrderModel order) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('order_cancel')),
+        content: Text(context.tr('order_cancel_confirm')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('order_cancel')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _cancellingOrderId = order.id);
+    try {
+      await OrderPaymentService.customerCancelOrder(orderId: order.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('order_cancel_ok'))),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          content: Text(context.tr('order_cancel_fail')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _cancellingOrderId = null);
+    }
   }
 
   void _openEntryDetail(BuildContext context, CustomerOrderEntry entry) {

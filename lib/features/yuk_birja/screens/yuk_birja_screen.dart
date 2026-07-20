@@ -76,19 +76,22 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   Future<void> _bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
-    final phone = phoneDigits(prefs.getString('user_phone') ?? '');
+    final rawPhone = prefs.getString('user_phone') ?? '';
+    final ownerId = canonicalPhoneId(rawPhone);
     final name = (prefs.getString('user_name') ?? '').trim();
+    // Биринчи snapshot кейингина sync/close — race йўқ.
     await _store.load();
     if (!mounted) return;
-    final ownerId = phone.length >= 9 ? phone : '';
+    final me = phoneDigits(ownerId).length >= 9 ? ownerId : '';
     setState(() {
-      _ownerId = ownerId;
+      _ownerId = me;
       _ownerName = name.isEmpty ? context.tr('yuk_you') : name;
-      _ownerPhone = phone.length >= 9 ? '+$phone' : '';
+      _ownerPhone = me.isEmpty ? '' : phoneForCall(me);
     });
-    await _store.closeExpired(ownerId: ownerId);
+    if (me.isEmpty) return;
+    await _store.closeExpired(ownerId: me);
     await YukListingNotifier.syncOwner(
-      ownerId: ownerId,
+      ownerId: me,
       listings: _store.listings,
     );
   }
@@ -188,7 +191,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   }
 
   bool _isMine(YukListing item) =>
-      _ownerId.isNotEmpty && item.ownerId == _ownerId;
+      _ownerId.isNotEmpty && phonesMatch(item.ownerId, _ownerId);
 
   Future<void> _call(YukListing item) async {
     if (_isMine(item)) {
@@ -197,6 +200,63 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     }
     final ok = await callPhone(item.phone);
     if (!ok && mounted) _snack(context.tr('yuk_call_fail'));
+  }
+
+  Future<void> _report(YukListing item) async {
+    if (_isMine(item)) return;
+    if (_ownerId.isEmpty) {
+      _snack(context.tr('yuk_need_phone'));
+      return;
+    }
+    const reasons = <String>[
+      'yuk_report_fake',
+      'yuk_report_phone',
+      'yuk_report_spam',
+      'yuk_report_abuse',
+    ];
+    final key = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              context.tr('yuk_report_title'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final r in reasons)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  context.tr(r),
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                ),
+                onTap: () => Navigator.of(ctx).pop(r),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (key == null || !mounted) return;
+    final ok = await _store.reportListing(
+      item: item,
+      reason: context.tr(key),
+      reporterId: _ownerId,
+    );
+    if (!mounted) return;
+    _snack(ok ? context.tr('yuk_report_ok') : context.tr('yuk_report_fail'));
   }
 
   Future<void> _close(YukListing item) async {
@@ -325,15 +385,52 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
           foregroundColor: Colors.white,
           title: Text(context.tr('home_module_yuk_birja')),
         ),
-        body: !_store.ready
-            ? const Center(child: CircularProgressIndicator(color: _accent))
-            : ListenableBuilder(
-                listenable: _store,
-                builder: (context, _) {
-                  final items = _visible;
-                  final activeCount =
-                      _store.listings.where((e) => e.isActive).length;
-                  return Column(
+        body: ListenableBuilder(
+          listenable: _store,
+          builder: (context, _) {
+            if (!_store.ready) {
+              return const Center(
+                child: CircularProgressIndicator(color: _accent),
+              );
+            }
+            final items = _visible;
+            final activeCount =
+                _store.listings.where((e) => e.isActive).length;
+            final err = _store.error;
+            return Column(
+              children: [
+                if (err != null)
+                  Material(
+                    color: const Color(0xFF3F1D1D),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: Color(0xFFFCA5A5), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              context.tr('yuk_load_error'),
+                              style: const TextStyle(
+                                color: Color(0xFFFCA5A5),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _store.reload(),
+                            child: Text(
+                              context.tr('yuk_retry'),
+                              style: const TextStyle(color: _accent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: Column(
                     children: [
                       ClipRect(
                         child: AnimatedSize(
@@ -445,8 +542,13 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
                           onNotification: _onListScroll,
                           child: items.isEmpty
                               ? Center(
-                                  child: Text(context.tr('yuk_empty'),
-                                      style: const TextStyle(color: _muted)),
+                                  child: Text(
+                                    err != null
+                                        ? context.tr('yuk_load_error')
+                                        : context.tr('yuk_empty'),
+                                    style: const TextStyle(color: _muted),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 )
                               : ListView.separated(
                                   controller: _listCtrl,
@@ -463,15 +565,19 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
                                       onCall: () => _call(item),
                                       onEdit: () => _openEdit(item),
                                       onClose: () => _close(item),
+                                      onReport: () => _report(item),
                                     );
                                   },
                                 ),
                         ),
                       ),
                     ],
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -711,6 +817,7 @@ class _ListingCard extends StatelessWidget {
     required this.onCall,
     required this.onEdit,
     required this.onClose,
+    required this.onReport,
   });
 
   final YukListing item;
@@ -718,6 +825,7 @@ class _ListingCard extends StatelessWidget {
   final VoidCallback onCall;
   final VoidCallback onEdit;
   final VoidCallback onClose;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -908,18 +1016,32 @@ class _ListingCard extends StatelessWidget {
                         ],
                       )
                     else
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFFACC15),
-                            foregroundColor: const Color(0xFF0B0E14),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFFACC15),
+                                foregroundColor: const Color(0xFF0B0E14),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              onPressed: onCall,
+                              icon: const Icon(Icons.phone, size: 18),
+                              label: Text(context.tr('yuk_call')),
+                            ),
                           ),
-                          onPressed: onCall,
-                          icon: const Icon(Icons.phone, size: 18),
-                          label: Text(context.tr('yuk_call')),
-                        ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: context.tr('yuk_report_title'),
+                            onPressed: onReport,
+                            style: IconButton.styleFrom(
+                              foregroundColor: const Color(0xFFFCA5A5),
+                              side: const BorderSide(color: Color(0xFF3F1D1D)),
+                            ),
+                            icon: const Icon(Icons.flag_outlined, size: 20),
+                          ),
+                        ],
                       ),
                   ],
                 ),

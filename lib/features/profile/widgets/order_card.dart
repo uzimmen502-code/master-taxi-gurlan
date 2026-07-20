@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/order_model.dart';
 
 class OrderCard extends StatelessWidget {
-  const OrderCard({super.key, required this.order});
+  const OrderCard({
+    super.key,
+    required this.order,
+    this.onCancel,
+    this.cancelling = false,
+  });
 
   final OrderModel order;
+  final VoidCallback? onCancel;
+  final bool cancelling;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +49,10 @@ class OrderCard extends StatelessWidget {
             Text(dateStr,
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
           const SizedBox(width: 8),
-          _StatusChip(status: order.status),
+          _StatusChip(
+            status: order.status,
+            fulfillment: order.effectiveFulfillment,
+          ),
         ]),
         const SizedBox(height: 8),
         ...order.items.take(3).map((it) {
@@ -67,6 +78,14 @@ class OrderCard extends StatelessWidget {
             text: '❌ ${order.rejectReason}',
             color: Colors.red,
           ),
+        if (order.balanceApplied > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${context.tr('bread_wallet_will_apply').replaceAll('{amount}', formatPrice(order.balanceApplied))}'
+            '${order.collectibleDue > 0 ? ' · ${context.tr('bread_wallet_cash_due').replaceAll('{amount}', formatPrice(order.collectibleDue))}' : ''}',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
         Row(children: [
           Text(formatPrice(order.total),
               style: TextStyle(
@@ -74,26 +93,55 @@ class OrderCard extends StatelessWidget {
           Text(' сўм',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
         ]),
+        if (onCancel != null && order.canCustomerCancel) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: cancelling ? null : onCancel,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade700,
+                side: BorderSide(color: Colors.red.shade200),
+              ),
+              child: cancelling
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(context.tr('order_cancel')),
+            ),
+          ),
+        ],
       ]),
     );
   }
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+  const _StatusChip({required this.status, this.fulfillment = ''});
   final String status;
+  final String fulfillment;
 
   static const _map = <String, ({String label, Color color})>{
     'new': (label: '🔵 Янги', color: AppColors.primary),
     'accepted': (label: '🟡 Қабул', color: AppColors.primaryMid),
     'ready': (label: '🟠 Тайёр', color: AppColors.warning),
     'delivered': (label: '🟢 Етказилди', color: AppColors.primary),
+    'cancelled': (label: 'Бекор', color: Colors.red),
+    'rejected': (label: 'Бекор', color: Colors.red),
   };
 
   @override
   Widget build(BuildContext context) {
-    final info = _map[status];
-    final label = info?.label ?? status;
+    final key = (status == 'cancelled' ||
+            status == 'rejected' ||
+            fulfillment == 'cancelled')
+        ? 'cancelled'
+        : status;
+    final info = _map[key];
+    final label = info?.label ??
+        (key == 'cancelled' ? context.tr('order_status_cancelled') : status);
     final color = info?.color ?? Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),

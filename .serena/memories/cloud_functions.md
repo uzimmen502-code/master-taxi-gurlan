@@ -4,14 +4,15 @@ Grep exact name with `^exports\.NAME` to jump to a function (no line numbers —
 Types: onCall = `functions.https.onCall`; trigger = `functions.firestore`; sched = `functions.pubsub.schedule`; http = `onRequest`; storage = `onObjectFinalized`.
 Region `us-central1`, Node 20 1st Gen. Helpers from `settlement_ledger.js` imported as `settlementLedger`.
 Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_idempotency/{key}` + client `opId`.
-Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,districtId,serviceAreaId} (faqat boʻsh emas) user hujjatidan olib order payload'ga bosiladi. Ishlatilgan: placeOrderWithWallet, placeOrderPostPaid, placeCarpetWashOrder, placeAgroPickupOrder. (Client-side trips/courier/intercity Flutter `ServiceConfigHolder.reportStamp()` bilan bosadi.)
+Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,districtId,serviceAreaId} (faqat boʻsh emas) user hujjatidan olib order payload'ga bosiladi. Ishlatilgan: placeOrderPostPaid, placeCarpetWashOrder, placeAgroPickupOrder (placeOrderWithWallet deprecated). (Client-side trips/courier/intercity Flutter `ServiceConfigHolder.reportStamp()` bilan bosadi.)
 
 ## Wallet / Finance (onCall)
 - creditChange — wallet credit/refund (change, bonuses); idemKey e.g. `change_trip_{id}`.
 - creditSupplier — credit a supplier account.
 - debitForOrder — legacy wallet debit for order.
-- placeOrderWithWallet — legacy pre-paid order (wallet).
-- placeOrderPostPaid — CURRENT order placement (bread/food), post-paid; takes orderBase+decrements+idempotencyKey.
+- placeOrderWithWallet — **deprecated** (throws failed-precondition); use placeOrderPostPaid only.
+- placeOrderPostPaid — bread/food; **food←food_catalog**, **bread←bread_products+extra_products+settings/prices** (flour/milk, salt yeast, extras bonus); wallet debit; cashDue=total-balanceApplied. Bread items require `firestoreId`.
+- customerCancelOrder — owner cancel early order; restore soldToday + wallet refund.
 - sellerPlaceSale / sellerGetCustomerWalletBalance / sellerGetShiftSummary — seller POS (role seller|admin|superadmin); cash/wallet/mixed; `fulfillmentMode:pos`; shift = today Tashkent `paidBySellerId`+`paidAt`.
 - sellerMarkPickupReady / sellerSubmitPickupPayment — pickup order ready + in-store pay.
 - requestPayout / confirmPayout / rejectPayout — cash-out lifecycle (`payout_requests`).
@@ -58,7 +59,9 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 ## Taxi (local + marshrut)
 - completeLocalTrip (onCall) — driver completes local/alone trip: debit passenger wallet per `passengerWalletIntent` (idem `local_trip_complete_{tripId}`), set `completed`+`walletPaid`; returns `{fare,cashPaid,walletPaid,cashDue,change}`.
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
-- expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; also closes expired `yuk_listings` (active→closed).
+- expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; closes expired `yuk_listings` (active→closed) + FCM via `notifications` (`yuk_listing_closed`); T−6h warn (`yuk_listing_expire_soon`, flag `expireSoonNotified`); jobs `ads` active|pending → `completed`; cheap_product expired → `inactive`.
+- submitJobAd / submitJobComplaint (onCall) — Иш топ CF-only create (auth+canonical phone; ad daily 10; complaint daily 20).
+- submitMarketAd / submitMarketComplaint (onCall) — Onlayn BOZOR CF-only create + reports type market_ad (daily 10 ads / 20 complaints; phone=token; images under ads/{uid}/).
 - cleanupStaleDrivers (sched) — offline stale drivers.
 - marshrutDriverAutoOffline (sched) — auto-offline marshrut drivers.
 - marshrutPassengerCancelAfterAccept — passenger cancel after accept (block logic).

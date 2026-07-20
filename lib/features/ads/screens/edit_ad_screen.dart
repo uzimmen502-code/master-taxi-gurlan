@@ -7,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
@@ -27,7 +26,6 @@ class _EditAdScreenState extends State<EditAdScreen> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _descCtrl;
-  late final TextEditingController _phoneCtrl;
 
   final List<String> _keptUrls = [];
   final List<XFile> _newImages = [];
@@ -40,7 +38,6 @@ class _EditAdScreenState extends State<EditAdScreen> {
     _titleCtrl = TextEditingController(text: ad.title);
     _priceCtrl = TextEditingController(text: '${ad.price}');
     _descCtrl = TextEditingController(text: ad.description);
-    _phoneCtrl = TextEditingController(text: ad.phone);
     _keptUrls.addAll(ad.imageUrls);
   }
 
@@ -107,7 +104,6 @@ class _EditAdScreenState extends State<EditAdScreen> {
         if (title != ad.title) 'titleLower': title.toLowerCase(),
         'description': _descCtrl.text.trim(),
         'price': int.parse(_priceCtrl.text.trim()),
-        'phone': _phoneCtrl.text.trim(),
         'imageUrls': urls,
       };
       // Фаол эълон таҳрири — қайта модерация.
@@ -146,7 +142,6 @@ class _EditAdScreenState extends State<EditAdScreen> {
     _titleCtrl.dispose();
     _priceCtrl.dispose();
     _descCtrl.dispose();
-    _phoneCtrl.dispose();
     super.dispose();
   }
 
@@ -235,9 +230,13 @@ class _EditAdScreenState extends State<EditAdScreen> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _titleCtrl,
+              maxLength: 120,
               decoration: const InputDecoration(labelText: 'Номи *'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Номини киритинг' : null,
+              validator: (v) {
+                final t = v?.trim() ?? '';
+                if (t.length < 3) return 'Камида 3 белги';
+                return null;
+              },
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -246,7 +245,9 @@ class _EditAdScreenState extends State<EditAdScreen> {
               decoration: const InputDecoration(labelText: 'Нархи (so\'m) *'),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Нархни киритинг';
-                if (int.tryParse(v.trim()) == null) return 'Фақат рақам';
+                final n = int.tryParse(v.trim());
+                if (n == null) return 'Фақат рақам';
+                if (n < 1) return 'Нарх 0 дан катта бўлсин';
                 return null;
               },
             ),
@@ -254,20 +255,18 @@ class _EditAdScreenState extends State<EditAdScreen> {
             TextFormField(
               controller: _descCtrl,
               maxLines: 4,
+              maxLength: 2000,
               decoration: const InputDecoration(labelText: 'Тавсиф *'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Тавсифни киритинг' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Телефон *'),
               validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Телефонни киритинг';
-                if (phoneDigits(v).length < 9) return 'Телефон нотўғри';
+                final t = v?.trim() ?? '';
+                if (t.length < 3) return 'Камида 3 белги';
                 return null;
               },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Телефон: ${widget.ad.phone} (ўзгартирилмайди)',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
             FilledButton(

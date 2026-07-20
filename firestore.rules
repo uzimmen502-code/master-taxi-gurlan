@@ -829,25 +829,20 @@ service cloud.firestore {
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
       );
 
-      allow create: if isAuth()
-          && request.resource.data.keys().hasAll(['userPhone', 'items', 'total', 'status'])
-          && request.resource.data.status == 'new'
-          && request.resource.data.total > 0;
+      // Яратиш / бекор — фақат CF (placeOrderPostPaid / customerCancelOrder).
+      allow create: if false;
 
-      allow update: if (
-          // Status transitions allowed from client
-          request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['status', 'updatedAt', 'cancelledAt', 'cancelReason'])
-          && request.resource.data.status in ['cancelled']
-          && resource.data.status in ['new', 'accepted']
-      ) || (
-          // Courier delivery fields — courier app
-          request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['deliveredAt', 'courierId', 'status', 'updatedAt'])
-      ) || (
-          // Admin or system updates
-          isAdmin()
-      );
+      // Статус/курьер майдонлари — фақат staff (courier|seller|…) ёки админ.
+      // Олдин authсиз update бўлган — чужой заказ «delivered» қилиш мумкин эди.
+      allow update: if isAdmin()
+          || (
+            isStaff()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly([
+                  'deliveredAt', 'courierId', 'status', 'updatedAt',
+                  'statusUpdatedAt', 'fulfillmentStatus'
+                ])
+          );
 
       allow delete: if false;
 
@@ -1116,15 +1111,8 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /settings/{docId} {
       allow read: if docId != 'courier';
-      // Only specific safe fields allowed from client; sensitive fields (driverApprovalMode etc) — Cloud Functions only.
-      allow create: if docId != 'courier'
-          && !request.resource.data.keys().hasAny([
-          'driverApprovalMode', 'datingAutoApprove', 'adminPhone', 'secret'
-        ]);
-      allow update: if docId != 'courier'
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'driverApprovalMode', 'datingAutoApprove', 'adminPhone', 'secret'
-        ]);
+      // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
+      allow create, update: if isAdmin();
       allow delete: if false;
     }
 
@@ -1552,10 +1540,11 @@ service cloud.firestore {
       }
     }
 
-    // Shikoyatlar — dating CF orqali; boshqa turlar client yaratishi mumkin.
+    // Shikoyatlar — dating/market CF orqali; boshqa turlar client yaratishi mumkin.
     match /reports/{reportId} {
       allow create: if isAuth()
-          && request.resource.data.get('type', '') != 'dating_profile';
+          && request.resource.data.get('type', '') != 'dating_profile'
+          && request.resource.data.get('type', '') != 'market_ad';
       allow read, update, delete: if isAdmin();
     }
 
@@ -1686,18 +1675,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    function adAuthorPhoneOk(phone) {
-      return phone is string && phone.matches('^[0-9]{9,15}$');
-    }
-
-    function adCreateOk() {
-      return request.resource.data.keys().hasAll([
-            'type', 'text', 'authorPhone', 'authorName', 'status', 'createdAt'])
-          && request.resource.data.type in ['work', 'service', 'ad']
-          && request.resource.data.status == 'pending'
-          && adAuthorPhoneOk(request.resource.data.authorPhone);
-    }
-
     function isJobsBoardAdData(d) {
       let t = d.get('type', '');
       return t != 'cheap_product'
@@ -1758,46 +1735,54 @@ service cloud.firestore {
       return d.get('type', '') == 'cheap_product';
     }
 
-    function cheapProductCreateOk() {
+    function cheapProductOwnerIsCaller() {
       return isAuth()
-          && isCheapProductAdData(request.resource.data)
-          && request.resource.data.ownerId == userDocIdFromPhoneToken()
-          && request.resource.data.status == 'pending'
-          && request.resource.data.keys().hasAll([
-            'type', 'ownerId', 'title', 'titleLower', 'description', 'price',
-            'phone', 'sellerName', 'imageUrls', 'status', 'views',
-            'createdAt', 'updatedAt'
-          ]);
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               phoneDigits(resource.data.get('ownerId', '')));
     }
 
     // Owner may edit content / hide / re-submit for moderation — never set active.
+    // phone ўзгармайди (токенга боғланган).
     function cheapProductOwnerUpdateOk() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return isAuth()
+      return cheapProductOwnerIsCaller()
           && isCheapProductAdData(resource.data)
-          && resource.data.ownerId == userDocIdFromPhoneToken()
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.type == resource.data.type
+          && request.resource.data.phone == resource.data.phone
+          && request.resource.data.price is int
+          && request.resource.data.price > 0
+          && request.resource.data.price <= 100000000
+          && request.resource.data.title is string
+          && request.resource.data.title.size() >= 3
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.description is string
+          && request.resource.data.description.size() >= 3
+          && request.resource.data.description.size() <= 2000
+          && request.resource.data.imageUrls is list
+          && request.resource.data.imageUrls.size() >= 1
+          && request.resource.data.imageUrls.size() <= 5
           && changed.hasOnly([
-                'title', 'titleLower', 'description', 'price', 'phone',
+                'title', 'titleLower', 'description', 'price',
                 'sellerName', 'imageUrls', 'status', 'updatedAt'
               ])
           && (!changed.hasAny(['status'])
               || (
                 (request.resource.data.status == 'inactive'
                     && resource.data.status in ['active', 'pending'])
-                // hide→pending (republish) yoki active→pending (tahrirdan keyin qayta moderatsiya)
                 || (request.resource.data.status == 'pending'
                     && resource.data.status in ['inactive', 'active'])
               ));
     }
 
     function cheapProductViewIncrementOk() {
-      return isCheapProductAdData(resource.data)
+      return isAuth()
+          && isCheapProductAdData(resource.data)
           && resource.data.status == 'active'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
           && request.resource.data.views is int
-          && request.resource.data.views >= resource.data.views;
+          && request.resource.data.views == resource.data.views + 1;
     }
 
     function cheapProductAdminPatchOk() {
@@ -1821,12 +1806,15 @@ service cloud.firestore {
 
     match /ads/{id} {
       // Jobs board: барча; cheap_product: active/owner; admin — барча BOZOR.
+      // Create — фақат CF (`submitJobAd` / `submitMarketAd`).
       allow read: if isAdmin()
           || !isCheapProductAdData(resource.data)
           || resource.data.status == 'active'
           || (isAuth()
-              && resource.data.ownerId == userDocIdFromPhoneToken());
-      allow create: if adCreateOk() || cheapProductCreateOk();
+              && phoneDocIdsMatch(
+                   userDocIdFromPhoneToken(),
+                   phoneDigits(resource.data.get('ownerId', ''))));
+      allow create: if false;
       allow update: if adOwnerPatchOk()
           || adModerationPatchOk()
           || cheapProductOwnerUpdateOk()
@@ -1836,14 +1824,14 @@ service cloud.firestore {
           || cheapProductAdminDeleteOk()
           || (isAuth()
               && isCheapProductAdData(resource.data)
-              && resource.data.ownerId == userDocIdFromPhoneToken());
+              && phoneDocIdsMatch(
+                   userDocIdFromPhoneToken(),
+                   phoneDigits(resource.data.get('ownerId', ''))));
     }
 
+    // Шикоят — фақат CF `submitJobComplaint` (client create: false).
     function complaintCreateOk() {
-      return request.resource.data.keys().hasAll(['adId', 'reason', 'createdAt'])
-          && request.resource.data.adId is string
-          && request.resource.data.reason is string
-          && request.resource.data.get('resolved', false) == false;
+      return false;
     }
 
     function complaintAdminResolveOk() {

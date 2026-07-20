@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -66,8 +67,14 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     );
   }
 
+  String get _callPhone {
+    final p = widget.ad.phone;
+    if (phoneDigits(p).length >= 9) return p;
+    return widget.ad.ownerId;
+  }
+
   Future<void> _callSeller() async {
-    if (phoneDigits(widget.ad.phone).length < 9) {
+    if (phoneDigits(_callPhone).length < 9) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -77,7 +84,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
       );
       return;
     }
-    final uri = Uri.parse('tel:${phoneForCall(widget.ad.phone)}');
+    final uri = Uri.parse('tel:${phoneForCall(_callPhone)}');
     if (!await launchUrl(uri)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -89,10 +96,66 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     }
   }
 
+  Future<void> _reportAd() async {
+    const reasons = <String>[
+      'Алдамчи эълон',
+      'Телефон нотўғри',
+      'Спам / Такрорий',
+      'Ҳақоратли матн',
+    ];
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Шикоят',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ...reasons.map(
+              (r) => ListTile(
+                title: Text(r),
+                onTap: () => Navigator.pop(ctx, r),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (reason == null || !mounted) return;
+    try {
+      await context.read<AdsRepository>().submitComplaint(
+            adId: widget.ad.id,
+            reason: reason,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Шикоят юборилди')),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      final msg = e.code == 'resource-exhausted'
+          ? 'Кунига шикоят лимити тугади'
+          : (e.message ?? 'Хатолик');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Хатолик: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ad = widget.ad;
-    final canCall = phoneDigits(ad.phone).length >= 9;
+    final canCall = phoneDigits(_callPhone).length >= 9;
 
     return Scaffold(
       backgroundColor: AppColors.scaffold,
@@ -121,6 +184,13 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             pinned: true,
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
+            actions: [
+              IconButton(
+                tooltip: 'Шикоят',
+                icon: const Icon(Icons.flag_outlined),
+                onPressed: _reportAd,
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: AdImageSlider(imageUrls: ad.imageUrls, height: 300),
             ),

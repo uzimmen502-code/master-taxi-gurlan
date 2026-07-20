@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/pending_commerce_orders.dart';
 import '../../../models/food_product.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../../repositories/orders_repository.dart';
@@ -24,8 +25,6 @@ class FoodController extends ChangeNotifier {
     required InventoryRepository inventoryRepo,
   })  : _ordersRepo = ordersRepo,
         _inventoryRepo = inventoryRepo;
-
-  static const _pendingOrdersKey = 'food_pending_orders';
 
   // ignore: unused_field — Provider контракти.
   final OrdersRepository _ordersRepo;
@@ -133,16 +132,20 @@ class FoodController extends ChangeNotifier {
   Future<void> _loadStock() async {
     stockLoading = true;
     notifyListeners();
-    final map = <int, int>{};
     final list = _products.isEmpty
         ? List<FoodProduct>.from(FoodCatalog.products)
         : _products;
-    for (final p in list) {
-      try {
-        final r = await _inventoryRepo.getRemaining(
-            InventoryKind.food, p.inventoryId);
-        map[p.id] = r;
-      } catch (_) {
+    final map = <int, int>{};
+    try {
+      final byInv = await _inventoryRepo.getRemainingMap(
+        InventoryKind.food,
+        list.map((p) => p.inventoryId),
+      );
+      for (final p in list) {
+        map[p.id] = byInv[p.inventoryId] ?? 999999;
+      }
+    } catch (_) {
+      for (final p in list) {
         map[p.id] = 999999;
       }
     }
@@ -153,16 +156,30 @@ class FoodController extends ChangeNotifier {
 
   Future<void> _loadWallet() async {
     final prefs = await SharedPreferences.getInstance();
-    final uid =
-        (prefs.getString('user_phone') ?? '').replaceAll(RegExp(r'[^\d]'), '');
-    if (uid.length < 9) return;
+    final raw = prefs.getString('user_phone') ?? '';
+    final uid12 = canonicalPhoneId(raw);
+    final uid9 = phoneDigits(raw);
+    if (phoneDigits(uid12).length < 9 && uid9.length < 9) return;
     try {
-      final u =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      walletBalance = (u.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
+      DocumentSnapshot<Map<String, dynamic>>? u;
+      if (uid12.length >= 12) {
+        u = await FirebaseFirestore.instance.collection('users').doc(uid12).get();
+      }
+      if ((u == null || !u.exists) && uid9.length >= 9 && uid9 != uid12) {
+        u = await FirebaseFirestore.instance.collection('users').doc(uid9).get();
+      }
+      walletBalance = (u?.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
       notifyListeners();
     } catch (_) {}
   }
+
+  /// Саватда ҳамёндан ечиладиган сумма (сервер ҳам шу clamp қилади).
+  int get walletApplyAmount {
+    if (walletBalance <= 0 || cartTotal <= 0) return 0;
+    return walletBalance < cartTotal ? walletBalance : cartTotal;
+  }
+
+  int get cashDuePreview => cartTotal - walletApplyAmount;
 
   Future<void> _initConnectivity() async {
     final initial = await Connectivity().checkConnectivity();
@@ -181,27 +198,20 @@ class FoodController extends ChangeNotifier {
 
   Future<void> _loadPendingOrder() async {
     final prefs = await SharedPreferences.getInstance();
-    final pending = prefs.getString(_pendingOrdersKey);
-    if (pending == null) return;
-    try {
-      final list = jsonDecode(pending) as List;
-      pendingCount = list.length;
-      notifyListeners();
-    } catch (_) {}
+    final list = await PendingCommerceOrders.load(prefs);
+    pendingCount = list.length;
+    if (list.isNotEmpty) notifyListeners();
   }
 
   Future<int> _flushPendingOrders() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final pending = prefs.getString(_pendingOrdersKey);
-      if (pending == null) return 0;
-      final list = jsonDecode(pending) as List;
+      final list = await PendingCommerceOrders.load(prefs);
       if (list.isEmpty) return 0;
 
       int sent = 0;
       final remaining = <Map<String, dynamic>>[];
-      for (final order in list) {
-        final data = Map<String, dynamic>.from(order as Map<String, dynamic>);
+      for (final data in list) {
         try {
           final payload = Map<String, dynamic>.from(data)
             ..removeWhere((k, _) =>
@@ -231,11 +241,7 @@ class FoodController extends ChangeNotifier {
           remaining.add(data);
         }
       }
-      if (remaining.isEmpty) {
-        await prefs.remove(_pendingOrdersKey);
-      } else {
-        await prefs.setString(_pendingOrdersKey, jsonEncode(remaining));
-      }
+      await PendingCommerceOrders.save(prefs, remaining);
       pendingCount = remaining.length;
       notifyListeners();
       return sent;
@@ -341,9 +347,9 @@ class FoodController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userName = prefs.getString('user_name') ?? '';
-      final userPhone = prefs.getString('user_phone') ?? '';
-      final uid = phoneDigits(userPhone);
-      if (uid.length < 9) {
+      final userPhoneRaw = prefs.getString('user_phone') ?? '';
+      final userPhone = canonicalPhoneId(userPhoneRaw);
+      if (phoneDigits(userPhone).length < 9) {
         isSubmitting = false;
         errorMessage = 'Телефон рақamingizni profilда tўldiring.';
         notifyListeners();
@@ -374,16 +380,18 @@ class FoodController extends ChangeNotifier {
         }
       }
 
+      final apply = walletApplyAmount;
       final orderData = <String, dynamic>{
         'type': 'food',
         'userName': userName,
         'userPhone': userPhone,
         'address': address,
-        'phone': phone,
+        'phone': phone.isNotEmpty ? phone : userPhone,
         'items': items,
         'total': cartTotal,
-        'balanceApplied': 0,
-        'cashDue': cartTotal,
+        'balanceApplied': apply,
+        'useWallet': true,
+        'cashDue': cartTotal - apply,
         'cashPaid': 0,
         'status': 'new',
         'fulfillmentStatus': 'pending',
@@ -408,12 +416,9 @@ class FoodController extends ChangeNotifier {
           offline['createdAt'] = DateTime.now().toIso8601String();
           offline['idempotencyKey'] = idempotencyKey;
           offline['decrements'] = decMaps;
-          final existing = jsonDecode(
-                  prefs.getString(_pendingOrdersKey) ?? '[]')
-              as List;
-          existing.add(offline);
-          await prefs.setString(_pendingOrdersKey, jsonEncode(existing));
-          pendingCount = existing.length;
+          await PendingCommerceOrders.add(prefs, offline);
+          final queued = await PendingCommerceOrders.load(prefs);
+          pendingCount = queued.length;
           clearCart();
           isSubmitting = false;
           notifyListeners();

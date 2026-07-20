@@ -98,6 +98,43 @@ class OrderModel {
 
   bool get canCourierPay => effectiveFulfillment == 'arrived';
 
+  /// Мижоз бекор: курьер олмаган / етиб келмаган / якунланмаган.
+  bool get canCustomerCancel {
+    if (effectivePayment == 'paid' &&
+        effectiveFulfillment == 'completed') {
+      return false;
+    }
+    final fs = effectiveFulfillment;
+    if (fs == 'courier_picked' ||
+        fs == 'arrived' ||
+        fs == 'completed' ||
+        fs == 'cancelled') {
+      return false;
+    }
+    if (status == 'in_delivery' ||
+        status == 'delivered' ||
+        status == 'cancelled' ||
+        status == 'rejected') {
+      return false;
+    }
+    return status == 'new' ||
+        status == 'accepted' ||
+        status == 'ready' ||
+        fs == 'pending' ||
+        fs == 'confirmed' ||
+        fs == 'ready';
+  }
+
+  /// Курьер/seller тўлаши керак бўлган қолдиқ.
+  int get collectibleDue {
+    if (cashDue > 0) return cashDue;
+    if (balanceApplied > 0) {
+      final d = total - balanceApplied;
+      return d < 0 ? 0 : d;
+    }
+    return total;
+  }
+
   static String _legacyToFulfillment(String s) {
     switch (s) {
       case 'accepted':

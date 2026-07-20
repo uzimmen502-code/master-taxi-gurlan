@@ -1985,279 +1985,12 @@ async function applyStockReservations(reserved) {
   return count;
 }
 
-exports.placeOrderWithWallet = functions.https.onCall(async (data, context) => {
-  const userPhone = String(data.userPhone || '');
-  const idempotencyKey = String(data.idempotencyKey || '').trim();
-  const orderBase = data.orderBase && typeof data.orderBase === 'object' ? data.orderBase : null;
-  const decrementsIn = Array.isArray(data.decrements) ? data.decrements : [];
-
-  if (!idempotencyKey) {
-    throw new functions.https.HttpsError('invalid-argument', 'idempotencyKey required');
-  }
-  if (!orderBase) {
-    throw new functions.https.HttpsError('invalid-argument', 'orderBase required');
-  }
-  if (decrementsIn.length > 80) {
-    throw new functions.https.HttpsError('invalid-argument', 'too many decrements');
-  }
-
-  const orderType = String(orderBase.type || '');
-  if (orderType !== 'bread' && orderType !== 'food') {
-    throw new functions.https.HttpsError('invalid-argument', 'orderBase.type must be bread or food');
-  }
-
-  const uid = userUid(userPhone);
-  const userRef = db.collection('users').doc(uid);
-  const userCheck = await userRef.get();
-  if (!userCheck.exists) {
-    throw new functions.https.HttpsError('not-found', 'user not found');
-  }
-
-  const idemRef = db.collection('wallet_idempotency').doc(idempotencyKey);
-
-  const existing = await idemRef.get();
-  if (existing.exists) {
-    return existing.data().result || { ok: true, duplicate: true };
-  }
-
-  const orderRef = db.collection('orders').doc();
-  const module = orderType === 'bread' ? 'bread' : 'food';
-
-  /** key: "col__id" -> { col, id, qty, label } */
-  const agg = {};
-  for (let i = 0; i < decrementsIn.length; i += 1) {
-    const c = decrementsIn[i] || {};
-    const id = String(c.id || '').trim();
-    const qty = Number(c.qty);
-    if (!id || !Number.isFinite(qty) || qty <= 0) continue;
-    let col;
-    try {
-      col = inventoryCollectionForDecrementKind(String(c.kind || ''));
-    } catch (e) {
-      throw new functions.https.HttpsError('invalid-argument', 'bad decrement kind');
-    }
-    const key = `${col}__${id}`;
-    if (!agg[key]) {
-      agg[key] = {
-        col, id, qty: 0, label: String(c.label || id),
-      };
-    }
-    agg[key].qty += qty;
-  }
-
-  let txDuplicate = null;
-  const result = await db.runTransaction(async (t) => {
-    const idemSnap = await t.get(idemRef);
-    if (idemSnap.exists) {
-      txDuplicate = idemSnap.data().result;
-      return null;
-    }
-
-    const userRef = db.collection('users').doc(uid);
-    const userSnap = await t.get(userRef);
-    const prevBalance = (userSnap.data() && userSnap.data().bonusBalance) || 0;
-
-    const orderTotal = parseInt(String(orderBase.total || 0), 10);
-    if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
-      throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
-    }
-
-    const maxWallet = maxWalletDebit(prevBalance, orderTotal);
-    let requested = parseInt(String(orderBase.balanceApplied ?? 0), 10);
-    if (!Number.isFinite(requested) || requested < 0) requested = 0;
-    requested = Math.floor(requested);
-    const walletDebit = Math.min(requested, maxWallet);
-    const cashDue = orderTotal - walletDebit;
-
-    const cashPaidParsed = orderBase.cashPaid != null && orderBase.cashPaid !== ''
-      ? parseInt(String(orderBase.cashPaid), 10)
-      : cashDue;
-    const cashPaid = Number.isFinite(cashPaidParsed) ? cashPaidParsed : cashDue;
-
-    if (cashDue > 0 && cashPaid < cashDue) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        `insufficient_cash: need ${cashDue}, got ${cashPaid}`,
-      );
-    }
-
-    const changeCredit = Math.max(0, cashPaid - cashDue);
-    const nextBalance = prevBalance - walletDebit + changeCredit;
-    if (nextBalance < 0) {
-      throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
-    }
-
-    const invKeys = Object.keys(agg);
-    const invSnaps = {};
-    for (let i = 0; i < invKeys.length; i += 1) {
-      const row = agg[invKeys[i]];
-      const ref = db.collection(row.col).doc(row.id);
-      invSnaps[invKeys[i]] = await t.get(ref);
-    }
-
-    const failures = [];
-    for (let i = 0; i < invKeys.length; i += 1) {
-      const row = agg[invKeys[i]];
-      const snap = invSnaps[invKeys[i]];
-      const need = row.qty;
-      if (!snap.exists) {
-        continue;
-      }
-      const d = snap.data() || {};
-      const total = Number(d.totalStock) || 0;
-      const sold = Number(d.soldToday) || 0;
-      if (total <= 0) continue;
-      const remaining = total - sold;
-      if (remaining + 1e-9 < need) {
-        failures.push(`${row.label}: керак ${need}, қолди ${remaining}`);
-      }
-    }
-    if (failures.length > 0) {
-      throw new functions.https.HttpsError('failed-precondition', failures.join('; '));
-    }
-
-    // Ledger ko'zgusi (READ fazasi) — inventar yozuvlaridan OLDIN bo'lishi shart.
-    const bonusCtx = await settlementLedger.prepareBonusInTx(t, db, uid, {
-      idempotencyKey,
-    });
-
-    for (let i = 0; i < invKeys.length; i += 1) {
-      const row = agg[invKeys[i]];
-      const snap = invSnaps[invKeys[i]];
-      const ref = db.collection(row.col).doc(row.id);
-      const need = row.qty;
-      if (!snap.exists) {
-        t.set(ref, {
-          totalStock: 0,
-          soldToday: need,
-        });
-        continue;
-      }
-      t.update(ref, {
-        soldToday: admin.firestore.FieldValue.increment(need),
-      });
-    }
-
-    let ledgerIdDebit = null;
-    let ledgerIdChange = null;
-
-    if (walletDebit > 0 || changeCredit > 0) {
-      t.set(userRef, {
-        bonusBalance: nextBalance,
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-
-    // Ledger ko'zgusi (WRITE fazasi) — net delta = changeCredit - walletDebit.
-    const bonusDelta = changeCredit - walletDebit;
-    if (bonusDelta !== 0) {
-      settlementLedger.commitBonusInTx(t, bonusCtx, {
-        delta: bonusDelta,
-        kind: 'order_wallet',
-        refType: 'order',
-        refId: orderRef.id,
-        meta: { module, orderTotal, walletDebit, changeCredit },
-        postedBy: uid,
-        postedRole: 'client',
-      });
-    }
-
-    if (walletDebit > 0) {
-      ledgerIdDebit = userRef.collection('wallet_ledger').doc().id;
-      t.set(userRef.collection('wallet_ledger').doc(ledgerIdDebit), {
-        type: 'purchase_debit',
-        amount: -walletDebit,
-        module,
-        refType: 'order',
-        refId: orderRef.id,
-        meta: {
-          orderTotal, cashDue, cashPaid, roundingStep: 1,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'client',
-      });
-    }
-
-    if (changeCredit > 0) {
-      ledgerIdChange = userRef.collection('wallet_ledger').doc().id;
-      t.set(userRef.collection('wallet_ledger').doc(ledgerIdChange), {
-        type: 'change_accrued',
-        amount: changeCredit,
-        module,
-        refType: 'order',
-        refId: orderRef.id,
-        meta: {
-          orderTotal, cashPaid, cashDue, roundingStep: 1,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'client',
-      });
-    }
-
-    const orderPayload = {
-      type: orderType,
-      userName: String(orderBase.userName || ''),
-      userPhone: String(orderBase.userPhone || ''),
-      address: String(orderBase.address || ''),
-      phone: String(orderBase.phone || ''),
-      items: orderBase.items || [],
-      total: orderTotal,
-      balanceApplied: walletDebit,
-      cashDue,
-      cashPaid,
-      status: 'new',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    if (orderType === 'bread' && orderBase.extras) {
-      orderPayload.extras = orderBase.extras;
-    }
-    const userData = userSnap.data() || {};
-    const userAddr = userData.address;
-    Object.assign(orderPayload, geoReportStamp(userData));
-    let lat = orderBase.lat != null && orderBase.lat !== ''
-      ? Number(orderBase.lat)
-      : null;
-    let lng = orderBase.lng != null && orderBase.lng !== ''
-      ? Number(orderBase.lng)
-      : null;
-    if ((lat == null || lng == null) && userAddr && typeof userAddr === 'object') {
-      if (lat == null && userAddr.lat != null) lat = Number(userAddr.lat);
-      if (lng == null && userAddr.lng != null) lng = Number(userAddr.lng);
-    }
-    if (
-      lat != null && lng != null &&
-      Number.isFinite(lat) && Number.isFinite(lng) &&
-      (Math.abs(lat) > 1e-6 || Math.abs(lng) > 1e-6)
-    ) {
-      orderPayload.lat = lat;
-      orderPayload.lng = lng;
-    }
-
-    t.set(orderRef, orderPayload);
-
-    const out = {
-      ok: true,
-      orderId: orderRef.id,
-      walletDebited: walletDebit,
-      cashDue,
-      cashPaid,
-      ledgerIdDebit,
-      ledgerIdChange,
-    };
-
-    t.set(idemRef, {
-      type: 'placeOrderWithWallet',
-      result: out,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    return out;
-  });
-
-  if (txDuplicate) {
-    return txDuplicate;
-  }
-  return result;
+/** @deprecated — хавфли (auth/reprice йўқ). Фақат `placeOrderPostPaid`. */
+exports.placeOrderWithWallet = functions.https.onCall(async () => {
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    'Deprecated: use placeOrderPostPaid',
+  );
 });
 
 // ══════════════════════════════════════
@@ -2335,7 +2068,283 @@ function resolvePaymentMethod(lines) {
   return 'cash';
 }
 
-/** Буюртма + омбор; кошелёк ечилмайди (post-paid). */
+/** food_catalog doc — inventoryId `food_N` (seed) ёки legacy. */
+async function loadFoodCatalogDoc(inventoryId) {
+  const id = String(inventoryId || '').trim();
+  if (!id) return null;
+  let snap = await db.collection('food_catalog').doc(id).get();
+  if (!snap.exists && /^\d+$/.test(id)) {
+    snap = await db.collection('food_catalog').doc(`food_${id}`).get();
+  }
+  if (!snap.exists) return null;
+  return { docId: snap.id, data: snap.data() || {} };
+}
+
+/**
+ * Food буюртма: нарх/ном фақат food_catalog дан (client price ишончсиз).
+ * @returns {{ items: object[], total: number, decrements: object[] }}
+ */
+async function repriceFoodOrderFromCatalog(itemsIn) {
+  const raw = Array.isArray(itemsIn) ? itemsIn : [];
+  if (raw.length < 1 || raw.length > 40) {
+    throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
+  }
+  const items = [];
+  const decrements = [];
+  let total = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    const it = raw[i] || {};
+    const invId = String(it.inventoryId || '').trim();
+    const qty = Number(it.qty);
+    if (!invId) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: inventoryId required`);
+    }
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 500) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: bad qty`);
+    }
+    const cat = await loadFoodCatalogDoc(invId);
+    if (!cat) {
+      throw new functions.https.HttpsError('not-found', `Taom topilmadi: ${invId}`);
+    }
+    const unitPrice = Math.trunc(Number(cat.data.price || 0));
+    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Narx yo'q: ${invId}`);
+    }
+    const lineTotal = Math.round(unitPrice * qty);
+    if (!Number.isFinite(lineTotal) || lineTotal <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', `items[${i}]: bad total`);
+    }
+    total += lineTotal;
+    const name = String(cat.data.name || invId).trim() || invId;
+    const unit = String(cat.data.unit || it.unit || 'кг');
+    const emoji = String(cat.data.emoji || it.emoji || '🍽');
+    const catalogInv = cat.docId.startsWith('food_') ? cat.docId : invId;
+    items.push({
+      name,
+      emoji,
+      price: unitPrice,
+      qty,
+      unit,
+      total: lineTotal,
+      inventoryId: catalogInv,
+    });
+    decrements.push({
+      kind: 'food',
+      id: catalogInv,
+      qty,
+      label: name,
+    });
+  }
+  if (total <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+  }
+  return { items, total, decrements };
+}
+
+function breadTypeNorm(raw) {
+  const t = String(raw || 'tayyor').toLowerCase().trim();
+  if (t === 'ёпиш' || t === 'yopish') return 'yopish';
+  if (t === 'той' || t === 'toy') return 'toy';
+  if (t === 'тайёр' || t === 'tayyor' || t === 'ready') return 'tayyor';
+  return t;
+}
+
+function breadUnitPriceFromDoc(d, prices) {
+  const direct = Math.trunc(Number(d.price || 0));
+  if (Number.isInteger(direct) && direct > 0) return direct;
+  const key = String(d.priceKey || '').trim();
+  if (key && prices && prices[key] != null) {
+    const fromKey = Math.trunc(Number(prices[key]));
+    if (Number.isInteger(fromKey) && fromKey > 0) return fromKey;
+  }
+  return 0;
+}
+
+function breadFlourMilkCost(d, count, prices) {
+  const flourG = Number(d.flourG) > 0 ? Number(d.flourG) : 300;
+  const ratio = Number(d.milkRatio);
+  const milkMl = Number(d.milkMl) > 0
+      ? Number(d.milkMl)
+      : Math.round((Number.isFinite(ratio) && ratio > 0 ? ratio : 0.575) * flourG);
+  const flourPrice = Math.trunc(Number((prices && prices.flour_price) || 8000)) || 8000;
+  const milkPrice = Math.trunc(Number((prices && prices.milk_price) || 7000)) || 7000;
+  const n = Math.max(1, Math.trunc(count));
+  return Math.round((flourG / 1000) * flourPrice * n)
+      + Math.round((milkMl / 1000) * milkPrice * n);
+}
+
+function breadExtraDiscount(d, qty) {
+  if (!(qty > 0) || d.bonusEnabled !== true) return 0;
+  const threshold = Math.trunc(Number(d.bonusThreshold || 0));
+  const bonusQty = Math.trunc(Number(d.bonusQty || 0));
+  const bonusPercent = Math.trunc(Number(d.bonusPercent || 0));
+  const price = Math.trunc(Number(d.price || 0));
+  if (threshold <= 0 || bonusQty <= 0 || bonusPercent <= 0 || price <= 0) return 0;
+  if (qty + 1e-9 < threshold) return 0;
+  const discounted = bonusQty > qty ? Math.floor(qty) : bonusQty;
+  return Math.round(price * discounted * (bonusPercent / 100));
+}
+
+/**
+ * Bread буюртма: нарх bread_products + extra_products + settings/prices дан.
+ * Client price/total e'tiborsiz. flourMilk faqat 'ours'|'yours' (mijoz tanlovi).
+ */
+async function repriceBreadOrderFromCatalog(orderBase) {
+  const rawItems = Array.isArray(orderBase.items) ? orderBase.items : [];
+  const rawExtras = Array.isArray(orderBase.extras) ? orderBase.extras : [];
+  if (rawItems.length < 1 && rawExtras.length < 1) {
+    throw new functions.https.HttpsError('invalid-argument', 'items or extras required');
+  }
+  if (rawItems.length > 40 || rawExtras.length > 40) {
+    throw new functions.https.HttpsError('invalid-argument', 'too many lines');
+  }
+
+  const pricesSnap = await db.collection('settings').doc('prices').get();
+  const prices = pricesSnap.exists ? (pricesSnap.data() || {}) : {};
+  const saltUnit = Math.trunc(Number(prices.salt_yeast_unit || prices.saltYeastUnit || 50)) || 50;
+
+  const items = [];
+  const decrements = [];
+  let breadSum = 0;
+  let yopishToyCount = 0;
+  let cartHadYopish = false;
+
+  for (let i = 0; i < rawItems.length; i += 1) {
+    const it = rawItems[i] || {};
+    const fid = String(it.firestoreId || it.productId || '').trim();
+    const count = Math.trunc(Number(it.count ?? it.qty ?? 0));
+    if (!fid) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: firestoreId required`);
+    }
+    if (!Number.isFinite(count) || count < 1 || count > 200) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: bad count`);
+    }
+    const snap = await db.collection('bread_products').doc(fid).get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', `Non topilmadi: ${fid}`);
+    }
+    const d = snap.data() || {};
+    const type = breadTypeNorm(d.type);
+    const unitPrice = breadUnitPriceFromDoc(d, prices);
+    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Narx yo'q: ${fid}`);
+    }
+
+    const flourMilkRaw = String(it.flourMilk || 'ours').toLowerCase();
+    const flourMilk = (type === 'yopish' || type === 'toy')
+        ? (flourMilkRaw === 'yours' ? 'yours' : 'ours')
+        : 'none';
+
+    const baseLineTotal = unitPrice * count;
+    let fmCost = 0;
+    if ((type === 'yopish' || type === 'toy') && flourMilk === 'ours') {
+      fmCost = breadFlourMilkCost(d, count, prices);
+    }
+    const lineTotal = baseLineTotal + fmCost;
+    breadSum += lineTotal;
+
+    if (type === 'yopish' || type === 'toy') {
+      yopishToyCount += count;
+    }
+    if (type === 'yopish') cartHadYopish = true;
+
+    // Inventory: faqat tayyor (ready) — client bilan bir xil.
+    if (type === 'tayyor') {
+      decrements.push({
+        kind: 'bread',
+        id: fid,
+        qty: count,
+        label: String(d.name || fid).trim() || fid,
+      });
+    }
+
+    const typeOut = type === 'yopish' ? 'ёпиш' : (type === 'toy' ? 'той' : 'тайёр');
+    items.push({
+      id: it.id != null ? it.id : fid,
+      firestoreId: fid,
+      emoji: String(d.emoji || it.emoji || '🫓'),
+      name: String(d.name || fid).trim() || fid,
+      count,
+      type: typeOut,
+      flourMilk,
+      price: unitPrice,
+      baseLineTotal,
+      ...(fmCost > 0 ? { flourMilkCost: fmCost } : {}),
+      lineTotal,
+    });
+  }
+
+  const extras = [];
+  let extrasSum = 0;
+  for (let i = 0; i < rawExtras.length; i += 1) {
+    const it = rawExtras[i] || {};
+    const fid = String(it.firestoreId || '').trim();
+    const qty = Number(it.count ?? it.qty ?? 0);
+    if (!fid) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `extras[${i}]: firestoreId required`);
+    }
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 500) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `extras[${i}]: bad qty`);
+    }
+    const snap = await db.collection('extra_products').doc(fid).get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', `Qo'shimcha topilmadi: ${fid}`);
+    }
+    const d = snap.data() || {};
+    const unitPrice = Math.trunc(Number(d.price || 0));
+    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Narx yo'q: ${fid}`);
+    }
+    const discount = breadExtraDiscount(d, qty);
+    const lineTotal = Math.max(0, Math.round(unitPrice * qty) - discount);
+    extrasSum += lineTotal;
+    decrements.push({
+      kind: 'extra',
+      id: fid,
+      qty,
+      label: String(d.name || fid).trim() || fid,
+    });
+    extras.push({
+      emoji: String(d.emoji || it.emoji || ''),
+      caption: String(d.caption || it.caption || ''),
+      name: String(d.name || fid).trim() || fid,
+      count: qty,
+      unit: String(d.unit || it.unit || 'dona'),
+      firestoreId: fid,
+      ...(discount > 0 ? {
+        bonusDiscount: discount,
+        bonusPercent: Math.trunc(Number(d.bonusPercent || 0)),
+      } : {}),
+      total: lineTotal,
+    });
+  }
+
+  const saltYeastCost = yopishToyCount * saltUnit;
+  const total = breadSum + extrasSum + saltYeastCost;
+  if (!Number.isFinite(total) || total <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+  }
+
+  return {
+    items,
+    extras,
+    saltYeastCost,
+    cartHadYopishBread: cartHadYopish,
+    total,
+    decrements,
+  };
+}
+
+/** Буюртма + омбор; food/bread нарх каталогдан; ҳамён (ixtiyoriy) ledger орқали. */
 exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
@@ -2384,10 +2393,36 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     return existing.data().result || { ok: true, duplicate: true };
   }
 
+  // Food/bread: server-side narx (client total/price e'tiborsiz).
+  let pricedItems = Array.isArray(orderBase.items) ? orderBase.items : [];
+  let pricedExtras = Array.isArray(orderBase.extras) ? orderBase.extras : null;
+  let serverSaltYeast = null;
+  let serverHadYopish = null;
+  let serverTotal = parseInt(String(orderBase.total || 0), 10);
+  let catalogDecs = null;
+  if (orderType === 'food') {
+    const priced = await repriceFoodOrderFromCatalog(orderBase.items);
+    pricedItems = priced.items;
+    serverTotal = priced.total;
+    catalogDecs = priced.decrements;
+  } else if (orderType === 'bread') {
+    const priced = await repriceBreadOrderFromCatalog(orderBase);
+    pricedItems = priced.items;
+    pricedExtras = priced.extras;
+    serverSaltYeast = priced.saltYeastCost;
+    serverHadYopish = priced.cartHadYopishBread;
+    serverTotal = priced.total;
+    catalogDecs = priced.decrements;
+  } else if (!Number.isFinite(serverTotal) || serverTotal <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+  }
+
   const orderRef = db.collection('orders').doc();
+  const module = orderType === 'bread' ? 'bread' : 'food';
   const agg = {};
-  for (let i = 0; i < decrementsIn.length; i += 1) {
-    const c = decrementsIn[i] || {};
+  const decSource = catalogDecs || decrementsIn;
+  for (let i = 0; i < decSource.length; i += 1) {
+    const c = decSource[i] || {};
     const id = String(c.id || '').trim();
     const qty = Number(c.qty);
     if (!id || !Number.isFinite(qty) || qty <= 0) continue;
@@ -2407,7 +2442,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       return null;
     }
 
-    const orderTotal = parseInt(String(orderBase.total || 0), 10);
+    const orderTotal = serverTotal;
     if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
       throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
     }
@@ -2422,6 +2457,7 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     const userSnap = await t.get(userRef);
     const userData = userSnap.data() || {};
     const userAddr = userData.address;
+    const prevBalance = parseInt(String(userData.bonusBalance ?? 0), 10) || 0;
 
     const failures = [];
     for (let i = 0; i < invKeys.length; i += 1) {
@@ -2442,6 +2478,18 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition', failures.join('; '));
     }
 
+    // Ҳамён: клиент сўрагани clamp (max = баланс ва жами).
+    const maxWallet = maxWalletDebit(prevBalance, orderTotal);
+    let requested = parseInt(String(orderBase.balanceApplied ?? maxWallet), 10);
+    if (!Number.isFinite(requested) || requested < 0) requested = 0;
+    const useWallet = orderBase.useWallet !== false;
+    const walletDebit = useWallet ? Math.min(Math.floor(requested), maxWallet) : 0;
+    const cashDue = orderTotal - walletDebit;
+
+    const bonusCtx = walletDebit > 0
+      ? await settlementLedger.prepareBonusInTx(t, db, userRef.id, { idempotencyKey })
+      : null;
+
     for (let i = 0; i < invKeys.length; i += 1) {
       const row = agg[invKeys[i]];
       const snap = invSnaps[invKeys[i]];
@@ -2454,6 +2502,37 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       t.update(ref, { soldToday: admin.firestore.FieldValue.increment(need) });
     }
 
+    if (walletDebit > 0 && bonusCtx) {
+      const nextBalance = prevBalance - walletDebit;
+      if (nextBalance < 0) {
+        throw new functions.https.HttpsError('failed-precondition', 'insufficient_balance');
+      }
+      t.set(userRef, {
+        bonusBalance: nextBalance,
+        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      settlementLedger.commitBonusInTx(t, bonusCtx, {
+        delta: -walletDebit,
+        kind: 'order_wallet',
+        refType: 'order',
+        refId: orderRef.id,
+        meta: { module, orderTotal, walletDebit, cashDue },
+        postedBy: userRef.id,
+        postedRole: 'client',
+      });
+      const ledgerId = userRef.collection('wallet_ledger').doc().id;
+      t.set(userRef.collection('wallet_ledger').doc(ledgerId), {
+        type: 'purchase_debit',
+        amount: -walletDebit,
+        module,
+        refType: 'order',
+        refId: orderRef.id,
+        meta: { orderTotal, cashDue, roundingStep: 1 },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'client',
+      });
+    }
+
     const inventoryDecrements = Object.keys(agg).map((k) => ({
       kind: agg[k].col === 'bread_products'
           ? 'bread'
@@ -2463,29 +2542,47 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       label: agg[k].label,
     }));
 
+    const paymentStatus = cashDue <= 0 ? 'paid' : 'unpaid';
+    const clampStr = (v, max) => String(v || '').trim().slice(0, max);
     const orderPayload = {
       type: orderType,
-      userName: String(orderBase.userName || ''),
-      userPhone: String(orderBase.userPhone || ''),
-      address: String(orderBase.address || ''),
-      phone: String(orderBase.phone || ''),
-      items: orderBase.items || [],
+      userName: clampStr(orderBase.userName, 80),
+      userPhone: callerUid,
+      address: clampStr(orderBase.address, 300),
+      phone: callerUid,
+      items: pricedItems,
       inventoryDecrements,
       total: orderTotal,
-      balanceApplied: 0,
-      cashDue: orderTotal,
+      balanceApplied: walletDebit,
+      cashDue,
       cashPaid: 0,
       status: 'new',
       fulfillmentStatus: 'pending',
-      paymentStatus: 'unpaid',
+      paymentStatus,
       fulfillmentMode: (String(orderBase.fulfillmentMode || '') === 'pickup')
           ? 'pickup'
           : 'delivery',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (orderType === 'bread' && orderBase.extras) {
-      orderPayload.extras = orderBase.extras;
+    if (orderBase.note != null || orderBase.comment != null) {
+      orderPayload.note = clampStr(orderBase.note || orderBase.comment, 500);
+    }
+    if (paymentStatus === 'paid') {
+      orderPayload.paymentMethod = 'wallet';
+      orderPayload.paidAmount = orderTotal;
+      orderPayload.paidAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    if (orderType === 'bread') {
+      if (Array.isArray(pricedExtras)) {
+        orderPayload.extras = pricedExtras;
+      }
+      if (serverSaltYeast != null && serverSaltYeast > 0) {
+        orderPayload.saltYeastCost = serverSaltYeast;
+      }
+      if (serverHadYopish === true) {
+        orderPayload.cartHadYopishBread = true;
+      }
     }
     Object.assign(orderPayload, geoReportStamp(userData));
     let lat = orderBase.lat != null && orderBase.lat !== '' ? Number(orderBase.lat) : null;
@@ -2504,9 +2601,178 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     }
 
     t.set(orderRef, orderPayload);
-    const out = { ok: true, orderId: orderRef.id, cashDue: orderTotal };
+    const out = {
+      ok: true,
+      orderId: orderRef.id,
+      total: orderTotal,
+      balanceApplied: walletDebit,
+      cashDue,
+      paymentStatus,
+    };
     t.set(idemRef, {
       type: 'placeOrderPostPaid',
+      result: out,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return out;
+  });
+
+  if (txDuplicate) return txDuplicate;
+  return result;
+});
+
+/**
+ * Мижоз: food/bread буюртмани бекор (фақат эрта ҳолат).
+ * Захира қайтариш + ҳамён refund (agar balanceApplied > 0).
+ */
+exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const orderId = String((data && data.orderId) || '').trim();
+  const reason = String((data && data.reason) || 'Мижоз бекор қилди').trim().slice(0, 200);
+  if (!orderId) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+
+  const callerUid = canonicalUid(callerPhone(context));
+  if (!callerUid || callerUid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+
+  const orderRef = db.collection('orders').doc(orderId);
+  const idemKey = `customer_cancel_${orderId}`;
+  const idemRef = db.collection('wallet_idempotency').doc(idemKey);
+  const existing = await idemRef.get();
+  if (existing.exists) {
+    return existing.data().result || { ok: true, duplicate: true };
+  }
+
+  let txDuplicate = null;
+  const result = await db.runTransaction(async (t) => {
+    const idemSnap = await t.get(idemRef);
+    if (idemSnap.exists) {
+      txDuplicate = idemSnap.data().result;
+      return null;
+    }
+    const snap = await t.get(orderRef);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'order not found');
+    }
+    const od = snap.data() || {};
+    const owner = canonicalUid(String(od.userPhone || od.phone || ''));
+    if (!owner || owner !== callerUid) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your order');
+    }
+
+    const status = String(od.status || '');
+    const fs = String(od.fulfillmentStatus || '').toLowerCase();
+    const cancelledAlready = status === 'cancelled' || status === 'rejected'
+        || fs === 'cancelled';
+    if (cancelledAlready) {
+      const out = { ok: true, already: true, orderId };
+      t.set(idemRef, {
+        type: 'customerCancelOrder',
+        result: out,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return out;
+    }
+
+    // Курьер олиб кетгандан кейин / тўлангандан кейин (қисман ҳамён + нақд) — йўқ.
+    const blockedFs = ['courier_picked', 'arrived', 'completed', 'in_delivery'];
+    if (blockedFs.includes(fs) || status === 'in_delivery' || status === 'delivered') {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Бу ҳолатда бекор қилиб бўлмайди',
+      );
+    }
+    const allowedStatus = ['new', 'accepted', 'ready', ''].includes(status);
+    const allowedFs = ['', 'pending', 'confirmed', 'ready'].includes(fs);
+    if (!allowedStatus || !allowedFs) {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Бу ҳолатда бекор қилиб бўлмайди',
+      );
+    }
+
+    // Захира қайтариш
+    const decs = Array.isArray(od.inventoryDecrements) ? od.inventoryDecrements : [];
+    for (let i = 0; i < decs.length; i += 1) {
+      const c = decs[i] || {};
+      const id = String(c.id || '').trim();
+      const qty = Number(c.qty);
+      if (!id || !Number.isFinite(qty) || qty <= 0) continue;
+      let col;
+      try {
+        col = inventoryCollectionForDecrementKind(String(c.kind || ''));
+      } catch (_) {
+        continue;
+      }
+      const invRef = db.collection(col).doc(id);
+      const invSnap = await t.get(invRef);
+      if (!invSnap.exists) continue;
+      const d = invSnap.data() || {};
+      const totalStock = Number(d.totalStock) || 0;
+      if (totalStock <= 0) continue;
+      t.update(invRef, {
+        soldToday: admin.firestore.FieldValue.increment(-qty),
+      });
+    }
+
+    const walletRefund = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
+    const uid12 = canonicalUid(String(od.userPhone || od.phone || ''));
+    const uid9 = userUid(String(od.userPhone || od.phone || ''));
+    let customerRef = db.collection('users').doc(uid12);
+    let customerSnap = await t.get(customerRef);
+    if (!customerSnap.exists && uid9 !== uid12) {
+      customerRef = db.collection('users').doc(uid9);
+      customerSnap = await t.get(customerRef);
+    }
+
+    if (walletRefund > 0 && customerSnap.exists) {
+      const bal = parseInt(String(customerSnap.data()?.bonusBalance ?? 0), 10) || 0;
+      const bonusCtx = await settlementLedger.prepareBonusInTx(
+          t, db, customerRef.id, { idempotencyKey: idemKey });
+      t.set(customerRef, {
+        bonusBalance: bal + walletRefund,
+        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      settlementLedger.commitBonusInTx(t, bonusCtx, {
+        delta: walletRefund,
+        kind: 'order_cancel_refund',
+        refType: 'order',
+        refId: orderId,
+        meta: { walletRefund },
+        postedBy: callerUid,
+        postedRole: 'client',
+      });
+      const ledgerId = customerRef.collection('wallet_ledger').doc().id;
+      t.set(customerRef.collection('wallet_ledger').doc(ledgerId), {
+        type: 'order_cancel_refund',
+        amount: walletRefund,
+        module: String(od.type || 'food') === 'bread' ? 'bread' : 'food',
+        refType: 'order',
+        refId: orderId,
+        meta: { reason },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: 'customerCancelOrder',
+      });
+    }
+
+    t.update(orderRef, {
+      status: 'cancelled',
+      fulfillmentStatus: 'cancelled',
+      cancelReason: reason || 'Мижоз бекор қилди',
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      cancelledBy: callerUid,
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const out = { ok: true, orderId, walletRefund };
+    t.set(idemRef, {
+      type: 'customerCancelOrder',
       result: out,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -2978,7 +3244,7 @@ exports.sellerSubmitPickupPayment = functions.https.onCall(async (data, context)
     if (String(od.fulfillmentMode || '') !== 'pickup') {
       throw new functions.https.HttpsError('failed-precondition', 'Faqat olib ketish');
     }
-    if (od.paymentStatus === 'paid') {
+    if (od.paymentStatus === 'paid' && String(od.fulfillmentStatus) === 'completed') {
       const paidOut = {
         ok: true,
         idempotent: true,
@@ -3009,16 +3275,52 @@ exports.sellerSubmitPickupPayment = functions.https.onCall(async (data, context)
     if (orderTotal <= 0) {
       throw new functions.https.HttpsError('invalid-argument', 'jami noto\'g\'ri');
     }
-    if (cashPaid + walletPaid < orderTotal) {
+    const preApplied = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
+    const remainingDue = Math.max(0, orderTotal - preApplied);
+
+    // Буюртмада ҳамён тўлиқ — қўшимча тўловсиз якун.
+    if (remainingDue <= 0 || (od.paymentStatus === 'paid' && preApplied >= orderTotal)) {
+      t.update(orderRef, {
+        paymentStatus: 'paid',
+        paymentMethod: od.paymentMethod || 'wallet',
+        paidAmount: orderTotal,
+        balanceApplied: Math.max(preApplied, orderTotal),
+        cashDue: 0,
+        fulfillmentStatus: 'completed',
+        status: 'delivered',
+        paidBySellerId: sellerUid,
+        paidAt: od.paidAt || admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+        statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      const prepaidOut = {
+        ok: true,
+        orderId,
+        total: orderTotal,
+        cashPaid: 0,
+        walletPaid: Math.max(preApplied, orderTotal),
+        changeCredit: 0,
+        prepaid: true,
+      };
+      t.set(idemRef, {
+        type: 'sellerSubmitPickupPayment',
+        result: prepaidOut,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return prepaidOut;
+    }
+
+    if (cashPaid + walletPaid < remainingDue) {
       throw new functions.https.HttpsError(
           'invalid-argument',
-          `Kam to'lov: ${cashPaid + walletPaid} < ${orderTotal}`,
+          `Kam to'lov: ${cashPaid + walletPaid} < ${remainingDue}`,
       );
     }
-    if (walletPaid > orderTotal) {
-      throw new functions.https.HttpsError('invalid-argument', 'walletPaid > jami');
+    if (walletPaid > remainingDue) {
+      throw new functions.https.HttpsError('invalid-argument', 'walletPaid > qoldiq');
     }
-    const changeCredit = Math.max(0, cashPaid + walletPaid - orderTotal);
+    const changeCredit = Math.max(0, cashPaid + walletPaid - remainingDue);
 
     const customerPhone = String(od.userPhone || od.phone || '');
     let customerRef = null;
@@ -3105,11 +3407,13 @@ exports.sellerSubmitPickupPayment = functions.https.onCall(async (data, context)
 
     t.update(orderRef, {
       paymentStatus: 'paid',
-      paymentMethod,
-      paidAmount: cashPaid + walletPaid,
+      paymentMethod: preApplied > 0 && (walletPaid > 0 || cashPaid > 0)
+          ? 'mixed'
+          : paymentMethod,
+      paidAmount: preApplied + cashPaid + walletPaid,
       cashPaid,
-      balanceApplied: walletPaid,
-      cashDue: Math.max(0, orderTotal - walletPaid),
+      balanceApplied: preApplied + walletPaid,
+      cashDue: 0,
       fulfillmentStatus: 'completed',
       status: 'delivered',
       paidBySellerId: sellerUid,
@@ -3125,7 +3429,7 @@ exports.sellerSubmitPickupPayment = functions.https.onCall(async (data, context)
       orderId,
       total: orderTotal,
       cashPaid,
-      walletPaid,
+      walletPaid: preApplied + walletPaid,
       changeCredit,
     };
     t.set(idemRef, {
@@ -3450,22 +3754,60 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
 
-  if (linesIn.length < 1 || linesIn.length > 20) {
-    throw new functions.https.HttpsError('invalid-argument', 'lines required');
-  }
-
   const { ref, data: od } = await loadOrderOrThrow(orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'arrived') {
     throw new functions.https.HttpsError('failed-precondition', 'arrived first');
   }
-  if (od.paymentStatus === 'paid' || od.paymentStatus === 'payment_pending_confirm') {
+  if (od.paymentStatus === 'payment_pending_confirm') {
     throw new functions.https.HttpsError('failed-precondition', 'already_paid');
   }
 
   const orderTotal = parseInt(String(od.total ?? od.grandTotal ?? 0), 10);
   if (!Number.isFinite(orderTotal) || orderTotal <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+  }
+  const preApplied = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
+  const remainingDue = Math.max(0, orderTotal - preApplied);
+  const alreadyPaidWallet = od.paymentStatus === 'paid' && remainingDue <= 0;
+
+  // Буюртма вақтида ҳамён тўлиқ ёпилган — фақат етказишни якунлаш.
+  if (alreadyPaidWallet || remainingDue <= 0) {
+    if (od.paymentStatus === 'paid' && String(od.fulfillmentStatus) === 'completed') {
+      throw new functions.https.HttpsError('failed-precondition', 'already_paid');
+    }
+    await ref.update({
+      paymentStatus: 'paid',
+      paymentMethod: od.paymentMethod || 'wallet',
+      paidAmount: orderTotal,
+      cashPaid: Math.trunc(Number(od.cashPaid || 0)),
+      balanceApplied: Math.max(preApplied, orderTotal),
+      cashDue: 0,
+      fulfillmentStatus: 'completed',
+      status: 'delivered',
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+      courierId: od.courierId || courierId,
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      paidByCourierId: courierId,
+      paidAt: od.paidAt || admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {
+      ok: true,
+      orderId,
+      orderTotal,
+      prepaid: true,
+      balanceApplied: Math.max(preApplied, orderTotal),
+      changeCredit: 0,
+    };
+  }
+
+  if (od.paymentStatus === 'paid') {
+    throw new functions.https.HttpsError('failed-precondition', 'already_paid');
+  }
+
+  if (linesIn.length < 1 || linesIn.length > 20) {
+    throw new functions.https.HttpsError('invalid-argument', 'lines required');
   }
 
   const normalized = [];
@@ -3511,14 +3853,14 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   }
 
   const totalSubmitted = paymentLinesTotal(normalized);
-  if (totalSubmitted < orderTotal - 1) {
+  if (totalSubmitted < remainingDue - 1) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      `Underpaid: ${totalSubmitted} < ${orderTotal}`,
+      `Underpaid: ${totalSubmitted} < ${remainingDue}`,
     );
   }
   const paidSum = totalSubmitted;
-  const changeCredit = Math.max(0, totalSubmitted - orderTotal);
+  const changeCredit = Math.max(0, totalSubmitted - remainingDue);
 
   const userPhone = String(od.userPhone || od.phone || '');
   const uid9 = userUid(userPhone);
@@ -3546,11 +3888,11 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
       );
     }
     const nonWalletSum = totalSubmitted - walletSum;
-    const remainingDue = orderTotal - nonWalletSum;
-    if (walletSum > remainingDue + 1) {
+    const walletCap = remainingDue - nonWalletSum;
+    if (walletSum > walletCap + 1) {
       throw new functions.https.HttpsError(
         'invalid-argument',
-        `wallet_overpay: wallet ${walletSum} > remaining due ${remainingDue}`,
+        `wallet_overpay: wallet ${walletSum} > remaining due ${walletCap}`,
       );
     }
   }
@@ -3582,15 +3924,14 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   if (changeCredit > 0) {
     orderPatch.changeCredited = changeCredit;
   }
-  if (walletSum > 0) {
-    orderPatch.balanceApplied = walletSum;
-  }
+  orderPatch.balanceApplied = preApplied + walletSum;
+  orderPatch.cashDue = 0;
   batch.update(ref, orderPatch);
   batch.set(ref.collection('payment_events').doc(), {
     action: 'courier_submit_payment',
     actorType: 'courier',
     actorId: courierId,
-    payload: { lines: normalized, paidSum, changeCredit },
+    payload: { lines: normalized, paidSum, changeCredit, preApplied, remainingDue },
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
     at: admin.firestore.FieldValue.serverTimestamp(),
@@ -5465,6 +5806,16 @@ function urgentForJobAdType(type, isUrgent) {
   return t === 'work' || t === 'ad';
 }
 
+function jobAdExpiryDays(type, isUrgent) {
+  const t = String(type || '');
+  const urgent = urgentForJobAdType(t, isUrgent === true);
+  if (urgent) return 2;
+  if (t === 'work') return 3;
+  if (t === 'service') return 30;
+  if (t === 'ad') return 14;
+  return 14;
+}
+
 async function getJobsBoardAdOrThrow(adId) {
   const ref = db.collection('ads').doc(adId);
   const snap = await ref.get();
@@ -5477,6 +5828,136 @@ async function getJobsBoardAdOrThrow(adId) {
   }
   return { ref, snap };
 }
+
+const JOBS_DAILY_AD_LIMIT = 10;
+const JOBS_DAILY_COMPLAINT_LIMIT = 20;
+
+/** Mijoz: Иш топ эълон (CF-only, auth + телефон + кунлик лимит). */
+exports.submitJobAd = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+
+  const type = String((data && data.type) || '').trim();
+  if (!['work', 'service', 'ad'].includes(type)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid type');
+  }
+  const text = String((data && data.text) || '').trim();
+  if (text.length < 3 || text.length > 2000) {
+    throw new functions.https.HttpsError('invalid-argument', 'text 3..2000');
+  }
+  const title = String((data && data.title) || '').trim().slice(0, 120);
+  const priceText = String((data && data.priceText) || '').trim().slice(0, 80);
+  const authorName = String((data && data.authorName) || '').trim().slice(0, 80);
+  const address = String((data && data.address) || '').trim().slice(0, 300);
+  const isUrgent = urgentForJobAdType(type, data && data.isUrgent === true);
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  // Янги ёзувлар canonical; эски 9-рақамли ҳам санаш.
+  const phoneVariants = [...new Set([
+    uid,
+    uid.length >= 12 && uid.startsWith('998') ? uid.slice(3) : '',
+  ].filter((p) => p.length >= 9))];
+
+  let todayCount = 0;
+  for (const phoneKey of phoneVariants) {
+    const recentSnap = await db.collection('ads')
+      .where('authorPhone', '==', phoneKey)
+      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+      .limit(JOBS_DAILY_AD_LIMIT + 1)
+      .get();
+    todayCount += recentSnap.size;
+    if (todayCount >= JOBS_DAILY_AD_LIMIT) break;
+  }
+  if (todayCount >= JOBS_DAILY_AD_LIMIT) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily ad limit reached');
+  }
+
+  const days = jobAdExpiryDays(type, isUrgent);
+  const expiresAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+  );
+
+  const ref = await db.collection('ads').add({
+    type,
+    text,
+    ...(title ? { title } : {}),
+    ...(priceText ? { priceText } : {}),
+    authorName: authorName || 'Фойдаланувчи',
+    authorPhone: uid,
+    address,
+    isUrgent,
+    status: 'pending',
+    expiresAt,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    editedAt: null,
+  });
+  return { ok: true, adId: ref.id };
+});
+
+/** Mijoz: Иш топ шикоят (CF-only, auth). */
+exports.submitJobComplaint = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  const adId = String((data && data.adId) || '').trim();
+  const reason = String((data && data.reason) || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  if (reason.length < 3 || reason.length > 300) {
+    throw new functions.https.HttpsError('invalid-argument', 'reason 3..300');
+  }
+
+  const { snap } = await getJobsBoardAdOrThrow(adId);
+  const ad = snap.data() || {};
+  const owner = canonicalUid(String(ad.authorPhone || ''));
+  if (owner && owner === uid) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Cannot report own ad');
+  }
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const todaySnap = await db.collection('complaints')
+    .where('reporterPhone', '==', uid)
+    .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+    .limit(JOBS_DAILY_COMPLAINT_LIMIT + 1)
+    .get();
+  if (todaySnap.size >= JOBS_DAILY_COMPLAINT_LIMIT) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily complaint limit reached');
+  }
+
+  const openSnap = await db.collection('complaints')
+    .where('adId', '==', adId)
+    .where('reporterPhone', '==', uid)
+    .where('resolved', '==', false)
+    .limit(1)
+    .get();
+  if (!openSnap.empty) {
+    return { ok: true, complaintId: openSnap.docs[0].id, duplicate: true };
+  }
+
+  const ref = await db.collection('complaints').add({
+    adId,
+    reason,
+    reporterPhone: uid,
+    resolved: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, complaintId: ref.id };
+});
 
 /** Admin web: Иш топ e'lonini o'chirish (Firestore rules custom token bilan ishlamaydi). */
 exports.adminDeleteJobAd = functions.https.onCall(async (data, context) => {
@@ -5583,9 +6064,9 @@ exports.submitSellSubmission = functions.https.onCall(async (data, context) => {
   const recentSnap = await db.collection('sell_submissions')
     .where('userId', '==', uid)
     .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
-    .limit(20)
+    .limit(500)
     .get();
-  if (recentSnap.size >= 10) {
+  if (recentSnap.size >= 500) {
     throw new functions.https.HttpsError(
       'resource-exhausted', 'Daily submission limit reached');
   }
@@ -5882,6 +6363,9 @@ exports.adminUpdateMarketAdStatus = functions.https.onCall(async (data, context)
   };
   if (status === 'active') {
     patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.expiresAt = admin.firestore.Timestamp.fromDate(
+      new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+    );
   }
   await ref.update(patch);
   return { ok: true, adId, status };
@@ -5930,10 +6414,210 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
     patch.status = status;
     if (status === 'active') {
       patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+      patch.expiresAt = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      );
     }
+  }
+  // phone — owner canonical; админ ҳам ўзгартирмасин
+  if (existing.ownerId) {
+    patch.phone = canonicalUid(String(existing.ownerId));
   }
   await ref.update(patch);
   return { ok: true, adId };
+});
+
+const MARKET_DAILY_AD_LIMIT = 10;
+const MARKET_MAX_PENDING = 20;
+const MARKET_MAX_ACTIVE = 50;
+const MARKET_ACTIVE_TTL_DAYS = 60;
+const MARKET_PENDING_TTL_DAYS = 14;
+const MARKET_MAX_PRICE = 100000000;
+const MARKET_DAILY_REPORT_LIMIT = 20;
+
+function marketPhoneVariants(uid) {
+  const u = canonicalUid(uid);
+  return [...new Set([
+    u,
+    u.length >= 12 && u.startsWith('998') ? u.slice(3) : '',
+  ].filter((p) => p.length >= 9))];
+}
+
+function marketImageUrlsOk(urls, uid) {
+  if (!Array.isArray(urls) || urls.length < 1 || urls.length > 5) return false;
+  const markers = marketPhoneVariants(uid).flatMap((p) => [
+    `ads/${p}/`,
+    `ads%2F${p}%2F`,
+  ]);
+  return urls.every((raw) => {
+    const u = String(raw || '');
+    if (u.length < 20 || u.length > 2000) return false;
+    if (!u.startsWith('https://')) return false;
+    return markers.some((m) => u.includes(m));
+  });
+}
+
+/** Mijoz: Onlayn BOZOR эълон (CF-only, auth + canonical phone + лимитлар). */
+exports.submitMarketAd = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+
+  const title = String((data && data.title) || '').trim();
+  if (title.length < 3 || title.length > 120) {
+    throw new functions.https.HttpsError('invalid-argument', 'title 3..120');
+  }
+  const description = String((data && data.description) || '').trim();
+  if (description.length < 3 || description.length > 2000) {
+    throw new functions.https.HttpsError('invalid-argument', 'description 3..2000');
+  }
+  const price = Math.floor(Number((data && data.price)));
+  if (!Number.isFinite(price) || price < 1 || price > MARKET_MAX_PRICE) {
+    throw new functions.https.HttpsError('invalid-argument', 'price invalid');
+  }
+  const sellerName = String((data && data.sellerName) || '').trim().slice(0, 80)
+    || 'Сотувчи';
+  const imageUrls = Array.isArray(data && data.imageUrls) ? data.imageUrls : [];
+  if (!marketImageUrlsOk(imageUrls, uid)) {
+    throw new functions.https.HttpsError(
+      'invalid-argument', 'imageUrls 1..5 under ads/{uid}/');
+  }
+
+  const phoneVariants = marketPhoneVariants(uid);
+  let activeCount = 0;
+  let pendingCount = 0;
+  for (const phoneKey of phoneVariants) {
+    const [activeSnap, pendingSnap] = await Promise.all([
+      db.collection('ads')
+        .where('type', '==', 'cheap_product')
+        .where('ownerId', '==', phoneKey)
+        .where('status', '==', 'active')
+        .limit(MARKET_MAX_ACTIVE + 1)
+        .get(),
+      db.collection('ads')
+        .where('type', '==', 'cheap_product')
+        .where('ownerId', '==', phoneKey)
+        .where('status', '==', 'pending')
+        .limit(MARKET_MAX_PENDING + 1)
+        .get(),
+    ]);
+    activeCount += activeSnap.size;
+    pendingCount += pendingSnap.size;
+  }
+  if (activeCount >= MARKET_MAX_ACTIVE) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Active ad limit reached');
+  }
+  if (pendingCount >= MARKET_MAX_PENDING) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Pending ad limit reached');
+  }
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  let todayCount = 0;
+  for (const phoneKey of phoneVariants) {
+    const recentSnap = await db.collection('ads')
+      .where('type', '==', 'cheap_product')
+      .where('ownerId', '==', phoneKey)
+      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+      .limit(MARKET_DAILY_AD_LIMIT + 1)
+      .get();
+    todayCount += recentSnap.size;
+    if (todayCount >= MARKET_DAILY_AD_LIMIT) break;
+  }
+  if (todayCount >= MARKET_DAILY_AD_LIMIT) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily ad limit reached');
+  }
+
+  const expiresAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
+  );
+
+  const ref = await db.collection('ads').add({
+    type: 'cheap_product',
+    ownerId: uid,
+    title,
+    titleLower: title.toLowerCase(),
+    description,
+    price,
+    phone: uid,
+    sellerName,
+    imageUrls: imageUrls.map((u) => String(u)),
+    status: 'pending',
+    views: 0,
+    expiresAt,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, adId: ref.id };
+});
+
+/** Mijoz: Onlayn BOZOR шикоят → reports (CF-only). */
+exports.submitMarketComplaint = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const uid = canonicalUid(callerPhone(context));
+  if (!uid || uid.length < 9) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  const adId = String((data && data.adId) || '').trim();
+  const reason = String((data && data.reason) || '').trim();
+  if (!adId) {
+    throw new functions.https.HttpsError('invalid-argument', 'adId required');
+  }
+  if (reason.length < 3 || reason.length > 300) {
+    throw new functions.https.HttpsError('invalid-argument', 'reason 3..300');
+  }
+
+  const { snap } = await getMarketAdOrThrow(adId);
+  const ad = snap.data() || {};
+  const owner = canonicalUid(String(ad.ownerId || ''));
+  if (owner && owner === uid) {
+    throw new functions.https.HttpsError(
+      'failed-precondition', 'Cannot report own ad');
+  }
+
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const todaySnap = await db.collection('reports')
+    .where('type', '==', 'market_ad')
+    .where('reporterId', '==', uid)
+    .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
+    .limit(MARKET_DAILY_REPORT_LIMIT + 1)
+    .get();
+  if (todaySnap.size >= MARKET_DAILY_REPORT_LIMIT) {
+    throw new functions.https.HttpsError(
+      'resource-exhausted', 'Daily complaint limit reached');
+  }
+
+  const openSnap = await db.collection('reports')
+    .where('type', '==', 'market_ad')
+    .where('reporterId', '==', uid)
+    .where('targetId', '==', adId)
+    .where('status', '==', 'open')
+    .limit(1)
+    .get();
+  if (!openSnap.empty) {
+    return { ok: true, reportId: openSnap.docs[0].id, duplicate: true };
+  }
+
+  const ref = db.collection('reports').doc();
+  await ref.set({
+    type: 'market_ad',
+    reporterId: uid,
+    targetId: adId,
+    reason,
+    status: 'open',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true, reportId: ref.id };
 });
 
 const ADMIN_ORDER_STATUSES = new Set([
@@ -8656,16 +9340,42 @@ exports.expirePendingTrips = functions.pubsub
       .where('expiresAt', '<', now)
       .get();
 
-    // 3. ads (ИШ ТОП) — muddati o'tgan active → completed
-    const expiredAdsSnap = await db.collection('ads')
-      .where('status', '==', 'active')
-      .where('expiresAt', '<', now)
-      .get();
+    // 3. ads — ИШ ТОП: active|pending → completed; cheap_product → inactive
+    const [expiredAdsActiveSnap, expiredAdsPendingSnap] = await Promise.all([
+      db.collection('ads')
+        .where('status', '==', 'active')
+        .where('expiresAt', '<', now)
+        .get(),
+      db.collection('ads')
+        .where('status', '==', 'pending')
+        .where('expiresAt', '<', now)
+        .get(),
+    ]);
+    const expiredAdsSnap = {
+      docs: [...expiredAdsActiveSnap.docs, ...expiredAdsPendingSnap.docs],
+      get size() { return this.docs.length; },
+    };
 
     // 3b. yuk_listings — 48 soat muddati o'tgan active → closed
     const expiredYukSnap = await db.collection('yuk_listings')
       .where('status', '==', 'active')
       .where('expiresAt', '<', now)
+      .get();
+
+    // 3c. yuk_listings — T−6 soat FCM (ойна ~±90с, cron har 1 daqiqa)
+    const sixHMs = 6 * 60 * 60 * 1000;
+    const warnWindowMs = 90 * 1000;
+    const nowMs = now.toMillis();
+    const warnStart = admin.firestore.Timestamp.fromMillis(
+      nowMs + sixHMs - warnWindowMs,
+    );
+    const warnEnd = admin.firestore.Timestamp.fromMillis(
+      nowMs + sixHMs + warnWindowMs,
+    );
+    const warnYukSnap = await db.collection('yuk_listings')
+      .where('status', '==', 'active')
+      .where('expiresAt', '>=', warnStart)
+      .where('expiresAt', '<=', warnEnd)
       .get();
 
     const allDocs = [
@@ -8709,11 +9419,20 @@ exports.expirePendingTrips = functions.pubsub
     }
 
     for (const doc of expiredAdsSnap.docs) {
-      batch.update(doc.ref, {
-        status: 'completed',
-        autoExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
-        editedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      const adType = String((doc.data() || {}).type || '');
+      if (adType === 'cheap_product') {
+        batch.update(doc.ref, {
+          status: 'inactive',
+          autoExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        batch.update(doc.ref, {
+          status: 'completed',
+          autoExpiredAt: admin.firestore.FieldValue.serverTimestamp(),
+          editedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
       writes++;
       if (writes >= 450) {
         await batch.commit();
@@ -8723,6 +9442,7 @@ exports.expirePendingTrips = functions.pubsub
     }
 
     for (const doc of expiredYukSnap.docs) {
+      const yuk = doc.data() || {};
       batch.update(doc.ref, {
         status: 'closed',
         closedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -8730,6 +9450,62 @@ exports.expirePendingTrips = functions.pubsub
         autoExpired: true,
       });
       writes++;
+
+      const ownerKey = digits(yuk.ownerId || yuk.phone || '');
+      if (ownerKey.length >= 9) {
+        const route = `${yuk.from || ''} → ${yuk.to || ''}`.trim();
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          targetPhone: ownerKey,
+          title: 'Эълонингиз ёпилди',
+          body: route
+            ? `${route} — 48 соат муддати тугади`
+            : 'Юк биржаси эълони 48 соатдан кейин ёпилди',
+          sent: false,
+          type: 'yuk_listing_closed',
+          screen: 'yuk_birja',
+          listingId: doc.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        writes++;
+      }
+
+      if (writes >= 450) {
+        await batch.commit();
+        batch = db.batch();
+        writes = 0;
+      }
+    }
+
+    // yuk T−6h огоҳлантириш (бир марта, expireSoonNotified)
+    for (const doc of warnYukSnap.docs) {
+      const yuk = doc.data() || {};
+      if (yuk.expireSoonNotified === true) continue;
+      const ownerKey = digits(yuk.ownerId || yuk.phone || '');
+      if (ownerKey.length < 9) continue;
+
+      batch.update(doc.ref, {
+        expireSoonNotified: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      writes++;
+
+      const route = `${yuk.from || ''} → ${yuk.to || ''}`.trim();
+      const notifRef = db.collection('notifications').doc();
+      batch.set(notifRef, {
+        targetPhone: ownerKey,
+        title: 'Эълон муддати тугамоқда',
+        body: route
+          ? `${route} — 6 соат қолди`
+          : 'Юк биржаси эълонига 6 соат қолди',
+        sent: false,
+        type: 'yuk_listing_expire_soon',
+        screen: 'yuk_birja',
+        listingId: doc.id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      writes++;
+
       if (writes >= 450) {
         await batch.commit();
         batch = db.batch();
@@ -8823,7 +9599,10 @@ exports.expirePendingTrips = functions.pubsub
       await updateDriverGenderStats(driverId);
     }
 
-    console.log(`expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}`);
+    console.log(
+      `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}`
+        + `, yukClosed=${expiredYukSnap.size}, yukWarn=${warnYukSnap.size}`,
+    );
     return null;
   });
 

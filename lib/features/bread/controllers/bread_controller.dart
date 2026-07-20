@@ -7,6 +7,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/formatters.dart';
+import '../../../core/utils/pending_commerce_orders.dart';
 import '../../../models/bread_extra_product.dart';
 import '../../../models/bread_product.dart';
 import '../../../models/order_model.dart';
@@ -158,16 +160,12 @@ class BreadController extends ChangeNotifier {
     }
   }
 
-  // ─── Pending orders queue ───────────────────────────────────────────
+  // ─── Pending orders queue (`commerce_pending_orders`) ─────────────
   Future<void> _loadPendingOrder() async {
     final prefs = await SharedPreferences.getInstance();
-    final pending = prefs.getString('pending_orders');
-    if (pending == null) return;
-    try {
-      final list = jsonDecode(pending) as List;
-      pendingCount = list.length;
-      notifyListeners();
-    } catch (_) {}
+    final list = await PendingCommerceOrders.load(prefs);
+    pendingCount = list.length;
+    if (list.isNotEmpty) notifyListeners();
   }
 
   /// `_flushPendingOrders` муваффақиятли юборилган сонни қайтаради
@@ -175,15 +173,12 @@ class BreadController extends ChangeNotifier {
   Future<int> _flushPendingOrders() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final pending = prefs.getString('pending_orders');
-      if (pending == null) return 0;
-      final list = jsonDecode(pending) as List;
+      final list = await PendingCommerceOrders.load(prefs);
       if (list.isEmpty) return 0;
 
       int sent = 0;
       final remaining = <Map<String, dynamic>>[];
-      for (final order in list) {
-        final data = Map<String, dynamic>.from(order as Map<String, dynamic>);
+      for (final data in list) {
         try {
           final payload = Map<String, dynamic>.from(data)
             ..removeWhere((k, _) =>
@@ -207,11 +202,7 @@ class BreadController extends ChangeNotifier {
           remaining.add(data);
         }
       }
-      if (remaining.isEmpty) {
-        await prefs.remove('pending_orders');
-      } else {
-        await prefs.setString('pending_orders', jsonEncode(remaining));
-      }
+      await PendingCommerceOrders.save(prefs, remaining);
       pendingCount = remaining.length;
       notifyListeners();
       return sent;
@@ -434,17 +425,30 @@ class BreadController extends ChangeNotifier {
     final name = prefs.getString('user_name') ?? '';
     final phone = prefs.getString('user_phone') ?? '';
     final address = prefs.getString('user_address') ?? '';
-    final uid = phone.replaceAll(RegExp(r'[^\d]'), '');
-    if (uid.length >= 9) {
-      try {
-        final doc =
-            await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        walletBalance = (doc.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
-        notifyListeners();
-      } catch (_) {}
-    }
+    final uid12 = canonicalPhoneId(phone);
+    final uid9 = phoneDigits(phone);
+    try {
+      DocumentSnapshot<Map<String, dynamic>>? doc;
+      if (uid12.length >= 12) {
+        doc = await FirebaseFirestore.instance.collection('users').doc(uid12).get();
+      }
+      if ((doc == null || !doc.exists) &&
+          uid9.length >= 9 &&
+          uid9 != uid12) {
+        doc = await FirebaseFirestore.instance.collection('users').doc(uid9).get();
+      }
+      walletBalance = (doc?.data()?['bonusBalance'] as num?)?.toInt() ?? 0;
+      notifyListeners();
+    } catch (_) {}
     return (name: name, phone: phone, address: address);
   }
+
+  int get walletApplyAmount {
+    if (walletBalance <= 0 || grandTotal <= 0) return 0;
+    return walletBalance < grandTotal ? walletBalance : grandTotal;
+  }
+
+  int get cashDuePreview => grandTotal - walletApplyAmount;
 
   // ─── Buyurtma юбориш ────────────────────────────────────────────────
   /// Натижа: `(success: bool, isOffline: bool, error: String?)`
@@ -482,11 +486,9 @@ class BreadController extends ChangeNotifier {
         offline['idempotencyKey'] = idempotencyKey;
         offline['decrements'] = decMaps;
         final prefs = await SharedPreferences.getInstance();
-        final existing =
-            jsonDecode(prefs.getString('pending_orders') ?? '[]') as List;
-        existing.add(offline);
-        await prefs.setString('pending_orders', jsonEncode(existing));
-        pendingCount = existing.length;
+        await PendingCommerceOrders.add(prefs, offline);
+        final list = await PendingCommerceOrders.load(prefs);
+        pendingCount = list.length;
         notifyListeners();
         return (success: true, isOffline: true, error: null);
       } catch (e) {
@@ -634,6 +636,8 @@ class BreadController extends ChangeNotifier {
           : baseLineTotal;
       items.add({
         'id': id,
+        if (p.firestoreId != null && p.firestoreId!.isNotEmpty)
+          'firestoreId': p.firestoreId,
         if (p.emoji.trim().isNotEmpty) 'emoji': p.emoji.trim(),
         'name': p.name,
         'count': qty,
@@ -695,8 +699,9 @@ class BreadController extends ChangeNotifier {
       if (saltYeastCost > 0) 'saltYeastCost': saltYeastCost,
       if (saltYeastCost > 0) 'cartHadYopishBread': cartHasYopishBread,
       'total': grandTotal,
-      'balanceApplied': 0,
-      'cashDue': grandTotal,
+      'balanceApplied': walletApplyAmount,
+      'useWallet': true,
+      'cashDue': cashDuePreview,
       'cashPaid': 0,
       'status': 'new',
       'fulfillmentStatus': 'pending',

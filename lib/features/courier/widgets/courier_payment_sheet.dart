@@ -60,7 +60,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
   @override
   void initState() {
     super.initState();
-    _cashCtrl.text = '${widget.order.total}';
+    _cashCtrl.text = '${widget.order.collectibleDue}';
     _cashCtrl.addListener(_onAmountChanged);
     _cardCtrl.addListener(_onAmountChanged);
     _loadCatalog();
@@ -153,8 +153,10 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     return sum;
   }
 
+  int get _orderDue => widget.order.collectibleDue;
+
   int get _remainingDue {
-    final due = widget.order.total - _productLinesSum();
+    final due = _orderDue - _productLinesSum();
     return due > 0 ? due : 0;
   }
 
@@ -259,16 +261,16 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
 
   void _fillCashOrCardForMode(String mode) {
     final productSum = _productLinesSum();
-    final shortfall = widget.order.total - productSum;
+    final shortfall = _orderDue - productSum;
     if (mode == 'cash') {
       _cardCtrl.clear();
       _cashCtrl.text = productSum == 0
-          ? '${widget.order.total}'
+          ? '$_orderDue'
           : (shortfall > 0 ? '$shortfall' : '');
     } else if (mode == 'card') {
       _cashCtrl.clear();
       _cardCtrl.text = productSum == 0
-          ? '${widget.order.total}'
+          ? '$_orderDue'
           : (shortfall > 0 ? '$shortfall' : '');
     } else if (mode == 'wallet') {
       _fillWalletShortfallFields();
@@ -330,7 +332,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
 
   Widget _buildPaymentStatus() {
     final sum = _paymentSum();
-    final diff = sum - widget.order.total;
+    final diff = sum - _orderDue;
     final underLabel = _mode == 'wallet' && _walletShortfall > 0
         ? _l('courier_pay_deficit')
         : _l('courier_pay_shortfall');
@@ -492,7 +494,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
   Widget _buildProductSummary() {
     final z = _productLinesSum();
     if (z <= 0) return const SizedBox.shrink();
-    final y = widget.order.total;
+    final y = _orderDue;
     final x = _walletBalance ?? 0;
     final diff = z - y; // Z - Y
     final newBalance = x + diff; // X + (Z - Y)
@@ -807,8 +809,8 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
       return;
     }
 
-    if (sum < widget.order.total - 1) {
-      final short = widget.order.total - sum;
+    if (sum < _orderDue - 1) {
+      final short = _orderDue - sum;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -819,7 +821,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
                   })
                 : _l('courier_pay_underpaid', {
                     'sum': formatPrice(sum),
-                    'total': formatPrice(widget.order.total),
+                    'total': formatPrice(_orderDue),
                     'currency': _cur,
                   }),
           ),

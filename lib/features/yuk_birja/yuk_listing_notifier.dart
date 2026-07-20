@@ -71,9 +71,10 @@ class YukListingNotifier {
     required String ownerId,
     required List<YukListing> listings,
   }) async {
-    if (ownerId.isEmpty) return;
+    final me = canonicalPhoneId(ownerId);
+    if (me.length < 9) return;
     for (final item in listings) {
-      if (item.ownerId != ownerId) continue;
+      if (!phonesMatch(item.ownerId, me)) continue;
       if (item.isActive) {
         await scheduleFor(item);
       } else {
@@ -86,10 +87,10 @@ class YukListingNotifier {
   static Future<void> notifyJustClosed(List<YukListing> closed) async {
     if (closed.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final me = phoneDigits(prefs.getString('user_phone') ?? '');
+    final me = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     for (final item in closed) {
       await cancelFor(item.id);
-      if (me.length < 9 || item.ownerId != me) continue;
+      if (me.length < 9 || !phonesMatch(item.ownerId, me)) continue;
       final route = _route(item);
       final title = await OfflineL10n.tr('yuk_notify_closed_title');
       final body = (await OfflineL10n.tr('yuk_notify_closed_body'))

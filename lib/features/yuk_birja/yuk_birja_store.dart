@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/utils/formatters.dart';
 import 'models/yuk_listing.dart';
 import 'repositories/yuk_listings_repository.dart';
 import 'yuk_listing_notifier.dart';
@@ -22,9 +23,14 @@ class YukBirjaStore extends ChangeNotifier {
   String? get error => _error;
   List<YukListing> get listings => List.unmodifiable(_listings);
 
+  /// Биринчи snapshot (ёки хато) келгунча кутади — bootstrap sync учун.
   Future<void> load() async {
     await _sub?.cancel();
     _error = null;
+    _ready = false;
+    notifyListeners();
+
+    final first = Completer<void>();
     _sub = _repo.watchActive().listen(
       (items) {
         _listings
@@ -33,15 +39,27 @@ class YukBirjaStore extends ChangeNotifier {
         _ready = true;
         _error = null;
         notifyListeners();
+        if (!first.isCompleted) first.complete();
       },
       onError: (Object e, StackTrace st) {
         debugPrint('YukBirjaStore.watch: $e\n$st');
         _error = e.toString();
         _ready = true;
         notifyListeners();
+        if (!first.isCompleted) first.complete();
       },
     );
+
+    try {
+      await first.future.timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      _ready = true;
+      _error ??= 'timeout';
+      notifyListeners();
+    }
   }
+
+  Future<void> reload() => load();
 
   /// Ўз эълонларидан муддати ўтганларни ёпиш (CF ҳам ёпади).
   Future<List<YukListing>> closeExpired({
@@ -49,12 +67,12 @@ class YukBirjaStore extends ChangeNotifier {
     DateTime? now,
   }) async {
     final at = now ?? DateTime.now();
-    final me = (ownerId ?? '').trim();
-    if (me.isEmpty) return const [];
+    final me = canonicalPhoneId(ownerId ?? '');
+    if (me.length < 9) return const [];
     final mineClosed = <YukListing>[];
     for (final item in List<YukListing>.from(_listings)) {
       if (!item.isActive || !item.isExpired(at)) continue;
-      if (item.ownerId != me) continue;
+      if (!phonesMatch(item.ownerId, me)) continue;
       try {
         await _repo.close(item.id);
         mineClosed.add(item.copyWith(status: YukListingStatus.closed));
@@ -77,7 +95,7 @@ class YukBirjaStore extends ChangeNotifier {
       to: item.to,
       stops: item.stops,
       vehicleType: item.vehicleType,
-      ownerId: item.ownerId,
+      ownerId: canonicalPhoneId(item.ownerId),
       ownerName: item.ownerName,
       phone: item.phone,
       status: YukListingStatus.active,
@@ -101,7 +119,7 @@ class YukBirjaStore extends ChangeNotifier {
     required YukListing updated,
     required String currentOwnerId,
   }) async {
-    if (updated.ownerId != currentOwnerId) return false;
+    if (!phonesMatch(updated.ownerId, currentOwnerId)) return false;
     if (!updated.isActive) return false;
     try {
       await _repo.update(updated);
@@ -125,7 +143,7 @@ class YukBirjaStore extends ChangeNotifier {
     final i = _listings.indexWhere((e) => e.id == id);
     if (i < 0) return false;
     final item = _listings[i];
-    if (item.ownerId != currentOwnerId) return false;
+    if (!phonesMatch(item.ownerId, currentOwnerId)) return false;
     try {
       await _repo.close(id);
       _listings.removeAt(i);
@@ -134,6 +152,27 @@ class YukBirjaStore extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('YukBirjaStore.closeListing: $e');
+      return false;
+    }
+  }
+
+  Future<bool> reportListing({
+    required YukListing item,
+    required String reason,
+    required String reporterId,
+  }) async {
+    if (phonesMatch(item.ownerId, reporterId)) return false;
+    try {
+      await _repo.report(
+        listingId: item.id,
+        reason: reason,
+        reporterId: reporterId,
+        targetOwnerId: item.ownerId,
+        route: '${item.from} → ${item.to}',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('YukBirjaStore.reportListing: $e');
       return false;
     }
   }

@@ -25,13 +25,25 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
-    // Арзон маҳсулотлар расмлари (ownerId = phoneDigits).
+    // Арзон маҳсулотлар расмлари (ownerId = canonical phone; image ≤8MB).
     match /ads/{ownerId}/{fileName} {
+      function adsStoragePhone() {
+        return request.auth.token.phone_number.replace('\\+', '');
+      }
+      function adsOwnerPathOk() {
+        let p = adsStoragePhone();
+        return p == ownerId
+            || (ownerId.size() == 12 && ownerId.matches('998[0-9]{9}')
+                && p == ownerId[3:12])
+            || (p.size() == 12 && p.matches('998[0-9]{9}')
+                && ownerId == p[3:12]);
+      }
       allow read: if true;
       allow write: if request.auth != null
-          && request.auth.token.phone_number.replace('\\+', '') == ownerId;
-      allow delete: if request.auth != null
-          && request.auth.token.phone_number.replace('\\+', '') == ownerId;
+          && adsOwnerPathOk()
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && adsOwnerPathOk();
     }
 
     // Davra (Mening yaqinlarim) fotoalbomi. O'qish — download URL bilan hammaga;

@@ -47,6 +47,41 @@ class InventoryRepository {
     return r < 0 ? 0 : r;
   }
 
+  CollectionReference<Map<String, dynamic>> _colFor(InventoryKind kind) {
+    switch (kind) {
+      case InventoryKind.bread:
+        return _bread;
+      case InventoryKind.extra:
+        return _extras;
+      case InventoryKind.food:
+        return _foodInv;
+    }
+  }
+
+  /// Бир коллекция snapshot — N+1 ўрнига.
+  Future<Map<String, int>> getRemainingMap(
+    InventoryKind kind,
+    Iterable<String> ids,
+  ) async {
+    final want = ids.where((e) => e.isNotEmpty).toSet();
+    if (want.isEmpty) return const {};
+    final snap = await _colFor(kind).get();
+    final out = <String, int>{ for (final id in want) id: 999999 };
+    for (final doc in snap.docs) {
+      if (!want.contains(doc.id)) continue;
+      final d = doc.data();
+      final total = (d['totalStock'] as num?)?.toInt() ?? 0;
+      final sold = (d['soldToday'] as num?)?.toInt() ?? 0;
+      if (total <= 0) {
+        out[doc.id] = 999999;
+      } else {
+        final r = total - sold;
+        out[doc.id] = r < 0 ? 0 : r;
+      }
+    }
+    return out;
+  }
+
   /// order + омбор (client transaction). Бу метод — оффлайн навбат / тест / махсус сценарийлар учун.
   ///
   /// Агар бирор маҳсулот етишмаса — `InsufficientStockException` отилади

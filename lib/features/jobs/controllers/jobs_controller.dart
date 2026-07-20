@@ -1,9 +1,11 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../../../services/user_role_sync.dart';
 
 /// ИШ ТОП экранининг controller'и.
 class JobsController extends ChangeNotifier {
@@ -24,10 +26,10 @@ class JobsController extends ChangeNotifier {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     userName = prefs.getString('user_name') ?? '';
-    userPhone = phoneDigits(prefs.getString('user_phone') ?? '');
+    userPhone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     userAddress = prefs.getString('user_address') ?? '';
-    final role = prefs.getString('user_role') ?? 'user';
-    isAdmin = role == 'admin';
+    final role = await UserRoleSync().syncToPreferences();
+    isAdmin = UserRoleSync.isPrivileged(role);
     notifyListeners();
   }
 
@@ -100,6 +102,28 @@ class JobsController extends ChangeNotifier {
     return _filterExpiredAndSearch(list.toList(growable: false));
   }
 
+  String _cfError(Object e) {
+    if (e is FirebaseFunctionsException) {
+      switch (e.code) {
+        case 'unauthenticated':
+          return 'Аввал тизимга киринг';
+        case 'resource-exhausted':
+          return e.message?.contains('complaint') == true
+              ? '⚠️ Кунига шикоят лимити тугади'
+              : '⚠️ Кунига максимум $dailyAdLimit та эълон!';
+        case 'invalid-argument':
+          return e.message ?? 'Маълумотлар нотўғри';
+        case 'failed-precondition':
+          return e.message ?? 'Амал бажарилмади';
+        case 'permission-denied':
+          return 'Рухсат йўқ — профилда телефонни текширинг';
+        default:
+          return e.message ?? 'Хатолик: ${e.code}';
+      }
+    }
+    return 'Хатолик: $e';
+  }
+
   Future<({bool success, String? error})> submitAd({
     required String type,
     required String text,
@@ -110,10 +134,11 @@ class JobsController extends ChangeNotifier {
     if (text.trim().isEmpty) {
       return (success: false, error: 'Матнни киритинг');
     }
-    if (userPhone.length < 9) {
+    if (phoneDigits(userPhone).length < 9) {
       return (success: false, error: 'Профилда телефон рақамини киритинг');
     }
     try {
+      // UI hint; сервер `submitJobAd` ҳам текширади.
       final dailyCount = await _repo.dailyCountByAuthor(userPhone);
       if (dailyCount >= dailyAdLimit) {
         return (
@@ -138,7 +163,7 @@ class JobsController extends ChangeNotifier {
       );
       return (success: true, error: null);
     } catch (e) {
-      return (success: false, error: 'Хатолик: $e');
+      return (success: false, error: _cfError(e));
     }
   }
 
@@ -195,15 +220,19 @@ class JobsController extends ChangeNotifier {
     }
   }
 
-  Future<void> submitComplaint({
+  Future<({bool success, String? error})> submitComplaint({
     required String adId,
     required String reason,
   }) async {
-    await _repo.addComplaint(
-      adId: adId,
-      reason: reason,
-      reporterPhone: userPhone,
-    );
+    if (phoneDigits(userPhone).length < 9) {
+      return (success: false, error: 'Профилда телефон рақамини киритинг');
+    }
+    try {
+      await _repo.addComplaint(adId: adId, reason: reason);
+      return (success: true, error: null);
+    } catch (e) {
+      return (success: false, error: _cfError(e));
+    }
   }
 
   Stream<List<JobAd>> watch(String type) => _repo.watchActiveByType(type);

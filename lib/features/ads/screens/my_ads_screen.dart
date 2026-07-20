@@ -32,7 +32,7 @@ class _MyAdsScreenState extends State<MyAdsScreen>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _uid = phoneDigits(prefs.getString('user_phone') ?? '');
+      _uid = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     });
   }
 

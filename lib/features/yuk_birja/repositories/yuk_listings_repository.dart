@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_vehicle_types.dart';
 
@@ -10,10 +11,12 @@ class YukListingsRepository {
 
   final FirebaseFirestore _db;
 
+  static const int activeWatchLimit = 10000;
+
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection('yuk_listings');
 
-  Stream<List<YukListing>> watchActive({int limit = 200}) {
+  Stream<List<YukListing>> watchActive({int limit = activeWatchLimit}) {
     return _col
         .where('status', isEqualTo: 'active')
         .orderBy('createdAt', descending: true)
@@ -29,15 +32,18 @@ class YukListingsRepository {
     final expiresAt = item.expiresAt.isAfter(createdAt)
         ? item.expiresAt
         : createdAt.add(YukListing.ttl);
+    final ownerId = canonicalPhoneId(item.ownerId);
     await ref.set({
       'type': item.type.name,
       'from': item.from,
       'to': item.to,
       'stops': item.stops,
       'vehicleType': normalizeYukVehicleType(item.vehicleType),
-      'ownerId': item.ownerId,
+      'ownerId': ownerId,
       'ownerName': item.ownerName,
-      'phone': item.phone,
+      'phone': item.phone.isNotEmpty
+          ? item.phone
+          : (ownerId.length >= 12 ? '+$ownerId' : item.phone),
       'status': 'active',
       'cargo': item.cargo,
       'weight': item.weight,
@@ -77,6 +83,28 @@ class YukListingsRepository {
       'status': 'closed',
       'closedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Шикоят — admin `reports` коллекциясида.
+  Future<void> report({
+    required String listingId,
+    required String reason,
+    required String reporterId,
+    required String targetOwnerId,
+    String route = '',
+  }) async {
+    await _db.collection('reports').add({
+      'type': 'yuk_listing',
+      'module': 'yuk_birja',
+      'listingId': listingId,
+      'targetId': listingId,
+      'reason': reason,
+      'reporterId': canonicalPhoneId(reporterId),
+      'targetOwnerId': canonicalPhoneId(targetOwnerId),
+      if (route.isNotEmpty) 'route': route,
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 

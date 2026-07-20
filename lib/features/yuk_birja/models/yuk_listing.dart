@@ -24,7 +24,13 @@ class YukListing {
     this.comment = '',
     this.stars = 5.0,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    DateTime? expiresAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        expiresAt = expiresAt ??
+            (createdAt ?? DateTime.now()).add(ttl);
+
+  /// Эълон актив муддати.
+  static const Duration ttl = Duration(hours: 48);
 
   final String id;
   final YukListingType type;
@@ -44,9 +50,18 @@ class YukListing {
   final String comment;
   final double stars;
   final DateTime createdAt;
+  final DateTime expiresAt;
 
   bool get isCargo => type == YukListingType.cargo;
   bool get isActive => status == YukListingStatus.active;
+
+  bool isExpired([DateTime? now]) =>
+      (now ?? DateTime.now()).isAfter(expiresAt);
+
+  Duration remaining([DateTime? now]) {
+    final left = expiresAt.difference(now ?? DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
 
   List<String> get routeCities => [from, ...stops, to];
 
@@ -69,9 +84,14 @@ class YukListing {
         'comment': comment,
         'stars': stars,
         'createdAt': createdAt.toIso8601String(),
+        'expiresAt': expiresAt.toIso8601String(),
       };
 
   factory YukListing.fromJson(Map<String, dynamic> j) {
+    final created = DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
+        DateTime.now();
+    final expires = DateTime.tryParse(j['expiresAt']?.toString() ?? '') ??
+        created.add(ttl);
     return YukListing(
       id: (j['id'] ?? '').toString(),
       type: (j['type']?.toString() == 'truck')
@@ -97,31 +117,51 @@ class YukListing {
       price: (j['price'] as num?)?.toDouble() ?? 0,
       comment: (j['comment'] ?? '').toString(),
       stars: (j['stars'] as num?)?.toDouble() ?? 5,
-      createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
+      createdAt: created,
+      expiresAt: expires,
     );
   }
 
-  YukListing copyWith({YukListingStatus? status}) {
+  YukListing copyWith({
+    YukListingType? type,
+    String? from,
+    String? to,
+    List<String>? stops,
+    String? vehicleType,
+    String? ownerId,
+    String? ownerName,
+    String? phone,
+    YukListingStatus? status,
+    String? cargo,
+    double? weight,
+    double? capacity,
+    double? freeSpace,
+    double? price,
+    String? comment,
+    double? stars,
+    DateTime? createdAt,
+    DateTime? expiresAt,
+  }) {
     return YukListing(
       id: id,
-      type: type,
-      from: from,
-      to: to,
-      stops: stops,
-      vehicleType: vehicleType,
-      ownerId: ownerId,
-      ownerName: ownerName,
-      phone: phone,
+      type: type ?? this.type,
+      from: from ?? this.from,
+      to: to ?? this.to,
+      stops: stops ?? this.stops,
+      vehicleType: vehicleType ?? this.vehicleType,
+      ownerId: ownerId ?? this.ownerId,
+      ownerName: ownerName ?? this.ownerName,
+      phone: phone ?? this.phone,
       status: status ?? this.status,
-      cargo: cargo,
-      weight: weight,
-      capacity: capacity,
-      freeSpace: freeSpace,
-      price: price,
-      comment: comment,
-      stars: stars,
-      createdAt: createdAt,
+      cargo: cargo ?? this.cargo,
+      weight: weight ?? this.weight,
+      capacity: capacity ?? this.capacity,
+      freeSpace: freeSpace ?? this.freeSpace,
+      price: price ?? this.price,
+      comment: comment ?? this.comment,
+      stars: stars ?? this.stars,
+      createdAt: createdAt ?? this.createdAt,
+      expiresAt: expiresAt ?? this.expiresAt,
     );
   }
 }

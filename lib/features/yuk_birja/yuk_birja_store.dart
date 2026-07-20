@@ -40,8 +40,8 @@ class YukBirjaStore extends ChangeNotifier {
     if (_listings.isEmpty && !(prefs.getBool(_seededKey) ?? false)) {
       _listings.addAll(_demoSeed());
       await prefs.setBool(_seededKey, true);
-      await _persist();
     }
+    await closeExpired();
     _ready = true;
     notifyListeners();
   }
@@ -54,10 +54,53 @@ class YukBirjaStore extends ChangeNotifier {
     );
   }
 
+  /// Муддати ўтган актив эълонларни автоёпиш.
+  Future<int> closeExpired({DateTime? now}) async {
+    final at = now ?? DateTime.now();
+    var n = 0;
+    for (var i = 0; i < _listings.length; i++) {
+      final item = _listings[i];
+      if (item.isActive && item.isExpired(at)) {
+        _listings[i] = item.copyWith(status: YukListingStatus.closed);
+        n++;
+      }
+    }
+    if (n > 0) {
+      await _persist();
+      notifyListeners();
+    }
+    return n;
+  }
+
   Future<void> addListing(YukListing item) async {
+    await closeExpired();
     _listings.insert(0, item);
     await _persist();
     notifyListeners();
+  }
+
+  /// Фақат эълон эгаси таҳрирлай олади.
+  Future<bool> updateListing({
+    required YukListing updated,
+    required String currentOwnerId,
+  }) async {
+    final i = _listings.indexWhere((e) => e.id == updated.id);
+    if (i < 0) return false;
+    final prev = _listings[i];
+    if (prev.ownerId != currentOwnerId) return false;
+    if (!prev.isActive) return false;
+    _listings[i] = updated.copyWith(
+      ownerId: prev.ownerId,
+      ownerName: prev.ownerName,
+      phone: prev.phone,
+      createdAt: prev.createdAt,
+      expiresAt: prev.expiresAt,
+      status: YukListingStatus.active,
+      stars: prev.stars,
+    );
+    await _persist();
+    notifyListeners();
+    return true;
   }
 
   /// Фақат эълон эгаси ёпа олади.
@@ -84,6 +127,20 @@ class YukBirjaStore extends ChangeNotifier {
     String vehicleType = '',
     Set<String> matchedIds = const {},
   }) {
+    // Sync expire (persist async) so list stays fresh while browsing.
+    final now = DateTime.now();
+    var expired = false;
+    for (var i = 0; i < _listings.length; i++) {
+      final item = _listings[i];
+      if (item.isActive && item.isExpired(now)) {
+        _listings[i] = item.copyWith(status: YukListingStatus.closed);
+        expired = true;
+      }
+    }
+    if (expired) {
+      _persist();
+    }
+
     final f = from.trim().toLowerCase();
     final t = to.trim().toLowerCase();
     final vt = vehicleType.trim().toLowerCase();
@@ -147,10 +204,8 @@ class YukBirjaStore extends ChangeNotifier {
     var score = 0;
     final cFrom = cargo.from.toLowerCase();
     final cTo = cargo.to.toLowerCase();
-    final tCities =
-        truck.routeCities.map((c) => c.toLowerCase()).toSet();
-    final cCities =
-        cargo.routeCities.map((c) => c.toLowerCase()).toSet();
+    final tCities = truck.routeCities.map((c) => c.toLowerCase()).toSet();
+    final cCities = cargo.routeCities.map((c) => c.toLowerCase()).toSet();
 
     if (truck.from.toLowerCase() == cFrom) score += 30;
     if (truck.to.toLowerCase() == cTo) score += 30;
@@ -179,6 +234,7 @@ class YukBirjaStore extends ChangeNotifier {
   List<YukListing> _demoSeed() {
     var n = 0;
     String id() => 'demo_${DateTime.now().microsecondsSinceEpoch}_${n++}';
+    final now = DateTime.now();
     return [
       YukListing(
         id: id(),
@@ -195,6 +251,7 @@ class YukBirjaStore extends ChangeNotifier {
         weight: 18,
         price: 4500000,
         stars: 4.9,
+        createdAt: now.subtract(const Duration(hours: 2)),
       ),
       YukListing(
         id: id(),
@@ -211,6 +268,7 @@ class YukBirjaStore extends ChangeNotifier {
         weight: 15,
         price: 5200000,
         stars: 4.6,
+        createdAt: now.subtract(const Duration(hours: 8)),
       ),
       YukListing(
         id: id(),
@@ -227,6 +285,7 @@ class YukBirjaStore extends ChangeNotifier {
         weight: 12,
         price: 2200000,
         stars: 4.7,
+        createdAt: now.subtract(const Duration(hours: 20)),
       ),
       YukListing(
         id: id(),
@@ -243,6 +302,7 @@ class YukBirjaStore extends ChangeNotifier {
         weight: 3,
         price: 800000,
         stars: 4.5,
+        createdAt: now.subtract(const Duration(hours: 30)),
       ),
       YukListing(
         id: id(),
@@ -258,6 +318,7 @@ class YukBirjaStore extends ChangeNotifier {
         capacity: 22,
         freeSpace: 18,
         stars: 4.9,
+        createdAt: now.subtract(const Duration(hours: 4)),
       ),
       YukListing(
         id: id(),
@@ -273,6 +334,7 @@ class YukBirjaStore extends ChangeNotifier {
         capacity: 20,
         freeSpace: 20,
         stars: 5.0,
+        createdAt: now.subtract(const Duration(hours: 12)),
       ),
       YukListing(
         id: id(),
@@ -288,6 +350,7 @@ class YukBirjaStore extends ChangeNotifier {
         capacity: 20,
         freeSpace: 12,
         stars: 4.8,
+        createdAt: now.subtract(const Duration(hours: 36)),
       ),
       YukListing(
         id: id(),
@@ -303,6 +366,7 @@ class YukBirjaStore extends ChangeNotifier {
         capacity: 5,
         freeSpace: 5,
         stars: 4.5,
+        createdAt: now.subtract(const Duration(hours: 1)),
       ),
     ];
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +12,7 @@ import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
 import '../yuk_vehicle_types.dart';
 
-/// Юк биржаси — MVP (қўнғироқ + ўз эълонни ёпиш).
+/// Юк биржаси — MVP (қўнғироқ + таҳрир + 48с муддат).
 class YukBirjaScreen extends StatefulWidget {
   const YukBirjaScreen({super.key});
 
@@ -39,10 +41,10 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   String _ownerPhone = '';
   String _tab = 'all';
 
-  /// Драфт (ёзилмоқда) — «Қидируш»гача рўйхатга таъсир қилмайди.
+  /// Драфт (ёзилмоқда) — «Қидирув»гача рўйхатга таъсир қилмайди.
   String _draftVehicle = '';
 
-  /// Қўлланилган фильтр (фақат «Қидируш»дан кейин).
+  /// Қўлланилган фильтр (фақат «Қидирув»дан кейин).
   String _appliedFrom = '';
   String _appliedTo = '';
   String _appliedVehicle = '';
@@ -53,10 +55,16 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   List<String> _fromSuggestions = [];
   List<String> _toSuggestions = [];
 
+  Timer? _expiryTimer;
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+    _expiryTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      await _store.closeExpired();
+      if (mounted) setState(() {});
+    });
     _fromFocus.addListener(() {
       if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
     });
@@ -80,6 +88,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   @override
   void dispose() {
+    _expiryTimer?.cancel();
     _listCtrl.dispose();
     _fromCtrl.dispose();
     _toCtrl.dispose();
@@ -255,6 +264,36 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     _snack(context.tr('yuk_posted_ok'));
   }
 
+  Future<void> _openEdit(YukListing item) async {
+    if (!_isMine(item)) {
+      _snack(context.tr('yuk_close_only_own'));
+      return;
+    }
+    final updated = await showModalBottomSheet<YukListing>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _CreateListingSheet(
+        isCargo: item.isCargo,
+        ownerId: _ownerId,
+        ownerName: _ownerName,
+        ownerPhone: _ownerPhone,
+        initial: item,
+      ),
+    );
+    if (updated == null) return;
+    final ok = await _store.updateListing(
+      updated: updated,
+      currentOwnerId: _ownerId,
+    );
+    if (!mounted) return;
+    _snack(ok ? context.tr('yuk_edited_ok') : context.tr('yuk_close_only_own'));
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -409,6 +448,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
                                       item: item,
                                       mine: _isMine(item),
                                       onCall: () => _call(item),
+                                      onEdit: () => _openEdit(item),
                                       onClose: () => _close(item),
                                     );
                                   },
@@ -440,18 +480,25 @@ class _BigAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(20),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: border.withValues(alpha: 0.85)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color,
+                Color.lerp(color, const Color(0xFF0B0E14), 0.35)!,
+              ],
+            ),
           ),
-          alignment: Alignment.center,
           child: Text(
             '＋ $label',
             textAlign: TextAlign.center,
@@ -633,22 +680,34 @@ class _FiltersBar extends StatelessWidget {
   }
 }
 
+String _yukRemainingLabel(BuildContext context, YukListing item) {
+  final left = item.remaining();
+  if (left.inMinutes < 1) return context.tr('yuk_expires_soon');
+  if (left.inHours >= 1) {
+    return context.tr('yuk_hours_left').replaceAll('{n}', '${left.inHours}');
+  }
+  return context
+      .tr('yuk_minutes_left')
+      .replaceAll('{n}', '${left.inMinutes}');
+}
+
 class _ListingCard extends StatelessWidget {
   const _ListingCard({
     required this.item,
     required this.mine,
     required this.onCall,
+    required this.onEdit,
     required this.onClose,
   });
 
   final YukListing item;
   final bool mine;
   final VoidCallback onCall;
+  final VoidCallback onEdit;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
-    final route = item.routeCities.join(' → ');
     final vLabel = context.tr(yukVehicleLabelKey(item.vehicleType));
     final ton = context.tr('yuk_ton_short');
     final details = item.isCargo
@@ -657,122 +716,244 @@ class _ListingCard extends StatelessWidget {
     final price = item.price > 0
         ? '${item.price.toStringAsFixed(0)} ${context.tr('sum')}'
         : context.tr('yuk_negotiable');
+    final accent =
+        item.isCargo ? const Color(0xFF3B82F6) : const Color(0xFF22C55E);
+    final left = item.remaining();
+    final urgent = left.inHours < 6;
 
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF131A22),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: mine
-              ? const Color(0xFFFACC15).withValues(alpha: 0.45)
+              ? const Color(0xFFFACC15).withValues(alpha: 0.4)
               : const Color(0xFF252B36),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (mine)
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF422006),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(context.tr('yuk_mine'),
-                      style: const TextStyle(
-                          color: Color(0xFFFACC15), fontSize: 11)),
-                ),
-              const Spacer(),
-              Text(
-                item.isCargo
-                    ? context.tr('yuk_badge_cargo')
-                    : context.tr('yuk_badge_truck'),
-                style: TextStyle(
-                  color: item.isCargo
-                      ? const Color(0xFF60A5FA)
-                      : const Color(0xFF4ADE80),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(18),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(route,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700)),
-          if (item.stops.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: item.stops
-                  .map(
-                    (s) => Chip(
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: const Color(0xFF0B0E14),
-                      side: const BorderSide(color: Color(0xFF2D3748)),
-                      label: Text(s,
-                          style: const TextStyle(
-                              color: Color(0xFF94A3B8), fontSize: 11)),
-                      avatar: const Icon(Icons.place,
-                          size: 14, color: Color(0xFFFACC15)),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _Pill(
+                          text: item.isCargo
+                              ? context.tr('yuk_badge_cargo')
+                              : context.tr('yuk_badge_truck'),
+                          fg: accent,
+                          bg: accent.withValues(alpha: 0.12),
+                        ),
+                        if (mine) ...[
+                          const SizedBox(width: 6),
+                          _Pill(
+                            text: context.tr('yuk_mine'),
+                            fg: const Color(0xFFFACC15),
+                            bg: const Color(0xFF422006),
+                          ),
+                        ],
+                        const Spacer(),
+                        _Pill(
+                          text: _yukRemainingLabel(context, item),
+                          fg: urgent
+                              ? const Color(0xFFFCA5A5)
+                              : const Color(0xFF94A3B8),
+                          bg: urgent
+                              ? const Color(0xFF3F1D1D)
+                              : const Color(0xFF0B0E14),
+                          icon: Icons.schedule,
+                        ),
+                      ],
                     ),
-                  )
-                  .toList(),
+                    const SizedBox(height: 10),
+                    Text(
+                      item.from,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.south, size: 14, color: accent),
+                          const SizedBox(width: 4),
+                          if (item.stops.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                item.stops.join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      item.to,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(details,
+                        style: const TextStyle(
+                            color: Color(0xFF94A3B8), fontSize: 13)),
+                    const SizedBox(height: 8),
+                    Text(
+                      price,
+                      style: const TextStyle(
+                        color: Color(0xFFFACC15),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      context.tr('yuk_price_hint'),
+                      style: const TextStyle(
+                          color: Color(0xFF64748B), fontSize: 11),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline,
+                            size: 16, color: Color(0xFF64748B)),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.ownerName,
+                            style: const TextStyle(
+                                color: Color(0xFF94A3B8), fontSize: 13),
+                          ),
+                        ),
+                        Text(
+                          '★ ${item.stars}',
+                          style: const TextStyle(
+                            color: Color(0xFFFACC15),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (mine)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF93C5FD),
+                                side: const BorderSide(
+                                    color: Color(0xFF1E3A5F)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                              ),
+                              onPressed: onEdit,
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: Text(context.tr('yuk_edit')),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFFCA5A5),
+                                side: const BorderSide(
+                                    color: Color(0xFF3F1D1D)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                              ),
+                              onPressed: onClose,
+                              icon:
+                                  const Icon(Icons.cancel_outlined, size: 16),
+                              label: Text(context.tr('yuk_close_btn')),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFFACC15),
+                            foregroundColor: const Color(0xFF0B0E14),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: onCall,
+                          icon: const Icon(Icons.phone, size: 18),
+                          label: Text(context.tr('yuk_call')),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ],
-          const SizedBox(height: 6),
-          Text(details,
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
-          const SizedBox(height: 6),
-          Text(price,
-              style: const TextStyle(
-                  color: Color(0xFFFACC15),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
-          Text(context.tr('yuk_price_hint'),
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.person, size: 16, color: Colors.grey.shade500),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(item.ownerName,
-                    style: const TextStyle(color: Color(0xFF94A3B8))),
-              ),
-              Text('★ ${item.stars}',
-                  style: const TextStyle(color: Color(0xFFFACC15))),
-              const SizedBox(width: 8),
-              if (mine)
-                FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF3F1D1D),
-                    foregroundColor: const Color(0xFFFCA5A5),
-                  ),
-                  onPressed: onClose,
-                  icon: const Icon(Icons.cancel_outlined, size: 16),
-                  label: Text(context.tr('yuk_close_btn')),
-                )
-              else
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFACC15),
-                    foregroundColor: const Color(0xFF0B0E14),
-                  ),
-                  onPressed: onCall,
-                  icon: const Icon(Icons.phone, size: 16),
-                  label: Text(context.tr('yuk_call')),
-                ),
-            ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.text,
+    required this.fg,
+    required this.bg,
+    this.icon,
+  });
+
+  final String text;
+  final Color fg;
+  final Color bg;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: fg),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            text,
+            style: TextStyle(
+              color: fg,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -786,12 +967,14 @@ class _CreateListingSheet extends StatefulWidget {
     required this.ownerId,
     required this.ownerName,
     required this.ownerPhone,
+    this.initial,
   });
 
   final bool isCargo;
   final String ownerId;
   final String ownerName;
   final String ownerPhone;
+  final YukListing? initial;
 
   @override
   State<_CreateListingSheet> createState() => _CreateListingSheetState();
@@ -813,9 +996,26 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
   List<String> _fromSuggestions = [];
   List<String> _toSuggestions = [];
 
+  bool get _editing => widget.initial != null;
+
   @override
   void initState() {
     super.initState();
+    final init = widget.initial;
+    if (init != null) {
+      _from.text = init.from;
+      _to.text = init.to;
+      _vehicle = normalizeYukVehicleType(init.vehicleType);
+      _cargo.text = init.cargo ?? '';
+      if (init.weight != null) _weight.text = _num(init.weight!);
+      if (init.capacity != null) _capacity.text = _num(init.capacity!);
+      if (init.freeSpace != null) _free.text = _num(init.freeSpace!);
+      if (init.price > 0) _price.text = init.price.toStringAsFixed(0);
+      _comment.text = init.comment;
+      for (final s in init.stops) {
+        _stopCtrls.add(TextEditingController(text: s));
+      }
+    }
     _fromFocus.addListener(() {
       if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
     });
@@ -823,6 +1023,9 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
       if (!_toFocus.hasFocus) setState(() => _toSuggestions = []);
     });
   }
+
+  String _num(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
   @override
   void dispose() {
@@ -894,6 +1097,11 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
       return;
     }
 
+    final prev = widget.initial;
+    final id = prev?.id ?? 'u_${DateTime.now().microsecondsSinceEpoch}';
+    final createdAt = prev?.createdAt ?? DateTime.now();
+    final expiresAt = prev?.expiresAt ?? createdAt.add(YukListing.ttl);
+
     if (widget.isCargo) {
       final w = double.tryParse(_weight.text.trim()) ?? 0;
       if (w <= 0) {
@@ -905,7 +1113,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
       Navigator.pop(
         context,
         YukListing(
-          id: 'u_${DateTime.now().microsecondsSinceEpoch}',
+          id: id,
           type: YukListingType.cargo,
           from: from,
           to: to,
@@ -921,6 +1129,9 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
           weight: w,
           price: double.tryParse(_price.text.trim()) ?? 0,
           comment: _comment.text.trim(),
+          createdAt: createdAt,
+          expiresAt: expiresAt,
+          stars: prev?.stars ?? 5,
         ),
       );
       return;
@@ -943,7 +1154,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
     Navigator.pop(
       context,
       YukListing(
-        id: 'u_${DateTime.now().microsecondsSinceEpoch}',
+        id: id,
         type: YukListingType.truck,
         from: from,
         to: to,
@@ -957,6 +1168,9 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
         freeSpace: free,
         price: double.tryParse(_price.text.trim()) ?? 0,
         comment: _comment.text.trim(),
+        createdAt: createdAt,
+        expiresAt: expiresAt,
+        stars: prev?.stars ?? 5,
       ),
     );
   }
@@ -964,20 +1178,40 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final title = _editing
+        ? context.tr('yuk_edit')
+        : (widget.isCargo
+            ? context.tr('yuk_send_cargo')
+            : context.tr('yuk_take_cargo'));
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
             Text(
-              widget.isCargo
-                  ? context.tr('yuk_send_cargo')
-                  : context.tr('yuk_take_cargo'),
+              title,
               style: const TextStyle(
-                  color: Color(0xFFFACC15),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700),
+                color: Color(0xFFFACC15),
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              context.tr('yuk_ttl_hint'),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -1125,7 +1359,9 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               onPressed: _submit,
-              child: Text(context.tr('yuk_post')),
+              child: Text(
+                _editing ? context.tr('yuk_save') : context.tr('yuk_post'),
+              ),
             ),
           ],
         ),

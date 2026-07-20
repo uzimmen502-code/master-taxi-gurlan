@@ -19,7 +19,7 @@ import '../models/marshrut_search_filter_stats.dart';
 /// Marshrut yo'lovchi qidiruv ekrani state mashinasi.
 ///
 /// Mas'uliyatlari:
-/// - GPS faqat qidiruvda (ixtiyoriy masofa filtri; ekran ochilganda banner yo'q)
+/// - GPS qidiruvda majburiy (`getFreshCoords`) — 5 km radius filtri ishlashi uchun
 /// - Bugungi aktiv `schedules` ni olish va yo'nalish/masofa/ETA bo'yicha filtrlash
 /// - Blok holati: Firestore `.snapshots()` + one-shot expiry timer (poll yo'q)
 /// - "ЧАҚИРИШ" — keshlangan blok holatini tekshirish va navbatga qo'yish
@@ -218,10 +218,18 @@ class MarshrutSearchController extends ChangeNotifier {
     }
 
     _isSearching = true;
+    _errorMessage = null;
     _results = const [];
     notifyListeners();
 
-    await _loadGpsForSearch();
+    final gpsOk = await _loadGpsForSearch();
+    if (!gpsOk) {
+      _isSearching = false;
+      _searched = false;
+      _results = const [];
+      notifyListeners();
+      return;
+    }
 
     try {
       final today = DateTime.now();
@@ -239,18 +247,28 @@ class MarshrutSearchController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Marshrut qidiruvida GPS ixtiyoriy — MFY bo‘yicha asosiy filtr.
-  Future<void> _loadGpsForSearch() async {
+  /// Fresh GPS majburiy — muvaffaqiyatsiz bo'lsa qidiruv to'xtaydi.
+  Future<bool> _loadGpsForSearch() async {
     try {
-      final c = await _location.getCurrentCoords(
-        mediumTimeout: const Duration(seconds: 4),
-        highTimeout: const Duration(seconds: 6),
-      );
+      final c = await _location.getFreshCoords();
       _userLat = c.lat;
       _userLng = c.lng;
+      return true;
+    } on LocationException catch (e) {
+      _userLat = null;
+      _userLng = null;
+      _errorMessage = switch (e.kind) {
+        LocationErrorKind.permissionDenied => 'gps_permission_denied_msg',
+        LocationErrorKind.serviceDisabled => 'gps_service_disabled_msg',
+        LocationErrorKind.timeout => 'gps_timeout_msg',
+        LocationErrorKind.lookupFailed => 'gps_lookup_failed_msg',
+      };
+      return false;
     } catch (_) {
       _userLat = null;
       _userLng = null;
+      _errorMessage = 'gps_unavailable';
+      return false;
     }
   }
 

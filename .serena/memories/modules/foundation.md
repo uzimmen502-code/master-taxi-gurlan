@@ -11,7 +11,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 ## yuk_birja (`features/yuk_birja/`) — MVP 2026-07
 - Native load marketplace; UI + vehicle types via AppLocalizations (`yuk_*`, `yuk_vehicle_*`); vehicle codes latin (`fura`,`ref`,…) with Cyrillic legacy map: `YukBirjaScreen`, `YukBirjaStore` (SharedPreferences `yuk_birja_listings_v1` + demo seed), models, vehicle types list.
 - Flows: cargo/truck posts, intermediate stops, filters, Smart Match, call via `callPhone`, close **only own** listing (`ownerId` = phone digits).
-- Listing TTL 48h (`expiresAt`); auto-close on load/filter + 1min timer. Owner edit (keeps createdAt/expiresAt) or close. Search-on-submit; tools collapse on scroll; IntercityPlaces autocomplete.
+- Listing TTL 48h (`expiresAt`); auto-close on load/filter + 1min timer. Owner edit (keeps createdAt/expiresAt) or close. Local notify: 6h before expiry + on auto-close (`YukListingNotifier`). Search-on-submit; tools collapse on scroll; IntercityPlaces autocomplete.
 - No Firestore yet; dark/yellow UI. HTML proto still in `docs/yuk_birjasi_prototype.html`.
 
 ## onboarding (`features/onboarding/`)

@@ -25,6 +25,7 @@ import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/sell/screens/sell_hub_screen.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
+import '../features/yuk_birja/screens/yuk_birja_screen.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
@@ -242,6 +243,13 @@ class PushNavigation {
     if (screen == 'seller_pos' || type == 'seller_pickup') {
       await nav.push(
         MaterialPageRoute(builder: (_) => const SellerPosScreen()),
+      );
+      return;
+    }
+
+    if (screen == 'yuk_birja' || type == 'yuk_listing_closed') {
+      await nav.push(
+        MaterialPageRoute(builder: (_) => const YukBirjaScreen()),
       );
       return;
     }

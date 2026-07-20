@@ -10,6 +10,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../utils/intercity_places.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
+import '../yuk_listing_notifier.dart';
 import '../yuk_vehicle_types.dart';
 
 /// Юк биржаси — MVP (қўнғироқ + таҳрир + 48с муддат).
@@ -79,11 +80,16 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     final name = (prefs.getString('user_name') ?? '').trim();
     await _store.load();
     if (!mounted) return;
+    final ownerId = phone.length >= 9 ? phone : '';
     setState(() {
-      _ownerId = phone.length >= 9 ? phone : '';
+      _ownerId = ownerId;
       _ownerName = name.isEmpty ? context.tr('yuk_you') : name;
       _ownerPhone = phone.length >= 9 ? '+$phone' : '';
     });
+    await YukListingNotifier.syncOwner(
+      ownerId: ownerId,
+      listings: _store.listings,
+    );
   }
 
   @override

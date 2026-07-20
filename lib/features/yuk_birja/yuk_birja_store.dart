@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/yuk_listing.dart';
+import 'yuk_listing_notifier.dart';
 import 'yuk_vehicle_types.dart';
 
 /// Юк биржаси — маҳаллий MVP store (кейин Firestore).
@@ -55,21 +56,24 @@ class YukBirjaStore extends ChangeNotifier {
   }
 
   /// Муддати ўтган актив эълонларни автоёпиш.
-  Future<int> closeExpired({DateTime? now}) async {
+  /// Қайтиш: эндигина ёпилган эълонлар (хабар учун).
+  Future<List<YukListing>> closeExpired({DateTime? now}) async {
     final at = now ?? DateTime.now();
-    var n = 0;
+    final closed = <YukListing>[];
     for (var i = 0; i < _listings.length; i++) {
       final item = _listings[i];
       if (item.isActive && item.isExpired(at)) {
-        _listings[i] = item.copyWith(status: YukListingStatus.closed);
-        n++;
+        final next = item.copyWith(status: YukListingStatus.closed);
+        _listings[i] = next;
+        closed.add(next);
       }
     }
-    if (n > 0) {
+    if (closed.isNotEmpty) {
       await _persist();
       notifyListeners();
+      await YukListingNotifier.notifyJustClosed(closed);
     }
-    return n;
+    return closed;
   }
 
   Future<void> addListing(YukListing item) async {
@@ -77,6 +81,7 @@ class YukBirjaStore extends ChangeNotifier {
     _listings.insert(0, item);
     await _persist();
     notifyListeners();
+    await YukListingNotifier.scheduleFor(item);
   }
 
   /// Фақат эълон эгаси таҳрирлай олади.
@@ -89,7 +94,7 @@ class YukBirjaStore extends ChangeNotifier {
     final prev = _listings[i];
     if (prev.ownerId != currentOwnerId) return false;
     if (!prev.isActive) return false;
-    _listings[i] = updated.copyWith(
+    final next = updated.copyWith(
       ownerId: prev.ownerId,
       ownerName: prev.ownerName,
       phone: prev.phone,
@@ -98,8 +103,10 @@ class YukBirjaStore extends ChangeNotifier {
       status: YukListingStatus.active,
       stars: prev.stars,
     );
+    _listings[i] = next;
     await _persist();
     notifyListeners();
+    await YukListingNotifier.scheduleFor(next);
     return true;
   }
 
@@ -116,6 +123,7 @@ class YukBirjaStore extends ChangeNotifier {
     _listings[i] = item.copyWith(status: YukListingStatus.closed);
     await _persist();
     notifyListeners();
+    await YukListingNotifier.cancelFor(id);
     return true;
   }
 
@@ -127,18 +135,21 @@ class YukBirjaStore extends ChangeNotifier {
     String vehicleType = '',
     Set<String> matchedIds = const {},
   }) {
-    // Sync expire (persist async) so list stays fresh while browsing.
+    // Sync expire — хабар async (filtered sync қолсин).
     final now = DateTime.now();
-    var expired = false;
+    final justClosed = <YukListing>[];
     for (var i = 0; i < _listings.length; i++) {
       final item = _listings[i];
       if (item.isActive && item.isExpired(now)) {
-        _listings[i] = item.copyWith(status: YukListingStatus.closed);
-        expired = true;
+        final next = item.copyWith(status: YukListingStatus.closed);
+        _listings[i] = next;
+        justClosed.add(next);
       }
     }
-    if (expired) {
+    if (justClosed.isNotEmpty) {
       _persist();
+      // ignore: unawaited_futures
+      YukListingNotifier.notifyJustClosed(justClosed);
     }
 
     final f = from.trim().toLowerCase();

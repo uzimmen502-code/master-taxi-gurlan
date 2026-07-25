@@ -1,12 +1,16 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/news_item.dart';
 import '../../../repositories/news_repository.dart';
 import '../services/admin_news_read_service.dart';
 import '../../analytics/screens/admin_news_compose_screen.dart';
-import '../../../core/theme/app_theme.dart';
 
 /// Админ web панели — News list screen.
 ///
@@ -19,17 +23,31 @@ class AdminNewsListScreen extends StatefulWidget {
   State<AdminNewsListScreen> createState() => _AdminNewsListScreenState();
 }
 
-class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
+class _AdminNewsListScreenState extends State<AdminNewsListScreen>
+    with SingleTickerProviderStateMixin {
   String _filter = 'all'; // 'all' | 'user' | 'driver' | 'courier'
   final Set<String> _resendingPushIds = {};
+  late final TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminNewsReadService>().markGeneralSeen();
     });
   }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  bool get _isWalletTab => _tabController.index == 1;
 
   Future<void> _openCompose() async {
     await Navigator.push(
@@ -153,11 +171,12 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
     final newsRepo = context.read<NewsRepository>();
     return Column(children: [
       _header(),
-      _filterBar(),
+      _sectionTabs(),
+      if (!_isWalletTab) _filterBar(),
       const Divider(height: 1),
       Expanded(
         child: StreamBuilder<List<NewsItem>>(
-          stream: newsRepo.watchForAdmin(orderOnly: false, limit: 200),
+          stream: newsRepo.watchForAdmin(orderOnly: false, limit: 300),
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -171,17 +190,29 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
               );
             }
             final allItems = snap.data ?? const <NewsItem>[];
-            final filtered = _filter == 'all'
-                ? allItems
-                : allItems.where((n) => n.audience == _filter).toList();
+            final scoped = _isWalletTab
+                ? allItems.where((n) => n.isWalletNews).toList()
+                : allItems.where((n) => !n.isWalletNews).toList();
+            final filtered = (_isWalletTab || _filter == 'all')
+                ? scoped
+                : scoped.where((n) => n.audience == _filter).toList();
             if (filtered.isEmpty) {
               return _emptyState(
-                icon: Icons.campaign_outlined,
-                color: Colors.blue,
-                title: 'Ҳали хабар ёқ',
-                message: 'Янги хабaр ёзиш учун юқoри ўнгдaги "+ Янги хабaр" '
-                    'тугмaсини бoсинг.',
+                icon: _isWalletTab
+                    ? Icons.account_balance_wallet_outlined
+                    : Icons.campaign_outlined,
+                color: _isWalletTab ? const Color(0xFF00897B) : Colors.blue,
+                title: _isWalletTab
+                    ? 'Ҳали wallet хабар ёқ'
+                    : 'Ҳали хабар ёқ',
+                message: _isWalletTab
+                    ? 'Telegram ҳамён тўлдириш/ечиш хабарлари шу ерда чиқади.'
+                    : 'Янги хабaр ёзиш учун юқoри ўнгдaги "+ Янги хабaр" '
+                        'тугмaсини бoсинг.',
               );
+            }
+            if (_isWalletTab) {
+              return _WalletNewsList(items: filtered);
             }
             return _ResponsiveGrid(
               items: filtered,
@@ -211,20 +242,47 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
         const Text('📣 Хабaрлaр',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const Spacer(),
-        ElevatedButton.icon(
-          onPressed: _openCompose,
-          icon: const Icon(Icons.add),
-          label: const Text('Янги хабaр'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
+        if (!_isWalletTab)
+          ElevatedButton.icon(
+            onPressed: _openCompose,
+            icon: const Icon(Icons.add),
+            label: const Text('Янги хабaр'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
           ),
-        ),
       ]),
+    );
+  }
+
+  Widget _sectionTabs() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: TabBar(
+        controller: _tabController,
+        labelColor: AppColors.primary,
+        unselectedLabelColor: Colors.grey.shade600,
+        indicatorColor: AppColors.primary,
+        indicatorWeight: 3,
+        tabs: const [
+          Tab(
+            icon: Icon(Icons.campaign_outlined, size: 18),
+            text: 'Умумий',
+            height: 48,
+          ),
+          Tab(
+            icon: Icon(Icons.account_balance_wallet_outlined, size: 18),
+            text: 'Wallet',
+            height: 48,
+          ),
+        ],
+      ),
     );
   }
 
@@ -295,6 +353,319 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen> {
   }
 }
 
+/// Фойдаланувчи бўйича Telegram тўлдириш суммалари.
+class _UserTopUpSums {
+  const _UserTopUpSums({this.pending = 0, this.paid = 0});
+  final int pending;
+  final int paid;
+  int get total => pending + paid;
+}
+
+/// Wallet хабарлари — фойдаланувчи катаги; тўлдиришлар №1, №2… (охиргиси юқорида).
+class _WalletNewsList extends StatefulWidget {
+  const _WalletNewsList({required this.items});
+  final List<NewsItem> items;
+
+  @override
+  State<_WalletNewsList> createState() => _WalletNewsListState();
+}
+
+class _WalletNewsListState extends State<_WalletNewsList> {
+  static final _amountRe =
+      RegExp(r'([+-]?\d[\d\s]*)\s*сўм', caseSensitive: false);
+  static final _dtFmt = DateFormat('dd.MM.yyyy HH:mm');
+  static const _pendingStatuses = {
+    // Фақат чек юкланган, админ тасдиғи кутилаётган.
+    // awaiting_transfer — пул ҳали ўтмаган / бекор қолиши мумкин → жамига қўшилмайди.
+    'awaiting_review',
+  };
+
+  /// canonicalPhoneId → display name
+  final Map<String, String> _names = {};
+
+  /// canonicalPhoneId → ҳамён баланси (bonusBalance)
+  final Map<String, int> _balances = {};
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _topUpSub;
+  Map<String, _UserTopUpSums> _topUpByUid = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNames();
+    _listenTopUps();
+  }
+
+  @override
+  void dispose() {
+    _topUpSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WalletNewsList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.items, widget.items)) {
+      _loadNames();
+    }
+  }
+
+  void _listenTopUps() {
+    _topUpSub?.cancel();
+    _topUpSub = FirebaseFirestore.instance
+        .collection('wallet_topup_requests')
+        .snapshots()
+        .listen((snap) {
+      final map = <String, _UserTopUpSums>{};
+      for (final doc in snap.docs) {
+        final m = doc.data();
+        final uid = canonicalPhoneId('${m['uid'] ?? ''}');
+        if (uid.isEmpty) continue;
+        final amount = (m['amount'] as num?)?.toInt() ?? 0;
+        if (amount <= 0) continue;
+        final status = '${m['status'] ?? ''}';
+        final prev = map[uid] ?? const _UserTopUpSums();
+        if (_pendingStatuses.contains(status)) {
+          map[uid] = _UserTopUpSums(
+            pending: prev.pending + amount,
+            paid: prev.paid,
+          );
+        } else if (status == 'credited') {
+          map[uid] = _UserTopUpSums(
+            pending: prev.pending,
+            paid: prev.paid + amount,
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() => _topUpByUid = map);
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() => _topUpByUid = {});
+    });
+  }
+
+  Future<void> _loadNames() async {
+    final ids = <String>{};
+    for (final item in widget.items) {
+      final id = canonicalPhoneId(item.targetUserId);
+      if (id.isNotEmpty && !_names.containsKey(id)) ids.add(id);
+    }
+    if (ids.isEmpty) return;
+    try {
+      final db = FirebaseFirestore.instance;
+      final list = ids.toList();
+      for (var i = 0; i < list.length; i += 10) {
+        final chunk = list.sublist(i, (i + 10).clamp(0, list.length));
+        final snaps = await Future.wait(
+          chunk.map((id) => db.collection('users').doc(id).get()),
+        );
+        for (final snap in snaps) {
+          if (!snap.exists) {
+            _names[snap.id] = '';
+            _balances[snap.id] = 0;
+            continue;
+          }
+          final data = snap.data() ?? const <String, dynamic>{};
+          _names[snap.id] = '${data['name'] ?? ''}'.trim();
+          _balances[snap.id] =
+              (data['bonusBalance'] as num?)?.toInt() ?? 0;
+        }
+      }
+    } catch (_) {
+      // Исм топилмаса телефон қолadi.
+    }
+    if (mounted) setState(() {});
+  }
+
+  String amountOf(NewsItem item) {
+    final m = _amountRe.firstMatch(item.body);
+    if (m != null) {
+      final raw = m.group(1)!.replaceAll(RegExp(r'\s'), '');
+      return '$raw сўм';
+    }
+    final body = item.body.trim();
+    return body.isEmpty ? '—' : body;
+  }
+
+  String phoneOf(NewsItem item) {
+    final u = item.targetUserId.trim();
+    return u.isEmpty ? '—' : u;
+  }
+
+  String nameOf(NewsItem item) {
+    final id = canonicalPhoneId(item.targetUserId);
+    if (id.isEmpty) return '';
+    return (_names[id] ?? '').trim();
+  }
+
+  bool isCredit(NewsItem item) {
+    final t = '${item.title} ${item.body} ${item.source}'.toLowerCase();
+    if (t.contains('withdraw') || t.contains('ечил') || t.contains('yech')) {
+      return false;
+    }
+    if (item.body.trim().startsWith('-')) return false;
+    return true;
+  }
+
+  Widget _kvRow(String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Фойдаланувчи бўйича гуруҳ: охирги фаоллик аввал.
+  List<({String uid, List<NewsItem> items, Map<String, int> seq})> _groups() {
+    final byUid = <String, List<NewsItem>>{};
+    for (final item in widget.items) {
+      final uid = canonicalPhoneId(item.targetUserId);
+      final key = uid.isEmpty ? '_${item.id}' : uid;
+      (byUid[key] ??= []).add(item);
+    }
+
+    final groups = <({String uid, List<NewsItem> items, Map<String, int> seq})>[];
+    for (final e in byUid.entries) {
+      final chronological = [...e.value]
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final seq = <String, int>{};
+      for (var i = 0; i < chronological.length; i++) {
+        seq[chronological[i].id] = i + 1;
+      }
+      final newestFirst = [...chronological.reversed];
+      groups.add((
+        uid: e.key.startsWith('_') ? '' : e.key,
+        items: newestFirst,
+        seq: seq,
+      ));
+    }
+    groups.sort((a, b) {
+      final aAt = a.items.isEmpty
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : a.items.first.createdAt;
+      final bAt = b.items.isEmpty
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : b.items.first.createdAt;
+      return bAt.compareTo(aAt);
+    });
+    return groups;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groups();
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+      itemCount: groups.length,
+      separatorBuilder: (_, __) => Divider(height: 20, color: Colors.grey.shade300),
+      itemBuilder: (ctx, gi) {
+        final group = groups[gi];
+        final head = group.items.first;
+        final uid = group.uid.isNotEmpty
+            ? group.uid
+            : canonicalPhoneId(head.targetUserId);
+        final name = nameOf(head);
+        final phone = phoneOf(head);
+        final sums = _topUpByUid[uid] ?? const _UserTopUpSums();
+        final walletBal = _balances[uid];
+
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name.isNotEmpty ? name : phone,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                [
+                  if (name.isNotEmpty) phone,
+                  if (walletBal != null)
+                    'баланс ${formatPrice(walletBal)} сўм',
+                ].where((s) => s.trim().isNotEmpty).join(' · '),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 6),
+              _kvRow(
+                'Тўлов қилингунча',
+                '${formatPrice(sums.pending)} сўм',
+                valueColor: const Color(0xFFE65100),
+              ),
+              _kvRow(
+                'Тўлов қилинган',
+                '${formatPrice(sums.paid)} сўм',
+                valueColor: const Color(0xFF00897B),
+              ),
+              _kvRow(
+                'Жами',
+                '${formatPrice(sums.total)} сўм',
+                valueColor: const Color(0xFF1565C0),
+              ),
+              const SizedBox(height: 6),
+              for (final item in group.items)
+                _eventRow(
+                  item: item,
+                  number: group.seq[item.id] ?? 0,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _eventRow({required NewsItem item, required int number}) {
+    final credit = isCredit(item);
+    final accent =
+        credit ? const Color(0xFF00897B) : const Color(0xFFD32F2F);
+    final title = item.title.trim().isEmpty ? 'Wallet' : item.title.trim();
+    final when = _dtFmt.format(item.createdAt);
+    final line = '$number. $title · ${amountOf(item)} · $when';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 2),
+      child: Text(
+        line,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 12,
+          height: 1.35,
+          fontWeight: FontWeight.w600,
+          color: accent,
+        ),
+      ),
+    );
+  }
+}
+
 class _ResponsiveGrid extends StatelessWidget {
   const _ResponsiveGrid({
     required this.items,
@@ -351,6 +722,7 @@ class _NewsCard extends StatelessWidget {
     'promo': AppColors.primary,
     'warning': Color(0xFFFFA000),
     'emergency': Color(0xFFD32F2F),
+    'wallet': Color(0xFF00897B),
   };
 
   static const _categoryIcons = <String, IconData>{
@@ -359,6 +731,7 @@ class _NewsCard extends StatelessWidget {
     'promo': Icons.local_offer,
     'warning': Icons.warning_amber,
     'emergency': Icons.crisis_alert,
+    'wallet': Icons.account_balance_wallet_outlined,
   };
 
   static const _categoryLabels = <String, String>{
@@ -367,6 +740,7 @@ class _NewsCard extends StatelessWidget {
     'promo': 'Аксия',
     'warning': 'Огoҳлaнтириш',
     'emergency': 'Шошилинч',
+    'wallet': 'Wallet',
   };
 
   static const _audienceLabels = <String, String>{

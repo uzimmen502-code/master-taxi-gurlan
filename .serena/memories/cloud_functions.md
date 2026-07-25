@@ -28,6 +28,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - cashExchange / walletToCash — Cash In→Wallet / Wallet→Cash (finance); floatTopUp/floatReturn deprecated.
 - migrateFloatToWallet — one-shot driver_float → passenger_credit.
 - requestWalletTransfer / respondWalletTransfer — P2P pull-request, 100k/day.
+- Telegram Wallet Bot (`functions/telegram_wallet_bot.js`): `telegramWalletBotWebhook` (http); `createTelegramLinkCode`; `adminGetWalletBotSettings` / `adminSetWalletBotSettings`; `adminReviewWalletTopUp` (→cashExchange); `adminReviewWalletWithdraw` (→walletToCash); `getWalletTopUpReceiptUrl`. Config `telegram.wallet_token|username|secret`. Doc: `docs/telegram_wallet_bot_architecture.md`.
 - closePeriod — daily closing lock+snapshot (`period_closings/{YYYY-MM-DD}`).
 - driverFloatStatus — legacy read (float accounts).
 - openSettlement / confirmSettlement / cancelSettlement — trip change via driver wallet → passenger wallet.

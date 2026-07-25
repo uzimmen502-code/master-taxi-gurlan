@@ -76,6 +76,10 @@ class NewsItem {
       source == 'order_placed' ||
       category == 'order';
 
+  /// Ҳамён хабари (Хабарлар → Wallet таб).
+  bool get isWalletNews =>
+      category == 'wallet' || source.startsWith('wallet_');
+
   static const _broadcastSources = {'', 'admin_compose', 'broadcast'};
 
   /// Админ broadcast — «Янгилик» (қаттиқ фильтр).

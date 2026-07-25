@@ -1,0 +1,15 @@
+---
+description: Pul va summalar faqat aniq hisob-kitob — taxminiy raqam taqiqlanadi
+alwaysApply: true
+---
+
+# Aniq hisob-kitob (majburiy)
+
+- Pul, balans, to‘lov, wallet, ledger, top-up/withdraw yig‘indilari haqida **faqat aniq** raqam.
+- «taxminan», «~», «atrofida», «bo‘lishi mumkin» — **ishlatilmasin**.
+- UI aggregatlar: status bo‘yicha aniq filter. Masalan Telegram top-up:
+  - `awaiting_review` — to‘lov qilinguncha (chek yuklangan)
+  - `credited` — to‘lov qilingan
+  - `awaiting_transfer` — pul o‘tmagan; pending/jami ga **qo‘shilmasin**
+- Ham yon balansi = `bonusBalance` / ledger projection — boshqa yig‘indi bilan aralashtirilmasin.
+- Summa aytilganda manba (Firestore/ledger) dan tekshirilgan aniq qiymat bo‘lsin.

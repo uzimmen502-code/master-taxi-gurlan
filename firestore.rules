@@ -1978,6 +1978,33 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Telegram wallet bot — top-up / withdraw (CF-only write).
+    match /wallet_topup_requests/{id} {
+      // Хабарлар → Wallet таб суммалари учун admin/dispatcher ҳам ўқийди.
+      allow read: if isFinanceReader() || isAdmin()
+          || (isAuth() && phoneDocIdsMatch(
+                userDocIdFromPhoneToken(), resource.data.uid));
+      allow create, update, delete: if false;
+    }
+    match /wallet_withdraw_requests/{id} {
+      allow read: if isFinanceReader()
+          || (isAuth() && phoneDocIdsMatch(
+                userDocIdFromPhoneToken(), resource.data.uid));
+      allow create, update, delete: if false;
+    }
+    match /telegram_links/{tgId} {
+      allow read: if isFinanceReader()
+          || (isAuth() && phoneDocIdsMatch(
+                userDocIdFromPhoneToken(), resource.data.uid));
+      allow create, update, delete: if false;
+    }
+    match /telegram_link_codes/{code} {
+      allow read, write: if false;
+    }
+    match /telegram_bot_sessions/{tgId} {
+      allow read, write: if false;
+    }
+
     // ══════════════════════════════════════
     // DAILY_REPORTS — кунлик ҳисоботлар (Analytics Center + Cloud Functions)
     // ══════════════════════════════════════

@@ -104,6 +104,11 @@ service firebase.storage {
       allow write: if true;
     }
 
+    // Telegram wallet top-up receipts — write CF Admin SDK only; finance read via signed URL CF.
+    match /topup_receipts/{uid}/{fileName} {
+      allow read, write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

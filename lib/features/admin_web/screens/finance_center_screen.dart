@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import 'money_control_tab.dart';
+import 'wallet_bot_tab.dart';
 
 /// Finance Center — Settlement Ledger (finance/auditor/superadmin, SoD).
 ///   • Назорат — пул оқими KPI + навбат + инкасса / payout
@@ -47,7 +48,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 6, vsync: this);
+    _tabCtrl = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -79,6 +80,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             tabs: const [
               Tab(text: 'Назорат'),
               Tab(text: 'Cash Exchange'),
+              Tab(text: 'Telegram ҳамён'),
               Tab(text: 'Settlements'),
               Tab(text: 'Аудит журнали'),
               Tab(text: 'Давр қулфи'),
@@ -92,6 +94,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             children: [
               MoneyControlTab(onOpenTab: _goTab),
               const _CashExchangeTab(),
+              const WalletBotTab(),
               const _SettlementsTab(),
               const _JournalTab(),
               const _ClosingTab(),

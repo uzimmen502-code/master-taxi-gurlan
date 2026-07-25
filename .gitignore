@@ -86,3 +86,9 @@ pubspec.lock
 .idea/ 
 .vscode/ 
 *.log 
+
+# Firebase Functions env (secrets)
+functions/.env
+functions/.env.*
+!functions/.env.example
+

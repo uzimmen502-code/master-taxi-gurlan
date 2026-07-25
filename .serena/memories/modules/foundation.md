@@ -4,7 +4,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 
 ## home (`features/home/`)
 - Entry `home_screen.dart` (re-exported by screens/home_screen.dart); home_controller.dart, home_grid_layout.dart, home_modules_catalog.dart (HomeModulesCatalog.modules: bread,food,sell,cheap_products_home,marshrut,local_taxi,intercity,jobs).
-- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_header, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile, **yuk_birja**).
+- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile, **yuk_birja**).
 - `_UnifiedServicesGrid`: 4×3 per page. **1-page**: local, intercity, marshrut, **yuk_birja** (was courier), sell, food, jobs, market, bread, oil, circles, dating. **2-page**: **courier**, milk, tire, car_wash, carpet.
 - Module id `yuk_birja` in `kKnownModuleIds`; icon `assets/images/services/service_yuk_birja.png`.
 
@@ -21,13 +21,13 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - finish(): UserRepository.createOrMergeProfileWithAddress, prefs (user_phone/name/role via canonicalPhoneId, onboarding_done, phone_reverified), refresh FCM. District default Гурлан/Gurlan; MfyService autocomplete.
 
 ## profile (`features/profile/`)
-- profile_controller.dart (wraps CF changeDevicePhone); screens profile/user_info/wallet/wallet_partner_program/wallet_operations_tab/address_edit/news_hub/news/*_news_detail/messages_tab; widgets wallet_section/wallet_ledger_list/order_card/trip_card/language_settings_tile. Role via UserRoleSync. wallet uses wallet_ledger_entry model + `core/utils/wallet_ledger_labels.dart`.
+- profile_controller.dart (wraps CF changeDevicePhone); screens profile/user_info/wallet/wallet_partner_program/wallet_operations_tab/address_edit/news_hub/news/*_news_detail/messages_tab; widgets wallet_section/wallet_ledger_list/**wallet_telegram_link_panel**/wallet_p2p_panel/order_card/trip_card/language_settings_tile. Role via UserRoleSync. wallet uses wallet_ledger_entry model + `core/utils/wallet_ledger_labels.dart`. Telegram top-up: one-tap «Telegramda bogʻlash» (createTelegramLinkCode + deep link) → bot deposit → admin approve; linked state via users.telegramId.
 
 ## Cold-start (`lib/main.dart`)
 - Blocking before `runApp`: Firebase + Firestore settings, SharedPreferences routing flags, `ServiceConfigHolder.loadCacheOnly()`, `SplashTaglinesHolder.prepareSessionSync()`.
 - Parallel unawaited: splash network `load()`, `PassengerCancelRulesHolder.load()`, daily report.
 - `AppLaunchSplash` ~3.0s (900+1600+500ms); `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init (ruxsat dialog splash ustida chiqmasin). Home still refreshes `ServiceConfigHolder.bootstrap()` post-frame.
-- Brand hierarchy: display `AVA Zona` + short district context (`BrandLabels` / `ServiceConfigHolder.districtLabel`); package/applicationId stay `ava_gurlan` / `uz.ava.gurlan`.
+- Brand hierarchy: display `AVA` + short district context (`BrandLabels` / `ServiceConfigHolder.districtLabel`); package/applicationId stay `ava_gurlan` / `uz.ava.gurlan`. Never `AVA Zona`.
 
 ## Core services (`lib/services/`)
 - user_role_sync.dart UserRoleSync — server-authoritative role; `users/{uid}.role` vs prefs; privilegedRoles{admin,superadmin,dispatcher} Firestore wins; reconcile/forceSyncDriver; isClientAssignableRole{user,driver,courier}.

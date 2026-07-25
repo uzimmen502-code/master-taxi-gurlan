@@ -14295,3 +14295,16 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError('internal', msg);
   }
 });
+
+// --- Telegram Wallet Bot (Phase 0) -----------------------------
+const { attachTelegramWalletBot } = require('./telegram_wallet_bot');
+attachTelegramWalletBot(exports, {
+  functions,
+  db,
+  admin,
+  settlementLedger,
+  requireCallerRoles,
+  canonicalUid,
+  notifyUserInApp,
+  isIdentifiedUser,
+});

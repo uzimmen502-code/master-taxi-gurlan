@@ -1968,16 +1968,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Wallet P2P so'rovlar — yozuv faqat CF; o'qish: tomonlar yoki finance.
-    match /wallet_transfer_requests/{id} {
-      allow read: if isFinanceReader()
-          || (isAuth() && (
-                phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.fromUid)
-                || phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.toUid)
-              ));
-      allow create, update, delete: if false;
-    }
-
     // Telegram wallet bot — top-up / withdraw (CF-only write).
     match /wallet_topup_requests/{id} {
       // Хабарлар → Wallet таб суммалари учун admin/dispatcher ҳам ўқийди.

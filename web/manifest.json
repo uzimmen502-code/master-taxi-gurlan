@@ -1,11 +1,11 @@
 {
-    "name": "AVA Zona",
-    "short_name": "AVA Zona",
+    "name": "AVA",
+    "short_name": "AVA",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E65100",
     "theme_color": "#E65100",
-    "description": "AVA Zona — фойдаланувчи иловаси",
+    "description": "AVA — фойдаланувчи иловаси",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

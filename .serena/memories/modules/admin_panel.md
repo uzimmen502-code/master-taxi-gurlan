@@ -14,7 +14,7 @@ Monitoring Center→MonitoringCenterScreen(embedded) · Буюртмалар→A
 ## Auth / RBAC
 - `admin_auth_service.dart`: trusted phone `998912778777` → CF adminWebSignIn (SMS-less custom token); others → Firebase Phone OTP; PIN → CF adminWebSignInWithCode. Role gate `_isPanelRole` ∈ {admin,superadmin,dispatcher,finance,auditor}. Persists prefs user_role/phone/name.
 - **Sidebar access (2026-07)**: `_SectionAccess` — ops (admin/superadmin/dispatcher); finance (finance/auditor/superadmin: Молия+Finance Center); opsAndFinance (Buyurtmalar, Ombor, Харид); users (admin+superadmin); superOnly (Risk, Anomaly). Finance UI label **Buxgalter**.
-- **Finance Center (2026-07)**: Назорат + **Cash Exchange** + **Telegram ҳамён** (`WalletBotTab`: top-up/withdraw queues, card settings) + Settlements/Journal/Closing/Exceptions. P2P + Telegram link panel in user wallet UI. Docs: `docs/telegram_wallet_bot_architecture.md`.
+- **Finance Center (2026-07)**: Назорат + **Cash Exchange** + **Telegram ҳамён** (`WalletBotTab`: top-up/withdraw queues, card settings) + Settlements/Journal/Closing/Exceptions. App withdraw + Telegram top-up panels in user wallet UI. Docs: `docs/telegram_wallet_bot_architecture.md`.
 - **Role assign SoD**: ordinary `admin` → only `seller`/`user`; `superadmin` → admin/finance/auditor/seller/superadmin/user. CF `setUserRoleByAdmin` enforces.
 - **Иш топ writes**: `AdminJobsService` → CF `adminDeleteJobAd`, `adminUpdateJobAdStatus`, `adminUpdateJobAd`, `adminResolveJobComplaint` (Firestore rules `isAdmin()` unreliable with admin custom token).
 - **Onlayn BOZOR writes**: `AdminMarketService` → CF `adminDeleteMarketAd`, `adminUpdateMarketAdStatus`, `adminUpdateMarketAd`.

@@ -9,7 +9,7 @@ import 'service_config_holder.dart';
 class BrandLabels {
   BrandLabels._();
 
-  static const String brand = 'AVA Zona';
+  static const String brand = 'AVA';
 
   /// `Гурлан тумани` → `Гурлан`, `Urganch shahri` → `Urganch`.
   static String shortDistrictName(String raw) {

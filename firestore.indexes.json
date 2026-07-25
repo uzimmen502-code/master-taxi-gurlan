@@ -1,16 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "wallet_transfer_requests",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "fromUid", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "wallet_topup_requests",
-      "queryScope": "COLLECTION",
+      "collectionGroup": "wallet_topup_requests",      "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }

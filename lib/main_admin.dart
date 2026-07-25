@@ -133,7 +133,7 @@ class AdminWebApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'AVA Zona — Admin',
+        title: 'AVA — Admin',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.adminWeb,
         home: const _AuthGate(),

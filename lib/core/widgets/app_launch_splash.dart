@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../brand_labels.dart';
+import '../splash_taglines_holder.dart';
 
 /// Qora fon: spiral → pulsatsiya → chiqish (~3.0 s) → UI fade-in.
+///
+/// Kompozitsiya: yuqori brand (AVA) · markaz logo · past ayluvchi tagline.
 class AppLaunchSplash extends StatefulWidget {
   const AppLaunchSplash({
     super.key,
@@ -139,13 +142,43 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     return _thirdGrowthStart + (_exitScaleEnd - _thirdGrowthStart) * eased;
   }
 
+  /// Pulse davomida session tagline'larini navbat bilan aylantiradi.
   ({String? text, double opacity}) _taglineForPulse(double pulseLocal) {
-    // Brand+district hierarchy; marketing splash words no longer used here.
-    final revealAt = 0.55 / 3.0;
-    if (pulseLocal < revealAt) {
-      return (text: BrandLabels.brand, opacity: 0);
+    final words = SplashTaglinesHolder.sessionWords;
+    if (!SplashTaglinesHolder.enabled || words.isEmpty) {
+      return (text: null, opacity: 0);
     }
-    return (text: BrandLabels.brand, opacity: 1);
+    final count = words.length;
+    final segment = math.min((pulseLocal * count).floor(), count - 1);
+    final localT = (pulseLocal * count) - segment;
+    double opacity;
+    if (localT < 0.18) {
+      opacity = Curves.easeOut.transform(localT / 0.18);
+    } else if (localT > 0.82) {
+      opacity = Curves.easeIn.transform((1.0 - localT) / 0.18);
+    } else {
+      opacity = 1;
+    }
+    return (text: words[segment], opacity: opacity.clamp(0.0, 1.0));
+  }
+
+  double _brandOpacityFor(double t) {
+    // Spiral oxirida paydo, pulse davomida to'liq, exitda logo bilan so'nadi.
+    if (t < _spiralFraction * 0.72) return 0;
+    if (t < _spiralFraction) {
+      final local =
+          (t - _spiralFraction * 0.72) / (_spiralFraction * 0.28);
+      return Curves.easeOut.transform(local.clamp(0.0, 1.0));
+    }
+    final pulseEnd = _spiralFraction + _pulseFraction;
+    if (t < pulseEnd) return 1;
+    final local = (t - pulseEnd) / (1 - pulseEnd);
+    if (local < 0.15) return 1;
+    if (local >= 0.60) return 0;
+    return 1 -
+        Curves.easeInOutSine.transform(
+          ((local - 0.15) / 0.45).clamp(0.0, 1.0),
+        );
   }
 
   _SplashFrame _frameFor(double t) {
@@ -159,6 +192,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         logoOpacity: Curves.easeIn.transform(local.clamp(0, 1)),
         contentOpacity: 0,
         backgroundOpacity: 1,
+        brandOpacity: _brandOpacityFor(t),
       );
     }
 
@@ -172,6 +206,7 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         logoOpacity: 1,
         contentOpacity: 0,
         backgroundOpacity: 1,
+        brandOpacity: _brandOpacityFor(t),
         tagline: tagline.text,
         taglineOpacity: tagline.opacity,
       );
@@ -195,7 +230,9 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         : Curves.easeInOutSine.transform(
             ((local - 0.55) / 0.45).clamp(0.0, 1.0),
           );
-    final lastTagline = BrandLabels.brand;
+    final words = SplashTaglinesHolder.sessionWords;
+    final lastTagline =
+        words.isNotEmpty ? words.last : null;
 
     return _SplashFrame(
       scale: _thirdGrowthScale(growthProgress),
@@ -203,14 +240,17 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
       logoOpacity: logoFade,
       contentOpacity: contentOpacity,
       backgroundOpacity: 1 - contentOpacity,
+      brandOpacity: _brandOpacityFor(t),
       tagline: lastTagline,
-      taglineOpacity: logoFade,
+      taglineOpacity: logoFade * (lastTagline == null ? 0 : 1),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final logoWidth = MediaQuery.sizeOf(context).width * 0.52;
+    final size = MediaQuery.sizeOf(context);
+    final padding = MediaQuery.paddingOf(context);
+    final logoWidth = size.width * 0.52;
 
     return Directionality(
       textDirection: TextDirection.ltr,
@@ -244,6 +284,33 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
+                        // Yuqori — brand
+                        Positioned(
+                          top: padding.top + 36,
+                          left: 28,
+                          right: 28,
+                          child: Opacity(
+                            opacity: frame.brandOpacity.clamp(0, 1),
+                            child: BrandTitleColumn(
+                              listenToConfig: true,
+                              spacing: 6,
+                              brandStyle: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2.0,
+                                height: 1.05,
+                              ),
+                              districtStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.72),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Markaz — logo
                         Center(
                           child: Opacity(
                             opacity: math
@@ -262,38 +329,28 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                             ),
                           ),
                         ),
-                        Center(
-                          child: Transform.translate(
-                            offset: Offset(
-                              0,
-                              logoWidth.clamp(160, 280) *
-                                      math.max(frame.scale, 1.60) /
-                                      2 +
-                                  18,
-                            ),
-                            child: Opacity(
-                              opacity: frame.taglineOpacity.clamp(0, 1),
-                              child: frame.tagline == null
-                                  ? const SizedBox.shrink()
-                                  : BrandTitleColumn(
-                                      listenToConfig: true,
-                                      spacing: 6,
-                                      brandStyle: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.2,
-                                      ),
-                                      districtStyle: TextStyle(
-                                        color: _taglineColor.withValues(
-                                          alpha: 0.95,
-                                        ),
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1.6,
-                                      ),
+                        // Past — ayluvchi tagline
+                        Positioned(
+                          left: 28,
+                          right: 28,
+                          bottom: padding.bottom + 48,
+                          child: Opacity(
+                            opacity: frame.taglineOpacity.clamp(0, 1),
+                            child: frame.tagline == null
+                                ? const SizedBox.shrink()
+                                : Text(
+                                    frame.tagline!,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: _taglineColor,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.8,
+                                      height: 1.2,
                                     ),
-                            ),
+                                  ),
                           ),
                         ),
                       ],
@@ -315,6 +372,7 @@ class _SplashFrame {
     required this.logoOpacity,
     required this.contentOpacity,
     required this.backgroundOpacity,
+    this.brandOpacity = 0,
     this.tagline,
     this.taglineOpacity = 0,
   });
@@ -324,6 +382,7 @@ class _SplashFrame {
   final double logoOpacity;
   final double contentOpacity;
   final double backgroundOpacity;
+  final double brandOpacity;
   final String? tagline;
   final double taglineOpacity;
 }

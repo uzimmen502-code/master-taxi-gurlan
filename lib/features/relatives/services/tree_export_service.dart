@@ -26,7 +26,7 @@ class TreeExportService {
     final file = await _writeTemp('nasab_daraxti_$stamp.ged', body);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'text/plain')],
-      subject: 'AVA Zona — nasab daraxti (GEDCOM)',
+      subject: 'AVA — nasab daraxti (GEDCOM)',
     );
   }
 
@@ -37,7 +37,7 @@ class TreeExportService {
     final file = await _writeTempBytes('nasab_daraxti_$stamp.png', png);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'image/png')],
-      subject: 'AVA Zona — nasab daraxti',
+      subject: 'AVA — nasab daraxti',
     );
   }
 
@@ -54,7 +54,7 @@ class TreeExportService {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'AVA Zona — Насаб дарахти',
+              'AVA — Насаб дарахти',
               style: pw.TextStyle(
                 fontSize: 14,
                 fontWeight: pw.FontWeight.bold,
@@ -80,7 +80,7 @@ class TreeExportService {
     final file = await _writeTempBytes('nasab_daraxti_$stamp.pdf', bytes);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/pdf')],
-      subject: 'AVA Zona — nasab daraxti (PDF)',
+      subject: 'AVA — nasab daraxti (PDF)',
     );
   }
 

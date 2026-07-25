@@ -14,10 +14,10 @@ Design: `docs/settlement_ledger_v1_uz.md`. Code: `functions/settlement_ledger.js
 - Trip settlement: Dr `passenger_credit:driver` / Cr `passenger_credit:passenger` (openSettlement checks driver bonusBalance).
 - Deferred: same wallet path; negative deferred forbidden.
 
-## P2P
-- `wallet_transfer_requests` CF-only write; rules: parties + finance read.
-- `requestWalletTransfer` / `respondWalletTransfer`; daily ceiling 100_000 fromUid; 24h TTL; pull-request model.
-- kinds: `wallet_p2p`.
+## Withdraw (app)
+- `requestWalletWithdraw` (app) + Telegram `/withdraw` → `wallet_withdraw_requests`; admin `adminReviewWalletWithdraw` → `walletToCash`.
+- Withdraw auto: `settings/wallet_bot.withdrawApproveMode` (manual|auto) + `withdrawAutoLimit` ∈ {20000,50000,100000}; ≤limit → auto `walletToCash` (balance−); card payout still manual.
+- Wallet P2P deleted; historical `wallet_p2p_*` ledger labels kept.
 
 ## Exact accounting (majburiy, 2026-07)
 - Pul/summa haqida **faqat aniq** raqam: taxminan/approximate/~ YO‘Q.

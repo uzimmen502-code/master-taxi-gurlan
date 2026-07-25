@@ -307,7 +307,6 @@ Finance Centerга янги таб ёки бўлим:
 - Бот UI сақланади; канал `gateway` бўлади
 
 ### Phase 3 (ихтиёрий)
-- QR P2P (мавжуд transfer устида)  
 - AVA Assistant (orders/queue) — **алоҳида** маҳсулот
 
 ---

@@ -285,7 +285,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             localeResolutionCallback: LocaleUtils.localeResolutionCallback,
             navigatorKey: MyApp.navigatorKey,
             debugShowCheckedModeBanner: false,
-            title: 'AVA Zona',
+            title: 'AVA',
             theme: AppTheme.light,
             home: !widget.languageSelected
                 ? const LanguageSelectScreen()

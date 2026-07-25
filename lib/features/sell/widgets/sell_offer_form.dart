@@ -172,7 +172,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Text(
-              'AVA Zona харид қилиши мумкин — оператор боғланади',
+              'AVA харид қилиши мумкин — оператор боғланади',
               style: TextStyle(fontSize: 12),
             ),
           ),

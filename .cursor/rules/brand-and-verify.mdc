@@ -1,0 +1,11 @@
+---
+description: Brand display is AVA (never AVA Zona); verify code before stating current UI
+alwaysApply: true
+---
+
+# Brand + current-state answers
+
+- App display brand is **`AVA`** (`BrandLabels.brand`). Never use or reintroduce **`AVA Zona`**.
+- District (if set) is a separate context line via `ServiceConfigHolder.districtLabel` / `BrandLabels.districtContext`.
+- Before answering what the UI "currently" shows: **re-read the relevant source** (do not rely on memory, Serena stale notes, or prior chat ASCII).
+- If the user ordered a brand/UI change and code still has the old value, say so explicitly and fix — do not present the old value as the intended design.

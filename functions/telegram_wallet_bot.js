@@ -16,8 +16,16 @@ const SETTINGS_DOC = 'settings/wallet_bot';
 const DEFAULT_MAX_TOPUP = 500000;
 const DEFAULT_DAILY_TOPUP = 1000000;
 const DEFAULT_MAX_WITHDRAW = 500000;
+/** Админ танлайдиган ечиш авто-лимитлари (сўм). */
+const WITHDRAW_AUTO_LIMITS = [20000, 50000, 100000];
+const DEFAULT_WITHDRAW_AUTO_LIMIT = 20000;
 const LINK_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+
+function normalizeWithdrawAutoLimit(v) {
+  const n = Math.trunc(Number(v) || 0);
+  return WITHDRAW_AUTO_LIMITS.includes(n) ? n : DEFAULT_WITHDRAW_AUTO_LIMIT;
+}
 
 function attachTelegramWalletBot(exports, deps) {
   const {
@@ -61,6 +69,12 @@ function attachTelegramWalletBot(exports, deps) {
           String(d.topUpApproveMode || 'manual').toLowerCase() === 'auto'
             ? 'auto'
             : 'manual',
+      // manual (default) | auto — лимит ичида админсиз walletToCash
+      withdrawApproveMode:
+          String(d.withdrawApproveMode || 'manual').toLowerCase() === 'auto'
+            ? 'auto'
+            : 'manual',
+      withdrawAutoLimit: normalizeWithdrawAutoLimit(d.withdrawAutoLimit),
     };
   }
 
@@ -269,6 +283,95 @@ function attachTelegramWalletBot(exports, deps) {
     });
   }
 
+  function shouldAutoApproveWithdraw(settings, amount) {
+    return settings.withdrawApproveMode === 'auto'
+        && amount > 0
+        && amount <= settings.withdrawAutoLimit;
+  }
+
+  /** pending → approved/paid + walletToCash (manual yoki auto). */
+  async function approveWithdrawInternal({
+    requestId, req, callerUid, markPaid = false, auto = false,
+  }) {
+    const amount = Math.trunc(Number(req.amount || 0));
+    const uid = canonicalUid(req.uid);
+    const tgChat = req.telegramChatId || req.telegramUserId;
+    if (!uid || amount <= 0) {
+      throw new Error('So\'rov buzilgan');
+    }
+    const opId = `withdraw_${requestId}`;
+    await runWalletToCashInternal({
+      callerUid,
+      userUid12: uid,
+      amount,
+      opId,
+      meta: {
+        withdrawRequestId: requestId,
+        channel: req.source || 'telegram',
+        approveMode: auto ? 'auto' : 'manual',
+      },
+    });
+
+    const ref = db.collection(WITHDRAW_COL).doc(requestId);
+    await ref.set({
+      status: markPaid ? 'paid' : 'approved',
+      reviewedBy: callerUid,
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ledgerOpId: opId,
+      approveMode: auto ? 'auto' : 'manual',
+      ...(markPaid
+        ? {
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
+          paidBy: callerUid,
+        }
+        : {}),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    if (tgChat) {
+      await tgSend(tgChat, markPaid
+          ? `💸 Ечиш тасдиқланди ва тўланди: <b>${amount}</b> сўм.`
+          : (`✅ Ечиш тасдиқланди: <b>${amount}</b> сўм. Тўлов йўналтирилади.`
+              + (auto ? '\n(авто тасдиқ)' : '')));
+    }
+    try {
+      await notifyUserInApp({
+        userId: uid,
+        title: 'Ечиш тасдиқланди',
+        body: `${amount} сўм` + (auto ? ' (авто)' : ''),
+        category: 'wallet',
+        source: auto ? 'wallet_withdraw_auto' : 'wallet_withdraw',
+        dataType: 'wallet_withdraw_approved',
+        screen: 'wallet',
+        extraData: { requestId },
+      });
+    } catch (_) { /* ignore */ }
+
+    return { ok: true, status: markPaid ? 'paid' : 'approved', amount, auto };
+  }
+
+  async function maybeAutoApproveWithdraw(requestId, settings) {
+    if (!settings || settings.withdrawApproveMode !== 'auto') return null;
+    const snap = await db.collection(WITHDRAW_COL).doc(requestId).get();
+    if (!snap.exists) return null;
+    const req = snap.data() || {};
+    if (req.status !== 'pending') return null;
+    const amount = Math.trunc(Number(req.amount || 0));
+    if (!shouldAutoApproveWithdraw(settings, amount)) return null;
+    try {
+      return await approveWithdrawInternal({
+        requestId,
+        req,
+        callerUid: 'wallet_withdraw_auto',
+        markPaid: false,
+        auto: true,
+      });
+    } catch (e) {
+      console.error('auto withdraw approve failed', requestId, e);
+      return null;
+    }
+  }
+
   async function downloadTelegramFileToStorage(fileId, storagePath) {
     const { token } = tgConfig();
     const file = await tgApi('getFile', { file_id: fileId });
@@ -345,6 +448,109 @@ function attachTelegramWalletBot(exports, deps) {
     };
   });
 
+  // ─── Callable: app withdraw request (own wallet → cash via admin) ─
+  exports.requestWalletWithdraw = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+    }
+    const tokenPhone = String(
+        (context.auth.token && context.auth.token.phone_number) || '')
+        .replace(/\D/g, '');
+    const uid = canonicalUid(
+        (data && (data.phone || data.userPhone)) || tokenPhone);
+    if (!uid || uid.length < 12) {
+      throw new functions.https.HttpsError('invalid-argument', 'phone kerak');
+    }
+    if (tokenPhone) {
+      const tokenUid = canonicalUid(tokenPhone);
+      if (tokenUid && tokenUid !== uid) {
+        throw new functions.https.HttpsError(
+            'permission-denied', 'Faqat o\'z raqamingiz');
+      }
+    }
+    if (!(await isIdentifiedUser(uid))) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'Avval ilovada ro\'yxatdan o\'ting');
+    }
+
+    const settings = await loadBotSettings();
+    const amount = Math.trunc(Number((data && data.amount) || 0));
+    if (amount <= 0 || amount > settings.maxWithdraw) {
+      throw new functions.https.HttpsError(
+          'invalid-argument',
+          `Сумма 1…${settings.maxWithdraw} оралиғида бўлсин`);
+    }
+
+    const card = String((data && data.payoutCardNumber) || '')
+        .replace(/\D/g, '');
+    const holder = String((data && data.payoutCardHolder) || '')
+        .trim()
+        .slice(0, 80);
+    if (card.length < 16 || card.length > 19 || !holder) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'Карта рақами ва эгаси керак');
+    }
+
+    const userSnap = await db.collection('users').doc(uid).get();
+    const bal = userSnap.exists
+        ? (parseInt(String((userSnap.data() || {}).bonusBalance ?? 0), 10) || 0)
+        : 0;
+    if (amount > bal) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Yetarli emas. Баланс: ${bal} сўм`);
+    }
+
+    const pending = await db.collection(WITHDRAW_COL)
+        .where('uid', '==', uid)
+        .where('status', '==', 'pending')
+        .limit(1)
+        .get();
+    if (!pending.empty) {
+      throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Аллақачон кутилаётган ечиш аризаси бор');
+    }
+
+    const ref = db.collection(WITHDRAW_COL).doc();
+    await ref.set({
+      uid,
+      amount,
+      currency: 'UZS',
+      status: 'pending',
+      source: 'app',
+      payoutCardNumber: card,
+      payoutCardHolder: holder,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const autoRes = await maybeAutoApproveWithdraw(ref.id, settings);
+    if (autoRes && autoRes.ok) {
+      return {
+        ok: true,
+        requestId: ref.id,
+        amount,
+        status: autoRes.status,
+        auto: true,
+      };
+    }
+
+    try {
+      await notifyUserInApp({
+        userId: uid,
+        title: 'Ечиш аризаси',
+        body: `${amount} сўм — админ текширувида`,
+        category: 'wallet',
+        source: 'wallet_app_withdraw',
+        dataType: 'wallet_withdraw_pending',
+        screen: 'wallet',
+        extraData: { requestId: ref.id },
+      });
+    } catch (_) { /* ignore */ }
+
+    return { ok: true, requestId: ref.id, amount, status: 'pending' };
+  });
+
   // ─── Callable: bot settings ──────────────────────────────────────
   exports.adminGetWalletBotSettings = functions.https.onCall(async (data, context) => {
     await requireCallerRoles(
@@ -401,6 +607,13 @@ function attachTelegramWalletBot(exports, deps) {
     if (data && data.topUpApproveMode != null) {
       const m = String(data.topUpApproveMode).toLowerCase();
       patch.topUpApproveMode = m === 'auto' ? 'auto' : 'manual';
+    }
+    if (data && data.withdrawApproveMode != null) {
+      const m = String(data.withdrawApproveMode).toLowerCase();
+      patch.withdrawApproveMode = m === 'auto' ? 'auto' : 'manual';
+    }
+    if (data && data.withdrawAutoLimit != null) {
+      patch.withdrawAutoLimit = normalizeWithdrawAutoLimit(data.withdrawAutoLimit);
     }
     patch.updatedAt = admin.firestore.FieldValue.serverTimestamp();
     patch.updatedBy = caller;
@@ -524,47 +737,28 @@ function attachTelegramWalletBot(exports, deps) {
         await tgSend(tgChat,
             `❌ Ечиш рад этилди (${amount} сўм).\n${rejectReason || ''}`.trim());
       }
+      try {
+        await notifyUserInApp({
+          userId: uid,
+          title: 'Ечиш рад этилди',
+          body: `${amount} сўм. ${rejectReason || ''}`.trim(),
+          category: 'wallet',
+          source: 'wallet_withdraw',
+          dataType: 'wallet_withdraw_rejected',
+          screen: 'wallet',
+          extraData: { requestId },
+        });
+      } catch (_) { /* ignore */ }
       return { ok: true, status: 'rejected' };
     }
 
-    const opId = `withdraw_${requestId}`;
-    await runWalletToCashInternal({
+    return approveWithdrawInternal({
+      requestId,
+      req,
       callerUid,
-      userUid12: uid,
-      amount,
-      opId,
-      meta: { withdrawRequestId: requestId, channel: 'telegram' },
+      markPaid,
+      auto: false,
     });
-
-    await ref.set({
-      status: markPaid ? 'paid' : 'approved',
-      reviewedBy: callerUid,
-      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-      ledgerOpId: opId,
-      ...(markPaid
-        ? { paidAt: admin.firestore.FieldValue.serverTimestamp(), paidBy: callerUid }
-        : {}),
-    }, { merge: true });
-
-    if (tgChat) {
-      await tgSend(tgChat, markPaid
-          ? `💸 Ечиш тасдиқланди ва тўланди: <b>${amount}</b> сўм.`
-          : `✅ Ечиш тасдиқланди: <b>${amount}</b> сўм. Тўлов йўналтирилади.`);
-    }
-    try {
-      await notifyUserInApp({
-        userId: uid,
-        title: 'Ечиш тасдиқланди',
-        body: `${amount} сўм`,
-        category: 'wallet',
-        source: 'wallet_telegram_withdraw',
-        dataType: 'wallet_withdraw_approved',
-        screen: 'wallet',
-        extraData: { requestId },
-      });
-    } catch (_) { /* ignore */ }
-
-    return { ok: true, status: markPaid ? 'paid' : 'approved', amount };
   });
 
   // ─── Callable: signed receipt URL ────────────────────────────────
@@ -927,11 +1121,20 @@ function attachTelegramWalletBot(exports, deps) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     await clearSession(tgUser.id);
+
+    const autoRes = await maybeAutoApproveWithdraw(ref.id, settings);
+    if (autoRes && autoRes.ok) {
+      return;
+    }
+
+    const autoHint = settings.withdrawApproveMode === 'auto'
+        ? `\n(Авто лимит: ${settings.withdrawAutoLimit.toLocaleString('uz-UZ')} сўм — ортиқча сумма админ текширувида)`
+        : '';
     await tgSend(chatId,
         `📤 Ечиш аризаси қабул қилинди.\n` +
         `Сумма: <b>${amount}</b> сўм\n` +
         `ID: <code>${ref.id}</code>\n` +
-        `Админ тасдиғидан кейин тўланади.`);
+        `Админ тасдиғидан кейин тўланади.` + autoHint);
   }
 
   async function cmdStatus(chatId, tgUser) {

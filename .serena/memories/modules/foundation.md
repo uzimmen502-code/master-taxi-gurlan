@@ -21,12 +21,12 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - finish(): UserRepository.createOrMergeProfileWithAddress, prefs (user_phone/name/role via canonicalPhoneId, onboarding_done, phone_reverified), refresh FCM. District default Гурлан/Gurlan; MfyService autocomplete.
 
 ## profile (`features/profile/`)
-- profile_controller.dart (wraps CF changeDevicePhone); screens profile/user_info/wallet/wallet_partner_program/wallet_operations_tab/address_edit/news_hub/news/*_news_detail/messages_tab; widgets wallet_section/wallet_ledger_list/**wallet_telegram_link_panel**/wallet_p2p_panel/order_card/trip_card/language_settings_tile. Role via UserRoleSync. wallet uses wallet_ledger_entry model + `core/utils/wallet_ledger_labels.dart`. Telegram top-up: one-tap «Telegramda bogʻlash» (createTelegramLinkCode + deep link) → bot deposit → admin approve; linked state via users.telegramId.
+- profile_controller.dart (wraps CF changeDevicePhone); screens profile/user_info/wallet/wallet_partner_program/wallet_operations_tab/address_edit/news_hub/news/*_news_detail/messages_tab; widgets wallet_section/wallet_ledger_list/**wallet_telegram_link_panel**/wallet_withdraw_panel/order_card/trip_card/language_settings_tile. Role via UserRoleSync. wallet uses wallet_ledger_entry model + `core/utils/wallet_ledger_labels.dart`. Telegram top-up: one-tap «Ҳамённи тўлдириш» → bot deposit → admin approve; withdraw: «Ҳамёндан пул ечиш» → `requestWalletWithdraw` → admin approve.
 
 ## Cold-start (`lib/main.dart`)
 - Blocking before `runApp`: Firebase + Firestore settings, SharedPreferences routing flags, `ServiceConfigHolder.loadCacheOnly()`, `SplashTaglinesHolder.prepareSessionSync()`.
 - Parallel unawaited: splash network `load()`, `PassengerCancelRulesHolder.load()`, daily report.
-- `AppLaunchSplash` ~3.0s (900+1600+500ms); `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init (ruxsat dialog splash ustida chiqmasin). Home still refreshes `ServiceConfigHolder.bootstrap()` post-frame.
+- `AppLaunchSplash` ~3.0s (900+1600+500ms); composition: top `BrandTitleColumn` (AVA+district), center logo spiral/pulse/exit, bottom rotating `SplashTaglinesHolder.sessionWords`. `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init. Home refreshes `ServiceConfigHolder.bootstrap()` post-frame.
 - Brand hierarchy: display `AVA` + short district context (`BrandLabels` / `ServiceConfigHolder.districtLabel`); package/applicationId stay `ava_gurlan` / `uz.ava.gurlan`. Never `AVA Zona`.
 
 ## Core services (`lib/services/`)

@@ -490,7 +490,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 _benefit(
                   icon: '🎂',
                   text:
-                      'Киритсангиз — AVA Zona туғилган кунда табрик ва бонус беради.',
+                      'Киритсангиз — AVA туғилган кунда табрик ва бонус беради.',
                   warm: true,
                 ),
               ],

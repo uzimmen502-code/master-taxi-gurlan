@@ -24,6 +24,11 @@ class _WalletBotTabState extends State<WalletBotTab>
   bool _enabled = true;
   /// `manual` | `auto`
   String _topUpApproveMode = 'manual';
+  /// `manual` | `auto`
+  String _withdrawApproveMode = 'manual';
+  /// 20000 | 50000 | 100000
+  int _withdrawAutoLimit = 20000;
+  static const _withdrawAutoLimits = [20000, 50000, 100000];
   bool _loadingSettings = true;
   bool _saving = false;
   String? _botUsername;
@@ -75,6 +80,13 @@ class _WalletBotTabState extends State<WalletBotTab>
           '${s['topUpApproveMode'] ?? 'manual'}'.toLowerCase() == 'auto'
               ? 'auto'
               : 'manual';
+      _withdrawApproveMode =
+          '${s['withdrawApproveMode'] ?? 'manual'}'.toLowerCase() == 'auto'
+              ? 'auto'
+              : 'manual';
+      final lim = (s['withdrawAutoLimit'] as num?)?.toInt() ?? 20000;
+      _withdrawAutoLimit =
+          _withdrawAutoLimits.contains(lim) ? lim : 20000;
       _botUsername = data['botUsername'] as String?;
     } catch (e) {
       if (mounted) {
@@ -95,6 +107,8 @@ class _WalletBotTabState extends State<WalletBotTab>
           .call({
         'enabled': _enabled,
         'topUpApproveMode': _topUpApproveMode,
+        'withdrawApproveMode': _withdrawApproveMode,
+        'withdrawAutoLimit': _withdrawAutoLimit,
         'depositCardNumber': _cardCtrl.text.trim(),
         'depositCardFirstName': _firstNameCtrl.text.trim(),
         'depositCardLastName': _lastNameCtrl.text.trim(),
@@ -318,10 +332,23 @@ class _WalletBotTabState extends State<WalletBotTab>
             final m = d.data();
             final amount = (m['amount'] as num?)?.toInt() ?? 0;
             final uid = '${m['uid'] ?? ''}';
+            final source = '${m['source'] ?? ''}';
+            final card = '${m['payoutCardNumber'] ?? ''}';
+            final holder = '${m['payoutCardHolder'] ?? ''}';
+            final cardLine = card.isEmpty
+                ? ''
+                : 'Карта: $card${holder.isEmpty ? '' : ' · $holder'}';
             return Card(
               child: ListTile(
                 title: Text('${formatPrice(amount)} сўм · +$uid'),
-                subtitle: Text('ID: ${d.id}'),
+                subtitle: Text(
+                  [
+                    'ID: ${d.id}',
+                    if (source.isNotEmpty) source,
+                    if (cardLine.isNotEmpty) cardLine,
+                  ].join('\n'),
+                ),
+                isThreeLine: cardLine.isNotEmpty,
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -399,6 +426,62 @@ class _WalletBotTabState extends State<WalletBotTab>
             _topUpApproveMode == 'auto'
                 ? 'Авто: чек юклангач ҳамёнга дарҳол ёзилади (админ навбатисиз).'
                 : 'Қўлда: чек «Тўлдириш навбати»да кутади, админ тасдиқлайди.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ),
+        const Text(
+          'Ечиш тасдиғи',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: 'manual',
+              label: Text('Қўлда'),
+              icon: Icon(Icons.person_outline, size: 18),
+            ),
+            ButtonSegment(
+              value: 'auto',
+              label: Text('Авто'),
+              icon: Icon(Icons.bolt, size: 18),
+            ),
+          ],
+          selected: {_withdrawApproveMode},
+          onSelectionChanged: (s) {
+            if (s.isEmpty) return;
+            setState(() => _withdrawApproveMode = s.first);
+          },
+        ),
+        if (_withdrawApproveMode == 'auto') ...[
+          const SizedBox(height: 10),
+          const Text(
+            'Авто лимит (шу сумма ва ундан кичик — админсиз)',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            segments: [
+              for (final lim in _withdrawAutoLimits)
+                ButtonSegment(
+                  value: lim,
+                  label: Text(NumberFormat.decimalPattern('uz').format(lim)),
+                ),
+            ],
+            selected: {_withdrawAutoLimit},
+            onSelectionChanged: (s) {
+              if (s.isEmpty) return;
+              setState(() => _withdrawAutoLimit = s.first);
+            },
+          ),
+        ],
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 12),
+          child: Text(
+            _withdrawApproveMode == 'auto'
+                ? 'Авто: ≤ ${formatPrice(_withdrawAutoLimit)} сўм дарҳол ҳамёндан ечилади; '
+                    'каттареси «Ечиш навбати»да кутади. Картага тўлов ҳали қўлда.'
+                : 'Қўлда: барча ечиш аризалари админ тасдиғини кутади.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ),

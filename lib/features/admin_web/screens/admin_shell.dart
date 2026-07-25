@@ -539,7 +539,10 @@ class _Sidebar extends StatelessWidget {
             children: List.generate(sections.length, (i) {
               final s = sections[i];
               final selected = i == selectedIndex;
-              return _sidebarItem(context, s, selected, () => onSelect(i));
+              return KeyedSubtree(
+                key: ValueKey('nav_${s.label}'),
+                child: _sidebarItem(context, s, selected, () => onSelect(i)),
+              );
             }),
           ),
         ),
@@ -573,7 +576,7 @@ class _Sidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AVA Zona',
+                Text('AVA',
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,
@@ -588,6 +591,9 @@ class _Sidebar extends StatelessWidget {
     );
   }
 
+  static const _tabAnim = Duration(milliseconds: 280);
+  static const _tabCurve = Curves.easeOutCubic;
+
   Widget _sidebarItem(
     BuildContext context,
     _AdminSection s,
@@ -595,64 +601,221 @@ class _Sidebar extends StatelessWidget {
     VoidCallback onTap,
   ) {
     final badgeStream = _badgeCountStream(context, s.label);
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: EdgeInsets.symmetric(
-            horizontal: compact ? 0 : 14, vertical: compact ? 12 : 12),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white.withValues(alpha: 0.12) : null,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: compact
-            ? Stack(
-                clipBehavior: Clip.none,
+    final iconColor = selected ? Colors.white : Colors.white60;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: _tabAnim,
+            curve: _tabCurve,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        blurRadius: 14,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 0),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
                 children: [
-                  Center(
-                    child: Icon(s.icon,
-                        color: selected ? Colors.white : Colors.white70, size: 22),
-                  ),
-                  if (badgeStream != null)
-                    Positioned(
-                      right: 8,
-                      top: -4,
-                      child: _sidebarBadge(stream: badgeStream),
-                    ),
-                ],
-              )
-            : Row(children: [
-                Icon(s.icon,
-                    color: selected ? Colors.white : Colors.white70, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Expanded(
-                            child: Text(s.label,
-                                style: TextStyle(
-                                    color: selected
-                                        ? Colors.white
-                                        : Colors.white70,
-                                    fontSize: 13,
-                                    fontWeight: selected
-                                        ? FontWeight.bold
-                                        : FontWeight.w500)),
+                  // Chap → o'ng glow / gradient
+                  Positioned.fill(
+                    child: AnimatedOpacity(
+                      duration: _tabAnim,
+                      curve: _tabCurve,
+                      opacity: selected ? 1 : 0,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.34),
+                              Colors.white.withValues(alpha: 0.14),
+                              Colors.white.withValues(alpha: 0.04),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.28, 0.62, 1.0],
                           ),
-                        ]),
-                        Text(s.description,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 10)),
-                      ]),
-                ),
-                if (badgeStream != null) ...[
-                  const SizedBox(width: 8),
-                  _sidebarBadge(stream: badgeStream),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Chap chetda yorqin chiziq
+                  if (selected)
+                    Positioned(
+                      left: 0,
+                      top: 6,
+                      bottom: 6,
+                      child: Container(
+                        width: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(99),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.75),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  AnimatedContainer(
+                    duration: _tabAnim,
+                    curve: _tabCurve,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? (selected ? 6 : 0) : 14,
+                      vertical: selected ? 14 : 8,
+                    ),
+                    child: AnimatedSize(
+                      duration: _tabAnim,
+                      curve: _tabCurve,
+                      alignment: Alignment.topCenter,
+                      child: compact
+                          ? _compactTabBody(
+                              s, selected, iconColor, badgeStream)
+                          : _expandedTabBody(
+                              s, selected, iconColor, badgeStream),
+                    ),
+                  ),
                 ],
-              ]),
+              ),
+            ),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _compactTabBody(
+    _AdminSection s,
+    bool selected,
+    Color iconColor,
+    Stream<int>? badgeStream,
+  ) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              duration: _tabAnim,
+              curve: _tabCurve,
+              scale: selected ? 1.12 : 1.0,
+              child: Icon(s.icon, color: iconColor, size: selected ? 24 : 22),
+            ),
+            if (selected) ...[
+              const SizedBox(height: 6),
+              Text(
+                s.label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
+                  shadows: [
+                    Shadow(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (badgeStream != null)
+          Positioned(
+            right: 0,
+            top: -2,
+            child: _sidebarBadge(stream: badgeStream),
+          ),
+      ],
+    );
+  }
+
+  Widget _expandedTabBody(
+    _AdminSection s,
+    bool selected,
+    Color iconColor,
+    Stream<int>? badgeStream,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: selected ? 2 : 0),
+          child: AnimatedScale(
+            duration: _tabAnim,
+            curve: _tabCurve,
+            scale: selected ? 1.08 : 1.0,
+            child: Icon(s.icon, color: iconColor, size: selected ? 22 : 20),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                s.label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.white60,
+                  fontSize: selected ? 14.5 : 13,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  letterSpacing: selected ? 0.2 : 0,
+                  shadows: selected
+                      ? [
+                          Shadow(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            blurRadius: 10,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(height: 3),
+                Text(
+                  s.description,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.88),
+                    fontSize: 11,
+                    height: 1.25,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (badgeStream != null) ...[
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: _sidebarBadge(stream: badgeStream),
+          ),
+        ],
+      ],
     );
   }
 

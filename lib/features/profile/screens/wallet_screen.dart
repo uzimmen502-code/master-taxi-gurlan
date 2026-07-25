@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../widgets/wallet_p2p_panel.dart';
 import '../widgets/wallet_section.dart';
 import '../widgets/wallet_telegram_link_panel.dart';
+import '../widgets/wallet_withdraw_panel.dart';
 
-/// Кошелёк — баланс + Telegram тўлдириш + P2P.
+/// Кошелёк — баланс + Telegram тўлдириш + ечиш.
 class WalletScreen extends StatelessWidget {
   const WalletScreen({super.key, required this.phone});
 
@@ -29,7 +29,7 @@ class WalletScreen extends StatelessWidget {
               child: Column(
                 children: [
                   WalletTelegramLinkPanel(phone: phone),
-                  WalletP2pPanel(phone: phone),
+                  WalletWithdrawPanel(phone: phone),
                 ],
               ),
             ),

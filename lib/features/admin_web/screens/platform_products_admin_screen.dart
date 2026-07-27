@@ -115,64 +115,22 @@ class _PlatformProductsAdminScreenState
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) => const SizedBox(height: 6),
                   itemBuilder: (context, i) {
                     final p = items[i];
-                    return Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        leading: _Thumb(url: p.imageUrl),
-                        title: Text(
-                          p.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          [
-                            '${formatPrice(p.price)} сўм',
-                            p.active ? 'фаол' : 'нофаол',
-                            if (p.featuredOnHome) 'витрина',
-                            if (p.showInMarket) 'бозор',
-                            p.isUnlimitedStock
-                                ? 'лимитсиз'
-                                : 'қолдиқ ${p.remaining}',
-                          ].join(' · '),
-                          maxLines: 2,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (v) async {
-                            if (v == 'edit') {
-                              await _openEdit(p);
-                            } else if (v == 'toggle') {
-                              await _repo.setActive(p.id, !p.active);
-                            } else if (v == 'delete') {
-                              await _delete(p);
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Таҳрир'),
-                            ),
-                            PopupMenuItem(
-                              value: 'toggle',
-                              child: Text(p.active ? 'Нофаол' : 'Фаол'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Ўчириш'),
-                            ),
-                          ],
-                        ),
-                        onTap: () => _openEdit(p),
-                      ),
+                    return _ProductTile(
+                      index: i + 1,
+                      product: p,
+                      onTap: () => _openEdit(p),
+                      onMenu: (v) async {
+                        if (v == 'edit') {
+                          await _openEdit(p);
+                        } else if (v == 'toggle') {
+                          await _repo.setActive(p.id, !p.active);
+                        } else if (v == 'delete') {
+                          await _delete(p);
+                        }
+                      },
                     );
                   },
                 );
@@ -299,6 +257,112 @@ class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProductTile extends StatelessWidget {
+  const _ProductTile({
+    required this.index,
+    required this.product,
+    required this.onTap,
+    required this.onMenu,
+  });
+
+  final int index;
+  final PlatformProduct product;
+  final VoidCallback onTap;
+  final ValueChanged<String> onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = [
+      '${formatPrice(product.price)} сўм',
+      product.active ? 'фаол' : 'нофаол',
+      if (product.featuredOnHome) 'витрина',
+      if (product.showInMarket) 'бозор',
+      product.isUnlimitedStock ? 'лимитсиз' : 'қолдиқ ${product.remaining}',
+    ].join(' · ');
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE8ECE8)),
+          ),
+          padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text(
+                  '$index',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              _Thumb(url: product.imageUrl),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                onSelected: onMenu,
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Text('Таҳрир'),
+                  ),
+                  PopupMenuItem(
+                    value: 'toggle',
+                    child: Text(product.active ? 'Нофаол' : 'Фаол'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Ўчириш'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

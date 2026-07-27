@@ -4,18 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
-import '../utils/ad_search_text.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/platform_market_card.dart';
 import 'create_ad_screen.dart';
 import 'my_ads_screen.dart';
 
-/// Онлайн бозор / Арзон маҳсулотлар: қидирув + лента (AVA + хусусий).
+/// Онлайн бозор / Арзон маҳсулотлар: қидирув (Платформа дўкони каби) + лента.
 class CheapProductsScreen extends StatefulWidget {
   const CheapProductsScreen({super.key});
 
@@ -28,8 +29,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
   final _searchCtrl = TextEditingController();
   final _platformRepo = PlatformProductsRepository();
-  Timer? _debounce;
-  String _searchQuery = '';
+  String _query = '';
   List<PlatformProduct> _platform = const [];
   bool _platformLoaded = false;
 
@@ -70,37 +70,29 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (!mounted) return;
-      setState(() => _searchQuery = value.trim());
-    });
-  }
-
   void _clearSearch() {
-    _debounce?.cancel();
     _searchCtrl.clear();
-    setState(() => _searchQuery = '');
+    setState(() => _query = '');
   }
 
   List<PlatformProduct> _filteredPlatform() {
-    final list = _platform.where((p) {
-      if (p.price <= 0) return false;
-      if (_searchQuery.length >= 2) {
-        final hay = '${p.name} ${p.description}'.toLowerCase();
-        final tokens = AdSearchText.queryTokens(_searchQuery);
-        if (tokens.isEmpty) return true;
-        return tokens.every((t) => hay.contains(t.toLowerCase()));
-      }
-      return true;
-    }).toList();
-    list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final priced = _platform.where((p) => p.price > 0).toList();
+    var list =
+        priced.where((p) => CatalogSearch.matchesProduct(p, _query)).toList();
+    if (CatalogSearch.normalize(_query).isNotEmpty) {
+      list.sort((a, b) {
+        final byScore = CatalogSearch.scoreProduct(b, _query)
+            .compareTo(CatalogSearch.scoreProduct(a, _query));
+        if (byScore != 0) return byScore;
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
+    } else {
+      list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    }
     return list;
   }
 
@@ -130,28 +122,31 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _searchCtrl,
-                    onChanged: _onSearchChanged,
+                    onChanged: (v) => setState(() => _query = v),
                     decoration: InputDecoration(
-                      hintText: 'Қидириш (масалан: олма, kartoshka)...',
+                      hintText: context.tr('platform_store_search_hint'),
                       prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
+                      suffixIcon: _query.trim().isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip:
+                                  context.tr('platform_store_search_clear'),
                               icon: const Icon(Icons.clear),
                               onPressed: _clearSearch,
-                            )
-                          : null,
+                            ),
                       filled: true,
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
                       ),
+                      isDense: true,
                     ),
                   ),
                 ),
@@ -187,7 +182,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
           ),
           Expanded(
             child: StreamBuilder<List<AdModel>>(
-              stream: repo.searchActiveAds(_searchQuery),
+              stream: repo.searchActiveAds(_query),
               builder: (context, snap) {
                 if ((snap.connectionState == ConnectionState.waiting &&
                         !snap.hasData) ||
@@ -213,15 +208,18 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
                 final ads = snap.data ?? const <AdModel>[];
                 final platform = _filteredPlatform();
+                final found = platform.length + ads.length;
 
                 if (platform.isEmpty && ads.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        _searchQuery.isEmpty
+                        CatalogSearch.normalize(_query).isEmpty
                             ? 'Ҳозирча эълонлар йўқ'
-                            : 'Қидирув бўйича ҳеч қандай эълон топилмади',
+                            : context
+                                .tr('platform_store_search_none')
+                                .replaceAll('{query}', _query.trim()),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: AppText.bodyLarge,
@@ -232,28 +230,52 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                // AVA юқорида (витрина), кейин хусусий.
                 final entries = <_MarketEntry>[
                   ...platform.map(_MarketEntry.platform),
                   ...ads.map(_MarketEntry.ad),
                 ];
 
-                return GridView.builder(
-                  padding: const EdgeInsets.all(12),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.75,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemCount: entries.length,
-                  itemBuilder: (_, i) {
-                    final e = entries[i];
-                    if (e.platform != null) {
-                      return PlatformMarketCard(product: e.platform!);
-                    }
-                    return AdCard(ad: e.ad!);
-                  },
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Text(
+                        CatalogSearch.normalize(_query).isEmpty
+                            ? context
+                                .tr('platform_store_search_total')
+                                .replaceAll('{count}', '$found')
+                            : context
+                                .tr('platform_store_search_found_n')
+                                .replaceAll('{found}', '$found'),
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(12),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
+                        itemCount: entries.length,
+                        itemBuilder: (_, i) {
+                          final e = entries[i];
+                          if (e.platform != null) {
+                            return PlatformMarketCard(product: e.platform!);
+                          }
+                          return AdCard(ad: e.ad!);
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),

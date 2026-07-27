@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../bread/services/bread_image_storage.dart';
@@ -51,17 +52,10 @@ class _PlatformProductsAdminScreenState
     );
   }
 
-  static String _norm(String s) => s.trim().toLowerCase().replaceAll(
-        RegExp(r'\s+'),
-        ' ',
-      );
-
   List<PlatformProduct> _filter(List<PlatformProduct> all) {
-    final q = _norm(_query);
-    if (q.isEmpty) return all;
-    final tokens = q.split(' ').where((t) => t.isNotEmpty).toList();
-    return all.where((p) {
-      final hay = _norm([
+    final q = _query;
+    var list = all.where((p) {
+      return CatalogSearch.matches(q, [
         p.name,
         p.description,
         p.unit,
@@ -70,10 +64,17 @@ class _PlatformProductsAdminScreenState
         p.active ? 'фаол' : 'нофаол',
         p.showInMarket ? 'бозор' : '',
         p.featuredOnHome ? 'витрина' : '',
-      ].join(' '));
-      // Барча сўзлар топилсин (мукаммалроқ қидирув).
-      return tokens.every(hay.contains);
-    }).toList(growable: false);
+      ]);
+    }).toList();
+    if (CatalogSearch.normalize(q).isNotEmpty) {
+      list.sort((a, b) {
+        final byScore = CatalogSearch.scoreProduct(b, q)
+            .compareTo(CatalogSearch.scoreProduct(a, q));
+        if (byScore != 0) return byScore;
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
+    }
+    return list;
   }
 
   List<PlatformProduct> _findNameDuplicates(
@@ -81,12 +82,12 @@ class _PlatformProductsAdminScreenState
     String name, {
     String? exceptId,
   }) {
-    final n = _norm(name);
+    final n = CatalogSearch.normalize(name);
     if (n.isEmpty) return const [];
     return all
         .where((p) {
           if (exceptId != null && p.id == exceptId) return false;
-          return _norm(p.name) == n;
+          return CatalogSearch.normalize(p.name) == n;
         })
         .toList(growable: false);
   }

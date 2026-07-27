@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../services/market_ad_service.dart';
 import '../models/ad_model.dart';
@@ -123,7 +124,7 @@ class AdsRepository {
         );
   }
 
-  /// Фаол эълонлар: токен/кирилл-лотин қидирув (янгилик бўйича).
+  /// Фаол эълонлар: каталог қидируви (AND + кирилл/лотин) + релевантлик.
   Stream<List<AdModel>> searchActiveAds(
     String query, {
     int limit = searchLimit,
@@ -132,18 +133,27 @@ class AdsRepository {
     final poolLimit = q.isEmpty ? limit : feedLimit;
     return getActiveAds(limit: poolLimit).map((ads) {
       var list = ads.where((ad) {
-        if (q.length >= AdSearchText.minTokenLen &&
-            !AdSearchText.matches(ad, q)) {
-          return false;
-        }
-        return true;
+        return CatalogSearch.matches(q, [
+          ad.title,
+          ad.description,
+          '${ad.price}',
+          ad.sellerName,
+          ...ad.searchTokens,
+        ]);
       }).toList();
 
       list.sort((a, b) {
-        if (q.length >= AdSearchText.minTokenLen) {
-          final byScore =
-              AdSearchText.score(b, q).compareTo(AdSearchText.score(a, q));
-          if (byScore != 0) return byScore;
+        if (CatalogSearch.normalize(q).isNotEmpty) {
+          final byScoreDesc = CatalogSearch.score(
+            q,
+            title: b.title,
+            extra: [b.description, '${b.price}', ...b.searchTokens],
+          ).compareTo(CatalogSearch.score(
+            q,
+            title: a.title,
+            extra: [a.description, '${a.price}', ...a.searchTokens],
+          ));
+          if (byScoreDesc != 0) return byScoreDesc;
         }
         final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
         final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;

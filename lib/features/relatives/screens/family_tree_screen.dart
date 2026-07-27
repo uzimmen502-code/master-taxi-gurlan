@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
@@ -7,9 +9,10 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/relative_person.dart';
 import '../../../models/tree_link_invite.dart';
 import '../../../models/tree_person.dart';
-import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
 import '../l10n/relatives_l10n.dart';
+import '../services/family_tree_bundle.dart';
+import '../services/tree_export_handle.dart';
 import '../services/tree_export_service.dart';
 import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
@@ -23,10 +26,12 @@ class FamilyTreeScreen extends StatefulWidget {
     super.key,
     required this.userId,
     this.onEditOwnNode,
+    this.exportHandle,
   });
 
   final String userId;
   final void Function(String nodeId)? onEditOwnNode;
+  final TreeExportHandle? exportHandle;
 
   @override
   State<FamilyTreeScreen> createState() => _FamilyTreeScreenState();
@@ -35,22 +40,32 @@ class FamilyTreeScreen extends StatefulWidget {
 class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   static const _accent = Color(0xFF6A4C93);
   final _repo = TreeRepository();
-  final _relRepo = RelativesRepository();
 
   List<TreePerson> _comp = const [];
   Map<String, RelativePerson> _personalById = const {};
   List<RelativePerson> _exportPeople = const [];
   final _treeCaptureKey = GlobalKey();
   bool _exportBusy = false;
+  late final Stream<FamilyTreeBundle> _bundleStream =
+      FamilyTreeBundleSource(userId: widget.userId).watch();
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         _invitesBanner(),
-        _exportBar(),
         Expanded(child: _tree()),
       ],
+    );
+  }
+
+  void _syncExportHandle() {
+    widget.exportHandle?.bind(
+      canExport: !_exportBusy && _exportPeople.isNotEmpty,
+      busy: _exportBusy,
+      gedcom: _exportGedcom,
+      png: _exportPng,
+      pdf: _exportPdf,
     );
   }
 
@@ -90,83 +105,41 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   Widget _tree() {
-    return StreamBuilder<({String componentId, String personId})>(
-      stream: _repo.watchMyTreeMeta(widget.userId),
-      builder: (context, metaSnap) {
-        if (metaSnap.hasError) return _streamError(metaSnap.error);
-        final componentId = metaSnap.data?.componentId ?? '';
-        return StreamBuilder<List<RelativePerson>>(
-          stream: _relRepo.watchPeople(widget.userId),
-          builder: (context, personalSnap) {
-            if (personalSnap.hasError) return _streamError(personalSnap.error);
-            return StreamBuilder<Map<String, String>>(
-              stream: _repo.watchRedirects(),
-              builder: (context, redirSnap) {
-                if (redirSnap.hasError) return _streamError(redirSnap.error);
-                final redirects = redirSnap.data ?? const {};
-                return StreamBuilder<List<TreePerson>>(
-                  stream: _repo.watchComponent(componentId),
-                  builder: (context, compSnap) {
-                    if (compSnap.hasError) return _streamError(compSnap.error);
-                    final personal =
-                        personalSnap.data ?? const <RelativePerson>[];
-                    final comp = compSnap.data ?? const <TreePerson>[];
-                    _personalById = {for (final p in personal) p.id: p};
-                    final anyWaiting =
-                        metaSnap.connectionState == ConnectionState.waiting ||
-                        personalSnap.connectionState == ConnectionState.waiting ||
-                        redirSnap.connectionState == ConnectionState.waiting ||
-                        compSnap.connectionState == ConnectionState.waiting;
-                    if (anyWaiting && comp.isEmpty && personal.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+    return StreamBuilder<FamilyTreeBundle>(
+      stream: _bundleStream,
+      builder: (context, snap) {
+        if (snap.hasError) return _streamError(snap.error);
+        final bundle = snap.data;
+        if (bundle == null || bundle.loading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-                    final compById = {for (final n in comp) n.id: n};
-                    final renderById = <String, RelativePerson>{};
-                    final allIds = {
-                      ...comp.map((n) => n.id),
-                      ...personal.map((p) => p.id),
-                    };
-                    for (final id in allIds) {
-                      if (redirects.containsKey(id)) continue;
-                      final merged = _mergeForTreeDisplay(
-                        _personalById[id],
-                        compById[id],
-                      );
-                      if (merged == null) continue;
-                      renderById[id] =
-                          resolvePersonLinks(merged, redirects);
-                    }
-                    final people =
-                        renderById.values.toList(growable: false);
-                    final dupGroups = findDuplicateGroups(comp);
-                    _comp = comp;
-                    _exportPeople = people;
+        final people = bundle.renderPeople;
+        final dupGroups = bundle.duplicateGroups;
+        final compById = bundle.componentById;
+        _personalById = bundle.personalById;
+        _comp = bundle.component;
+        _exportPeople = people;
+        _syncExportHandle();
 
-                    return Column(
-                      children: [
-                        if (dupGroups.isNotEmpty) _dupBar(dupGroups),
-                        Expanded(
-                          child: FamilyTreeView(
-                            exportCaptureKey: _treeCaptureKey,
-                            people: people,
-                            onTap: (RelativePerson p) {
-                              final node = compById[p.id];
-                              if (node != null) {
-                                _onNodeTap(node);
-                              } else if (widget.onEditOwnNode != null) {
-                                widget.onEditOwnNode!(p.id);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            );
-          },
+        return Column(
+          children: [
+            if (dupGroups.isNotEmpty) _dupBar(dupGroups),
+            Expanded(
+              child: FamilyTreeView(
+                exportCaptureKey: _treeCaptureKey,
+                people: people,
+                onTap: (RelativePerson p) {
+                  final node = compById[p.id];
+                  if (node != null) {
+                    _onNodeTap(node);
+                  } else if (widget.onEditOwnNode != null) {
+                    widget.onEditOwnNode!(p.id);
+                  }
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -181,7 +154,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     final bothClaimed = others
         .any((n) => n.isClaimed && n.claimedBy != keep.claimedBy);
     if (bothClaimed) {
-      _snack(context.tr('rel_tree_merge_both_claimed'));
+      await _showBothClaimedDialog();
       return;
     }
     final label = duplicateGroupLabel(group);
@@ -227,99 +200,58 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     }
   }
 
-  RelativePerson? _mergeForTreeDisplay(
-    RelativePerson? personal,
-    TreePerson? comp,
-  ) {
-    if (comp == null) return personal;
-    if (personal == null) return comp.toRelativePerson();
-    return RelativePerson(
-      id: comp.id,
-      fullName: comp.fullName.isNotEmpty ? comp.fullName : personal.fullName,
-      firstName: personal.firstName,
-      lastName: personal.lastName,
-      patronymic: personal.patronymic,
-      photoUrl:
-          comp.photoUrl.isNotEmpty ? comp.photoUrl : personal.photoUrl,
-      photoPath: personal.photoPath,
-      phone: personal.phone,
-      address: personal.address,
-      birthDate: comp.birthDate ?? personal.birthDate,
-      gender: comp.gender.isNotEmpty ? comp.gender : personal.gender,
-      relationDegree: personal.relationDegree,
-      side: personal.side,
-      notes: personal.notes,
-      fatherId: comp.fatherId ?? personal.fatherId,
-      motherId: comp.motherId ?? personal.motherId,
-      spouseId: comp.spouseId ?? personal.spouseId,
-      isSelf: personal.isSelf,
-      createdAt: personal.createdAt,
+  Future<void> _showBothClaimedDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('rel_tree_merge_both_claimed_title')),
+        content: Text(ctx.tr('rel_tree_merge_both_claimed_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(ctx.tr('ok')),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _exportBar() {
-    final disabled = _exportBusy || _exportPeople.isEmpty;
-    return Material(
-      color: const Color(0xFFECEAF3),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          children: [
-            const Icon(Icons.ios_share, size: 18, color: _accent),
-            const SizedBox(width: 6),
-            Text(
-              context.tr('rel_tree_export_label'),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _accent,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: disabled ? null : _exportGedcom,
-              icon: const Icon(Icons.description_outlined, size: 18),
-              label: const Text('GEDCOM'),
-              style: TextButton.styleFrom(
-                foregroundColor: _accent,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: disabled ? null : _exportPng,
-              icon: const Icon(Icons.image_outlined, size: 18),
-              label: Text(context.tr('rel_tree_export_image')),
-              style: TextButton.styleFrom(
-                foregroundColor: _accent,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: disabled ? null : _exportPdf,
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-              label: const Text('PDF'),
-              style: TextButton.styleFrom(
-                foregroundColor: _accent,
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            if (_exportBusy)
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-          ],
-        ),
+  bool _groupHasBothClaimed(List<TreePerson> group) {
+    final claimedBys = group
+        .where((n) => n.isClaimed)
+        .map((n) => n.claimedBy)
+        .where((id) => id != null && id.isNotEmpty)
+        .toSet();
+    return claimedBys.length > 1;
+  }
+
+  Widget _dupGroupAction(BuildContext sheetCtx, List<TreePerson> group) {
+    if (_groupHasBothClaimed(group)) {
+      return TextButton.icon(
+        onPressed: () {
+          Navigator.pop(sheetCtx);
+          unawaited(_showBothClaimedDialog());
+        },
+        icon: const Icon(Icons.info_outline, size: 18),
+        label: Text(sheetCtx.tr('rel_tree_merge_both_claimed_why')),
+      );
+    }
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFE67E22),
+        foregroundColor: Colors.white,
       ),
+      onPressed: () => _mergeGroup(sheetCtx, group),
+      icon: const Icon(Icons.merge_type, size: 18),
+      label: Text(sheetCtx.tr('rel_tree_dup_merge')),
     );
   }
 
   Future<void> _runExport(Future<void> Function() action) async {
     if (_exportBusy) return;
     setState(() => _exportBusy = true);
+    _syncExportHandle();
     try {
       await action();
       if (mounted) _snack(context.tr('rel_tree_export_share_opened'));
@@ -333,7 +265,10 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       _snack(RelativesL10n.trParams(
           context, 'error_generic', {'error': '$e'}));
     } finally {
-      if (mounted) setState(() => _exportBusy = false);
+      if (mounted) {
+        setState(() => _exportBusy = false);
+        _syncExportHandle();
+      }
     }
   }
 
@@ -430,14 +365,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFE67E22),
-                              foregroundColor: Colors.white),
-                          onPressed: () => _mergeGroup(ctx, g),
-                          icon: const Icon(Icons.merge_type, size: 18),
-                          label: Text(ctx.tr('rel_tree_dup_merge')),
-                        ),
+                        child: _dupGroupAction(ctx, g),
                       ),
                     ],
                   ),
@@ -476,12 +404,20 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.account_tree_outlined, color: _accent),
-              title: Text(ctx.tr('rel_node_edit_network')),
-              subtitle: Text(ctx.tr('rel_node_edit_sub')),
+              leading: const Icon(Icons.edit_outlined, color: _accent),
+              title: Text(ctx.tr('edit')),
+              subtitle: Text(
+                isMine
+                    ? ctx.tr('rel_node_edit_unified_sub')
+                    : ctx.tr('rel_node_edit_sub'),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
-                _editNode(node);
+                if (isMine && widget.onEditOwnNode != null) {
+                  widget.onEditOwnNode!(node.id);
+                } else {
+                  _editNode(node);
+                }
               },
             ),
             if (isMine && !isSelf && !node.isClaimed)
@@ -492,16 +428,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _sendInvite(node);
-                },
-              ),
-            if (isMine && widget.onEditOwnNode != null)
-              ListTile(
-                leading: const Icon(Icons.edit_note_outlined),
-                title: Text(ctx.tr('rel_node_personal')),
-                subtitle: Text(ctx.tr('rel_node_personal_sub')),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  widget.onEditOwnNode!(node.id);
                 },
               ),
           ],

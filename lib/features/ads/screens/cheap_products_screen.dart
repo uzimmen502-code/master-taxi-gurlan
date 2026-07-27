@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
+import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../models/ad_model.dart';
@@ -94,6 +95,39 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     }
     return list;
+  }
+
+  List<_MarketEntry> _mixedEntries(
+    List<PlatformProduct> platform,
+    List<AdModel> ads,
+  ) {
+    final q = _query;
+    if (CatalogSearch.normalize(q).isEmpty) {
+      return FairMix.roundRobin([
+        platform.map(_MarketEntry.platform).toList(growable: false),
+        ads.map(_MarketEntry.ad).toList(growable: false),
+      ]);
+    }
+
+    final scored = <_MarketEntry>[
+      ...platform.map(_MarketEntry.platform),
+      ...ads.map(_MarketEntry.ad),
+    ];
+    return FairMix.byScoreThenFair(
+      scored,
+      (e) {
+        if (e.platform != null) {
+          return CatalogSearch.scoreProduct(e.platform!, q);
+        }
+        final ad = e.ad!;
+        return CatalogSearch.score(
+          q,
+          title: ad.title,
+          extra: [ad.description, '${ad.price}', ...ad.searchTokens],
+        );
+      },
+      laneKey: (e) => e.platform != null ? 'platform' : 'ad',
+    );
   }
 
   @override
@@ -230,10 +264,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final entries = <_MarketEntry>[
-                  ...platform.map(_MarketEntry.platform),
-                  ...ads.map(_MarketEntry.ad),
-                ];
+                final entries = _mixedEntries(platform, ads);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

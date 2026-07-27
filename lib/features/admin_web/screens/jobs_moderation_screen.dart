@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_jobs_service.dart';
 import '../widgets/jobs_ad_edit_dialog.dart';
 import 'jobs_complaints_tab.dart';
-import '../../../core/theme/app_theme.dart';
 
 enum _JobsTypeFilter { all, work, service, ad, urgent }
 
@@ -80,17 +81,36 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
   }
 
   List<JobAd> _filter(List<JobAd> ads) {
-    final q = _query.trim().toLowerCase();
-    return ads.where((ad) {
+    final q = _query.trim();
+    final digitQ = q.replaceAll(RegExp(r'\D'), '');
+    var list = ads.where((ad) {
       if (_statusFilter != 'all' && ad.status != _statusFilter) return false;
       if (!_matchesTypeFilter(ad)) return false;
-      if (q.isEmpty) return true;
-      return ad.title.toLowerCase().contains(q) ||
-          ad.text.toLowerCase().contains(q) ||
-          ad.authorName.toLowerCase().contains(q) ||
-          ad.authorPhone.toLowerCase().contains(q) ||
-          ad.address.toLowerCase().contains(q);
-    }).toList(growable: false);
+      if (CatalogSearch.normalize(q).isEmpty) return true;
+      if (digitQ.length >= 4 &&
+          (ad.authorPhone.contains(digitQ) ||
+              ad.authorPhone.toLowerCase().contains(q.toLowerCase()))) {
+        return true;
+      }
+      return CatalogSearch.matches(q, [
+        ad.title,
+        ad.text,
+        ad.authorName,
+        ad.address,
+      ]);
+    }).toList();
+    if (CatalogSearch.normalize(q).isNotEmpty) {
+      list.sort((a, b) {
+        return CatalogSearch.compare(
+          q,
+          titleA: a.title,
+          titleB: b.title,
+          extraA: [a.text, a.authorName, a.address],
+          extraB: [b.text, b.authorName, b.address],
+        );
+      });
+    }
+    return list;
   }
 
   Future<void> _setStatus(JobAd ad, String status) async {

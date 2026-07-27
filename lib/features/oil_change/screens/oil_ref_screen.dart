@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
 import '../data/oil_l10n.dart';
@@ -111,15 +112,26 @@ class _OilRefScreenState extends State<OilRefScreen>
 
   List<OilRefProduct> _filter(List<OilRefProduct> src) {
     if (_query.isEmpty) return src;
-    final q = _query.toLowerCase();
-    return src
-        .where((p) =>
-            p.brand.toLowerCase().contains(q) ||
-            p.name.toLowerCase().contains(q) ||
-            p.dexos.toLowerCase().contains(q) ||
-            p.api.toLowerCase().contains(q) ||
-            p.sae.toLowerCase().contains(q))
+    final q = _query;
+    final list = src
+        .where((p) => CatalogSearch.matches(q, [
+              p.brand,
+              p.name,
+              p.dexos,
+              p.api,
+              p.sae,
+            ]))
         .toList();
+    list.sort((a, b) {
+      return CatalogSearch.compare(
+        q,
+        titleA: '${a.brand} ${a.name}',
+        titleB: '${b.brand} ${b.name}',
+        extraA: [a.dexos, a.api, a.sae],
+        extraB: [b.dexos, b.api, b.sae],
+      );
+    });
+    return list;
   }
 
   bool get _showSearch => _tabs.index > 0;

@@ -72,6 +72,29 @@ class RelativesRepository {
         );
   }
 
+  /// Фақат шахсий CRM майдонлари (genealogy — [TreeService.saveNode]).
+  Future<void> updatePersonCrm(
+    String userId,
+    String personId, {
+    required String phone,
+    required String address,
+    required String relationDegree,
+    required String side,
+    required String notes,
+  }) async {
+    await _people(userId).doc(personId).set(
+      {
+        'phone': phone,
+        'address': address,
+        'relationDegree': relationDegree,
+        'side': side,
+        'notes': notes,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
   Future<void> deletePerson(String userId, String personId) async {
     try {
       await FirebaseFunctions.instance

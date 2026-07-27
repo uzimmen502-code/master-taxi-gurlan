@@ -56,9 +56,16 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _streetCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
   final _carPlateCtrl = TextEditingController();
+  final _streetFocus = FocusNode();
+  final _houseFocus = FocusNode();
+  final _streetFieldKey = GlobalKey();
+  final _houseFieldKey = GlobalKey();
+  final _addressTileCtrl = ExpansibleController();
 
   bool _isLoading = false;
   bool _carExpanded = false;
+  /// МФЙ тайёр (рўйхатдан ёки қўлда ёзилган) — шунда кўча/уй очилади.
+  bool get _mfyReady => _mfyCtrl.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -98,7 +105,38 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _streetCtrl.dispose();
     _houseCtrl.dispose();
     _carPlateCtrl.dispose();
+    _streetFocus.dispose();
+    _houseFocus.dispose();
+    _addressTileCtrl.dispose();
     super.dispose();
+  }
+
+  void _ensureFieldVisible(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+      alignment: 0.2,
+    );
+  }
+
+  void _unlockStreetAfterMfy() {
+    if (!_mfyReady) return;
+    _addressTileCtrl.expand();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _streetFocus.requestFocus();
+      _ensureFieldVisible(_streetFieldKey);
+    });
+  }
+
+  void _onMfyPickedFromList(String value) {
+    _mfyCtrl.text = value;
+    context.read<OnboardingController>().setMfy(value);
+    setState(() {});
+    _unlockStreetAfterMfy();
   }
 
   void _showError(String msg) {
@@ -121,11 +159,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   Future<void> _next() async {
     final c = context.read<OnboardingController>();
+    final loc = AppLocalizations.of(context)!;
 
     if (c.currentPage == 0) {
       final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
       if (err != null) {
-        _showError(err);
+        _showError(loc.translate(err));
         return;
       }
       final raw = _phoneCtrl.text.trim();
@@ -153,7 +192,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
         final sent = await c.requestAdminCode(raw);
         if (!mounted) return;
         if (!sent) {
-          _showError(c.otpError ?? 'Код сўрови юборилмади');
+          _showError(
+              c.otpError ?? loc.translate('ob_code_request_failed'));
           return;
         }
         c.advance();
@@ -169,7 +209,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
     final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
     if (err != null) {
-      _showError(err);
+      _showError(loc.translate(err));
       return;
     }
     if (c.isLastPage) {
@@ -202,29 +242,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
     }
   }
 
-  Future<void> _pickBirthDate() async {
-    final loc = AppLocalizations.of(context)!;
-    final c = context.read<OnboardingController>();
-    final now = DateTime.now();
-    final initial = OnboardingController.parseBirthDate(c.birthDate) ??
-        DateTime(now.year - 25);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(1920),
-      lastDate: now,
-      helpText: loc.translate('ob_birth_picker'),
-      cancelText: loc.translate('ob_date_picker_cancel'),
-      confirmText: loc.translate('ob_date_picker_confirm'),
-    );
-    if (picked == null) return;
-    String two(int n) => n.toString().padLeft(2, '0');
-    final formatted =
-        '${two(picked.day)}.${two(picked.month)}.${picked.year}';
-    _birthDateCtrl.text = formatted;
-    c.setBirthDate(formatted);
-  }
-
   void _prepareCarBeforeFinish(OnboardingController c) {
     final plate = _carPlateCtrl.text.trim();
     final wantsCar = _carExpanded &&
@@ -243,9 +260,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   Future<void> _finish() async {
     final c = context.read<OnboardingController>();
+    final loc = AppLocalizations.of(context)!;
     final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
     if (err != null) {
-      _showError(err);
+      _showError(loc.translate(err));
       return;
     }
     _prepareCarBeforeFinish(c);
@@ -296,7 +314,13 @@ class _OnboardingViewState extends State<_OnboardingView> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Қадам ${c.currentPage + 1} / ${OnboardingController.totalPages}',
+                        loc
+                            .translate('ob_step')
+                            .replaceAll(
+                                '{current}', '${c.currentPage + 1}')
+                            .replaceAll(
+                                '{total}',
+                                '${OnboardingController.totalPages}'),
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -355,9 +379,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
           if (c.currentPage > 0)
             TextButton(
               onPressed: _isLoading ? null : _prev,
-              child: const Text(
-                'Ортга',
-                style: TextStyle(
+              child: Text(
+                loc.translate('ob_back'),
+                style: const TextStyle(
                   color: _muted,
                   fontWeight: FontWeight.w700,
                 ),
@@ -390,7 +414,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                       )
                     : Text(
                         c.isLastPage
-                            ? 'Бошлаш'
+                            ? loc.translate('ob_start')
                             : loc.translate('continue'),
                         style: const TextStyle(
                           fontSize: 16,
@@ -412,24 +436,49 @@ class _OnboardingViewState extends State<_OnboardingView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('👋', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 8),
-          const Text(
-            'Танишайлик',
-            style: TextStyle(
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/images/ava_logo_mark.png',
+                  height: 42,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12),
+                  width: 1,
+                  height: 26,
+                  color: _green.withValues(alpha: 0.35),
+                ),
+                Text(
+                  loc.translate('ob_platform_for_you'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: _greenDark.withValues(alpha: 0.9),
+                    letterSpacing: 0.2,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            loc.translate('ob_meet_title'),
+            style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
               color: _ink,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Исм, телефон ва жинс — битта экранда.',
-            style: TextStyle(fontSize: 14, color: _muted, fontWeight: FontWeight.w500),
-          ),
           const SizedBox(height: 16),
           _card(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _field(
                   controller: _nameCtrl,
@@ -449,8 +498,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 ),
                 if (c.phoneStepError != null) ...[
                   const SizedBox(height: 10),
-                  Text(c.phoneStepError!,
-                      style: TextStyle(color: Colors.red.shade700, fontSize: 13)),
+                  Text(
+                    c.phoneStepError!.startsWith('ob_')
+                        ? loc.translate(c.phoneStepError!)
+                        : c.phoneStepError!,
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                  ),
                 ],
                 if (c.isCheckingDevice) ...[
                   const SizedBox(height: 12),
@@ -471,6 +524,15 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                Text(
+                  loc.translate('ob_birth_enter'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 _field(
                   controller: _birthDateCtrl,
                   hint: loc.translate('ob_birth_input_hint'),
@@ -478,19 +540,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   inputType: TextInputType.number,
                   formatters: [_BirthDateInputFormatter()],
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _pickBirthDate,
-                    icon: const Icon(Icons.calendar_month, size: 18),
-                    label: Text(loc.translate('ob_birth_calendar')),
-                    style: TextButton.styleFrom(foregroundColor: _greenDark),
-                  ),
-                ),
+                const SizedBox(height: 10),
                 _benefit(
                   icon: '🎂',
-                  text:
-                      'Киритсангиз — AVA туғилган кунда табрик ва бонус беради.',
+                  text: loc.translate('ob_birth_benefit'),
                   warm: true,
                 ),
               ],
@@ -521,8 +574,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
           const SizedBox(height: 4),
           Text(
             c.isAdminCodeReady
-                ? 'Админ код тайёр — киритинг ёки автоматик тўлдирилади'
-                : 'Админ код яратилмоқда... (${_phoneCtrl.text})',
+                ? loc.translate('ob_admin_code_ready')
+                : loc
+                    .translate('ob_admin_code_creating')
+                    .replaceAll('{phone}', _phoneCtrl.text),
             style: const TextStyle(
               fontSize: 14,
               color: _muted,
@@ -535,7 +590,9 @@ class _OnboardingViewState extends State<_OnboardingView> {
               children: [
                 if (c.isAdminCodeReady && c.generatedAdminCode != null) ...[
                   Text(
-                    'Код: ${c.generatedAdminCode}',
+                    loc
+                        .translate('ob_admin_code_label')
+                        .replaceAll('{code}', c.generatedAdminCode!),
                     style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
@@ -602,8 +659,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   const SizedBox(height: 8),
                   Text(
                     c.isSendingOtp
-                        ? 'Сўров юборилмоқда...'
-                        : 'Админ код кутилмоқда...',
+                        ? loc.translate('ob_admin_code_sending')
+                        : loc.translate('ob_admin_code_waiting'),
                     style: const TextStyle(color: _muted, fontSize: 13),
                   ),
                 ],
@@ -659,11 +716,12 @@ class _OnboardingViewState extends State<_OnboardingView> {
               data: Theme.of(context)
                   .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
+                controller: _addressTileCtrl,
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.only(bottom: 4),
-                title: const Text(
-                  'Яшаш манзилингизни киритинг',
-                  style: TextStyle(
+                title: Text(
+                  loc.translate('ob_live_address_title'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     color: _greenDark,
                     fontSize: 14,
@@ -672,24 +730,45 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 children: [
                   _benefit(
                     icon: '🍞',
-                    text:
-                        'Аниқ манзил бўлса — нон ва бошқа буюртмалар тўғри эшигингизга етиб боради.',
+                    text: loc.translate('ob_address_benefit'),
                   ),
                   const SizedBox(height: 10),
                   _mfyAutocomplete(c, loc),
                   const SizedBox(height: 8),
-                  _manualField(
-                    ctrl: _streetCtrl,
-                    label: 'Кўча / гузар',
-                    icon: Icons.signpost,
-                    hint: 'Кўча номи',
+                  KeyedSubtree(
+                    key: _streetFieldKey,
+                    child: _manualField(
+                      ctrl: _streetCtrl,
+                      label: loc.translate('ob_street_label'),
+                      icon: Icons.signpost,
+                      hint: _mfyReady
+                          ? loc.translate('ob_street_hint')
+                          : loc.translate('ob_address_pick_mfy_first'),
+                      enabled: _mfyReady,
+                      focusNode: _streetFocus,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) {
+                        _houseFocus.requestFocus();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _ensureFieldVisible(_houseFieldKey);
+                        });
+                      },
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  _manualField(
-                    ctrl: _houseCtrl,
-                    label: 'Уй №',
-                    icon: Icons.home,
-                    hint: '12',
+                  KeyedSubtree(
+                    key: _houseFieldKey,
+                    child: _manualField(
+                      ctrl: _houseCtrl,
+                      label: loc.translate('ob_house_label'),
+                      icon: Icons.home,
+                      hint: _mfyReady
+                          ? '12'
+                          : loc.translate('ob_address_pick_mfy_first'),
+                      enabled: _mfyReady,
+                      focusNode: _houseFocus,
+                      textInputAction: TextInputAction.done,
+                    ),
                   ),
                 ],
               ),
@@ -702,23 +781,22 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 childrenPadding: const EdgeInsets.only(bottom: 4),
                 onExpansionChanged: (v) =>
                     setState(() => _carExpanded = v),
-                title: const Text(
-                  'Автомобил маълумоти',
-                  style: TextStyle(
+                title: Text(
+                  loc.translate('ob_car_title'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     color: _greenDark,
                     fontSize: 14,
                   ),
                 ),
-                subtitle: const Text(
-                  'ихтиёрий',
-                  style: TextStyle(fontSize: 11, color: _muted),
+                subtitle: Text(
+                  loc.translate('ob_optional'),
+                  style: const TextStyle(fontSize: 11, color: _muted),
                 ),
                 children: [
                   _benefit(
                     icon: '🚗',
-                    text:
-                        'Киритсангиз — AVA service хизматларини 5%–20% арзонроқ таклиф қиламиз.',
+                    text: loc.translate('ob_car_benefit'),
                     warm: true,
                   ),
                   const SizedBox(height: 10),
@@ -777,7 +855,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
         children: [
           Row(
             children: [
-              const Icon(Icons.gps_fixed, color: _green, size: 18),
+              Icon(
+                hasGps ? Icons.check_circle : Icons.gps_fixed,
+                color: hasGps ? _green : _green,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -791,22 +873,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          if (hasGps)
-            Text(
-              '${c.lat!.toStringAsFixed(5)}, ${c.lng!.toStringAsFixed(5)}'
-              '${c.accuracy != null ? ' · ±${c.accuracy!.toStringAsFixed(0)} м' : ''}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _greenDark,
-              ),
-            )
-          else
-            Text(
-              loc.translate('ob_gps_not_obtained'),
-              style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
-            ),
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -826,7 +892,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               label: Text(
                 hasGps
                     ? loc.translate('ob_gps_update')
-                    : 'Жойлашувни олиш (GPS)',
+                    : loc.translate('ob_gps_get'),
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
               style: ElevatedButton.styleFrom(
@@ -1000,23 +1066,27 @@ class _OnboardingViewState extends State<_OnboardingView> {
         if (hits.isEmpty) hits = MfyService.searchMfy(q);
         return hits.take(12);
       },
-      onSelected: (value) {
-        _mfyCtrl.text = value;
-        c.setMfy(value);
-      },
+      onSelected: _onMfyPickedFromList,
       fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
         return TextField(
           controller: textController,
           focusNode: focusNode,
-          onSubmitted: (_) => onFieldSubmitted(),
+          onSubmitted: (_) {
+            onFieldSubmitted();
+            _mfyCtrl.text = textController.text;
+            c.setMfy(textController.text);
+            setState(() {});
+            _unlockStreetAfterMfy();
+          },
           onChanged: (v) {
             _mfyCtrl.text = v;
             c.setMfy(v);
+            setState(() {});
           },
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             labelText: loc.translate('ob_mfy_label'),
-            hintText: 'МФЙ номини ёзинг — рўйхатдан танланг',
+            hintText: loc.translate('ob_mfy_hint'),
             prefixIcon:
                 const Icon(Icons.location_city, size: 18, color: _green),
             isDense: true,
@@ -1072,18 +1142,34 @@ class _OnboardingViewState extends State<_OnboardingView> {
     required IconData icon,
     String hint = '',
     int maxLines = 1,
+    bool enabled = true,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onSubmitted,
   }) {
     return TextField(
       controller: ctrl,
+      focusNode: focusNode,
+      enabled: enabled,
       maxLines: maxLines,
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      textInputAction: textInputAction,
+      onSubmitted: onSubmitted,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: enabled ? _ink : Colors.grey.shade500,
+      ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon, size: 18, color: _green),
+        prefixIcon: Icon(
+          icon,
+          size: 18,
+          color: enabled ? _green : Colors.grey.shade400,
+        ),
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFF7FBF7),
+        fillColor: enabled ? const Color(0xFFF7FBF7) : Colors.grey.shade100,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

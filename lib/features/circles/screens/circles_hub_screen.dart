@@ -50,21 +50,6 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          for (final spec in specs) ...[
-            _CircleCard(
-              emoji: spec.emoji,
-              title: spec.title,
-              subtitle: spec.subtitle,
-              color: CirclesHubScreen._accent,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CirclesListScreen(spec: spec),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
           _CircleCard(
             emoji: '👨‍👩‍👧',
             title: 'Қариндошларим',
@@ -108,6 +93,22 @@ class _CirclesHubScreenState extends State<CirclesHubScreen> {
               MaterialPageRoute(builder: (_) => const RelativesScreen()),
             ),
           ),
+          const SizedBox(height: 12),
+          for (final spec in specs) ...[
+            _CircleCard(
+              emoji: spec.emoji,
+              title: spec.title,
+              subtitle: spec.subtitle,
+              color: CirclesHubScreen._accent,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CirclesListScreen(spec: spec),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
         ],
       ),
     );

@@ -1,12 +1,15 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../l10n/relatives_l10n.dart';
 import '../services/relative_photo_storage.dart';
+import '../services/tree_service.dart';
 import '../utils/relative_name_smart.dart';
 
 /// Qarindosh qo'shish / tahrirlash.
@@ -260,7 +263,7 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
         motherId: existing.motherId ?? _motherId,
         spouseId: existing.spouseId ?? _spouseId,
       );
-      await _repo.updatePerson(widget.userId, existing.id, merged);
+      await _persistOwnedPerson(merged);
       if (widget.existing != null &&
           widget.existing!.id != existing.id &&
           !(widget.existing!.isSelf)) {
@@ -272,12 +275,45 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _snack(RelativesL10n.trParams(
-            context, 'error_generic', {'error': '$e'}));
+        _snack(_errMsg(e));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Genealogy → CF saveTreeNode; CRM → client merge (тарих сақланади).
+  Future<void> _persistOwnedPerson(RelativePerson person) async {
+    await TreeService.saveNode(
+      nodeId: person.id,
+      fullName: person.fullName,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      patronymic: person.patronymic,
+      gender: person.gender,
+      photoUrl: person.photoUrl,
+      photoPath: person.photoPath,
+      birthDate: person.birthDate,
+      fatherId: person.fatherId,
+      motherId: person.motherId,
+      spouseId: person.spouseId,
+    );
+    await _repo.updatePersonCrm(
+      widget.userId,
+      person.id,
+      phone: person.phone,
+      address: person.address,
+      relationDegree: person.relationDegree,
+      side: person.side,
+      notes: person.notes,
+    );
+  }
+
+  String _errMsg(Object e) {
+    if (e is FirebaseFunctionsException) {
+      return firebaseFunctionsUserMessage(e);
+    }
+    return RelativesL10n.trParams(context, 'error_generic', {'error': '$e'});
   }
 
   Future<void> _save() async {
@@ -340,13 +376,12 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
       if (widget.existing == null) {
         await _repo.addPerson(widget.userId, person);
       } else {
-        await _repo.updatePerson(widget.userId, widget.existing!.id, person);
+        await _persistOwnedPerson(person);
       }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
-        _snack(RelativesL10n.trParams(
-            context, 'error_generic', {'error': '$e'}));
+        _snack(_errMsg(e));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -366,171 +401,219 @@ class _RelativeFormScreenState extends State<RelativeFormScreen> {
         : (isEdit
             ? context.tr('edit')
             : context.tr('rel_form_add_title'));
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: RelativeFormScreen._accent,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (isSelf)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Material(
-                color: RelativeFormScreen._accent.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    context.tr('rel_form_self_hint'),
-                    style: const TextStyle(fontSize: 13),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(title),
+          backgroundColor: RelativeFormScreen._accent,
+          foregroundColor: Colors.white,
+          bottom: TabBar(
+            indicatorColor: Colors.white,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            tabs: [
+              Tab(text: context.tr('rel_tab_personal')),
+              Tab(text: context.tr('rel_tab_nasab')),
+            ],
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: TabBarView(
+                children: [
+                  ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: _personalTabChildren(isSelf),
+                  ),
+                  ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: _nasabTabChildren(),
+                  ),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _busy ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: RelativeFormScreen._accent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(context.tr('save')),
                   ),
                 ),
               ),
             ),
-          if (!isSelf)
-            Center(
-              child: GestureDetector(
-                onTap: _busy ? null : _pickPhoto,
-                child: CircleAvatar(
-                  radius: 44,
-                  backgroundColor:
-                      RelativeFormScreen._accent.withValues(alpha: 0.12),
-                  backgroundImage:
-                      _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
-                  child: _photoUrl.isEmpty
-                      ? const Icon(Icons.add_a_photo_outlined,
-                          color: RelativeFormScreen._accent)
-                      : null,
-                ),
-              ),
-            ),
-          if (!isSelf) const SizedBox(height: 16),
-          if (isSelf)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor:
-                    RelativeFormScreen._accent.withValues(alpha: 0.12),
-                backgroundImage:
-                    _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
-                child: _photoUrl.isEmpty
-                    ? const Icon(Icons.person, color: RelativeFormScreen._accent)
-                    : null,
-              ),
-              title: Text(
-                RelativeNameSmart.compose(
-                  firstName: _firstCtrl.text,
-                  lastName: _lastCtrl.text,
-                  patronymic: _patronymicCtrl.text,
-                ).isNotEmpty
-                    ? RelativeNameSmart.compose(
-                        firstName: _firstCtrl.text,
-                        lastName: _lastCtrl.text,
-                        patronymic: _patronymicCtrl.text,
-                      )
-                    : widget.existing!.fullName,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text([
-                if (_phoneCtrl.text.isNotEmpty) _phoneCtrl.text,
-                if (_birthCtrl.text.isNotEmpty) _birthCtrl.text,
-              ].join(' · ')),
-            ),
-          if (!isSelf) ...[
-            _field(_firstCtrl, context.tr('rel_field_first_name'),
-                Icons.badge_outlined),
-            _field(_lastCtrl, context.tr('rel_field_last_name'),
-                Icons.family_restroom_outlined),
-            _field(_patronymicCtrl, context.tr('rel_field_patronymic'),
-                Icons.person_outline),
-            if (_similar.isNotEmpty) _similarBanner(),
-            _field(_phoneCtrl, context.tr('phone'), Icons.phone_outlined,
-                keyboard: TextInputType.phone),
-            _field(_degreeCtrl, context.tr('rel_field_degree'),
-                Icons.diversity_1_outlined),
-            _field(_addressCtrl, context.tr('rel_field_address'),
-                Icons.location_on_outlined),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: TextField(
-                controller: _birthCtrl,
-                keyboardType: TextInputType.datetime,
-                onChanged: (_) {
-                  if (_birthError != null) _parseBirthInput();
-                },
-                decoration: InputDecoration(
-                  labelText: context.tr('rel_field_birth_manual'),
-                  hintText: context.tr('rel_birth_manual_hint'),
-                  prefixIcon: const Icon(Icons.cake_outlined),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  errorText: _birthError,
-                  helperText: context.tr('rel_birth_manual_helper'),
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            _dropdown(
-              context.tr('rel_field_gender'),
-              _gender,
-              RelativesL10n.genderOptions(context),
-              (v) => setState(() => _gender = v),
-            ),
-            const SizedBox(height: 12),
           ],
-          _dropdown(
-            context.tr('rel_field_side'),
-            _side,
-            RelativesL10n.sideOptions(context),
-            (v) => setState(() => _side = v),
-          ),
-          const SizedBox(height: 12),
-          _field(_notesCtrl, context.tr('rel_field_notes'), Icons.notes_outlined,
-              maxLines: 3),
-          if (_others.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                context.tr('rel_tree_links_section'),
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: RelativeFormScreen._accent),
-              ),
-            ),
-            _relativeDropdown(context.tr('rel_father'), _fatherId,
-                (v) => setState(() => _fatherId = v)),
-            const SizedBox(height: 12),
-            _relativeDropdown(context.tr('rel_mother'), _motherId,
-                (v) => setState(() => _motherId = v)),
-            const SizedBox(height: 12),
-            _relativeDropdown(context.tr('rel_spouse'), _spouseId,
-                (v) => setState(() => _spouseId = v)),
-          ],
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _busy ? null : _save,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: RelativeFormScreen._accent,
-                  foregroundColor: Colors.white),
-              child: _busy
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : Text(context.tr('save')),
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  List<Widget> _personalTabChildren(bool isSelf) {
+    return [
+      if (isSelf)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: RelativeFormScreen._accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                context.tr('rel_form_self_hint'),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+        ),
+      if (!isSelf)
+        Center(
+          child: GestureDetector(
+            onTap: _busy ? null : _pickPhoto,
+            child: CircleAvatar(
+              radius: 44,
+              backgroundColor:
+                  RelativeFormScreen._accent.withValues(alpha: 0.12),
+              backgroundImage:
+                  _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
+              child: _photoUrl.isEmpty
+                  ? const Icon(Icons.add_a_photo_outlined,
+                      color: RelativeFormScreen._accent)
+                  : null,
+            ),
+          ),
+        ),
+      if (!isSelf) const SizedBox(height: 16),
+      if (isSelf)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            backgroundColor:
+                RelativeFormScreen._accent.withValues(alpha: 0.12),
+            backgroundImage:
+                _photoUrl.isNotEmpty ? NetworkImage(_photoUrl) : null,
+            child: _photoUrl.isEmpty
+                ? const Icon(Icons.person, color: RelativeFormScreen._accent)
+                : null,
+          ),
+          title: Text(
+            RelativeNameSmart.compose(
+              firstName: _firstCtrl.text,
+              lastName: _lastCtrl.text,
+              patronymic: _patronymicCtrl.text,
+            ).isNotEmpty
+                ? RelativeNameSmart.compose(
+                    firstName: _firstCtrl.text,
+                    lastName: _lastCtrl.text,
+                    patronymic: _patronymicCtrl.text,
+                  )
+                : widget.existing!.fullName,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text([
+            if (_phoneCtrl.text.isNotEmpty) _phoneCtrl.text,
+            if (_birthCtrl.text.isNotEmpty) _birthCtrl.text,
+          ].join(' · ')),
+        ),
+      if (!isSelf) ...[
+        _field(_firstCtrl, context.tr('rel_field_first_name'),
+            Icons.badge_outlined),
+        _field(_lastCtrl, context.tr('rel_field_last_name'),
+            Icons.family_restroom_outlined),
+        _field(_patronymicCtrl, context.tr('rel_field_patronymic'),
+            Icons.person_outline),
+        if (_similar.isNotEmpty) _similarBanner(),
+        _field(_phoneCtrl, context.tr('phone'), Icons.phone_outlined,
+            keyboard: TextInputType.phone),
+        _field(_degreeCtrl, context.tr('rel_field_degree'),
+            Icons.diversity_1_outlined),
+        _field(_addressCtrl, context.tr('rel_field_address'),
+            Icons.location_on_outlined),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextField(
+            controller: _birthCtrl,
+            keyboardType: TextInputType.datetime,
+            onChanged: (_) {
+              if (_birthError != null) _parseBirthInput();
+            },
+            decoration: InputDecoration(
+              labelText: context.tr('rel_field_birth_manual'),
+              hintText: context.tr('rel_birth_manual_hint'),
+              prefixIcon: const Icon(Icons.cake_outlined),
+              border: const OutlineInputBorder(),
+              isDense: true,
+              errorText: _birthError,
+              helperText: context.tr('rel_birth_manual_helper'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        _dropdown(
+          context.tr('rel_field_gender'),
+          _gender,
+          RelativesL10n.genderOptions(context),
+          (v) => setState(() => _gender = v),
+        ),
+        const SizedBox(height: 12),
+      ],
+      _dropdown(
+        context.tr('rel_field_side'),
+        _side,
+        RelativesL10n.sideOptions(context),
+        (v) => setState(() => _side = v),
+      ),
+      const SizedBox(height: 12),
+      _field(_notesCtrl, context.tr('rel_field_notes'), Icons.notes_outlined,
+          maxLines: 3),
+    ];
+  }
+
+  List<Widget> _nasabTabChildren() {
+    if (_others.isEmpty) {
+      return [
+        Text(
+          context.tr('rel_nasab_need_people'),
+          style: const TextStyle(color: Colors.black54, height: 1.4),
+        ),
+      ];
+    }
+    return [
+      Text(
+        context.tr('rel_tree_links_section'),
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          color: RelativeFormScreen._accent,
+        ),
+      ),
+      const SizedBox(height: 12),
+      _relativeDropdown(context.tr('rel_father'), _fatherId,
+          (v) => setState(() => _fatherId = v)),
+      const SizedBox(height: 12),
+      _relativeDropdown(context.tr('rel_mother'), _motherId,
+          (v) => setState(() => _motherId = v)),
+      const SizedBox(height: 12),
+      _relativeDropdown(context.tr('rel_spouse'), _spouseId,
+          (v) => setState(() => _spouseId = v)),
+    ];
   }
 
   Widget _similarBanner() {

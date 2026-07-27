@@ -49,6 +49,17 @@ void showTreeLinkInvitesSheet(BuildContext context, String userId) {
                       fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: Text(
+                  context.tr('rel_invite_privacy_hint'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade700,
+                    height: 1.35,
+                  ),
+                ),
+              ),
               for (final inv in invites)
                 Card(
                   child: Padding(
@@ -103,6 +114,30 @@ Future<void> _respond(
   bool accept,
   Color accent,
 ) async {
+  if (accept) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('rel_invite_privacy_title')),
+        content: Text(ctx.tr('rel_invite_privacy_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(ctx.tr('no')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(ctx.tr('rel_invite_privacy_confirm')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+  }
   try {
     final res =
         await TreeService.respondLinkInvite(inviteId: inv.id, accept: accept);

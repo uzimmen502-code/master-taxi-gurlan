@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../ads/models/ad_model.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
 import '../widgets/market_ad_edit_dialog.dart';
@@ -137,16 +138,36 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
   }
 
   List<AdModel> _filter(List<AdModel> ads) {
-    final q = _query.trim().toLowerCase();
-    return ads.where((ad) {
+    final q = _query.trim();
+    final digitQ = q.replaceAll(RegExp(r'\D'), '');
+    var list = ads.where((ad) {
       if (_statusFilter != 'all' && ad.status != _statusFilter) return false;
-      if (q.isEmpty) return true;
-      return ad.title.toLowerCase().contains(q) ||
-          ad.description.toLowerCase().contains(q) ||
-          ad.sellerName.toLowerCase().contains(q) ||
-          ad.phone.toLowerCase().contains(q) ||
-          ad.ownerId.contains(q);
-    }).toList(growable: false);
+      if (CatalogSearch.normalize(q).isEmpty) return true;
+      // Телефон / ID — аниқроқ contains (каталог зинаси эмас).
+      if (digitQ.length >= 4 &&
+          (ad.phone.contains(digitQ) ||
+              ad.ownerId.contains(digitQ) ||
+              ad.phone.contains(q))) {
+        return true;
+      }
+      return CatalogSearch.matches(q, [
+        ad.title,
+        ad.description,
+        ad.sellerName,
+      ]);
+    }).toList();
+    if (CatalogSearch.normalize(q).isNotEmpty) {
+      list.sort((a, b) {
+        return CatalogSearch.compare(
+          q,
+          titleA: a.title,
+          titleB: b.title,
+          extraA: [a.description, a.sellerName],
+          extraB: [b.description, b.sellerName],
+        );
+      });
+    }
+    return list;
   }
 
   @override

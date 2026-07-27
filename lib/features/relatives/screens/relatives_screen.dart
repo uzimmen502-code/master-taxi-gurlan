@@ -13,8 +13,10 @@ import '../../../models/relative_person.dart';
 import '../../../repositories/relatives_repository.dart';
 import '../../../repositories/tree_repository.dart';
 import '../../../models/tree_person.dart';
+import '../../circles/screens/circles_hub_screen.dart';
 import '../services/relative_photo_storage.dart';
 import '../services/relative_reminder_scheduler.dart';
+import '../services/tree_export_handle.dart';
 import '../services/tree_redirect_resolver.dart';
 import '../services/tree_service.dart';
 import '../l10n/relatives_l10n.dart';
@@ -52,6 +54,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   final _treeRepo = TreeRepository();
   final _photo = RelativePhotoStorage();
   final _scheduler = RelativeReminderScheduler();
+  final _exportHandle = TreeExportHandle();
   String? _phone;
   List<RelativePerson> _people = const [];
   String? _reminderSig;
@@ -81,6 +84,7 @@ class _RelativesScreenState extends State<RelativesScreen>
   @override
   void dispose() {
     _tab.dispose();
+    _exportHandle.dispose();
     super.dispose();
   }
 
@@ -98,14 +102,15 @@ class _RelativesScreenState extends State<RelativesScreen>
   }
 
   Future<void> _maybePromptTreeInvites(String phone) async {
-    if (_invitesPrompted) return;
+    // Фақат push орқали келganda авто-очиш; ҳар сафар очиш — ортиқча шовқин.
+    if (!widget.openTreeInvites || _invitesPrompted) return;
     _invitesPrompted = true;
     try {
       final invites = await _treeRepo.watchIncomingInvites(phone).first;
       if (!mounted || invites.isEmpty) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (widget.openTreeInvites && _tab.index != _treeTabIndex) {
+        if (_tab.index != _treeTabIndex) {
           _tab.animateTo(_treeTabIndex);
         }
         showTreeLinkInvitesSheet(context, phone);
@@ -120,10 +125,12 @@ class _RelativesScreenState extends State<RelativesScreen>
     if (phone == null || phone.length < 12) return _people;
     try {
       final meta = await _treeRepo.watchMyTreeMeta(phone).first;
-      final redirects = await _treeRepo.watchRedirects().first;
       final comp = meta.componentId.isEmpty
           ? const <TreePerson>[]
           : await _treeRepo.watchComponent(meta.componentId).first;
+      final redirects = await _treeRepo.fetchRedirectsForIds(
+        TreeRepository.collectTreeRelatedIds(_people, comp),
+      );
       return buildLinkCandidates(
         personal: _people,
         component: comp,
@@ -321,6 +328,63 @@ class _RelativesScreenState extends State<RelativesScreen>
               onTap: () => showTreeLinkInvitesSheet(context, phone),
             ),
           IconButton(
+            tooltip: context.tr('rel_tooltip_circles'),
+            icon: const Icon(Icons.groups_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CirclesHubScreen()),
+            ),
+          ),
+          if (_tab.index == _treeTabIndex)
+            ListenableBuilder(
+              listenable: _exportHandle,
+              builder: (context, _) {
+                final disabled =
+                    !_exportHandle.canExport || _exportHandle.busy;
+                return PopupMenuButton<String>(
+                  tooltip: context.tr('rel_tree_export_label'),
+                  enabled: !disabled,
+                  icon: _exportHandle.busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.ios_share),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'gedcom':
+                        unawaited(_exportHandle.exportGedcom());
+                        break;
+                      case 'png':
+                        unawaited(_exportHandle.exportPng());
+                        break;
+                      case 'pdf':
+                        unawaited(_exportHandle.exportPdf());
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'gedcom',
+                      child: Text(ctx.tr('rel_tree_export_gedcom')),
+                    ),
+                    PopupMenuItem(
+                      value: 'png',
+                      child: Text(ctx.tr('rel_tree_export_image')),
+                    ),
+                    PopupMenuItem(
+                      value: 'pdf',
+                      child: Text(ctx.tr('rel_tree_export_pdf')),
+                    ),
+                  ],
+                );
+              },
+            ),
+          IconButton(
             tooltip: context.tr('rel_tooltip_history'),
             icon: const Icon(Icons.history),
             onPressed: phone == null ? null : () => _openHistory(phone),
@@ -389,6 +453,7 @@ class _RelativesScreenState extends State<RelativesScreen>
                     FamilyTreeScreen(
                       userId: phone,
                       onEditOwnNode: _editById,
+                      exportHandle: _exportHandle,
                     ),
                     _datesTab(people),
                   ],

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/fair_mix.dart';
 import '../models/bread_product.dart';
 import '../models/food_product.dart';
 import '../repositories/platform_products_repository.dart';
@@ -41,7 +42,8 @@ class FeaturedProductsService {
     final bread = await _fetchBread();
     final food = await _fetchFood();
     final platform = await _fetchPlatform();
-    return [...bread, ...food, ...platform];
+    // Адолатли: non / taom / platforma навбатма-навбат.
+    return FairMix.roundRobin([bread, food, platform]);
   }
 
   List<FeaturedProduct> _positivePrice(Iterable<FeaturedProduct> items,

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AVA Zona — транспорт</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Manrope, system-ui, sans-serif;
+    background: #0f172a;
+    color: #0f172a;
+    padding: 24px;
+  }
+  .sheet {
+    width: 1400px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  }
+  .hero {
+    background: linear-gradient(135deg, #0d7a4f 0%, #0a5c3c 55%, #094530 100%);
+    color: #fff;
+    padding: 36px 40px 32px;
+    text-align: center;
+  }
+  .brand {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: .02em;
+  }
+  .hero h1 {
+    margin-top: 10px;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+  .hero p {
+    margin-top: 10px;
+    font-size: 16px;
+    opacity: .92;
+    max-width: 820px;
+    margin-left: auto;
+    margin-right: auto;
+    font-weight: 500;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  th, td {
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+    padding: 14px 12px;
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+  thead th {
+    background: #f8fafc;
+    font-weight: 800;
+    font-size: 15px;
+    text-align: center;
+    padding: 16px 10px;
+  }
+  thead th .ico { font-size: 22px; display: block; margin-bottom: 4px; }
+  .row-label {
+    width: 150px;
+    background: #f1f5f9;
+    font-weight: 800;
+    font-size: 13px;
+    color: #334155;
+  }
+  tbody tr:nth-child(even) td:not(.row-label) { background: #fcfcfd; }
+  .checks { color: #0d7a4f; font-weight: 700; }
+  .foot {
+    padding: 16px 24px 22px;
+    text-align: center;
+    font-size: 13px;
+    color: #64748b;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+  }
+</style>
+</head>
+<body>
+  <div class="sheet" id="poster">
+    <div class="hero">
+      <div class="brand">AVA Zona</div>
+      <h1>Барча транспорт хизматлари — битта иловада!</h1>
+      <p>Йўловчи ташиш, маршрутлар, шаҳарлараро сафар ва юк ташиш учун ягона платформа.</p>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="row-label"></th>
+          <th><span class="ico">🚕</span>Маҳаллий такси</th>
+          <th><span class="ico">🚐</span>Маршрут такси</th>
+          <th><span class="ico">🛣️</span>Шаҳарлараро такси</th>
+          <th><span class="ico">🚚</span>Юк биржаси</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="row-label">📌 Хизмат ҳақида</td>
+          <td>Манзилдан манзилга тез ва қулай такси хизмати.</td>
+          <td>Белгиланган МФЙ йўналиши бўйича умумий транспорт хизмати.</td>
+          <td>Шаҳардан шаҳарга хавфсиз ва қулай сафар хизмати.</td>
+          <td>Юк эгалари ва бўш машина эгаларини боғловчи эълон платформаси.</td>
+        </tr>
+        <tr>
+          <td class="row-label">👥 Кимлар учун?</td>
+          <td>Ҳар куни ишга, ўқишга ёки шахсий ишларига қатнайдиганлар учун.</td>
+          <td>Бир йўналишда арзон сафар қилишни истовчилар учун.</td>
+          <td>Бошқа шаҳарларга сафар қилувчи барча йўловчилар учун.</td>
+          <td>Тадбиркорлар, дўконлар, ишлаб чиқарувчилар ва жисмоний шахслар учун.</td>
+        </tr>
+        <tr>
+          <td class="row-label">📲 Қандай буюртма қилинади?</td>
+          <td>Манзилни киритинг → Қидириш → биринчи қабул қилган ҳайдовчи билан боғланасиз.</td>
+          <td>Қаердан / қаерга МФЙ танланг → рейсларни кўринг → Чақириш (тизим навбат бўйича).</td>
+          <td>Қаердан / қаерга + сана + ўрин → рейс танланг → брон қилинг (ҳайдовчи қабул қилади).</td>
+          <td>Юк ёки машина эълони қўйинг / қидиринг → қўнғироқ қилинг.</td>
+        </tr>
+        <tr>
+          <td class="row-label">💰 Нархланиш</td>
+          <td>Масофа ва тариф асосида автоматик ҳисобланади.</td>
+          <td>Йўналиш бўйича ягона (белгиланган) тариф.</td>
+          <td>Ҳайдовчи белгилаган ўрин нарҳи × йўловчи сони.</td>
+          <td>Эълонда кўрсатилган нарх (ҳажм, оғирлик, масофага қараб келишилади).</td>
+        </tr>
+        <tr>
+          <td class="row-label">⭐ Афзалликлари</td>
+          <td class="checks">✔ Тез чақириш<br>✔ Яқин ҳайдовчи<br>✔ Онлайн кузатиш<br>✔ Хавфсиз сафар</td>
+          <td class="checks">✔ Арзон<br>✔ Доимий йўналиш<br>✔ Йўловчига қулай</td>
+          <td class="checks">✔ Узоқ масофага ишончли<br>✔ Олдиндан брон<br>✔ Қулай нарх</td>
+          <td class="checks">✔ Юкни тез топшириш<br>✔ Бўш машинани тез топиш<br>✔ Тўғридан-тўғри боғланиш</td>
+        </tr>
+        <tr>
+          <td class="row-label">ℹ️ Эслатма</td>
+          <td>Ҳайдовчи маълумоти ва сафар ҳолати иловада кўринади.</td>
+          <td>Йўналиш ва жойлашув иловада янгиланиб туради.</td>
+          <td>Сафардан олдин брон қилиш тавсия этилади.</td>
+          <td>Юкнинг аниқ вазни, ҳажми ва манзилини кўрсатинг. Эълон ~48 соат фаол.</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="foot">Иловадаги ҳақиқий оқимга мослаштирилган · AVA Zona</div>
+  </div>
+</body>
+</html>

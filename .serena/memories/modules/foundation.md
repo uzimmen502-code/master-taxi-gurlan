@@ -17,6 +17,8 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 
 ## onboarding (`features/onboarding/`)
 - onboarding_controller.dart (3 soft pages: identity+birth → admin OTP → zone/GPS + optional address/car); LanguageSelectScreen soft pills; finish allows empty MFY/street/house; screens onboarding/phone_reverify/auth_restore/language_select.
+- Zone: viloyat hidden (Хоразм auto). GPS card: `ob_gps_required` = «GPS мажбурий» (Latin GPS); no lat/lng row — get/update button only.
+- Address intelligence: street/house unlock when MFY non-empty (list pick OR free type); pick/submit → expand + street focus + ensureVisible; street submit → house focus. Identity subtitle «битта экранда» removed.
 - Phone auth = ADMIN-CODE flow (NOT Firebase SMS): DeviceFingerprintService → checkDeviceBinding (CF) → trustedDevice signInWithCustomToken; else requestPendingCode (CF) → watch PendingCodeRepository → verifyPendingCodeAndRegister (CF) → customToken sign-in.
 - finish(): UserRepository.createOrMergeProfileWithAddress, prefs (user_phone/name/role via canonicalPhoneId, onboarding_done, phone_reverified), refresh FCM. District default Гурлан/Gurlan; MfyService autocomplete.
 
@@ -46,5 +48,6 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - fcm_service.dart — FCM token + background push; `notifications`. notification_delivery/notification_service/arrival_ringer/push_navigation.
 - featured_products_service.dart — bread+food+platform_products (tap: bread/food modules, platform→PlatformStoreScreen; title «Тавсия этамиз»). product_feed_service — still bread/food/ads (market mix later). См. `mem:modules/platform_store`.
 - Money display: `formatPrice` → `1 234 567`, `formatMoney` → `1 234 567 сўм` (`lib/core/utils/formatters.dart`, `kCurrencySum`). No commas / so'm / сум.
+- Catalog search (`lib/core/utils/catalog_search.dart`): AND filter + ranking ladder exact→whole word→prefix→stem→compound→extra→weak; used by platform store, cheap products, ads search, jobs, oil ref, admin market/jobs moderation. Not for phone/ID/MFY/geo.
 - daily_report_service.dart — 20:00 report (client + scheduled CF backup).
 - location_service.dart, geo_math_service.dart, courier_delivery_route_optimizer.dart, intercity_pickup_route_service.dart (Directions optimize:true), admin_service.dart (client admin gate).

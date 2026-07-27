@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/relative_person.dart';
 import '../models/tree_history_entry.dart';
 import '../models/tree_link_invite.dart';
 import '../models/tree_person.dart';
@@ -44,29 +45,65 @@ class TreeRepository {
         .map((s) => s.docs.map(TreeLinkInvite.fromDoc).toList(growable: false));
   }
 
-  Stream<List<TreeLinkInvite>> watchSentInvites(String uid) {
-    return _db
-        .collection('tree_link_invites')
-        .where('fromUid', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(100)
-        .snapshots()
-        .map((s) => s.docs.map(TreeLinkInvite.fromDoc).toList(growable: false));
-  }
+  /// Фақат берилган id лар учун redirect (бутун коллекция эмас).
+  Future<Map<String, String>> fetchRedirectsForIds(Iterable<String> ids) async {
+    final result = <String, String>{};
+    var pending = ids.where((id) => id.isNotEmpty).toSet();
+    const maxHops = 8;
+    const batchSize = 100;
 
-  /// Merge redirectlari (eski id → yangi id).
-  Stream<Map<String, String>> watchRedirects() {
-    return _db.collection('tree_redirects').snapshots().map((s) {
-      final map = <String, String>{};
-      for (final d in s.docs) {
-        final to = (d.data()['to'] ?? '') as String;
-        if (to.isNotEmpty) map[d.id] = to;
+    for (var hop = 0; hop < maxHops && pending.isNotEmpty; hop++) {
+      final chunk = pending.toList(growable: false);
+      pending = <String>{};
+      for (var i = 0; i < chunk.length; i += batchSize) {
+        final end =
+            (i + batchSize < chunk.length) ? i + batchSize : chunk.length;
+        final slice = chunk.sublist(i, end);
+        final snaps = await Future.wait(
+          slice.map(
+            (id) => _db.collection('tree_redirects').doc(id).get(),
+          ),
+        );
+        for (final s in snaps) {
+          if (!s.exists) continue;
+          final data = s.data();
+          if (data == null) continue;
+          final to = (data['to'] ?? '').toString();
+          if (to.isEmpty) continue;
+          result[s.id] = to;
+          if (!result.containsKey(to)) pending.add(to);
+        }
       }
-      return map;
-    });
+    }
+    return result;
   }
 
-  /// Komponent tarixi (audit + undo).
+  /// Personal + component даги барча id ва боғланишлар.
+  static Set<String> collectTreeRelatedIds(
+    List<RelativePerson> personal,
+    List<TreePerson> component,
+  ) {
+    final ids = <String>{};
+    void addLink(String? id) {
+      if (id != null && id.isNotEmpty) ids.add(id);
+    }
+
+    for (final p in personal) {
+      ids.add(p.id);
+      addLink(p.fatherId);
+      addLink(p.motherId);
+      addLink(p.spouseId);
+    }
+    for (final n in component) {
+      ids.add(n.id);
+      addLink(n.fatherId);
+      addLink(n.motherId);
+      addLink(n.spouseId);
+    }
+    return ids;
+  }
+
+  /// Компонент тарихи (audit + undo).
   Stream<List<TreeHistoryEntry>> watchHistory(String componentId) {
     if (componentId.isEmpty) {
       return Stream.value(const <TreeHistoryEntry>[]);

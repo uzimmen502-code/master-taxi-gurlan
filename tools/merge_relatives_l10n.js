@@ -461,14 +461,64 @@ const keys = {
     ru: 'Удалить это фото?',
   },
   rel_tree_export_label: {
-    uz_Cyrl: 'Eksport:',
-    uz_Latn: 'Eksport:',
-    ru: 'Экспорт:',
+    uz_Cyrl: 'Експорт',
+    uz_Latn: 'Eksport',
+    ru: 'Экспорт',
+  },
+  rel_tree_export_gedcom: {
+    uz_Cyrl: 'GEDCOM',
+    uz_Latn: 'GEDCOM',
+    ru: 'GEDCOM',
+  },
+  rel_tree_export_pdf: {
+    uz_Cyrl: 'PDF',
+    uz_Latn: 'PDF',
+    ru: 'PDF',
   },
   rel_tree_export_image: {
-    uz_Cyrl: 'Rasm',
+    uz_Cyrl: 'Расм',
     uz_Latn: 'Rasm',
     ru: 'Изображение',
+  },
+  rel_tooltip_circles: {
+    uz_Cyrl: 'Менинг яқинларим (тўгараклар)',
+    uz_Latn: 'Mening yaqinlarim (to‘garaklar)',
+    ru: 'Мои близкие (круги)',
+  },
+  rel_invite_privacy_hint: {
+    uz_Cyrl: 'Улаш — икки томон розилиги. Қабул қилсангиз, уланган оила дарахтининг бутун қисмини кўрасиз ва улар сизникини кўради.',
+    uz_Latn: 'Ulash — ikki tomon roziligi. Qabul qilsangiz, ulangan oila daraxtining butun qismini ko‘rasiz va ular siznikini ko‘radi.',
+    ru: 'Связь — взаимное согласие. После принятия вы увидите всё общее дерево, и они увидят ваше.',
+  },
+  rel_invite_privacy_title: {
+    uz_Cyrl: 'Дарахтни улаш',
+    uz_Latn: 'Daraxtni ulash',
+    ru: 'Связать деревья',
+  },
+  rel_invite_privacy_body: {
+    uz_Cyrl: 'Қабул қилсангиз:\n• Иккала дарахт бирлашади\n• Уланган оила аъзолари бутун умумий дарахтни кўради\n• Бу қарорни кейин бекор қилиш қийин\n\nДавом этасизми?',
+    uz_Latn: 'Qabul qilsangiz:\n• Ikkala daraxt birlashadi\n• Ulangan oila a’zolari butun umumiy daraxtni ko‘radi\n• Bu qarorni keyin bekor qilish qiyin\n\nDavom etasizmi?',
+    ru: 'Если принять:\n• Деревья объединятся\n• Участники увидят всё общее дерево\n• Отменить это позже сложно\n\nПродолжить?',
+  },
+  rel_invite_privacy_confirm: {
+    uz_Cyrl: 'Тушундим, қабул қиламан',
+    uz_Latn: 'Tushundim, qabul qilaman',
+    ru: 'Понятно, принять',
+  },
+  rel_tree_merge_both_claimed_title: {
+    uz_Cyrl: 'Иккала ҳисоб уланган',
+    uz_Latn: 'Ikkala hisob ulangan',
+    ru: 'Оба аккаунта связаны',
+  },
+  rel_tree_merge_both_claimed_body: {
+    uz_Cyrl: 'Бу тугунларнинг ҳар бири алоҳида фойдаланувчи ҳисобига тегишли. Автоматик бирлаштириш мумкин эмас.\n\nТўғри йўл: бир томон иккинчисига «улаш таклифи» юборади — ҳар иккиси рози бўлгандагина дарахтлар бирлашади.',
+    uz_Latn: 'Bu tugunlarning har biri alohida foydalanuvchi hisobiga tegishli. Avtomatik birlashtirish mumkin emas.\n\nTo‘g‘ri yo‘l: bir tomon ikkinchisiga «ulash taklifi» yuboradi — har ikkisi rozi bo‘lgandagina daraxtlar birlashadi.',
+    ru: 'Каждый из этих узлов принадлежит отдельному аккаунту. Автоматическое объединение невозможно.\n\nПравильный путь: одна сторона отправляет приглашение к связи — деревья объединятся только при взаимном согласии.',
+  },
+  rel_tree_merge_both_claimed_why: {
+    uz_Cyrl: 'Нега бирлаштириб бўлмайди?',
+    uz_Latn: 'Nega birlashtirib bo‘lmaydi?',
+    ru: 'Почему нельзя объединить?',
   },
   rel_tree_export_share_opened: {
     uz_Cyrl: 'Ulashish oynasi ochildi.',

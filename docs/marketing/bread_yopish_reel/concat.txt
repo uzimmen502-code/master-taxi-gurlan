@@ -1,0 +1,8 @@
+file bread_yopish_reel_01.png
+duration 4
+file bread_yopish_reel_02.png
+duration 5
+file bread_yopish_reel_03.png
+duration 4
+file bread_yopish_reel_03.png
+duration 0.1

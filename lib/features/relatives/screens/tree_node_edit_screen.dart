@@ -11,18 +11,18 @@ import '../services/relative_photo_storage.dart';
 import '../services/tree_service.dart';
 import '../utils/relative_name_smart.dart';
 
-/// Umumiy nasab tugunini yaratish/tahrirlash (Faza 5 — umumiy tahrir).
+/// Умумий насаб тугунини таҳрирлаш (Faza 5 — умумий таҳрир).
 class TreeNodeEditScreen extends StatefulWidget {
   const TreeNodeEditScreen({
     super.key,
     required this.userId,
     required this.componentNodes,
-    this.existing,
+    required this.existing,
   });
 
   final String userId;
   final List<TreePerson> componentNodes;
-  final TreePerson? existing;
+  final TreePerson existing;
 
   static const _accent = Color(0xFF6A4C93);
 
@@ -51,20 +51,18 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    if (e != null) {
-      final parts = RelativeNameSmart.splitLegacy(e.fullName);
-      _firstCtrl.text = parts.firstName;
-      _lastCtrl.text = parts.lastName;
-      _patronymicCtrl.text = parts.patronymic;
-      if (e.birthDate != null) {
-        _birthCtrl.text = _fmtDate(e.birthDate!);
-      }
-      _gender = e.gender;
-      _photoUrl = e.photoUrl;
-      _fatherId = e.fatherId;
-      _motherId = e.motherId;
-      _spouseId = e.spouseId;
+    final parts = RelativeNameSmart.splitLegacy(e.fullName);
+    _firstCtrl.text = parts.firstName;
+    _lastCtrl.text = parts.lastName;
+    _patronymicCtrl.text = parts.patronymic;
+    if (e.birthDate != null) {
+      _birthCtrl.text = _fmtDate(e.birthDate!);
     }
+    _gender = e.gender;
+    _photoUrl = e.photoUrl;
+    _fatherId = e.fatherId;
+    _motherId = e.motherId;
+    _spouseId = e.spouseId;
   }
 
   @override
@@ -77,7 +75,7 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
   }
 
   List<TreePerson> get _others {
-    final selfId = widget.existing?.id;
+    final selfId = widget.existing.id;
     return widget.componentNodes
         .where((p) => p.id != selfId)
         .toList(growable: false);
@@ -146,36 +144,20 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
 
     setState(() => _busy = true);
     try {
-      if (widget.existing == null) {
-        await TreeService.addRelativePerson(
-          fullName: name,
-          firstName: first,
-          lastName: last,
-          patronymic: patronymic,
-          gender: _gender,
-          photoUrl: _photoUrl,
-          photoPath: _photoPath,
-          birthDate: birth,
-          fatherId: _fatherId,
-          motherId: _motherId,
-          spouseId: _spouseId,
-        );
-      } else {
-        await TreeService.saveNode(
-          nodeId: widget.existing!.id,
-          fullName: name,
-          firstName: first,
-          lastName: last,
-          patronymic: patronymic,
-          gender: _gender,
-          photoUrl: _photoUrl,
-          photoPath: _photoPath,
-          birthDate: birth,
-          fatherId: _fatherId,
-          motherId: _motherId,
-          spouseId: _spouseId,
-        );
-      }
+      await TreeService.saveNode(
+        nodeId: widget.existing.id,
+        fullName: name,
+        firstName: first,
+        lastName: last,
+        patronymic: patronymic,
+        gender: _gender,
+        photoUrl: _photoUrl,
+        photoPath: _photoPath,
+        birthDate: birth,
+        fatherId: _fatherId,
+        motherId: _motherId,
+        spouseId: _spouseId,
+      );
       if (mounted) Navigator.pop(context);
     } on FirebaseFunctionsException catch (e) {
       _snack(firebaseFunctionsUserMessage(e));
@@ -194,12 +176,9 @@ class _TreeNodeEditScreenState extends State<TreeNodeEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.existing != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit
-            ? context.tr('rel_node_edit_title')
-            : context.tr('rel_node_add_title')),
+        title: Text(context.tr('rel_node_edit_title')),
         backgroundColor: TreeNodeEditScreen._accent,
         foregroundColor: Colors.white,
       ),

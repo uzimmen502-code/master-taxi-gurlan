@@ -42,7 +42,7 @@ import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
 import '../sell/screens/sell_hub_screen.dart';
-import '../circles/screens/circles_hub_screen.dart';
+import '../relatives/screens/relatives_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
@@ -626,7 +626,7 @@ class _HomeViewState extends State<_HomeView> {
                                 'oil_change',
                                 () => _push(const OilChangeHomeScreen()),
                               ),
-                              onCircles: () => _push(const CirclesHubScreen()),
+                              onCircles: () => _push(const RelativesScreen()),
                               onDating: () => _openDatingTelegramBot(),
                             ),
                             const SizedBox(height: 16),

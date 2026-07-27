@@ -287,24 +287,24 @@ class OnboardingController extends ChangeNotifier {
   }) {
     switch (currentPage) {
       case 0:
-        if (name.trim().isEmpty) return 'Исмингизни киритинг';
+        if (name.trim().isEmpty) return 'ob_err_name';
         final d = phoneDigits(phone);
-        if (d.length < 12) return 'Телефон рақамини тўлиқ киритинг';
+        if (d.length < 12) return 'ob_phone_required';
         if (birthDate.trim().isNotEmpty &&
             parseBirthDate(birthDate.trim()) == null) {
-          return 'Туғилган кун формати: КК.ОО.ЙЙЙЙ';
+          return 'ob_birth_invalid_format';
         }
         break;
       case 1:
-        if (!otpVerified) return 'Телефон рақамини тасдиқланг';
+        if (!otpVerified) return 'ob_err_otp';
         break;
       case 2:
         final gpsRequired = isGpsRequiredForPhone(phone);
         if (gpsRequired && !hasGps) {
-          return 'GPS манзилни олинг — "Жорий GPS манзилни олиш" тугмасини босинг';
+          return 'ob_err_gps';
         }
         if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
-          return 'Xizmat zonasi — viloyat va tumaningizni tanlang';
+          return 'ob_err_zone';
         }
         break;
     }
@@ -359,7 +359,7 @@ class OnboardingController extends ChangeNotifier {
   Future<bool> checkPhoneDeviceLock(String phone) async {
     final digits = phoneDigits(phone);
     if (digits.length < 12) {
-      phoneStepError = 'Телефон рақамини тўлиқ киритинг';
+      phoneStepError = 'ob_phone_required';
       notifyListeners();
       return false;
     }

@@ -35,4 +35,8 @@ Architecture: per-user private `relatives/people` + SHARED global `tree_persons`
 - CFs by phase: F1 ensureMyTree + onRelativePersonWrite; F2 send/respondTreeLinkInvite; F3 mergeTreePersons; F4 undoTreeOperation; F5 saveTreeNode.
 - Privacy: link = mutual consent; linked members see WHOLE shared tree.
 - Phase-1/2/3: addRelativePerson, redirects, GEDCOM/PNG/PDF export.
-- GOTCHAS: translateByDouble/scaleByDouble; TREE tab prefers component for genealogy fields; merge must update tree_redirects.
+- GOTCHAS: translateByDouble/scaleByDouble; TREE tab prefers component for genealogy fields (CRM fields personal); merge must update tree_redirects.
+- Cleanup 2026-07: removed unused `watchSentInvites`; `TreeNodeEditScreen` edit-only (no dead create); invites auto-sheet only when `openTreeInvites` (push); deleted unused `HomeTickerBar`+`home_ticker_layout` (home uses `HomeInfoTicker`).
+- P0 2026-07: owned person edit → `saveTreeNode` (genealogy) + `updatePersonCrm` (phone/address/side/notes); `RelativeFormScreen` tabs Шахсий|Насаб; tree node sheet single Edit (own→form, other→TreeNodeEdit); `family_tree_view_parts.dart` extracted painters/node models.
+- P1 2026-07: no full-collection `watchRedirects`; `TreeRepository.fetchRedirectsForIds` + `collectTreeRelatedIds`; `FamilyTreeBundleSource` single stream for tree screen; link candidates use scoped redirects.
+- P2 2026-07: tree export → Relatives AppBar overflow (`TreeExportHandle`); Home tile opens `RelativesScreen` (circles via AppBar → CirclesHub, Relatives first in hub); invite accept privacy dialog; claimed+claimed = explain dialog only (no auto-merge).

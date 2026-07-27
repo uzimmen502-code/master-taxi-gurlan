@@ -44,8 +44,8 @@ class _HomeInfoTickerState extends State<HomeInfoTicker> {
   void _schedule() {
     _timer?.cancel();
     if (widget.ads.length < 2) return;
-    final secs = widget.ads[_index].durationSec.clamp(3, 12);
-    _timer = Timer(Duration(seconds: secs), () {
+    // Хар бир матн 3 с → 3D flip → кейингиси.
+    _timer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
       setState(() => _index = (_index + 1) % widget.ads.length);
       _schedule();

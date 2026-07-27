@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/fair_mix.dart';
 import '../features/ads/models/ad_model.dart';
 import '../models/bread_product.dart';
 import '../models/feed_item.dart';
@@ -37,24 +38,26 @@ class ProductFeedService {
   bool get isExhausted => _breadDone && _foodDone && _marketDone;
 
   Future<List<FeedItem>> loadNextBatch() async {
-    final results = <FeedItem>[];
+    final bread = <FeedItem>[];
+    final food = <FeedItem>[];
+    final market = <FeedItem>[];
     final rand = Random();
 
     if (!_breadDone) {
       final n = 2 + rand.nextInt(29);
-      results.addAll(await _fetchBreadBatch(n));
+      bread.addAll(await _fetchBreadBatch(n));
     }
     if (!_foodDone) {
       final n = 2 + rand.nextInt(29);
-      results.addAll(await _fetchFoodBatch(n));
+      food.addAll(await _fetchFoodBatch(n));
     }
     if (!_marketDone) {
       final n = 2 + rand.nextInt(29);
-      results.addAll(await _fetchMarketBatch(n));
+      market.addAll(await _fetchMarketBatch(n));
     }
 
-    results.shuffle(rand);
-    return results;
+    // Адолатли аралаш (shuffle ўрнига RR).
+    return FairMix.roundRobin([bread, food, market]);
   }
 
   Future<List<FeedItem>> loadNextSourceBatch(

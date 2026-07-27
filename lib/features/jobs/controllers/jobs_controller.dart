@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/catalog_search.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../services/user_role_sync.dart';
@@ -57,11 +58,21 @@ class JobsController extends ChangeNotifier {
       return bt.compareTo(at);
     });
     if (searchQuery.isEmpty) return list;
-    return list
-        .where((a) =>
-            a.text.toLowerCase().contains(searchQuery) ||
-            a.title.toLowerCase().contains(searchQuery))
-        .toList(growable: false);
+    final q = searchQuery;
+    final filtered = list
+        .where((a) => CatalogSearch.matches(q, [a.title, a.text]))
+        .toList();
+    if (CatalogSearch.normalize(q).isEmpty) return filtered;
+    filtered.sort((a, b) {
+      return CatalogSearch.compare(
+        q,
+        titleA: a.title,
+        titleB: b.title,
+        extraA: [a.text],
+        extraB: [b.text],
+      );
+    });
+    return filtered;
   }
 
   /// Шошилинч алоҳида бўлим; қолганлар вақт бўйича.

@@ -189,6 +189,7 @@ class AdSearchText {
   }
 
   /// Релевантлик (каттароқ = яхшироқ).
+  /// Эълон/каталог жойлаштириш учун [CatalogSearch.score] ишлатинг.
   static int score(AdSearchable ad, String query) {
     final q = query.trim().toLowerCase();
     if (q.length < minTokenLen) return 0;
@@ -196,7 +197,9 @@ class AdSearchText {
     final title = ad.titleLower;
     final titleLat = toLatin(title);
     final titleCyr = toCyrillic(title);
-    if (title.contains(q) || titleLat.contains(toLatin(q)) || titleCyr.contains(toCyrillic(q))) {
+    if (title.contains(q) ||
+        titleLat.contains(toLatin(q)) ||
+        titleCyr.contains(toCyrillic(q))) {
       s += 100;
     }
     final words = _words(q);

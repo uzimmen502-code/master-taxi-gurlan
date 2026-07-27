@@ -19,6 +19,11 @@ Design: `docs/settlement_ledger_v1_uz.md`. Code: `functions/settlement_ledger.js
 - Withdraw auto: `settings/wallet_bot.withdrawApproveMode` (manual|auto) + `withdrawAutoLimit` ∈ {20000,50000,100000}; ≤limit → auto `walletToCash` (balance−); card payout still manual.
 - Wallet P2P deleted; historical `wallet_p2p_*` ledger labels kept.
 
+## Order wallet opt-in (2026-07)
+- `placeOrderPostPaid`: wallet debit **only** if `orderBase.useWallet === true`; `balanceApplied` defaults to **0** (not max). Silent max debit removed.
+- Client: bread/food/platform `useWallet=false` + `OrderCheckoutWalletBanner` switch; new commerce modules must reuse this banner + CF gate.
+- Courier/Seller POS still use explicit `walletPaid` (operator-entered).
+
 ## Exact accounting (majburiy, 2026-07)
 - Pul/summa haqida **faqat aniq** raqam: taxminan/approximate/~ YO‘Q.
 - UI aggregatlar: status bo‘yicha aniq filter (masalan top-up `awaiting_review` vs `credited`); `awaiting_transfer` (pul o‘tmagan) jami/pending ga **qo‘shilmaydi**.

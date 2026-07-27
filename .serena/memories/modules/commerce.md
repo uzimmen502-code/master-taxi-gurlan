@@ -11,7 +11,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Order placement ALWA
 - `food_screen.dart`,`food_controller.dart`,`product_card.dart`,`food_cart_sheet.dart`. fallback `utils/food_catalog.dart`; model `models/food_product.dart` (inventoryId,minQty,step,unit).
 - FoodController(ordersRepo,inventoryRepo). cart = Map<int,double> productId→qty (0.5 multiples).
 - reads: streams `food_catalog` (orderBy id); remaining via `food_inventory/{inventoryId}`; `users/{uid}.bonusBalance`.
-- orderBase food/bread: CF `placeOrderPostPaid` **reprices server-side** — food←`food_catalog`; bread←`bread_products`+`extra_products`+`settings/prices` (flour/milk, salt×50, extras bonus); client price ignored. Wallet ledger `balanceApplied`/`cashDue`. Stock batch `getRemainingMap`.
+- orderBase food/bread: CF `placeOrderPostPaid` **reprices server-side** — food←`food_catalog`; bread←`bread_products`+`extra_products`+`settings/prices` (flour/milk, salt×50, extras bonus); client price ignored. Wallet **opt-in**: client `useWallet` default false; CF debit only if `useWallet===true` + `balanceApplied` (default 0). UI: `OrderCheckoutWalletBanner` switch. Stock batch `getRemainingMap`.
 - Cancel: CF `customerCancelOrder` (early states only; restore stock + wallet refund). Rules: orders create false; update isAdmin|isStaff only. `settings/*` write isAdmin (prices locked). `placeOrderWithWallet` deprecated. placeOrderPostPaid PII caps (name≤80, address≤300); phone=token.
 - GOTCHA: offline → shared pref `commerce_pending_orders` (migrates legacy `pending_orders` / `food_pending_orders`). stock clamp `_wouldExceedStock`.
 

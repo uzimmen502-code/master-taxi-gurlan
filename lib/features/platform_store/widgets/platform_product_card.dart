@@ -78,12 +78,12 @@ class PlatformProductCard extends StatelessWidget {
                         ),
                       if (!out)
                         Positioned(
-                          right: 6,
-                          bottom: 6,
+                          right: 5,
+                          bottom: 5,
                           child: Material(
-                            color: AppColors.button,
+                            color: const Color(0xFFB39DDB), // очик бинафша
                             shape: const CircleBorder(),
-                            elevation: 2,
+                            elevation: 1.5,
                             child: InkWell(
                               customBorder: const CircleBorder(),
                               onTap: () {
@@ -94,11 +94,11 @@ class PlatformProductCard extends StatelessWidget {
                                 }
                               },
                               child: const SizedBox(
-                                width: 32,
-                                height: 32,
+                                width: 26,
+                                height: 26,
                                 child: Icon(
                                   Icons.add,
-                                  size: 18,
+                                  size: 15,
                                   color: Colors.white,
                                 ),
                               ),

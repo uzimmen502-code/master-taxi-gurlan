@@ -12,7 +12,9 @@ import '../../../widgets/order_checkout_wallet_banner.dart';
 import '../../profile/screens/address_edit_screen.dart';
 import '../controllers/platform_store_controller.dart';
 
-/// Платформа савати: миқдор + етказиш/олиб кетиш + ҳамён + буюртма.
+/// Соддалаштирилган сават: фақат товарлар + жами + буюртма.
+/// Ётказиш/олиб кетиш, исм/телефон/манзил, ҳамён — бу ерда йўқ.
+/// «Буюртма бериш» → тўлов тасдиғида ҳамён кўринади, сўнг профиль+манзил билан юборилади.
 class PlatformCartSheet extends StatefulWidget {
   const PlatformCartSheet({super.key});
 
@@ -24,54 +26,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
   static const _green = AppColors.primaryDark;
   static const _primary = AppColors.primary;
 
-  final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _addrCtrl = TextEditingController();
   bool _isSending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
-  }
-
-  Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedName = prefs.getString('user_name') ?? '';
-    final savedPhone = prefs.getString('user_phone') ?? '';
-    var savedAddress = prefs.getString('user_address') ?? '';
-
-    if (savedAddress.isEmpty) {
-      try {
-        final uid = phoneDigits(savedPhone);
-        if (uid.length >= 9 && mounted) {
-          final user = await context.read<UserRepository>().getById(uid);
-          if (user != null) {
-            if (user.address.isComplete) {
-              savedAddress = user.address.formatted;
-            } else if (user.addressLegacy.isNotEmpty) {
-              savedAddress = user.addressLegacy;
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _nameCtrl.text = savedName;
-      _phoneCtrl.text = savedPhone;
-      _addrCtrl.text = savedAddress;
-    });
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _addrCtrl.dispose();
-    super.dispose();
-  }
 
   void _showError(String msg) {
     if (!mounted) return;
@@ -96,34 +51,71 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
       return;
     }
 
-    final name = _nameCtrl.text.trim();
-    final phone = _phoneCtrl.text.trim();
-    if (name.isEmpty) {
-      return _showError(loc.translate('bread_error_name_required'));
-    }
-    if (phone.isEmpty || phone.length < 9) {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = (prefs.getString('user_phone') ?? '').trim();
+    if (phone.isEmpty || phoneDigits(phone).length < 9) {
       return _showError(loc.translate('bread_error_phone_invalid'));
     }
 
-    final isPickup = c.fulfillmentMode == 'pickup';
-    var deliveryText = 'Olib ketish';
-    if (!isPickup) {
-      final uid = phoneDigits(phone);
-      final userRepo = context.read<UserRepository>();
-      var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
+    // Тўлов пайти: ҳамён маълумоти шу диалогда.
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('platform_store_checkout')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${context.tr('platform_store_total')}: '
+              '${formatPrice(c.cartTotal)} ${loc.translate('sum')}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            OrderCheckoutWalletBanner(
+              orderTotal: c.cartTotal,
+              walletBalance: c.walletBalance,
+              walletApply: c.walletApplyAmount,
+              cashDue: c.cashDuePreview,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Манзил ва телефон профилингиздан олинади. '
+              'Буюртма етказиш учун юборилади.',
+              style: TextStyle(fontSize: 12.5, color: Colors.black54),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(loc.translate('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.tr('platform_store_checkout')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    c.setFulfillmentMode('delivery');
+    final uid = phoneDigits(phone);
+    final userRepo = context.read<UserRepository>();
+    var profile = uid.length >= 9 ? await userRepo.getById(uid) : null;
+    if (profile == null || !profile.address.isComplete) {
+      if (!mounted) return;
+      final filled = await AddressGate.ensureFilled(context, user: profile);
+      if (filled == null) return;
+      profile = await userRepo.getById(uid);
+      if (!mounted) return;
       if (profile == null || !profile.address.isComplete) {
-        if (!mounted) return;
-        final filled = await AddressGate.ensureFilled(context, user: profile);
-        if (filled == null) return;
-        profile = await userRepo.getById(uid);
-        if (!mounted) return;
-        if (profile == null || !profile.address.isComplete) {
-          return _showError(loc.translate('bread_error_address_required'));
-        }
-        setState(() => _addrCtrl.text = profile!.address.formatted);
+        return _showError(loc.translate('bread_error_address_required'));
       }
-      deliveryText = profile.address.formatted;
     }
+    final deliveryText = profile.address.formatted;
 
     setState(() => _isSending = true);
     try {
@@ -166,7 +158,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
     }
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.92,
+      height: MediaQuery.of(context).size.height * 0.72,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -207,105 +199,40 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: SingleChildScrollView(
+            child: ListView(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
+              children: [
+                for (final e in c.cart.entries)
+                  _CartLine(id: e.key, qty: e.value),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F8E9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _green.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: _ModeChip(
-                          label: 'Етказиш',
-                          selected: c.fulfillmentMode == 'delivery',
-                          onTap: () => c.setFulfillmentMode('delivery'),
-                        ),
+                      Text(
+                        context.tr('platform_store_total'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ModeChip(
-                          label: 'Олиб кетиш',
-                          selected: c.fulfillmentMode == 'pickup',
-                          onTap: () => c.setFulfillmentMode('pickup'),
+                      const Spacer(),
+                      Text(
+                        '${formatPrice(c.cartTotal)} ${loc.translate('sum')}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _green,
+                          fontSize: 16,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  for (final e in c.cart.entries)
-                    _CartLine(id: e.key, qty: e.value),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F8E9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _green.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              context.tr('platform_store_total'),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '${formatPrice(c.cartTotal)} ${loc.translate('sum')}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _green,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        OrderCheckoutWalletBanner(
-                          orderTotal: c.cartTotal,
-                          walletBalance: c.walletBalance,
-                          walletApply: c.walletApplyAmount,
-                          cashDue: c.cashDuePreview,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameCtrl,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('name'),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _phoneCtrl,
-                    decoration: InputDecoration(
-                      labelText: loc.translate('phone'),
-                      border: const OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                  if (c.fulfillmentMode != 'pickup') ...[
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _addrCtrl,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: loc.translate('address'),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.place_outlined),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           Padding(
@@ -381,49 +308,18 @@ class _CartLine extends StatelessWidget {
             onPressed: () => c.decrease(id),
             icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
           ),
-          Text('$qty ${p.unit}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            '$qty ${p.unit}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           IconButton(
             onPressed: () => c.increase(id),
-            icon: const Icon(Icons.add_circle_outline,
-                color: AppColors.primaryDark),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.button : Colors.grey.shade100,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : Colors.black87,
+            icon: const Icon(
+              Icons.add_circle_outline,
+              color: AppColors.primaryDark,
             ),
           ),
-        ),
+        ],
       ),
     );
   }

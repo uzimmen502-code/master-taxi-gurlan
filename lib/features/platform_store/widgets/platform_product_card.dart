@@ -8,11 +8,23 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
 import '../controllers/platform_store_controller.dart';
+import '../screens/platform_product_detail_screen.dart';
 
 class PlatformProductCard extends StatelessWidget {
   const PlatformProductCard({super.key, required this.product});
 
   final PlatformProduct product;
+
+  void _openDetail(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(
+          value: context.read<PlatformStoreController>(),
+          child: PlatformProductDetailScreen(product: product),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,134 +39,117 @@ class PlatformProductCard extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(13),
-      child: Ink(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: AppColors.cardBorderMuted, width: 0.5),
-        ),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _ProductImages(urls: product.displayImages),
-                    if (out)
-                      ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        child: Center(
-                          child: Text(
-                            context.tr('platform_store_out_of_stock'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
+      child: InkWell(
+        onTap: () => _openDetail(context),
+        borderRadius: BorderRadius.circular(13),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: AppColors.cardBorderMuted, width: 0.5),
+          ),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _ProductImages(urls: product.displayImages),
+                      if (out)
+                        ColoredBox(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          child: Center(
+                            child: Text(
+                              context.tr('platform_store_out_of_stock'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                      if (!out)
+                        Positioned(
+                          right: 6,
+                          bottom: 6,
+                          child: Material(
+                            color: AppColors.button,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () {
+                                if (qty == 0) {
+                                  c.addToCart(product);
+                                } else {
+                                  c.increase(product.id);
+                                }
+                              },
+                              child: const SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: Icon(
+                                  Icons.add,
+                                  size: 18,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (qty > 0)
+                        Positioned(
+                          left: 6,
+                          bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$qty',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              product.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1A3A20),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              priceText,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2E5C1E),
-              ),
-            ),
-            const SizedBox(height: 6),
-            if (out)
+              const SizedBox(height: 8),
               Text(
-                context.tr('platform_store_out_of_stock'),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.red.shade700,
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A3A20),
                 ),
-              )
-            else if (qty == 0)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => c.addToCart(product),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.button,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    minimumSize: const Size(0, 34),
-                  ),
-                  child: Text(
-                    context.tr('platform_store_add'),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              )
-            else
-              Row(
-                children: [
-                  _QtyBtn(
-                    icon: Icons.remove,
-                    onTap: () => c.decrease(product.id),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '$qty',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  _QtyBtn(
-                    icon: Icons.add,
-                    onTap: () => c.increase(product.id),
-                  ),
-                ],
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QtyBtn extends StatelessWidget {
-  const _QtyBtn({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 34,
-      height: 34,
-      child: Material(
-        color: const Color(0xFFE8F5E9),
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Icon(icon, size: 18, color: AppColors.button),
+              const SizedBox(height: 2),
+              Text(
+                priceText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2E5C1E),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

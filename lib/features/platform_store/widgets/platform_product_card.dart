@@ -39,6 +39,7 @@ class PlatformProductCard extends StatelessWidget {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(13),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openDetail(context),
         borderRadius: BorderRadius.circular(13),
@@ -54,9 +55,12 @@ class PlatformProductCard extends StatelessWidget {
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(10),
+                  clipBehavior: Clip.hardEdge,
                   child: Stack(
                     fit: StackFit.expand,
+                    clipBehavior: Clip.hardEdge,
                     children: [
+                      const ColoredBox(color: Color(0xFFE8F5E9)),
                       _ProductImages(urls: product.displayImages),
                       if (out)
                         ColoredBox(
@@ -180,7 +184,7 @@ class _ProductImagesState extends State<_ProductImages> {
         PageView.builder(
           itemCount: urls.length,
           onPageChanged: (i) => setState(() => _page = i),
-          itemBuilder: (_, i) => _Image(url: urls[i]),
+          itemBuilder: (_, i) => SizedBox.expand(child: _Image(url: urls[i])),
         ),
         Positioned(
           left: 0,
@@ -214,35 +218,47 @@ class _Image extends StatelessWidget {
 
   final String url;
 
+  static const _bg = Color(0xFFE8F5E9);
+
   @override
   Widget build(BuildContext context) {
     final u = url.trim();
+    Widget child;
     if (u.startsWith('assets/')) {
-      return Image.asset(u, fit: BoxFit.contain);
-    }
-    if (u.isNotEmpty && isHttpImageUrl(u)) {
-      return CachedNetworkImage(
+      child = Image.asset(u, fit: BoxFit.contain, alignment: Alignment.center);
+    } else if (u.isNotEmpty && isHttpImageUrl(u)) {
+      child = CachedNetworkImage(
         imageUrl: u,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => const ColoredBox(
-          color: Color(0xFFE8F5E9),
-          child: Center(child: Text('🛒', style: TextStyle(fontSize: 28))),
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        width: double.infinity,
+        height: double.infinity,
+        memCacheWidth: 600,
+        placeholder: (_, __) => const Center(
+          child: Text('🛒', style: TextStyle(fontSize: 28)),
         ),
-        errorWidget: (_, __, ___) => const ColoredBox(
-          color: Color(0xFFE8F5E9),
-          child: Center(child: Text('🛒', style: TextStyle(fontSize: 28))),
+        errorWidget: (_, __, ___) => const Center(
+          child: Text('🛒', style: TextStyle(fontSize: 28)),
         ),
       );
-    }
-    if (u.isNotEmpty && isDataImageUrl(u)) {
+    } else if (u.isNotEmpty && isDataImageUrl(u)) {
       final bytes = decodeDataUrlImageBytes(u);
-      if (bytes != null) {
-        return Image.memory(bytes, fit: BoxFit.cover);
-      }
+      child = bytes != null
+          ? Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
+              width: double.infinity,
+              height: double.infinity,
+            )
+          : const Center(child: Text('🛒', style: TextStyle(fontSize: 28)));
+    } else {
+      child = const Center(child: Text('🛒', style: TextStyle(fontSize: 28)));
     }
-    return const ColoredBox(
-      color: Color(0xFFE8F5E9),
-      child: Center(child: Text('🛒', style: TextStyle(fontSize: 28))),
+
+    return ColoredBox(
+      color: _bg,
+      child: SizedBox.expand(child: child),
     );
   }
 }

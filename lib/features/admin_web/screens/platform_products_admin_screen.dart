@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 // ignore: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
@@ -19,6 +18,7 @@ import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
+import '../utils/clipboard_paste_image.dart';
 
 /// Админ: платформа дўкони каталоги.
 class PlatformProductsAdminScreen extends StatefulWidget {
@@ -478,52 +478,43 @@ class _EditDialogState extends State<_EditDialog> {
     super.dispose();
   }
 
-  Future<Uint8List?> _blobToBytes(html.Blob blob) async {
-    final reader = html.FileReader();
-    final done = reader.onLoadEnd.first;
-    reader.readAsArrayBuffer(blob);
-    await done;
-    final result = reader.result;
-    if (result is ByteBuffer) {
-      return Uint8List.view(result);
-    }
-    return null;
-  }
-
   void _onDocumentPaste(html.Event event) {
     if (_uploading || !mounted) return;
     final e = event as html.ClipboardEvent;
-    final items = e.clipboardData?.items;
-    if (items == null) return;
-    final len = items.length;
-    if (len == null) return;
-    for (var i = 0; i < len; i++) {
-      final item = items[i];
-      final type = item.type;
-      if (type == null || !type.startsWith('image/')) continue;
-      final file = item.getAsFile();
-      if (file == null) continue;
-      e.preventDefault();
-      e.stopPropagation();
-      unawaited(_uploadFromBlob(file, type));
-      return;
-    }
+    if (!ClipboardPasteImage.looksLikeImagePaste(e)) return;
+    // Capture image paste; leave normal text paste alone.
+    e.preventDefault();
+    e.stopPropagation();
+    unawaited(_handlePasteEvent(e));
   }
 
-  Future<void> _uploadFromBlob(html.Blob blob, String mime) async {
-    final bytes = await _blobToBytes(blob);
-    if (bytes == null || bytes.isEmpty) {
+  Future<void> _handlePasteEvent(html.ClipboardEvent e) async {
+    try {
+      final pasted = await ClipboardPasteImage.fromPasteEvent(e);
+      if (pasted == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.orange,
+              content: Text(
+                'Нусхадаги расм ўқилмади. ChatGPT’да «Copy image» ёки «Save image» → «Расм танлаш».',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      await _uploadBytes(pasted.bytes, pasted.mime);
+    } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.orange,
-            content: Text('Нусхадаги расм ўқилмади.'),
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Нусхадан ўқиш хато: $err'),
           ),
         );
       }
-      return;
     }
-    await _uploadBytes(bytes, mime.isEmpty ? 'image/png' : mime);
   }
 
   Future<void> _uploadBytes(Uint8List bytes, String mime) async {

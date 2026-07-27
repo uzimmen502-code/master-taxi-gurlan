@@ -307,6 +307,8 @@ class _BreadProductCardState extends State<BreadProductCard> {
     ]);
   }
 
+  static const _addRed = Color(0xFFF44336);
+
   Widget _addButton(AppLocalizations loc, Color accent,
       {bool disabled = false}) {
     return SizedBox(
@@ -321,7 +323,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 : loc.translate('bread_add'),
             style: const TextStyle(fontSize: AppText.labelSmall)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
+          backgroundColor: _addRed,
           foregroundColor: Colors.white,
           disabledBackgroundColor: Colors.grey.shade300,
           disabledForegroundColor: Colors.grey.shade600,

@@ -110,7 +110,7 @@ class BreadExtraProductCard extends StatelessWidget {
               label: Text(loc.translate('bread_add'),
                   style: const TextStyle(fontSize: AppText.labelSmall)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _orange,
+                backgroundColor: const Color(0xFFF44336),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 shape: RoundedRectangleBorder(

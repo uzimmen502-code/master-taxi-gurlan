@@ -129,7 +129,7 @@ class _MarketAdEditDialogState extends State<_MarketAdEditDialog> {
               TextField(
                 controller: _price,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Narx (so\'m)'),
+                decoration: const InputDecoration(labelText: 'Narx (сўм)'),
               ),
               const SizedBox(height: 10),
               TextField(

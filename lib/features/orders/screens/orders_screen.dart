@@ -100,7 +100,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                   const SizedBox(width: 8),
                   _TypeChip(
-                    label: 'Нон/Таом',
+                    label: 'Дўкон',
                     selected: _typeFilter == CustomerOrderKind.food,
                     onTap: () =>
                         setState(() => _typeFilter = CustomerOrderKind.food),
@@ -311,7 +311,7 @@ class _CarpetOrderTile extends StatelessWidget {
           if (order.finalPrice > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '${formatPrice(order.finalPrice)} so\'m',
+              '${formatMoney(order.finalPrice)}',
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 color: _accent,
@@ -378,7 +378,7 @@ class _MilkOrderTile extends StatelessWidget {
           if (order.finalPrice > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '${formatPrice(order.finalPrice)} so\'m',
+              '${formatMoney(order.finalPrice)}',
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 color: _accent,

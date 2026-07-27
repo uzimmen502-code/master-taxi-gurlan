@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/theme/app_theme.dart';
-import 'package:intl/intl.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
 
@@ -16,8 +16,6 @@ class KpiCard extends StatelessWidget {
   final KpiValue kpi;
   final bool compact;
   final Color? accent;
-
-  static final _fmt = NumberFormat.decimalPattern('en');
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +56,7 @@ class KpiCard extends StatelessWidget {
           ]),
           const SizedBox(height: 6),
           Text(
-            _fmt.format(kpi.value),
+            formatPrice(kpi.value),
             style: TextStyle(
                 fontSize: compact ? 18 : 22,
                 fontWeight: FontWeight.bold,

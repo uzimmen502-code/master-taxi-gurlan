@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -97,7 +98,6 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
                 0,
                 (acc, d) =>
                     acc + ((d.data()['amount'] as num?)?.toInt() ?? 0));
-            final fmt = NumberFormat.decimalPattern('en');
             return Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -111,7 +111,7 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
                     size: 16, color: AppColors.primary),
                 const SizedBox(width: 6),
                 Text(
-                    '${docs.length} тa · ${fmt.format(totalAmount)} сўм',
+                    '${docs.length} тa · ${formatMoney(totalAmount)}',
                     style: const TextStyle(
                         color: AppColors.primary,
                         fontSize: 13,
@@ -345,9 +345,8 @@ class _PayoutRowState extends State<_PayoutRow> {
   }
 
   String _amountText() {
-    final fmt = NumberFormat.decimalPattern('en');
     final amt = (widget.doc.data()['amount'] as num?)?.toInt() ?? 0;
-    return '${fmt.format(amt)} сўм';
+    return formatMoney(amt);
   }
 
   @override
@@ -362,7 +361,7 @@ class _PayoutRowState extends State<_PayoutRow> {
     final phone = (data['userPhone'] ?? '').toString();
     final name = (_userData?['name'] ?? '') as String;
     final balance = (_userData?['bonusBalance'] as num?)?.toInt() ?? 0;
-    final bal = NumberFormat.decimalPattern('en').format(balance);
+    final bal = formatPrice(balance);
 
     return Container(
       decoration: BoxDecoration(

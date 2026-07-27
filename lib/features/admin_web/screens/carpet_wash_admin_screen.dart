@@ -78,7 +78,7 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
           controller: priceCtrl,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Narx (so\'m, ixtiyoriy)',
+            labelText: 'Narx (сўм, ixtiyoriy)',
             hintText: 'Admin keyin ham qo\'yishi mumkin',
           ),
         ),
@@ -245,7 +245,7 @@ class _OrderCard extends StatelessWidget {
             if (order.note.isNotEmpty) Text('Izoh: ${order.note}'),
             if (order.finalPrice > 0)
               Text(
-                'Narx: ${formatPrice(order.finalPrice)} so\'m',
+                'Narx: ${formatMoney(order.finalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             if (order.createdAt != null)

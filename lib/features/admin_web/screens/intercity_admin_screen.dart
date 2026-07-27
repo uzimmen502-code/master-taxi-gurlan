@@ -60,7 +60,6 @@ class _DriversTab extends StatefulWidget {
 
 class _DriversTabState extends State<_DriversTab> {
   static final _db = FirebaseFirestore.instance;
-  static final _money = NumberFormat.decimalPattern('en');
   bool _showAllDays = false;
 
   static String _dateKey(DateTime d) =>
@@ -199,7 +198,7 @@ class _DriversTabState extends State<_DriversTab> {
                 ),
                 TextField(
                   controller: price,
-                  decoration: const InputDecoration(labelText: "Narx (so'm)"),
+                  decoration: const InputDecoration(labelText: "Narx (сўм)"),
                   keyboardType: TextInputType.number,
                 ),
                 Row(
@@ -354,7 +353,7 @@ class _DriversTabState extends State<_DriversTab> {
                         '${d['from'] ?? '?'} -> ${d['to'] ?? '?'}  '
                         '${d['hour'] ?? '?'}:00  '
                         '${_seatsLabel(d)} joy  '
-                        "${_money.format(d['price'] ?? 0)} so'm\n"
+                        "${formatMoney(d['price'] ?? 0)}\n"
                         '${scheduleDate.isNotEmpty ? 'Sana: $scheduleDate  ' : ''}'
                         '${kino ? '🎬 Kino ruxsati: yoqilgan' : '🎬 Kino: o‘chiq'}',
                       ),
@@ -413,7 +412,6 @@ class _DriversTabState extends State<_DriversTab> {
 class _BookingsTab extends StatelessWidget {
   const _BookingsTab();
   static final _db = FirebaseFirestore.instance;
-  static final _money = NumberFormat.decimalPattern('en');
   static final _date = DateFormat('dd.MM HH:mm');
 
   Color _color(String s) {
@@ -503,7 +501,7 @@ class _BookingsTab extends StatelessWidget {
                 ),
                 subtitle: Text(
                   '${d['userName'] ?? '-'}  ${d['userPhone'] ?? ''}\n'
-                  '${d['driverName'] ?? '-'}  ${_money.format(d['totalAmount'] ?? 0)} so\'m',
+                  '${d['driverName'] ?? '-'}  ${formatMoney(d['totalAmount'] ?? 0)}',
                 ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -552,7 +550,6 @@ class _BookingsTab extends StatelessWidget {
 class _StatsTab extends StatelessWidget {
   const _StatsTab();
   static final _db = FirebaseFirestore.instance;
-  static final _money = NumberFormat.decimalPattern('en');
 
   @override
   Widget build(BuildContext context) {
@@ -593,7 +590,7 @@ class _StatsTab extends StatelessWidget {
               _Stat('Jami bronlar', '$total ta', Colors.blue),
               _Stat('Tasdiqlangan', '$confirmed ta', Colors.green),
               _Stat('Bekor qilingan', '$cancelled ta', Colors.red),
-              _Stat('Daromad', "${_money.format(revenue)} so'm", Colors.orange),
+              _Stat('Daromad', "${formatMoney(revenue)}", Colors.orange),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _db
                     .collection('intercity_drivers')

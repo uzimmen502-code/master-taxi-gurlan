@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -111,7 +111,7 @@ class _FeaturedProductCard extends StatelessWidget {
         return '🍞';
       case 'food':
         return '🍽️';
-      case 'market':
+      case 'platform':
         return '🛒';
       default:
         return '📦';
@@ -124,8 +124,8 @@ class _FeaturedProductCard extends StatelessWidget {
         return const Color(0xFFFFF3E0);
       case 'food':
         return const Color(0xFFFFEBEE);
-      case 'market':
-        return const Color(0xFFE3F2FD);
+      case 'platform':
+        return const Color(0xFFE8F5E9);
       default:
         return const Color(0xFFF5F5F5);
     }
@@ -135,7 +135,7 @@ class _FeaturedProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          NumberFormat('#,###').format(product.price),
+          formatPrice(product.price),
         );
 
     return Material(

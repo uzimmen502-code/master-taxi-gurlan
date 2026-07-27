@@ -37,7 +37,7 @@ class OrderReceiptFormat {
     for (final it in order.items) {
       yield '• ${_breadBaseLine(it)}';
       if (it.flourMilkCost > 0) {
-        yield '• 🌾 Un+Sut (${it.name}): ${formatPrice(it.flourMilkCost)} сўм';
+        yield '• 🌾 Un+Sut (${it.name}): ${formatMoney(it.flourMilkCost)}';
       }
     }
   }
@@ -48,7 +48,7 @@ class OrderReceiptFormat {
         ? it.baseLineTotal
         : (it.unitPrice > 0 ? it.unitPrice * it.count : 0);
     final priceSuffix =
-        amount > 0 ? ' = ${formatPrice(amount)} сўм' : '';
+        amount > 0 ? ' = ${formatMoney(amount)}' : '';
     return '$prefix${it.name} × ${it.count}$priceSuffix';
   }
 
@@ -87,7 +87,7 @@ class OrderReceiptFormat {
       }
 
       if (discount > 0) {
-        yield '• 🎁 Bonus: -${formatPrice(discount)} сўм';
+        yield '• 🎁 Bonus: -${formatMoney(discount)}';
       }
     }
   }
@@ -96,7 +96,7 @@ class OrderReceiptFormat {
     final label = order.cartHadYopishBread
         ? '🧂 Tuz · xamirturush · drojya'
         : '🧂 Tuz va drojya';
-    return '• $label: ${formatPrice(order.saltYeastCost)} сўм';
+    return '• $label: ${formatMoney(order.saltYeastCost)}';
   }
 
   // ─── Овқат (food_screen / cart_sheet) ───────────────────────────────
@@ -117,7 +117,7 @@ class OrderReceiptFormat {
           ? it.itemTotal
           : (it.unitPrice > 0 ? (it.unitPrice * q).round() : 0);
       if (lineTotal > 0) {
-        return '$prefix${it.name}: $qty$unit = ${formatPrice(lineTotal)} сўм';
+        return '$prefix${it.name}: $qty$unit = ${formatMoney(lineTotal)}';
       }
       return '$prefix${it.name}: $qty$unit';
     }
@@ -125,7 +125,7 @@ class OrderReceiptFormat {
         ? it.itemTotal
         : (it.unitPrice > 0 ? it.unitPrice * it.count : 0);
     if (amount > 0) {
-      return '$prefix${it.name} × ${it.count} = ${formatPrice(amount)} сўм';
+      return '$prefix${it.name} × ${it.count} = ${formatMoney(amount)}';
     }
     return '$prefix${it.name} × ${it.count}';
   }
@@ -140,15 +140,15 @@ class OrderReceiptFormat {
   // ─── Жами, манзил ───────────────────────────────────────────────────
 
   static Iterable<String> _footerLines(OrderModel order) sync* {
-    yield 'Жами: ${formatPrice(order.total)} сўм';
+    yield 'Жами: ${formatMoney(order.total)}';
     if (order.balanceApplied > 0) {
-      yield 'Кошелёкдан: ${formatPrice(order.balanceApplied)} сўм';
+      yield 'Кошелёкдан: ${formatMoney(order.balanceApplied)}';
     }
     if (order.cashDue > 0) {
-      yield 'Нақд тўлов: ${formatPrice(order.cashDue)} сўм';
+      yield 'Нақд тўлов: ${formatMoney(order.cashDue)}';
     }
     if (order.cashPaid > 0 && order.cashPaid != order.cashDue) {
-      yield 'Берилган нақд: ${formatPrice(order.cashPaid)} сўм';
+      yield 'Берилган нақд: ${formatMoney(order.cashPaid)}';
     }
     if (order.address.isNotEmpty) yield '📍 ${order.address}';
     if (order.userPhone.isNotEmpty) yield '📞 ${order.userPhone}';

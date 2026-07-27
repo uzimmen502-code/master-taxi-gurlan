@@ -265,6 +265,11 @@ async function isDatingAutoApproveEnabled() {
   return (snap.data() || {}).datingAutoApprove === true;
 }
 
+async function isMarketAutoApproveEnabled() {
+  const snap = await db.collection('settings').doc('app').get();
+  return (snap.data() || {}).marketAutoApprove === true;
+}
+
 /** Admin yoki auto-rejim: telefon ↔ hash bog'lanishini majburan yangilash. */
 async function forceDeviceBindingLink({
   hash,
@@ -830,6 +835,25 @@ exports.onAdUpdate = functions.firestore
     if (before.status === after.status) return;
 
     const isMarket = String(after.type || '') === 'cheap_product';
+
+    // Авто: pending → active (янги эълон / қайта модерация).
+    if (
+      isMarket
+      && after.status === 'pending'
+      && before.status !== 'pending'
+      && (await isMarketAutoApproveEnabled())
+    ) {
+      await change.after.ref.update({
+        status: 'active',
+        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: marketActiveExpiresAt(),
+        moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        moderatedBy: 'auto',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
+
     const uid = digits(after.authorPhone || after.ownerId || '');
     if (uid.length < 9) return;
 
@@ -1841,6 +1865,7 @@ function inventoryCollectionForDecrementKind(kind) {
   if (k === 'bread') return 'bread_products';
   if (k === 'extra') return 'extra_products';
   if (k === 'food') return 'food_inventory';
+  if (k === 'platform') return 'platform_products';
   throw new functions.https.HttpsError('invalid-argument', 'bad inventory kind');
 }
 
@@ -2144,6 +2169,79 @@ async function repriceFoodOrderFromCatalog(itemsIn) {
   return { items, total, decrements };
 }
 
+/** Платформа дўкони: нарх `platform_products` дан. */
+async function repricePlatformOrderFromCatalog(itemsIn) {
+  const raw = Array.isArray(itemsIn) ? itemsIn : [];
+  if (raw.length < 1 || raw.length > 40) {
+    throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
+  }
+  const items = [];
+  const decrements = [];
+  let total = 0;
+  for (let i = 0; i < raw.length; i += 1) {
+    const it = raw[i] || {};
+    const productId = String(it.productId || it.inventoryId || '').trim();
+    const qty = Math.trunc(Number(it.qty));
+    if (!productId) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: productId required`);
+    }
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 500) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `items[${i}]: bad qty`);
+    }
+    const snap = await db.collection('platform_products').doc(productId).get();
+    if (!snap.exists) {
+      throw new functions.https.HttpsError(
+          'not-found', `Маҳсулот топилмади: ${productId}`);
+    }
+    const d = snap.data() || {};
+    if (d.active === false) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Нофаол: ${d.name || productId}`);
+    }
+    const unitPrice = Math.trunc(Number(d.price || 0));
+    if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', `Нарх йўқ: ${productId}`);
+    }
+    const totalStock = Number(d.totalStock) || 0;
+    if (totalStock > 0) {
+      const sold = Number(d.soldToday) || 0;
+      const remaining = totalStock - sold;
+      if (remaining + 1e-9 < qty) {
+        throw new functions.https.HttpsError(
+            'failed-precondition',
+            `${d.name || productId}: керак ${qty}, қолди ${remaining}`,
+        );
+      }
+    }
+    const lineTotal = Math.round(unitPrice * qty);
+    total += lineTotal;
+    const name = String(d.name || productId).trim() || productId;
+    const unit = String(d.unit || it.unit || 'дона');
+    items.push({
+      name,
+      price: unitPrice,
+      qty,
+      unit,
+      total: lineTotal,
+      productId,
+      inventoryId: productId,
+    });
+    decrements.push({
+      kind: 'platform',
+      id: productId,
+      qty,
+      label: name,
+    });
+  }
+  if (total <= 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
+  }
+  return { items, total, decrements };
+}
+
 function breadTypeNorm(raw) {
   const t = String(raw || 'tayyor').toLowerCase().trim();
   if (t === 'ёпиш' || t === 'yopish') return 'yopish';
@@ -2371,8 +2469,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   }
 
   const orderType = String(orderBase.type || '');
-  if (orderType !== 'bread' && orderType !== 'food') {
-    throw new functions.https.HttpsError('invalid-argument', 'orderBase.type must be bread or food');
+  if (orderType !== 'bread' && orderType !== 'food' && orderType !== 'platform') {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'orderBase.type must be bread, food or platform');
   }
 
   const uid9 = userUid(userPhone);
@@ -2413,12 +2512,19 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     serverHadYopish = priced.cartHadYopishBread;
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
+  } else if (orderType === 'platform') {
+    const priced = await repricePlatformOrderFromCatalog(orderBase.items);
+    pricedItems = priced.items;
+    serverTotal = priced.total;
+    catalogDecs = priced.decrements;
   } else if (!Number.isFinite(serverTotal) || serverTotal <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
   }
 
   const orderRef = db.collection('orders').doc();
-  const module = orderType === 'bread' ? 'bread' : 'food';
+  const module = orderType === 'bread'
+      ? 'bread'
+      : (orderType === 'platform' ? 'platform' : 'food');
   const agg = {};
   const decSource = catalogDecs || decrementsIn;
   for (let i = 0; i < decSource.length; i += 1) {
@@ -2536,7 +2642,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     const inventoryDecrements = Object.keys(agg).map((k) => ({
       kind: agg[k].col === 'bread_products'
           ? 'bread'
-          : (agg[k].col === 'extra_products' ? 'extra' : 'food'),
+          : (agg[k].col === 'extra_products'
+              ? 'extra'
+              : (agg[k].col === 'platform_products' ? 'platform' : 'food')),
       id: agg[k].id,
       qty: agg[k].qty,
       label: agg[k].label,
@@ -6289,6 +6397,55 @@ function marketTsToIso(v) {
   return v.toDate().toISOString();
 }
 
+const MARKET_SEARCH_MAX_TOKENS = 48;
+const MARKET_SEARCH_MIN_LEN = 2;
+
+function marketToLatin(s) {
+  const map = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z',
+    и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
+    с: 's', т: 't', у: 'u', ф: 'f', х: 'x', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sh',
+    ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya', ҳ: 'h', қ: 'q', ғ: "g'",
+    ў: "o'", ң: 'ng',
+  };
+  return String(s || '').toLowerCase().split('').map((c) => map[c] || c).join('');
+}
+
+function marketToCyrillic(s) {
+  let result = String(s || '').toLowerCase();
+  const digraphs = {
+    sh: 'ш', ch: 'ч', yo: 'ё', yu: 'ю', ya: 'я', ts: 'ц', ng: 'ң',
+    "o'": 'ў', "g'": 'ғ',
+  };
+  for (const [k, v] of Object.entries(digraphs)) {
+    result = result.split(k).join(v);
+  }
+  const singles = {
+    q: 'қ', h: 'ҳ', a: 'а', b: 'б', v: 'в', g: 'г', d: 'д', e: 'е', j: 'ж',
+    z: 'з', i: 'и', y: 'й', k: 'к', l: 'л', m: 'м', n: 'н', o: 'о', p: 'п',
+    r: 'р', s: 'с', t: 'т', u: 'у', f: 'ф', x: 'х',
+  };
+  return result.split('').map((c) => singles[c] || c).join('');
+}
+
+/** Title+description → searchTokens (кирилл + лотин). */
+function buildMarketSearchTokens(title, description) {
+  const text = `${title || ''} ${description || ''}`.toLowerCase();
+  const words = text.split(/[^0-9a-zа-яёўқғҳʻʼ']+/i).filter(
+    (w) => w && w.length >= MARKET_SEARCH_MIN_LEN,
+  );
+  const out = new Set();
+  for (const w of words) {
+    out.add(w);
+    const latin = marketToLatin(w);
+    const cyrl = marketToCyrillic(w);
+    if (latin.length >= MARKET_SEARCH_MIN_LEN) out.add(latin);
+    if (cyrl.length >= MARKET_SEARCH_MIN_LEN) out.add(cyrl);
+    if (out.size >= MARKET_SEARCH_MAX_TOKENS) break;
+  }
+  return Array.from(out).slice(0, MARKET_SEARCH_MAX_TOKENS);
+}
+
 function serializeMarketAdForAdmin(doc) {
   const d = doc.data() || {};
   const title = String(d.title || '');
@@ -6398,6 +6555,7 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
   const patch = {
     title,
     titleLower: title.toLowerCase(),
+    searchTokens: buildMarketSearchTokens(title, description),
     description,
     price,
     phone,
@@ -6427,13 +6585,19 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
   return { ok: true, adId };
 });
 
-const MARKET_DAILY_AD_LIMIT = 10;
-const MARKET_MAX_PENDING = 20;
-const MARKET_MAX_ACTIVE = 50;
+const MARKET_DAILY_AD_LIMIT = 5000;
+const MARKET_MAX_PENDING = 5000;
+const MARKET_MAX_ACTIVE = 5000;
 const MARKET_ACTIVE_TTL_DAYS = 60;
 const MARKET_PENDING_TTL_DAYS = 14;
 const MARKET_MAX_PRICE = 100000000;
 const MARKET_DAILY_REPORT_LIMIT = 20;
+
+function marketActiveExpiresAt() {
+  return admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + MARKET_ACTIVE_TTL_DAYS * 24 * 60 * 60 * 1000),
+  );
+}
 
 function marketPhoneVariants(uid) {
   const u = canonicalUid(uid);
@@ -6491,22 +6655,22 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   let activeCount = 0;
   let pendingCount = 0;
   for (const phoneKey of phoneVariants) {
-    const [activeSnap, pendingSnap] = await Promise.all([
+    const [activeAgg, pendingAgg] = await Promise.all([
       db.collection('ads')
         .where('type', '==', 'cheap_product')
         .where('ownerId', '==', phoneKey)
         .where('status', '==', 'active')
-        .limit(MARKET_MAX_ACTIVE + 1)
+        .count()
         .get(),
       db.collection('ads')
         .where('type', '==', 'cheap_product')
         .where('ownerId', '==', phoneKey)
         .where('status', '==', 'pending')
-        .limit(MARKET_MAX_PENDING + 1)
+        .count()
         .get(),
     ]);
-    activeCount += activeSnap.size;
-    pendingCount += pendingSnap.size;
+    activeCount += activeAgg.data().count || 0;
+    pendingCount += pendingAgg.data().count || 0;
   }
   if (activeCount >= MARKET_MAX_ACTIVE) {
     throw new functions.https.HttpsError(
@@ -6521,13 +6685,13 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
   dayStart.setHours(0, 0, 0, 0);
   let todayCount = 0;
   for (const phoneKey of phoneVariants) {
-    const recentSnap = await db.collection('ads')
+    const recentAgg = await db.collection('ads')
       .where('type', '==', 'cheap_product')
       .where('ownerId', '==', phoneKey)
       .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
-      .limit(MARKET_DAILY_AD_LIMIT + 1)
+      .count()
       .get();
-    todayCount += recentSnap.size;
+    todayCount += recentAgg.data().count || 0;
     if (todayCount >= MARKET_DAILY_AD_LIMIT) break;
   }
   if (todayCount >= MARKET_DAILY_AD_LIMIT) {
@@ -6535,27 +6699,38 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
       'resource-exhausted', 'Daily ad limit reached');
   }
 
-  const expiresAt = admin.firestore.Timestamp.fromDate(
-    new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
-  );
+  const autoApprove = await isMarketAutoApproveEnabled();
+  const expiresAt = autoApprove
+    ? marketActiveExpiresAt()
+    : admin.firestore.Timestamp.fromDate(
+      new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
+    );
 
-  const ref = await db.collection('ads').add({
+  const payload = {
     type: 'cheap_product',
     ownerId: uid,
     title,
     titleLower: title.toLowerCase(),
+    searchTokens: buildMarketSearchTokens(title, description),
     description,
     price,
     phone: uid,
     sellerName,
     imageUrls: imageUrls.map((u) => String(u)),
-    status: 'pending',
+    status: autoApprove ? 'active' : 'pending',
     views: 0,
     expiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  return { ok: true, adId: ref.id };
+  };
+  if (autoApprove) {
+    payload.publishedAt = admin.firestore.FieldValue.serverTimestamp();
+    payload.moderatedBy = 'auto';
+    payload.moderatedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  const ref = await db.collection('ads').add(payload);
+  return { ok: true, adId: ref.id, status: payload.status };
 });
 
 /** Mijoz: Onlayn BOZOR шикоят → reports (CF-only). */
@@ -8500,14 +8675,15 @@ exports.resetDailySoldStock = functions.pubsub
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
     const reserved = await aggregateOpenOrderStockReservations();
-    const [bread, extras, food] = await Promise.all([
+    const [bread, extras, food, platform] = await Promise.all([
       _resetCollectionSoldToday('bread_products'),
       _resetCollectionSoldToday('extra_products'),
       _resetCollectionSoldToday('food_inventory'),
+      _resetCollectionSoldToday('platform_products'),
     ]);
     const reapplied = await applyStockReservations(reserved);
     console.log(
-      `Daily stock reset: bread=${bread}, extras=${extras}, food=${food}, reapplied=${reapplied}`);
+      `Daily stock reset: bread=${bread}, extras=${extras}, food=${food}, platform=${platform}, reapplied=${reapplied}`);
     return null;
   });
 
@@ -8516,13 +8692,17 @@ exports.resetSoldStockNow = functions.https.onCall(async (data, context) => {
   const adminPhone = String(data.adminPhone || '');
   await assertAdmin(adminPhone, context);
   const reserved = await aggregateOpenOrderStockReservations();
-  const [bread, extras, food] = await Promise.all([
+  const [bread, extras, food, platform] = await Promise.all([
     _resetCollectionSoldToday('bread_products'),
     _resetCollectionSoldToday('extra_products'),
     _resetCollectionSoldToday('food_inventory'),
+    _resetCollectionSoldToday('platform_products'),
   ]);
   const reapplied = await applyStockReservations(reserved);
-  return { ok: true, bread, extras, food, reapplied, reservedKeys: Object.keys(reserved).length };
+  return {
+    ok: true, bread, extras, food, platform, reapplied,
+    reservedKeys: Object.keys(reserved).length,
+  };
 });
 
 // ─── P1-2: Heartbeat crash cleanup (drivers + couriers) ───────────────────────
@@ -9770,7 +9950,7 @@ exports.marshrutDriverAutoOffline = functions.pubsub
   });
 
 /**
- * One-time migration: set titleLower on cheap_product ads missing it.
+ * Migration: titleLower + searchTokens for cheap_product ads.
  * Callable; requires authenticated admin/superadmin user doc.
  */
 exports.migrateCheapProductTitleLower = functions.https.onCall(
@@ -9811,9 +9991,19 @@ exports.migrateCheapProductTitleLower = functions.https.onCall(
         lastId = doc.id;
         const d = doc.data();
         const title = (d.title || '').toString();
+        if (!title) continue;
+        const description = (d.description || '').toString();
         const lower = (d.titleLower || '').toString();
-        if (!title || lower) continue;
-        batch.update(doc.ref, { titleLower: title.toLowerCase() });
+        const tokens = Array.isArray(d.searchTokens) ? d.searchTokens : [];
+        const needLower = !lower;
+        const needTokens = tokens.length === 0;
+        if (!needLower && !needTokens) continue;
+        const patch = {};
+        if (needLower) patch.titleLower = title.toLowerCase();
+        if (needTokens) {
+          patch.searchTokens = buildMarketSearchTokens(title, description);
+        }
+        batch.update(doc.ref, patch);
         writes++;
         updated++;
       }
@@ -11727,6 +11917,17 @@ exports.adminSetDatingAutoApprove = functions.https.onCall(async (data, context)
   const enabled = data.enabled === true;
   await db.collection('settings').doc('app').set({
     datingAutoApprove: enabled,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, enabled };
+});
+
+/** Admin: Onlayn BOZOR эълонларини авто фаоллаштириш. */
+exports.adminSetMarketAutoApprove = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const enabled = data.enabled === true;
+  await db.collection('settings').doc('app').set({
+    marketAutoApprove: enabled,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, enabled };

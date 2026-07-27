@@ -20,9 +20,12 @@ class OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFood = order.type == 'food';
-    final emoji = isFood ? '🍽️' : '🫓';
-    final title = isFood ? 'Овқат буюртма' : 'Нон буюртма';
-    final color = isFood ? AppColors.primary : AppColors.primary;
+    final isPlatform = order.type == 'platform';
+    final emoji = isPlatform ? '🛒' : (isFood ? '🍽️' : '🫓');
+    final title = isPlatform
+        ? 'Платформа дўкони'
+        : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
+    final color = AppColors.primary;
 
     final dt = order.createdAt;
     final dateStr =

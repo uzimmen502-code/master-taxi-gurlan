@@ -64,7 +64,7 @@ class WalletWithdrawPanel extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     dense: true,
-                    title: Text('${formatPrice(amount)} сўм'),
+                    title: Text('${formatMoney(amount)}'),
                     subtitle: Text(
                       [
                         _statusLabel(status),

@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
@@ -107,7 +108,7 @@ class HourlyBarChart extends StatelessWidget {
               getTooltipItem: (g, _, __, ___) {
                 final p = series.points[g.x.toInt()];
                 return BarTooltipItem(
-                  '${p.hourLabel}\n${NumberFormat.decimalPattern('en').format(p.value.toInt())} ${series.unit}',
+                  '${p.hourLabel}\n${formatPrice(p.value.toInt())} ${series.unit}',
                   const TextStyle(color: Colors.white, fontSize: 11),
                 );
               },

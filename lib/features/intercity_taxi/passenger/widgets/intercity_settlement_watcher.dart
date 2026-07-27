@@ -61,7 +61,7 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Qaytim — hamyonga'),
         content: Text(
-          'Haydovchi ${formatPrice(amount)} so\'m qaytimni hamyoningizga '
+          'Haydovchi ${formatMoney(amount)} qaytimni hamyoningizga '
           'o\'tkazmoqchi. Tasdiqlaysizmi?',
         ),
         actions: [
@@ -82,7 +82,7 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatPrice(amount)} so\'m hamyoningizga qo\'shildi'),
+          content: Text('${formatMoney(amount)} hamyoningizga qo\'shildi'),
           backgroundColor: Colors.green,
         ));
       } else {

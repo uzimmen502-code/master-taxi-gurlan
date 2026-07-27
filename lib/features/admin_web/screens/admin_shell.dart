@@ -34,6 +34,7 @@ import 'courier_management_screen.dart';
 import 'driver_applications_screen.dart';
 import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
+import 'platform_products_admin_screen.dart';
 import 'products_manager_screen.dart';
 import 'procurement_prices_screen.dart';
 import 'oil_catalog_admin_screen.dart';
@@ -126,6 +127,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Онлайн бозор',
       icon: Icons.storefront_outlined,
       description: 'Арзон маҳсулот эълонлари',
+    ),
+    _AdminSection(
+      label: 'Платформа дўкони',
+      icon: Icons.store_mall_directory_outlined,
+      description: 'Тавсия / платформа каталоги',
     ),
     _AdminSection(
       label: '❤️ Танишув',
@@ -381,6 +387,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Онлайн бозор') {
       return const MarketModerationScreen();
+    }
+    if (section.label == 'Платформа дўкони') {
+      return const PlatformProductsAdminScreen();
     }
     if (section.label == '❤️ Танишув') {
       return const DatingModerationScreen();

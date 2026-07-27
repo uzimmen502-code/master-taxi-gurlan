@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,6 +27,7 @@ import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
+import '../platform_store/screens/platform_store_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_birja/screens/yuk_birja_screen.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
@@ -83,14 +83,6 @@ double _sectionGap(BuildContext context, {required double base}) {
               : 1.0;
   return (base * scale * heightFactor).clamp(6.0, base);
 }
-
-String _formatBalance(BuildContext context, int balance) => context
-    .tr('home_amount_with_currency')
-    .replaceAll(
-      '{amount}',
-      NumberFormat('#,###').format(balance),
-    )
-    .replaceAll('{currency}', context.tr('currency_sum'));
 
 String _todayText(BuildContext context) {
   final now = DateTime.now();
@@ -467,8 +459,9 @@ class _HomeViewState extends State<_HomeView> {
                           children: [
                             SizedBox(height: _sectionGap(context, base: 10)),
                             WalletCard(
-                              balance: _formatBalance(
-                                  context, user?.bonusBalance ?? 0),
+                              balanceAmount:
+                                  formatPrice(user?.bonusBalance ?? 0),
+                              balanceCurrency: kCurrencySum,
                               lastTxAmount: '—',
                               displayName: _displayName(context, user, home),
                               dateText: _todayText(context),
@@ -639,16 +632,20 @@ class _HomeViewState extends State<_HomeView> {
                             const SizedBox(height: 16),
                             FeaturedProductsSection(
                               onProductTap: (source) {
-                                final moduleId = switch (source) {
-                                  'bread' => 'bread',
-                                  'food' => 'food',
-                                  'market' => 'cheap_products_home',
-                                  _ => null,
-                                };
-                                if (moduleId == null) return;
-                                _openModule(
-                                  HomeModulesCatalog.byId(moduleId),
-                                );
+                                switch (source) {
+                                  case 'bread':
+                                    _openModule(
+                                      HomeModulesCatalog.byId('bread'),
+                                    );
+                                  case 'food':
+                                    _openModule(
+                                      HomeModulesCatalog.byId('food'),
+                                    );
+                                  case 'platform':
+                                    _push(const PlatformStoreScreen());
+                                  default:
+                                    break;
+                                }
                               },
                             ),
                             const SizedBox(height: 12),

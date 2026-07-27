@@ -525,7 +525,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Қайтим — ҳамёнга'),
         content: Text(
-          'Ҳайдовчи ${formatPrice(amount)} сўм қайтимни ҳамёнингизга '
+          'Ҳайдовчи ${formatMoney(amount)} қайтимни ҳамёнингизга '
           'ўтказмоқчи. Тасдиқлайсизми?',
         ),
         actions: [
@@ -546,7 +546,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
+          content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
           backgroundColor: Colors.green,
         ));
       } else {

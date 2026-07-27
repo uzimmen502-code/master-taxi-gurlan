@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:intl/intl.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -608,24 +608,24 @@ class _WalletNewsListState extends State<_WalletNewsList> {
                 [
                   if (name.isNotEmpty) phone,
                   if (walletBal != null)
-                    'баланс ${formatPrice(walletBal)} сўм',
+                    'баланс ${formatMoney(walletBal)}',
                 ].where((s) => s.trim().isNotEmpty).join(' · '),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 6),
               _kvRow(
                 'Тўлов қилингунча',
-                '${formatPrice(sums.pending)} сўм',
+                '${formatMoney(sums.pending)}',
                 valueColor: const Color(0xFFE65100),
               ),
               _kvRow(
                 'Тўлов қилинган',
-                '${formatPrice(sums.paid)} сўм',
+                '${formatMoney(sums.paid)}',
                 valueColor: const Color(0xFF00897B),
               ),
               _kvRow(
                 'Жами',
-                '${formatPrice(sums.total)} сўм',
+                '${formatMoney(sums.total)}',
                 valueColor: const Color(0xFF1565C0),
               ),
               const SizedBox(height: 6),

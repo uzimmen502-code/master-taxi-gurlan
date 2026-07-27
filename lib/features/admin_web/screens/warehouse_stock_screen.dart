@@ -310,7 +310,7 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
                         TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                   Text(
-                    value != null ? '${formatPrice(value)} сўм' : '—',
+                    value != null ? '${formatMoney(value)}' : '—',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -344,7 +344,7 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           Text(
-            '${formatPrice(_grandTotal)} сўм',
+            '${formatMoney(_grandTotal)}',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,

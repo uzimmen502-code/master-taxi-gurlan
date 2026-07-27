@@ -682,7 +682,7 @@ class _PriceSummary extends StatelessWidget {
                   fontSize: AppText.titleSmall, fontWeight: FontWeight.bold)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('${formatPrice(c.grandTotal)} сўм',
+            child: Text('${formatMoney(c.grandTotal)}',
                 textAlign: TextAlign.right,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

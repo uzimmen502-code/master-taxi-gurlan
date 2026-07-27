@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -17,7 +18,6 @@ class DailyReportScreen extends StatefulWidget {
 }
 
 class _DailyReportScreenState extends State<DailyReportScreen> {
-  static final _money = NumberFormat.decimalPattern('en');
 
   @override
   void initState() {
@@ -178,30 +178,30 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
             MetricRow(
                 icon: '💵',
                 label: 'Бугунги тушум',
-                value: '${_money.format(r.todayRevenue)} сўм',
+                value: '${formatMoney(r.todayRevenue)}',
                 valueColor: AppColors.primary),
             MetricRow(
                 label: 'Ҳафталик тушум',
-                value: '${_money.format(r.weekRevenue)} сўм'),
+                value: '${formatMoney(r.weekRevenue)}'),
             MetricRow(
                 label: 'Ойлик тушум',
-                value: '${_money.format(r.monthRevenue)} сўм'),
+                value: '${formatMoney(r.monthRevenue)}'),
             MetricRow(
                 label: 'Ўртача буюртма қиймати',
-                value: '${_money.format(r.avgOrderValue.toInt())} сўм'),
+                value: '${formatPrice(r.avgOrderValue.toInt())} сўм'),
             MetricRow(
                 label: 'Ўртача сафар қиймати',
-                value: '${_money.format(r.avgTripValue.toInt())} сўм'),
+                value: '${formatPrice(r.avgTripValue.toInt())} сўм'),
             MetricRow(
                 label: 'Қайтарилган қолдиқ',
-                value: '${_money.format(r.todayCashChange)} сўм'),
+                value: '${formatMoney(r.todayCashChange)}'),
             MetricRow(
                 label: 'Кошелёкдаги пул',
-                value: '${_money.format(r.totalWalletBalance)} сўм'),
+                value: '${formatMoney(r.totalWalletBalance)}'),
             MetricRow(
                 label: 'Кутаётган payout',
                 value:
-                    '${r.pendingPayouts} та · ${_money.format(r.pendingPayoutsAmount)} сўм',
+                    '${r.pendingPayouts} та · ${formatMoney(r.pendingPayoutsAmount)}',
                 valueColor: r.pendingPayouts > 0
                     ? AppColors.primary
                     : null),
@@ -291,7 +291,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
               Text(
-                '${r.todayOrdersTotal} буюртма · ${r.todayTripsTotal} сафар · ${_money.format(r.todayRevenue)} сўм',
+                '${r.todayOrdersTotal} буюртма · ${r.todayTripsTotal} сафар · ${formatMoney(r.todayRevenue)}',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],

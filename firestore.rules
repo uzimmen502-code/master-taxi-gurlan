@@ -930,6 +930,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /platform_products/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /food_inventory/{id} {
       allow read: if true;
       allow create, update: if isAdmin();
@@ -1764,9 +1770,12 @@ service cloud.firestore {
           && request.resource.data.imageUrls.size() >= 1
           && request.resource.data.imageUrls.size() <= 5
           && changed.hasOnly([
-                'title', 'titleLower', 'description', 'price',
+                'title', 'titleLower', 'searchTokens', 'description', 'price',
                 'sellerName', 'imageUrls', 'status', 'updatedAt'
               ])
+          && (!('searchTokens' in request.resource.data)
+              || (request.resource.data.searchTokens is list
+                  && request.resource.data.searchTokens.size() <= 64))
           && (!changed.hasAny(['status'])
               || (
                 (request.resource.data.status == 'inactive'
@@ -1792,8 +1801,8 @@ service cloud.firestore {
           && request.resource.data.ownerId == resource.data.ownerId
           && request.resource.data.type == resource.data.type
           && changed.hasOnly([
-                'title', 'titleLower', 'description', 'price', 'phone',
-                'sellerName', 'status', 'adminNote', 'moderatedBy',
+                'title', 'titleLower', 'searchTokens', 'description', 'price',
+                'phone', 'sellerName', 'status', 'adminNote', 'moderatedBy',
                 'moderatedAt', 'updatedAt', 'publishedAt'
               ])
           && (!changed.hasAny(['status'])

@@ -701,7 +701,7 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Нарх:', style: TextStyle(color: Colors.grey.shade700)),
-              Text('${formatPrice(_fare)} сўм',
+              Text('${formatMoney(_fare)}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
@@ -734,7 +734,7 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Қайтим ${formatPrice(change)} сўм — йўловчи ҳисобига '
+                      'Қайтим ${formatMoney(change)} — йўловчи ҳисобига '
                       'ўтказилади.',
                       style: const TextStyle(fontSize: 12),
                     ),

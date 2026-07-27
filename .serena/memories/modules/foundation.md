@@ -44,6 +44,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - driver_role_service.dart — CF leaveDriverRole/adminResetTaxiDriversRegistry.
 - google_directions_service.dart — CF Directions proxy; polyline_decoder.dart decodes.
 - fcm_service.dart — FCM token + background push; `notifications`. notification_delivery/notification_service/arrival_ringer/push_navigation.
-- featured_products_service.dart / product_feed_service.dart — feeds from bread_products,food_catalog,ads(cheap_product active).
+- featured_products_service.dart — bread+food+platform_products (tap: bread/food modules, platform→PlatformStoreScreen; title «Тавсия этамиз»). product_feed_service — still bread/food/ads (market mix later). См. `mem:modules/platform_store`.
+- Money display: `formatPrice` → `1 234 567`, `formatMoney` → `1 234 567 сўм` (`lib/core/utils/formatters.dart`, `kCurrencySum`). No commas / so'm / сум.
 - daily_report_service.dart — 20:00 report (client + scheduled CF backup).
 - location_service.dart, geo_math_service.dart, courier_delivery_route_optimizer.dart, intercity_pickup_route_service.dart (Directions optimize:true), admin_service.dart (client admin gate).

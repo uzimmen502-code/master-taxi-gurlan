@@ -303,7 +303,7 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
-              '${p.plainMeta ?? ''}\nдан ${formatPrice(p.price)} сўм'
+              '${p.plainMeta ?? ''}\nдан ${formatMoney(p.price)}'
               '${p.active ? '' : ' · ўчирилган'}',
             ),
             isThreeLine: true,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -163,15 +164,14 @@ class _DashboardTabState extends State<DashboardTab>
   }
 
   Widget _quickPulse(KpiSummary kpi) {
-    final fmt = NumberFormat.decimalPattern('en');
-    final revToday = fmt.format(kpi.todayRevenue);
+    final revToday = formatMoney(kpi.todayRevenue);
     return SectionCard(
       title: 'Кундалик пулс',
       icon: '💓',
       subtitle: 'Сўнгги 24 соат',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _pulseLine(
-            '📦 Бугунги тушум', '$revToday сўм', AppColors.primary),
+            '📦 Бугунги тушум', revToday, AppColors.primary),
         _pulseLine(
             '🛒 Бугунги буюртмалар',
             '${kpi.todayOrders} та',

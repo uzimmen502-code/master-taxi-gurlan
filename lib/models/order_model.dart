@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// `orders` collection — non/ovqat buyurtmasi.
 class OrderModel {
   final String id;
-  final String type; // bread | food
+  final String type; // bread | food | platform
   final int total;
   final String status; // legacy
   final List<OrderItem> items;

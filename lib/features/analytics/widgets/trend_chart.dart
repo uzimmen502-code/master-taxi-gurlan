@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
@@ -139,7 +140,7 @@ class TrendChart extends StatelessWidget {
                     : (useWeekday ? p.weekdayLabel : p.dayLabel);
                 final v = formatValue != null
                     ? formatValue!(s.y)
-                    : NumberFormat.decimalPattern('en').format(s.y.toInt());
+                    : formatPrice(s.y.toInt());
                 return LineTooltipItem('$lbl\n$v ${series.unit}',
                     const TextStyle(color: Colors.white, fontSize: 11));
               }).toList(),

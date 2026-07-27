@@ -9,7 +9,8 @@ import '../painters/metallic_border_highlight_painter.dart';
 class WalletCard extends StatefulWidget {
   const WalletCard({
     super.key,
-    required this.balance,
+    required this.balanceAmount,
+    required this.balanceCurrency,
     required this.lastTxAmount,
     required this.displayName,
     required this.dateText,
@@ -18,7 +19,11 @@ class WalletCard extends StatefulWidget {
     this.onHistoryTap,
   });
 
-  final String balance;
+  /// Масалан `19 562` (`formatPrice`).
+  final String balanceAmount;
+
+  /// Масалан `сўм` / `сўм`.
+  final String balanceCurrency;
   final String lastTxAmount;
   final String displayName;
   final String dateText;
@@ -146,14 +151,25 @@ class _WalletCardState extends State<WalletCard>
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Flexible(
-                        child: Text(
-                          widget.balance,
+                        child: RichText(
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
+                          text: TextSpan(
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: widget.balanceAmount,
+                                style: const TextStyle(
+                                  fontSize: 19.8, // 18 × 1.1
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(text: ' ${widget.balanceCurrency}'),
+                            ],
                           ),
                         ),
                       ),

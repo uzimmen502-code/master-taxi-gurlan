@@ -166,7 +166,7 @@ class _TaskCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    'Жами: ${formatPrice(task.totalValue)} сўм',
+                    'Жами: ${formatMoney(task.totalValue)}',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,

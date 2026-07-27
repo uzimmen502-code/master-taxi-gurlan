@@ -182,7 +182,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 ),
                 if (!product.isYopish && !product.isToy) ...[
                   const SizedBox(height: 2),
-                  Text('${formatPrice(widget.price)} сўм',
+                  Text('${formatMoney(widget.price)}',
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,

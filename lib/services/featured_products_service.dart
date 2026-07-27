@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../features/ads/models/ad_model.dart';
 import '../models/bread_product.dart';
 import '../models/food_product.dart';
+import '../repositories/platform_products_repository.dart';
 import '../utils/food_catalog.dart';
 
 /// Bosh ekran «Tavsiya etamiz» bo‘limi uchun mahsulot.
@@ -22,22 +22,26 @@ class FeaturedProduct {
   /// HTTP, data URL yoki bo‘sh.
   final String imageUrl;
 
-  /// `bread` | `food` | `market`
+  /// `bread` | `food` | `platform`
   final String source;
 }
 
-/// Non, taom va bozor dan tavsiya mahsulotlarini yig‘adi.
+/// Non, taom va platforma do‘konidan tavsiya mahsulotlarini yig‘adi.
 class FeaturedProductsService {
-  FeaturedProductsService({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+  FeaturedProductsService({
+    FirebaseFirestore? db,
+    PlatformProductsRepository? platformRepo,
+  })  : _db = db ?? FirebaseFirestore.instance,
+        _platformRepo = platformRepo ?? PlatformProductsRepository(db: db);
 
   final FirebaseFirestore _db;
+  final PlatformProductsRepository _platformRepo;
 
   Future<List<FeaturedProduct>> getFeaturedProducts() async {
     final bread = await _fetchBread();
     final food = await _fetchFood();
-    final market = await _fetchMarket();
-    return [...bread, ...food, ...market];
+    final platform = await _fetchPlatform();
+    return [...bread, ...food, ...platform];
   }
 
   List<FeaturedProduct> _positivePrice(Iterable<FeaturedProduct> items,
@@ -123,40 +127,22 @@ class FeaturedProductsService {
     }
   }
 
-  Future<List<FeaturedProduct>> _fetchMarket() async {
+  Future<List<FeaturedProduct>> _fetchPlatform() async {
     try {
-      return await _marketQuery(orderField: 'createdAt');
+      final products = await _platformRepo.fetchForHomeFeatured(take: 2);
+      return products
+          .map(
+            (p) => FeaturedProduct(
+              id: p.id,
+              name: p.name,
+              price: p.price,
+              imageUrl: p.imageUrl,
+              source: 'platform',
+            ),
+          )
+          .toList(growable: false);
     } catch (_) {
-      try {
-        return await _marketQuery(orderField: 'publishedAt');
-      } catch (_) {
-        return const [];
-      }
+      return const [];
     }
-  }
-
-  Future<List<FeaturedProduct>> _marketQuery({required String orderField}) async {
-    final snap = await _db
-        .collection('ads')
-        .where('type', isEqualTo: AdModel.typeKey)
-        .where('status', isEqualTo: 'active')
-        .orderBy(orderField, descending: true)
-        .limit(6)
-        .get();
-
-    final items = snap.docs.map((doc) {
-      final ad = AdModel.fromFirestore(doc);
-      final imageUrl =
-          ad.imageUrls.isNotEmpty ? ad.imageUrls.first.trim() : '';
-      return FeaturedProduct(
-        id: ad.id,
-        name: ad.title,
-        price: ad.price,
-        imageUrl: imageUrl,
-        source: 'market',
-      );
-    });
-
-    return _positivePrice(items);
   }
 }

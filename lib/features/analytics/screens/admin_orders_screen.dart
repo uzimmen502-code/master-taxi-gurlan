@@ -30,8 +30,9 @@ class AdminOrdersScreen extends StatefulWidget {
 
 class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   static const _blue = AppColors.primary;
-  static final _money = NumberFormat.decimalPattern('en');
   static final _date = DateFormat('dd.MM HH:mm');
+  /// Legacy param for board cards (display uses [fmt.formatMoney]).
+  static final _money = NumberFormat.decimalPattern('en');
 
   bool _adminChecked = false;
   bool _isAdmin = false;
@@ -1037,7 +1038,7 @@ class _OrderCard extends StatelessWidget {
             const SizedBox(height: 10),
             OrderReceiptView(
               order: order,
-              title: '🧾 Чек · ${money.format(order.total)} сўм',
+              title: '🧾 Чек · ${fmt.formatMoney(order.total)}',
             ),
             if (next != null && next!.isNotEmpty) ...[
               const SizedBox(height: 12),

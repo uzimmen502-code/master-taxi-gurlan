@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -269,7 +269,7 @@ class _WalletBotTabState extends State<WalletBotTab>
                 : '—';
             return Card(
               child: ListTile(
-                title: Text('${formatPrice(amount)} сўм · +$uid'),
+                title: Text('${formatMoney(amount)} · +$uid'),
                 subtitle: Text('ID: ${d.id}\n$when'),
                 isThreeLine: true,
                 trailing: Wrap(
@@ -340,7 +340,7 @@ class _WalletBotTabState extends State<WalletBotTab>
                 : 'Карта: $card${holder.isEmpty ? '' : ' · $holder'}';
             return Card(
               child: ListTile(
-                title: Text('${formatPrice(amount)} сўм · +$uid'),
+                title: Text('${formatMoney(amount)} · +$uid'),
                 subtitle: Text(
                   [
                     'ID: ${d.id}',
@@ -465,7 +465,7 @@ class _WalletBotTabState extends State<WalletBotTab>
               for (final lim in _withdrawAutoLimits)
                 ButtonSegment(
                   value: lim,
-                  label: Text(NumberFormat.decimalPattern('uz').format(lim)),
+                  label: Text(formatPrice(lim)),
                 ),
             ],
             selected: {_withdrawAutoLimit},
@@ -479,7 +479,7 @@ class _WalletBotTabState extends State<WalletBotTab>
           padding: const EdgeInsets.only(top: 6, bottom: 12),
           child: Text(
             _withdrawApproveMode == 'auto'
-                ? 'Авто: ≤ ${formatPrice(_withdrawAutoLimit)} сўм дарҳол ҳамёндан ечилади; '
+                ? 'Авто: ≤ ${formatMoney(_withdrawAutoLimit)} дарҳол ҳамёндан ечилади; '
                     'каттареси «Ечиш навбати»да кутади. Картага тўлов ҳали қўлда.'
                 : 'Қўлда: барча ечиш аризалари админ тасдиғини кутади.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),

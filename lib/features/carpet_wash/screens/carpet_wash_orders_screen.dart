@@ -143,7 +143,7 @@ class _OrderCard extends StatelessWidget {
           if (order.finalPrice > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '${formatPrice(order.finalPrice)} so\'m',
+              '${formatMoney(order.finalPrice)}',
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 color: _accent,

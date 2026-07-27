@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/theme/app_theme.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
@@ -213,7 +213,6 @@ class _FinanceTabState extends State<FinanceTab>
 }
 
 class _MoneyFmt {
-  static final _fmt = intl.NumberFormat.decimalPattern('en');
   static String fmt(num v) {
     if (v.abs() >= 1000000) {
       return '${(v / 1000000).toStringAsFixed(1)}M';
@@ -221,6 +220,6 @@ class _MoneyFmt {
     if (v.abs() >= 1000) {
       return '${(v / 1000).toStringAsFixed(1)}K';
     }
-    return _fmt.format(v.toInt());
+    return formatPrice(v.toInt());
   }
 }

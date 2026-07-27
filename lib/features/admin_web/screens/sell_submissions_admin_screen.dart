@@ -215,7 +215,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
         SnackBar(
           backgroundColor: AppColors.button,
           content: Text(
-            'Йиғиб олиш вазифаси яратилди · ${formatPrice(created.totalValue)} сўм',
+            'Йиғиб олиш вазифаси яратилди · ${formatMoney(created.totalValue)}',
           ),
         ),
       );
@@ -907,7 +907,7 @@ class _CollectionTaskDialogState extends State<_CollectionTaskDialog> {
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   Text(
-                    '${formatPrice(_total)} сўм',
+                    '${formatMoney(_total)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 16,

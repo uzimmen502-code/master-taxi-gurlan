@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/utils/formatters.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -72,7 +73,7 @@ class AdCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${ad.price} so\'m',
+                      formatMoney(ad.price),
                       style: const TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w700,

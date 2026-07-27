@@ -45,12 +45,12 @@ String walletLedgerSubtitle(WalletLedgerEntry e) {
 
   final orderTotal = (e.meta['orderTotal'] as num?)?.toInt();
   if (orderTotal != null && orderTotal > 0) {
-    parts.add('Buyurtma: ${formatPrice(orderTotal)} so‘m');
+    parts.add('Buyurtma: ${formatMoney(orderTotal)}');
   }
 
   final cashPaid = (e.meta['cashPaid'] as num?)?.toInt();
   if (cashPaid != null && cashPaid > 0) {
-    parts.add('Naqd: ${formatPrice(cashPaid)} so‘m');
+    parts.add('Naqd: ${formatMoney(cashPaid)}');
   }
 
   if (e.refId.isNotEmpty && e.refType == 'order') {

@@ -359,7 +359,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
                   Text(
-                    '${formatPrice(estimatedPrice)} сўм',
+                    '${formatMoney(estimatedPrice)}',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -488,7 +488,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Қайтим — ҳамёнга'),
         content: Text(
-          'Ҳайдовчи ${formatPrice(amount)} сўм қайтимни ҳамёнингизга '
+          'Ҳайдовчи ${formatMoney(amount)} қайтимни ҳамёнингизга '
           'ўтказмоқчи. Тасдиқлайсизми?',
         ),
         actions: [
@@ -509,7 +509,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatPrice(amount)} сўм ҳамёнингизга қўшилди'),
+          content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
           backgroundColor: Colors.green,
         ));
       } else {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import '../../../core/utils/formatters.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -362,7 +362,7 @@ class _FeedProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          NumberFormat('#,###').format(item.price),
+          formatPrice(item.price),
         );
 
     return Material(

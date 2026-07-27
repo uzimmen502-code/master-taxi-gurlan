@@ -136,7 +136,7 @@ class _AdsList extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${ad.price} so\'m'
+                    '${formatMoney(ad.price)}'
                     '${date != null ? ' · ${dateFmt.format(date)}' : ''}',
                   ),
                   if (pendingOnly)

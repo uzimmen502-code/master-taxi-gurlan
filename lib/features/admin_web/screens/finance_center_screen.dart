@@ -360,7 +360,7 @@ class _CashExchangeTab extends StatelessWidget {
               children: [
                 Text('+$uid',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text('${formatPrice(bal)} сўм',
+                Text('${formatMoney(bal)}',
                     style: const TextStyle(
                         color: AppColors.primaryDark, fontSize: 13)),
               ],
@@ -651,7 +651,7 @@ class _SettlementsTabState extends State<_SettlementsTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${formatPrice(amount)} сўм',
+                        Text('${formatMoney(amount)}',
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 2),
@@ -843,7 +843,7 @@ class _JournalTabState extends State<_JournalTab> {
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                       ),
-                      Text('${formatPrice(amount)} сўм',
+                      Text('${formatMoney(amount)}',
                           style: const TextStyle(
                               color: AppColors.primaryDark,
                               fontWeight: FontWeight.bold)),
@@ -1132,7 +1132,7 @@ class _ExceptionsTab extends StatelessWidget {
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                         if (driverUid.isNotEmpty)
-                          Text('+$driverUid  ·  ${formatPrice(bal)} сўм',
+                          Text('+$driverUid  ·  ${formatMoney(bal)}',
                               style: const TextStyle(
                                   fontSize: 12, color: Colors.grey)),
                         if (detectedAt.isNotEmpty)

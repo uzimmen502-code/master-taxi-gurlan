@@ -92,16 +92,25 @@ List<String> userDocIdCandidates(String raw) {
   return ids.where((id) => phoneDigits(id).length >= 9).toList(growable: false);
 }
 
-/// 1234567 -> "1 234 567"
+/// Иловада ягона валюта белгиси (кирилл).
+const kCurrencySum = 'сўм';
+
+/// 1234567 -> "1 234 567" (манфий: "-1 234 567").
 String formatPrice(num p) {
-  final s = p.toInt().toString();
+  final n = p.round();
+  final neg = n < 0;
+  final s = n.abs().toString();
   final b = StringBuffer();
   for (int i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 == 0) b.write(' ');
     b.write(s[i]);
   }
-  return b.toString();
+  final body = b.toString();
+  return neg ? '-$body' : body;
 }
+
+/// 1234567 -> "1 234 567 сўм"
+String formatMoney(num p) => '${formatPrice(p)} $kCurrencySum';
 
 const _monthNames = <String>[
   '', 'янв', 'фев', 'мар', 'апр', 'май', 'июн',

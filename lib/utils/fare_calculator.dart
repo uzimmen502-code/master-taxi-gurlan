@@ -6,6 +6,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/formatters.dart';
 import 'taxi_price_region.dart';
 
 class FareCalculator {
@@ -114,15 +115,7 @@ class FareCalculator {
     return (base, night);
   }
 
-  static String format(int price) {
-    final s = price.toString();
-    final b = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write(' ');
-      b.write(s[i]);
-    }
-    return b.toString();
-  }
+  static String format(int price) => formatPrice(price);
 
   static String breakdown({
     required double distanceKm,
@@ -153,18 +146,18 @@ class FareCalculator {
     );
 
     final lines = <String>[];
-    lines.add('Boshlang\'ich: ${format(baseFare)} so\'m');
+    lines.add('Boshlang\'ich: ${format(baseFare)} сўм');
     lines.add(
       'Masofa: ${distanceKm.toStringAsFixed(1)} km × ${format(pricePerKm)} '
-      '= ${format((distanceKm * pricePerKm).round())} so\'m',
+      '= ${format((distanceKm * pricePerKm).round())} сўм',
     );
     if (paidWait > 0) {
       lines.add(
         'Kutish: $paidWait daq × ${format(pricePerMin)} '
-        '= ${format(paidWait * pricePerMin)} so\'m',
+        '= ${format(paidWait * pricePerMin)} сўм',
       );
     }
-    lines.add('Jami (asosiy): ${format(base)} so\'m');
+    lines.add('Jami (asosiy): ${format(base)} сўм');
     if (priceCoef != 1.0) {
       lines.add('Admin koeffitsient: ×${priceCoef.toStringAsFixed(2)}');
     }
@@ -180,7 +173,7 @@ class FareCalculator {
       lines.add('Qo\'shimcha koeffitsient: ${reasons.join(', ')}');
     }
     lines.add('──────────────');
-    lines.add('Yo\'lkira: ${format(total)} so\'m');
+    lines.add('Yo\'lkira: ${format(total)} сўм');
     return lines.join('\n');
   }
 }

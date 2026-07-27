@@ -387,7 +387,7 @@ class IntercityBookingsRepository {
               routeLabel: routeText,
               passengers: passengers,
               userPhone: userPhone,
-              pricePart: ', ${formatPrice(totalAmount)} сўм',
+              pricePart: ', ${formatMoney(totalAmount)}',
             ),
             'sent': false,
             'type': initialStatus == IntercityBookingStatus.pending

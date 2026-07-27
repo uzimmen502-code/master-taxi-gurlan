@@ -31,6 +31,17 @@ class AdminMarketService {
     });
   }
 
+  /// `settings/app.marketAutoApprove` — янги/қайта юборилган эълонлар дарҳол active.
+  Future<void> setAutoApprove({
+    required String adminPhone,
+    required bool enabled,
+  }) async {
+    await _call('adminSetMarketAutoApprove', {
+      'adminPhone': adminPhone,
+      'enabled': enabled,
+    });
+  }
+
   Future<void> updateAd({
     required String adminPhone,
     required String adId,

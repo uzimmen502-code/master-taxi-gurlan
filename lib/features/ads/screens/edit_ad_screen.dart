@@ -101,7 +101,6 @@ class _EditAdScreenState extends State<EditAdScreen> {
       final title = _titleCtrl.text.trim();
       final patch = <String, dynamic>{
         'title': title,
-        if (title != ad.title) 'titleLower': title.toLowerCase(),
         'description': _descCtrl.text.trim(),
         'price': int.parse(_priceCtrl.text.trim()),
         'imageUrls': urls,
@@ -242,7 +241,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
             TextFormField(
               controller: _priceCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Нархи (so\'m) *'),
+              decoration: const InputDecoration(labelText: 'Нархи (сўм) *'),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Нархни киритинг';
                 final n = int.tryParse(v.trim());

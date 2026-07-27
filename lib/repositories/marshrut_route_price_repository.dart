@@ -17,7 +17,7 @@ class MarshrutRoutePriceRepository {
   static String routeKey(String from, String to) =>
       '${from.trim()}|${to.trim()}';
 
-  /// Yo'nalish narxi (so'm/o'rin) yoki `null` (hali belgilanmagan).
+  /// Yo'nalish narxi (сўм/o'rin) yoki `null` (hali belgilanmagan).
   Future<int?> getPrice(String from, String to) async {
     final snap = await _col.doc(routeKey(from, to)).get();
     if (!snap.exists) return null;

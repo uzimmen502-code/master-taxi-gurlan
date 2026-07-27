@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/ad_search_text.dart';
+
 /// Cheap product listing in Firestore `ads` (type == `cheap_product`).
-class AdModel {
+class AdModel implements AdSearchable {
   const AdModel({
     required this.id,
     required this.ownerId,
@@ -14,6 +16,7 @@ class AdModel {
     required this.imageUrls,
     required this.status,
     required this.views,
+    this.searchTokens = const [],
     this.createdAt,
     this.updatedAt,
     this.publishedAt,
@@ -27,7 +30,9 @@ class AdModel {
   final String id;
   final String ownerId;
   final String title;
+  @override
   final String titleLower;
+  @override
   final String description;
   final int price;
   final String phone;
@@ -37,6 +42,8 @@ class AdModel {
   /// `active` | `inactive` | `pending`
   final String status;
   final int views;
+  @override
+  final List<String> searchTokens;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? publishedAt;
@@ -58,18 +65,26 @@ class AdModel {
   factory AdModel.fromMap(String id, Map<String, dynamic> d) {
     final title = (d['title'] ?? '') as String;
     final rawLower = d['titleLower'] as String?;
+    final description = (d['description'] ?? '') as String;
+    final titleLower =
+        rawLower?.isNotEmpty == true ? rawLower! : title.toLowerCase();
+    final rawTokens = d['searchTokens'];
+    final tokens = rawTokens is List
+        ? rawTokens.map((e) => e.toString()).where((t) => t.isNotEmpty).toList()
+        : AdSearchText.buildTokens(title, description);
     return AdModel(
       id: id,
       ownerId: (d['ownerId'] ?? '') as String,
       title: title,
-      titleLower: rawLower?.isNotEmpty == true ? rawLower! : title.toLowerCase(),
-      description: (d['description'] ?? '') as String,
+      titleLower: titleLower,
+      description: description,
       price: (d['price'] as num?)?.toInt() ?? 0,
       phone: (d['phone'] ?? '') as String,
       sellerName: (d['sellerName'] ?? '') as String,
       imageUrls: List<String>.from(d['imageUrls'] ?? const <String>[]),
       status: (d['status'] ?? 'active') as String,
       views: (d['views'] as num?)?.toInt() ?? 0,
+      searchTokens: tokens,
       createdAt: _parseDate(d['createdAt']),
       updatedAt: _parseDate(d['updatedAt']),
       publishedAt: _parseDate(d['publishedAt']),
@@ -99,6 +114,9 @@ class AdModel {
       'imageUrls': imageUrls,
       'status': status,
       'views': views,
+      'searchTokens': searchTokens.isNotEmpty
+          ? searchTokens
+          : AdSearchText.buildTokens(title, description),
     };
     if (forCreate) {
       map['createdAt'] = FieldValue.serverTimestamp();

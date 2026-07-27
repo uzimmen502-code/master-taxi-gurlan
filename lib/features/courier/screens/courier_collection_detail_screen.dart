@@ -280,7 +280,7 @@ class _CourierCollectionDetailScreenState
                 ),
               ),
               Text(
-                '${formatPrice(item.unitPrice)} сўм / ${item.unit}',
+                '${formatMoney(item.unitPrice)} / ${item.unit}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ],
@@ -319,7 +319,7 @@ class _CourierCollectionDetailScreenState
                         TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                   Text(
-                    lineTotal > 0 ? '${formatPrice(lineTotal)} сўм' : '—',
+                    lineTotal > 0 ? '${formatMoney(lineTotal)}' : '—',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -355,7 +355,7 @@ class _CourierCollectionDetailScreenState
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  '${formatPrice(_grandTotal)} сўм',
+                  '${formatMoney(_grandTotal)}',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -521,9 +521,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
         builder: (ctx) => AlertDialog(
           title: const Text('Диққат — кошелёкдан ечиш'),
           content: Text(
-            'Мижозга товар қийматидан ${formatPrice(withdrawal)} сўм ортиқ '
+            'Мижозга товар қийматидан ${formatMoney(withdrawal)} ортиқ '
             'нақд беряпсиз. Бу сумма унинг кошелёгидан ечилади.\n'
-            'Янги баланс: ${formatPrice(_newBalance)} сўм. Тасдиқлайсизми?',
+            'Янги баланс: ${formatMoney(_newBalance)}. Тасдиқлайсизми?',
           ),
           actions: [
             TextButton(
@@ -592,12 +592,12 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Ҳисоб-китоб · ${formatPrice(widget.totalValue)} сўм',
+          'Ҳисоб-китоб · ${formatMoney(widget.totalValue)}',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
-          'Жами қиймат: ${formatPrice(widget.totalValue)} сўм',
+          'Жами қиймат: ${formatMoney(widget.totalValue)}',
           style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
         ),
         const SizedBox(height: 4),
@@ -611,7 +611,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               )
             else
               Text(
-                '💼 Мижоз кошелёги: ${formatPrice(_customerBalance)} сўм'
+                '💼 Мижоз кошелёги: ${formatMoney(_customerBalance)}'
                 '${_balanceUnknown ? ' (баланс аниқланмади)' : ''}',
                 style: TextStyle(
                   fontSize: 13,
@@ -631,7 +631,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
           decoration: InputDecoration(
             labelText: 'Нақд берилди (мижозга)',
             suffixText: 'сўм',
-            helperText: 'Макс: ${formatPrice(_maxCash)} сўм',
+            helperText: 'Макс: ${formatMoney(_maxCash)}',
             border: const OutlineInputBorder(),
             errorText: _cashTooBig ? _cashTooBigMessage : null,
           ),
@@ -666,9 +666,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                     child: Text(
                       isWithdrawal
                           ? '💼 Кошелёкдан ечилади: '
-                              '${formatPrice(_cashGiven - widget.totalValue)} сўм'
+                              '${formatMoney(_cashGiven - widget.totalValue)}'
                           : '💼 Кошелёкка қўшилади: '
-                              '${formatPrice(_walletDelta)} сўм',
+                              '${formatMoney(_walletDelta)}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
@@ -684,7 +684,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               Padding(
                 padding: const EdgeInsets.only(left: 28),
                 child: Text(
-                  '💼 Янги баланс: ${formatPrice(_newBalance)} сўм',
+                  '💼 Янги баланс: ${formatMoney(_newBalance)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -763,21 +763,21 @@ class _SettlementSheetState extends State<_SettlementSheet> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Жами: ${formatPrice(v)} сўм',
+          'Жами: ${formatMoney(v)}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         if (cashGiven > 0) ...[
           const SizedBox(height: 6),
-          Text('💵 Нақд берилди: ${formatPrice(cashGiven)} сўм'),
+          Text('💵 Нақд берилди: ${formatMoney(cashGiven)}'),
         ],
         if (walletCredit > 0) ...[
           const SizedBox(height: 6),
-          Text('💼 Кошелёкка қўшилди: ${formatPrice(walletCredit)} сўм'),
+          Text('💼 Кошелёкка қўшилди: ${formatMoney(walletCredit)}'),
         ],
         if (withdrawnFromBalance > 0) ...[
           const SizedBox(height: 6),
           Text(
-            '💼 Кошелёкдан нақд олинди: ${formatPrice(withdrawnFromBalance)} сўм',
+            '💼 Кошелёкдан нақд олинди: ${formatMoney(withdrawnFromBalance)}',
             style: TextStyle(
               color: Colors.orange.shade900,
               fontWeight: FontWeight.w600,
@@ -805,7 +805,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               Expanded(
                 child: Text(
                   newBalance != null
-                      ? '💼 Мижоз янги баланси:\n${formatPrice(newBalance)} сўм'
+                      ? '💼 Мижоз янги баланси:\n${formatMoney(newBalance)}'
                       : '💼 Аввал якунланган вазифа',
                   style: const TextStyle(
                     fontSize: 17,

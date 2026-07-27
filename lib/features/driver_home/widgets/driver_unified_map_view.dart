@@ -1107,7 +1107,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                     }),
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey.shade600)),
-                    Text('${formatPrice(_liveFare)} сўм',
+                    Text('${formatMoney(_liveFare)}',
                         style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,

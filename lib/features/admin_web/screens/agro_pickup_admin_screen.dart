@@ -78,7 +78,7 @@ class _AgroPickupAdminScreenState extends State<AgroPickupAdminScreen> {
           controller: priceCtrl,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Jami narx (so\'m, ixtiyoriy)',
+            labelText: 'Jami narx (сўм, ixtiyoriy)',
             hintText: 'Keyinroq ham belgilash mumkin',
           ),
         ),
@@ -239,7 +239,7 @@ class _OrderCard extends StatelessWidget {
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
             if (order.finalPrice > 0)
               Text(
-                'Narx: ${formatPrice(order.finalPrice)} so\'m',
+                'Narx: ${formatMoney(order.finalPrice)}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             if (order.createdAt != null)

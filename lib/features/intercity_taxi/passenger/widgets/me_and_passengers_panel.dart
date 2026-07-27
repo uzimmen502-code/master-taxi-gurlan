@@ -524,7 +524,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               Text(
-                '${_formatPreviewPrice(total)} сўм',
+                formatMoney(total),
                 style: TextStyle(
                   color: Colors.green.shade700,
                   fontWeight: FontWeight.bold,
@@ -620,7 +620,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
               ),
               Text(
-                '${_formatPreviewPrice(total)} сўм',
+                formatMoney(total),
                 style: TextStyle(
                   color: Colors.green.shade700,
                   fontWeight: FontWeight.bold,
@@ -737,13 +737,6 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
         _previewError = e.toString();
       });
     }
-  }
-
-  String _formatPreviewPrice(int price) {
-    return price.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]} ',
-        );
   }
 
   String _formatPreviewTime(DateTime dt) {

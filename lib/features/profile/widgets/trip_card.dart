@@ -82,7 +82,7 @@ class TripCard extends StatelessWidget {
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(
-            '${formatPrice(trip.fare)} сўм',
+            '${formatMoney(trip.fare)}',
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

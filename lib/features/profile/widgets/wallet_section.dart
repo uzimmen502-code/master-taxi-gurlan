@@ -47,12 +47,20 @@ class WalletSection extends StatelessWidget {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                 if (showTitle) const SizedBox(height: 6),
-                Text(
-                  '${formatPrice(bal)} сўм',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: _green,
+                Text.rich(
+                  TextSpan(
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: _green,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: formatPrice(bal),
+                        style: const TextStyle(fontSize: 30.8), // 28 × 1.1
+                      ),
+                      const TextSpan(text: ' сўм'),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),

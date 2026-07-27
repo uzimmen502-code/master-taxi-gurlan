@@ -4,6 +4,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../services/market_ad_service.dart';
 import '../models/ad_model.dart';
 import '../services/ads_storage_service.dart';
+import '../utils/ad_search_text.dart';
 
 /// Firestore access for cheap product ads (`ads` + `type: cheap_product`).
 class AdsRepository {
@@ -16,7 +17,7 @@ class AdsRepository {
   final FirebaseFirestore _db;
   final AdsStorageService _storage;
 
-  static const maxActivePerUser = 50;
+  static const maxActivePerUser = 5000;
   static const feedLimit = 200;
   static const searchLimit = 100;
 
@@ -57,9 +58,19 @@ class AdsRepository {
     final patch = Map<String, dynamic>.from(data);
     patch.remove('phone');
     patch.remove('ownerId');
-    if (patch.containsKey('title')) {
-      final title = (patch['title'] as String?) ?? '';
+    final touchesText =
+        patch.containsKey('title') || patch.containsKey('description');
+    if (touchesText) {
+      var title = patch['title'] as String?;
+      var description = patch['description'] as String?;
+      if (title == null || description == null) {
+        final snap = await _col.doc(adId).get();
+        final d = snap.data() ?? const <String, dynamic>{};
+        title ??= (d['title'] as String?) ?? '';
+        description ??= (d['description'] as String?) ?? '';
+      }
       patch['titleLower'] = title.toLowerCase();
+      patch['searchTokens'] = AdSearchText.buildTokens(title, description);
     }
     patch['updatedAt'] = FieldValue.serverTimestamp();
     await _col.doc(adId).update(patch);
@@ -112,20 +123,60 @@ class AdsRepository {
         );
   }
 
-  Stream<List<AdModel>> searchActiveAds(String query, {int limit = searchLimit}) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return getActiveAds(limit: limit);
-    return _cheapQuery()
-        .where('status', isEqualTo: 'active')
-        .where('titleLower', isGreaterThanOrEqualTo: q)
-        .where('titleLower', isLessThanOrEqualTo: '$q\uf8ff')
-        .orderBy('titleLower')
-        .orderBy('publishedAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map(
-          (snap) => snap.docs.map(AdModel.fromFirestore).toList(),
-        );
+  /// Фаол эълонлар: токен/кирилл-лотин қидирув + нарх фильтри + саралаш.
+  Stream<List<AdModel>> searchActiveAds(
+    String query, {
+    int limit = searchLimit,
+    int? minPrice,
+    int? maxPrice,
+    AdSortMode sort = AdSortMode.newest,
+  }) {
+    final q = query.trim();
+    final poolLimit = q.isEmpty ? limit : feedLimit;
+    return getActiveAds(limit: poolLimit).map((ads) {
+      var list = ads.where((ad) {
+        if (minPrice != null && ad.price < minPrice) return false;
+        if (maxPrice != null && ad.price > maxPrice) return false;
+        if (q.length >= AdSearchText.minTokenLen &&
+            !AdSearchText.matches(ad, q)) {
+          return false;
+        }
+        return true;
+      }).toList();
+
+      list.sort((a, b) {
+        if (q.length >= AdSearchText.minTokenLen &&
+            sort == AdSortMode.newest) {
+          final byScore =
+              AdSearchText.score(b, q).compareTo(AdSearchText.score(a, q));
+          if (byScore != 0) return byScore;
+        }
+        switch (sort) {
+          case AdSortMode.cheapest:
+            final byPrice = a.price.compareTo(b.price);
+            if (byPrice != 0) return byPrice;
+            break;
+          case AdSortMode.expensive:
+            final byPrice = b.price.compareTo(a.price);
+            if (byPrice != 0) return byPrice;
+            break;
+          case AdSortMode.mostViewed:
+            final byViews = b.views.compareTo(a.views);
+            if (byViews != 0) return byViews;
+            break;
+          case AdSortMode.newest:
+            break;
+        }
+        final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
+        final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;
+        return bp.compareTo(ap);
+      });
+
+      if (list.length > limit) {
+        return list.sublist(0, limit);
+      }
+      return list;
+    });
   }
 
   Stream<List<AdModel>> getMyAds(String uid, {String? status}) {
@@ -156,11 +207,12 @@ class AdsRepository {
     if (aliases.isEmpty) return false;
     var active = 0;
     for (final id in aliases) {
-      final snap = await _cheapQuery()
+      final agg = await _cheapQuery()
           .where('ownerId', isEqualTo: id)
           .where('status', isEqualTo: 'active')
+          .count()
           .get();
-      active += snap.size;
+      active += agg.count ?? 0;
       if (active >= maxActivePerUser) return false;
     }
     return true;

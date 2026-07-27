@@ -201,7 +201,7 @@ Future<void> _showSaleReceipt(
                 ),
               ),
               const Divider(),
-              _ShiftRow('Jami', '${formatPrice(r.total)} so\'m'),
+              _ShiftRow('Jami', '${formatMoney(r.total)}'),
               _ShiftRow('Naqd', formatPrice(r.cashPaid)),
               if (r.walletPaid > 0)
                 _ShiftRow('Hamyon', formatPrice(r.walletPaid)),
@@ -591,7 +591,7 @@ class _OrderCard extends StatelessWidget {
           ],
           const SizedBox(height: 4),
           Text(
-            '${formatPrice(order.total)} so\'m',
+            '${formatMoney(order.total)}',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primaryDark,
@@ -830,7 +830,7 @@ class _ProductCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${formatPrice(price)} so\'m',
+                '${formatMoney(price)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: soldOut ? Colors.grey : AppColors.primaryDark,
@@ -966,7 +966,7 @@ class _PhoneCartBar extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Jami: ${formatPrice(c.cartTotal)} so\'m',
+              'Jami: ${formatMoney(c.cartTotal)}',
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -1130,7 +1130,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'To\'lov · ${formatPrice(total)} so\'m',
+                  'To\'lov · ${formatMoney(total)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: AppText.titleMedium,
@@ -1175,7 +1175,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                 if (c.customerPhone.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Hamyon: ${formatPrice(c.walletBalance)} so\'m',
+                    'Hamyon: ${formatMoney(c.walletBalance)}',
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
@@ -1446,7 +1446,7 @@ class _CartPanelState extends State<_CartPanel> {
                   }),
                 const Divider(height: 16),
                 Text(
-                  'Jami: ${formatPrice(total)} so\'m',
+                  'Jami: ${formatMoney(total)}',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -1493,7 +1493,7 @@ class _CartPanelState extends State<_CartPanel> {
                 if (!pickup && c.customerPhone.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'Hamyon: ${formatPrice(c.walletBalance)} so\'m',
+                    'Hamyon: ${formatMoney(c.walletBalance)}',
                     style:
                         TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),

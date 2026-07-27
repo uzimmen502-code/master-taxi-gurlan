@@ -75,7 +75,7 @@ class _WalletCashSplitPanelState extends State<WalletCashSplitPanel> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Жами: ${formatPrice(widget.orderTotal)} сўм · мавжуд: ${formatPrice(widget.walletBalance)} сўм',
+              'Жами: ${formatMoney(widget.orderTotal)} · мавжуд: ${formatMoney(widget.walletBalance)}',
               style: TextStyle(
                 fontSize: AppText.labelSmall,
                 color: Colors.grey.shade700,
@@ -108,7 +108,7 @@ class _WalletCashSplitPanelState extends State<WalletCashSplitPanel> {
             if (eff > 0 || change > 0) ...[
               const SizedBox(height: 4),
               Text(
-                'Тўловдан кейин кошелёкда: ${formatPrice(postPayment)} сўм',
+                'Тўловдан кейин кошелёкда: ${formatMoney(postPayment)}',
                 style: TextStyle(
                   fontSize: AppText.labelTiny,
                   color: Colors.blue.shade800,

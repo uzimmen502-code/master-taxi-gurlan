@@ -106,7 +106,7 @@ class BreadHistoryCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${formatPrice(order.total)} сўм',
+            '${formatMoney(order.total)}',
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,

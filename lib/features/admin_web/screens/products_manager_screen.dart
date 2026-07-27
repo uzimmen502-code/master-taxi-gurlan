@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/utils/formatters.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -307,7 +308,7 @@ class _BreadCard extends StatelessWidget {
               ]),
               const SizedBox(height: 6),
               if (item.price != null && item.price! > 0)
-                Text('${item.price} сўм',
+                Text(formatMoney(item.price!),
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -1561,7 +1562,7 @@ class _ExtraCard extends StatelessWidget {
           ]),
           const SizedBox(height: 4),
           Row(children: [
-            Text('${item.price} сўм',
+            Text(formatMoney(item.price),
                 style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

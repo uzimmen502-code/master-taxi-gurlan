@@ -177,7 +177,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                '💳 Yo\'lovchi hamyon: ${FareCalculator.format(widget.passengerWalletIntent)} so\'m',
+                '💳 Yo\'lovchi hamyon: ${FareCalculator.format(widget.passengerWalletIntent)} сўм',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: Colors.blue.shade900,

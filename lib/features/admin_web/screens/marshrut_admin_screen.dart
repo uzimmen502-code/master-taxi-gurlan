@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/utils/formatters.dart';
+
 import '../../../models/queue_entry.dart';
 import '../../../core/passenger_cancel_block_rules.dart';
 import '../../../repositories/local_taxi_block_repository.dart';
@@ -907,7 +909,7 @@ class _MarshrutTariffPolicyCardState extends State<_MarshrutTariffPolicyCard> {
             TextField(
               controller: _priceCtrl,
               decoration: const InputDecoration(
-                labelText: 'Narx / o\'rin (so\'m)',
+                labelText: 'Narx / o\'rin (сўм)',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
@@ -944,7 +946,7 @@ class _MarshrutTariffPolicyCardState extends State<_MarshrutTariffPolicyCard> {
                         contentPadding: EdgeInsets.zero,
                         title: Text('${r.from} → ${r.to}'),
                         subtitle: Text(
-                          '${r.price} so\'m'
+                          '${formatMoney(r.price)}'
                           '${r.lockedByAdmin ? ' • admin' : ''}'
                           '${r.setByName.isNotEmpty ? ' • ${r.setByName}' : ''}',
                         ),

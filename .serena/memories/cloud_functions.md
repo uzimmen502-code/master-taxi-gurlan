@@ -11,7 +11,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - creditSupplier — credit a supplier account.
 - debitForOrder — legacy wallet debit for order.
 - placeOrderWithWallet — **deprecated** (throws failed-precondition); use placeOrderPostPaid only.
-- placeOrderPostPaid — bread/food; **food←food_catalog**, **bread←bread_products+extra_products+settings/prices** (flour/milk, salt yeast, extras bonus); wallet debit; cashDue=total-balanceApplied. Bread items require `firestoreId`.
+- placeOrderPostPaid — bread/food/platform; **food←food_catalog**, **bread←bread_products+extra_products+settings/prices**, **platform←platform_products** (kind platform → soldToday on product doc); wallet debit; cashDue=total-balanceApplied. Bread items require `firestoreId`.
 - customerCancelOrder — owner cancel early order; restore soldToday + wallet refund.
 - sellerPlaceSale / sellerGetCustomerWalletBalance / sellerGetShiftSummary — seller POS (role seller|admin|superadmin); cash/wallet/mixed; `fulfillmentMode:pos`; shift = today Tashkent `paidBySellerId`+`paidAt`.
 - sellerMarkPickupReady / sellerSubmitPickupPayment — pickup order ready + in-store pay.
@@ -61,7 +61,8 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
 - expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; closes expired `yuk_listings` (active→closed) + FCM via `notifications` (`yuk_listing_closed`); T−6h warn (`yuk_listing_expire_soon`, flag `expireSoonNotified`); jobs `ads` active|pending → `completed`; cheap_product expired → `inactive`.
 - submitJobAd / submitJobComplaint (onCall) — Иш топ CF-only create (auth+canonical phone; ad daily 10; complaint daily 20).
-- submitMarketAd / submitMarketComplaint (onCall) — Onlayn BOZOR CF-only create + reports type market_ad (daily 10 ads / 20 complaints; phone=token; images under ads/{uid}/).
+- submitMarketAd / submitMarketComplaint (onCall) — Onlayn BOZOR CF-only create + reports type market_ad (ads daily/pending/active <=5000; complaints daily 20; phone=token; images under ads/{uid}/; submit/adminUpdate write `searchTokens`).
+- migrateCheapProductTitleLower (onCall admin) — backfill `titleLower` + empty `searchTokens` on cheap_product.
 - cleanupStaleDrivers (sched) — offline stale drivers.
 - marshrutDriverAutoOffline (sched) — auto-offline marshrut drivers.
 - marshrutPassengerCancelAfterAccept — passenger cancel after accept (block logic).
@@ -107,6 +108,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - deleteDatingProfile — owner deletes profile, Storage `dating/{uid}/`, interests, matches(+messages), blocks.
 - setDatingAgePreference — user sets prefMinAge/prefMaxAge (18–80) on `dating_profiles`.
 - adminSetDatingAutoApprove — admin toggle `datingAutoApprove` in `settings/app`.
+- adminSetMarketAutoApprove — toggle `marketAutoApprove` in `settings/app`; submitMarketAd + onAdUpdate(pending) auto→active when on.
 - setDatingActive — toggle visibility (active) + lastActive.
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.

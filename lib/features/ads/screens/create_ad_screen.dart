@@ -53,7 +53,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('Чеклов'),
           content: const Text(
-            'Фаол эълонлар сони 50 тадан ошмаслиги керак. '
+            'Фаол эълонлар сони 5000 тадан ошмаслиги керак. '
             'Аввал бирор эълонни яширинг ёки ўчиринг.',
           ),
           actions: [
@@ -288,7 +288,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
             TextFormField(
               controller: _priceCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Нархи (so\'m) *'),
+              decoration: const InputDecoration(labelText: 'Нархи (сўм) *'),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Нархни киритинг';
                 final n = int.tryParse(v.trim());

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/theme/app_theme.dart';
-import 'package:intl/intl.dart';
 
 import '../../../models/analytics/top_entity.dart';
 
@@ -18,8 +18,6 @@ class TopList extends StatelessWidget {
   final Color color;
   final int maxItems;
   final String Function(num)? formatValue;
-
-  static final _fmt = NumberFormat.decimalPattern('en');
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +76,7 @@ class TopList extends StatelessWidget {
                 Text(
                   formatValue != null
                       ? formatValue!(e.value)
-                      : _fmt.format(e.value),
+                      : formatPrice(e.value),
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,

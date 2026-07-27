@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
 import 'package:provider/provider.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 
 import '../../../models/analytics/kpi_summary.dart';
 import '../controllers/analytics_controller.dart';
@@ -135,7 +137,7 @@ class _DriversTabState extends State<DriversTab>
               MetricRow(
                   icon: '💰',
                   label: 'Ўртача даромад / ҳайдовчи (7 кун)',
-                  value: '${d.avgEarningsPerDriver} сўм',
+                  value: formatMoney(d.avgEarningsPerDriver),
                   valueColor: AppColors.primary),
               MetricRow(
                   icon: '📊',

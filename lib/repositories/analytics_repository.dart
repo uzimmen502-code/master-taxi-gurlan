@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../core/theme/app_theme.dart';
+import '../core/utils/formatters.dart';
 
 import '../models/analytics/daily_report.dart';
 import '../models/analytics/driver_analytics.dart';
@@ -583,7 +585,7 @@ class AnalyticsRepository {
               id: e.key,
               label: driverNames[e.key] ?? e.key,
               value: e.value,
-              subtitle: '${earningsByDriver[e.key] ?? 0} сўм',
+              subtitle: formatMoney(earningsByDriver[e.key] ?? 0),
               icon: '🛣',
             ))
         .toList();
@@ -1159,7 +1161,7 @@ class AnalyticsRepository {
     }
     if (fin.pendingPayouts > 0) {
       notes.add(
-          '💰 ${fin.pendingPayouts} та кутаётган payout: ${fin.pendingPayoutsAmount} сўм');
+          '💰 ${fin.pendingPayouts} та кутаётган payout: ${formatMoney(fin.pendingPayoutsAmount)}');
     }
     if (kpi.blockedUsers > 5) {
       notes.add('🚫 ${kpi.blockedUsers} та фойдаланувчи блокда');

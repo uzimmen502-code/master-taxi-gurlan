@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../utils/fare_calculator.dart';
 import '../../../utils/taxi_price_region.dart';
 
@@ -251,14 +252,14 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
               ),
               const SizedBox(height: 12),
               _intField(
-                label: 'Boshlang\'ich narx (so\'m)',
+                label: 'Boshlang\'ich narx (сўм)',
                 hint: '5000',
                 controller: _globalBaseCtrl,
                 icon: Icons.flag_outlined,
               ),
               const SizedBox(height: 12),
               _intField(
-                label: 'Har km uchun (so\'m/km)',
+                label: 'Har km uchun (сўм/km)',
                 hint: '1500',
                 controller: _globalPerKmCtrl,
                 icon: Icons.route_outlined,
@@ -272,8 +273,8 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
               const SizedBox(height: 8),
               Text(
                 'Namuna 5 km: $globalBase + 5×$globalPerKm = '
-                '${globalBase + 5 * globalPerKm} so\'m × $globalCoef '
-                '≈ ${FareCalculator.format(sample5km)} so\'m',
+                '${formatMoney(globalBase + 5 * globalPerKm)} × $globalCoef '
+                '≈ ${formatMoney(sample5km)}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
               const SizedBox(height: 28),
@@ -374,14 +375,14 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
                 ),
                 if (draft.enabled) ...[
                   _intField(
-                    label: 'Boshlang\'ich (so\'m)',
+                    label: 'Boshlang\'ich (сўм)',
                     hint: _globalBaseCtrl.text,
                     controller: draft.baseCtrl,
                     icon: Icons.flag_outlined,
                   ),
                   const SizedBox(height: 10),
                   _intField(
-                    label: 'Har km (so\'m/km)',
+                    label: 'Har km (сўм/km)',
                     hint: _globalPerKmCtrl.text,
                     controller: draft.perKmCtrl,
                     icon: Icons.route_outlined,

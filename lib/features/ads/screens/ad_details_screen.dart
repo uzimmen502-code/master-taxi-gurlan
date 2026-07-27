@@ -212,21 +212,23 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           style: const TextStyle(
                             fontSize: AppText.titleLarge,
                             fontWeight: FontWeight.bold,
+                            height: 1.2,
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        '${ad.price} so\'m',
+                        formatMoney(ad.price),
                         style: const TextStyle(
                           fontSize: AppText.titleMedium,
                           color: AppColors.primary,
                           fontWeight: FontWeight.w700,
+                          height: 1.2,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(
@@ -237,6 +239,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                           style: TextStyle(
                             fontSize: AppText.bodyMedium,
                             color: Colors.grey.shade700,
+                            height: 1.2,
                           ),
                         ),
                       ),
@@ -246,16 +249,22 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                         style: TextStyle(
                           fontSize: AppText.labelSmall,
                           color: Colors.grey.shade600,
+                          height: 1.2,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    ad.description,
-                    style: const TextStyle(fontSize: AppText.bodyMedium),
-                  ),
-                  const SizedBox(height: 20),
+                  if (ad.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      ad.description,
+                      style: const TextStyle(
+                        fontSize: AppText.bodyMedium,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
                     const Text(
                       'Ўхшаш эълонлар',
@@ -413,7 +422,7 @@ class _SimilarAdTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${ad.price} so\'m',
+                        formatMoney(ad.price),
                         style: const TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w700,

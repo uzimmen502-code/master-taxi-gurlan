@@ -73,7 +73,7 @@ class TripChangeSettlement {
         return TripChangeSettlementOutcome(
           status: TripChangeSettlementStatus.opened,
           settlementId: settlementId,
-          userMessage: 'Qaytim $change so\'m yo\'lovchi tasdiqlashini kutmoqda',
+          userMessage: 'Qaytim $change сўм yo\'lovchi tasdiqlashini kutmoqda',
         );
       } on FirebaseFunctionsException catch (e, st) {
         lastError = e;

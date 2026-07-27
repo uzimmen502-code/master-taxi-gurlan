@@ -20,8 +20,6 @@ class BreadExtraProductCard extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback onOpenCart;
 
-  static const _orange = AppColors.primary;
-
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;

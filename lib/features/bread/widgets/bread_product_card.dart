@@ -191,7 +191,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                 const SizedBox(height: 6),
                 widget.count > 0
                     ? _counterRow(accentColor)
-                    : _addButton(loc, accentColor, disabled: product.isSoldOut),
+                    : _addButton(loc, disabled: product.isSoldOut),
               ]),
         ),
       ]),
@@ -309,8 +309,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
 
   static const _addRed = Color(0xFFF44336);
 
-  Widget _addButton(AppLocalizations loc, Color accent,
-      {bool disabled = false}) {
+  Widget _addButton(AppLocalizations loc, {bool disabled = false}) {
     return SizedBox(
       width: double.infinity,
       height: 30,

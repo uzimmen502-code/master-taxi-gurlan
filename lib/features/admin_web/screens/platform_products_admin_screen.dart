@@ -112,24 +112,43 @@ class _PlatformProductsAdminScreenState
                     child: Text('Каталог бўш — маҳсулот қўшинг'),
                   );
                 }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (context, i) {
-                    final p = items[i];
-                    return _ProductTile(
-                      index: i + 1,
-                      product: p,
-                      onTap: () => _openEdit(p),
-                      onMenu: (v) async {
-                        if (v == 'edit') {
-                          await _openEdit(p);
-                        } else if (v == 'toggle') {
-                          await _repo.setActive(p.id, !p.active);
-                        } else if (v == 'delete') {
-                          await _delete(p);
-                        }
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final cols = w >= 1500
+                        ? 5
+                        : w >= 1200
+                            ? 4
+                            : w >= 900
+                                ? 3
+                                : w >= 600
+                                    ? 2
+                                    : 1;
+                    return GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        mainAxisExtent: 76,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, i) {
+                        final p = items[i];
+                        return _ProductTile(
+                          index: i + 1,
+                          product: p,
+                          onTap: () => _openEdit(p),
+                          onMenu: (v) async {
+                            if (v == 'edit') {
+                              await _openEdit(p);
+                            } else if (v == 'toggle') {
+                              await _repo.setActive(p.id, !p.active);
+                            } else if (v == 'delete') {
+                              await _delete(p);
+                            }
+                          },
+                        );
                       },
                     );
                   },

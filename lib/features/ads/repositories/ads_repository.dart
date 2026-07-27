@@ -123,20 +123,15 @@ class AdsRepository {
         );
   }
 
-  /// Фаол эълонлар: токен/кирилл-лотин қидирув + нарх фильтри + саралаш.
+  /// Фаол эълонлар: токен/кирилл-лотин қидирув (янгилик бўйича).
   Stream<List<AdModel>> searchActiveAds(
     String query, {
     int limit = searchLimit,
-    int? minPrice,
-    int? maxPrice,
-    AdSortMode sort = AdSortMode.newest,
   }) {
     final q = query.trim();
     final poolLimit = q.isEmpty ? limit : feedLimit;
     return getActiveAds(limit: poolLimit).map((ads) {
       var list = ads.where((ad) {
-        if (minPrice != null && ad.price < minPrice) return false;
-        if (maxPrice != null && ad.price > maxPrice) return false;
         if (q.length >= AdSearchText.minTokenLen &&
             !AdSearchText.matches(ad, q)) {
           return false;
@@ -145,27 +140,10 @@ class AdsRepository {
       }).toList();
 
       list.sort((a, b) {
-        if (q.length >= AdSearchText.minTokenLen &&
-            sort == AdSortMode.newest) {
+        if (q.length >= AdSearchText.minTokenLen) {
           final byScore =
               AdSearchText.score(b, q).compareTo(AdSearchText.score(a, q));
           if (byScore != 0) return byScore;
-        }
-        switch (sort) {
-          case AdSortMode.cheapest:
-            final byPrice = a.price.compareTo(b.price);
-            if (byPrice != 0) return byPrice;
-            break;
-          case AdSortMode.expensive:
-            final byPrice = b.price.compareTo(a.price);
-            if (byPrice != 0) return byPrice;
-            break;
-          case AdSortMode.mostViewed:
-            final byViews = b.views.compareTo(a.views);
-            if (byViews != 0) return byViews;
-            break;
-          case AdSortMode.newest:
-            break;
         }
         final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
         final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;

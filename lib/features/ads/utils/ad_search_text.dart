@@ -224,10 +224,3 @@ abstract class AdSearchable {
   String get description;
   List<String> get searchTokens;
 }
-
-enum AdSortMode {
-  newest,
-  cheapest,
-  expensive,
-  mostViewed,
-}

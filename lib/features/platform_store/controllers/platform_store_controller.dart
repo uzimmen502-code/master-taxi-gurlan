@@ -22,9 +22,17 @@ class PlatformStoreController extends ChangeNotifier {
   bool loading = true;
   String? errorMessage;
   int walletBalance = 0;
+  /// Мижоз ҳамёндан тўлашни танладими (default off — opt-in).
+  bool useWallet = false;
   bool isSubmitting = false;
   /// `delivery` | `pickup`
   String fulfillmentMode = 'delivery';
+
+  void setUseWallet(bool value) {
+    if (useWallet == value) return;
+    useWallet = value;
+    notifyListeners();
+  }
 
   List<PlatformProduct> get products => List.unmodifiable(_products);
   Map<String, int> get cart => Map.unmodifiable(_cart);
@@ -41,7 +49,7 @@ class PlatformStoreController extends ChangeNotifier {
   }
 
   int get walletApplyAmount {
-    if (walletBalance <= 0 || cartTotal <= 0) return 0;
+    if (!useWallet || walletBalance <= 0 || cartTotal <= 0) return 0;
     return walletBalance < cartTotal ? walletBalance : cartTotal;
   }
 
@@ -152,6 +160,7 @@ class PlatformStoreController extends ChangeNotifier {
 
   void clearCart() {
     _cart.clear();
+    useWallet = false;
     notifyListeners();
   }
 
@@ -223,7 +232,7 @@ class PlatformStoreController extends ChangeNotifier {
         'items': items,
         'total': cartTotal,
         'balanceApplied': apply,
-        'useWallet': true,
+        'useWallet': useWallet,
         'cashDue': cartTotal - apply,
         'cashPaid': 0,
         'status': 'new',

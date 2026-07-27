@@ -68,6 +68,14 @@ class BreadController extends ChangeNotifier {
 
   // ─── Wallet/cash ────────────────────────────────────────────────────
   int walletBalance = 0;
+  /// Мижоз ҳамёндан тўлашни танладими (default off — opt-in).
+  bool useWallet = false;
+
+  void setUseWallet(bool value) {
+    if (useWallet == value) return;
+    useWallet = value;
+    notifyListeners();
+  }
 
   // ─── Тарих ──────────────────────────────────────────────────────────
   List<OrderModel> orderHistory = const [];
@@ -281,6 +289,7 @@ class BreadController extends ChangeNotifier {
     cart.clear();
     extraProductsCart.clear();
     flourMilkChoice.clear();
+    useWallet = false;
     notifyListeners();
   }
 
@@ -444,7 +453,7 @@ class BreadController extends ChangeNotifier {
   }
 
   int get walletApplyAmount {
-    if (walletBalance <= 0 || grandTotal <= 0) return 0;
+    if (!useWallet || walletBalance <= 0 || grandTotal <= 0) return 0;
     return walletBalance < grandTotal ? walletBalance : grandTotal;
   }
 
@@ -700,7 +709,7 @@ class BreadController extends ChangeNotifier {
       if (saltYeastCost > 0) 'cartHadYopishBread': cartHasYopishBread,
       'total': grandTotal,
       'balanceApplied': walletApplyAmount,
-      'useWallet': true,
+      'useWallet': useWallet,
       'cashDue': cashDuePreview,
       'cashPaid': 0,
       'status': 'new',

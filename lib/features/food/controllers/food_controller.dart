@@ -35,10 +35,19 @@ class FoodController extends ChangeNotifier {
   Map<int, int> _stockMap = const {};
   bool stockLoading = false;
   int walletBalance = 0;
+  /// Мижоз ҳамёндан тўлашни танладими (default off — opt-in).
+  bool useWallet = false;
   bool isSubmitting = false;
   String? errorMessage;
   /// `delivery` | `pickup`
   String fulfillmentMode = 'delivery';
+
+  void setUseWallet(bool value) {
+    if (useWallet == value) return;
+    useWallet = value;
+    notifyListeners();
+  }
+
   bool hasInternet = true;
   int pendingCount = 0;
 
@@ -173,9 +182,9 @@ class FoodController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Саватда ҳамёндан ечиладиган сумма (сервер ҳам шу clamp қилади).
+  /// Саватда ҳамёндан ечиладиган сумма (фақат useWallet=true).
   int get walletApplyAmount {
-    if (walletBalance <= 0 || cartTotal <= 0) return 0;
+    if (!useWallet || walletBalance <= 0 || cartTotal <= 0) return 0;
     return walletBalance < cartTotal ? walletBalance : cartTotal;
   }
 
@@ -316,6 +325,7 @@ class FoodController extends ChangeNotifier {
   void clearCart() {
     if (_cart.isEmpty) return;
     _cart.clear();
+    useWallet = false;
     notifyListeners();
   }
 
@@ -390,7 +400,7 @@ class FoodController extends ChangeNotifier {
         'items': items,
         'total': cartTotal,
         'balanceApplied': apply,
-        'useWallet': true,
+        'useWallet': useWallet,
         'cashDue': cartTotal - apply,
         'cashPaid': 0,
         'status': 'new',

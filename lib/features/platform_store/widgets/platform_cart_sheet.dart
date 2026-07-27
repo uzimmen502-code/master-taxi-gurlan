@@ -76,6 +76,8 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
             OrderCheckoutWalletBanner(
               orderTotal: c.cartTotal,
               walletBalance: c.walletBalance,
+              useWallet: c.useWallet,
+              onUseWalletChanged: c.setUseWallet,
               walletApply: c.walletApplyAmount,
               cashDue: c.cashDuePreview,
             ),

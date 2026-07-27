@@ -2584,11 +2584,12 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('failed-precondition', failures.join('; '));
     }
 
-    // Ҳамён: клиент сўрагани clamp (max = баланс ва жами).
+    // Ҳамён opt-in: фақат useWallet===true + аниқ balanceApplied (default 0).
+    // Silent max debit йўқ — келажакдаги барча placeOrderPostPaid хизматлари учун.
     const maxWallet = maxWalletDebit(prevBalance, orderTotal);
-    let requested = parseInt(String(orderBase.balanceApplied ?? maxWallet), 10);
+    const useWallet = orderBase.useWallet === true;
+    let requested = parseInt(String(orderBase.balanceApplied ?? 0), 10);
     if (!Number.isFinite(requested) || requested < 0) requested = 0;
-    const useWallet = orderBase.useWallet !== false;
     const walletDebit = useWallet ? Math.min(Math.floor(requested), maxWallet) : 0;
     const cashDue = orderTotal - walletDebit;
 
@@ -2713,6 +2714,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       ok: true,
       orderId: orderRef.id,
       total: orderTotal,
+      useWallet,
+      walletDebit,
       balanceApplied: walletDebit,
       cashDue,
       paymentStatus,

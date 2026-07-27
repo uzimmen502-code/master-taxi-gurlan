@@ -33,6 +33,14 @@ class PlatformProductsAdminScreen extends StatefulWidget {
 class _PlatformProductsAdminScreenState
     extends State<PlatformProductsAdminScreen> {
   final _repo = PlatformProductsRepository();
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _toast(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -43,13 +51,91 @@ class _PlatformProductsAdminScreenState
     );
   }
 
-  Future<void> _openEdit([PlatformProduct? existing]) async {
+  static String _norm(String s) => s.trim().toLowerCase().replaceAll(
+        RegExp(r'\s+'),
+        ' ',
+      );
+
+  List<PlatformProduct> _filter(List<PlatformProduct> all) {
+    final q = _norm(_query);
+    if (q.isEmpty) return all;
+    final tokens = q.split(' ').where((t) => t.isNotEmpty).toList();
+    return all.where((p) {
+      final hay = _norm([
+        p.name,
+        p.description,
+        p.unit,
+        '${p.price}',
+        p.id,
+        p.active ? 'фаол' : 'нофаол',
+        p.showInMarket ? 'бозор' : '',
+        p.featuredOnHome ? 'витрина' : '',
+      ].join(' '));
+      // Барча сўзлар топилсин (мукаммалроқ қидирув).
+      return tokens.every(hay.contains);
+    }).toList(growable: false);
+  }
+
+  List<PlatformProduct> _findNameDuplicates(
+    List<PlatformProduct> all,
+    String name, {
+    String? exceptId,
+  }) {
+    final n = _norm(name);
+    if (n.isEmpty) return const [];
+    return all
+        .where((p) {
+          if (exceptId != null && p.id == exceptId) return false;
+          return _norm(p.name) == n;
+        })
+        .toList(growable: false);
+  }
+
+  List<PlatformProduct> _latestCatalog = const [];
+
+  Future<void> _openEdit(
+    List<PlatformProduct> catalog, [
+    PlatformProduct? existing,
+  ]) async {
     final result = await showDialog<PlatformProduct>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _EditDialog(existing: existing),
+      builder: (_) => _EditDialog(
+        existing: existing,
+        catalog: catalog,
+      ),
     );
     if (result == null || !mounted) return;
+
+    final dups = _findNameDuplicates(
+      catalog,
+      result.name,
+      exceptId: existing?.id,
+    );
+    if (dups.isNotEmpty) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Такрорий ном'),
+          content: Text(
+            '«${result.name}» номли маҳсулот аллақачон бор '
+            '(${dups.length} та). Барибир сақлайсизми?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Бекор'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Сақлаш'),
+            ),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+    }
+
     try {
       if (existing == null) {
         await _repo.create(result);
@@ -98,7 +184,7 @@ class _PlatformProductsAdminScreenState
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7F5),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEdit(),
+        onPressed: () => _openEdit(_latestCatalog),
         backgroundColor: AppColors.button,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
@@ -107,6 +193,33 @@ class _PlatformProductsAdminScreenState
       body: Column(
         children: [
           const _PlatformFeaturedAutoBar(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                hintText: 'Қидирув: ном, нарх, тавсиф, ID…',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Тозалаш',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+              ),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<PlatformProduct>>(
               stream: _repo.watchAll(),
@@ -115,52 +228,86 @@ class _PlatformProductsAdminScreenState
                     !snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final items = snap.data ?? const [];
-                if (items.isEmpty) {
+                final all = snap.data ?? const <PlatformProduct>[];
+                _latestCatalog = all;
+                final items = _filter(all);
+                if (all.isEmpty) {
                   return const Center(
                     child: Text('Каталог бўш — маҳсулот қўшинг'),
                   );
                 }
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    final w = constraints.maxWidth;
-                    final cols = w >= 1500
-                        ? 5
-                        : w >= 1200
-                            ? 4
-                            : w >= 900
-                                ? 3
-                                : w >= 600
-                                    ? 2
-                                    : 1;
-                    return GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: cols,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        mainAxisExtent: 76,
+                if (items.isEmpty) {
+                  return Center(
+                    child: Text(
+                      '«$_query» бўйича топилмади',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _query.trim().isEmpty
+                              ? 'Жами: ${all.length}'
+                              : 'Топилди: ${items.length} / ${all.length}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      itemCount: items.length,
-                      itemBuilder: (context, i) {
-                        final p = items[i];
-                        return _ProductTile(
-                          index: i + 1,
-                          product: p,
-                          onTap: () => _openEdit(p),
-                          onMenu: (v) async {
-                            if (v == 'edit') {
-                              await _openEdit(p);
-                            } else if (v == 'toggle') {
-                              await _repo.setActive(p.id, !p.active);
-                            } else if (v == 'delete') {
-                              await _delete(p);
-                            }
-                          },
-                        );
-                      },
-                    );
-                  },
+                    ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          final cols = w >= 1500
+                              ? 5
+                              : w >= 1200
+                                  ? 4
+                                  : w >= 900
+                                      ? 3
+                                      : w >= 600
+                                          ? 2
+                                          : 1;
+                          return GridView.builder(
+                            padding:
+                                const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: cols,
+                              mainAxisSpacing: 8,
+                              crossAxisSpacing: 8,
+                              mainAxisExtent: 76,
+                            ),
+                            itemCount: items.length,
+                            itemBuilder: (context, i) {
+                              final p = items[i];
+                              return _ProductTile(
+                                index: i + 1,
+                                product: p,
+                                onTap: () => _openEdit(all, p),
+                                onMenu: (v) async {
+                                  if (v == 'edit') {
+                                    await _openEdit(all, p);
+                                  } else if (v == 'toggle') {
+                                    await _repo.setActive(p.id, !p.active);
+                                  } else if (v == 'delete') {
+                                    await _delete(p);
+                                  }
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -421,9 +568,13 @@ class _Thumb extends StatelessWidget {
 }
 
 class _EditDialog extends StatefulWidget {
-  const _EditDialog({this.existing});
+  const _EditDialog({
+    this.existing,
+    this.catalog = const [],
+  });
 
   final PlatformProduct? existing;
+  final List<PlatformProduct> catalog;
 
   @override
   State<_EditDialog> createState() => _EditDialogState();
@@ -623,6 +774,17 @@ class _EditDialogState extends State<_EditDialog> {
     });
   }
 
+  int _dupNameCount() {
+    final n = _name.text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (n.isEmpty) return 0;
+    final exceptId = widget.existing?.id;
+    return widget.catalog.where((p) {
+      if (exceptId != null && p.id == exceptId) return false;
+      final pn = p.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      return pn == n;
+    }).length;
+  }
+
   void _save() {
     final name = _name.text.trim();
     final price = int.tryParse(_price.text.trim()) ?? -1;
@@ -799,7 +961,13 @@ class _EditDialogState extends State<_EditDialog> {
               ),
               TextField(
                 controller: _name,
-                decoration: const InputDecoration(labelText: 'Ном'),
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Ном',
+                  errorText: _dupNameCount() > 0
+                      ? 'Диққат: шу номли ${_dupNameCount()} та маҳсулот бор'
+                      : null,
+                ),
               ),
               TextField(
                 controller: _desc,

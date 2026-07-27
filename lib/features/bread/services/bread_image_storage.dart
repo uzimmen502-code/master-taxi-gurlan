@@ -77,17 +77,23 @@ class BreadImageStorage {
   }
 
   /// Платформа дўкони расми (`platform_images/`).
+  /// [index] берилса файл номи уникал бўлади (кўп расм).
   Future<String> uploadPlatformImage({
     required String docId,
     required Uint8List bytes,
     String contentType = 'image/jpeg',
+    int? index,
   }) async {
     final ext = contentType.contains('png')
         ? 'png'
         : contentType.contains('webp')
             ? 'webp'
             : 'jpg';
-    final ref = _storage.ref('platform_images/$docId.$ext');
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final path = index == null
+        ? 'platform_images/$docId.$ext'
+        : 'platform_images/${docId}_${index}_$stamp.$ext';
+    final ref = _storage.ref(path);
     await ref.putData(bytes, SettableMetadata(contentType: contentType));
     return ref.getDownloadURL();
   }

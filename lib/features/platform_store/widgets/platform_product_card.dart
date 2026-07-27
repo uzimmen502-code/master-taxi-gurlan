@@ -42,7 +42,7 @@ class PlatformProductCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _Image(url: product.imageUrl),
+                    _ProductImages(urls: product.displayImages),
                     if (out)
                       ColoredBox(
                         color: Colors.black.withValues(alpha: 0.45),
@@ -157,6 +157,59 @@ class _QtyBtn extends StatelessWidget {
           child: Icon(icon, size: 18, color: AppColors.button),
         ),
       ),
+    );
+  }
+}
+
+class _ProductImages extends StatefulWidget {
+  const _ProductImages({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  State<_ProductImages> createState() => _ProductImagesState();
+}
+
+class _ProductImagesState extends State<_ProductImages> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final urls = widget.urls;
+    if (urls.isEmpty) return const _Image(url: '');
+    if (urls.length == 1) return _Image(url: urls.first);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          itemCount: urls.length,
+          onPageChanged: (i) => setState(() => _page = i),
+          itemBuilder: (_, i) => _Image(url: urls[i]),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 6,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < urls.length; i++)
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i == _page
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.45),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

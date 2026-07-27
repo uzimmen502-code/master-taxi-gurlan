@@ -339,7 +339,7 @@ class _ProductTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              _Thumb(url: product.imageUrl),
+              _Thumb(url: product.coverImageUrl),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -433,7 +433,6 @@ class _EditDialogState extends State<_EditDialog> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
   late final TextEditingController _price;
-  late final TextEditingController _image;
   late final TextEditingController _unit;
   late final TextEditingController _stock;
   late final TextEditingController _sort;
@@ -441,6 +440,7 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _featured;
   late bool _inMarket;
   late String _docId;
+  late List<String> _imageUrls;
   bool _uploading = false;
   StreamSubscription<html.Event>? _pasteSub;
 
@@ -454,7 +454,6 @@ class _EditDialogState extends State<_EditDialog> {
     _name = TextEditingController(text: e?.name ?? '');
     _desc = TextEditingController(text: e?.description ?? '');
     _price = TextEditingController(text: e != null ? '${e.price}' : '');
-    _image = TextEditingController(text: e?.imageUrl ?? '');
     _unit = TextEditingController(text: e?.unit ?? 'дона');
     _stock = TextEditingController(
       text: e != null ? '${e.totalStock}' : '0',
@@ -463,6 +462,7 @@ class _EditDialogState extends State<_EditDialog> {
     _active = e?.active ?? true;
     _featured = e?.featuredOnHome ?? false;
     _inMarket = e?.showInMarket ?? true;
+    _imageUrls = List<String>.from(e?.displayImages ?? const <String>[]);
     _pasteSub = html.document.onPaste.listen(_onDocumentPaste);
   }
 
@@ -472,7 +472,6 @@ class _EditDialogState extends State<_EditDialog> {
     _name.dispose();
     _desc.dispose();
     _price.dispose();
-    _image.dispose();
     _unit.dispose();
     _stock.dispose();
     _sort.dispose();
@@ -483,7 +482,6 @@ class _EditDialogState extends State<_EditDialog> {
     if (_uploading || !mounted) return;
     final e = event as html.ClipboardEvent;
     if (!ClipboardPasteImage.looksLikeImagePaste(e)) return;
-    // Capture image paste; leave normal text paste alone.
     e.preventDefault();
     e.stopPropagation();
     unawaited(_handlePasteEvent(e));
@@ -520,6 +518,17 @@ class _EditDialogState extends State<_EditDialog> {
 
   Future<void> _uploadBytes(Uint8List bytes, String mime) async {
     if (_uploading) return;
+    if (_imageUrls.length >= PlatformProduct.maxImages) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.orange,
+            content: Text('Энг кўпи 5 та расм'),
+          ),
+        );
+      }
+      return;
+    }
     setState(() => _uploading = true);
     try {
       final prepared = await WebImageCompress.prepareForUpload(
@@ -530,9 +539,10 @@ class _EditDialogState extends State<_EditDialog> {
         docId: _docId,
         bytes: prepared.bytes,
         contentType: prepared.mime,
+        index: _imageUrls.length,
       );
       if (!mounted) return;
-      setState(() => _image.text = url);
+      setState(() => _imageUrls = [..._imageUrls, url]);
       final note = prepared.bytes.length < bytes.length
           ? 'Расм юкланди (сиқилди)'
           : 'Расм юкланди';
@@ -558,33 +568,45 @@ class _EditDialogState extends State<_EditDialog> {
 
   Future<void> _pickImage() async {
     if (_uploading) return;
+    final room = PlatformProduct.maxImages - _imageUrls.length;
+    if (room <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text('Энг кўпи 5 та расм'),
+        ),
+      );
+      return;
+    }
     try {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.image,
-        allowMultiple: false,
+        allowMultiple: true,
         withData: true,
       );
       if (res == null || res.files.isEmpty) return;
-      final f = res.files.single;
-      final bytes = f.bytes;
-      if (bytes == null || bytes.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.orange,
-              content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
-            ),
-          );
+      final files = res.files.take(room).toList();
+      for (final f in files) {
+        final bytes = f.bytes;
+        if (bytes == null || bytes.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: Colors.orange,
+                content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
+              ),
+            );
+          }
+          continue;
         }
-        return;
+        final name = f.name.toLowerCase();
+        final mime = name.endsWith('.png')
+            ? 'image/png'
+            : name.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg';
+        await _uploadBytes(bytes, mime);
       }
-      final name = f.name.toLowerCase();
-      final mime = name.endsWith('.png')
-          ? 'image/png'
-          : name.endsWith('.webp')
-              ? 'image/webp'
-              : 'image/jpeg';
-      await _uploadBytes(bytes, mime);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -592,6 +614,13 @@ class _EditDialogState extends State<_EditDialog> {
         );
       }
     }
+  }
+
+  void _removeImageAt(int i) {
+    if (i < 0 || i >= _imageUrls.length) return;
+    setState(() {
+      _imageUrls = [..._imageUrls]..removeAt(i);
+    });
   }
 
   void _save() {
@@ -604,6 +633,11 @@ class _EditDialogState extends State<_EditDialog> {
       return;
     }
     final existing = widget.existing;
+    final urls = _imageUrls
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .take(PlatformProduct.maxImages)
+        .toList(growable: false);
     Navigator.pop(
       context,
       PlatformProduct(
@@ -611,7 +645,8 @@ class _EditDialogState extends State<_EditDialog> {
         name: name,
         description: _desc.text.trim(),
         price: price,
-        imageUrl: _image.text.trim(),
+        imageUrl: urls.isEmpty ? '' : urls.first,
+        imageUrls: urls,
         unit: _unit.text.trim().isEmpty ? 'дона' : _unit.text.trim(),
         minQty: existing?.minQty ?? 1,
         step: existing?.step ?? 1,
@@ -627,7 +662,8 @@ class _EditDialogState extends State<_EditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final url = _image.text.trim();
+    final count = _imageUrls.length;
+    final canAdd = count < PlatformProduct.maxImages;
     return AlertDialog(
       title: Text(widget.existing == null ? 'Янги маҳсулот' : 'Таҳрир'),
       content: SizedBox(
@@ -635,22 +671,107 @@ class _EditDialogState extends State<_EditDialog> {
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  height: 140,
-                  width: double.infinity,
-                  child: url.isNotEmpty && isHttpImageUrl(url)
-                      ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
-                      : const ColoredBox(
-                          color: Color(0xFFEAF6EB),
-                          child: Icon(
-                            Icons.image_outlined,
-                            size: 48,
-                            color: AppColors.primary,
+              SizedBox(
+                height: 96,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (var i = 0; i < _imageUrls.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: SizedBox(
+                                width: 96,
+                                height: 96,
+                                child: isHttpImageUrl(_imageUrls[i])
+                                    ? CachedNetworkImage(
+                                        imageUrl: _imageUrls[i],
+                                        fit: BoxFit.cover,
+                                      )
+                                    : const ColoredBox(
+                                        color: Color(0xFFEAF6EB),
+                                        child: Icon(Icons.image_outlined),
+                                      ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: Material(
+                                color: Colors.black54,
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: _uploading
+                                      ? null
+                                      : () => _removeImageAt(i),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (i == 0)
+                              Positioned(
+                                left: 4,
+                                bottom: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.button,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'Асосий',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (canAdd)
+                      OutlinedButton(
+                        onPressed: _uploading ? null : _pickImage,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(96, 96),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
+                        child: _uploading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_photo_alternate),
+                                  SizedBox(height: 4),
+                                  Text('Қўшиш', style: TextStyle(fontSize: 11)),
+                                ],
+                              ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -658,39 +779,21 @@ class _EditDialogState extends State<_EditDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: _uploading ? null : _pickImage,
-                      icon: _uploading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add_photo_alternate),
+                      onPressed: (_uploading || !canAdd) ? null : _pickImage,
+                      icon: const Icon(Icons.add_photo_alternate),
                       label: Text(
                         _uploading
                             ? 'Юкланмоқда...'
-                            : (url.isEmpty
-                                ? 'Расм танлаш'
-                                : 'Расмни алмаштириш'),
+                            : 'Расм танлаш ($count/${PlatformProduct.maxImages})',
                       ),
                     ),
                   ),
-                  if (url.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Расмни олиб ташлаш',
-                      onPressed: _uploading
-                          ? null
-                          : () => setState(() => _image.clear()),
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    ),
-                  ],
                 ],
               ),
               const Padding(
                 padding: EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
-                  'Файл танланг ёки Ctrl+V. Катта расм авто сиқилади (≤8 MB).',
+                  '1–5 та расм. Файл ёки Ctrl+V. Катта расм авто сиқилади.',
                   style: TextStyle(fontSize: 11.5, color: Colors.black54),
                 ),
               ),
@@ -708,12 +811,6 @@ class _EditDialogState extends State<_EditDialog> {
                 decoration: const InputDecoration(labelText: 'Нарх (сўм)'),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              TextField(
-                controller: _image,
-                decoration: const InputDecoration(
-                  labelText: 'Расм URL (авто тўлдирилади)',
-                ),
               ),
               TextField(
                 controller: _unit,

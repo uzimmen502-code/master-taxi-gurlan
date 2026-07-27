@@ -34,7 +34,7 @@ class PlatformMarketCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _Image(url: product.imageUrl),
+                  _Image(url: product.coverImageUrl),
                   Positioned(
                     top: 6,
                     left: 6,

@@ -136,7 +136,7 @@ class FeaturedProductsService {
               id: p.id,
               name: p.name,
               price: p.price,
-              imageUrl: p.imageUrl,
+              imageUrl: p.coverImageUrl,
               source: 'platform',
             ),
           )

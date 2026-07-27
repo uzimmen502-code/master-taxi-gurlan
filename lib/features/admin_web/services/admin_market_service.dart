@@ -42,6 +42,17 @@ class AdminMarketService {
     });
   }
 
+  /// `settings/app.platformFeaturedAuto` — Тавсия этамиз витринаси АВТО/ҚЎЛДА.
+  Future<void> setPlatformFeaturedAuto({
+    required String adminPhone,
+    required bool enabled,
+  }) async {
+    await _call('adminSetPlatformFeaturedAuto', {
+      'adminPhone': adminPhone,
+      'enabled': enabled,
+    });
+  }
+
   Future<void> updateAd({
     required String adminPhone,
     required String adId,

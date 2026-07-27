@@ -1,12 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../services/admin_auth_service.dart';
+import '../services/admin_market_service.dart';
 
 /// Админ: платформа дўкони каталоги.
 class PlatformProductsAdminScreen extends StatefulWidget {
@@ -91,83 +95,210 @@ class _PlatformProductsAdminScreenState
         icon: const Icon(Icons.add),
         label: const Text('Маҳсулот'),
       ),
-      body: StreamBuilder<List<PlatformProduct>>(
-        stream: _repo.watchAll(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting &&
-              !snap.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final items = snap.data ?? const [];
-          if (items.isEmpty) {
-            return const Center(
-              child: Text('Каталог бўш — маҳсулот қўшинг'),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final p = items[i];
-              return Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  leading: _Thumb(url: p.imageUrl),
-                  title: Text(
-                    p.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    [
-                      '${formatPrice(p.price)} сўм',
-                      p.active ? 'фаол' : 'нофаол',
-                      if (p.featuredOnHome) 'витрина',
-                      if (p.showInMarket) 'бозор',
-                      p.isUnlimitedStock
-                          ? 'лимитсиз'
-                          : 'қолдиқ ${p.remaining}',
-                    ].join(' · '),
-                    maxLines: 2,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (v) async {
-                      if (v == 'edit') {
-                        await _openEdit(p);
-                      } else if (v == 'toggle') {
-                        await _repo.setActive(p.id, !p.active);
-                      } else if (v == 'delete') {
-                        await _delete(p);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Text('Таҳрир'),
+      body: Column(
+        children: [
+          const _PlatformFeaturedAutoBar(),
+          Expanded(
+            child: StreamBuilder<List<PlatformProduct>>(
+              stream: _repo.watchAll(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting &&
+                    !snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final items = snap.data ?? const [];
+                if (items.isEmpty) {
+                  return const Center(
+                    child: Text('Каталог бўш — маҳсулот қўшинг'),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final p = items[i];
+                    return Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        leading: _Thumb(url: p.imageUrl),
+                        title: Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          [
+                            '${formatPrice(p.price)} сўм',
+                            p.active ? 'фаол' : 'нофаол',
+                            if (p.featuredOnHome) 'витрина',
+                            if (p.showInMarket) 'бозор',
+                            p.isUnlimitedStock
+                                ? 'лимитсиз'
+                                : 'қолдиқ ${p.remaining}',
+                          ].join(' · '),
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (v) async {
+                            if (v == 'edit') {
+                              await _openEdit(p);
+                            } else if (v == 'toggle') {
+                              await _repo.setActive(p.id, !p.active);
+                            } else if (v == 'delete') {
+                              await _delete(p);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Таҳрир'),
+                            ),
+                            PopupMenuItem(
+                              value: 'toggle',
+                              child: Text(p.active ? 'Нофаол' : 'Фаол'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Ўчириш'),
+                            ),
+                          ],
+                        ),
+                        onTap: () => _openEdit(p),
                       ),
-                      PopupMenuItem(
-                        value: 'toggle',
-                        child: Text(p.active ? 'Нофаол' : 'Фаол'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Ўчириш'),
-                      ),
-                    ],
-                  ),
-                  onTap: () => _openEdit(p),
-                ),
-              );
-            },
-          );
-        },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// `settings/app.platformFeaturedAuto` — ҚЎЛДА / АВТО витрина.
+class _PlatformFeaturedAutoBar extends StatefulWidget {
+  const _PlatformFeaturedAutoBar();
+
+  @override
+  State<_PlatformFeaturedAutoBar> createState() =>
+      _PlatformFeaturedAutoBarState();
+}
+
+class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
+  bool _busy = false;
+
+  Future<void> _setAuto(bool enabled) async {
+    final adminPhone = context.read<AdminAuthService>().phoneDigits ?? '';
+    if (adminPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin телефон топилмади — қайта киринг'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await context.read<AdminMarketService>().setPlatformFeaturedAuto(
+            adminPhone: adminPhone,
+            enabled: enabled,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('settings')
+          .doc('app')
+          .snapshots(),
+      builder: (context, snap) {
+        // Default АВТО (null/absent → true).
+        final auto = snap.data?.data()?['platformFeaturedAuto'] != false;
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                auto ? Icons.flash_on : Icons.admin_panel_settings,
+                color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  auto
+                      ? 'Витрина АВТО — фаол маҳсулотлар «Тавсия этамиз»да кўринади'
+                      : 'Витрина ҚЎЛДА — фақат «Тавсия этамиз» белгиланганлари',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        auto ? Colors.green.shade900 : Colors.orange.shade900,
+                  ),
+                ),
+              ),
+              if (_busy)
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else ...[
+                OutlinedButton(
+                  onPressed: auto ? () => _setAuto(false) : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange.shade800,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('ҚЎЛДА', style: TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: auto ? null : () => _setAuto(true),
+                  icon: const Icon(Icons.flash_on, size: 16),
+                  label: const Text('АВТО', style: TextStyle(fontSize: 12)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.button,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: const Size(0, 36),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -335,6 +466,7 @@ class _EditDialogState extends State<_EditDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Тавсия этамиз (витрина)'),
+                subtitle: const Text('ҚЎЛДА режимда витринага чиқади'),
                 value: _featured,
                 onChanged: (v) => setState(() => _featured = v),
               ),

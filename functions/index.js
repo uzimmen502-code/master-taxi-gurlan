@@ -11933,6 +11933,17 @@ exports.adminSetMarketAutoApprove = functions.https.onCall(async (data, context)
   return { ok: true, enabled };
 });
 
+/** Admin: «Тавсия этамиз» витринаси — АВТО (барча фаол) / ҚЎЛДА (featuredOnHome). */
+exports.adminSetPlatformFeaturedAuto = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const enabled = data.enabled === true;
+  await db.collection('settings').doc('app').set({
+    platformFeaturedAuto: enabled,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, enabled };
+});
+
 /** Qiziqish bildirish — o'zaro (mutual) bo'lsa avtomatik match. */
 exports.sendDatingInterest = functions.https.onCall(async (data, context) => {
   const fromId = datingCallerUid(context);

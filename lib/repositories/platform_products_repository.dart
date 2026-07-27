@@ -46,13 +46,22 @@ class PlatformProductsRepository {
         .toList(growable: false);
   }
 
-  /// Уй «Тавсия этамиз» учун: аввал featured, етишмаса бошқа фаоллар.
+  /// Уй «Тавсия этамиз» учун.
+  /// АВТО (`platformFeaturedAuto`): барча фаол/бор товарлар.
+  /// ҚЎЛДА: фақат `featuredOnHome == true`.
   Future<List<PlatformProduct>> fetchForHomeFeatured({int take = 2}) async {
+    final settings = await _db.collection('settings').doc('app').get();
+    // Default АВТО — витрина бўш қолмасин.
+    final auto = settings.data()?['platformFeaturedAuto'] != false;
     final all = await fetchActive(limit: 48);
-    final featured =
-        all.where((p) => p.featuredOnHome && p.price > 0 && p.inStock);
-    final rest = all.where((p) => !p.featuredOnHome && p.price > 0 && p.inStock);
-    return [...featured, ...rest].take(take).toList(growable: false);
+    final eligible = all.where((p) => p.price > 0 && p.inStock);
+    if (auto) {
+      return eligible.take(take).toList(growable: false);
+    }
+    return eligible
+        .where((p) => p.featuredOnHome)
+        .take(take)
+        .toList(growable: false);
   }
 
   /// Онлайн бозор лентаси учун.

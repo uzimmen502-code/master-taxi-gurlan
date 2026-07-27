@@ -109,6 +109,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - setDatingAgePreference — user sets prefMinAge/prefMaxAge (18–80) on `dating_profiles`.
 - adminSetDatingAutoApprove — admin toggle `datingAutoApprove` in `settings/app`.
 - adminSetMarketAutoApprove — toggle `marketAutoApprove` in `settings/app`; submitMarketAd + onAdUpdate(pending) auto→active when on.
+- adminSetPlatformFeaturedAuto — toggle `platformFeaturedAuto` in `settings/app` (Тавсия этамиз витрина АВТО/ҚЎЛДА).
 - setDatingActive — toggle visibility (active) + lastActive.
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.

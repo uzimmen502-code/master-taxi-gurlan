@@ -6,6 +6,6 @@ Rules: read true; write isAdmin. Index: active+sortOrder.
 
 Code: `lib/models/platform_product.dart`, `lib/repositories/platform_products_repository.dart`, customer `features/platform_store/screens/platform_store_screen.dart`, admin `admin_web/screens/platform_products_admin_screen.dart` (shell: «Платформа дўкони»).
 
-Home «Тавсия этамиз» (`FeaturedProductsService`): bread + food + platform (source `platform`). Tap: bread→Bread, food→Food, platform→PlatformStoreScreen. Title stays `home_featured_title`.
+Home «Тавсия этамиз»: bread + food + platform. Tap: bread/food modules, platform→PlatformStoreScreen. Витрина: `settings/app.platformFeaturedAuto` (default true=АВТО all active; false=ҚЎЛДА only featuredOnHome). Admin bar ҚЎЛДА/АВТО + CF `adminSetPlatformFeaturedAuto`.
 
 Cart+checkout DONE: `PlatformStoreController` submit via `placeOrderPostPaid` type=`platform` (server reprice from `platform_products`, wallet±cashDue, inventory soldToday on same docs). Cart sheet: delivery|pickup, AddressGate, wallet banner. Orders list shows as OrderCard «Платформа дўкони». Market mix DONE: `CheapProductsScreen` filters Ҳаммаси|AVA|Хусусий; platform cards `PlatformMarketCard` (AVA badge) → PlatformStoreScreen; private ads unchanged.

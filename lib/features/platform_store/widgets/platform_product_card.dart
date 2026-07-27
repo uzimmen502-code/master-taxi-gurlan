@@ -81,7 +81,7 @@ class PlatformProductCard extends StatelessWidget {
                           right: 5,
                           bottom: 5,
                           child: Material(
-                            color: const Color(0xFFB39DDB), // очик бинафша
+                            color: const Color(0xFFF44336), // Material qizil
                             shape: const CircleBorder(),
                             elevation: 1.5,
                             child: InkWell(

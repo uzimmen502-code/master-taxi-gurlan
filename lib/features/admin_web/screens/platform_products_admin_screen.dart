@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:html' as html;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
@@ -435,6 +441,7 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _inMarket;
   late String _docId;
   bool _uploading = false;
+  StreamSubscription<html.Event>? _pasteSub;
 
   @override
   void initState() {
@@ -455,10 +462,12 @@ class _EditDialogState extends State<_EditDialog> {
     _active = e?.active ?? true;
     _featured = e?.featuredOnHome ?? false;
     _inMarket = e?.showInMarket ?? true;
+    _pasteSub = html.document.onPaste.listen(_onDocumentPaste);
   }
 
   @override
   void dispose() {
+    _pasteSub?.cancel();
     _name.dispose();
     _desc.dispose();
     _price.dispose();
@@ -469,9 +478,96 @@ class _EditDialogState extends State<_EditDialog> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<Uint8List?> _blobToBytes(html.Blob blob) async {
+    final reader = html.FileReader();
+    final done = reader.onLoadEnd.first;
+    reader.readAsArrayBuffer(blob);
+    await done;
+    final result = reader.result;
+    if (result is ByteBuffer) {
+      return Uint8List.view(result);
+    }
+    return null;
+  }
+
+  void _onDocumentPaste(html.Event event) {
+    if (_uploading || !mounted) return;
+    final e = event as html.ClipboardEvent;
+    final items = e.clipboardData?.items;
+    if (items == null) return;
+    final len = items.length;
+    if (len == null) return;
+    for (var i = 0; i < len; i++) {
+      final item = items[i];
+      final type = item.type;
+      if (type == null || !type.startsWith('image/')) continue;
+      final file = item.getAsFile();
+      if (file == null) continue;
+      e.preventDefault();
+      e.stopPropagation();
+      unawaited(_uploadFromBlob(file, type));
+      return;
+    }
+  }
+
+  Future<void> _uploadFromBlob(html.Blob blob, String mime) async {
+    final bytes = await _blobToBytes(blob);
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.orange,
+            content: Text('Нусхадаги расм ўқилмади.'),
+          ),
+        );
+      }
+      return;
+    }
+    await _uploadBytes(bytes, mime.isEmpty ? 'image/png' : mime);
+  }
+
+  Future<void> _uploadBytes(Uint8List bytes, String mime) async {
     if (_uploading) return;
     setState(() => _uploading = true);
+    try {
+      if (bytes.length > 2 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.orange,
+              content: Text('Расм 2 MB дан кичик бўлсин.'),
+            ),
+          );
+        }
+        return;
+      }
+      final contentType = mime.startsWith('image/') ? mime : 'image/jpeg';
+      final url = await BreadImageStorage().uploadPlatformImage(
+        docId: _docId,
+        bytes: bytes,
+        contentType: contentType,
+      );
+      if (!mounted) return;
+      setState(() => _image.text = url);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text('Расм юкланди'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('Расм: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    if (_uploading) return;
     try {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.image,
@@ -492,44 +588,19 @@ class _EditDialogState extends State<_EditDialog> {
         }
         return;
       }
-      if (bytes.length > 2 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.orange,
-              content: Text('Расм 2 MB дан кичик бўлсин.'),
-            ),
-          );
-        }
-        return;
-      }
       final name = f.name.toLowerCase();
       final mime = name.endsWith('.png')
           ? 'image/png'
           : name.endsWith('.webp')
               ? 'image/webp'
               : 'image/jpeg';
-      final url = await BreadImageStorage().uploadPlatformImage(
-        docId: _docId,
-        bytes: bytes,
-        contentType: mime,
-      );
-      if (!mounted) return;
-      setState(() => _image.text = url);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
-        ),
-      );
+      await _uploadBytes(bytes, mime);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: Colors.red, content: Text('Расм: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -629,7 +700,7 @@ class _EditDialogState extends State<_EditDialog> {
               const Padding(
                 padding: EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
-                  'Компьютердан JPG/PNG/WebP (max 2 MB). Storage’га юкланади.',
+                  'Файл танланг ёки нусха қўйинг (Ctrl+V). JPG/PNG/WebP, max 2 MB.',
                   style: TextStyle(fontSize: 11.5, color: Colors.black54),
                 ),
               ),

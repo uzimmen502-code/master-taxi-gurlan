@@ -75,4 +75,20 @@ class BreadImageStorage {
     await ref.putData(bytes, SettableMetadata(contentType: contentType));
     return ref.getDownloadURL();
   }
+
+  /// Платформа дўкони расми (`platform_images/`).
+  Future<String> uploadPlatformImage({
+    required String docId,
+    required Uint8List bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    final ext = contentType.contains('png')
+        ? 'png'
+        : contentType.contains('webp')
+            ? 'webp'
+            : 'jpg';
+    final ref = _storage.ref('platform_images/$docId.$ext');
+    await ref.putData(bytes, SettableMetadata(contentType: contentType));
+    return ref.getDownloadURL();
+  }
 }

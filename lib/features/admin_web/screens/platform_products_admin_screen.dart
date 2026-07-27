@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
+import '../../bread/services/bread_image_storage.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../services/admin_auth_service.dart';
@@ -431,11 +433,16 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _active;
   late bool _featured;
   late bool _inMarket;
+  late String _docId;
+  bool _uploading = false;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
+    _docId = (e?.id.isNotEmpty == true)
+        ? e!.id
+        : FirebaseFirestore.instance.collection('platform_products').doc().id;
     _name = TextEditingController(text: e?.name ?? '');
     _desc = TextEditingController(text: e?.description ?? '');
     _price = TextEditingController(text: e != null ? '${e.price}' : '');
@@ -462,6 +469,70 @@ class _EditDialogState extends State<_EditDialog> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    if (_uploading) return;
+    setState(() => _uploading = true);
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+      if (res == null || res.files.isEmpty) return;
+      final f = res.files.single;
+      final bytes = f.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.orange,
+              content: Text('Файл ўқилмади — кичикроқ JPG/PNG танланг.'),
+            ),
+          );
+        }
+        return;
+      }
+      if (bytes.length > 2 * 1024 * 1024) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.orange,
+              content: Text('Расм 2 MB дан кичик бўлсин.'),
+            ),
+          );
+        }
+        return;
+      }
+      final name = f.name.toLowerCase();
+      final mime = name.endsWith('.png')
+          ? 'image/png'
+          : name.endsWith('.webp')
+              ? 'image/webp'
+              : 'image/jpeg';
+      final url = await BreadImageStorage().uploadPlatformImage(
+        docId: _docId,
+        bytes: bytes,
+        contentType: mime,
+      );
+      if (!mounted) return;
+      setState(() => _image.text = url);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.button,
+          content: Text('Расм юкланди'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('Расм: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   void _save() {
     final name = _name.text.trim();
     final price = int.tryParse(_price.text.trim()) ?? -1;
@@ -475,7 +546,7 @@ class _EditDialogState extends State<_EditDialog> {
     Navigator.pop(
       context,
       PlatformProduct(
-        id: existing?.id ?? '',
+        id: existing?.id.isNotEmpty == true ? existing!.id : _docId,
         name: name,
         description: _desc.text.trim(),
         price: price,
@@ -495,6 +566,7 @@ class _EditDialogState extends State<_EditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final url = _image.text.trim();
     return AlertDialog(
       title: Text(widget.existing == null ? 'Янги маҳсулот' : 'Таҳрир'),
       content: SizedBox(
@@ -503,6 +575,64 @@ class _EditDialogState extends State<_EditDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  height: 140,
+                  width: double.infinity,
+                  child: url.isNotEmpty && isHttpImageUrl(url)
+                      ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+                      : const ColoredBox(
+                          color: Color(0xFFEAF6EB),
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 48,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _uploading ? null : _pickImage,
+                      icon: _uploading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_photo_alternate),
+                      label: Text(
+                        _uploading
+                            ? 'Юкланмоқда...'
+                            : (url.isEmpty
+                                ? 'Расм танлаш'
+                                : 'Расмни алмаштириш'),
+                      ),
+                    ),
+                  ),
+                  if (url.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Расмни олиб ташлаш',
+                      onPressed: _uploading
+                          ? null
+                          : () => setState(() => _image.clear()),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                  ],
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  'Компьютердан JPG/PNG/WebP (max 2 MB). Storage’га юкланади.',
+                  style: TextStyle(fontSize: 11.5, color: Colors.black54),
+                ),
+              ),
               TextField(
                 controller: _name,
                 decoration: const InputDecoration(labelText: 'Ном'),
@@ -520,7 +650,9 @@ class _EditDialogState extends State<_EditDialog> {
               ),
               TextField(
                 controller: _image,
-                decoration: const InputDecoration(labelText: 'Расм URL'),
+                decoration: const InputDecoration(
+                  labelText: 'Расм URL (авто тўлдирилади)',
+                ),
               ),
               TextField(
                 controller: _unit,
@@ -565,11 +697,11 @@ class _EditDialogState extends State<_EditDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _uploading ? null : () => Navigator.pop(context),
           child: const Text('Бекор'),
         ),
         FilledButton(
-          onPressed: _save,
+          onPressed: _uploading ? null : _save,
           child: const Text('Сақлаш'),
         ),
       ],

@@ -80,7 +80,7 @@ class PlatformProductsRepository {
   }
 
   Future<String> create(PlatformProduct product) async {
-    final ref = _col.doc();
+    final ref = product.id.isEmpty ? _col.doc() : _col.doc(product.id);
     await ref.set(product.toFirestoreCreate());
     return ref.id;
   }

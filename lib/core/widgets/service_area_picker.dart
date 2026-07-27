@@ -19,6 +19,7 @@ class ServiceAreaPicker extends StatefulWidget {
     required this.onChanged,
     this.repository,
     this.showAreaDropdown = true,
+    this.showRegionDropdown = true,
   });
 
   final String initialRegionId;
@@ -29,6 +30,10 @@ class ServiceAreaPicker extends StatefulWidget {
   /// Viloyat → Tuman tanlaydi; tumanning birlamchi zonasi avtomatik
   /// [onChanged] ga serviceAreaId sifatida beriladi.
   final bool showAreaDropdown;
+
+  /// `false` — viloyat yashirin; birinchi (yoki yagona) region avto-tanlanadi.
+  /// AVA Хоразм учун: рўйхатдан ўтишда фақат туман етарли.
+  final bool showRegionDropdown;
 
   /// (regionId, districtId, serviceAreaId) — har biri bo'sh bo'lishi mumkin.
   final void Function(String regionId, String districtId, String serviceAreaId)
@@ -71,8 +76,11 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
     setState(() {
       _regions = regions;
       _loadingRegions = false;
-      if (_regionId.isEmpty && regions.length == 1) {
-        _regionId = regions.first.id;
+      if (_regionId.isEmpty && regions.isNotEmpty) {
+        // Bitta viloyat (Хоразм) yoki yashirin rejimda — birinchi region.
+        if (regions.length == 1 || !widget.showRegionDropdown) {
+          _regionId = regions.first.id;
+        }
       }
     });
     if (_regionId.isNotEmpty) await _loadDistricts(_regionId);
@@ -128,33 +136,36 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _dropdown<GeoRegion>(
-          label: 'Viloyat',
-          icon: Icons.public,
-          value: _regionId.isEmpty ? null : _regionId,
-          loading: _loadingRegions,
-          items: _regions,
-          idOf: (r) => r.id,
-          labelOf: (r) => r.displayName,
-          onChanged: (id) {
-            setState(() {
-              _regionId = id ?? '';
-              _districtId = '';
-              _areaId = '';
-            });
-            if (_regionId.isNotEmpty) {
-              _loadDistricts(_regionId);
-            } else {
-              _emit();
-            }
-          },
-        ),
-        const SizedBox(height: 12),
+        if (widget.showRegionDropdown) ...[
+          _dropdown<GeoRegion>(
+            label: 'Вилоят',
+            icon: Icons.public,
+            value: _regionId.isEmpty ? null : _regionId,
+            loading: _loadingRegions,
+            items: _regions,
+            idOf: (r) => r.id,
+            labelOf: (r) => r.displayName,
+            onChanged: (id) {
+              setState(() {
+                _regionId = id ?? '';
+                _districtId = '';
+                _areaId = '';
+              });
+              if (_regionId.isNotEmpty) {
+                _loadDistricts(_regionId);
+              } else {
+                _emit();
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
         _dropdown<GeoDistrict>(
-          label: 'Tuman',
+          label: 'Туман',
           icon: Icons.location_city,
           value: _districtId.isEmpty ? null : _districtId,
-          loading: _loadingDistricts,
+          loading: _loadingDistricts ||
+              (_loadingRegions && !widget.showRegionDropdown),
           items: _districts,
           idOf: (d) => d.id,
           labelOf: (d) => d.displayName,
@@ -173,7 +184,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
         if (widget.showAreaDropdown) ...[
           const SizedBox(height: 12),
           _dropdown<ServiceArea>(
-            label: 'Mahalla / xizmat zonasi',
+            label: 'Маҳалла / хизмат зонаси',
             icon: Icons.holiday_village,
             value: _areaId.isEmpty ? null : _areaId,
             loading: _loadingAreas,

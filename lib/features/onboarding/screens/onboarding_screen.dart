@@ -635,161 +635,128 @@ class _OnboardingViewState extends State<_OnboardingView> {
   Widget _pageZone(AppLocalizations loc, OnboardingController c) {
     final gpsRequired = c.isGpsRequiredForPhone(_phoneCtrl.text);
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('📍', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 8),
-          const Text(
-            'Ҳудудингиз',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: _ink,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      child: _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ServiceAreaPicker(
+              initialRegionId: c.geoRegionId,
+              initialDistrictId: c.geoDistrictId,
+              initialServiceAreaId: c.geoServiceAreaId,
+              showRegionDropdown: false,
+              showAreaDropdown: false,
+              onChanged: (region, district, area) {
+                c.setGeoArea(region, district, area);
+              },
             ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Вилоят, туман ва GPS — хизматлар учун. Аниқ манзил — ихтиёрий.',
-            style: TextStyle(
-              fontSize: 14,
-              color: _muted,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Хизмат зонаси *',
+            if (gpsRequired) ...[
+              const SizedBox(height: 12),
+              _gpsCard(c, loc),
+            ],
+            const SizedBox(height: 4),
+            Theme(
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                title: const Text(
+                  'Яшаш манзилингизни киритинг',
                   style: TextStyle(
-                    fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: _ink,
+                    color: _greenDark,
+                    fontSize: 14,
                   ),
                 ),
-                const SizedBox(height: 8),
-                ServiceAreaPicker(
-                  initialRegionId: c.geoRegionId,
-                  initialDistrictId: c.geoDistrictId,
-                  initialServiceAreaId: c.geoServiceAreaId,
-                  showAreaDropdown: false,
-                  onChanged: (region, district, area) {
-                    c.setGeoArea(region, district, area);
-                  },
-                ),
-                if (gpsRequired) ...[
-                  const SizedBox(height: 14),
-                  _gpsCard(c, loc),
+                children: [
+                  _benefit(
+                    icon: '🍞',
+                    text:
+                        'Аниқ манзил бўлса — нон ва бошқа буюртмалар тўғри эшигингизга етиб боради.',
+                  ),
+                  const SizedBox(height: 10),
+                  _mfyAutocomplete(c, loc),
+                  const SizedBox(height: 8),
+                  _manualField(
+                    ctrl: _streetCtrl,
+                    label: 'Кўча / гузар',
+                    icon: Icons.signpost,
+                    hint: 'Кўча номи',
+                  ),
+                  const SizedBox(height: 8),
+                  _manualField(
+                    ctrl: _houseCtrl,
+                    label: 'Уй №',
+                    icon: Icons.home,
+                    hint: '12',
+                  ),
                 ],
-                const SizedBox(height: 10),
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: 4),
-                    title: const Text(
-                      'Яшаш манзилингизни киритинг',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: _greenDark,
-                        fontSize: 14,
-                      ),
-                    ),
-                    children: [
-                      _benefit(
-                        icon: '🍞',
-                        text:
-                            'Аниқ манзил бўлса — нон ва бошқа буюртмалар тўғри эшигингизга етиб боради.',
-                      ),
-                      const SizedBox(height: 10),
-                      _mfyAutocomplete(c, loc),
-                      const SizedBox(height: 8),
-                      _manualField(
-                        ctrl: _streetCtrl,
-                        label: 'Кўча / гузар',
-                        icon: Icons.signpost,
-                        hint: 'Кўча номи',
-                      ),
-                      const SizedBox(height: 8),
-                      _manualField(
-                        ctrl: _houseCtrl,
-                        label: 'Уй №',
-                        icon: Icons.home,
-                        hint: '12',
-                      ),
-                    ],
-                  ),
-                ),
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: 4),
-                    onExpansionChanged: (v) =>
-                        setState(() => _carExpanded = v),
-                    title: const Text(
-                      'Автомобил маълумоти',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: _greenDark,
-                        fontSize: 14,
-                      ),
-                    ),
-                    subtitle: const Text(
-                      'ихтиёрий',
-                      style: TextStyle(fontSize: 11, color: _muted),
-                    ),
-                    children: [
-                      _benefit(
-                        icon: '🚗',
-                        text:
-                            'Киритсангиз — AVA service хизматларини 5%–20% арзонроқ таклиф қиламиз.',
-                        warm: true,
-                      ),
-                      const SizedBox(height: 10),
-                      _dropdownStr(
-                        label: context.tr('oil_brand'),
-                        value: OilCarOptions.brands.contains(c.carBrand)
-                            ? c.carBrand
-                            : OilCarOptions.brands.first,
-                        items: OilCarOptions.brands,
-                        onChanged: c.setCarBrand,
-                      ),
-                      _dropdownStr(
-                        label: context.tr('oil_model'),
-                        value: OilCarOptions.models.contains(c.carModel)
-                            ? c.carModel
-                            : OilCarOptions.models.first,
-                        items: OilCarOptions.models,
-                        onChanged: c.setCarModel,
-                      ),
-                      _dropdownInt(
-                        label: context.tr('oil_year'),
-                        value: OilCarOptions.years.contains(c.carYear)
-                            ? c.carYear
-                            : OilCarOptions.years.first,
-                        items: OilCarOptions.years,
-                        onChanged: c.setCarYear,
-                      ),
-                      _manualField(
-                        ctrl: _carPlateCtrl,
-                        label: context.tr('onb_car_plate_hint'),
-                        icon: Icons.pin_outlined,
-                        hint: '01 A 123 BC',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+            Theme(
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                onExpansionChanged: (v) =>
+                    setState(() => _carExpanded = v),
+                title: const Text(
+                  'Автомобил маълумоти',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: _greenDark,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: const Text(
+                  'ихтиёрий',
+                  style: TextStyle(fontSize: 11, color: _muted),
+                ),
+                children: [
+                  _benefit(
+                    icon: '🚗',
+                    text:
+                        'Киритсангиз — AVA service хизматларини 5%–20% арзонроқ таклиф қиламиз.',
+                    warm: true,
+                  ),
+                  const SizedBox(height: 10),
+                  _dropdownStr(
+                    label: context.tr('oil_brand'),
+                    value: OilCarOptions.brands.contains(c.carBrand)
+                        ? c.carBrand
+                        : OilCarOptions.brands.first,
+                    items: OilCarOptions.brands,
+                    onChanged: c.setCarBrand,
+                  ),
+                  _dropdownStr(
+                    label: context.tr('oil_model'),
+                    value: OilCarOptions.models.contains(c.carModel)
+                        ? c.carModel
+                        : OilCarOptions.models.first,
+                    items: OilCarOptions.models,
+                    onChanged: c.setCarModel,
+                  ),
+                  _dropdownInt(
+                    label: context.tr('oil_year'),
+                    value: OilCarOptions.years.contains(c.carYear)
+                        ? c.carYear
+                        : OilCarOptions.years.first,
+                    items: OilCarOptions.years,
+                    onChanged: c.setCarYear,
+                  ),
+                  _manualField(
+                    ctrl: _carPlateCtrl,
+                    label: context.tr('onb_car_plate_hint'),
+                    icon: Icons.pin_outlined,
+                    hint: '01 A 123 BC',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

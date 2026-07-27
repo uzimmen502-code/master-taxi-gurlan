@@ -19,6 +19,7 @@ import '../../../repositories/platform_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
 import '../utils/clipboard_paste_image.dart';
+import '../utils/web_image_compress.dart';
 
 /// Админ: платформа дўкони каталоги.
 class PlatformProductsAdminScreen extends StatefulWidget {
@@ -521,35 +522,33 @@ class _EditDialogState extends State<_EditDialog> {
     if (_uploading) return;
     setState(() => _uploading = true);
     try {
-      if (bytes.length > 2 * 1024 * 1024) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.orange,
-              content: Text('Расм 2 MB дан кичик бўлсин.'),
-            ),
-          );
-        }
-        return;
-      }
-      final contentType = mime.startsWith('image/') ? mime : 'image/jpeg';
+      final prepared = await WebImageCompress.prepareForUpload(
+        bytes,
+        mimeHint: mime,
+      );
       final url = await BreadImageStorage().uploadPlatformImage(
         docId: _docId,
-        bytes: bytes,
-        contentType: contentType,
+        bytes: prepared.bytes,
+        contentType: prepared.mime,
       );
       if (!mounted) return;
       setState(() => _image.text = url);
+      final note = prepared.bytes.length < bytes.length
+          ? 'Расм юкланди (сиқилди)'
+          : 'Расм юкланди';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
+          content: Text(note),
         ),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red, content: Text('Расм: $e')),
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(e is StateError ? e.message : 'Расм: $e'),
+          ),
         );
       }
     } finally {
@@ -691,7 +690,7 @@ class _EditDialogState extends State<_EditDialog> {
               const Padding(
                 padding: EdgeInsets.only(top: 4, bottom: 8),
                 child: Text(
-                  'Файл танланг ёки нусха қўйинг (Ctrl+V). JPG/PNG/WebP, max 2 MB.',
+                  'Файл танланг ёки Ctrl+V. Катта расм авто сиқилади (≤8 MB).',
                   style: TextStyle(fontSize: 11.5, color: Colors.black54),
                 ),
               ),

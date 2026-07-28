@@ -51,6 +51,11 @@ class ActiveTrip {
   final String cancelReason;
   final int passengerWalletIntent;
   final int estimatedPrice;
+  final double toLat;
+  final double toLng;
+  final int lockedFare;
+  final double lockedDistanceKm;
+  final int fareLockVersion;
 
   const ActiveTrip({
     required this.id,
@@ -87,6 +92,11 @@ class ActiveTrip {
     this.cancelReason = '',
     this.passengerWalletIntent = 0,
     this.estimatedPrice = 0,
+    this.toLat = 0,
+    this.toLng = 0,
+    this.lockedFare = 0,
+    this.lockedDistanceKm = 0,
+    this.fareLockVersion = 0,
   });
 
   bool get isAccepted => status == 'accepted';
@@ -104,6 +114,9 @@ class ActiveTrip {
   bool get isNoSeats => status == 'no_seats';
   bool get isExpired =>
       expiresAt != null && !expiresAt!.isAfter(DateTime.now());
+  bool get hasLockedFare => lockedFare > 0;
+  /// UI uchun: qulflangan narx, yo'q bo'lsa legacy estimatedPrice.
+  int get displayFare => lockedFare > 0 ? lockedFare : estimatedPrice;
 
   factory ActiveTrip.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
@@ -143,6 +156,11 @@ class ActiveTrip {
       cancelReason: (d['cancelReason'] ?? '') as String,
       passengerWalletIntent: (d['passengerWalletIntent'] as num?)?.toInt() ?? 0,
       estimatedPrice: (d['estimatedPrice'] as num?)?.toInt() ?? 0,
+      toLat: (d['toLat'] as num?)?.toDouble() ?? 0,
+      toLng: (d['toLng'] as num?)?.toDouble() ?? 0,
+      lockedFare: (d['lockedFare'] as num?)?.toInt() ?? 0,
+      lockedDistanceKm: (d['lockedDistanceKm'] as num?)?.toDouble() ?? 0,
+      fareLockVersion: (d['fareLockVersion'] as num?)?.toInt() ?? 0,
     );
   }
 }

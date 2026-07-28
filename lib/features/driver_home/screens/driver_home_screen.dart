@@ -132,8 +132,12 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
 
   Future<void> _onEndWork() async {
     final c = context.read<DriverHomeController>();
-    await c.endWorkDay();
+    final ok = await c.endWorkDay();
     if (!mounted) return;
+    if (!ok) {
+      _showSnack('⚠️ Аввал сафарни якунланг ёки тарк этинг', Colors.orange);
+      return;
+    }
     _showSnack('⚫ Иш тугатилди — оффлайн', Colors.grey.shade700);
   }
 
@@ -167,20 +171,25 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
   Future<void> _onFinishLocalTrip(int fare) async {
     final c = context.read<DriverHomeController>();
     var walletIntent = 0;
+    var lockedFare = 0;
     final tripId = c.acceptedRide?.id;
     if (tripId != null && tripId.isNotEmpty) {
       final snap = await FirebaseFirestore.instance
           .collection('trips')
           .doc(tripId)
           .get();
+      final data = snap.data() ?? const <String, dynamic>{};
       walletIntent =
-          (snap.data()?['passengerWalletIntent'] as num?)?.toInt() ?? 0;
+          (data['passengerWalletIntent'] as num?)?.toInt() ?? 0;
+      lockedFare = (data['lockedFare'] as num?)?.toInt() ?? 0;
     }
     if (!mounted) return;
+    final effectiveFare = lockedFare > 0 ? lockedFare : fare;
     final result = await showFareCalculatorDialog(
       context,
-      initialFare: fare,
+      initialFare: effectiveFare,
       passengerWalletIntent: walletIntent,
+      fareLocked: lockedFare > 0,
     );
     if (!mounted || result == null) return;
     final earned = await c.finishRide(
@@ -195,7 +204,11 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
 
   Future<void> _onAbandonLocalTrip() async {
     final c = context.read<DriverHomeController>();
-    await c.abandonRide();
+    final result = await c.abandonRide();
+    if (!mounted) return;
+    if (!result.success && result.error != null) {
+      _showSnack(result.error!, Colors.orange);
+    }
   }
 
   @override

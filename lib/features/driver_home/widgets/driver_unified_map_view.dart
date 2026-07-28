@@ -17,6 +17,7 @@ import '../../../services/google_directions_service.dart';
 import '../../../services/location_service.dart';
 import '../../../services/polyline_decoder.dart';
 import '../../../utils/fare_calculator.dart';
+import '../../local_taxi/services/local_trip_fare_lock_service.dart';
 import '../controllers/driver_home_controller.dart';
 import '../services/driver_offer_sounds.dart';
 import 'active_ride_card.dart';
@@ -56,6 +57,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
 
   final _mapController = Completer<GoogleMapController>();
   final _directionsService = GoogleDirectionsService();
+  final _fareLock = LocalTripFareLockService();
   final _polylineDecoder = const PolylineDecoder();
   final _locationService = const LocationService();
   late final AnimationController _pulseController;
@@ -77,6 +79,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
   LatLng? _lastTripPos;
   double _drivenKm = 0;
   int _liveFare = 0;
+  int _lockedFare = 0;
   bool _arrived = false;
   bool _finishing = false;
   bool _prefillingDestination = false;
@@ -268,8 +271,21 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
   }
 
   Future<void> _prefillDestination(TripRequest ride) async {
+    if (_destination != null) return;
+    if (ride.lockedFare > 0) {
+      _lockedFare = ride.lockedFare;
+      _liveFare = ride.lockedFare;
+    }
+    if (ride.toLat.abs() > 1e-6 || ride.toLng.abs() > 1e-6) {
+      setState(() {
+        _destination = LatLng(ride.toLat, ride.toLng);
+        _prefillingDestination = false;
+      });
+      await _calculateRoute(lockFare: ride.lockedFare <= 0);
+      return;
+    }
     final to = ride.to.trim();
-    if (to.isEmpty || _destination != null) return;
+    if (to.isEmpty) return;
     setState(() => _prefillingDestination = true);
     try {
       final coords = await _locationService.coordsFromAddress(
@@ -281,7 +297,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
         _destination = LatLng(coords.lat, coords.lng);
         _prefillingDestination = false;
       });
-      await _calculateRoute();
+      await _calculateRoute(lockFare: true);
     } catch (_) {
       if (mounted) setState(() => _prefillingDestination = false);
     }
@@ -300,6 +316,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     _lastTripPos = null;
     _drivenKm = 0;
     _liveFare = 0;
+    _lockedFare = 0;
     _arrived = false;
     _finishing = false;
     _prefillingDestination = false;
@@ -316,10 +333,10 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
       _routeKm = null;
       _calcError = null;
     });
-    await _calculateRoute();
+    await _calculateRoute(lockFare: true);
   }
 
-  Future<void> _calculateRoute() async {
+  Future<void> _calculateRoute({bool lockFare = false}) async {
     final dest = _destination;
     final origin = _tripOrigin;
     if (dest == null || origin == null) return;
@@ -360,6 +377,35 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
           ));
         _calculating = false;
       });
+
+      if (lockFare) {
+        final ride = context.read<DriverHomeController>().acceptedRide;
+        if (ride != null) {
+          try {
+            final locked = await _fareLock.lockFare(
+              tripId: ride.id,
+              fromLat: origin.latitude,
+              fromLng: origin.longitude,
+              toLat: dest.latitude,
+              toLng: dest.longitude,
+              toAddr: ride.to.isNotEmpty
+                  ? ride.to
+                  : '${dest.latitude.toStringAsFixed(5)},'
+                      '${dest.longitude.toStringAsFixed(5)}',
+            );
+            if (!mounted) return;
+            setState(() {
+              _lockedFare = locked.fare;
+              _liveFare = locked.fare;
+              _routeKm = locked.distanceKm;
+            });
+          } catch (e) {
+            debugPrint('driver fare lock: $e');
+          }
+        }
+      } else if (_lockedFare > 0) {
+        setState(() => _liveFare = _lockedFare);
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -376,7 +422,9 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
       _drivenKm = 0;
       _lastTripPos = null;
       _arrived = false;
-      _liveFare = FareCalculator.calculate(distanceKm: 0);
+      _liveFare = _lockedFare > 0
+          ? _lockedFare
+          : FareCalculator.calculate(distanceKm: 0);
     });
     _tripPosSub?.cancel();
     _tripPosSub = null;
@@ -459,7 +507,10 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
     if (!mounted) return;
     setState(() {
       _distToPassengerM = distToPassengerM;
-      _liveFare = FareCalculator.calculate(distanceKm: _drivenKm);
+      // Qulflangan yo'lkira — driven km narxni o'zgartirmaydi.
+      _liveFare = _lockedFare > 0
+          ? _lockedFare
+          : FareCalculator.calculate(distanceKm: _drivenKm);
       _arrived = arrived;
     });
   }
@@ -530,8 +581,9 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
       return;
     }
     _resetTripState();
-    _ensureTripOrigin(ride);
-    unawaited(_prefillDestination(ride));
+    final accepted = c.acceptedRide ?? ride;
+    _ensureTripOrigin(accepted);
+    unawaited(_prefillDestination(accepted));
     setState(() {});
   }
 
@@ -582,6 +634,15 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
   @override
   Widget build(BuildContext context) {
     final c = context.watch<DriverHomeController>();
+
+    if (c.offersStreamError != null) {
+      final msg = c.offersStreamError!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onSnack(msg, Colors.orange);
+        c.clearOffersStreamError();
+      });
+    }
 
     if (!c.isLocalAcceptedRide && _tripOrigin != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1011,7 +1072,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                     style: TextStyle(color: Colors.red.shade700)),
               ),
               TextButton(
-                  onPressed: _calculateRoute,
+                  onPressed: () => _calculateRoute(lockFare: true),
                   child: Text(context.tr('driver_map_retry'))),
             ]),
           ] else if (_routeKm != null) ...[
@@ -1028,11 +1089,15 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                 ),
               ),
               TextButton(
-                onPressed: () => setState(() {
-                  _destination = null;
-                  _tripPolylines.clear();
-                  _routeKm = null;
-                }),
+                onPressed: () {
+                  setState(() {
+                    _destination = null;
+                    _tripPolylines.clear();
+                    _routeKm = null;
+                    _lockedFare = 0;
+                    _liveFare = 0;
+                  });
+                },
                 child: Text(context.tr('driver_map_change_destination')),
               ),
             ]),
@@ -1102,9 +1167,12 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_fmt('driver_map_current_fare_km', {
-                      'km': _drivenKm.toStringAsFixed(1),
-                    }),
+                    Text(
+                      _lockedFare > 0
+                          ? context.tr('driver_map_locked_fare')
+                          : _fmt('driver_map_current_fare_km', {
+                              'km': _drivenKm.toStringAsFixed(1),
+                            }),
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey.shade600)),
                     Text('${formatMoney(_liveFare)}',

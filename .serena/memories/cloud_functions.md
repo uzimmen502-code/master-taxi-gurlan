@@ -57,7 +57,8 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - courierClaimCarpetReturn / courierMarkCarpetDelivered — return flow; completed requires `returnArrivedAt`.
 
 ## Taxi (local + marshrut)
-- completeLocalTrip (onCall) — driver completes local/alone trip: debit passenger wallet per `passengerWalletIntent` (idem `local_trip_complete_{tripId}`), set `completed`+`walletPaid`; returns `{fare,cashPaid,walletPaid,cashDue,change}`.
+- completeLocalTrip (onCall) — driver completes local/alone trip: **uses `trip.lockedFare` if set** (else client fare); debit passenger wallet per `passengerWalletIntent` (idem `local_trip_complete_{tripId}`), set `completed`+`walletPaid`; returns `{fare,cashPaid,walletPaid,cashDue,change}`.
+- expirePendingTrips (sched) — trips expire via **txn status guard** (faqat hali `searching`/`pending`); accepted trip race himoyalangan.
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
 - expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; closes expired `yuk_listings` (active→closed) + FCM via `notifications` (`yuk_listing_closed`); T−6h warn (`yuk_listing_expire_soon`, flag `expireSoonNotified`); jobs `ads` active|pending → `completed`; cheap_product expired → `inactive`.
 - submitJobAd / submitJobComplaint (onCall) — Иш топ CF-only create (auth+canonical phone; ad daily 10; complaint daily 20).

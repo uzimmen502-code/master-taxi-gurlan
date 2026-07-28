@@ -16,7 +16,6 @@ import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../utils/fare_calculator.dart';
 import '../../../map_picker/screens/map_picker_screen.dart';
 import '../controllers/local_taxi_controller.dart';
 import '../../../driver_home/screens/driver_home_screen.dart';
@@ -62,11 +61,12 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
 
   double? _pickupLat;
   double? _pickupLng;
+  double? _dropoffLat;
+  double? _dropoffLng;
 
   bool _bootstrapped = false;
   bool _isSearching = false;
   bool _isSubmitting = false;
-  String? _estimatedPriceText;
   LocalTaxiController? _controllerRef;
 
   @override
@@ -75,7 +75,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _onGpsTap();
       _tryResumeActiveTrip();
-      _loadEstimatedPrice();
     });
   }
 
@@ -122,18 +121,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
     ));
   }
 
-  Future<void> _loadEstimatedPrice() async {
-    try {
-      await FareCalculator.loadPrices();
-      final est = FareCalculator.calculate(distanceKm: 3);
-      if (mounted) {
-        setState(() {
-          _estimatedPriceText = '${formatPrice(est)}+ сўм';
-        });
-      }
-    } catch (_) {}
-  }
-
   // ─── Manzil maydonlari (MFY autocomplete yo'q — GPS / xarita) ─────
 
   Future<void> _onGpsTap() async {
@@ -174,6 +161,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             );
       } else {
         _toCtrl.text = result.label;
+        _dropoffLat = result.lat;
+        _dropoffLng = result.lng;
       }
     });
   }
@@ -327,6 +316,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
             taxiType: 'local',
             pickupLat: _pickupLat,
             pickupLng: _pickupLng,
+            dropoffLat: _dropoffLat,
+            dropoffLng: _dropoffLng,
           ),
         ),
       );
@@ -645,12 +636,14 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
               final tmp = _fromCtrl.text;
               _fromCtrl.text = _toCtrl.text;
               _toCtrl.text = tmp;
-              final tLat = _pickupLat;
-              final tLng = _pickupLng;
-              setState(() {});
-              // pickup koordinata swap qilinmaydi — faqat matn
-              _pickupLat = tLat;
-              _pickupLng = tLng;
+              setState(() {
+                final tLat = _pickupLat;
+                final tLng = _pickupLng;
+                _pickupLat = _dropoffLat;
+                _pickupLng = _dropoffLng;
+                _dropoffLat = tLat;
+                _dropoffLng = tLng;
+              });
             },
             onPickFromSug: (_) {},
             onPickToSug: (_) {},
@@ -682,19 +675,6 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                       onLongPress: _onDeletePlace,
                     ),
                     const SizedBox(height: 24),
-                    if (_estimatedPriceText != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          '${context.tr('estimated_price')}: '
-                          '$_estimatedPriceText',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
                     SizedBox(
                       height: 54,
                       width: double.infinity,

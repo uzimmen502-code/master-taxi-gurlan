@@ -15,10 +15,13 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
+import '../../../../models/map_picker_result.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../repositories/user_repository.dart';
 import '../../../../services/notification_service.dart';
 import '../../../../services/settlement_service.dart';
+import '../../../map_picker/screens/map_picker_screen.dart';
+import '../../services/local_trip_fare_lock_service.dart';
 import '../widgets/local_taxi_wallet_panel.dart';
 import 'searching_screen.dart';
 
@@ -41,6 +44,7 @@ class LocalTaxiActiveTripScreen extends StatefulWidget {
 class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   ActiveTrip? _trip;
   bool _tripEndHandled = false;
+  bool _cancelInProgress = false;
   bool _arrivalAlertShown = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _driverLocationSub;
   String? _listeningDriverId;
@@ -355,7 +359,9 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    context.tr('estimated_price'),
+                    trip.hasLockedFare
+                        ? context.tr('locked_fare')
+                        : context.tr('estimated_price'),
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
                   Text(
@@ -373,12 +379,52 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               walletSection,
             ],
             if (trip.status == 'accepted') ...[
+              if (!trip.hasLockedFare) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _setDestination(context, trip),
+                  icon: const Icon(Icons.flag_outlined, size: 18),
+                  label: Text(context.tr('set_destination')),
+                ),
+              ],
               const SizedBox(height: 10),
               _buildCancelButton(context),
             ],
           ],
         ),
       );
+
+  Future<void> _setDestination(BuildContext context, ActiveTrip trip) async {
+    final picked = await Navigator.push<MapPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapPickerScreen(
+          title: context.tr('pick_location'),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    if (picked.lat.abs() < 1e-6 && picked.lng.abs() < 1e-6) return;
+    try {
+      await LocalTripFareLockService().lockFare(
+        tripId: trip.id,
+        fromLat: trip.fromLat,
+        fromLng: trip.fromLng,
+        toLat: picked.lat,
+        toLng: picked.lng,
+        toAddr: picked.label,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('locked_fare'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
+  }
 
   Future<void> _callDriver(String phone) async {
     await callPhone(phone);
@@ -548,19 +594,99 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
       ),
     );
     if (ok != true || !context.mounted) return;
+    _cancelInProgress = true;
     try {
       await context.read<RidesRepository>().cancelLocalTripByPassenger(
             widget.tripId,
           );
       if (!context.mounted) return;
-      Navigator.of(context).pop();
+      _tripEndHandled = true;
+      await _showCancelFeedbackThenPop(context);
     } catch (e) {
+      _cancelInProgress = false;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(context.trMsg('error_generic|$e')),
         backgroundColor: Colors.red,
       ));
     }
+  }
+
+  /// CF `localCancelFeedback` (3 soft / 4 hard / 5 block) — қисқа кутиб диалог.
+  Future<void> _showCancelFeedbackThenPop(BuildContext context) async {
+    Map<String, dynamic>? fb;
+    for (var i = 0; i < 8; i++) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('trips')
+            .doc(widget.tripId)
+            .get();
+        final raw = snap.data()?['localCancelFeedback'];
+        if (raw is Map) {
+          fb = Map<String, dynamic>.from(raw);
+          break;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!context.mounted) return;
+    }
+    if (!context.mounted) return;
+
+    final level = (fb?['level'] ?? '').toString();
+    if (level == 'soft' || level == 'hard' || level == 'block') {
+      final count = (fb?['cancelCount'] as num?)?.toInt() ?? 0;
+      final remaining = (fb?['remaining'] as num?)?.toInt();
+      final mins = (fb?['blockMinutes'] as num?)?.toInt() ?? 15;
+      final titleKey = switch (level) {
+        'block' => 'local_taxi_cancel_block_title',
+        'hard' => 'local_taxi_cancel_hard_title',
+        _ => 'local_taxi_cancel_soft_title',
+      };
+      final body = switch (level) {
+        'block' => context
+            .tr('local_taxi_cancel_block_body')
+            .replaceAll('{count}', '$count')
+            .replaceAll('{minutes}', '$mins'),
+        'hard' => context
+            .tr('local_taxi_cancel_hard_body')
+            .replaceAll('{count}', '$count')
+            .replaceAll('{minutes}', '$mins'),
+        _ => context
+            .tr('local_taxi_cancel_soft_body')
+            .replaceAll('{count}', '$count')
+            .replaceAll('{remaining}', '${remaining ?? 2}'),
+      };
+      final isHard = level == 'hard' || level == 'block';
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            ctx.tr(titleKey),
+            style: TextStyle(
+              color: isHard ? Colors.red.shade800 : null,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(body),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    isHard ? Colors.red.shade700 : AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(ctx.tr('ok')),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -579,13 +705,12 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
 
           final trip = ActiveTrip.fromDoc(docSnap.data!);
           final data = docSnap.data!.data() ?? {};
-          final estimatedPrice =
-              (data['estimatedPrice'] as num?)?.toInt() ?? 0;
+          final displayFare = trip.displayFare;
 
           _trip = trip;
 
           if (trip.status == 'cancelled') {
-            if (!_tripEndHandled) {
+            if (!_tripEndHandled && !_cancelInProgress) {
               _tripEndHandled = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
@@ -666,9 +791,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
           if (trip.status == 'accepted' &&
               _passengerUid != null &&
               _passengerUid!.isNotEmpty) {
-            final fareEst = estimatedPrice > 0
-                ? estimatedPrice
-                : trip.estimatedPrice;
+            final fareEst = displayFare;
             walletSection = StreamBuilder<int>(
               stream: context
                   .read<UserRepository>()
@@ -751,7 +874,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                       _tripInfoPanel(
                         context,
                         trip,
-                        estimatedPrice,
+                        displayFare,
                         statusText,
                         walletSection: walletSection,
                       ),

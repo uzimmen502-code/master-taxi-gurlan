@@ -117,6 +117,8 @@ class RidesRepository {
     String userName = '',
     String userGender = '',
     String userBirthDate = '',
+    double? toLat,
+    double? toLng,
     double initialRadiusKm = 3,
     Duration ttl = const Duration(minutes: 3),
   }) async {
@@ -131,6 +133,8 @@ class RidesRepository {
       'toAddr': toAddr,
       'fromLat': fromLat,
       'fromLng': fromLng,
+      if (toLat != null) 'toLat': toLat,
+      if (toLng != null) 'toLng': toLng,
       'geohash4': GeoHash.encode(fromLat, fromLng, precision: 4),
       'taxiType': taxiType,
       'radiusKm': initialRadiusKm,
@@ -191,24 +195,23 @@ class RidesRepository {
     required String tripId,
   }) async {
     if (tripId.isEmpty) return;
-    try {
-      await _db.runTransaction((tx) async {
-        final ref = _trips.doc(tripId);
-        final snap = await tx.get(ref);
-        if (!snap.exists) return;
-        final status = (snap.data()?['status'] ?? '') as String;
-        if (status != 'searching' && status != 'pending') return;
-        tx.update(ref, {
-          'status': 'cancelled',
-          'cancelledBy': 'passenger',
-          'cancelReason': 'search_cancelled',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
+    await _db.runTransaction((tx) async {
+      final ref = _trips.doc(tripId);
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final status = (snap.data()?['status'] ?? '') as String;
+      if (status != 'searching' && status != 'pending') return;
+      tx.update(ref, {
+        'status': 'cancelled',
+        'cancelledBy': 'passenger',
+        'cancelReason': 'search_cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {}
+    });
   }
 
   /// Qabul qilingan mahalliy safarni yo'lovchi bekor qiladi.
+  /// Driver isBusy — CF `onTripUpdate` tozalaydi (client drivers write yo'q).
   Future<void> cancelLocalTripByPassenger(String tripId) async {
     await _db.runTransaction((t) async {
       final ref = _trips.doc(tripId);
@@ -219,25 +222,12 @@ class RidesRepository {
 
       if (status != 'accepted') return;
 
-      final driverId =
-          (data['acceptedDriverId'] ?? data['driverId'] ?? '') as String;
-
       t.update(ref, {
         'status': 'cancelled',
         'cancelledBy': 'passenger',
         'cancelReason': 'passenger_cancel_during_trip',
         'cancelledAt': FieldValue.serverTimestamp(),
       });
-
-      if (driverId.isNotEmpty) {
-        t.update(
-          _db.collection('drivers').doc(driverId),
-          {
-            'isBusy': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-        );
-      }
     });
   }
 
@@ -1394,10 +1384,10 @@ class RidesRepository {
 
   // ─── Driver home screen — universal trips stream ─────────────────────
 
-  /// `searching`/`pending` triplar — haydovchi atrofidagi geohash hujayralari.
+  /// Mahalliy broadcast offerlar — `tripLocalOfferRead` bilan mos.
   ///
-  /// Index: `trips` — `geohash4` ASC, `createdAt` DESC.
-  /// Index yo'q bo'lsa [watchPendingTrips] ga tushadi.
+  /// Firestore bitta `whereIn` cheklovi: `local` va `alone` alohida so'rov,
+  /// keyin merge. Index: status + taxiType + geohash4 + createdAt.
   Stream<List<ActiveTrip>> watchPendingTripsNear({
     required double lat,
     required double lng,
@@ -1407,25 +1397,102 @@ class RidesRepository {
       return watchPendingTrips(limit: limit);
     }
     final cells = GeoHash.neighborsForRadius(lat, lng, precision: 4);
+    return _mergeLocalOfferStreams(
+      _localOffersByType(taxiType: 'local', cells: cells, limit: limit),
+      _localOffersByType(taxiType: 'alone', cells: cells, limit: limit),
+    );
+  }
+
+  /// GPS yo'q fallback — faqat searching local|alone.
+  Stream<List<ActiveTrip>> watchPendingTrips({int limit = 50}) {
+    return _mergeLocalOfferStreams(
+      _localOffersGlobal(taxiType: 'local', limit: limit),
+      _localOffersGlobal(taxiType: 'alone', limit: limit),
+    );
+  }
+
+  Stream<List<ActiveTrip>> _localOffersByType({
+    required String taxiType,
+    required List<String> cells,
+    required int limit,
+  }) {
     return _trips
+        .where('status', isEqualTo: 'searching')
+        .where('taxiType', isEqualTo: taxiType)
         .where('geohash4', whereIn: cells)
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs
-            .map(ActiveTrip.fromDoc)
-            .where((t) => t.status == 'searching' || t.status == 'pending')
-            .toList());
+        .map((snap) => snap.docs.map(ActiveTrip.fromDoc).toList());
   }
 
-  /// `searching`/`pending` ҳолатидаги триплар (global fallback).
-  Stream<List<ActiveTrip>> watchPendingTrips({int limit = 50}) {
+  Stream<List<ActiveTrip>> _localOffersGlobal({
+    required String taxiType,
+    required int limit,
+  }) {
     return _trips
-        .where('status', whereIn: ['searching', 'pending'])
+        .where('status', isEqualTo: 'searching')
+        .where('taxiType', isEqualTo: taxiType)
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(ActiveTrip.fromDoc).toList());
+  }
+
+  Stream<List<ActiveTrip>> _mergeLocalOfferStreams(
+    Stream<List<ActiveTrip>> a,
+    Stream<List<ActiveTrip>> b,
+  ) {
+    late StreamController<List<ActiveTrip>> controller;
+    List<ActiveTrip> latestA = const [];
+    List<ActiveTrip> latestB = const [];
+    StreamSubscription<List<ActiveTrip>>? subA;
+    StreamSubscription<List<ActiveTrip>>? subB;
+
+    void emit() {
+      if (controller.isClosed) return;
+      final byId = <String, ActiveTrip>{};
+      for (final t in latestA) {
+        byId[t.id] = t;
+      }
+      for (final t in latestB) {
+        byId[t.id] = t;
+      }
+      final merged = byId.values.toList()
+        ..sort((x, y) {
+          final ax = x.createdAt;
+          final ay = y.createdAt;
+          if (ax == null && ay == null) return 0;
+          if (ax == null) return 1;
+          if (ay == null) return -1;
+          return ay.compareTo(ax);
+        });
+      controller.add(merged);
+    }
+
+    controller = StreamController<List<ActiveTrip>>(
+      onListen: () {
+        subA = a.listen(
+          (list) {
+            latestA = list;
+            emit();
+          },
+          onError: controller.addError,
+        );
+        subB = b.listen(
+          (list) {
+            latestB = list;
+            emit();
+          },
+          onError: controller.addError,
+        );
+      },
+      onCancel: () async {
+        await subA?.cancel();
+        await subB?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   /// Универсал ride accept — alone, marshrut, intercity учун ягона транзакция.
@@ -1488,8 +1555,14 @@ class RidesRepository {
         }
         final isLocalTaxi = taxiType == 'alone' || taxiType == 'local';
         if (isLocalTaxi && driverId.isNotEmpty) {
+          final driverRef = _drivers.doc(driverId);
+          final driverDoc = await tx.get(driverRef);
+          final alreadyBusy = driverDoc.data()?['isBusy'] == true;
+          if (alreadyBusy) {
+            throw Exception('busy');
+          }
           tx.set(
-            _drivers.doc(driverId),
+            driverRef,
             {
               'isBusy': true,
               'updatedAt': FieldValue.serverTimestamp(),
@@ -1516,6 +1589,9 @@ class RidesRepository {
       if (msg.contains('no_seats')) {
         return (success: false, errorCode: 'no_seats');
       }
+      if (msg.contains('busy')) {
+        return (success: false, errorCode: 'busy');
+      }
       return (success: false, errorCode: 'taken');
     }
   }
@@ -1523,71 +1599,72 @@ class RidesRepository {
   /// Қабул қилинган трипни `searching`'га қайтаради (ҳайдовчи сафарни
   /// тугатмасдан чиқиб кетганда — back тугмаси). Фақат шу ҳайдовчи қабул
   /// қилган бўлса ишлайди.
-  Future<void> releaseAcceptedTrip({
+  /// Муваффақиятда `true`; хатода exception (silent catch йўқ).
+  Future<bool> releaseAcceptedTrip({
     required String tripId,
     required String driverId,
   }) async {
-    if (tripId.isEmpty) return;
-    try {
-      await _db.runTransaction((tx) async {
-        final tripRef = _trips.doc(tripId);
-        final tripDoc = await tx.get(tripRef);
-        if (!tripDoc.exists) return;
-        final data = tripDoc.data() ?? const <String, dynamic>{};
-        final status = (data['status'] ?? '') as String;
-        final by = (data['acceptedDriverId'] ?? '') as String;
-        if (status != 'accepted' || by != driverId) return;
-        tx.update(tripRef, {
-          'status': 'searching',
-          'acceptedDriverId': '',
-          'acceptedDriverName': '',
-          'acceptedDriverPhone': '',
-          'acceptedDriverCar': '',
-          'acceptedDriverPlate': '',
-          'driverId': '',
-          'driverName': '',
-          'driverPhone': '',
-          'reservedBy': '',
-          'reservedByName': '',
-          'reservedAt': FieldValue.delete(),
-        });
-        tx.set(
-          _drivers.doc(driverId),
-          {
-            'isBusy': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+    if (tripId.isEmpty) return false;
+    var released = false;
+    await _db.runTransaction((tx) async {
+      final tripRef = _trips.doc(tripId);
+      final tripDoc = await tx.get(tripRef);
+      if (!tripDoc.exists) return;
+      final data = tripDoc.data() ?? const <String, dynamic>{};
+      final status = (data['status'] ?? '') as String;
+      final by = (data['acceptedDriverId'] ?? '') as String;
+      if (status != 'accepted' || by != driverId) return;
+      tx.update(tripRef, {
+        'status': 'searching',
+        'acceptedDriverId': '',
+        'acceptedDriverName': '',
+        'acceptedDriverPhone': '',
+        'acceptedDriverCar': '',
+        'acceptedDriverPlate': '',
+        'driverId': '',
+        'driverName': '',
+        'driverPhone': '',
+        'reservedBy': '',
+        'reservedByName': '',
+        'reservedAt': FieldValue.delete(),
       });
-    } catch (_) {}
+      tx.set(
+        _drivers.doc(driverId),
+        {
+          'isBusy': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      released = true;
+    });
+    return released;
   }
+
   Future<void> finishTrip({
     required String tripId,
     required int fare,
     required int cashPaid,
   }) async {
     if (tripId.isEmpty) return;
-    try {
-      final snap = await _trips.doc(tripId).get();
-      final driverId =
-          (snap.data()?['acceptedDriverId'] ?? snap.data()?['driverId'] ?? '')
-              as String;
-      await _trips.doc(tripId).update({
-        'status': 'completed',
-        'fare': fare,
-        'cashPaid': cashPaid,
-        'completedAt': FieldValue.serverTimestamp(),
-      });
-      if (driverId.isNotEmpty) {
-        await _drivers.doc(driverId).set(
-          {
-            'isBusy': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
-    } catch (_) {}
+    final snap = await _trips.doc(tripId).get();
+    final driverId =
+        (snap.data()?['acceptedDriverId'] ?? snap.data()?['driverId'] ?? '')
+            as String;
+    await _trips.doc(tripId).update({
+      'status': 'completed',
+      'fare': fare,
+      'cashPaid': cashPaid,
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+    if (driverId.isNotEmpty) {
+      await _drivers.doc(driverId).set(
+        {
+          'isBusy': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
   }
 }

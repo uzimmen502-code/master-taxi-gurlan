@@ -114,15 +114,173 @@ async function applyPassengerCancelBlock(stateRef) {
   return { blocked: false, cancelCount };
 }
 
-/** Local taxi: accepted safardan keyin yo'lovchi bekor → `local_taxi_block/state`. */
-async function applyLocalTaxiCancelBlock(userPhone) {
+/** Local taxi: accepted дан кейинги бекор зинаси.
+ *  3 = енгил огоҳ; 4 = қаттиқ (қизил); 5+ = 15 дақ блок.
+ *  Счёт муваффақ complete да нолга (қаранг completeLocalTrip).
+ */
+const LOCAL_CANCEL_SOFT_WARN_AT = 3;
+const LOCAL_CANCEL_HARD_WARN_AT = 4;
+const LOCAL_CANCEL_BLOCK_AT = 5;
+const LOCAL_CANCEL_BLOCK_MS = 15 * 60 * 1000;
+
+async function applyLocalTaxiCancelBlock(userPhone, { tripRef } = {}) {
   const phone = digits(userPhone);
   if (phone.length < 9) {
-    return { blocked: false, cancelCount: 0 };
+    return {
+      blocked: false,
+      softWarning: false,
+      hardWarning: false,
+      cancelCount: 0,
+      level: 'none',
+    };
   }
   const stateRef = db.collection('users').doc(phone)
       .collection('local_taxi_block').doc('state');
-  return applyPassengerCancelBlock(stateRef);
+
+  return db.runTransaction(async (t) => {
+    if (tripRef) {
+      const tripSnap = await t.get(tripRef);
+      if (!tripSnap.exists) {
+        return {
+          blocked: false,
+          softWarning: false,
+          hardWarning: false,
+          cancelCount: 0,
+          level: 'none',
+          skipped: true,
+        };
+      }
+      const trip = tripSnap.data() || {};
+      if (trip.localTaxiBlockCounted === true) {
+        return {
+          blocked: false,
+          softWarning: false,
+          hardWarning: false,
+          cancelCount: Number(trip.localCancelFeedback?.cancelCount || 0),
+          level: trip.localCancelFeedback?.level || 'none',
+          remaining: trip.localCancelFeedback?.remaining != null
+              ? trip.localCancelFeedback.remaining
+              : null,
+          blockMinutes: trip.localCancelFeedback?.blockMinutes != null
+              ? trip.localCancelFeedback.blockMinutes
+              : null,
+          alreadyCounted: true,
+        };
+      }
+    }
+
+    const snap = await t.get(stateRef);
+    const now = Date.now();
+
+    let cancelCount = 0;
+    let blockedUntil = null;
+
+    if (snap.exists) {
+      const d = snap.data() || {};
+      blockedUntil = d.blockedUntil?.toMillis?.() ?? null;
+
+      if (blockedUntil && now < blockedUntil) {
+        const result = {
+          blocked: true,
+          softWarning: false,
+          hardWarning: false,
+          cancelCount: d.cancelCount ?? 0,
+          level: 'block',
+          blockMinutes: Math.ceil((blockedUntil - now) / 60000),
+        };
+        if (tripRef) {
+          t.update(tripRef, {
+            localTaxiBlockCounted: true,
+            localCancelFeedback: {
+              level: result.level,
+              cancelCount: result.cancelCount,
+              remaining: null,
+              blockMinutes: result.blockMinutes,
+            },
+          });
+        }
+        return result;
+      }
+
+      if (blockedUntil && now >= blockedUntil) {
+        cancelCount = 0;
+        blockedUntil = null;
+      } else {
+        cancelCount = d.cancelCount ?? 0;
+      }
+    }
+
+    cancelCount += 1;
+
+    let result;
+    if (cancelCount >= LOCAL_CANCEL_BLOCK_AT) {
+      t.set(stateRef, {
+        cancelCount,
+        blockedUntil: admin.firestore.Timestamp.fromMillis(
+            now + LOCAL_CANCEL_BLOCK_MS),
+        firstCancelAt: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      result = {
+        blocked: true,
+        softWarning: false,
+        hardWarning: false,
+        cancelCount,
+        level: 'block',
+        blockMinutes: Math.round(LOCAL_CANCEL_BLOCK_MS / 60000),
+        remaining: 0,
+      };
+    } else {
+      const softWarning = cancelCount === LOCAL_CANCEL_SOFT_WARN_AT;
+      const hardWarning = cancelCount === LOCAL_CANCEL_HARD_WARN_AT;
+      let level = 'none';
+      if (hardWarning) level = 'hard';
+      else if (softWarning) level = 'soft';
+
+      t.set(stateRef, {
+        cancelCount,
+        blockedUntil: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      result = {
+        blocked: false,
+        softWarning,
+        hardWarning,
+        cancelCount,
+        level,
+        remaining: LOCAL_CANCEL_BLOCK_AT - cancelCount,
+      };
+    }
+
+    if (tripRef) {
+      t.update(tripRef, {
+        localTaxiBlockCounted: true,
+        localCancelFeedback: {
+          level: result.level || 'none',
+          cancelCount: result.cancelCount || 0,
+          remaining: result.remaining != null ? result.remaining : null,
+          blockMinutes: result.blockMinutes != null
+              ? result.blockMinutes
+              : null,
+        },
+      });
+    }
+    return result;
+  });
+}
+
+async function resetLocalTaxiCancelBlock(userPhone) {
+  const phone = digits(userPhone);
+  if (phone.length < 9) return;
+  const stateRef = db.collection('users').doc(phone)
+      .collection('local_taxi_block').doc('state');
+  await stateRef.set({
+    cancelCount: 0,
+    blockedUntil: null,
+    firstCancelAt: null,
+    resetReason: 'trip_completed',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 const MARSHRUT_CANCEL_WARN_AT = 5;
@@ -1269,6 +1427,8 @@ exports.onTripUpdate = functions.firestore
       }
     }
 
+    let localCancelFb = after.localCancelFeedback || null;
+
     if (
       after.status === 'cancelled' &&
       (after.taxiType === 'local' || after.taxiType === 'alone') &&
@@ -1288,6 +1448,7 @@ exports.onTripUpdate = functions.firestore
       }
 
       // Faqat qabuldan keyingi bekor — qidiruv bekorida blok yo'q.
+      // Block count + trip.localTaxiBlockCounted bitta txn (TOCTOU yo'q).
       if (
         before.status === 'accepted' &&
         after.localTaxiBlockCounted !== true
@@ -1295,8 +1456,19 @@ exports.onTripUpdate = functions.firestore
         const userPhone = digits(after.userPhone || '');
         if (userPhone.length >= 9) {
           try {
-            await applyLocalTaxiCancelBlock(userPhone);
-            await change.after.ref.update({ localTaxiBlockCounted: true });
+            const blockResult = await applyLocalTaxiCancelBlock(userPhone, {
+              tripRef: change.after.ref,
+            });
+            localCancelFb = {
+              level: blockResult.level || 'none',
+              cancelCount: blockResult.cancelCount || 0,
+              remaining: blockResult.remaining != null
+                  ? blockResult.remaining
+                  : null,
+              blockMinutes: blockResult.blockMinutes != null
+                  ? blockResult.blockMinutes
+                  : null,
+            };
           } catch (e) {
             console.error('applyLocalTaxiCancelBlock failed:', e);
           }
@@ -1327,8 +1499,27 @@ exports.onTripUpdate = functions.firestore
           break;
         }
         if (after.cancelledBy === 'driver') return null;
-        title = '❌ Сафар бекор қилинди';
-        body  = 'Яна уриниб кўринг';
+        {
+          const fb = localCancelFb || {};
+          if (fb.level === 'block') {
+            title = '⛔ Чақирув вақтинча ёпилди';
+            body = `Қабулдан кейин ${fb.cancelCount || 5} марта бекор.`
+                + ` Маҳаллий такси ${fb.blockMinutes || 15} дақиқага чекланди.`;
+          } else if (fb.level === 'hard') {
+            title = '🚫 Охирги огоҳлантириш';
+            body = `Қабулдан кейин ${fb.cancelCount} марта бекор қилдингиз.`
+                + ` Яна 1 марта бекор қилсангиз`
+                + ` ${Math.round(LOCAL_CANCEL_BLOCK_MS / 60000)} дақиқа блок.`;
+          } else if (fb.level === 'soft') {
+            title = '⚠️ Эслатма';
+            body = `Қабулдан кейин ${fb.cancelCount} марта бекор.`
+                + ` Яна ${fb.remaining != null ? fb.remaining : 2} мартадан`
+                + ` кейин чақирув вақтинча ёпилади.`;
+          } else {
+            title = '❌ Сафар бекор қилинди';
+            body  = 'Яна уриниб кўринг';
+          }
+        }
         break;
       default: return;
     }
@@ -1364,22 +1555,8 @@ exports.onTripUpdate = functions.firestore
       });
     }
 
-    if (
-      after.status === 'accepted' &&
-      (after.taxiType === 'local' || after.taxiType === 'alone') &&
-      !after.estimatedPrice
-    ) {
-      const priceSnap = await db.collection('settings').doc('prices').get();
-      const baseFare = priceSnap.data()?.local_base ?? 5000;
-      const perKm = priceSnap.data()?.local_per_km ?? 1500;
-      const coef = priceSnap.data()?.local_coef ?? 1;
-      const distKm = after.distanceKm ?? 0;
-      const estimated = Math.round((baseFare + distKm * perKm) * coef);
-      await db.collection('trips').doc(tripId).update({
-        estimatedPrice: estimated,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
+    // Mahalliy yo'lkira: faqat destination + Directions bilan lock qilinadi
+    // (client LocalTripFareLockService). Accept paytida soxta estimate yozilmaydi.
   });
 
 // Админ/мижоз чат хабарлари учун push
@@ -9569,25 +9746,20 @@ exports.expirePendingTrips = functions.pubsub
     let batch = db.batch();
     let writes = 0;
 
-    // trips → expired
-    for (const doc of allDocs) {
-      batch.update(doc.ref, {
-        status: 'expired',
-        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+    // trips → expired (faqat hali searching/pending bo'lsa — accept race himoyasi)
+    async function expireTripIfStillOpen(ref) {
+      await db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        if (!snap.exists) return;
+        const st = String((snap.data() || {}).status || '');
+        if (st !== 'pending' && st !== 'searching') return;
+        t.update(ref, {
+          status: 'expired',
+          expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       });
-      writes++;
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
-      }
     }
-
-    if (writes > 0) {
-      await batch.commit();
-      batch = db.batch();
-      writes = 0;
-    }
+    await Promise.all(allDocs.map((doc) => expireTripIfStillOpen(doc.ref)));
 
     const marshrutExpired = allDocs.filter((doc) => {
       const d = doc.data();
@@ -11061,14 +11233,11 @@ function payoutKycOk(userData) {
 exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
   const driverUid = requireCallerUid(context);
   const tripId = String((data && data.tripId) || '').trim();
-  const fare = Math.trunc(Number((data && data.fare) || 0));
+  const clientFare = Math.trunc(Number((data && data.fare) || 0));
   const cashPaid = Math.trunc(Number((data && data.cashPaid) || 0));
 
   if (!tripId) {
     throw new functions.https.HttpsError('invalid-argument', 'tripId kerak');
-  }
-  if (!Number.isInteger(fare) || fare <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'fare musbat bo\'lsin');
   }
   if (!Number.isInteger(cashPaid) || cashPaid < 0) {
     throw new functions.https.HttpsError('invalid-argument', 'cashPaid >= 0 bo\'lsin');
@@ -11129,6 +11298,17 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
     if (assignedDriver !== driverUid) {
       throw new functions.https.HttpsError(
           'permission-denied', 'Bu safar sizga biriktirilmagan');
+    }
+
+    // Asosiy qoida: destination bo'yicha qulflangan yo'lkira.
+    const lockedFare = Math.trunc(Number(trip.lockedFare || 0));
+    const fare = lockedFare > 0 ? lockedFare : clientFare;
+    if (!Number.isInteger(fare) || fare <= 0) {
+      throw new functions.https.HttpsError(
+          'invalid-argument',
+          lockedFare > 0
+            ? 'lockedFare noto\'g\'ri'
+            : 'Avval manzilni belgilab yo\'lkirani qulflang yoki fare yuboring');
     }
 
     const passengerUid = canonicalUid(trip.userPhone || '');
@@ -11214,6 +11394,14 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   });
+
+  try {
+    const tripSnap = await tripRef.get();
+    const phone = (tripSnap.data() || {}).userPhone || '';
+    await resetLocalTaxiCancelBlock(phone);
+  } catch (e) {
+    console.error('resetLocalTaxiCancelBlock failed:', e);
+  }
 
   return resultPayload || { ok: true };
 });

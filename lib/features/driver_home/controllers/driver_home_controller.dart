@@ -54,6 +54,15 @@ class DriverHomeController extends ChangeNotifier {
   List<TripRequest> activeRequests = const [];
   TripRequest? acceptedRide;
 
+  /// Offer stream permission/index хатоси (UI snack).
+  String? offersStreamError;
+
+  void clearOffersStreamError() {
+    if (offersStreamError == null) return;
+    offersStreamError = null;
+    notifyListeners();
+  }
+
   int seatsLeft = 0;
   int totalSeats = 0;
 
@@ -215,7 +224,8 @@ class DriverHomeController extends ChangeNotifier {
   bool _isLocalTaxiTrip(ActiveTrip trip) =>
       trip.taxiType == 'local' || trip.taxiType == 'alone';
 
-  TripRequest _tripRequestFromActiveTrip(ActiveTrip t) => TripRequest(
+  TripRequest _tripRequestFromActiveTrip(ActiveTrip t, {int secsLeft = 0, double distanceKm = 0}) =>
+      TripRequest(
         id: t.id,
         userPhone: t.userPhone,
         userName: t.userName,
@@ -223,13 +233,19 @@ class DriverHomeController extends ChangeNotifier {
         userBirthDate: t.userBirthDate,
         fromLat: t.fromLat,
         fromLng: t.fromLng,
+        toLat: t.toLat,
+        toLng: t.toLng,
         from: t.fromAddr,
         to: t.toAddr,
         taxiType: t.taxiType,
-        secsLeft: 0,
+        secsLeft: secsLeft,
+        distanceKm: distanceKm,
         scheduleId: t.scheduleId,
         targetDriverId: t.targetDriverId,
         reservedBy: t.reservedBy,
+        lockedFare: t.lockedFare,
+        lockedDistanceKm: t.lockedDistanceKm,
+        fareLockVersion: t.fareLockVersion,
       );
 
   void _setAcceptedFromActiveTrip(ActiveTrip trip) {
@@ -237,23 +253,6 @@ class DriverHomeController extends ChangeNotifier {
     isBusy = true;
     activeRequests =
         activeRequests.where((r) => r.id != trip.id).toList();
-    _reconcileGpsProfile();
-    notifyListeners();
-  }
-
-  Future<void> _releaseLocalAcceptedTripIfAny() async {
-    final ride = acceptedRide;
-    if (ride == null || !isLocalAcceptedRide) return;
-    _releasingTripId = ride.id;
-    try {
-      await _ridesRepo.releaseAcceptedTrip(
-        tripId: ride.id,
-        driverId: session.driverId,
-      );
-    } catch (_) {}
-    _releasingTripId = null;
-    acceptedRide = null;
-    isBusy = false;
     _reconcileGpsProfile();
     notifyListeners();
   }
@@ -279,15 +278,24 @@ class DriverHomeController extends ChangeNotifier {
           trips.where(_isLocalTaxiTrip).toList(growable: false);
 
       if (acceptedRide != null) {
-        final still =
-            local.any((t) => t.id == acceptedRide!.id);
-        if (!still) {
+        ActiveTrip? match;
+        for (final t in local) {
+          if (t.id == acceptedRide!.id) {
+            match = t;
+            break;
+          }
+        }
+        if (match == null) {
           final removedId = acceptedRide!.id;
           acceptedRide = null;
           isBusy = false;
           _reconcileGpsProfile();
           notifyListeners();
           unawaited(_notifyPassengerCancelIfRemoved(removedId));
+        } else {
+          // In-place refresh — lockedFare / toLat yo'qolmasin.
+          acceptedRide = _tripRequestFromActiveTrip(match);
+          notifyListeners();
         }
         return;
       }
@@ -364,12 +372,15 @@ class DriverHomeController extends ChangeNotifier {
       isOnline = newStatus;
       if (!newStatus) {
         if (isBusy && isLocalAcceptedRide) {
-          await _releaseLocalAcceptedTripIfAny();
-        } else {
-          activeRequests = const [];
-          acceptedRide = null;
-          isBusy = false;
+          isOnline = true; // rollback — safar ochiq turib offline bo'lmasin
+          return (
+            success: false,
+            error: '⚠️ Аввал сафарни якунланг ёки тарк этинг',
+          );
         }
+        activeRequests = const [];
+        acceptedRide = null;
+        isBusy = false;
         _tripsSub?.cancel();
         _acceptedTripsSub?.cancel();
       }
@@ -550,14 +561,15 @@ class DriverHomeController extends ChangeNotifier {
         ? _ridesRepo.watchPendingTripsNear(lat: lat, lng: lng)
         : _ridesRepo.watchPendingTrips();
     _tripsSub = stream.listen((trips) {
+      if (offersStreamError != null) {
+        offersStreamError = null;
+      }
       final now = DateTime.now();
       final filtered = trips.where((t) {
         if (t.taxiType == 'marshrut') return false;
         if (_dismissedTripIds.contains(t.id)) return false;
         if (!t.isActiveSearchOffer) return false;
         if (!_matchesTaxiType(t.taxiType)) return false;
-        // Radius gate: haydovchi faqat yo'lovchining joriy qidiruv radiusi
-        // ichidagi buyurtmalarni ko'radi (0.5 km — GPS xatosi uchun bufer).
         if (_driverLat != null &&
             _driverLng != null &&
             t.fromLat != 0 &&
@@ -609,23 +621,7 @@ class DriverHomeController extends ChangeNotifier {
               ) /
               1000;
         }
-        return TripRequest(
-          id: t.id,
-          userPhone: t.userPhone,
-          userName: t.userName,
-          userGender: t.userGender,
-          userBirthDate: t.userBirthDate,
-          fromLat: t.fromLat,
-          fromLng: t.fromLng,
-          distanceKm: distKm,
-          reservedBy: t.reservedBy,
-          from: t.fromAddr,
-          to: t.toAddr,
-          taxiType: t.taxiType,
-          secsLeft: secs,
-          scheduleId: t.scheduleId,
-          targetDriverId: t.targetDriverId,
-        );
+        return _tripRequestFromActiveTrip(t, secsLeft: secs, distanceKm: distKm);
       }).toList();
 
       activeRequests = list;
@@ -634,6 +630,11 @@ class DriverHomeController extends ChangeNotifier {
       if (list.isNotEmpty && !isBusy && acceptedRide == null) {
         _newRequestController.add(list.first);
       }
+    }, onError: (Object e, StackTrace st) {
+      debugPrint('offers stream error: $e\n$st');
+      offersStreamError = 'Чақирувларни ўқиб бўлмади. Қайтa уриниб кўринг.';
+      activeRequests = const [];
+      notifyListeners();
     });
   }
 
@@ -665,6 +666,9 @@ class DriverHomeController extends ChangeNotifier {
     if (!result.success) {
       if (result.errorCode == 'no_seats') {
         return (success: false, error: '⚠️ Ўрин қолмаган');
+      }
+      if (result.errorCode == 'busy') {
+        return (success: false, error: '⚠️ Аввал жорий сафарни якунланг');
       }
       return (success: false, error: '⚠️ Аллақачон қабул қилинган');
     }
@@ -703,8 +707,17 @@ class DriverHomeController extends ChangeNotifier {
       return (success: true, error: null);
     }
 
-    // Local taxi — оддий қабул, seats'сиз.
-    acceptedRide = ride;
+    // Local taxi — оддий қабул, seats'сиз. Trip doc'дан lock/destination refresh.
+    TripRequest accepted = ride;
+    try {
+      final fresh = await _ridesRepo.getTrip(ride.id);
+      if (fresh != null) {
+        accepted = _tripRequestFromActiveTrip(fresh);
+      }
+    } catch (e) {
+      debugPrint('accept refresh: $e');
+    }
+    acceptedRide = accepted;
     isBusy = true;
     activeRequests = activeRequests.where((r) => r.id != ride.id).toList();
     _reconcileGpsProfile();
@@ -732,72 +745,83 @@ class DriverHomeController extends ChangeNotifier {
     _finishingTripId = ride.id;
     _gpsSub?.cancel();
 
-    lastSettlementOutcome = null;
-    final isLocal = ride.taxiType == 'local' || ride.taxiType == 'alone';
-    int change = 0;
+    try {
+      lastSettlementOutcome = null;
+      final isLocal = ride.taxiType == 'local' || ride.taxiType == 'alone';
+      int change = 0;
 
-    if (isLocal) {
-      final result = await LocalTaxiPaymentService.completeTrip(
-        tripId: ride.id,
-        fare: fare,
-        cashPaid: cashPaid,
-      );
-      change = result.change;
-    } else {
-      await _ridesRepo.finishTrip(
-          tripId: ride.id, fare: fare, cashPaid: cashPaid);
-      if (ride.userPhone.isNotEmpty && cashPaid > fare) {
-        change = cashPaid - fare;
+      if (isLocal) {
+        final result = await LocalTaxiPaymentService.completeTrip(
+          tripId: ride.id,
+          fare: fare,
+          cashPaid: cashPaid,
+        );
+        change = result.change;
+      } else {
+        await _ridesRepo.finishTrip(
+            tripId: ride.id, fare: fare, cashPaid: cashPaid);
+        if (ride.userPhone.isNotEmpty && cashPaid > fare) {
+          change = cashPaid - fare;
+        }
       }
-    }
 
-    if (ride.userPhone.isNotEmpty && change > 0) {
-      final opId = 'settle_trip_${ride.id}';
-      lastSettlementOutcome = await TripChangeSettlement.settle(
-        passengerPhone: canonicalPhoneId(ride.userPhone),
-        tripId: ride.id,
-        opId: opId,
-        change: change,
-      );
-      if (lastSettlementOutcome!.status ==
-          TripChangeSettlementStatus.failedPermanent) {
-        debugPrint(
-            'settlement: ${lastSettlementOutcome!.reasonCode} '
-            '${lastSettlementOutcome!.userMessage}');
+      if (ride.userPhone.isNotEmpty && change > 0) {
+        final opId = 'settle_trip_${ride.id}';
+        lastSettlementOutcome = await TripChangeSettlement.settle(
+          passengerPhone: canonicalPhoneId(ride.userPhone),
+          tripId: ride.id,
+          opId: opId,
+          change: change,
+        );
+        if (lastSettlementOutcome!.status ==
+            TripChangeSettlementStatus.failedPermanent) {
+          debugPrint(
+              'settlement: ${lastSettlementOutcome!.reasonCode} '
+              '${lastSettlementOutcome!.userMessage}');
+        }
       }
-    }
 
-    session = session.copyWith(
-      todayTrips: session.todayTrips + 1,
-      totalTrips: session.totalTrips + 1,
-      todayEarnings: session.todayEarnings + fare,
-    );
-    acceptedRide = null;
-    isBusy = false;
-    _reconcileGpsProfile();
-    if (isOnline && _gpsSub == null) _startGpsTracking();
-    notifyListeners();
-    await _saveStats();
-    _finishingTripId = null;
-    return fare;
+      session = session.copyWith(
+        todayTrips: session.todayTrips + 1,
+        totalTrips: session.totalTrips + 1,
+        todayEarnings: session.todayEarnings + fare,
+      );
+      acceptedRide = null;
+      isBusy = false;
+      _reconcileGpsProfile();
+      if (isOnline && _gpsSub == null) _startGpsTracking();
+      notifyListeners();
+      await _saveStats();
+      return fare;
+    } finally {
+      _finishingTripId = null;
+    }
   }
 
-  /// Сафарни тугатмасдан тарк этиш (back тугмаси) — трипни озод қилади.
-  Future<void> abandonRide() async {
+  /// Сафарни тугатмасдан тарк этиш — трипни озод қилади.
+  /// Release муваффақиятсиз бўлса UI тозаланмайди.
+  Future<({bool success, String? error})> abandonRide() async {
     final ride = acceptedRide;
-    if (ride != null) {
-      _releasingTripId = ride.id;
-    }
-    acceptedRide = null;
-    isBusy = false;
-    _reconcileGpsProfile();
-    if (isOnline && _gpsSub == null) _startGpsTracking();
-    notifyListeners();
-    if (ride != null) {
-      try {
-        await _ridesRepo.releaseAcceptedTrip(
-            tripId: ride.id, driverId: session.driverId);
-      } catch (_) {}
+    if (ride == null) return (success: true, error: null);
+    _releasingTripId = ride.id;
+    try {
+      final ok = await _ridesRepo.releaseAcceptedTrip(
+        tripId: ride.id,
+        driverId: session.driverId,
+      );
+      if (!ok) {
+        return (success: false, error: '⚠️ Сафарни тарк этиб бўлмади');
+      }
+      acceptedRide = null;
+      isBusy = false;
+      _reconcileGpsProfile();
+      if (isOnline && _gpsSub == null) _startGpsTracking();
+      notifyListeners();
+      return (success: true, error: null);
+    } catch (e) {
+      debugPrint('abandonRide: $e');
+      return (success: false, error: '⚠️ Сафарни тарк этиб бўлмади');
+    } finally {
       _releasingTripId = null;
     }
   }
@@ -848,10 +872,11 @@ class DriverHomeController extends ChangeNotifier {
   }
 
   // ─── Иш кунини якунлаш ──────────────────────────────────────────
-  Future<void> endWorkDay() async {
-    if (session.driverId.isEmpty) return;
+  /// Иш кунини якунлаш. Accepted local trip бор бўлса `false`.
+  Future<bool> endWorkDay() async {
+    if (session.driverId.isEmpty) return false;
     if (isBusy && isLocalAcceptedRide) {
-      await _releaseLocalAcceptedTripIfAny();
+      return false;
     }
     await _schedulesRepo.endTodayWork(
         driverId: session.driverId, date: _todayDateStr);
@@ -862,6 +887,7 @@ class DriverHomeController extends ChangeNotifier {
     }
     await _queueRepo.clearLastPosition(session.driverId);
     await _checkTodaySchedule();
+    return true;
   }
 
   @override
@@ -875,7 +901,10 @@ class DriverHomeController extends ChangeNotifier {
     _newRequestController.close();
     _seatsFullController.close();
     _passengerCancelController.close();
-    if (isOnline) _driverRepo.goOffline(session.driverId);
+    // Accepted local trip ochiq turib goOffline qilinmasin.
+    if (isOnline && !(isBusy && isLocalAcceptedRide)) {
+      _driverRepo.goOffline(session.driverId);
+    }
     super.dispose();
   }
 }

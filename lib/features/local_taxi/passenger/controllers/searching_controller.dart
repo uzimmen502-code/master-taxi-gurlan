@@ -10,6 +10,7 @@ import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
+import '../../services/local_trip_fare_lock_service.dart';
 import '../../../../utils/fare_calculator.dart';
 
 /// Yo'lovchining "haydovchi qidirish" oqimini boshqaradi (BROADCAST modeli).
@@ -31,11 +32,15 @@ class SearchingController extends ChangeNotifier {
     this.existingTripId,
     this.pickupLat,
     this.pickupLng,
+    this.dropoffLat,
+    this.dropoffLng,
     LocalTaxiBlockRepository? blockRepo,
+    LocalTripFareLockService? fareLock,
   })  : _ridesRepo = ridesRepo,
         _driverRepo = driverRepo,
         _locationService = locationService,
-        _blockRepo = blockRepo ?? LocalTaxiBlockRepository();
+        _blockRepo = blockRepo ?? LocalTaxiBlockRepository(),
+        _fareLock = fareLock ?? LocalTripFareLockService();
 
   /// Mavjud qidiruv tripini tiklash (yangi trip yaratilmaydi).
   final String? existingTripId;
@@ -44,10 +49,15 @@ class SearchingController extends ChangeNotifier {
   final double? pickupLat;
   final double? pickupLng;
 
+  /// Ixtiyoriy destination (berilsa yo'lkira qulflanadi).
+  final double? dropoffLat;
+  final double? dropoffLng;
+
   final RidesRepository _ridesRepo;
   final DriverRepository _driverRepo;
   final LocationService _locationService;
   final LocalTaxiBlockRepository _blockRepo;
+  final LocalTripFareLockService _fareLock;
 
   final String from;
   final String to;
@@ -154,9 +164,30 @@ class SearchingController extends ChangeNotifier {
           toAddr: to,
           fromLat: _fromLat,
           fromLng: _fromLng,
+          toLat: dropoffLat,
+          toLng: dropoffLng,
           taxiType: taxiType,
           initialRadiusKm: _radiusForCycle(0),
         );
+        final dLat = dropoffLat;
+        final dLng = dropoffLng;
+        if (dLat != null &&
+            dLng != null &&
+            (dLat.abs() > 1e-6 || dLng.abs() > 1e-6)) {
+          try {
+            await _fareLock.lockFare(
+              tripId: tripId!,
+              fromLat: _fromLat,
+              fromLng: _fromLng,
+              toLat: dLat,
+              toLng: dLng,
+              toAddr: to,
+            );
+          } catch (e) {
+            debugPrint('fare lock on search: $e');
+            // Destination ixtiyoriy — qidiruv davom etadi; narx keyin qulflanadi.
+          }
+        }
       }
       _tripSub = _ridesRepo.watch(tripId!).listen(_onTripUpdate);
     } catch (e) {
@@ -306,15 +337,21 @@ class SearchingController extends ChangeNotifier {
     if (tripId != null) {
       try {
         await _ridesRepo.cancelSearch(tripId: tripId!);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('cancelSearch: $e');
+        errorMessage = 'error_generic|$e';
+        notifyListeners();
+      }
     }
   }
 
-  /// Fire-and-forget — dispose paytida ham чақириладi.
+  /// Fire-and-forget — dispose paytida; хатони log қилади.
   void _cancelTripSilently() {
     if (_isCancelled || tripId == null) return;
     _isCancelled = true;
-    _ridesRepo.cancelSearch(tripId: tripId!).catchError((_) {});
+    _ridesRepo.cancelSearch(tripId: tripId!).catchError((Object e) {
+      debugPrint('cancelSearch silent: $e');
+    });
   }
 
   @override

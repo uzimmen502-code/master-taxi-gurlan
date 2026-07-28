@@ -11,6 +11,7 @@ Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
   int? initialFare,
   double? initialDistanceKm,
   int passengerWalletIntent = 0,
+  bool fareLocked = false,
 }) {
   return showDialog<({int fare, int cashPaid})>(
     context: context,
@@ -19,6 +20,7 @@ Future<({int fare, int cashPaid})?> showFareCalculatorDialog(
       initialFare: initialFare,
       initialDistanceKm: initialDistanceKm,
       passengerWalletIntent: passengerWalletIntent,
+      fareLocked: fareLocked,
     ),
   );
 }
@@ -28,11 +30,13 @@ class _FareCalculatorDialog extends StatefulWidget {
     this.initialFare,
     this.initialDistanceKm,
     this.passengerWalletIntent = 0,
+    this.fareLocked = false,
   });
 
   final int? initialFare;
   final double? initialDistanceKm;
   final int passengerWalletIntent;
+  final bool fareLocked;
 
   @override
   State<_FareCalculatorDialog> createState() => _FareCalculatorDialogState();
@@ -86,14 +90,16 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final fare = FareCalculator.calculate(
-      distanceKm: _distanceKm,
-      waitMinutes: _waitMins,
-      isNight: _isNight,
-      isHoliday: _isHoliday,
-      isRainy: _isRainy,
-      isUrgent: _isUrgent,
-    );
+    final fare = widget.fareLocked && (widget.initialFare ?? 0) > 0
+        ? widget.initialFare!
+        : FareCalculator.calculate(
+            distanceKm: _distanceKm,
+            waitMinutes: _waitMins,
+            isNight: _isNight,
+            isHoliday: _isHoliday,
+            isRainy: _isRainy,
+            isUrgent: _isUrgent,
+          );
     if (!_cashPaidInitialized) {
       final cashDefault = (fare - widget.passengerWalletIntent).clamp(0, fare);
       _cashPaidCtrl.text = '$cashDefault';
@@ -101,73 +107,76 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
     }
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Row(children: [
-        Icon(Icons.calculate, color: _blue, size: 24),
-        SizedBox(width: 8),
-        Text('Йўлкира ҳисоблаш'),
+      title: Row(children: [
+        Icon(widget.fareLocked ? Icons.lock : Icons.calculate,
+            color: _blue, size: 24),
+        const SizedBox(width: 8),
+        Text(widget.fareLocked ? 'Қулфланган йўлкира' : 'Йўлкира ҳисоблаш'),
       ]),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('📍 Масофа (км)',
-                style: TextStyle(
-                    fontSize: AppText.bodySmall,
-                    fontWeight: FontWeight.w600)),
-          ),
-          Row(children: [
-            Expanded(
-                child: Slider(
-                    value: _distanceKm,
-                    min: 0.5,
-                    max: 60,
-                    divisions: 119,
-                    activeColor: _blue,
-                    onChanged: (v) => setState(() =>
-                        _distanceKm = double.parse(v.toStringAsFixed(1))))),
-            SizedBox(
-                width: 50,
-                child: Text(_distanceKm.toStringAsFixed(1),
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(fontWeight: FontWeight.bold))),
-          ]),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('вЏі Кутиш (дақ)',
-                style: TextStyle(
-                    fontSize: AppText.bodySmall,
-                    fontWeight: FontWeight.w600)),
-          ),
-          Row(children: [
-            Expanded(
-                child: Slider(
-                    value: _waitMins.toDouble(),
-                    min: 0,
-                    max: 30,
-                    divisions: 30,
-                    activeColor: _orange,
-                    onChanged: (v) =>
-                        setState(() => _waitMins = v.round()))),
-            SizedBox(
-                width: 50,
-                child: Text('$_waitMins дақ',
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(fontWeight: FontWeight.bold))),
-          ]),
-          const Divider(height: 16),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            _coefChip('🌙 Тунги', _isNight,
-                (v) => setState(() => _isNight = v)),
-            _coefChip('🚨 Шошилинч', _isUrgent,
-                (v) => setState(() => _isUrgent = v)),
-            _coefChip('🎉 Байрам', _isHoliday,
-                (v) => setState(() => _isHoliday = v)),
-            _coefChip('🌧 Ёмғир', _isRainy,
-                (v) => setState(() => _isRainy = v)),
-          ]),
-          const Divider(height: 20),
+          if (!widget.fareLocked) ...[
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('📍 Масофа (км)',
+                  style: TextStyle(
+                      fontSize: AppText.bodySmall,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Row(children: [
+              Expanded(
+                  child: Slider(
+                      value: _distanceKm,
+                      min: 0.5,
+                      max: 60,
+                      divisions: 119,
+                      activeColor: _blue,
+                      onChanged: (v) => setState(() =>
+                          _distanceKm = double.parse(v.toStringAsFixed(1))))),
+              SizedBox(
+                  width: 50,
+                  child: Text(_distanceKm.toStringAsFixed(1),
+                      textAlign: TextAlign.center,
+                      style:
+                          const TextStyle(fontWeight: FontWeight.bold))),
+            ]),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('⏱ Кутиш (дақ)',
+                  style: TextStyle(
+                      fontSize: AppText.bodySmall,
+                      fontWeight: FontWeight.w600)),
+            ),
+            Row(children: [
+              Expanded(
+                  child: Slider(
+                      value: _waitMins.toDouble(),
+                      min: 0,
+                      max: 30,
+                      divisions: 30,
+                      activeColor: _orange,
+                      onChanged: (v) =>
+                          setState(() => _waitMins = v.round()))),
+              SizedBox(
+                  width: 50,
+                  child: Text('$_waitMins дақ',
+                      textAlign: TextAlign.center,
+                      style:
+                          const TextStyle(fontWeight: FontWeight.bold))),
+            ]),
+            const Divider(height: 16),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              _coefChip('🌙 Тунги', _isNight,
+                  (v) => setState(() => _isNight = v)),
+              _coefChip('🚨 Шошилинч', _isUrgent,
+                  (v) => setState(() => _isUrgent = v)),
+              _coefChip('🎉 Байрам', _isHoliday,
+                  (v) => setState(() => _isHoliday = v)),
+              _coefChip('🌧 Ёмғир', _isRainy,
+                  (v) => setState(() => _isRainy = v)),
+            ]),
+            const Divider(height: 20),
+          ],
           if (widget.passengerWalletIntent > 0) ...[
             Container(
               width: double.infinity,
@@ -194,8 +203,8 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _green.withValues(alpha: 0.3))),
             child: Column(children: [
-              const Text('💰 Йўлкира',
-                  style: TextStyle(
+              Text(widget.fareLocked ? '🔒 Қулфланган йўлкира' : '💰 Йўлкира',
+                  style: const TextStyle(
                       fontSize: AppText.bodyMedium, color: Colors.grey)),
               const SizedBox(height: 4),
               Text('${FareCalculator.format(fare)} сўм',

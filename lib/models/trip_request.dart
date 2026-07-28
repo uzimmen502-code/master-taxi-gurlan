@@ -18,10 +18,15 @@ class TripRequest {
     this.userBirthDate = '',
     this.fromLat = 0,
     this.fromLng = 0,
+    this.toLat = 0,
+    this.toLng = 0,
     this.distanceKm = 0,
     this.reservedBy = '',
     this.scheduleId = '',
     this.targetDriverId = '',
+    this.lockedFare = 0,
+    this.lockedDistanceKm = 0,
+    this.fareLockVersion = 0,
   });
 
   final String id;
@@ -35,10 +40,17 @@ class TripRequest {
   final String userBirthDate;
   final double fromLat;
   final double fromLng;
+  final double toLat;
+  final double toLng;
   final double distanceKm;
   final String reservedBy;
   final String scheduleId;
   final String targetDriverId;
+  final int lockedFare;
+  final double lockedDistanceKm;
+  final int fareLockVersion;
+
+  bool get hasLockedFare => lockedFare > 0;
 
   /// `userBirthDate` (YYYY-MM-DD) дан ёшни ҳисоблайди. Бўш бўлса `null`.
   int? get age {
@@ -86,6 +98,8 @@ class TripRequest {
       userBirthDate: (d['userBirthDate'] ?? '') as String,
       fromLat: (d['fromLat'] as num?)?.toDouble() ?? 0,
       fromLng: (d['fromLng'] as num?)?.toDouble() ?? 0,
+      toLat: (d['toLat'] as num?)?.toDouble() ?? 0,
+      toLng: (d['toLng'] as num?)?.toDouble() ?? 0,
       from: (d['from'] ?? d['fromAddr'] ?? d['pickupAddr'] ?? '') as String,
       to: (d['to'] ?? d['toAddr'] ?? '') as String,
       taxiType: (d['taxiType'] ?? 'alone') as String,
@@ -93,6 +107,9 @@ class TripRequest {
       scheduleId: (d['scheduleId'] ?? '') as String,
       targetDriverId: (d['targetDriverId'] ?? '') as String,
       reservedBy: (d['reservedBy'] ?? '') as String,
+      lockedFare: (d['lockedFare'] as num?)?.toInt() ?? 0,
+      lockedDistanceKm: (d['lockedDistanceKm'] as num?)?.toDouble() ?? 0,
+      fareLockVersion: (d['fareLockVersion'] as num?)?.toInt() ?? 0,
     );
   }
 }

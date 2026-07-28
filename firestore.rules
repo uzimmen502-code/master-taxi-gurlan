@@ -640,10 +640,10 @@ service cloud.firestore {
       allow write: if isOwner(userId) || isAdmin();
     }
 
-    // Local taxi qidiruv bloki — CF yozadi
+    // Local taxi qidiruv bloki — фақат CF / admin
     match /users/{userId}/local_taxi_block/{doc} {
       allow read: if isOwner(userId) || isAdmin();
-      allow write: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
     }
 
     // ══════════════════════════════════════
@@ -689,10 +689,26 @@ service cloud.firestore {
     }
 
     function localTripPassengerPatchFields() {
+      // status бу ерда ЙЎҚ — cancel алоҳида (isPassengerCancel).
       return [
-        'targetDriverId', 'targetedAt', 'cancelledBy', 'cancelReason',
-        'cancelledAt', 'status', 'radiusKm',
+        'targetDriverId', 'targetedAt',
+        'radiusKm',
         'passengerWalletIntent', 'passengerWalletUpdatedAt',
+      ];
+    }
+
+    function localTripPassengerCancelFields() {
+      return [
+        'status', 'cancelledBy', 'cancelReason', 'cancelledAt'
+      ];
+    }
+
+    // Yo'nalish + yo'lkira qulfi (marshrut o'rtacha/optimal; traffic keyin o'zgarmaydi).
+    function localTripFareLockFields() {
+      return [
+        'toAddr', 'toLat', 'toLng',
+        'lockedFare', 'lockedDistanceKm', 'lockedPolyline',
+        'fareLockedAt', 'fareLockVersion', 'estimatedPrice', 'updatedAt'
       ];
     }
 
@@ -704,13 +720,6 @@ service cloud.firestore {
       ];
     }
 
-    function localTripDriverCompleteFields() {
-      return [
-        'driverId', 'driverName', 'driverCar', 'driverPlate', 'acceptedAt',
-        'price', 'completedAt', 'date', 'status', 'fare', 'cashPaid', 'walletPaid'
-      ];
-    }
-
     function localTripDriverReleaseFields() {
       return [
         'status', 'acceptedDriverId', 'acceptedDriverName', 'acceptedDriverPhone',
@@ -719,38 +728,44 @@ service cloud.firestore {
       ];
     }
 
-    function localTripDriverRejectFields() {
-      return [
-        'targetDriverId', 'lastRejectedBy', 'lastRejectReason', 'lastRejectedAt'
-      ];
-    }
-
-    // Mahalliy taksi — passenger / broadcast driver accept / abandon / complete.
+    // Mahalliy taksi — passenger / broadcast accept / abandon / fare-lock.
+    // Yakunlash faqat CF `completeLocalTrip` (client completed yozishi taqiqlangan).
     function localTripLifecycleUpdate() {
       let d = request.resource.data;
       let prev = resource.data;
       let uid = userDocIdFromPhoneToken();
       let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
 
-      let isPassenger = uid == prev.userPhone
+      // Status o'zgarmaydi — radius / wallet / legacy target maydonlari.
+      let isPassengerPatch = uid == prev.userPhone
+          && d.status == prev.status
+          && prev.status in ['searching', 'accepted']
           && affectedKeys.hasOnly(localTripPassengerPatchFields());
 
-      let isDriverComplete = prev.status == 'accepted'
+      // Faqat cancelled; completed/expired/accepted yo'q.
+      let isPassengerCancel = uid == prev.userPhone
+          && prev.status in ['searching', 'pending', 'accepted']
+          && d.status == 'cancelled'
+          && d.cancelledBy in ['passenger', 'user']
+          && d.keys().hasAll(['status', 'cancelledBy', 'cancelledAt'])
+          && affectedKeys.hasOnly(localTripPassengerCancelFields());
+
+      let isPassengerFareLock = uid == prev.userPhone
+          && prev.status in ['searching', 'accepted']
+          && d.status == prev.status
+          && affectedKeys.hasOnly(localTripFareLockFields());
+
+      let isDriverFareLock = prev.status == 'accepted'
           && (uid == prev.driverId || uid == prev.acceptedDriverId)
-          && d.status == 'completed'
-          && affectedKeys.hasOnly(localTripDriverCompleteFields());
+          && approvedDriverForTaxi(uid, prev.taxiType)
+          && d.status == prev.status
+          && affectedKeys.hasOnly(localTripFareLockFields());
 
       let isBroadcastAccept = prev.status == 'searching'
           && d.status == 'accepted'
           && uid == d.acceptedDriverId
           && uid == d.driverId
           && approvedDriverForTaxi(uid, prev.taxiType)
-          && affectedKeys.hasOnly(localTripDriverAcceptFields());
-
-      let isTargetedAccept = prev.status == 'searching'
-          && d.status == 'accepted'
-          && prev.targetDriverId != ''
-          && uid == prev.targetDriverId
           && affectedKeys.hasOnly(localTripDriverAcceptFields());
 
       let isDriverRelease = prev.status == 'accepted'
@@ -761,20 +776,15 @@ service cloud.firestore {
           )
           && affectedKeys.hasOnly(localTripDriverReleaseFields());
 
-      let isDriverReject = prev.status == 'searching'
-          && prev.targetDriverId != ''
-          && uid == prev.targetDriverId
-          && affectedKeys.hasOnly(localTripDriverRejectFields());
-
       return isAuth()
           && prev.taxiType in ['local', 'alone']
           && (
-            isPassenger
-            || isDriverComplete
+            isPassengerPatch
+            || isPassengerCancel
+            || isPassengerFareLock
+            || isDriverFareLock
             || isBroadcastAccept
-            || isTargetedAccept
             || isDriverRelease
-            || isDriverReject
           );
     }
 
@@ -794,8 +804,20 @@ service cloud.firestore {
                phoneDigits(resource.data.get('driverPhone', '')));
     }
 
+    // Broadcast offer: approved local/alone haydovchi searching trip'ni o'qishi mumkin.
+    function tripLocalOfferRead() {
+      return isAuth()
+          && resource.data.status == 'searching'
+          && resource.data.taxiType in ['local', 'alone']
+          && approvedDriverForTaxi(
+               userDocIdFromPhoneToken(), resource.data.taxiType);
+    }
+
     match /trips/{tripId} {
-      allow read: if isStaff() || tripParticipantRead() || tripDriverRead();
+      allow read: if isStaff()
+          || tripParticipantRead()
+          || tripDriverRead()
+          || tripLocalOfferRead();
 
       // Яратиш — lokal/intercity taksi
       allow create: if isAuth() && (

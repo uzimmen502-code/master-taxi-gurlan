@@ -20,6 +20,8 @@ class SearchingScreen extends StatelessWidget {
     this.tripId,
     this.pickupLat,
     this.pickupLng,
+    this.dropoffLat,
+    this.dropoffLng,
   });
 
   final String from;
@@ -28,6 +30,8 @@ class SearchingScreen extends StatelessWidget {
   final String? tripId;
   final double? pickupLat;
   final double? pickupLng;
+  final double? dropoffLat;
+  final double? dropoffLng;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +46,8 @@ class SearchingScreen extends StatelessWidget {
         existingTripId: tripId,
         pickupLat: pickupLat,
         pickupLng: pickupLng,
+        dropoffLat: dropoffLat,
+        dropoffLng: dropoffLng,
       )..start(),
       child: const _SearchingView(),
     );

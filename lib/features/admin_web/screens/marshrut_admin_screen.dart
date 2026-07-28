@@ -787,10 +787,11 @@ class _PassengerCancelBlockPolicyCard extends StatelessWidget {
             Text(
               'Marshrut: faqat qabul qilingan safardan keyin bekor (kutish bekor — blok yo\'q). '
               'Local taxi: qidiruv paytida bekor. '
-              'Ikkalasi ham: ${PassengerCancelBlockRules.cancelLimit} bekor / '
-              '${PassengerCancelBlockRules.windowMinutes} daq oyna → '
-              '${PassengerCancelBlockRules.blockMinutes} daq blok. '
-              'Hisob CF da (`marshrut_block` / `local_taxi_block`).',
+              'Маҳаллий: қабулдан кейин 3-бекор — енгил огоҳ, 4 — қаттиқ '
+              '(қизил), 5 — 15 дақ блок. Маршрут: алоҳида қоида '
+              '(${PassengerCancelBlockRules.cancelLimit} / '
+              '${PassengerCancelBlockRules.blockMinutes} дақ). '
+              'Ҳисоб CF да; local_taxi_block ёзуви фақат admin/CF.',
               style: const TextStyle(fontSize: 13),
             ),
           ],

@@ -10,7 +10,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- Play policy: USE_FULL_SCREEN_INTENT faqat alarm/call core apps.
+         Takso/app uchun taqiqlangan — dependency merge dan ham olib tashlash. -->
+    <uses-permission
+        android:name="android.permission.USE_FULL_SCREEN_INTENT"
+        tools:node="remove"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
@@ -26,7 +30,7 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
-            android:exported="true"
+            android:exported="false"
             tools:replace="android:exported"/>
 
         <activity
@@ -37,9 +41,7 @@
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true">
+            android:windowSoftInputMode="adjustResize">
 
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
@@ -50,16 +52,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-        </activity>
-
-        <!-- ✅ Incoming Call Activity -->
-        <activity
-            android:name=".IncomingCallActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         </activity>
 
         <meta-data

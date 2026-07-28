@@ -86,7 +86,8 @@ class NotificationDelivery {
         type == 'marshrut_request';
   }
 
-  /// Қўнғироқли (call-style) огоҳлантиришлар — баланд овоз + fullScreenIntent.
+  /// Баланд приоритетли огоҳлантиришлар (heads-up) — fullScreenIntent йўқ
+  /// (Play: USE_FULL_SCREEN_INTENT faqat alarm/call core apps).
   static bool isRingAlert(String type) {
     return isDriverBookingAlert(type) || type == 'courier_arrived';
   }
@@ -157,10 +158,8 @@ class NotificationDelivery {
             vibrationPattern: isAlarm
                 ? Int64List.fromList([0, 800, 400, 800, 400, 1200])
                 : null,
-            fullScreenIntent: isAlarm,
-            category: isAlarm
-                ? AndroidNotificationCategory.call
-                : AndroidNotificationCategory.message,
+            fullScreenIntent: false,
+            category: AndroidNotificationCategory.message,
             visibility: NotificationVisibility.public,
             icon: '@mipmap/ic_launcher',
             ongoing: false,

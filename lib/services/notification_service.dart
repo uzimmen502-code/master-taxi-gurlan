@@ -112,8 +112,8 @@ class NotificationService {
           'Янги буюртма',
           importance: Importance.max,
           priority: Priority.max,
-          fullScreenIntent: true,
-          category: AndroidNotificationCategory.call,
+          fullScreenIntent: false,
+          category: AndroidNotificationCategory.message,
         ),
       ),
     );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../models/service_module_config.dart';
 
@@ -7,7 +8,7 @@ import '../../models/service_module_config.dart';
 class HomeModuleGate {
   HomeModuleGate._();
 
-  /// Hali implement qilinmagan modullar — har doim "Tez orada".
+  /// Hali implement qilinmagan modullar — hamkorlik taklifi.
   static const placeholderModuleIds = {'tire', 'car_wash'};
 
   static bool showInGrid(String moduleId) =>
@@ -23,8 +24,8 @@ class HomeModuleGate {
         ? ModuleStatus.comingSoon
         : ServiceConfigHolder.statusOf(moduleId);
     final msg = status == ModuleStatus.comingSoon
-        ? 'Tez orada'
-        : 'Hozircha mavjud emas';
+        ? context.tr('home_coming_soon')
+        : context.tr('home_not_available');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
     );

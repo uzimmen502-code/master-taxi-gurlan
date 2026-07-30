@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/platform_product.dart';
@@ -54,14 +56,12 @@ class PlatformProductsRepository {
     // Default АВТО — витрина бўш қолмасин.
     final auto = settings.data()?['platformFeaturedAuto'] != false;
     final all = await fetchActive(limit: 48);
-    final eligible = all.where((p) => p.price > 0 && p.inStock);
-    if (auto) {
-      return eligible.take(take).toList(growable: false);
-    }
-    return eligible
-        .where((p) => p.featuredOnHome)
-        .take(take)
-        .toList(growable: false);
+    final eligible = all.where((p) => p.price > 0 && p.inStock).toList();
+    final pool = auto
+        ? eligible
+        : eligible.where((p) => p.featuredOnHome).toList();
+    pool.shuffle(Random());
+    return pool.take(take).toList(growable: false);
   }
 
   /// Онлайн бозор лентаси учун.

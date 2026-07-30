@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/utils/fair_mix.dart';
@@ -42,13 +44,17 @@ class FeaturedProductsService {
     final bread = await _fetchBread();
     final food = await _fetchFood();
     final platform = await _fetchPlatform();
-    // Адолатли: non / taom / platforma навбатма-навбат.
-    return FairMix.roundRobin([bread, food, platform]);
+    // Адолатли RR, сўнг ҳар очилишда ўрин алмаштириш.
+    final mixed = FairMix.roundRobin([bread, food, platform]);
+    mixed.shuffle(Random());
+    return mixed;
   }
 
   List<FeaturedProduct> _positivePrice(Iterable<FeaturedProduct> items,
       {int take = 2}) {
-    return items.where((e) => e.price > 0).take(take).toList(growable: false);
+    final list = items.where((e) => e.price > 0).toList();
+    list.shuffle(Random());
+    return list.take(take).toList(growable: false);
   }
 
   Future<List<FeaturedProduct>> _fetchBread() async {

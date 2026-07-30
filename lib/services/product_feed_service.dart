@@ -56,22 +56,23 @@ class ProductFeedService {
       market.addAll(await _fetchMarketBatch(n));
     }
 
-    // Адолатли аралаш (shuffle ўрнига RR).
-    return FairMix.roundRobin([bread, food, market]);
+    // Адолатли RR, сўнг ҳар партияда ўрин алмаштириш (илова очилишида янги тартиб).
+    final mixed = FairMix.roundRobin([bread, food, market]);
+    mixed.shuffle(rand);
+    return mixed;
   }
 
   Future<List<FeedItem>> loadNextSourceBatch(
     FeedSource source, {
     int count = 12,
   }) async {
-    switch (source) {
-      case FeedSource.bread:
-        return _fetchBreadBatch(count);
-      case FeedSource.food:
-        return _fetchFoodBatch(count);
-      case FeedSource.market:
-        return _fetchMarketBatch(count);
-    }
+    final batch = switch (source) {
+      FeedSource.bread => await _fetchBreadBatch(count),
+      FeedSource.food => await _fetchFoodBatch(count),
+      FeedSource.market => await _fetchMarketBatch(count),
+    };
+    final out = List<FeedItem>.from(batch)..shuffle(Random());
+    return out;
   }
 
   void reset() {

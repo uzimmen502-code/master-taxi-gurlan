@@ -223,9 +223,12 @@ class UserRepository {
     if (validation != null) {
       throw ArgumentError(validation);
     }
-    final ref = _col.doc(uid);
-    final snap = await ref.get();
-    final data = <String, Object?>{
+    // No existence get(): users read requires isOwner, and a missing/stale
+    // phone_number claim would fail before set. Merge write is enough —
+    // create (new doc) or update (existing). Do not touch createdAt here so
+    // re-onboarding cannot rewrite an existing account's createdAt.
+    final id = canonicalPhoneId(uid);
+    await _col.doc(id).set({
       'phone': phone.trim(),
       'name': name.trim(),
       'gender': gender,
@@ -236,11 +239,7 @@ class UserRepository {
       'legacyAddress': legacyAddressLine.trim(),
       'addressUpdatedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    };
-    if (!snap.exists) {
-      data['createdAt'] = FieldValue.serverTimestamp();
-    }
-    await ref.set(data, SetOptions(merge: true));
+    }, SetOptions(merge: true));
   }
 
   /// Birth date бир марта эркин сақланади. Кейинги ўзгартиришлар admin

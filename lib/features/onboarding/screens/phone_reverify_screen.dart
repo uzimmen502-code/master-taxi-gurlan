@@ -257,6 +257,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
       final token = data['customToken'] as String?;
       if (token != null && token.isNotEmpty) {
         await _auth.signInWithCustomToken(token);
+        await _auth.currentUser?.getIdToken(true);
       }
       _codeSub?.cancel();
       if (!mounted) return;

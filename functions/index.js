@@ -401,6 +401,13 @@ async function createPhoneCustomToken(phone) {
   const e164 = `+${digits}`;
   try {
     const authUser = await authUserForPhoneDigits(digits);
+    // phone_number must be a durable custom claim — createCustomToken developer
+    // claims alone are dropped on ID token refresh (~1h), and Firestore isOwner()
+    // / isAdmin() rely on token.phone_number (same pattern as adminWebSignIn).
+    await admin.auth().setCustomUserClaims(authUser.uid, {
+      ...(authUser.customClaims || {}),
+      phone_number: e164,
+    });
     return await admin.auth().createCustomToken(authUser.uid, {
       phone_number: e164,
     });

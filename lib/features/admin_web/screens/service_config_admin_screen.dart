@@ -1099,9 +1099,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   }
 
   List<Widget> _legendChips() => [
-        _legend('Yoqilgan', Colors.green),
-        _legend('Tez orada', Colors.orange),
-        _legend('Yashirin', Colors.grey),
+        _legend('Очиқ', Colors.green),
+        _legend('Ҳамкорлик', Colors.orange),
+        _legend('Ёпиқ', Colors.grey),
         Text(
           'kursiv = baseline',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
@@ -1143,9 +1143,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   }
 
   static String _statusLabel(ModuleStatus s) => switch (s) {
-        ModuleStatus.enabled => 'Yoqilgan',
-        ModuleStatus.comingSoon => 'Tez orada',
-        ModuleStatus.hidden => 'Yashirin',
+        ModuleStatus.enabled => 'Очиқ',
+        ModuleStatus.comingSoon => 'Ҳамкорлик',
+        ModuleStatus.hidden => 'Ёпиқ',
       };
 
   static Color _statusColor(ModuleStatus s) => switch (s) {

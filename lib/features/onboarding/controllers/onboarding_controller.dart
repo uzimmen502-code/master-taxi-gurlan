@@ -40,6 +40,13 @@ class OnboardingController extends ChangeNotifier {
   final PendingCodeRepository _pendingCodeRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  /// Custom token sign-in + force-refresh so Firestore rules see
+  /// durable `phone_number` claim (isOwner) on the next request.
+  Future<void> _signInWithPhoneCustomToken(String token) async {
+    await _auth.signInWithCustomToken(token);
+    await _auth.currentUser?.getIdToken(true);
+  }
+
   StreamSubscription<PendingCodeStatusUpdate>? _pendingCodeSubscription;
   bool isVerifyingOtp = false;
   bool isSendingOtp = false;
@@ -392,7 +399,7 @@ class OnboardingController extends ChangeNotifier {
         case DeviceBindingStatus.trustedDevice:
           final token = result.customToken;
           if (token != null && token.isNotEmpty) {
-            await _auth.signInWithCustomToken(token);
+            await _signInWithPhoneCustomToken(token);
           }
           otpVerified = true;
           _bindingRegistered = true;
@@ -545,7 +552,7 @@ class OnboardingController extends ChangeNotifier {
       final data = Map<String, dynamic>.from(result.data as Map);
       final token = data['customToken'] as String?;
       if (token != null && token.isNotEmpty) {
-        await _auth.signInWithCustomToken(token);
+        await _signInWithPhoneCustomToken(token);
       }
       otpVerified = true;
       _bindingRegistered = true;
@@ -638,6 +645,12 @@ class OnboardingController extends ChangeNotifier {
       debugPrint('finish() blocked: no Firebase session');
       return false;
     }
+    // Ensure phone_number claim is on the ID token before users/* writes.
+    try {
+      await firebaseUser.getIdToken(true);
+    } catch (e) {
+      debugPrint('finish() token refresh failed: $e');
+    }
 
     final gpsRequired = isGpsRequiredForPhone(phone);
     if (gpsRequired && !hasGps) {
@@ -656,7 +669,7 @@ class OnboardingController extends ChangeNotifier {
     isSubmitting = true;
     notifyListeners();
 
-    final uid = phoneDigits(phone);
+    final uid = canonicalPhoneId(phone);
     final structured = UserAddress(
       mfy: mfy.trim(),
       street: street.trim(),

@@ -53,6 +53,7 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
         final token = result.customToken;
         if (token != null && token.isNotEmpty) {
           await FirebaseAuth.instance.signInWithCustomToken(token);
+          await FirebaseAuth.instance.currentUser?.getIdToken(true);
           if (FirebaseAuth.instance.currentUser != null) {
             await prefs.setBool('phone_reverified', true);
             _goHome();

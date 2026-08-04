@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../core/firebase_functions_client.dart';
 import '../core/utils/formatters.dart';
 import '../services/device_fingerprint_service.dart';
 
@@ -36,7 +37,7 @@ class DeviceBindingRepository {
   DeviceBindingRepository({
     FirebaseFunctions? functions,
     FirebaseFirestore? firestore,
-  })  : _functions = functions ?? FirebaseFunctions.instance,
+  })  : _functions = functions ?? AvaFunctions.auth,
         _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFunctions _functions;
@@ -69,6 +70,18 @@ class DeviceBindingRepository {
     return snap.exists;
   }
 
+  /// Cold start / region warmup — til ekranida fonda chaqiriladi.
+  Future<void> warmup() async {
+    try {
+      await _functions
+          .httpsCallable(
+            'checkDeviceBinding',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
+          )
+          .call(<String, dynamic>{'warmup': true});
+    } catch (_) {}
+  }
+
   Future<DeviceBindingCheckResult> checkDeviceBinding({
     required String phone,
     required DeviceFingerprintSnapshot snapshot,
@@ -85,10 +98,10 @@ class DeviceBindingRepository {
       'fingerprint': Map<String, String>.from(snapshot.components),
     };
 
-    Future<DeviceBindingCheckResult> invoke() async {
+    Future<DeviceBindingCheckResult> invoke(Duration timeout) async {
       final callable = _functions.httpsCallable(
         'checkDeviceBinding',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+        options: HttpsCallableOptions(timeout: timeout),
       );
       final result = await callable.call<Map<String, dynamic>>(payload);
       final data = Map<String, dynamic>.from(result.data as Map);
@@ -96,11 +109,11 @@ class DeviceBindingRepository {
     }
 
     try {
-      return await invoke();
+      return await invoke(const Duration(seconds: 25));
     } on FirebaseFunctionsException catch (e) {
-      // Cold start / Auth latency: бир марта қайта уриниш.
+      // Qisqa timeout / cold start: tezroq ikkinchi urinish.
       if (e.code == 'deadline-exceeded') {
-        return await invoke();
+        return await invoke(const Duration(seconds: 45));
       }
       rethrow;
     }
@@ -117,7 +130,10 @@ class DeviceBindingRepository {
       throw StateError('deviceFingerprintHash noto\'g\'ri');
     }
 
-    final callable = _functions.httpsCallable('registerDeviceBinding');
+    final callable = _functions.httpsCallable(
+      'registerDeviceBinding',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
+    );
     final digits = phoneDigits(phone);
     await callable.call<Map<String, dynamic>>({
       'phone': digits,

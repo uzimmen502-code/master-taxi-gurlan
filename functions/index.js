@@ -5161,10 +5161,18 @@ async function findUserDocByPhone(rawPhone) {
   return null;
 }
 
+/** Auth/binding callables — Europe (UZ + Firestore eur3 ga yaqinroq). */
+const authFunctions = functions.region('europe-west1');
+
 /** Composite fingerprint: login oldin qurilma ↔ telefon tekshiruvi. */
-exports.checkDeviceBinding = functions
-  .runWith({ timeoutSeconds: 120, memory: '256MB' })
+exports.checkDeviceBinding = authFunctions
+  .runWith({ timeoutSeconds: 60, memory: '256MB', minInstances: 1 })
   .https.onCall(async (data) => {
+  // Client til ekranidan cold-start warmup.
+  if (data && data.warmup === true) {
+    return { status: 'warmup', ok: true };
+  }
+
   const phone = canonicalUid(data.phone || '');
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
 
@@ -5337,7 +5345,7 @@ exports.checkDeviceBinding = functions
 });
 
 /** SMS yoki admin kodi tasdiqlangandan keyin qurilmani bog'lash. */
-exports.registerDeviceBinding = functions.https.onCall(async (data, context) => {
+exports.registerDeviceBinding = authFunctions.https.onCall(async (data, context) => {
   const phone = canonicalUid(data.phone || '');
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   const verifiedMethod = String(data.verifiedMethod || 'sms');
@@ -5426,7 +5434,7 @@ exports.registerDeviceBinding = functions.https.onCall(async (data, context) => 
 });
 
 /** Mobil: admin kod so'rovi — faqat CF yozadi (Firestore rules client write blok). */
-exports.requestPendingCode = functions.https.onCall(async (data) => {
+exports.requestPendingCode = authFunctions.https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
   const fingerprint = sanitizeFingerprintMap(data.fingerprint);
@@ -5456,7 +5464,7 @@ exports.requestPendingCode = functions.https.onCall(async (data) => {
 });
 
 /** Mobil: kod holati (auth talab qilinmaydi — hash tekshiruvi). */
-exports.getPendingCodeStatus = functions.https.onCall(async (data) => {
+exports.getPendingCodeStatus = authFunctions.https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
 
@@ -5505,7 +5513,7 @@ exports.getPendingCodeStatus = functions.https.onCall(async (data) => {
 });
 
 /** Admin panel kodidan keyin: pending_codes tekshiruvi + device_bindings + custom token. */
-exports.verifyPendingCodeAndRegister = functions.https.onCall(async (data) => {
+exports.verifyPendingCodeAndRegister = authFunctions.https.onCall(async (data) => {
   try {
     const phone = canonicalUid(data.phone || '');
     const code = String(data.code || '').trim();

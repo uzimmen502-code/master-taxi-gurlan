@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../core/firebase_functions_client.dart';
 import '../core/utils/formatters.dart';
 import '../services/device_fingerprint_service.dart';
 
@@ -26,7 +27,7 @@ class PendingCodeStatusUpdate {
 /// `pending_codes` — yozuv faqat Cloud Functions orqali.
 class PendingCodeRepository {
   PendingCodeRepository({FirebaseFunctions? functions})
-      : _functions = functions ?? FirebaseFunctions.instance;
+      : _functions = functions ?? AvaFunctions.auth;
 
   final FirebaseFunctions _functions;
 

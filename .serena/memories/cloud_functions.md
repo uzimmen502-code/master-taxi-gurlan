@@ -2,7 +2,7 @@
 
 Grep exact name with `^exports\.NAME` to jump to a function (no line numbers — they drift).
 Types: onCall = `functions.https.onCall`; trigger = `functions.firestore`; sched = `functions.pubsub.schedule`; http = `onRequest`; storage = `onObjectFinalized`.
-Region `us-central1`, Node 20 1st Gen. Helpers from `settlement_ledger.js` imported as `settlementLedger`.
+Region default `us-central1`, Node 20 1st Gen. **Auth/binding callables** (`checkDeviceBinding`, `registerDeviceBinding`, `requestPendingCode`, `getPendingCodeStatus`, `verifyPendingCodeAndRegister`) → `europe-west1` (`authFunctions`); `checkDeviceBinding` has `minInstances:1` + `warmup:true` fast-path. Client: `AvaFunctions.auth` (`lib/core/firebase_functions_client.dart`). Helpers from `settlement_ledger.js` imported as `settlementLedger`.
 Central RBAC: `requireCallerRoles(context,[roles],msg)`. Idempotency: `wallet_idempotency/{key}` + client `opId`.
 Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,districtId,serviceAreaId} (faqat boʻsh emas) user hujjatidan olib order payload'ga bosiladi. Ishlatilgan: placeOrderPostPaid, placeCarpetWashOrder, placeAgroPickupOrder (placeOrderWithWallet deprecated). (Client-side trips/courier/intercity Flutter `ServiceConfigHolder.reportStamp()` bilan bosadi.)
 

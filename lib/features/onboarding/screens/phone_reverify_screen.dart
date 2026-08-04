@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/firebase_functions_client.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
@@ -245,8 +246,10 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
 
     try {
       final snapshot = await _fingerprintService.collect();
-      final callable = FirebaseFunctions.instance
-          .httpsCallable('verifyPendingCodeAndRegister');
+      final callable = AvaFunctions.auth.httpsCallable(
+        'verifyPendingCodeAndRegister',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
+      );
       final result = await callable.call<Map<String, dynamic>>({
         'phone': _phoneDigits,
         'code': code.trim(),

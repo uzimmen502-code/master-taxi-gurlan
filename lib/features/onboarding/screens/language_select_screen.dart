@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +10,7 @@ import '../../../core/l10n/locale_notifier.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/service_area_picker.dart';
+import '../../../repositories/device_binding_repository.dart';
 import '../../../utils/locale_utils.dart';
 import 'onboarding_screen.dart';
 
@@ -40,6 +43,8 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
       if (_selected != null && mounted) {
         await context.read<LocaleNotifier>().setLocale(_selected!);
       }
+      // Auth CF cold start ни олдиндан иситиш (europe-west1).
+      unawaited(DeviceBindingRepository().warmup());
     });
   }
 

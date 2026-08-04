@@ -6,13 +6,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/firebase_functions_client.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../models/oil_vehicle.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/device_binding_repository.dart';
-import '../../../repositories/oil_change_repository.dart';
 import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
@@ -566,7 +565,10 @@ class OnboardingController extends ChangeNotifier {
       }
       final snapshot = _fingerprintSnapshot!;
       final callable =
-          FirebaseFunctions.instance.httpsCallable('verifyPendingCodeAndRegister');
+          AvaFunctions.auth.httpsCallable(
+        'verifyPendingCodeAndRegister',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
+      );
       final result = await callable.call<Map<String, dynamic>>({
         'phone': digits,
         'code': code,
@@ -717,7 +719,7 @@ class OnboardingController extends ChangeNotifier {
     final formatted = structured.formatted;
 
     try {
-      await _userRepo.createOrMergeProfileWithAddress(
+      final profileFut = _userRepo.createOrMergeProfileWithAddress(
         uid: uid,
         phone: phone,
         name: name,
@@ -727,27 +729,43 @@ class OnboardingController extends ChangeNotifier {
         address: structured,
         requireCompleteAddress: false,
       );
-
-      // Majburiy: config-driven zona (viloyat+tuman) saqlanadi.
-      // serviceAreaId — tumanning birlamchi zonasi (avto-tanlangan).
       if (geoDistrictId.trim().isNotEmpty) {
         try {
-          await _userRepo.saveServiceArea(
-            uid: uid,
-            regionId: geoRegionId,
-            districtId: geoDistrictId,
-            serviceAreaId: geoServiceAreaId,
-          );
+          await Future.wait([
+            profileFut,
+            _userRepo
+                .saveServiceArea(
+                  uid: uid,
+                  regionId: geoRegionId,
+                  districtId: geoDistrictId,
+                  serviceAreaId: geoServiceAreaId,
+                )
+                .catchError((Object e, StackTrace st) {
+              Error.throwWithStackTrace(
+                StateError('ZONE_SAVE_FAILED'),
+                st,
+              );
+            }),
+          ]);
+        } on ArgumentError {
+          rethrow;
+        } on StateError catch (e) {
+          if (e.message == 'ZONE_SAVE_FAILED') {
+            errorMessage =
+                'Zona saqlanmadi. Internet aloqasini tekshiring va qayta urinib ko\'ring.';
+            return false;
+          }
+          rethrow;
+        }
+        try {
           await ServiceConfigHolder.applyGeo(
             regionId: geoRegionId,
             districtId: geoDistrictId,
             serviceAreaId: geoServiceAreaId,
           );
-        } catch (e) {
-          errorMessage =
-              'Zona saqlanmadi. Internet aloqasini tekshiring va qayta urinib ko\'ring.';
-          return false;
-        }
+        } catch (_) {}
+      } else {
+        await profileFut;
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -763,51 +781,8 @@ class OnboardingController extends ChangeNotifier {
       await prefs.setBool('onboarding_done', true);
       await prefs.setBool('phone_reverified', true);
 
-      if (!skipCarStep && hasCarDraft) {
-        try {
-          final seats = int.tryParse(carSeats.trim()) ?? 4;
-          final color =
-              carColor.trim().isNotEmpty ? carColor.trim() : '—';
-          final plate = carPlate.trim().isNotEmpty
-              ? carPlate.trim().toUpperCase()
-              : 'TMP${DateTime.now().millisecondsSinceEpoch % 100000}';
-          final gasOrTaxi = carFuelType == 'cng' ||
-              carFuelType == 'lpg' ||
-              carUsageTags.contains('taxi');
-          await OilChangeRepository().saveVehicle(
-            uid: uid,
-            vehicle: OilVehicle(
-              id: '',
-              brand: carBrand.trim(),
-              model: carModel.trim(),
-              color: color,
-              plate: plate,
-              year: carYear,
-              engine: carEngine.trim(),
-              fuelType: carFuelType.trim(),
-              usageTags: carUsageTags,
-              seats: seats > 0 ? seats : 4,
-              intervalKm: gasOrTaxi ? 7000 : 10000,
-              isPrimary: true,
-            ),
-          );
-          if (hasCarBonusFields) {
-            try {
-              await FirebaseFunctions.instance
-                  .httpsCallable('claimCarProfileBonus')
-                  .call(<String, dynamic>{'uid': canonicalPhoneId(uid)});
-            } catch (_) {}
-          }
-        } catch (e) {
-          debugPrint('onboarding car save: $e');
-        }
-      }
-
-      try {
-        await FCMService().refreshToken();
-        FCMService().stopListeners();
-        await FCMService().startListeners();
-      } catch (_) {}
+      // FCM — рўйхатни блокламайди (Home/bootstrap билан бирга ишлайди).
+      unawaited(_refreshFcmInBackground());
 
       _deviceLockedUid = uid;
       return true;
@@ -822,6 +797,14 @@ class OnboardingController extends ChangeNotifier {
       isSubmitting = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _refreshFcmInBackground() async {
+    try {
+      await FCMService().refreshToken();
+      FCMService().stopListeners();
+      await FCMService().startListeners();
+    } catch (_) {}
   }
 
   String? consumeError() {

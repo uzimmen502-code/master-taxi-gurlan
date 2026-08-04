@@ -459,7 +459,10 @@ class OnboardingController extends ChangeNotifier {
       phoneStepError = firebaseFunctionsUserMessage(e);
       return false;
     } catch (e) {
-      phoneStepError = 'Xatolik: $e';
+      final raw = e.toString().toUpperCase();
+      phoneStepError = raw.contains('DEADLINE_EXCEEDED')
+          ? 'Сервер жавоб бермади. Бироздан кейин қайта уриниб кўринг.'
+          : 'Хатолик: $e';
       return false;
     } finally {
       isCheckingDevice = false;

@@ -391,11 +391,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 const SizedBox(height: 10),
                 Text(
                   loc.translate('ob_phone_bind_warning'),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12.5,
                     height: 1.35,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade900,
+                    fontWeight: FontWeight.w500,
+                    color: _muted,
                   ),
                 ),
                 if (c.phoneStepError != null) ...[

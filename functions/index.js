@@ -5162,7 +5162,9 @@ async function findUserDocByPhone(rawPhone) {
 }
 
 /** Composite fingerprint: login oldin qurilma ↔ telefon tekshiruvi. */
-exports.checkDeviceBinding = functions.https.onCall(async (data) => {
+exports.checkDeviceBinding = functions
+  .runWith({ timeoutSeconds: 120, memory: '256MB' })
+  .https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
   const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
 

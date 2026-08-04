@@ -78,15 +78,32 @@ class DeviceBindingRepository {
       throw StateError('deviceFingerprintHash noto\'g\'ri');
     }
 
-    final callable = _functions.httpsCallable('checkDeviceBinding');
     final digits = phoneDigits(phone);
-    final result = await callable.call<Map<String, dynamic>>({
+    final payload = <String, dynamic>{
       'phone': digits,
       'deviceFingerprintHash': hash,
       'fingerprint': Map<String, String>.from(snapshot.components),
-    });
-    final data = Map<String, dynamic>.from(result.data as Map);
-    return _parseCheckResult(data);
+    };
+
+    Future<DeviceBindingCheckResult> invoke() async {
+      final callable = _functions.httpsCallable(
+        'checkDeviceBinding',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+      );
+      final result = await callable.call<Map<String, dynamic>>(payload);
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return _parseCheckResult(data);
+    }
+
+    try {
+      return await invoke();
+    } on FirebaseFunctionsException catch (e) {
+      // Cold start / Auth latency: бир марта қайта уриниш.
+      if (e.code == 'deadline-exceeded') {
+        return await invoke();
+      }
+      rethrow;
+    }
   }
 
   Future<void> registerDeviceBinding({

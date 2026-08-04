@@ -193,7 +193,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
 
   Future<void> _goOffline() async {
     if (widget.ownerId.isEmpty) return;
-    final ok = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF131A22),
@@ -202,32 +202,48 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
           style: const TextStyle(color: Colors.white),
         ),
         content: Text(
-          context.tr('yuk_local_offline_confirm'),
+          context.tr('yuk_local_manage_confirm'),
           style: const TextStyle(color: Color(0xFF94A3B8)),
         ),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: Text(context.tr('cancel')),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'offline'),
             child: Text(
               context.tr('yuk_local_go_offline'),
               style: const TextStyle(color: Color(0xFFFACC15)),
             ),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'delete'),
+            child: Text(
+              context.tr('yuk_local_delete'),
+              style: const TextStyle(color: Color(0xFFEF4444)),
+            ),
+          ),
         ],
       ),
     );
-    if (ok != true) return;
+    if (action != 'offline' && action != 'delete') return;
     try {
-      await _repo.setOffline(widget.ownerId);
+      if (action == 'delete') {
+        await _repo.deleteMine(widget.ownerId);
+      } else {
+        await _repo.setOffline(widget.ownerId);
+      }
       _heartbeat?.cancel();
       if (!mounted) return;
       await _loadMine();
       if (!mounted) return;
-      _snack(context.tr('yuk_local_offline_ok'));
+      _snack(
+        action == 'delete'
+            ? context.tr('yuk_local_deleted_ok')
+            : context.tr('yuk_local_offline_ok'),
+      );
     } catch (_) {
       if (!mounted) return;
       _snack(context.tr('yuk_local_publish_fail'));

@@ -131,6 +131,12 @@ class YukLocalDriversRepository {
     }, SetOptions(merge: true));
   }
 
+  Future<void> deleteMine(String ownerId) async {
+    final id = canonicalPhoneId(ownerId);
+    if (id.isEmpty) return;
+    await docRef(id).delete();
+  }
+
   Future<void> updateAcceptRadius({
     required String ownerId,
     required int acceptRadiusKm,

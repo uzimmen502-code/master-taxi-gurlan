@@ -2154,7 +2154,10 @@ service cloud.firestore {
       allow read: if isAuth();
       allow create: if yukLocalDriverCreateOk(driverId);
       allow update: if isAdmin() || yukLocalDriverOwnerUpdateOk(driverId);
-      allow delete: if isAdmin();
+      allow delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId));
     }
 
   }

@@ -5293,9 +5293,44 @@ exports.checkDeviceBinding = functions.https.onCall(async (data) => {
     }
   }
 
+  // Янги қурилма ↔ телефон: админ кодсиз fingerprint билан боғлаш + token.
+  // Низолар (бошқа рақам/қурилма) юқорида блокланади — бу ерга фақат «тоза» биринчи боғлаш келади.
+  const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
+    ? data.fingerprint
+    : {};
+  try {
+    await forceDeviceBindingLink({
+      hash,
+      phone,
+      verifiedMethod: 'fingerprint_first_bind',
+      fingerprint,
+    });
+  } catch (linkErr) {
+    console.error('checkDeviceBinding first bind failed:', linkErr.message || linkErr);
+    return {
+      status: 'needs_verification',
+      skipSms: false,
+      message: 'Qurilmani bog\'lab bo\'lmadi. Qayta urinib ko\'ring.',
+    };
+  }
+
+  let customToken = null;
+  try {
+    customToken = await createPhoneCustomToken(phone);
+  } catch (authErr) {
+    console.error('createPhoneCustomToken failed:', authErr.message);
+    return {
+      status: 'needs_verification',
+      skipSms: false,
+      message: 'Kirish tokeni yaratilmadi. Qayta urinib ko\'ring.',
+    };
+  }
+
   return {
-    status: 'needs_verification',
-    skipSms: false,
+    status: 'trusted_device',
+    skipSms: true,
+    customToken,
+    firstBind: true,
   };
 });
 

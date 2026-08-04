@@ -183,7 +183,54 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
     if (ok == true) {
       await _loadMine();
       await ensureGps();
-      if (_mine?.online == true) _startHeartbeat();
+      if (_mine?.online == true) {
+        _startHeartbeat();
+      } else {
+        _heartbeat?.cancel();
+      }
+    }
+  }
+
+  Future<void> _goOffline() async {
+    if (widget.ownerId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131A22),
+        title: Text(
+          context.tr('yuk_close_title'),
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          context.tr('yuk_local_offline_confirm'),
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              context.tr('yuk_local_go_offline'),
+              style: const TextStyle(color: Color(0xFFFACC15)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.setOffline(widget.ownerId);
+      _heartbeat?.cancel();
+      if (!mounted) return;
+      await _loadMine();
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_offline_ok'));
+    } catch (_) {
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_publish_fail'));
     }
   }
 
@@ -334,6 +381,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
                           onlineAgo: _onlineAgo(row.driver.lastOnlineAt),
                           onCall: () => _call(row.driver),
                           onChat: () => _chat(row.driver),
+                          onEdit: _openPublish,
+                          onOffline: _goOffline,
                         );
                       },
                     ),
@@ -397,6 +446,8 @@ class _LocalTruckCard extends StatelessWidget {
     required this.onlineAgo,
     required this.onCall,
     required this.onChat,
+    required this.onEdit,
+    required this.onOffline,
   });
 
   final YukLocalDriverRanked row;
@@ -408,6 +459,8 @@ class _LocalTruckCard extends StatelessWidget {
   final String onlineAgo;
   final VoidCallback onCall;
   final VoidCallback onChat;
+  final VoidCallback onEdit;
+  final VoidCallback onOffline;
 
   static const _card = Color(0xFF131A22);
   static const _border = Color(0xFF252B36);
@@ -509,29 +562,54 @@ class _LocalTruckCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _MiniBtn(
-                  label: context.tr('yuk_call'),
-                  fg: Colors.white,
-                  border: _green,
-                  fill: const Color(0xFF14532D),
-                  onTap: onCall,
+          if (mine)
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniBtn(
+                    label: context.tr('yuk_edit'),
+                    fg: Colors.white,
+                    border: _accent,
+                    fill: const Color(0xFF3F3F1D),
+                    onTap: onEdit,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniBtn(
-                  label: context.tr('yuk_local_chat'),
-                  fg: Colors.white,
-                  border: _blue,
-                  fill: const Color(0xFF1E3A5F),
-                  onTap: onChat,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniBtn(
+                    label: context.tr('yuk_local_go_offline'),
+                    fg: Colors.white,
+                    border: const Color(0xFFEF4444),
+                    fill: const Color(0xFF3F1D1D),
+                    onTap: onOffline,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniBtn(
+                    label: context.tr('yuk_call'),
+                    fg: Colors.white,
+                    border: _green,
+                    fill: const Color(0xFF14532D),
+                    onTap: onCall,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniBtn(
+                    label: context.tr('yuk_local_chat'),
+                    fg: Colors.white,
+                    border: _blue,
+                    fill: const Color(0xFF1E3A5F),
+                    onTap: onChat,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

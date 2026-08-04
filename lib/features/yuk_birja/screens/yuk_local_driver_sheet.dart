@@ -64,7 +64,6 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
 
   String _vehicle = 'gazel';
   int _radiusKm = YukAcceptRadius.defaultKm;
-  YukLocalLoadStatus _status = YukLocalLoadStatus.empty;
   bool _busy = false;
   String? _error;
 
@@ -82,9 +81,6 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
       if (i.bodyWidthM > 0) _width.text = _fmtNum(i.bodyWidthM);
       if (i.bodyHeightM > 0) _height.text = _fmtNum(i.bodyHeightM);
       _radiusKm = i.acceptRadiusKm;
-      _status = i.loadStatus == YukLocalLoadStatus.offline
-          ? YukLocalLoadStatus.empty
-          : i.loadStatus;
       _location.text = i.locationLabel;
     }
   }
@@ -135,12 +131,8 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
       setState(() => _error = context.tr('yuk_need_phone'));
       return;
     }
-    final plate = _plate.text.trim();
-    final cap = _num(_capacity);
-    if (plate.isEmpty || cap <= 0) {
-      setState(() => _error = context.tr('yuk_local_need_truck'));
-      return;
-    }
+    // Мажбурий: машина тури + қамров радиуси (ҳар доим танланган).
+    // Қолган майдонлар ихтиёрий.
     setState(() {
       _busy = true;
       _error = null;
@@ -173,13 +165,13 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         ownerName: widget.ownerName,
         phone: widget.ownerPhone,
         vehicleType: _vehicle,
-        plateNumber: plate,
-        capacityTons: cap,
+        plateNumber: _plate.text.trim(),
+        capacityTons: _num(_capacity),
         bodyLengthM: _num(_len),
         bodyWidthM: _num(_width),
         bodyHeightM: _num(_height),
         acceptRadiusKm: _radiusKm,
-        loadStatus: _status,
+        loadStatus: YukLocalLoadStatus.empty,
         lat: coords.lat,
         lng: coords.lng,
         locationLabel: label,
@@ -336,43 +328,6 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                     onSelected: (_) =>
                         setState(() => _radiusKm = o.valueKm),
                   ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Text(
-              context.tr('yuk_local_status_title'),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: Text(context.tr('yuk_local_status_empty')),
-                    selected: _status == YukLocalLoadStatus.empty,
-                    onSelected: (_) =>
-                        setState(() => _status = YukLocalLoadStatus.empty),
-                    selectedColor: const Color(0xFF166534),
-                    labelStyle: const TextStyle(color: Colors.white),
-                    backgroundColor: const Color(0xFF0B0E14),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ChoiceChip(
-                    label: Text(context.tr('yuk_local_status_busy')),
-                    selected: _status == YukLocalLoadStatus.busy,
-                    onSelected: (_) =>
-                        setState(() => _status = YukLocalLoadStatus.busy),
-                    selectedColor: const Color(0xFF854D0E),
-                    labelStyle: const TextStyle(color: Colors.white),
-                    backgroundColor: const Color(0xFF0B0E14),
-                  ),
-                ),
               ],
             ),
             if (_error != null) ...[

@@ -47,6 +47,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   String _tab = 'all';
   bool _intercityBootstrapped = false;
+  final _localPanelKey = GlobalKey<YukLocalNearbyPanelState>();
 
   /// Драфт (ёзилмоқда) — «Қидирув»гача рўйхатга таъсир қилмайди.
   String _draftVehicle = '';
@@ -111,7 +112,11 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   void _onScopeTap(String scope) {
     setState(() => _scope = scope);
-    if (scope == 'intercity') {
+    if (scope == 'local') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _localPanelKey.currentState?.ensureGps();
+      });
+    } else {
       _ensureIntercityLoaded();
     }
   }
@@ -444,6 +449,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
             Expanded(
               child: _scope == 'local'
                   ? YukLocalNearbyPanel(
+                      key: _localPanelKey,
                       ownerId: _ownerId,
                       ownerName: _ownerName,
                       ownerPhone: _ownerPhone,
@@ -690,7 +696,7 @@ class _BigAction extends StatelessWidget {
             ),
           ),
           child: Text(
-            '$emoji $label',
+            emoji.trim().isEmpty ? label : '$emoji $label',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
@@ -1381,8 +1387,8 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
     final title = _editing
         ? context.tr('yuk_edit')
         : (widget.isCargo
-            ? context.tr('yuk_send_cargo')
-            : context.tr('yuk_take_cargo'));
+            ? context.tr('yuk_create_cargo')
+            : context.tr('yuk_create_truck'));
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
       child: SingleChildScrollView(

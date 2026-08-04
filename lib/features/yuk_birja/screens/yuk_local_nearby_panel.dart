@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
@@ -28,13 +29,12 @@ class YukLocalNearbyPanel extends StatefulWidget {
   final String ownerPhone;
 
   @override
-  State<YukLocalNearbyPanel> createState() => _YukLocalNearbyPanelState();
+  State<YukLocalNearbyPanel> createState() => YukLocalNearbyPanelState();
 }
 
-class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
+class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   static const _muted = Color(0xFF94A3B8);
   static const _accent = Color(0xFFFACC15);
-  static const _blue = Color(0xFF3B82F6);
   static const _green = Color(0xFF22C55E);
 
   final _repo = YukLocalDriversRepository();
@@ -58,7 +58,7 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([_loadGps(), _loadMine()]);
+    await Future.wait([ensureGps(), _loadMine()]);
     _sub = _repo.watchOnline().listen(
       (list) {
         if (!mounted) return;
@@ -91,15 +91,39 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
     } catch (_) {}
   }
 
-  Future<void> _loadGps() async {
+  /// «Туман ичида» таб: GPS рухсати + хизматни ёқиш + жойлашувни янгилаш.
+  Future<void> ensureGps() async {
+    if (!mounted) return;
     setState(() => _loadingGps = true);
     try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) {
+        await Geolocator.openLocationSettings();
+      }
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+        perm = await Geolocator.checkPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() {
+          _loadingGps = false;
+          _error = 'yuk_local_need_gps';
+        });
+        return;
+      }
       final coords = await const LocationService().getCurrentCoords();
       if (!mounted) return;
       setState(() {
         _userLat = coords.lat;
         _userLng = coords.lng;
         _loadingGps = false;
+        if (_error == 'yuk_local_need_gps') _error = null;
         _recompute();
       });
     } catch (_) {
@@ -158,7 +182,7 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
     );
     if (ok == true) {
       await _loadMine();
-      await _loadGps();
+      await ensureGps();
       if (_mine?.online == true) _startHeartbeat();
     }
   }
@@ -228,17 +252,6 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
     return context.tr('yuk_local_radius_km').replaceAll('{n}', '$km');
   }
 
-  String _statusLabel(YukLocalLoadStatus s) {
-    switch (s) {
-      case YukLocalLoadStatus.empty:
-        return context.tr('yuk_local_status_empty');
-      case YukLocalLoadStatus.busy:
-        return context.tr('yuk_local_status_busy');
-      case YukLocalLoadStatus.offline:
-        return context.tr('yuk_local_status_offline');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final loading = _loadingList || _loadingGps;
@@ -246,26 +259,14 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  color: const Color(0xFF1E2A1E),
-                  border: _green,
-                  label: context.tr('yuk_local_publish_btn'),
-                  onTap: _openPublish,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _ActionBtn(
-                  color: const Color(0xFF1E2A3A),
-                  border: _blue,
-                  label: context.tr('yuk_local_refresh_gps'),
-                  onTap: _loadGps,
-                ),
-              ),
-            ],
+          child: SizedBox(
+            width: double.infinity,
+            child: _ActionBtn(
+              color: const Color(0xFF1E2A1E),
+              border: _green,
+              label: context.tr('yuk_local_publish_btn'),
+              onTap: _openPublish,
+            ),
           ),
         ),
         if (_mine?.online == true)
@@ -330,7 +331,6 @@ class _YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
                           stars: _stars(row.driver.rating),
                           body: _body(row.driver),
                           radius: _radiusLabel(row.driver.acceptRadiusKm),
-                          status: _statusLabel(row.driver.loadStatus),
                           onlineAgo: _onlineAgo(row.driver.lastOnlineAt),
                           onCall: () => _call(row.driver),
                           onChat: () => _chat(row.driver),
@@ -394,7 +394,6 @@ class _LocalTruckCard extends StatelessWidget {
     required this.stars,
     required this.body,
     required this.radius,
-    required this.status,
     required this.onlineAgo,
     required this.onCall,
     required this.onChat,
@@ -406,7 +405,6 @@ class _LocalTruckCard extends StatelessWidget {
   final String stars;
   final String body;
   final String radius;
-  final String status;
   final String onlineAgo;
   final VoidCallback onCall;
   final VoidCallback onChat;
@@ -501,7 +499,6 @@ class _LocalTruckCard extends StatelessWidget {
                 : '—',
           ),
           _line(context.tr('yuk_local_body'), body),
-          _line(context.tr('yuk_local_status_title'), status),
           _line(context.tr('yuk_local_radius_title'), radius),
           _line(context.tr('yuk_local_online'), onlineAgo),
           if (!row.inRadius) ...[

@@ -6,29 +6,29 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
-import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/widgets/service_area_picker.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
-import '../../../services/mfy_service.dart';
-import '../../oil_change/data/oil_car_options.dart';
 import '../controllers/onboarding_controller.dart';
 
-/// Ихчам soft онбординг: танишув → админ код → ҳудуд → Home.
+/// Ихчам онбординг: исм + телефон → Home (тил/туман олдинда).
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<OnboardingController>(
-      create: (ctx) => OnboardingController(
-        userRepo: ctx.read<UserRepository>(),
-        locationService: ctx.read<LocationService>(),
-      ),
+      create: (ctx) {
+        final c = OnboardingController(
+          userRepo: ctx.read<UserRepository>(),
+          locationService: ctx.read<LocationService>(),
+        );
+        unawaited(c.loadPreselectedGeo());
+        return c;
+      },
       child: const _OnboardingView(),
     );
   }
@@ -52,38 +52,17 @@ class _OnboardingViewState extends State<_OnboardingView> {
   final _phoneCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
-  final _mfyCtrl = TextEditingController();
-  final _streetCtrl = TextEditingController();
-  final _houseCtrl = TextEditingController();
-  final _carPlateCtrl = TextEditingController();
-  final _streetFocus = FocusNode();
-  final _houseFocus = FocusNode();
-  final _streetFieldKey = GlobalKey();
-  final _houseFieldKey = GlobalKey();
-  final _addressTileCtrl = ExpansibleController();
 
   bool _isLoading = false;
-  bool _carExpanded = false;
-  /// МФЙ тайёр (рўйхатдан ёки қўлда ёзилган) — шунда кўча/уй очилади.
-  bool get _mfyReady => _mfyCtrl.text.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    unawaited(MfyService.loadMfyData());
     _phoneCtrl.text = '+998 ';
     _phoneCtrl.addListener(_enforcePhonePrefix);
-    _mfyCtrl.addListener(
-        () => context.read<OnboardingController>().setMfy(_mfyCtrl.text));
-    _streetCtrl.addListener(
-        () => context.read<OnboardingController>().setStreet(_streetCtrl.text));
-    _houseCtrl.addListener(
-        () => context.read<OnboardingController>().setHouse(_houseCtrl.text));
     _birthDateCtrl.addListener(() => context
         .read<OnboardingController>()
         .setBirthDate(_birthDateCtrl.text));
-    _carPlateCtrl.addListener(() =>
-        context.read<OnboardingController>().setCarPlate(_carPlateCtrl.text));
   }
 
   void _enforcePhonePrefix() {
@@ -101,42 +80,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
     _phoneCtrl.dispose();
     _otpCtrl.dispose();
     _birthDateCtrl.dispose();
-    _mfyCtrl.dispose();
-    _streetCtrl.dispose();
-    _houseCtrl.dispose();
-    _carPlateCtrl.dispose();
-    _streetFocus.dispose();
-    _houseFocus.dispose();
-    _addressTileCtrl.dispose();
     super.dispose();
-  }
-
-  void _ensureFieldVisible(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-      alignment: 0.2,
-    );
-  }
-
-  void _unlockStreetAfterMfy() {
-    if (!_mfyReady) return;
-    _addressTileCtrl.expand();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _streetFocus.requestFocus();
-      _ensureFieldVisible(_streetFieldKey);
-    });
-  }
-
-  void _onMfyPickedFromList(String value) {
-    _mfyCtrl.text = value;
-    context.read<OnboardingController>().setMfy(value);
-    setState(() {});
-    _unlockStreetAfterMfy();
   }
 
   void _showError(String msg) {
@@ -146,15 +90,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
-  }
-
-  Future<void> _goPage(int page) async {
-    context.read<OnboardingController>().goToPage(page);
-    await _pageController.animateToPage(
-      page,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-    );
   }
 
   Future<void> _next() async {
@@ -176,7 +111,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
         final fullPhone = '+${phoneDigits(raw)}';
 
         if (c.otpVerified || c.skipSmsVerification) {
-          await _goPage(2);
+          await _finish();
           return;
         }
 
@@ -185,10 +120,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
             current.phoneNumber == fullPhone &&
             current.phoneNumber != null) {
           c.otpVerified = true;
-          await _goPage(2);
+          await _finish();
           return;
         }
 
+        // Fallback: needsVerification — админ код оқими.
         final sent = await c.requestAdminCode(raw);
         if (!mounted) return;
         if (!sent) {
@@ -232,32 +168,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  Future<void> _fetchGps() async {
-    final c = context.read<OnboardingController>();
-    final ok = await c.fetchGps();
-    if (!mounted) return;
-    if (!ok) {
-      final err = c.consumeError();
-      if (err != null) _showError(err);
-    }
-  }
-
-  void _prepareCarBeforeFinish(OnboardingController c) {
-    final plate = _carPlateCtrl.text.trim();
-    final wantsCar = _carExpanded &&
-        (plate.isNotEmpty ||
-            c.carBrand.trim().isNotEmpty && c.carModel.trim().isNotEmpty);
-    if (wantsCar) {
-      c.setSkipCarStep(false);
-      c.setCarSetupStep(1);
-      if (c.carUsageTags.isEmpty) {
-        c.setCarUsageTags(const ['taxi']);
-      }
-    } else {
-      c.clearCarDraft();
-    }
-  }
-
   Future<void> _finish() async {
     final c = context.read<OnboardingController>();
     final loc = AppLocalizations.of(context)!;
@@ -266,7 +176,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
       _showError(loc.translate(err));
       return;
     }
-    _prepareCarBeforeFinish(c);
     final ok = await c.finish(
       name: _nameCtrl.text,
       phone: _phoneCtrl.text,
@@ -308,26 +217,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    _progressBar(c.currentPage),
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        loc
-                            .translate('ob_step')
-                            .replaceAll(
-                                '{current}', '${c.currentPage + 1}')
-                            .replaceAll(
-                                '{total}',
-                                '${OnboardingController.totalPages}'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _muted,
-                        ),
-                      ),
-                    ),
+                    if (c.currentPage > 0) ...[
+                      const SizedBox(height: 10),
+                      _progressBar(c.currentPage),
+                    ],
                   ],
                 ),
               ),
@@ -339,7 +232,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   children: [
                     _pageIdentity(loc, c),
                     _pageOtp(loc, c),
-                    _pageZone(loc, c),
                   ],
                 ),
               ),
@@ -496,6 +388,16 @@ class _OnboardingViewState extends State<_OnboardingView> {
                     FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s]')),
                   ],
                 ),
+                const SizedBox(height: 10),
+                Text(
+                  loc.translate('ob_phone_bind_warning'),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
                 if (c.phoneStepError != null) ...[
                   const SizedBox(height: 10),
                   Text(
@@ -641,11 +543,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                         val.trim(),
                       );
                       if (ok && mounted) {
-                        c.advance();
-                        await _pageController.nextPage(
-                          duration: const Duration(milliseconds: 350),
-                          curve: Curves.easeInOut,
-                        );
+                        await _finish();
                       } else if (mounted && c.otpError != null) {
                         _showError(c.otpError!);
                       }
@@ -681,228 +579,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   ),
                 ],
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Page 2 ───────────────────────────────────────────────────────────
-  Widget _pageZone(AppLocalizations loc, OnboardingController c) {
-    final gpsRequired = c.isGpsRequiredForPhone(_phoneCtrl.text);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: _card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ServiceAreaPicker(
-              initialRegionId: c.geoRegionId,
-              initialDistrictId: c.geoDistrictId,
-              initialServiceAreaId: c.geoServiceAreaId,
-              showRegionDropdown: false,
-              showAreaDropdown: false,
-              onChanged: (region, district, area) {
-                c.setGeoArea(region, district, area);
-              },
-            ),
-            if (gpsRequired) ...[
-              const SizedBox(height: 12),
-              _gpsCard(c, loc),
-            ],
-            const SizedBox(height: 4),
-            Theme(
-              data: Theme.of(context)
-                  .copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                controller: _addressTileCtrl,
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 4),
-                title: Text(
-                  loc.translate('ob_live_address_title'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: _greenDark,
-                    fontSize: 14,
-                  ),
-                ),
-                children: [
-                  _benefit(
-                    icon: '🍞',
-                    text: loc.translate('ob_address_benefit'),
-                  ),
-                  const SizedBox(height: 10),
-                  _mfyAutocomplete(c, loc),
-                  const SizedBox(height: 8),
-                  KeyedSubtree(
-                    key: _streetFieldKey,
-                    child: _manualField(
-                      ctrl: _streetCtrl,
-                      label: loc.translate('ob_street_label'),
-                      icon: Icons.signpost,
-                      hint: _mfyReady
-                          ? loc.translate('ob_street_hint')
-                          : loc.translate('ob_address_pick_mfy_first'),
-                      enabled: _mfyReady,
-                      focusNode: _streetFocus,
-                      textInputAction: TextInputAction.next,
-                      onSubmitted: (_) {
-                        _houseFocus.requestFocus();
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) _ensureFieldVisible(_houseFieldKey);
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  KeyedSubtree(
-                    key: _houseFieldKey,
-                    child: _manualField(
-                      ctrl: _houseCtrl,
-                      label: loc.translate('ob_house_label'),
-                      icon: Icons.home,
-                      hint: _mfyReady
-                          ? '12'
-                          : loc.translate('ob_address_pick_mfy_first'),
-                      enabled: _mfyReady,
-                      focusNode: _houseFocus,
-                      textInputAction: TextInputAction.done,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Theme(
-              data: Theme.of(context)
-                  .copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 4),
-                onExpansionChanged: (v) =>
-                    setState(() => _carExpanded = v),
-                title: Text(
-                  loc.translate('ob_car_title'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: _greenDark,
-                    fontSize: 14,
-                  ),
-                ),
-                subtitle: Text(
-                  loc.translate('ob_optional'),
-                  style: const TextStyle(fontSize: 11, color: _muted),
-                ),
-                children: [
-                  _benefit(
-                    icon: '🚗',
-                    text: loc.translate('ob_car_benefit'),
-                    warm: true,
-                  ),
-                  const SizedBox(height: 10),
-                  _dropdownStr(
-                    label: context.tr('oil_brand'),
-                    value: OilCarOptions.brands.contains(c.carBrand)
-                        ? c.carBrand
-                        : OilCarOptions.brands.first,
-                    items: OilCarOptions.brands,
-                    onChanged: c.setCarBrand,
-                  ),
-                  _dropdownStr(
-                    label: context.tr('oil_model'),
-                    value: OilCarOptions.models.contains(c.carModel)
-                        ? c.carModel
-                        : OilCarOptions.models.first,
-                    items: OilCarOptions.models,
-                    onChanged: c.setCarModel,
-                  ),
-                  _dropdownInt(
-                    label: context.tr('oil_year'),
-                    value: OilCarOptions.years.contains(c.carYear)
-                        ? c.carYear
-                        : OilCarOptions.years.first,
-                    items: OilCarOptions.years,
-                    onChanged: c.setCarYear,
-                  ),
-                  _manualField(
-                    ctrl: _carPlateCtrl,
-                    label: context.tr('onb_car_plate_hint'),
-                    icon: Icons.pin_outlined,
-                    hint: '01 A 123 BC',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _gpsCard(OnboardingController c, AppLocalizations loc) {
-    final hasGps = c.hasGps;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7FBF7),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: hasGps ? _green.withValues(alpha: 0.45) : Colors.orange.shade200,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                hasGps ? Icons.check_circle : Icons.gps_fixed,
-                color: hasGps ? _green : _green,
-                size: 18,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  loc.translate('ob_gps_required'),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: _ink,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: ElevatedButton.icon(
-              onPressed: c.isGpsLoading ? null : _fetchGps,
-              icon: c.isGpsLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(hasGps ? Icons.refresh : Icons.my_location, size: 18),
-              label: Text(
-                hasGps
-                    ? loc.translate('ob_gps_update')
-                    : loc.translate('ob_gps_get'),
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
             ),
           ),
         ],
@@ -1045,203 +721,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
     );
   }
 
-  Widget _mfyAutocomplete(OnboardingController c, AppLocalizations loc) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: _mfyCtrl.text),
-      optionsBuilder: (TextEditingValue tev) async {
-        await MfyService.loadMfyData();
-        final q = tev.text.trim();
-        final districtId = c.geoDistrictId.trim();
-        if (q.isEmpty) {
-          final list = districtId.isNotEmpty
-              ? MfyService.getMfyByDistrict(districtId)
-              : MfyService.getAllMfy();
-          if (list.isEmpty) return MfyService.getAllMfy().take(12);
-          return list.take(12);
-        }
-        var hits = MfyService.searchMfy(
-          q,
-          district: districtId.isEmpty ? null : districtId,
-        );
-        if (hits.isEmpty) hits = MfyService.searchMfy(q);
-        return hits.take(12);
-      },
-      onSelected: _onMfyPickedFromList,
-      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
-        return TextField(
-          controller: textController,
-          focusNode: focusNode,
-          onSubmitted: (_) {
-            onFieldSubmitted();
-            _mfyCtrl.text = textController.text;
-            c.setMfy(textController.text);
-            setState(() {});
-            _unlockStreetAfterMfy();
-          },
-          onChanged: (v) {
-            _mfyCtrl.text = v;
-            c.setMfy(v);
-            setState(() {});
-          },
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            labelText: loc.translate('ob_mfy_label'),
-            hintText: loc.translate('ob_mfy_hint'),
-            prefixIcon:
-                const Icon(Icons.location_city, size: 18, color: _green),
-            isDense: true,
-            filled: true,
-            fillColor: const Color(0xFFF7FBF7),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: _green, width: 1.5),
-            ),
-          ),
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 6,
-            borderRadius: BorderRadius.circular(12),
-            color: Colors.white,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 220, maxWidth: 360),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (context, index) {
-                  final option = options.elementAt(index);
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      option,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _ink,
-                      ),
-                    ),
-                    onTap: () => onSelected(option),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _manualField({
-    required TextEditingController ctrl,
-    required String label,
-    required IconData icon,
-    String hint = '',
-    int maxLines = 1,
-    bool enabled = true,
-    FocusNode? focusNode,
-    TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
-  }) {
-    return TextField(
-      controller: ctrl,
-      focusNode: focusNode,
-      enabled: enabled,
-      maxLines: maxLines,
-      textInputAction: textInputAction,
-      onSubmitted: onSubmitted,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: enabled ? _ink : Colors.grey.shade500,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(
-          icon,
-          size: 18,
-          color: enabled ? _green : Colors.grey.shade400,
-        ),
-        isDense: true,
-        filled: true,
-        fillColor: enabled ? const Color(0xFFF7FBF7) : Colors.grey.shade100,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _green, width: 1.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _dropdownStr({
-    required String label,
-    required String value,
-    required List<String> items,
-    required ValueChanged<String> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          filled: true,
-          fillColor: const Color(0xFFF7FBF7),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          isDense: true,
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: items.contains(value) ? value : items.first,
-            isExpanded: true,
-            items: items
-                .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) onChanged(v);
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _dropdownInt({
-    required String label,
-    required int value,
-    required List<int> items,
-    required ValueChanged<int> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          filled: true,
-          fillColor: const Color(0xFFF7FBF7),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          isDense: true,
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<int>(
-            value: items.contains(value) ? value : items.first,
-            isExpanded: true,
-            items: items
-                .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) onChanged(v);
-            },
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _BirthDateInputFormatter extends TextInputFormatter {

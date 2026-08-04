@@ -59,8 +59,8 @@ class OnboardingController extends ChangeNotifier {
   bool _bindingRegistered = false;
   String _deviceLockedUid = '';
 
-  /// Ихчам онбординг: 0=танишув, 1=админ код, 2=ҳудуд (+ихтиёрий манзил/авто).
-  static const totalPages = 3;
+  /// Ихчам онбординг: шахс+телефон → (керак бўлса) админ код. Тил/туман олдинда.
+  static const totalPages = 2;
 
   int currentPage = 0;
   String gender = 'male';
@@ -212,7 +212,7 @@ class OnboardingController extends ChangeNotifier {
     return accuracy! > 100;
   }
 
-  bool isGpsRequiredForPhone(String phone) => true;
+  bool isGpsRequiredForPhone(String phone) => false;
 
   void setGender(String v) {
     gender = v;
@@ -305,17 +305,38 @@ class OnboardingController extends ChangeNotifier {
       case 1:
         if (!otpVerified) return 'ob_err_otp';
         break;
-      case 2:
-        final gpsRequired = isGpsRequiredForPhone(phone);
-        if (gpsRequired && !hasGps) {
-          return 'ob_err_gps';
-        }
-        if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
-          return 'ob_err_zone';
-        }
-        break;
     }
     return null;
+  }
+
+  /// Тил+туман экранида танланган зонани юклаш.
+  Future<void> loadPreselectedGeo() async {
+    final fromHolderRegion = ServiceConfigHolder.regionId.trim();
+    final fromHolderDistrict = ServiceConfigHolder.districtId.trim();
+    final fromHolderArea = ServiceConfigHolder.serviceAreaId.trim();
+    if (fromHolderRegion.isNotEmpty && fromHolderDistrict.isNotEmpty) {
+      geoRegionId = fromHolderRegion;
+      geoDistrictId = fromHolderDistrict;
+      geoServiceAreaId = fromHolderArea;
+      notifyListeners();
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    geoRegionId = (prefs.getString('pre_onboarding_region_id') ?? '').trim();
+    geoDistrictId =
+        (prefs.getString('pre_onboarding_district_id') ?? '').trim();
+    geoServiceAreaId =
+        (prefs.getString('pre_onboarding_service_area_id') ?? '').trim();
+    if (geoRegionId.isNotEmpty && geoDistrictId.isNotEmpty) {
+      try {
+        await ServiceConfigHolder.applyGeo(
+          regionId: geoRegionId,
+          districtId: geoDistrictId,
+          serviceAreaId: geoServiceAreaId,
+        );
+      } catch (_) {}
+    }
+    notifyListeners();
   }
 
   void goToPage(int page) {
@@ -659,15 +680,19 @@ class OnboardingController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    // МФЙ/кўча/уй — ихтиёрий; кейинроқ профилда тўлдириш мумкин.
     if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
-      errorMessage = 'Xizmat zonasi — viloyat va tumaningizni tanlang';
+      await loadPreselectedGeo();
+    }
+    if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
+      errorMessage = 'Xizmat zonasi — tumanni tanlang (til ekranida)';
       notifyListeners();
       return false;
     }
 
     isSubmitting = true;
     notifyListeners();
+
+    skipCarStep = true;
 
     final uid = canonicalPhoneId(phone);
     final structured = UserAddress(

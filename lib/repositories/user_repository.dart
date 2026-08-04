@@ -217,11 +217,15 @@ class UserRepository {
     String birthDate = '',
     required String legacyAddressLine,
     required UserAddress address,
+    /// Онбордингда манзил кейин тўлдирилади — тўлиқ валидацияни ўтказиб юбориш.
+    bool requireCompleteAddress = true,
   }) async {
     if (uid.isEmpty) return;
-    final validation = address.validationError;
-    if (validation != null) {
-      throw ArgumentError(validation);
+    if (requireCompleteAddress) {
+      final validation = address.validationError;
+      if (validation != null) {
+        throw ArgumentError(validation);
+      }
     }
     // No existence get(): users read requires isOwner, and a missing/stale
     // phone_number claim would fail before set. Merge write is enough —

@@ -698,17 +698,21 @@ class OnboardingController extends ChangeNotifier {
     skipCarStep = true;
 
     final uid = canonicalPhoneId(phone);
+    final districtLabel = ServiceConfigHolder.districtLabel.trim();
     final structured = UserAddress(
       mfy: mfy.trim(),
       street: street.trim(),
       house: house.trim(),
-      district: district.trim().isEmpty ? 'Gurlan' : district.trim(),
+      district: district.trim().isNotEmpty
+          ? district.trim()
+          : (districtLabel.isNotEmpty ? districtLabel : 'Gurlan'),
       note: note.trim(),
       lat: lat,
       lng: lng,
       accuracy: accuracy,
       geoUpdatedAt: geoUpdatedAt,
-      manualUpdatedAt: DateTime.now(),
+      // Манзил онбордингда ихтиёрий — қўл майдонлар бўш бўлса timestamp ёзилмайди.
+      manualUpdatedAt: hasManualParts ? DateTime.now() : null,
     );
     final formatted = structured.formatted;
 
@@ -721,6 +725,7 @@ class OnboardingController extends ChangeNotifier {
         birthDate: birthDate,
         legacyAddressLine: formatted,
         address: structured,
+        requireCompleteAddress: false,
       );
 
       // Majburiy: config-driven zona (viloyat+tuman) saqlanadi.
@@ -807,7 +812,11 @@ class OnboardingController extends ChangeNotifier {
       _deviceLockedUid = uid;
       return true;
     } catch (e) {
-      errorMessage = 'Xatolik: $e';
+      if (e is ArgumentError) {
+        errorMessage = e.message?.toString() ?? e.toString();
+      } else {
+        errorMessage = 'Хатолик: $e';
+      }
       return false;
     } finally {
       isSubmitting = false;

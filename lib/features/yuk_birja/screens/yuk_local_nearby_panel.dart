@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../services/geo_math_service.dart';
 import '../../../services/location_service.dart';
 import '../../chat/screens/chat_screen.dart';
 import '../models/yuk_local_driver.dart';
@@ -41,6 +42,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   final _ranker = YukLocalRanking();
 
   StreamSubscription<List<YukLocalDriver>>? _sub;
+  StreamSubscription<YukLocalDriver?>? _mineSub;
   List<YukLocalDriver> _raw = [];
   List<YukLocalDriverRanked> _ranked = [];
   YukLocalDriver? _mine;
@@ -58,7 +60,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([ensureGps(), _loadMine()]);
+    await ensureGps();
     _sub = _repo.watchOnline().listen(
       (list) {
         if (!mounted) return;
@@ -77,18 +79,22 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
         });
       },
     );
-  }
-
-  Future<void> _loadMine() async {
-    if (widget.ownerId.isEmpty) return;
-    try {
-      final mine = await _repo.getMine(widget.ownerId);
-      if (!mounted) return;
-      setState(() => _mine = mine);
-      if (mine?.online == true) {
-        _startHeartbeat();
-      }
-    } catch (_) {}
+    if (widget.ownerId.isNotEmpty) {
+      _mineSub = _repo.watchMine(widget.ownerId).listen((mine) {
+        if (!mounted) return;
+        setState(() {
+          _mine = mine;
+          if (mine?.online == true) {
+            _startHeartbeat();
+          } else {
+            _heartbeat?.cancel();
+          }
+          _recompute();
+        });
+      });
+    } else {
+      _loadingList = false;
+    }
   }
 
   /// «Туман ичида» таб: GPS рухсати + хизматни ёқиш + жойлашувни янгилаш.
@@ -138,11 +144,43 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   void _recompute() {
     final lat = _userLat;
     final lng = _userLng;
-    if (lat == null || lng == null) {
-      _ranked = [];
+    final others = lat != null && lng != null
+        ? _ranker.rank(drivers: _raw, userLat: lat, userLng: lng)
+        : <YukLocalDriverRanked>[];
+
+    // Бошқаларга фақат online; ўз эълони (шу жумладан offline) — ҳар доим ўзига.
+    final mine = _mine;
+    if (mine == null) {
+      _ranked = others;
       return;
     }
-    _ranked = _ranker.rank(drivers: _raw, userLat: lat, userLng: lng);
+
+    final withoutMine = others
+        .where((r) => !phonesMatch(r.driver.ownerId, mine.ownerId))
+        .toList();
+
+    double straight = 0;
+    double road = 0;
+    var eta = 0;
+    var inRadius = true;
+    if (lat != null && lng != null && mine.hasGps) {
+      straight =
+          const GeoMathService().haversineKm(lat, lng, mine.lat!, mine.lng!);
+      road = straight * YukLocalRanking.roadFactor;
+      eta = (road / YukLocalRanking.avgSpeedKmh * 60).ceil().clamp(1, 999);
+      inRadius = mine.coversDistance(straight);
+    }
+
+    _ranked = [
+      YukLocalDriverRanked(
+        driver: mine,
+        straightKm: straight,
+        roadKm: road,
+        etaMinutes: eta,
+        inRadius: inRadius,
+      ),
+      ...withoutMine,
+    ];
   }
 
   void _startHeartbeat() {
@@ -150,8 +188,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
     _heartbeat = Timer.periodic(const Duration(seconds: 45), (_) async {
       if (widget.ownerId.isEmpty || _mine?.online != true) return;
       try {
-        final coords =
-            await const LocationService().getCurrentCoords();
+        final coords = await const LocationService().getCurrentCoords();
         await _repo.heartbeat(
           ownerId: widget.ownerId,
           lat: coords.lat,
@@ -164,6 +201,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
   @override
   void dispose() {
     _sub?.cancel();
+    _mineSub?.cancel();
     _heartbeat?.cancel();
     super.dispose();
   }
@@ -180,14 +218,48 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
       ownerPhone: widget.ownerPhone,
       initial: _mine,
     );
-    if (ok == true) {
-      await _loadMine();
+    if (ok == true && mounted) {
       await ensureGps();
-      if (_mine?.online == true) {
-        _startHeartbeat();
-      } else {
-        _heartbeat?.cancel();
+    }
+  }
+
+  Future<void> _goOnlineQuick() async {
+    final mine = _mine;
+    if (mine == null) {
+      await _openPublish();
+      return;
+    }
+    try {
+      await ensureGps();
+      final lat = _userLat;
+      final lng = _userLng;
+      if (lat == null || lng == null) {
+        if (!mounted) return;
+        _snack(context.tr('yuk_local_need_gps'));
+        return;
       }
+      await _repo.publishPresence(
+        ownerId: widget.ownerId,
+        ownerName:
+            widget.ownerName.isNotEmpty ? widget.ownerName : mine.ownerName,
+        phone: widget.ownerPhone.isNotEmpty ? widget.ownerPhone : mine.phone,
+        vehicleType: mine.vehicleType,
+        plateNumber: mine.plateNumber,
+        capacityTons: mine.capacityTons,
+        bodyLengthM: mine.bodyLengthM,
+        bodyWidthM: mine.bodyWidthM,
+        bodyHeightM: mine.bodyHeightM,
+        acceptRadiusKm: mine.acceptRadiusKm,
+        loadStatus: YukLocalLoadStatus.empty,
+        lat: lat,
+        lng: lng,
+        locationLabel: mine.locationLabel,
+      );
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_online_ok'));
+    } catch (_) {
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_publish_fail'));
     }
   }
 
@@ -237,13 +309,52 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
       }
       _heartbeat?.cancel();
       if (!mounted) return;
-      await _loadMine();
-      if (!mounted) return;
       _snack(
         action == 'delete'
             ? context.tr('yuk_local_deleted_ok')
             : context.tr('yuk_local_offline_ok'),
       );
+    } catch (_) {
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_publish_fail'));
+    }
+  }
+
+  Future<void> _deleteMine() async {
+    if (widget.ownerId.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131A22),
+        title: Text(
+          context.tr('yuk_local_delete'),
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          context.tr('yuk_local_delete_confirm'),
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              context.tr('yuk_local_delete'),
+              style: const TextStyle(color: Color(0xFFEF4444)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.deleteMine(widget.ownerId);
+      _heartbeat?.cancel();
+      if (!mounted) return;
+      _snack(context.tr('yuk_local_deleted_ok'));
     } catch (_) {
       if (!mounted) return;
       _snack(context.tr('yuk_local_publish_fail'));
@@ -332,14 +443,19 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
             ),
           ),
         ),
-        if (_mine?.online == true)
+        if (_mine != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                context.tr('yuk_local_you_online'),
-                style: const TextStyle(color: _green, fontSize: 12),
+                _mine!.online
+                    ? context.tr('yuk_local_you_online')
+                    : context.tr('yuk_local_you_offline'),
+                style: TextStyle(
+                  color: _mine!.online ? _green : const Color(0xFFFBBF24),
+                  fontSize: 12,
+                ),
               ),
             ),
           ),
@@ -394,11 +510,15 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel> {
                           stars: _stars(row.driver.rating),
                           body: _body(row.driver),
                           radius: _radiusLabel(row.driver.acceptRadiusKm),
-                          onlineAgo: _onlineAgo(row.driver.lastOnlineAt),
+                          onlineAgo: row.driver.online
+                              ? _onlineAgo(row.driver.lastOnlineAt)
+                              : context.tr('yuk_local_status_offline'),
                           onCall: () => _call(row.driver),
                           onChat: () => _chat(row.driver),
                           onEdit: _openPublish,
                           onOffline: _goOffline,
+                          onGoOnline: _goOnlineQuick,
+                          onDelete: _deleteMine,
                         );
                       },
                     ),
@@ -464,6 +584,8 @@ class _LocalTruckCard extends StatelessWidget {
     required this.onChat,
     required this.onEdit,
     required this.onOffline,
+    required this.onGoOnline,
+    required this.onDelete,
   });
 
   final YukLocalDriverRanked row;
@@ -477,6 +599,8 @@ class _LocalTruckCard extends StatelessWidget {
   final VoidCallback onChat;
   final VoidCallback onEdit;
   final VoidCallback onOffline;
+  final VoidCallback onGoOnline;
+  final VoidCallback onDelete;
 
   static const _card = Color(0xFF131A22);
   static const _border = Color(0xFF252B36);
@@ -527,13 +651,16 @@ class _LocalTruckCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.15),
+                    color: (d.online ? _accent : const Color(0xFFFBBF24))
+                        .withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(99),
                   ),
                   child: Text(
-                    context.tr('yuk_mine'),
-                    style: const TextStyle(
-                      color: _accent,
+                    d.online
+                        ? context.tr('yuk_mine')
+                        : context.tr('yuk_local_status_offline'),
+                    style: TextStyle(
+                      color: d.online ? _accent : const Color(0xFFFBBF24),
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                     ),
@@ -579,29 +706,68 @@ class _LocalTruckCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           if (mine)
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniBtn(
-                    label: context.tr('yuk_edit'),
-                    fg: Colors.white,
-                    border: _accent,
-                    fill: const Color(0xFF3F3F1D),
-                    onTap: onEdit,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MiniBtn(
-                    label: context.tr('yuk_local_go_offline'),
-                    fg: Colors.white,
-                    border: const Color(0xFFEF4444),
-                    fill: const Color(0xFF3F1D1D),
-                    onTap: onOffline,
-                  ),
-                ),
-              ],
-            )
+            d.online
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: _MiniBtn(
+                          label: context.tr('yuk_edit'),
+                          fg: Colors.white,
+                          border: _accent,
+                          fill: const Color(0xFF3F3F1D),
+                          onTap: onEdit,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _MiniBtn(
+                          label: context.tr('yuk_local_go_offline'),
+                          fg: Colors.white,
+                          border: const Color(0xFFEF4444),
+                          fill: const Color(0xFF3F1D1D),
+                          onTap: onOffline,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: _MiniBtn(
+                          label: context.tr('yuk_local_go_online'),
+                          fg: Colors.black,
+                          border: _green,
+                          fill: _green,
+                          onTap: onGoOnline,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniBtn(
+                              label: context.tr('yuk_edit'),
+                              fg: Colors.white,
+                              border: _accent,
+                              fill: const Color(0xFF3F3F1D),
+                              onTap: onEdit,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MiniBtn(
+                              label: context.tr('yuk_local_delete'),
+                              fg: Colors.white,
+                              border: const Color(0xFFEF4444),
+                              fill: const Color(0xFF3F1D1D),
+                              onTap: onDelete,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
           else
             Row(
               children: [

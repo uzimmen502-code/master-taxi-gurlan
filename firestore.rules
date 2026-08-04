@@ -2128,5 +2128,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ─── Туман ичида юк (live машиналар) ───────────────────────────────
+    function yukLocalDriverCreateOk(driverId) {
+      let d = request.resource.data;
+      return isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.ownerId)
+          && d.vehicleType is string
+          && d.phone is string
+          && d.ownerName is string
+          && d.online is bool
+          && d.loadStatus in ['empty', 'busy', 'offline'];
+    }
+
+    function yukLocalDriverOwnerUpdateOk(driverId) {
+      return isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId)
+          && notChanged('ownerId')
+          && notChanged('rating')
+          && notChanged('completedLoads');
+    }
+
+    match /yuk_local_drivers/{driverId} {
+      allow read: if isAuth();
+      allow create: if yukLocalDriverCreateOk(driverId);
+      allow update: if isAdmin() || yukLocalDriverOwnerUpdateOk(driverId);
+      allow delete: if isAdmin();
+    }
+
   }
 }

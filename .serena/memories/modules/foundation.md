@@ -8,12 +8,13 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 - `_UnifiedServicesGrid`: 4×3 per page. **1-page**: local, intercity, marshrut, **yuk_birja** (was courier), sell, food, jobs, market, bread, oil, circles, dating. **2-page**: **courier**, milk, tire, car_wash, carpet.
 - Module id `yuk_birja` in `kKnownModuleIds`; icon `assets/images/services/service_yuk_birja.png`.
 
-## yuk_birja (`features/yuk_birja/`) — shared Firestore 2026-07
-- UI + vehicle types via AppLocalizations (`yuk_*`, `yuk_vehicle_*`); latin vehicle codes + Cyrillic legacy map.
-- Firestore `yuk_listings`; `YukListingsRepository.watchActive(limit: 10000)`; store waits first snapshot then screen runs `closeExpired` + `YukListingNotifier.syncOwner`. Owner id = `canonicalPhoneId`; ownership via `phonesMatch`.
-- TTL 48h; CF `expirePendingTrips` closes expired + `notifications` (`yuk_listing_closed`); T−6h → `yuk_listing_expire_soon` once (`expireSoonNotified`). Local schedule still in `YukListingNotifier`.
-- Report → `reports` type `yuk_listing`; load error banner + retry; search-on-submit; tools collapse; IntercityPlaces.
-- Dark/yellow UI; HTML proto `docs/yuk_birjasi_prototype.html`.
+## yuk_birja (`features/yuk_birja/`) — dual scope 2026-08
+- Shell tabs: **Туман ичида** (`local`) | **Шаҳарлараро** (`intercity`). Default = local.
+- **Шаҳарлараро** = legacy `yuk_listings` MVP (unchanged): cargo|truck ads, TTL 48h, `createdAt` sort, call/edit/close/report. Lazy-loaded when tab opened.
+- **Туман ичида** = live nearby trucks: collection `yuk_local_drivers/{phoneUid}` (GPS, acceptRadiusKm 5/10/15/20/50/citywide=999, plate, body L×W×H, loadStatus empty|busy|offline, rating, completedLoads, lastOnlineAt). Rank: readiness → in-radius → ETA → roadKm → rating. P0 road/ETA = haversine×1.35 / 27km/h (Directions later). Call + Chat.
+- Files: `yuk_local_driver.dart`, `yuk_local_drivers_repository.dart`, `yuk_local_ranking.dart`, `yuk_accept_radius.dart`, `yuk_local_nearby_panel.dart`, `yuk_local_driver_sheet.dart`.
+- Indexes: `online`+`lastOnlineAt` DESC. Rules: auth read; owner create/update (rating/completedLoads locked for clients).
+- Also: vehicle types via l10n (`yuk_*`); IntercityPlaces filters on intercity tab; dark/yellow UI.
 
 ## onboarding (`features/onboarding/`)
 - onboarding_controller.dart (3 soft pages: identity+birth → admin OTP → zone/GPS + optional address/car); LanguageSelectScreen soft pills; finish allows empty MFY/street/house; screens onboarding/phone_reverify/auth_restore/language_select.

@@ -12,8 +12,9 @@ import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
 import '../yuk_listing_notifier.dart';
 import '../yuk_vehicle_types.dart';
+import 'yuk_local_nearby_panel.dart';
 
-/// Юк биржаси — MVP (қўнғироқ + таҳрир + 48с муддат).
+/// Юк биржаси — туман ичида (GPS) + шаҳарлараро эълонлар.
 class YukBirjaScreen extends StatefulWidget {
   const YukBirjaScreen({super.key});
 
@@ -40,7 +41,12 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   String _ownerId = '';
   String _ownerName = '';
   String _ownerPhone = '';
+
+  /// `local` = туман ичида; `intercity` = шаҳарлараро (эски эълонлар).
+  String _scope = 'local';
+
   String _tab = 'all';
+  bool _intercityBootstrapped = false;
 
   /// Драфт (ёзилмоқда) — «Қидирув»гача рўйхатга таъсир қилмайди.
   String _draftVehicle = '';
@@ -61,11 +67,7 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   @override
   void initState() {
     super.initState();
-    _bootstrap();
-    _expiryTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
-      await _store.closeExpired(ownerId: _ownerId);
-      if (mounted) setState(() {});
-    });
+    _bootstrapOwner();
     _fromFocus.addListener(() {
       if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
     });
@@ -74,13 +76,11 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
     });
   }
 
-  Future<void> _bootstrap() async {
+  Future<void> _bootstrapOwner() async {
     final prefs = await SharedPreferences.getInstance();
     final rawPhone = prefs.getString('user_phone') ?? '';
     final ownerId = canonicalPhoneId(rawPhone);
     final name = (prefs.getString('user_name') ?? '').trim();
-    // Биринчи snapshot кейингина sync/close — race йўқ.
-    await _store.load();
     if (!mounted) return;
     final me = phoneDigits(ownerId).length >= 9 ? ownerId : '';
     setState(() {
@@ -88,12 +88,32 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
       _ownerName = name.isEmpty ? context.tr('yuk_you') : name;
       _ownerPhone = me.isEmpty ? '' : phoneForCall(me);
     });
-    if (me.isEmpty) return;
-    await _store.closeExpired(ownerId: me);
+  }
+
+  Future<void> _ensureIntercityLoaded() async {
+    if (_intercityBootstrapped) return;
+    _intercityBootstrapped = true;
+    _expiryTimer ??= Timer.periodic(const Duration(minutes: 1), (_) async {
+      await _store.closeExpired(ownerId: _ownerId);
+      if (mounted) setState(() {});
+    });
+    // Биринчи snapshot кейингина sync/close — race йўқ.
+    await _store.load();
+    if (!mounted) return;
+    setState(() {});
+    if (_ownerId.isEmpty) return;
+    await _store.closeExpired(ownerId: _ownerId);
     await YukListingNotifier.syncOwner(
-      ownerId: me,
+      ownerId: _ownerId,
       listings: _store.listings,
     );
+  }
+
+  void _onScopeTap(String scope) {
+    setState(() => _scope = scope);
+    if (scope == 'intercity') {
+      _ensureIntercityLoaded();
+    }
   }
 
   @override
@@ -385,200 +405,249 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
           foregroundColor: Colors.white,
           title: Text(context.tr('home_module_yuk_birja')),
         ),
-        body: ListenableBuilder(
-          listenable: _store,
-          builder: (context, _) {
-            if (!_store.ready) {
-              return const Center(
-                child: CircularProgressIndicator(color: _accent),
-              );
-            }
-            final items = _visible;
-            final activeCount =
-                _store.listings.where((e) => e.isActive).length;
-            final err = _store.error;
-            return Column(
-              children: [
-                if (err != null)
-                  Material(
-                    color: const Color(0xFF3F1D1D),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline,
-                              color: Color(0xFFFCA5A5), size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              context.tr('yuk_load_error'),
-                              style: const TextStyle(
-                                color: Color(0xFFFCA5A5),
-                                fontSize: 13,
-                              ),
-                            ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Row(
+                children: [
+                  for (final t in [
+                    ('local', 'yuk_scope_local'),
+                    ('intercity', 'yuk_scope_intercity'),
+                  ])
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: t.$1 == 'local' ? 6 : 0,
+                          left: t.$1 == 'intercity' ? 6 : 0,
+                        ),
+                        child: ChoiceChip(
+                          label: Center(child: Text(context.tr(t.$2))),
+                          selected: _scope == t.$1,
+                          selectedColor: _accent.withValues(alpha: 0.25),
+                          labelStyle: TextStyle(
+                            color: _scope == t.$1 ? _accent : _muted,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
                           ),
-                          TextButton(
-                            onPressed: () => _store.reload(),
-                            child: Text(
-                              context.tr('yuk_retry'),
-                              style: const TextStyle(color: _accent),
-                            ),
+                          side: BorderSide(
+                            color: _scope == t.$1 ? _accent : _border,
                           ),
-                        ],
+                          backgroundColor: _card,
+                          onSelected: (_) => _onScopeTap(t.$1),
+                        ),
                       ),
                     ),
-                  ),
-                Expanded(
-                  child: Column(
+                ],
+              ),
+            ),
+            Expanded(
+              child: _scope == 'local'
+                  ? YukLocalNearbyPanel(
+                      ownerId: _ownerId,
+                      ownerName: _ownerName,
+                      ownerPhone: _ownerPhone,
+                    )
+                  : _buildIntercityBody(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIntercityBody() {
+    return ListenableBuilder(
+      listenable: _store,
+      builder: (context, _) {
+        if (!_store.ready) {
+          return const Center(
+            child: CircularProgressIndicator(color: _accent),
+          );
+        }
+        final items = _visible;
+        final activeCount = _store.listings.where((e) => e.isActive).length;
+        final err = _store.error;
+        return Column(
+          children: [
+            if (err != null)
+              Material(
+                color: const Color(0xFF3F1D1D),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                  child: Row(
                     children: [
-                      ClipRect(
-                        child: AnimatedSize(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutCubic,
-                          alignment: Alignment.topCenter,
-                          child: _toolsExpanded
-                              ? Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 0, 16, 8),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: _BigAction(
-                                              color: const Color(0xFF1E2A3A),
-                                              border: _blue,
-                                              label: context
-                                                  .tr('yuk_send_cargo'),
-                                              onTap: () =>
-                                                  _openCreate(cargo: true),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: _BigAction(
-                                              color: const Color(0xFF1E2A1E),
-                                              border: _green,
-                                              label: context
-                                                  .tr('yuk_take_cargo'),
-                                              onTap: () =>
-                                                  _openCreate(cargo: false),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    _FiltersBar(
-                                      fromCtrl: _fromCtrl,
-                                      toCtrl: _toCtrl,
-                                      fromFocus: _fromFocus,
-                                      toFocus: _toFocus,
-                                      fromSuggestions: _fromSuggestions,
-                                      toSuggestions: _toSuggestions,
-                                      vehicleFilter: _draftVehicle,
-                                      onVehicle: (v) =>
-                                          setState(() => _draftVehicle = v),
-                                      onFromChanged: _refreshFromSuggestions,
-                                      onToChanged: _refreshToSuggestions,
-                                      onPickFrom: _pickFrom,
-                                      onPickTo: _pickTo,
-                                      onSearch: _runSearch,
-                                    ),
-                                  ],
-                                )
-                              : const SizedBox(width: double.infinity),
-                        ),
-                      ),
-                      Material(
-                        color: _bg,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                          child: Row(
-                            children: [
-                              for (final t in [
-                                ('all', 'yuk_tab_all'),
-                                ('cargo', 'yuk_tab_cargo'),
-                                ('truck', 'yuk_tab_truck'),
-                              ])
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: ChoiceChip(
-                                    label: Text(context.tr(t.$2)),
-                                    selected: _tab == t.$1,
-                                    selectedColor:
-                                        _accent.withValues(alpha: 0.25),
-                                    labelStyle: TextStyle(
-                                      color: _tab == t.$1 ? _accent : _muted,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    side: BorderSide(
-                                      color: _tab == t.$1 ? _accent : _border,
-                                    ),
-                                    backgroundColor: _card,
-                                    onSelected: (_) => _onTabTap(t.$1),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (_toolsExpanded)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '${items.length} ${context.tr('yuk_showing')} · $activeCount ${context.tr('yuk_active')}',
-                              style:
-                                  const TextStyle(color: _muted, fontSize: 13),
-                            ),
-                          ),
-                        ),
+                      const Icon(Icons.error_outline,
+                          color: Color(0xFFFCA5A5), size: 20),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: _onListScroll,
-                          child: items.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    err != null
-                                        ? context.tr('yuk_load_error')
-                                        : context.tr('yuk_empty'),
-                                    style: const TextStyle(color: _muted),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                )
-                              : ListView.separated(
-                                  controller: _listCtrl,
-                                  padding: const EdgeInsets.fromLTRB(
-                                      16, 4, 16, 24),
-                                  itemCount: items.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(height: 8),
-                                  itemBuilder: (_, i) {
-                                    final item = items[i];
-                                    return _ListingCard(
-                                      item: item,
-                                      mine: _isMine(item),
-                                      onCall: () => _call(item),
-                                      onEdit: () => _openEdit(item),
-                                      onClose: () => _close(item),
-                                      onReport: () => _report(item),
-                                    );
-                                  },
-                                ),
+                        child: Text(
+                          context.tr('yuk_load_error'),
+                          style: const TextStyle(
+                            color: Color(0xFFFCA5A5),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => _store.reload(),
+                        child: Text(
+                          context.tr('yuk_retry'),
+                          style: const TextStyle(color: _accent),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-      ),
+              ),
+            Expanded(
+              child: Column(
+                children: [
+                  ClipRect(
+                    child: AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _toolsExpanded
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _BigAction(
+                                          color: const Color(0xFF1E2A3A),
+                                          border: _blue,
+                                          emoji:
+                                              context.tr('yuk_send_cargo_emoji'),
+                                          label: context.tr('yuk_send_cargo'),
+                                          onTap: () =>
+                                              _openCreate(cargo: true),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _BigAction(
+                                          color: const Color(0xFF1E2A1E),
+                                          border: _green,
+                                          emoji:
+                                              context.tr('yuk_take_cargo_emoji'),
+                                          label: context.tr('yuk_take_cargo'),
+                                          onTap: () =>
+                                              _openCreate(cargo: false),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _FiltersBar(
+                                  fromCtrl: _fromCtrl,
+                                  toCtrl: _toCtrl,
+                                  fromFocus: _fromFocus,
+                                  toFocus: _toFocus,
+                                  fromSuggestions: _fromSuggestions,
+                                  toSuggestions: _toSuggestions,
+                                  vehicleFilter: _draftVehicle,
+                                  onVehicle: (v) =>
+                                      setState(() => _draftVehicle = v),
+                                  onFromChanged: _refreshFromSuggestions,
+                                  onToChanged: _refreshToSuggestions,
+                                  onPickFrom: _pickFrom,
+                                  onPickTo: _pickTo,
+                                  onSearch: _runSearch,
+                                ),
+                              ],
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                  ),
+                  Material(
+                    color: _bg,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                      child: Row(
+                        children: [
+                          for (final t in [
+                            ('all', 'yuk_tab_all'),
+                            ('cargo', 'yuk_tab_cargo'),
+                            ('truck', 'yuk_tab_truck'),
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(context.tr(t.$2)),
+                                selected: _tab == t.$1,
+                                selectedColor: _accent.withValues(alpha: 0.25),
+                                labelStyle: TextStyle(
+                                  color: _tab == t.$1 ? _accent : _muted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                side: BorderSide(
+                                  color: _tab == t.$1 ? _accent : _border,
+                                ),
+                                backgroundColor: _card,
+                                onSelected: (_) => _onTabTap(t.$1),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_toolsExpanded)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '${items.length} ${context.tr('yuk_showing')} · $activeCount ${context.tr('yuk_active')}',
+                          style: const TextStyle(color: _muted, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: _onListScroll,
+                      child: items.isEmpty
+                          ? Center(
+                              child: Text(
+                                err != null
+                                    ? context.tr('yuk_load_error')
+                                    : context.tr('yuk_empty'),
+                                style: const TextStyle(color: _muted),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.separated(
+                              controller: _listCtrl,
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                              itemCount: items.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (_, i) {
+                                final item = items[i];
+                                return _ListingCard(
+                                  item: item,
+                                  mine: _isMine(item),
+                                  onCall: () => _call(item),
+                                  onEdit: () => _openEdit(item),
+                                  onClose: () => _close(item),
+                                  onReport: () => _report(item),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -587,12 +656,14 @@ class _BigAction extends StatelessWidget {
   const _BigAction({
     required this.color,
     required this.border,
+    required this.emoji,
     required this.label,
     required this.onTap,
   });
 
   final Color color;
   final Color border;
+  final String emoji;
   final String label;
   final VoidCallback onTap;
 
@@ -619,7 +690,7 @@ class _BigAction extends StatelessWidget {
             ),
           ),
           child: Text(
-            '＋ $label',
+            '$emoji $label',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,

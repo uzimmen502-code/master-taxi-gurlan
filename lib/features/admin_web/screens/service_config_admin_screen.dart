@@ -183,24 +183,34 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     }
   }
 
-  /// Eski seed override'larini Firestore'dan olib tashlash (manualModules yoʻq).
+  /// Eski seed override'larini fonda tozalash (UI ni bloklamaydi).
   Future<void> _purgeStaleSeedOverrides(List<String> areaIds) async {
     final by = _adminId();
+    const chunk = 12;
     var n = 0;
-    for (final areaId in areaIds) {
-      final area = _areaById[areaId];
-      if (area == null) continue;
-      try {
-        await _repo.setServiceAreaModules(
-          area,
-          ServiceModuleConfig.empty,
-          manualModules: const {},
-          updatedBy: by,
-        );
-        n++;
-      } catch (_) {
-        // Bitta zona xatosi — qolganlarini davom ettiramiz.
-      }
+    for (var i = 0; i < areaIds.length; i += chunk) {
+      final slice = areaIds.sublist(
+        i,
+        i + chunk > areaIds.length ? areaIds.length : i + chunk,
+      );
+      final results = await Future.wait(slice.map((areaId) async {
+        final area = _areaById[areaId];
+        if (area == null) return false;
+        try {
+          await _repo
+              .setServiceAreaModules(
+                area,
+                ServiceModuleConfig.empty,
+                manualModules: const {},
+                updatedBy: by,
+              )
+              .timeout(const Duration(seconds: 12));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }));
+      n += results.where((ok) => ok).length;
     }
     if (!mounted || n == 0) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -300,42 +310,27 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     final by = _adminId();
     final newDefaults = Map<String, ModuleStatus>.from(_defaults);
     try {
-      await _repo.setModuleDefaults(
-        ServiceModuleConfig(newDefaults),
-        enforce: _enforce,
-        updatedBy: by,
-      );
+      // Faqat baseline — barcha zonani ketma-ket yozish UI ni osiltirardi.
+      // Ilova allaqachon faqat manualModules override'ni oladi.
+      await _repo
+          .setModuleDefaults(
+            ServiceModuleConfig(newDefaults),
+            enforce: _enforce,
+            updatedBy: by,
+          )
+          .timeout(const Duration(seconds: 20));
 
-      // Barcha zonalar: faqat qoʻlda (manualModules) override qoladi;
-      // qolganlari inherit → Baseline barcha tumanga tatbiq.
-      var cascaded = 0;
+      // Local UI: no-manual kataklar inherit koʻrinsin.
       for (final areaId in _overrides.keys) {
-        final area = _areaById[areaId];
-        if (area == null) continue;
-
+        final manual = _manualByArea[areaId] ?? const <String>{};
         final cur = _overrides[areaId] ?? {};
-        final manual = Set<String>.from(_manualByArea[areaId] ?? const {});
-        final overridden = <String, ModuleStatus>{
-          for (final id in manual)
-            if (cur[id] != null) id: cur[id]!,
-        };
-
-        await _repo.setServiceAreaModules(
-          area,
-          ServiceModuleConfig(overridden),
-          manualModules: manual,
-          updatedBy: by,
-        );
-
         _overrides[areaId] = {
           for (final id in kKnownModuleIds)
             id: manual.contains(id) ? cur[id] : null,
         };
         _savedOverrides[areaId] =
             Map<String, ModuleStatus?>.from(_overrides[areaId]!);
-        _manualByArea[areaId] = manual;
         _savedManualByArea[areaId] = Set<String>.from(manual);
-        cascaded++;
       }
 
       _savedDefaults
@@ -344,10 +339,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       _savedEnforce = _enforce;
 
       if (mounted) setState(() {});
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          'Global baseline saqlandi — $cascaded zona yangilandi',
-        ),
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Global baseline saqlandi'),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -363,14 +356,19 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     if (!_hasDirtyAny) return;
     final hadDefaults = _hasDirtyDefaults;
     final hadMatrix = _hasDirtyMatrix;
-    if (hadDefaults) {
-      await _saveGlobal();
+    try {
+      if (hadDefaults) {
+        await _saveGlobal();
+        if (!mounted) return;
+      }
+      if (hadMatrix && _hasDirtyMatrix) {
+        await _saveMatrix();
+      }
+    } catch (e) {
       if (!mounted) return;
-    }
-    // Baseline cascade local holatni tozalagan boʻlishi mumkin — zona
-    // dirty qolgan boʻlsa alohida saqlaymiz.
-    if (hadMatrix && _hasDirtyMatrix) {
-      await _saveMatrix();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 

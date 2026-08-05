@@ -13,6 +13,7 @@ import '../../../repositories/user_repository.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
 import '../controllers/onboarding_controller.dart';
+import 'onboarding_bootstrap_screen.dart';
 
 /// Ихчам онбординг: исм + телефон → Home (тил/туман олдинда).
 class OnboardingScreen extends StatelessWidget {
@@ -111,7 +112,19 @@ class _OnboardingViewState extends State<_OnboardingView> {
         final fullPhone = '+${phoneDigits(raw)}';
 
         if (c.otpVerified || c.skipSmsVerification) {
-          await _finish();
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => ChangeNotifierProvider<OnboardingController>.value(
+                value: c,
+                child: OnboardingBootstrapScreen(
+                  name: _nameCtrl.text,
+                  phone: raw,
+                ),
+              ),
+            ),
+          );
           return;
         }
 

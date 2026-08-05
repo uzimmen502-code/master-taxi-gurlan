@@ -5206,17 +5206,11 @@ exports.checkDeviceBinding = authFunctions
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      let customToken = null;
-      try {
-        customToken = await createPhoneCustomToken(phone);
-      } catch (authErr) {
-        console.error('createPhoneCustomToken failed:', authErr.message);
-        return { status: 'needs_verification', skipSms: false };
-      }
+      // Auth/token — alohida createPhoneSession (UI kutmasin).
       return {
         status: 'trusted_device',
         skipSms: true,
-        customToken,
+        sessionRequired: true,
       };
     }
 
@@ -5230,17 +5224,10 @@ exports.checkDeviceBinding = authFunctions
         verifiedMethod: 'admin_auto',
         fingerprint,
       });
-      let customToken = null;
-      try {
-        customToken = await createPhoneCustomToken(phone);
-      } catch (authErr) {
-        console.error('createPhoneCustomToken failed:', authErr.message);
-        return { status: 'needs_verification', skipSms: false };
-      }
       return {
         status: 'trusted_device',
         skipSms: true,
-        customToken,
+        sessionRequired: true,
         autoApproved: true,
       };
     }
@@ -5282,17 +5269,10 @@ exports.checkDeviceBinding = authFunctions
           verifiedMethod: 'admin_auto',
           fingerprint,
         });
-        let customToken = null;
-        try {
-          customToken = await createPhoneCustomToken(phone);
-        } catch (authErr) {
-          console.error('createPhoneCustomToken failed:', authErr.message);
-          return { status: 'needs_verification', skipSms: false };
-        }
         return {
           status: 'trusted_device',
           skipSms: true,
-          customToken,
+          sessionRequired: true,
           autoApproved: true,
         };
       }
@@ -5303,7 +5283,7 @@ exports.checkDeviceBinding = authFunctions
     }
   }
 
-  // Янги қурилма ↔ телефон: админ кодсиз fingerprint билан боғлаш + token.
+  // Янги қурилма ↔ телефон: фақат fingerprint боғлаш (token — createPhoneSession).
   // Низолар (бошқа рақам/қурилма) юқорида блокланади — бу ерга фақат «тоза» биринчи боғлаш келади.
   const fingerprint = data.fingerprint && typeof data.fingerprint === 'object'
     ? data.fingerprint
@@ -5324,24 +5304,72 @@ exports.checkDeviceBinding = authFunctions
     };
   }
 
-  let customToken = null;
-  try {
-    customToken = await createPhoneCustomToken(phone);
-  } catch (authErr) {
-    console.error('createPhoneCustomToken failed:', authErr.message);
-    return {
-      status: 'needs_verification',
-      skipSms: false,
-      message: 'Kirish tokeni yaratilmadi. Qayta urinib ko\'ring.',
-    };
-  }
-
   return {
     status: 'trusted_device',
     skipSms: true,
-    customToken,
+    sessionRequired: true,
     firstBind: true,
   };
+});
+
+/**
+ * Device bindingдан кейин Auth session (createUser + claims + customToken).
+ * UI checkDeviceBindingдан кейин очилиши мумкин — бу CF фонда чақирилади.
+ */
+exports.createPhoneSession = authFunctions
+  .runWith({ timeoutSeconds: 60, memory: '256MB', minInstances: 1 })
+  .https.onCall(async (data) => {
+  if (data && data.warmup === true) {
+    return { ok: true };
+  }
+
+  const phone = canonicalUid(data.phone || '');
+  const hash = String(data.deviceFingerprintHash || '').trim().toLowerCase();
+
+  if (phone.length < 12) {
+    throw new functions.https.HttpsError('invalid-argument', 'Telefon raqami noto\'g\'ri');
+  }
+  if (!isValidFingerprintHash(hash)) {
+    throw new functions.https.HttpsError('invalid-argument', 'deviceFingerprintHash noto\'g\'ri');
+  }
+
+  const bindingSnap = await db.collection('device_bindings').doc(hash).get();
+  if (!bindingSnap.exists) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Qurilma hali bog\'lanmagan. Qayta urinib ko\'ring.',
+    );
+  }
+
+  const binding = bindingSnap.data() || {};
+  if (deviceBindingBlocked(binding)) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Qurilma vaqtincha bloklangan. Adminga murojaat qiling.',
+    );
+  }
+
+  const boundPhone = canonicalUid(binding.phone || '');
+  if (boundPhone !== phone) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Qurilma va telefon mos emas.',
+    );
+  }
+
+  try {
+    const customToken = await createPhoneCustomToken(phone);
+    return {
+      status: 'ok',
+      customToken,
+    };
+  } catch (authErr) {
+    console.error('createPhoneSession failed:', authErr.message || authErr);
+    throw new functions.https.HttpsError(
+      'internal',
+      'Kirish tokeni yaratilmadi. Qayta urinib ko\'ring.',
+    );
+  }
 });
 
 /** SMS yoki admin kodi tasdiqlangandan keyin qurilmani bog'lash. */

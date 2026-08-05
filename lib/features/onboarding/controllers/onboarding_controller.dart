@@ -417,10 +417,7 @@ class OnboardingController extends ChangeNotifier {
 
       switch (result.status) {
         case DeviceBindingStatus.trustedDevice:
-          final token = result.customToken;
-          if (token != null && token.isNotEmpty) {
-            await _signInWithPhoneCustomToken(token);
-          }
+          // Auth/token — createPhoneSession (bootstrap ekranida / fonda).
           otpVerified = true;
           _bindingRegistered = true;
           _deviceLockedUid = digits;
@@ -662,29 +659,41 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
-  Future<bool> finish({
+  /// Binding OK → Auth session (createUser/claims/token).
+  Future<bool> establishPhoneSession(String phone) async {
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      if (!await _requireValidFingerprintHash()) {
+        errorMessage = phoneStepError ?? 'Қурилма аниқланмади';
+        return false;
+      }
+      final token = await _deviceBindingRepo.createPhoneSession(
+        phone: phone,
+        snapshot: _fingerprintSnapshot!,
+      );
+      await _signInWithPhoneCustomToken(token);
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      errorMessage = firebaseFunctionsUserMessage(e);
+      return false;
+    } catch (e) {
+      final raw = e.toString().toUpperCase();
+      errorMessage = raw.contains('DEADLINE_EXCEEDED')
+          ? 'Сервер жавоб бермади. Бироздан кейин қайта уриниб кўринг.'
+          : 'Хатолик: $e';
+      return false;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> persistLocalOnboardingPrefs({
     required String name,
     required String phone,
   }) async {
-    final firebaseUser = _auth.currentUser;
-    if (firebaseUser == null) {
-      debugPrint('finish() blocked: no Firebase session');
-      return false;
-    }
-    // Ensure phone_number claim is on the ID token before users/* writes.
-    try {
-      await firebaseUser.getIdToken(true);
-    } catch (e) {
-      debugPrint('finish() token refresh failed: $e');
-    }
-
-    final gpsRequired = isGpsRequiredForPhone(phone);
-    if (gpsRequired && !hasGps) {
-      errorMessage =
-          'GPS manzilni oling — "Joriy GPS manzilni olish" tugmasini bosing';
-      notifyListeners();
-      return false;
-    }
     if (geoRegionId.trim().isEmpty || geoDistrictId.trim().isEmpty) {
       await loadPreselectedGeo();
     }
@@ -693,11 +702,6 @@ class OnboardingController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-
-    isSubmitting = true;
-    notifyListeners();
-
-    skipCarStep = true;
 
     final uid = canonicalPhoneId(phone);
     final districtLabel = ServiceConfigHolder.districtLabel.trim();
@@ -713,78 +717,119 @@ class OnboardingController extends ChangeNotifier {
       lng: lng,
       accuracy: accuracy,
       geoUpdatedAt: geoUpdatedAt,
-      // Манзил онбордингда ихтиёрий — қўл майдонлар бўш бўлса timestamp ёзилмайди.
       manualUpdatedAt: hasManualParts ? DateTime.now() : null,
     );
     final formatted = structured.formatted;
 
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userId', uid);
+    await prefs.setString('userName', name.trim());
+    await prefs.setString('user_name', name.trim());
+    await prefs.setString('user_phone', canonicalPhoneId(phone.trim()));
+    await prefs.setString('user_gender', gender);
+    if (birthDate.isNotEmpty) {
+      await prefs.setString('user_birth_date', birthDate);
+    }
+    await prefs.setString('user_address', formatted);
+    await prefs.setBool('onboarding_done', true);
+    await prefs.setBool('phone_reverified', true);
+    _deviceLockedUid = uid;
+    return true;
+  }
+
+  /// Home очилгандан кейин: profile ‖ zone ‖ FCM.
+  Future<void> syncProfileZoneFcmInBackground({
+    required String name,
+    required String phone,
+  }) async {
+    final uid = canonicalPhoneId(phone);
+    final districtLabel = ServiceConfigHolder.districtLabel.trim();
+    final structured = UserAddress(
+      mfy: mfy.trim(),
+      street: street.trim(),
+      house: house.trim(),
+      district: district.trim().isNotEmpty
+          ? district.trim()
+          : (districtLabel.isNotEmpty ? districtLabel : 'Gurlan'),
+      note: note.trim(),
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+      geoUpdatedAt: geoUpdatedAt,
+      manualUpdatedAt: hasManualParts ? DateTime.now() : null,
+    );
+    final formatted = structured.formatted;
+    final regionId = geoRegionId;
+    final districtId = geoDistrictId;
+    final areaId = geoServiceAreaId;
+
     try {
-      final profileFut = _userRepo.createOrMergeProfileWithAddress(
-        uid: uid,
-        phone: phone,
-        name: name,
-        gender: gender,
-        birthDate: birthDate,
-        legacyAddressLine: formatted,
-        address: structured,
-        requireCompleteAddress: false,
-      );
-      if (geoDistrictId.trim().isNotEmpty) {
-        try {
-          await Future.wait([
-            profileFut,
-            _userRepo
-                .saveServiceArea(
-                  uid: uid,
-                  regionId: geoRegionId,
-                  districtId: geoDistrictId,
-                  serviceAreaId: geoServiceAreaId,
-                )
-                .catchError((Object e, StackTrace st) {
-              Error.throwWithStackTrace(
-                StateError('ZONE_SAVE_FAILED'),
-                st,
-              );
-            }),
-          ]);
-        } on ArgumentError {
-          rethrow;
-        } on StateError catch (e) {
-          if (e.message == 'ZONE_SAVE_FAILED') {
-            errorMessage =
-                'Zona saqlanmadi. Internet aloqasini tekshiring va qayta urinib ko\'ring.';
-            return false;
-          }
-          rethrow;
-        }
+      final writes = <Future<void>>[
+        _userRepo.createOrMergeProfileWithAddress(
+          uid: uid,
+          phone: phone,
+          name: name,
+          gender: gender,
+          birthDate: birthDate,
+          legacyAddressLine: formatted,
+          address: structured,
+          requireCompleteAddress: false,
+        ),
+      ];
+      if (districtId.trim().isNotEmpty) {
+        writes.add(
+          _userRepo.saveServiceArea(
+            uid: uid,
+            regionId: regionId,
+            districtId: districtId,
+            serviceAreaId: areaId,
+          ),
+        );
+      }
+      await Future.wait(writes);
+      if (districtId.trim().isNotEmpty) {
         try {
           await ServiceConfigHolder.applyGeo(
-            regionId: geoRegionId,
-            districtId: geoDistrictId,
-            serviceAreaId: geoServiceAreaId,
+            regionId: regionId,
+            districtId: districtId,
+            serviceAreaId: areaId,
           );
         } catch (_) {}
-      } else {
-        await profileFut;
       }
+    } catch (e) {
+      debugPrint('onboarding bg profile/zone: $e');
+    }
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userId', uid);
-      await prefs.setString('userName', name.trim());
-      await prefs.setString('user_name', name.trim());
-      await prefs.setString('user_phone', canonicalPhoneId(phone.trim()));
-      await prefs.setString('user_gender', gender);
-      if (birthDate.isNotEmpty) {
-        await prefs.setString('user_birth_date', birthDate);
-      }
-      await prefs.setString('user_address', formatted);
-      await prefs.setBool('onboarding_done', true);
-      await prefs.setBool('phone_reverified', true);
+    try {
+      await FCMService().refreshToken();
+      FCMService().stopListeners();
+      await FCMService().startListeners();
+    } catch (_) {}
+  }
 
-      // FCM — рўйхатни блокламайди (Home/bootstrap билан бирга ишлайди).
-      unawaited(_refreshFcmInBackground());
+  /// OTP йўли: сессия бор → prefs → Home; profile/zone/FCM фон.
+  Future<bool> finish({
+    required String name,
+    required String phone,
+  }) async {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
+      debugPrint('finish() blocked: no Firebase session');
+      return false;
+    }
+    try {
+      await firebaseUser.getIdToken(true);
+    } catch (e) {
+      debugPrint('finish() token refresh failed: $e');
+    }
 
-      _deviceLockedUid = uid;
+    isSubmitting = true;
+    notifyListeners();
+    skipCarStep = true;
+    try {
+      final ok = await persistLocalOnboardingPrefs(name: name, phone: phone);
+      if (!ok) return false;
+      unawaited(syncProfileZoneFcmInBackground(name: name, phone: phone));
       return true;
     } catch (e) {
       if (e is ArgumentError) {
@@ -797,14 +842,6 @@ class OnboardingController extends ChangeNotifier {
       isSubmitting = false;
       notifyListeners();
     }
-  }
-
-  Future<void> _refreshFcmInBackground() async {
-    try {
-      await FCMService().refreshToken();
-      FCMService().stopListeners();
-      await FCMService().startListeners();
-    } catch (_) {}
   }
 
   String? consumeError() {

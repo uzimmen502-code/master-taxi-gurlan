@@ -72,14 +72,44 @@ class DeviceBindingRepository {
 
   /// Cold start / region warmup — til ekranida fonda chaqiriladi.
   Future<void> warmup() async {
-    try {
-      await _functions
-          .httpsCallable(
-            'checkDeviceBinding',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
-          )
-          .call(<String, dynamic>{'warmup': true});
-    } catch (_) {}
+    final opts = HttpsCallableOptions(timeout: const Duration(seconds: 15));
+    Future<void> ping(String name) async {
+      try {
+        await _functions
+            .httpsCallable(name, options: opts)
+            .call(<String, dynamic>{'warmup': true});
+      } catch (_) {}
+    }
+
+    await Future.wait([
+      ping('checkDeviceBinding'),
+      ping('createPhoneSession'),
+    ]);
+  }
+
+  /// Bindingdan keyin Auth custom token.
+  Future<String> createPhoneSession({
+    required String phone,
+    required DeviceFingerprintSnapshot snapshot,
+  }) async {
+    final hash = normalizeFingerprintHash(snapshot.hash);
+    if (!isValidFingerprintHash(hash)) {
+      throw StateError('deviceFingerprintHash noto\'g\'ri');
+    }
+    final callable = _functions.httpsCallable(
+      'createPhoneSession',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
+    );
+    final result = await callable.call<Map<String, dynamic>>({
+      'phone': phoneDigits(phone),
+      'deviceFingerprintHash': hash,
+    });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final token = (data['customToken'] as String?)?.trim() ?? '';
+    if (token.isEmpty) {
+      throw StateError('customToken bo\'sh');
+    }
+    return token;
   }
 
   Future<DeviceBindingCheckResult> checkDeviceBinding({

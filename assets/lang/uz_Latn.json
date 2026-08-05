@@ -826,6 +826,8 @@
   "ob_date_picker_confirm": "Tanlash",
   "ob_device_checking": "Qurilma tekshirilmoqda...",
   "ob_device_linking": "Qurilmangiz serverga bog'lanmoqda…",
+  "ob_bootstrap_wait_hint": "Bir lahza — so'ng bosh ekran ochiladi",
+  "ob_retry": "Qayta urinib ko'rish",
   "ob_err_gps": "GPS manzilni oling — joriy joylashuv tugmasini bosing",
   "ob_err_name": "Ismingizni kiriting",
   "ob_err_otp": "Telefon raqamingizni tasdiqlang",

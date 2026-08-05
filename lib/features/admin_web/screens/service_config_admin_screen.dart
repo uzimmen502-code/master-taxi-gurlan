@@ -14,9 +14,8 @@ import '../services/admin_auth_service.dart';
 ///   - Ustunlar: tuman markazlari (default); tuman bosilsa MFY ustunlari ochiladi
 ///   - Yuqorida: global baseline + enforce kill-switch
 ///
-/// Baseline saqlanganda: eski baseline bilan bir xil zona override'lari
-/// inherit ga o'tadi (barcha tumanlarga ta'sir); qo'lda boshqacha qilingan
-/// kataklar saqlanib qoladi.
+/// Baseline saqlanganda: faqat `manualModules` dagi zona kataklari saqlanadi;
+/// qolganlari inherit (barcha tumanlarga Baseline tatbiq).
 class ServiceConfigAdminScreen extends StatefulWidget {
   const ServiceConfigAdminScreen({super.key});
 
@@ -91,6 +90,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   /// Saqlangan (server) holat — dirty tekshiruv uchun.
   final Map<String, Map<String, ModuleStatus?>> _savedOverrides = {};
 
+  /// areaId → admin qoʻlda belgilagan modul ID lari (Baseline cascade dan himoya).
+  final Map<String, Set<String>> _manualByArea = {};
+  final Map<String, Set<String>> _savedManualByArea = {};
+
   @override
   void initState() {
     super.initState();
@@ -115,12 +118,28 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
       final overrides = <String, Map<String, ModuleStatus?>>{};
       final saved = <String, Map<String, ModuleStatus?>>{};
+      final manuals = <String, Set<String>>{};
+      final savedManuals = <String, Set<String>>{};
       for (final area in areas) {
-        final cfg = batch[area.id] ?? ServiceModuleConfig.empty;
+        final packed = batch[area.id];
+        final cfg = packed?.config ?? ServiceModuleConfig.empty;
+        final manual = packed?.manualModules ?? <String>{};
+        // Faqat qoʻlda belgilangan (yoki eski seed boʻlsa — keyin Baseline tozalaydi)
+        // kalitlar override sifatida saqlanadi; qolganlari inherit.
         overrides[area.id] = {
-          for (final id in kKnownModuleIds) id: cfg.modules[id],
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cfg.modules[id] : null,
         };
+        // Agar manualModules boʻsh lekin modules toʻla (seed) — UI da hozirgi
+        // qiymatni koʻrsatamiz, lekin manual emas → Baseline tozalaydi.
+        if (manual.isEmpty && cfg.modules.isNotEmpty) {
+          overrides[area.id] = {
+            for (final id in kKnownModuleIds) id: cfg.modules[id],
+          };
+        }
         saved[area.id] = Map<String, ModuleStatus?>.from(overrides[area.id]!);
+        manuals[area.id] = Set<String>.from(manual);
+        savedManuals[area.id] = Set<String>.from(manual);
       }
 
       setState(() {
@@ -142,6 +161,12 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _savedOverrides
           ..clear()
           ..addAll(saved);
+        _manualByArea
+          ..clear()
+          ..addAll(manuals);
+        _savedManualByArea
+          ..clear()
+          ..addAll(savedManuals);
         _loading = false;
       });
     } catch (e) {
@@ -191,6 +216,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
   bool _isInherited(String areaId, String moduleId) {
     if (areaId == '__global__') return false;
+    // Qoʻlda emas → baseline (kursiv), hatto modules da qiymat boʻlsa ham.
+    final manual = _manualByArea[areaId];
+    if (manual != null && manual.isNotEmpty) {
+      return !manual.contains(moduleId);
+    }
     return _overrides[areaId]?[moduleId] == null;
   }
 
@@ -200,6 +230,12 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       final saved = _savedOverrides[areaId] ?? const {};
       for (final id in kKnownModuleIds) {
         if (cur[id] != saved[id]) return true;
+      }
+      final curMan = _manualByArea[areaId] ?? const <String>{};
+      final savedMan = _savedManualByArea[areaId] ?? const <String>{};
+      if (curMan.length != savedMan.length ||
+          !curMan.containsAll(savedMan)) {
+        return true;
       }
     }
     return false;
@@ -219,7 +255,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     setState(() => _savingGlobal = true);
     final messenger = ScaffoldMessenger.of(context);
     final by = _adminId();
-    final oldDefaults = Map<String, ModuleStatus>.from(_savedDefaults);
     final newDefaults = Map<String, ModuleStatus>.from(_defaults);
     try {
       await _repo.setModuleDefaults(
@@ -228,38 +263,35 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         updatedBy: by,
       );
 
-      // Eski baseline bilan bir xil (yoki yangi baseline bilan bir xil)
-      // zona override'lari → inherit. Qo'lda farq qilganlari saqlanadi.
+      // Barcha zonalar: faqat qoʻlda (manualModules) override qoladi;
+      // qolganlari inherit → Baseline barcha tumanga tatbiq.
       var cascaded = 0;
       for (final areaId in _overrides.keys) {
-        final cur = _overrides[areaId] ?? {};
-        var changed = false;
-        for (final id in kKnownModuleIds) {
-          final ov = cur[id];
-          if (ov == null) continue;
-          final oldBase = oldDefaults[id];
-          final newBase = newDefaults[id];
-          if (ov == oldBase || ov == newBase) {
-            cur[id] = null;
-            changed = true;
-          }
-        }
-        if (!changed) continue;
-
         final area = _areaById[areaId];
         if (area == null) continue;
 
+        final cur = _overrides[areaId] ?? {};
+        final manual = Set<String>.from(_manualByArea[areaId] ?? const {});
         final overridden = <String, ModuleStatus>{
-          for (final e in cur.entries)
-            if (e.value != null) e.key: e.value!,
+          for (final id in manual)
+            if (cur[id] != null) id: cur[id]!,
         };
+
         await _repo.setServiceAreaModules(
           area,
           ServiceModuleConfig(overridden),
+          manualModules: manual,
           updatedBy: by,
         );
-        _overrides[areaId] = cur;
-        _savedOverrides[areaId] = Map<String, ModuleStatus?>.from(cur);
+
+        _overrides[areaId] = {
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cur[id] : null,
+        };
+        _savedOverrides[areaId] =
+            Map<String, ModuleStatus?>.from(_overrides[areaId]!);
+        _manualByArea[areaId] = manual;
+        _savedManualByArea[areaId] = Set<String>.from(manual);
         cascaded++;
       }
 
@@ -270,9 +302,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       if (mounted) setState(() {});
       messenger.showSnackBar(SnackBar(
         content: Text(
-          cascaded == 0
-              ? 'Global baseline saqlandi'
-              : 'Global baseline saqlandi — $cascaded zona yangilandi',
+          'Global baseline saqlandi — $cascaded zona yangilandi',
         ),
         backgroundColor: AppColors.button,
       ));
@@ -295,11 +325,16 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       for (final areaId in _overrides.keys) {
         final cur = _overrides[areaId] ?? const {};
         final prev = _savedOverrides[areaId] ?? const {};
-        var dirty = false;
-        for (final id in kKnownModuleIds) {
-          if (cur[id] != prev[id]) {
-            dirty = true;
-            break;
+        final curMan = _manualByArea[areaId] ?? const <String>{};
+        final savedMan = _savedManualByArea[areaId] ?? const <String>{};
+        var dirty = curMan.length != savedMan.length ||
+            !curMan.containsAll(savedMan);
+        if (!dirty) {
+          for (final id in kKnownModuleIds) {
+            if (cur[id] != prev[id]) {
+              dirty = true;
+              break;
+            }
           }
         }
         if (!dirty) continue;
@@ -307,16 +342,25 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         final area = _areaById[areaId];
         if (area == null) continue;
 
+        final manual = Set<String>.from(curMan);
         final overridden = <String, ModuleStatus>{
-          for (final e in cur.entries)
-            if (e.value != null) e.key: e.value!,
+          for (final id in manual)
+            if (cur[id] != null) id: cur[id]!,
         };
         await _repo.setServiceAreaModules(
           area,
           ServiceModuleConfig(overridden),
+          manualModules: manual,
           updatedBy: by,
         );
-        _savedOverrides[areaId] = Map<String, ModuleStatus?>.from(cur);
+        _overrides[areaId] = {
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cur[id] : null,
+        };
+        _savedOverrides[areaId] =
+            Map<String, ModuleStatus?>.from(_overrides[areaId]!);
+        _manualByArea[areaId] = manual;
+        _savedManualByArea[areaId] = Set<String>.from(manual);
         saved++;
       }
       messenger.showSnackBar(SnackBar(
@@ -340,7 +384,15 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     }
     setState(() {
       _overrides.putIfAbsent(areaId, () => {});
-      _overrides[areaId]![moduleId] = status;
+      _manualByArea.putIfAbsent(areaId, () => <String>{});
+      if (status == null) {
+        // Default (baseline) — qoʻlda emas.
+        _overrides[areaId]![moduleId] = null;
+        _manualByArea[areaId]!.remove(moduleId);
+      } else {
+        _overrides[areaId]![moduleId] = status;
+        _manualByArea[areaId]!.add(moduleId);
+      }
     });
   }
 
@@ -1160,7 +1212,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _legend('Ҳамкорлик', Colors.orange),
         _legend('Ёпиқ', Colors.grey),
         Text(
-          'kursiv = baseline',
+          'kursiv = baseline · tuman katak = qoʻlda (Baselinedan himoya)',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ];

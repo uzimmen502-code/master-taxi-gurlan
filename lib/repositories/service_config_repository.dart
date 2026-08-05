@@ -52,15 +52,44 @@ class ServiceConfigRepository {
 
   /// MFY override (`service_area_modules/{areaId}`). Yo'q/bo'sh → [ServiceModuleConfig.empty].
   Future<ServiceModuleConfig> fetchServiceAreaModules(String areaId) async {
-    if (areaId.trim().isEmpty) return ServiceModuleConfig.empty;
+    final detailed = await fetchServiceAreaModulesDetailed(areaId);
+    return detailed.config;
+  }
+
+  /// Override + qaysi modullar admin tomonidan qoʻlda belgilangan.
+  ///
+  /// `manualModules` maydoni yoʻq (eski seed) → boʻsh toʻplam: Baseline
+  /// cascade barcha kalitlarni inherit qiladi.
+  Future<
+      ({
+        ServiceModuleConfig config,
+        Set<String> manualModules,
+      })> fetchServiceAreaModulesDetailed(String areaId) async {
+    if (areaId.trim().isEmpty) {
+      return (config: ServiceModuleConfig.empty, manualModules: <String>{});
+    }
     try {
       final snap = await _areaModulesRef(areaId).get();
-      return snap.exists
-          ? ServiceModuleConfig.fromMap(snap.data())
-          : ServiceModuleConfig.empty;
+      if (!snap.exists) {
+        return (config: ServiceModuleConfig.empty, manualModules: <String>{});
+      }
+      final data = snap.data() ?? const <String, dynamic>{};
+      final manualRaw = data['manualModules'];
+      final manual = <String>{};
+      if (manualRaw is Iterable) {
+        for (final e in manualRaw) {
+          final id = e.toString().trim();
+          if (id.isNotEmpty) manual.add(id);
+        }
+      }
+      return (
+        config: ServiceModuleConfig.fromMap(data),
+        manualModules: manual,
+      );
     } catch (e, st) {
-      debugPrint('ServiceConfigRepository.fetchServiceAreaModules: $e\n$st');
-      return ServiceModuleConfig.empty;
+      debugPrint(
+          'ServiceConfigRepository.fetchServiceAreaModulesDetailed: $e\n$st');
+      return (config: ServiceModuleConfig.empty, manualModules: <String>{});
     }
   }
 
@@ -80,13 +109,18 @@ class ServiceConfigRepository {
 
   /// Admin: MFY override'ni yozish.
   ///
-  /// `modules` maydoni **toʻliq almashtiriladi** (merge emas) — inherit qilingan
-  /// kalitlar hujjatdan oʻchadi, aks holda eski override baselineni bloklab qoladi.
+  /// `modules` va `manualModules` **toʻliq almashtiriladi** — inherit kalitlari
+  /// oʻchadi; faqat [manualModules] dagi farqlar Baseline cascade dan himoyalanadi.
   Future<void> setServiceAreaModules(
     ServiceArea area,
     ServiceModuleConfig config, {
+    Set<String> manualModules = const {},
     String? updatedBy,
   }) async {
+    final manual = manualModules
+        .where((id) => id.trim().isNotEmpty && config.modules.containsKey(id))
+        .toList()
+      ..sort();
     await _areaModulesRef(area.id).set({
       'serviceAreaId': area.id,
       'districtId': area.districtId,
@@ -95,6 +129,7 @@ class ServiceConfigRepository {
         for (final e in config.modules.entries)
           e.key: {'status': e.value.wire},
       },
+      'manualModules': manual,
       'updatedAt': FieldValue.serverTimestamp(),
       if (updatedBy != null) 'updatedBy': updatedBy,
     });
@@ -182,14 +217,24 @@ class ServiceConfigRepository {
   }
 
   /// Bir nechta zona uchun override'larni parallel yuklash.
-  Future<Map<String, ServiceModuleConfig>> fetchAreaModulesBatch(
+  Future<
+      Map<
+          String,
+          ({
+            ServiceModuleConfig config,
+            Set<String> manualModules,
+          })>> fetchAreaModulesBatch(
     Iterable<String> areaIds,
   ) async {
     final ids = areaIds.where((id) => id.trim().isNotEmpty).toSet();
     if (ids.isEmpty) return const {};
-    final out = <String, ServiceModuleConfig>{};
+    final out = <String,
+        ({
+          ServiceModuleConfig config,
+          Set<String> manualModules,
+        })>{};
     await Future.wait(ids.map((id) async {
-      out[id] = await fetchServiceAreaModules(id);
+      out[id] = await fetchServiceAreaModulesDetailed(id);
     }));
     return out;
   }

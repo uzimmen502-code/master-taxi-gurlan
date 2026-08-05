@@ -34,20 +34,22 @@ class ServiceConfigRepository {
   /// `enforce=true` qilib config-driven rejimni yoqadi.
   Future<({ServiceModuleConfig config, bool enforce})>
       fetchModuleDefaults() async {
+    // Serverdan o‘qish — offline Firestore keshidagi eski enforce/status
+    // Baseline o‘zgarishini yashirmasin. Offline bo‘lsa cache’ga tushadi.
+    DocumentSnapshot<Map<String, dynamic>> snap;
     try {
-      final snap = await _defaultsRef.get();
-      if (!snap.exists) {
-        return (config: ServiceModuleConfig.empty, enforce: false);
-      }
-      final data = snap.data();
-      return (
-        config: ServiceModuleConfig.fromMap(data),
-        enforce: data?['enforce'] as bool? ?? false,
-      );
-    } catch (e, st) {
-      debugPrint('ServiceConfigRepository.fetchModuleDefaults: $e\n$st');
+      snap = await _defaultsRef.get(const GetOptions(source: Source.server));
+    } catch (_) {
+      snap = await _defaultsRef.get();
+    }
+    if (!snap.exists) {
       return (config: ServiceModuleConfig.empty, enforce: false);
     }
+    final data = snap.data();
+    return (
+      config: ServiceModuleConfig.fromMap(data),
+      enforce: data?['enforce'] as bool? ?? false,
+    );
   }
 
   /// MFY override (`service_area_modules/{areaId}`).
@@ -80,7 +82,13 @@ class ServiceConfigRepository {
       return (config: ServiceModuleConfig.empty, manualModules: <String>{});
     }
     try {
-      final snap = await _areaModulesRef(areaId).get();
+      DocumentSnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _areaModulesRef(areaId)
+            .get(const GetOptions(source: Source.server));
+      } catch (_) {
+        snap = await _areaModulesRef(areaId).get();
+      }
       if (!snap.exists) {
         return (config: ServiceModuleConfig.empty, manualModules: <String>{});
       }

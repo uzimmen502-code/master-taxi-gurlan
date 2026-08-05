@@ -6,8 +6,17 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../models/feed_item.dart';
 import '../../../services/product_feed_service.dart';
+import '../home_module_gate.dart';
 
-/// «Barcha mahsulotlar» — cheksiz mahsulotlar lentasi (non / taom / bozor).
+/// `FeedSource` → Baseline moduleId (koʻrinish filtri uchun).
+String _moduleIdFor(FeedSource s) => switch (s) {
+      FeedSource.bread => 'bread',
+      FeedSource.food => 'food',
+      FeedSource.market => 'cheap_products_home',
+    };
+
+/// Чексиз аралаш маҳсулот лентаси (аввалги «Барчаси» таби) —
+/// сарлавҳа ва табларсиз.
 class ProductFeedSection extends StatefulWidget {
   const ProductFeedSection({super.key, required this.onProductTap});
 
@@ -18,23 +27,14 @@ class ProductFeedSection extends StatefulWidget {
 }
 
 class _ProductFeedSectionState extends State<ProductFeedSection> {
-  static const _titleDark = Color(0xFF1A3A20);
   static const _sectionMuted = AppColors.sectionMuted;
 
   late final ProductFeedService _service;
 
   final List<FeedItem> _items = [];
-  FeedSource? _activeTab;
   bool _loading = false;
   bool _exhausted = false;
   bool _initialLoadDone = false;
-
-  List<({String label, FeedSource? source})> _tabs(BuildContext context) => [
-        (label: context.tr('all_categories'), source: null),
-        (label: context.tr('home_feed_tab_bread'), source: FeedSource.bread),
-        (label: context.tr('home_feed_tab_food'), source: FeedSource.food),
-        (label: context.tr('home_feed_tab_market'), source: FeedSource.market),
-      ];
 
   @override
   void initState() {
@@ -49,25 +49,48 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
     setState(() => _loading = true);
 
     try {
-      final batch = _activeTab == null
-          ? await _service.loadNextBatch()
-          : await _service.loadNextSourceBatch(_activeTab!);
+      // Ёпиқ модуллар бўш партия берса ҳам манбалар тугамагунча давом этамиз.
+      for (var attempt = 0; attempt < 4; attempt++) {
+        final batch = await _service.loadNextBatch();
+        if (!mounted) return;
+
+        if (batch.isEmpty) {
+          setState(() {
+            _loading = false;
+            _initialLoadDone = true;
+            _exhausted = true;
+          });
+          return;
+        }
+
+        final visibleBatch = batch
+            .where((e) => HomeModuleGate.showInGrid(_moduleIdFor(e.source)))
+            .toList(growable: false);
+
+        final seen = _items.map((e) => e.dedupKey).toSet();
+        final added = <FeedItem>[];
+        for (final item in visibleBatch) {
+          if (seen.add(item.dedupKey)) {
+            added.add(item);
+          }
+        }
+
+        if (added.isNotEmpty || _service.isExhausted) {
+          setState(() {
+            _loading = false;
+            _initialLoadDone = true;
+            _items.addAll(added);
+            if (_service.isExhausted) _exhausted = true;
+          });
+          return;
+        }
+      }
 
       if (!mounted) return;
-
       setState(() {
         _loading = false;
         _initialLoadDone = true;
-        if (batch.isEmpty) {
-          _exhausted = true;
-        } else {
-          final seen = _items.map((e) => e.dedupKey).toSet();
-          for (final item in batch) {
-            if (seen.add(item.dedupKey)) {
-              _items.add(item);
-            }
-          }
-        }
+        _exhausted = _service.isExhausted;
       });
     } catch (_) {
       if (!mounted) return;
@@ -79,186 +102,86 @@ class _ProductFeedSectionState extends State<ProductFeedSection> {
     }
   }
 
-  void _onTabSelected(FeedSource? tab) {
-    if (_activeTab == tab) return;
-
-    _service.reset();
-    setState(() {
-      _activeTab = tab;
-      _items.clear();
-      _exhausted = false;
-      _initialLoadDone = false;
-      _loading = false;
-    });
-    _loadMore();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final tabs = _tabs(context);
+    if (_loading && _items.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_initialLoadDone && _items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            context.tr('home_feed_empty'),
+            style: const TextStyle(
+              fontSize: 12,
+              color: _sectionMuted,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_items.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.tr('home_feed_title'),
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: _titleDark,
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.0,
+          ),
+          itemCount: _items.length,
+          itemBuilder: (context, index) => _FeedProductCard(
+            item: _items[index],
+            onTap: () => widget.onProductTap(_items[index].source),
           ),
         ),
-        const SizedBox(height: 10),
-        _FeedTabBar(
-          tabs: tabs,
-          activeTab: _activeTab,
-          onSelected: _onTabSelected,
-        ),
-        const SizedBox(height: 12),
-        if (_loading && _items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
-              ),
+        const SizedBox(height: 14),
+        if (!_exhausted && !_loading)
+          Center(
+            child: _LoadMoreButton(
+              label: context.tr('home_feed_load_more'),
+              onPressed: _loadMore,
             ),
           )
-        else if (_initialLoadDone && _items.isEmpty)
+        else if (_loading)
+          Center(
+            child: _LoadMoreButton(
+              label: context.tr('home_feed_load_more'),
+              onPressed: null,
+              loading: true,
+            ),
+          )
+        else
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Center(
               child: Text(
-                context.tr('home_feed_empty'),
+                context.tr('home_feed_no_more'),
                 style: const TextStyle(
                   fontSize: 12,
                   color: _sectionMuted,
                 ),
               ),
             ),
-          )
-        else if (_items.isNotEmpty) ...[
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 1.0,
-            ),
-            itemCount: _items.length,
-            itemBuilder: (context, index) => _FeedProductCard(
-              item: _items[index],
-              onTap: () => widget.onProductTap(_items[index].source),
-            ),
           ),
-          const SizedBox(height: 14),
-          if (!_exhausted && !_loading)
-            Center(
-              child: _LoadMoreButton(
-                label: context.tr('home_feed_load_more'),
-                onPressed: _loadMore,
-              ),
-            )
-          else if (_loading)
-            Center(
-              child: _LoadMoreButton(
-                label: context.tr('home_feed_load_more'),
-                onPressed: null,
-                loading: true,
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Center(
-                child: Text(
-                  context.tr('home_feed_no_more'),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: _sectionMuted,
-                  ),
-                ),
-              ),
-            ),
-        ],
       ],
-    );
-  }
-}
-
-class _FeedTabBar extends StatelessWidget {
-  const _FeedTabBar({
-    required this.tabs,
-    required this.activeTab,
-    required this.onSelected,
-  });
-
-  final List<({String label, FeedSource? source})> tabs;
-  final FeedSource? activeTab;
-  final ValueChanged<FeedSource?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < tabs.length; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
-            _FeedTabChip(
-              label: tabs[i].label,
-              selected: activeTab == tabs[i].source,
-              onTap: () => onSelected(tabs[i].source),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _FeedTabChip extends StatelessWidget {
-  const _FeedTabChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  static const _brandGreen = Color(0xFF36A63A);
-  static const _chipInactiveBg = Color(0xFFEAF5E4);
-  static const _chipInactiveText = Color(0xFF1A3A20);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: selected ? _brandGreen : _chipInactiveBg,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : _chipInactiveText,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -274,8 +197,8 @@ class _LoadMoreButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool loading;
 
-  static const _brandGreen = Color(0xFF36A63A);
-  static const _chipInactiveBg = Color(0xFFEAF5E4);
+  static const _brandGreen = AppColors.limeDeep;
+  static const _chipInactiveBg = AppColors.limeHighlight;
 
   @override
   Widget build(BuildContext context) {
@@ -332,8 +255,8 @@ class _FeedProductCard extends StatelessWidget {
   final FeedItem item;
   final VoidCallback onTap;
 
-  static const _titleDark = Color(0xFF1A3A20);
-  static const _priceGreen = Color(0xFF2E5C1E);
+  static const _titleDark = AppColors.limeDeep;
+  static const _priceGreen = AppColors.limeEdge;
   static const _cardBorder = AppColors.cardBorderMuted;
 
   String get _fallbackEmoji {

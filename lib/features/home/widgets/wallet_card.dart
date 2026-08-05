@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../painters/calligraphic_border_painter.dart';
 import '../painters/metallic_border_highlight_painter.dart';
 
@@ -39,9 +40,9 @@ class WalletCard extends StatefulWidget {
 
 class _WalletCardState extends State<WalletCard>
     with SingleTickerProviderStateMixin {
-  static const _green = Color(0xFF36A63A);
+  static const _green = AppColors.limeDeep;
   static const _gold = Color(0xFFF5C518);
-  static const _badgeText = Color(0xFF1A5E1C);
+  static const _badgeText = Color(0xFF1A3A00);
   static const _debitTint = Color(0xFFFFCDD2);
 
   static const _goldLight = Color(0xFFFFF4C2);

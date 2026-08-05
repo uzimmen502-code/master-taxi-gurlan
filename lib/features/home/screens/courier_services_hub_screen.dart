@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../bread/screens/bread_screen.dart';
 import '../../carpet_wash/screens/carpet_wash_screen.dart';
 import '../../food/screens/food_screen.dart';
 
-const _bg = Color(0xFFF6FAF2);
-const _titleDark = Color(0xFF1A3A20);
-const _brandGreen = Color(0xFF36A63A);
-const _cardBorder = Color(0xFFE0E8E0);
+const _bg = AppColors.lime;
+const _titleDark = AppColors.limeDeep;
+const _brandGreen = AppColors.limeDeep;
+const _cardBorder = AppColors.cardBorderMuted;
 
 /// Kuryer xizmati — Non / Taom / Gilam buyurtma yo‘riqnomasi.
 class CourierServicesHubScreen extends StatelessWidget {

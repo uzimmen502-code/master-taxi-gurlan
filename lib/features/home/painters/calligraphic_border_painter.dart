@@ -25,12 +25,12 @@ class CalligraphicBorderPainter extends CustomPainter {
         Offset.zero,
         Offset(size.width, size.height),
         const [
-          Color(0xFF9A7208),
-          Color(0xFFE8B400),
-          Color(0xFFFFF0A0),
+          Color(0xFFC9A000),
           Color(0xFFF5C518),
-          Color(0xFFC89000),
-          Color(0xFF9A7208),
+          Color(0xFFFFF59D),
+          Color(0xFFFFD54F),
+          Color(0xFFF5C518),
+          Color(0xFFC9A000),
         ],
         const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
       );
@@ -41,7 +41,8 @@ class CalligraphicBorderPainter extends CustomPainter {
       return Offset(x * sx, y * sy);
     }
 
-    double sw(double w) => w * avg;
+    // Бироз қалинроқ — неон фонда ҳам яхши кўринсин.
+    double sw(double w) => w * avg * 1.35;
 
     void rrect(double x, double y, double w, double h, double rx, double stroke) {
       final p = Paint()

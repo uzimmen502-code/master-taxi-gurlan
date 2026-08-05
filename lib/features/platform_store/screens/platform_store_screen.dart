@@ -14,7 +14,10 @@ import '../widgets/platform_product_card.dart';
 
 /// Платформа дўкони — каталог + қидирув + сават + миқдор.
 class PlatformStoreScreen extends StatelessWidget {
-  const PlatformStoreScreen({super.key});
+  const PlatformStoreScreen({super.key, this.highlightProductId});
+
+  /// Очилганда шу id'ли маҳсулот рўйхат бошида кўринади (қидирувсиз ҳолатда).
+  final String? highlightProductId;
 
   @override
   Widget build(BuildContext context) {
@@ -24,13 +27,15 @@ class PlatformStoreScreen extends StatelessWidget {
         unawaited(c.init());
         return c;
       },
-      child: const _PlatformStoreView(),
+      child: _PlatformStoreView(highlightProductId: highlightProductId),
     );
   }
 }
 
 class _PlatformStoreView extends StatefulWidget {
-  const _PlatformStoreView();
+  const _PlatformStoreView({this.highlightProductId});
+
+  final String? highlightProductId;
 
   @override
   State<_PlatformStoreView> createState() => _PlatformStoreViewState();
@@ -75,6 +80,15 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
         if (byScore != 0) return byScore;
         return a.sortOrder.compareTo(b.sortOrder);
       });
+    } else {
+      final highlightId = widget.highlightProductId;
+      if (highlightId != null) {
+        final idx = list.indexWhere((p) => p.id == highlightId);
+        if (idx > 0) {
+          final item = list.removeAt(idx);
+          list.insert(0, item);
+        }
+      }
     }
     return list;
   }

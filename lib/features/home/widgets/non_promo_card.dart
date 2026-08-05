@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Non buyurtma promo banner.
 class NonPromoCard extends StatelessWidget {
@@ -8,9 +9,9 @@ class NonPromoCard extends StatelessWidget {
 
   final VoidCallback? onTap;
 
-  static const _green = Color(0xFF36A63A);
+  static const _green = AppColors.limeEdge;
   static const _gold = Color(0xFFF5C518);
-  static const _badgeText = Color(0xFF1A5E1C);
+  static const _badgeText = AppColors.limeDeep;
 
   @override
   Widget build(BuildContext context) {

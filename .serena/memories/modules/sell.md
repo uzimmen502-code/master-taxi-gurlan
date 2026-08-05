@@ -1,8 +1,9 @@
 # Sell / Marketplace seller UX
 
 ## Entry
-- Home `sell` module + SellerCtaBanner → **`SellHubScreen`** (`features/sell/screens/sell_hub_screen.dart`).
-- **2 paths only**: Platforma (`SellOfferScreen` → `sell_submissions`), Onlayn bozor (create/my ads/feed sheet). Jobs P2P «Сотаман» / `AdKind.sell` / `publishAsPublicAd` **removed**.
+- Home grid `sell` → **`SellHubScreen`** (`features/sell/screens/sell_hub_screen.dart`): Platforma + Onlayn bozor + tabs.
+- Home **SellerCtaBanner** («Сиз ҳам сотинг») → **faqat Onlayn bozor** sheet (`SellerCtaBanner.openOnlineMarketSellFlow`): CreateAd / MyAds / CheapProducts — Platforma yo‘li yo‘q.
+- Jobs P2P «Сотаман» / `AdKind.sell` / `publishAsPublicAd` **removed**.
 - Tabs: Менинг таклифларим | Менга юборилган (`watchForwardedForUser`).
 
 ## Platform submissions

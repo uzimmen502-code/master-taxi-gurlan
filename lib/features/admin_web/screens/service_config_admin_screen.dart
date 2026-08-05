@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/geo_area.dart';
 import '../../../models/service_module_config.dart';
 import '../../../repositories/service_config_repository.dart';
+import '../../home/home_module_gate.dart';
 import '../services/admin_auth_service.dart';
 
 /// Admin — "Ҳудудлар ва хизматлар".
@@ -1244,27 +1245,43 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         ? _defaults[moduleId]
         : _overrides[areaId]?[moduleId];
 
+    // Bu ikkitasi hali real ekranga ega emas — ilova ularni har doim
+    // "Ҳамкорлик" sifatida ko'rsatadi (`HomeModuleGate.placeholderModuleIds`).
+    // "Очиқ" tanlansa ham iloviada hech narsa ochilmaydi — chalg'itmaslik
+    // uchun bu variant picker'dan olib tashlanadi.
+    final isPlaceholder = HomeModuleGate.placeholderModuleIds.contains(moduleId);
+
     final picked = await showDialog<ModuleStatus?>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(_labelFor(moduleId)),
         children: [
+          if (isPlaceholder)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              child: Text(
+                'Бу модул иловада ҳали ишламайди — фақат Ёпиқ/Ҳамкорлик '
+                'кўринишига таъсир қилади.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ),
           if (!isGlobal)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, null),
               child: const Text('Default (baseline)'),
             ),
           for (final s in ModuleStatus.values)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, s),
-              child: Row(
-                children: [
-                  Icon(Icons.circle, size: 10, color: _statusColor(s)),
-                  const SizedBox(width: 8),
-                  Text(_statusLabel(s)),
-                ],
+            if (!isPlaceholder || s != ModuleStatus.enabled)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, s),
+                child: Row(
+                  children: [
+                    Icon(Icons.circle, size: 10, color: _statusColor(s)),
+                    const SizedBox(width: 8),
+                    Text(_statusLabel(s)),
+                  ],
+                ),
               ),
-            ),
         ],
       ),
     );

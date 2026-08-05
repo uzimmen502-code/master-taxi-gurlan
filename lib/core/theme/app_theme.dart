@@ -16,47 +16,58 @@ abstract final class AppText {
 }
 
 // ══════════════════════════════════════
-// COLOURS — yagona brend palitra
+// COLOURS — yagona brend palitra (neon lime)
 // ══════════════════════════════════════
 abstract final class AppColors {
-  static const scaffold = Color(0xFFF2FAF2);
-  static const scaffoldGradientEnd = Color(0xFFE8F5E8);
+  /// Асосий ёруғ — электрик лайм.
+  static const lime = Color(0xFFB7FF1A);
+  /// Энг ёруғ — неон сариқ-яшил.
+  static const limeBright = Color(0xFFD9FF3F);
+  /// Highlight — лимон оқ-яшил.
+  static const limeHighlight = Color(0xFFF6FF8A);
+  /// Ўрта тон — тоза лайм.
+  static const limeMid = Color(0xFF9CFF00);
+  /// Чет қисми — тўқ табиий яшил.
+  static const limeEdge = Color(0xFF73C800);
+  /// Энг қоронғи — чуқур яшил.
+  static const limeDeep = Color(0xFF4E9F00);
 
-  static const primary = Color(0xFF36A63A);
-  static const primaryDark = Color(0xFF1A5E1C);
-  static const primaryMid = Color(0xFF4DC452);
-  static const primarySoft = Color(0xFF1F6B22);
+  static const scaffold = lime;
+  static const scaffoldGradientEnd = limeBright;
 
-  static const cardGradientStart = Color(0xFFF0FAF0);
-  static const cardGradientEnd = Color(0xFFE0F5E0);
-  static const cardImageBg = Color(0xFFE8F5E8);
+  static const primary = limeEdge;
+  static const primaryDark = limeDeep;
+  static const primaryMid = limeMid;
+  static const primarySoft = limeEdge;
 
-  /// Home/courier kartalari uchun muted yashil palitra (avval har bir
-  /// ekranda `_cardBorder` / `_sectionLabel` / `_primaryGreen` bo'lib
-  /// takrorlanardi).
-  static const cardBorderMuted = Color(0xFFC8DDB8);
-  static const sectionMuted = Color(0xFF7A9070);
-  static const courierGreen = Color(0xFF2E7D32);
-  static const tickerShell = Color(0xFFE8F5E8);
+  static const cardGradientStart = limeHighlight;
+  static const cardGradientEnd = limeBright;
+  static const cardImageBg = limeHighlight;
+
+  /// Home/courier kartalari uchun muted kontur / yorliq.
+  static const cardBorderMuted = Color(0xFFB8E060);
+  static const sectionMuted = Color(0xFF5A7A20);
+  static const courierGreen = limeDeep;
+  static const tickerShell = limeHighlight;
   static const bottomBarCapsule = Color(0xFFFFFFFF);
-  static const arabicText = Color(0xFF36A63A);
+  static const arabicText = limeEdge;
 
   /// Bosh ekran «500 СЎМ» festive (faqat home kartada).
-  static const accentOrange = AppColors.primary;
+  static const accentOrange = limeEdge;
   static const accentGold = Color(0xFFF9A825);
 
   static const background = scaffold;
   static const moduleBg = scaffold;
   static const surface = Colors.white;
 
-  /// Tugmalar (AppBar `primary`дан тўқроқ).
-  static const button = primaryDark;
+  /// Tugmalar — энг қоронғи лайм (оқ матн учун контраст).
+  static const button = limeDeep;
 
   /// Semantik (xato / ogohlantirish — brenddan ajralgan).
-  static const success = primaryMid;
+  static const success = limeMid;
   static const error = Color(0xFFB71C1C);
-  static const warning = AppColors.primary;
-  static const info = primary;
+  static const warning = limeEdge;
+  static const info = limeEdge;
 }
 
 abstract final class AppStyles {
@@ -214,12 +225,12 @@ abstract final class AppTheme {
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x140E7A38),
+            color: Color(0x334E9F00),
             blurRadius: 18,
             offset: Offset(0, 8),
           ),
           BoxShadow(
-            color: Color(0x335FD68A),
+            color: Color(0x339CFF00),
             blurRadius: 3,
             spreadRadius: 0,
           ),

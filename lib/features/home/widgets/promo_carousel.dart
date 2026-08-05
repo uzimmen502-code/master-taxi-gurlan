@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../home_module_gate.dart';
 
 /// Non / Taom / Bozor / taksi promo bannerlari — avtomatik aylantirish, nuqtasiz.
 class PromoCarousel extends StatefulWidget {
@@ -33,12 +34,15 @@ class PromoCarousel extends StatefulWidget {
 
 class _PromoBannerData {
   const _PromoBannerData({
+    required this.moduleId,
     required this.title,
     required this.imagePath,
     required this.onTap,
     this.darkText = false,
   });
 
+  /// Baseline/admin holatiga qarab banner ko'rsatilishi uchun (Ёпиқ → yashirin).
+  final String moduleId;
   final String title;
   final String imagePath;
   final VoidCallback onTap;
@@ -67,42 +71,50 @@ class _PromoCarouselState extends State<PromoCarousel> {
 
   List<_PromoBannerData> _banners(BuildContext context) => [
       _PromoBannerData(
+        moduleId: 'bread',
         title: context.tr('home_module_bread'),
         imagePath: 'assets/images/banners/banner_bread.jpg',
         onTap: widget.onNonTap,
       ),
       _PromoBannerData(
+        moduleId: 'carpet_wash',
         title: context.tr('home_module_carpet'),
         imagePath: 'assets/images/banners/banner_carpet_wash.jpg',
         onTap: widget.onCarpetWashTap,
       ),
       _PromoBannerData(
+        moduleId: 'milk',
         title: context.tr('milk_short_label'),
         imagePath: 'assets/images/banners/banner_milk.jpg',
         onTap: widget.onMilkTap,
       ),
       _PromoBannerData(
+        moduleId: 'food',
         title: context.tr('home_module_food'),
         imagePath: 'assets/images/banners/banner_food.jpg',
         onTap: widget.onTaomTap,
       ),
       _PromoBannerData(
+        moduleId: 'cheap_products_home',
         title: context.tr('home_module_cheap_products'),
         imagePath: 'assets/images/banners/banner_market.jpg',
         onTap: widget.onBozorTap,
       ),
       _PromoBannerData(
+        moduleId: 'local_taxi',
         title: context.tr('home_module_local'),
         imagePath: 'assets/images/banners/banner_local_taxi.jpg',
         onTap: widget.onLocalTaxiTap,
       ),
       _PromoBannerData(
+        moduleId: 'marshrut',
         title: context.tr('home_module_marshrut'),
         imagePath: 'assets/images/banners/banner_marshrut.jpg',
         onTap: widget.onMarshrutTap,
         darkText: true,
       ),
       _PromoBannerData(
+        moduleId: 'intercity',
         title: context.tr('home_module_intercity'),
         imagePath: 'assets/images/banners/banner_intercity.jpg',
         onTap: widget.onIntercityTap,
@@ -140,7 +152,12 @@ class _PromoCarouselState extends State<PromoCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final banners = _banners(context);
+    // Baseline Ёпиқ qilgan modul banneri iloviada ko'rinmasin (faqat tap
+    // bloklashning o'zi yetarli emas — banner "buyurtma bering" deb chaqiradi).
+    final banners = _banners(context)
+        .where((b) => HomeModuleGate.showInGrid(b.moduleId))
+        .toList(growable: false);
+    if (banners.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: _bannerHeight,
       child: NotificationListener<ScrollNotification>(

@@ -78,14 +78,11 @@ class PlatformProductCard extends StatelessWidget {
                         ),
                       if (!out)
                         Positioned(
-                          right: 5,
-                          bottom: 5,
+                          right: 4,
+                          bottom: 4,
                           child: Material(
-                            color: const Color(0xFFF44336), // Material qizil
-                            shape: const CircleBorder(),
-                            elevation: 1.5,
+                            color: Colors.transparent,
                             child: InkWell(
-                              customBorder: const CircleBorder(),
                               onTap: () {
                                 if (qty == 0) {
                                   c.addToCart(product);
@@ -93,13 +90,31 @@ class PlatformProductCard extends StatelessWidget {
                                   c.increase(product.id);
                                 }
                               },
+                              customBorder: const CircleBorder(),
                               child: const SizedBox(
-                                width: 26,
-                                height: 26,
-                                child: Icon(
-                                  Icons.add,
-                                  size: 15,
-                                  color: Colors.white,
+                                width: 30,
+                                height: 30,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.favorite,
+                                      size: 30,
+                                      color: Color(0xFFF44336),
+                                      shadows: [
+                                        Shadow(
+                                          color: Color(0x66000000),
+                                          blurRadius: 2,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                    Icon(
+                                      Icons.add,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),

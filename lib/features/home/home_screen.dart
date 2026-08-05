@@ -7,9 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
-import '../../models/feed_item.dart';
 import '../../models/active_trip.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
@@ -46,6 +46,7 @@ import '../relatives/screens/relatives_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
+import '../../models/feed_item.dart';
 import 'widgets/featured_products_section.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
@@ -54,10 +55,10 @@ import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
-const _bg = Color(0xFFF6FAF2);
-const _headerBorder = Color(0xFFD4E8C4);
-const _brandGreen = Color(0xFF36A63A);
-const _inactiveTab = Color(0xFF9AB090);
+const _bg = AppColors.lime;
+const _headerBorder = AppColors.limeEdge;
+const _brandGreen = AppColors.limeDeep;
+const _inactiveTab = Color(0xFF8AAB50);
 
 /// Kichik ekranlar uchun matn/shrift masshtabini moslashtirish.
 double _homeUiScale(BuildContext context) {
@@ -713,6 +714,7 @@ class _HomeViewState extends State<_HomeView> {
                                   label: context.tr('home_module_bread'),
                                   imagePath:
                                       'assets/images/services/service_bread.png',
+                                  iconScale: 1.15,
                                   onTap: () => _openModule(
                                     HomeModulesCatalog.byId('bread'),
                                   ),
@@ -737,8 +739,9 @@ class _HomeViewState extends State<_HomeView> {
                                 ServiceSpotlightItem(
                                   moduleId: 'dating',
                                   label: context.tr('dating_short_label'),
-                                  emoji: '❤️',
-                                  iconScale: 0.85,
+                                  icon: Icons.favorite_rounded,
+                                  iconColor: const Color(0xFFE53935),
+                                  iconScale: 1.05,
                                   onTap: () => _openDatingTelegramBot(),
                                 ),
                                 ServiceSpotlightItem(
@@ -768,6 +771,7 @@ class _HomeViewState extends State<_HomeView> {
                                   label: context.tr('milk_short_label'),
                                   imagePath:
                                       'assets/images/services/service_milk.png',
+                                  iconScale: 1.15,
                                   onTap: () =>
                                       _push(const MilkPickupScreen()),
                                 ),
@@ -797,30 +801,22 @@ class _HomeViewState extends State<_HomeView> {
                             ),
                             const SizedBox(height: 16),
                             FeaturedProductsSection(
-                              onProductTap: (source) {
-                                switch (source) {
-                                  case 'bread':
-                                    _openModule(
-                                      HomeModulesCatalog.byId('bread'),
-                                    );
-                                  case 'food':
-                                    _openModule(
-                                      HomeModulesCatalog.byId('food'),
-                                    );
-                                  case 'platform':
-                                    _push(const PlatformStoreScreen());
-                                  default:
-                                    break;
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            SellerCtaBanner(
-                              onTap: () => _openModule(
-                                HomeModulesCatalog.byId('sell'),
+                              onProductTap: (productId) => _push(
+                                PlatformStoreScreen(
+                                  highlightProductId: productId,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            if (HomeModuleGate.showInGrid('sell')) ...[
+                              const SizedBox(height: 12),
+                              SellerCtaBanner(
+                                onTap: () =>
+                                    SellerCtaBanner.openOnlineMarketSellFlow(
+                                  context,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             ProductFeedSection(
                               onProductTap: (source) {
                                 switch (source) {

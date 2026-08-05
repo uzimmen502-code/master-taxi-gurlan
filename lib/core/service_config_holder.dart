@@ -20,7 +20,10 @@ class ServiceConfigHolder {
   ServiceConfigHolder._();
 
   static const _cacheKeyDefaults = 'svc_module_defaults';
-  static const _cacheKeyArea = 'svc_area_modules';
+  /// v2: faqat `manualModules` filterlangan override. Eski `svc_area_modules`
+  /// toʻliq seed keshini eʼtiborsiz qoldiramiz (Baseline `hidden`ni bosmasin).
+  static const _cacheKeyArea = 'svc_area_modules_v2';
+  static const _cacheKeyAreaLegacy = 'svc_area_modules';
   static const _cacheKeyAreaId = 'svc_area_id';
   static const _cacheKeyEnforce = 'svc_enforce';
   static const _cacheKeyRegionId = 'svc_region_id';
@@ -104,22 +107,27 @@ class ServiceConfigHolder {
   /// Kesh'da serviceAreaId bo'lsa (qaytgan foydalanuvchi) — override ham yangilanadi.
   static Future<void> bootstrap() async {
     await _loadFromCache();
+    // Eski seed area keshini Baseline ustidan bosmasin — yangi fetch
+    // kelgunicha faqat defaults ishlaydi.
+    _areaOverride = ServiceModuleConfig.empty;
     try {
       final res = await _repo.fetchModuleDefaults();
       _defaults = res.config;
       _enforce = res.enforce;
       await _saveDefaultsToCache();
     } catch (e, st) {
+      // Tarmoq xatosida keshdagi defaults/enforce saqlanadi (enforce=false
+      // qilib hamma modulni ochib yubormaymiz).
       debugPrint('ServiceConfigHolder.bootstrap: $e\n$st');
     }
     if (_serviceAreaId.isNotEmpty) {
       try {
         _areaOverride = await _repo.fetchServiceAreaModules(_serviceAreaId);
-        await _saveAreaToCache();
       } catch (e, st) {
         debugPrint('ServiceConfigHolder.bootstrap(area): $e\n$st');
       }
     }
+    await _saveAreaToCache();
     if (_districtId.isNotEmpty && _districtLabel.isEmpty) {
       await _resolveDistrictLabel(_districtId);
       await _saveAreaToCache();
@@ -153,6 +161,9 @@ class ServiceConfigHolder {
       await _saveAreaToCache();
     } catch (e, st) {
       debugPrint('ServiceConfigHolder.applyServiceArea: $e\n$st');
+      // Xato bo‘lsa eski seed override qolmasin — Baseline hukmron.
+      _areaOverride = ServiceModuleConfig.empty;
+      await _saveAreaToCache();
     }
     _notifyRevision();
   }
@@ -201,6 +212,10 @@ class ServiceConfigHolder {
   static Future<void> _loadFromCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // Eski toʻliq seed kesh — olib tashlash (v2 faqat manual).
+      if (prefs.containsKey(_cacheKeyAreaLegacy)) {
+        await prefs.remove(_cacheKeyAreaLegacy);
+      }
       _defaults = ServiceModuleConfig.fromCacheMap(
         _decode(prefs.getStringList(_cacheKeyDefaults)),
       );

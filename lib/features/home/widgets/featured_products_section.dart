@@ -7,11 +7,12 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../services/featured_products_service.dart';
 
-/// «Tavsiya etamiz» — non, taom, bozor dan 2×3 ta mahsulot.
+/// «Улгуржи нарҳларда тавсия этамиз» — Платформа дўконидан 2×3 та маҳсулот.
 class FeaturedProductsSection extends StatefulWidget {
   const FeaturedProductsSection({super.key, required this.onProductTap});
 
-  final void Function(String source) onProductTap;
+  /// Босилган маҳсулот id'сини қайтаради (Платформа дўкони шу id билан очилади).
+  final void Function(String productId) onProductTap;
 
   @override
   State<FeaturedProductsSection> createState() =>
@@ -19,7 +20,7 @@ class FeaturedProductsSection extends StatefulWidget {
 }
 
 class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
-  static const _titleDark = Color(0xFF1A3A20);
+  static const _titleDark = AppColors.limeDeep;
   static const _sectionMuted = AppColors.sectionMuted;
 
   final _service = FeaturedProductsService();
@@ -44,7 +45,7 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
           );
         }
 
-        final items = snap.data ?? const [];
+        final items = snap.data ?? const <FeaturedProduct>[];
         if (items.isEmpty) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -77,12 +78,13 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
                 crossAxisCount: 2,
                 mainAxisSpacing: 10,
                 crossAxisSpacing: 10,
-                childAspectRatio: 1.0,
+                // Платформа дўкони (0.68) билан яқин — баннер расм тўлиқ сиғсин.
+                childAspectRatio: 0.78,
               ),
               itemCount: items.length,
               itemBuilder: (context, index) => _FeaturedProductCard(
                 product: items[index],
-                onTap: () => widget.onProductTap(items[index].source),
+                onTap: () => widget.onProductTap(items[index].id),
               ),
             ),
           ],
@@ -101,35 +103,11 @@ class _FeaturedProductCard extends StatelessWidget {
   final FeaturedProduct product;
   final VoidCallback onTap;
 
-  static const _titleDark = Color(0xFF1A3A20);
-  static const _priceGreen = Color(0xFF2E5C1E);
+  static const _titleDark = AppColors.limeDeep;
+  static const _priceGreen = AppColors.limeEdge;
   static const _cardBorder = AppColors.cardBorderMuted;
-
-  String get _fallbackEmoji {
-    switch (product.source) {
-      case 'bread':
-        return '🍞';
-      case 'food':
-        return '🍽️';
-      case 'platform':
-        return '🛒';
-      default:
-        return '📦';
-    }
-  }
-
-  Color get _fallbackTint {
-    switch (product.source) {
-      case 'bread':
-        return const Color(0xFFFFF3E0);
-      case 'food':
-        return const Color(0xFFFFEBEE);
-      case 'platform':
-        return const Color(0xFFE8F5E9);
-      default:
-        return const Color(0xFFF5F5F5);
-    }
-  }
+  static const _fallbackEmoji = '🛒';
+  static const _fallbackTint = Color(0xFFE8F5E9);
 
   @override
   Widget build(BuildContext context) {
@@ -139,42 +117,45 @@ class _FeaturedProductCard extends StatelessWidget {
         );
 
     return Material(
-      color: Colors.transparent,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(13),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(13),
         child: Ink(
           decoration: BoxDecoration(
-            color: Colors.white,
             borderRadius: BorderRadius.circular(13),
             border: Border.all(color: _cardBorder, width: 0.5),
           ),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  height: 88,
-                  width: double.infinity,
-                  child: _ProductImage(
-                    imageUrl: product.imageUrl,
-                    fallbackEmoji: _fallbackEmoji,
-                    fallbackTint: _fallbackTint,
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  clipBehavior: Clip.hardEdge,
+                  child: ColoredBox(
+                    color: _fallbackTint,
+                    child: _ProductImage(
+                      imageUrl: product.imageUrl,
+                      fallbackEmoji: _fallbackEmoji,
+                      fallbackTint: _fallbackTint,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 product.name,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   color: _titleDark,
+                  height: 1.2,
                 ),
               ),
               const SizedBox(height: 2),
@@ -211,20 +192,27 @@ class _ProductImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl.trim();
 
+    // Дизайн баннерлари тўлиқ кўринсин — cover кесиб юборарди.
     if (url.startsWith('assets/')) {
-      return Image.asset(url, fit: BoxFit.contain);
+      return SizedBox.expand(
+        child: Image.asset(
+          url,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+        ),
+      );
     }
 
     if (url.isNotEmpty && isHttpImageUrl(url)) {
       return CachedNetworkImage(
         imageUrl: url,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
         width: double.infinity,
-        placeholder: (_, __) => ColoredBox(
-          color: fallbackTint,
-          child: Center(
-            child: Text(fallbackEmoji, style: const TextStyle(fontSize: 32)),
-          ),
+        height: double.infinity,
+        memCacheWidth: 600,
+        placeholder: (_, __) => Center(
+          child: Text(fallbackEmoji, style: const TextStyle(fontSize: 28)),
         ),
         errorWidget: (_, __, ___) => _FallbackBox(
           emoji: fallbackEmoji,
@@ -236,7 +224,13 @@ class _ProductImage extends StatelessWidget {
     if (url.isNotEmpty && isDataImageUrl(url)) {
       final bytes = decodeDataUrlImageBytes(url);
       if (bytes != null) {
-        return Image.memory(bytes, fit: BoxFit.cover, width: double.infinity);
+        return SizedBox.expand(
+          child: Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            alignment: Alignment.center,
+          ),
+        );
       }
     }
 

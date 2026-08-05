@@ -79,6 +79,9 @@ class ServiceConfigRepository {
   }
 
   /// Admin: MFY override'ni yozish.
+  ///
+  /// `modules` maydoni **toʻliq almashtiriladi** (merge emas) — inherit qilingan
+  /// kalitlar hujjatdan oʻchadi, aks holda eski override baselineni bloklab qoladi.
   Future<void> setServiceAreaModules(
     ServiceArea area,
     ServiceModuleConfig config, {
@@ -88,10 +91,13 @@ class ServiceConfigRepository {
       'serviceAreaId': area.id,
       'districtId': area.districtId,
       'regionId': area.regionId,
-      ...config.toMap(),
+      'modules': {
+        for (final e in config.modules.entries)
+          e.key: {'status': e.value.wire},
+      },
       'updatedAt': FieldValue.serverTimestamp(),
       if (updatedBy != null) 'updatedBy': updatedBy,
-    }, SetOptions(merge: true));
+    });
   }
 
   // ── Geografik ierarxiya (admin va onboarding kaskadi uchun) ──

@@ -50,12 +50,12 @@ import 'widgets/featured_products_section.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
+import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const _bg = Color(0xFFF6FAF2);
 const _headerBorder = Color(0xFFD4E8C4);
-const _titleDark = Color(0xFF1A3A20);
 const _brandGreen = Color(0xFF36A63A);
 const _inactiveTab = Color(0xFF9AB090);
 
@@ -66,9 +66,6 @@ double _homeUiScale(BuildContext context) {
   if (w < 380) return 0.92;
   return 1.0;
 }
-
-double _scaled(BuildContext context, double size) =>
-    size * _homeUiScale(context);
 
 /// Bo‘limlar orasidagi vertikal masofa — ekran balandligi/kengligiga qarab.
 double _sectionGap(BuildContext context, {required double base}) {
@@ -120,6 +117,12 @@ class _HomeViewState extends State<_HomeView> {
   VoidCallback? _configListener;
   bool _tripResumeDone = false;
   String? _lastAppliedServiceAreaId;
+  /// Profile/orders/wallet дан қайтганда spotlight автони қайта ёқиш.
+  int _servicesCarouselEpoch = 0;
+  /// Home қайта очилганда ҳамён 11 с яна кўринсин.
+  int _walletRevealEpoch = 0;
+  bool _walletVisible = true;
+  Timer? _walletHideTimer;
 
   @override
   void initState() {
@@ -128,6 +131,7 @@ class _HomeViewState extends State<_HomeView> {
       if (mounted) setState(() {});
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
+    _armWalletHideTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
@@ -136,6 +140,24 @@ class _HomeViewState extends State<_HomeView> {
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
+    });
+  }
+
+  void _onHomeResurface() {
+    if (!mounted) return;
+    setState(() {
+      _servicesCarouselEpoch++;
+      _walletRevealEpoch++;
+      _walletVisible = true;
+    });
+    _armWalletHideTimer();
+  }
+
+  void _armWalletHideTimer() {
+    _walletHideTimer?.cancel();
+    _walletHideTimer = Timer(const Duration(seconds: 11), () {
+      if (!mounted) return;
+      setState(() => _walletVisible = false);
     });
   }
 
@@ -277,6 +299,7 @@ class _HomeViewState extends State<_HomeView> {
 
   @override
   void dispose() {
+    _walletHideTimer?.cancel();
     _promoSub?.cancel();
     if (_configListener != null) {
       ServiceConfigHolder.revision.removeListener(_configListener!);
@@ -319,6 +342,8 @@ class _HomeViewState extends State<_HomeView> {
         transitionDuration: const Duration(milliseconds: 280),
       ),
     );
+    // Home яна кўринганда spotlight авто / ҳамён 11 с қайта.
+    if (mounted) _onHomeResurface();
   }
 
   static const _datingTelegramBotUrl = 'https://t.me/bilish_tanish_bot';
@@ -360,6 +385,7 @@ class _HomeViewState extends State<_HomeView> {
           builder: (_) => SellHubScreen(phone: phone),
         ),
       );
+      if (mounted) _onHomeResurface();
       return;
     }
 
@@ -421,14 +447,21 @@ class _HomeViewState extends State<_HomeView> {
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: _HomeBottomNav(
-        onOrders: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const OrdersScreen()),
-        ),
-        onWallet: () => _HomeBottomNav.openWallet(context),
+        onOrders: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const OrdersScreen()),
+          );
+          if (mounted) _onHomeResurface();
+        },
+        onWallet: () async {
+          await _HomeBottomNav.openWallet(context);
+          if (mounted) _onHomeResurface();
+        },
         onProfile: () async {
           await _HomeBottomNav.openProfile(context);
           if (!context.mounted) return;
           await context.read<HomeController>().refreshUser();
+          if (mounted) _onHomeResurface();
         },
       ),
       body: SafeArea(
@@ -458,30 +491,52 @@ class _HomeViewState extends State<_HomeView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(height: _sectionGap(context, base: 10)),
-                            WalletCard(
-                              balanceAmount:
-                                  formatPrice(user?.bonusBalance ?? 0),
-                              balanceCurrency: kCurrencySum,
-                              lastTxAmount: '—',
-                              displayName: _displayName(context, user, home),
-                              dateText: _todayText(context),
-                              locationText: ServiceConfigHolder.districtLabel,
-                              lastTxIsCredit: null,
-                              onHistoryTap: () {
-                                if (uid.length < 9) {
-                                  _HomeBottomNav.needPhone(context);
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        WalletScreen(phone: home.phone),
-                                  ),
-                                );
-                              },
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 280),
+                              curve: Curves.easeInOut,
+                              alignment: Alignment.topCenter,
+                              child: _walletVisible
+                                  ? Column(
+                                      key: ValueKey(_walletRevealEpoch),
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        WalletCard(
+                                          balanceAmount: formatPrice(
+                                              user?.bonusBalance ?? 0),
+                                          balanceCurrency: kCurrencySum,
+                                          lastTxAmount: '—',
+                                          displayName: _displayName(
+                                              context, user, home),
+                                          dateText: _todayText(context),
+                                          locationText: ServiceConfigHolder
+                                              .districtLabel,
+                                          lastTxIsCredit: null,
+                                          onHistoryTap: () async {
+                                            if (uid.length < 9) {
+                                              _HomeBottomNav.needPhone(
+                                                  context);
+                                              return;
+                                            }
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => WalletScreen(
+                                                    phone: home.phone),
+                                              ),
+                                            );
+                                            if (mounted) _onHomeResurface();
+                                          },
+                                        ),
+                                        SizedBox(
+                                          height: _sectionGap(context,
+                                              base: 10),
+                                        ),
+                                      ],
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
-                            SizedBox(height: _sectionGap(context, base: 10)),
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()
@@ -553,81 +608,190 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                             ),
                             SizedBox(height: _sectionGap(context, base: 12)),
-                            _UnifiedServicesGrid(
-                              onLocal: () => _openModule(
-                                HomeModulesCatalog.byId('local_taxi'),
-                              ),
-                              onIntercity: () => _openModule(
-                                HomeModulesCatalog.byId('intercity'),
-                              ),
-                              onMarshrut: () => _openModule(
-                                HomeModulesCatalog.byId('marshrut'),
-                              ),
-                              onYukBirja: () async {
-                                if (!ServiceConfigHolder.isOpenable(
-                                    'yuk_birja')) {
-                                  _showTezKundaSnack();
-                                  return;
-                                }
-                                final phone = phoneDigits(
-                                  context.read<HomeController>().phone,
-                                );
-                                if (phone.length < 9) {
-                                  _HomeBottomNav.needPhone(context);
-                                  return;
-                                }
-                                await _push(const YukBirjaScreen());
-                              },
-                              onCourier: () async {
-                                if (!ServiceConfigHolder.isOpenable(
-                                    'courier')) {
-                                  _showTezKundaSnack();
-                                  return;
-                                }
-                                final phone = phoneDigits(
-                                  context.read<HomeController>().phone,
-                                );
-                                if (phone.length < 9) {
-                                  _HomeBottomNav.needPhone(context);
-                                  return;
-                                }
-                                await _push(const CourierServicesHubScreen());
-                              },
-                              onSell: () => _openModule(
-                                HomeModulesCatalog.byId('sell'),
-                              ),
-                              onFood: () => _openModule(
-                                HomeModulesCatalog.byId('food'),
-                              ),
-                              onJobAd: () {
-                                if (!ServiceConfigHolder.isOpenable('jobs')) {
-                                  _showTezKundaSnack();
-                                  return;
-                                }
-                                _push(
-                                  const JobsScreen(
-                                    initialTabIndex: JobsTabs.ad,
+                            ServicesSpotlightCarousel(
+                              key: ValueKey(_servicesCarouselEpoch),
+                              items: [
+                                ServiceSpotlightItem(
+                                  moduleId: 'local_taxi',
+                                  label: context.tr('home_module_local'),
+                                  imagePath:
+                                      'assets/images/services/service_taxi_local.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('local_taxi'),
                                   ),
-                                );
-                              },
-                              onOnlineMarket: () => _openModule(
-                                HomeModulesCatalog.byId('cheap_products_home'),
-                              ),
-                              onNon: () => _openModule(
-                                HomeModulesCatalog.byId('bread'),
-                              ),
-                              onCarpetWash: () =>
-                                  _push(const CarpetWashScreen()),
-                              onSut: () => _push(const MilkPickupScreen()),
-                              onCarWash: () {},
-                              onTire: () {},
-                              onOilChange: HomeModuleGate.gatedTap(
-                                context,
-                                'oil_change',
-                                () => _push(const OilChangeHomeScreen()),
-                              ),
-                              onCircles: () => _push(const RelativesScreen()),
-                              onDating: () => _openDatingTelegramBot(),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'intercity',
+                                  label: context.tr('home_module_intercity'),
+                                  imagePath:
+                                      'assets/images/services/service_taxi_intercity.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('intercity'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'marshrut',
+                                  label: context.tr('home_module_marshrut'),
+                                  imagePath:
+                                      'assets/images/services/service_marshrut.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('marshrut'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'yuk_birja',
+                                  label: context.tr('home_module_yuk_birja'),
+                                  imagePath:
+                                      'assets/images/services/service_yuk_birja.png',
+                                  onTap: () async {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'yuk_birja')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    final phone = phoneDigits(
+                                      context.read<HomeController>().phone,
+                                    );
+                                    if (phone.length < 9) {
+                                      _HomeBottomNav.needPhone(context);
+                                      return;
+                                    }
+                                    await _push(const YukBirjaScreen());
+                                  },
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'sell',
+                                  label: context.tr('home_module_sell'),
+                                  imagePath:
+                                      'assets/images/services/service_sell.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('sell'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'food',
+                                  label: context.tr('home_module_food'),
+                                  imagePath:
+                                      'assets/images/services/service_food.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('food'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'jobs',
+                                  label: context.tr('home_module_jobs'),
+                                  imagePath:
+                                      'assets/images/services/service_jobs.png',
+                                  onTap: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'jobs')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    _push(
+                                      const JobsScreen(
+                                        initialTabIndex: JobsTabs.ad,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'cheap_products_home',
+                                  label:
+                                      context.tr('home_module_cheap_products'),
+                                  imagePath:
+                                      'assets/images/services/service_market.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId(
+                                        'cheap_products_home'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'bread',
+                                  label: context.tr('home_module_bread'),
+                                  imagePath:
+                                      'assets/images/services/service_bread.png',
+                                  onTap: () => _openModule(
+                                    HomeModulesCatalog.byId('bread'),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'oil_change',
+                                  label: context.tr('home_module_oil_change'),
+                                  imagePath:
+                                      'assets/images/services/service_oil_change.png',
+                                  onTap: () => _push(
+                                    const OilChangeHomeScreen(),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'circles',
+                                  label: context.tr('home_module_relatives'),
+                                  imagePath:
+                                      'assets/images/services/service_relatives.png',
+                                  onTap: () =>
+                                      _push(const RelativesScreen()),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'dating',
+                                  label: context.tr('dating_short_label'),
+                                  emoji: '❤️',
+                                  iconScale: 0.85,
+                                  onTap: () => _openDatingTelegramBot(),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'courier',
+                                  label: context.tr('home_module_courier'),
+                                  imagePath:
+                                      'assets/images/services/service_courier.png',
+                                  onTap: () async {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'courier')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    final phone = phoneDigits(
+                                      context.read<HomeController>().phone,
+                                    );
+                                    if (phone.length < 9) {
+                                      _HomeBottomNav.needPhone(context);
+                                      return;
+                                    }
+                                    await _push(
+                                        const CourierServicesHubScreen());
+                                  },
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'milk',
+                                  label: context.tr('milk_short_label'),
+                                  imagePath:
+                                      'assets/images/services/service_milk.png',
+                                  onTap: () =>
+                                      _push(const MilkPickupScreen()),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'tire',
+                                  label: context.tr('home_module_tire'),
+                                  imagePath:
+                                      'assets/images/services/service_tire.png',
+                                  onTap: () {},
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'car_wash',
+                                  label: context.tr('home_module_car_wash'),
+                                  imagePath:
+                                      'assets/images/services/service_car_wash.png',
+                                  onTap: () {},
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'carpet_wash',
+                                  label: context.tr('home_module_carpet'),
+                                  imagePath:
+                                      'assets/images/services/service_carpet_wash.png',
+                                  onTap: () =>
+                                      _push(const CarpetWashScreen()),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 16),
                             FeaturedProductsSection(
@@ -684,326 +848,6 @@ class _HomeViewState extends State<_HomeView> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Taxi grid ───────────────────────────────────────────────────────────────
-// ─── Unified services grid (4 ustun x 3 qator, sahifalanadigan PNG rasmlar) ──
-class _UnifiedServicesGrid extends StatefulWidget {
-  const _UnifiedServicesGrid({
-    required this.onLocal,
-    required this.onIntercity,
-    required this.onMarshrut,
-    required this.onYukBirja,
-    required this.onCourier,
-    required this.onSell,
-    required this.onFood,
-    required this.onJobAd,
-    required this.onOnlineMarket,
-    required this.onNon,
-    required this.onCarpetWash,
-    required this.onSut,
-    required this.onCarWash,
-    required this.onTire,
-    required this.onOilChange,
-    required this.onCircles,
-    required this.onDating,
-  });
-
-  final VoidCallback onLocal;
-  final VoidCallback onIntercity;
-  final VoidCallback onMarshrut;
-  final VoidCallback onYukBirja;
-  final VoidCallback onCourier;
-  final VoidCallback onSell;
-  final VoidCallback onFood;
-  final VoidCallback onJobAd;
-  final VoidCallback onOnlineMarket;
-  final VoidCallback onNon;
-  final VoidCallback onCarpetWash;
-  final VoidCallback onSut;
-  final VoidCallback onCarWash;
-  final VoidCallback onTire;
-  final VoidCallback onOilChange;
-  final VoidCallback onCircles;
-  final VoidCallback onDating;
-
-  @override
-  State<_UnifiedServicesGrid> createState() => _UnifiedServicesGridState();
-}
-
-class _UnifiedServicesGridState extends State<_UnifiedServicesGrid> {
-  static const int _columns = 4;
-  static const int _rowsPerPage = 3;
-  static const int _perPage = _columns * _rowsPerPage; // 12
-  static const double _aspectRatio = 0.88;
-  static const double _rowGap = 2.0;
-
-  final PageController _pageController = PageController();
-  int _page = 0;
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final rawItems = <_GridItemData>[
-      _GridItemData(
-          'local_taxi',
-          'assets/images/services/service_taxi_local.png',
-          context.tr('home_module_local'),
-          widget.onLocal),
-      _GridItemData(
-          'intercity',
-          'assets/images/services/service_taxi_intercity.png',
-          context.tr('home_module_intercity'),
-          widget.onIntercity),
-      _GridItemData('marshrut', 'assets/images/services/service_marshrut.png',
-          context.tr('home_module_marshrut'), widget.onMarshrut),
-      _GridItemData(
-          'yuk_birja',
-          'assets/images/services/service_yuk_birja.png',
-          context.tr('home_module_yuk_birja'),
-          widget.onYukBirja),
-      _GridItemData('sell', 'assets/images/services/service_sell.png',
-          context.tr('home_module_sell'), widget.onSell),
-      _GridItemData('food', 'assets/images/services/service_food.png',
-          context.tr('home_module_food'), widget.onFood),
-      _GridItemData('jobs', 'assets/images/services/service_jobs.png',
-          context.tr('home_module_jobs'), widget.onJobAd),
-      _GridItemData(
-          'cheap_products_home',
-          'assets/images/services/service_market.png',
-          context.tr('home_module_cheap_products'),
-          widget.onOnlineMarket),
-      _GridItemData('bread', 'assets/images/services/service_bread.png',
-          context.tr('home_module_bread'), widget.onNon),
-      _GridItemData(
-          'oil_change',
-          'assets/images/services/service_oil_change.png',
-          context.tr('home_module_oil_change'),
-          widget.onOilChange),
-      _GridItemData('circles', 'assets/images/services/service_relatives.png',
-          context.tr('home_module_relatives'), widget.onCircles),
-      _GridItemData(
-          'dating', null, context.tr('dating_short_label'), widget.onDating,
-          emoji: '❤️', iconScale: 0.85),
-      // 2-саҳифа
-      _GridItemData('courier', 'assets/images/services/service_courier.png',
-          context.tr('home_module_courier'), widget.onCourier),
-      _GridItemData('milk', 'assets/images/services/service_milk.png',
-          context.tr('milk_short_label'), widget.onSut),
-      _GridItemData('tire', 'assets/images/services/service_tire.png',
-          context.tr('home_module_tire'), widget.onTire),
-      _GridItemData('car_wash', 'assets/images/services/service_car_wash.png',
-          context.tr('home_module_car_wash'), widget.onCarWash),
-      _GridItemData(
-          'carpet_wash',
-          'assets/images/services/service_carpet_wash.png',
-          context.tr('home_module_carpet'),
-          widget.onCarpetWash),
-    ];
-
-    final items = rawItems
-        .where((d) => HomeModuleGate.showInGrid(d.moduleId))
-        .map(
-          (d) => _GridItemData(
-            d.moduleId,
-            d.image,
-            d.label,
-            HomeModuleGate.gatedTap(context, d.moduleId, d.onTap),
-            icon: d.icon,
-            emoji: d.emoji,
-            iconScale: d.iconScale,
-          ),
-        )
-        .toList();
-
-    final colGap = _scaled(context, 13).clamp(10.0, 13.0);
-    final pageCount = (items.length / _perPage).ceil();
-
-    Widget pageGrid(List<_GridItemData> pageItems) {
-      return GridView.count(
-        crossAxisCount: _columns,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: _rowGap,
-        crossAxisSpacing: colGap,
-        childAspectRatio: _aspectRatio,
-        children: pageItems.map((d) => _GridTile(data: d)).toList(),
-      );
-    }
-
-    // Bitta sahifaga sig'sa (<=12 modul) — avvalgidek, sahifalashsiz.
-    if (pageCount <= 1) {
-      return pageGrid(items);
-    }
-
-    // 12 dan ortiq bo'lsa — gorizontal svayp qilinadigan sahifalar + nuqtalar.
-    // Har sahifa o'zgarmagan 3x4 joylashuv; ikonka/matn o'lchami o'sha-o'sha.
-    return LayoutBuilder(
-      builder: (context, c) {
-        final cellW = (c.maxWidth - (_columns - 1) * colGap) / _columns;
-        final cellH = cellW / _aspectRatio;
-        final pageH = _rowsPerPage * cellH + (_rowsPerPage - 1) * _rowGap;
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: pageH,
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: pageCount,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (_, page) {
-                  final start = page * _perPage;
-                  final end = (start + _perPage) > items.length
-                      ? items.length
-                      : start + _perPage;
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: pageGrid(items.sublist(start, end)),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            _PageDots(count: pageCount, index: _page),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _PageDots extends StatelessWidget {
-  const _PageDots({required this.count, required this.index});
-
-  final int count;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (int i = 0; i < count; i++)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: i == index ? 18 : 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: i == index
-                  ? _brandGreen
-                  : _brandGreen.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _GridItemData {
-  const _GridItemData(
-    this.moduleId,
-    this.image,
-    this.label,
-    this.onTap, {
-    this.icon,
-    this.emoji,
-    this.iconScale = 1.0,
-  });
-
-  final String moduleId;
-  final String? image;
-  final String label;
-  final VoidCallback onTap;
-  final IconData? icon;
-  final String? emoji;
-  final double iconScale;
-}
-
-class _GridTile extends StatefulWidget {
-  const _GridTile({required this.data});
-  final _GridItemData data;
-
-  @override
-  State<_GridTile> createState() => _GridTileState();
-}
-
-class _GridTileState extends State<_GridTile> {
-  bool _pressed = false;
-
-  Future<void> _handleTap() async {
-    if (_pressed) return;
-    setState(() => _pressed = true);
-    await Future<void>.delayed(const Duration(milliseconds: 140));
-    if (!mounted) return;
-    widget.data.onTap();
-    if (mounted) setState(() => _pressed = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final iconSize = _scaled(context, 52).clamp(44.0, 56.0);
-    final labelSize = _scaled(context, 10.5).clamp(9.5, 10.5);
-    final glyphSize = iconSize * 0.74 * widget.data.iconScale;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _handleTap,
-        borderRadius: BorderRadius.circular(12),
-        splashColor: _brandGreen.withValues(alpha: 0.15),
-        highlightColor: _brandGreen.withValues(alpha: 0.08),
-        child: Padding(
-          padding: EdgeInsets.zero,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: widget.data.emoji != null
-                    ? Center(
-                        child: Text(
-                          widget.data.emoji!,
-                          style: TextStyle(fontSize: glyphSize),
-                        ),
-                      )
-                    : widget.data.icon != null
-                        ? Icon(widget.data.icon,
-                            size: glyphSize, color: _brandGreen)
-                        : Image.asset(
-                            widget.data.image!,
-                            fit: BoxFit.contain,
-                          ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.data.label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: labelSize,
-                  fontWeight: FontWeight.w500,
-                  color: _titleDark,
-                  height: 1.15,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

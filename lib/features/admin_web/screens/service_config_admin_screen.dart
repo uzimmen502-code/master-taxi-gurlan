@@ -13,6 +13,10 @@ import '../services/admin_auth_service.dart';
 ///   - Qatorlar: 17 ta xizmat moduli
 ///   - Ustunlar: tuman markazlari (default); tuman bosilsa MFY ustunlari ochiladi
 ///   - Yuqorida: global baseline + enforce kill-switch
+///
+/// Baseline saqlanganda: eski baseline bilan bir xil zona override'lari
+/// inherit ga o'tadi (barcha tumanlarga ta'sir); qo'lda boshqacha qilingan
+/// kataklar saqlanib qoladi.
 class ServiceConfigAdminScreen extends StatefulWidget {
   const ServiceConfigAdminScreen({super.key});
 
@@ -73,6 +77,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
   bool _enforce = false;
   final Map<String, ModuleStatus> _defaults = {};
+  /// Oxirgi saqlangan baseline — cascade uchun (eski qiymat bilan solishtirish).
+  final Map<String, ModuleStatus> _savedDefaults = {};
 
   static const String _regionId = 'xorazm';
   List<GeoDistrict> _districts = const [];
@@ -125,6 +131,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                 id,
                 defaultsRes.config.statusOf(id, fallback: ModuleStatus.enabled),
               )));
+        _savedDefaults
+          ..clear()
+          ..addAll(_defaults);
         _districts = districts;
         _allAreas = areas;
         _overrides
@@ -209,14 +218,62 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   Future<void> _saveGlobal() async {
     setState(() => _savingGlobal = true);
     final messenger = ScaffoldMessenger.of(context);
+    final by = _adminId();
+    final oldDefaults = Map<String, ModuleStatus>.from(_savedDefaults);
+    final newDefaults = Map<String, ModuleStatus>.from(_defaults);
     try {
       await _repo.setModuleDefaults(
-        ServiceModuleConfig(Map<String, ModuleStatus>.from(_defaults)),
+        ServiceModuleConfig(newDefaults),
         enforce: _enforce,
-        updatedBy: _adminId(),
+        updatedBy: by,
       );
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Global baseline saqlandi'),
+
+      // Eski baseline bilan bir xil (yoki yangi baseline bilan bir xil)
+      // zona override'lari → inherit. Qo'lda farq qilganlari saqlanadi.
+      var cascaded = 0;
+      for (final areaId in _overrides.keys) {
+        final cur = _overrides[areaId] ?? {};
+        var changed = false;
+        for (final id in kKnownModuleIds) {
+          final ov = cur[id];
+          if (ov == null) continue;
+          final oldBase = oldDefaults[id];
+          final newBase = newDefaults[id];
+          if (ov == oldBase || ov == newBase) {
+            cur[id] = null;
+            changed = true;
+          }
+        }
+        if (!changed) continue;
+
+        final area = _areaById[areaId];
+        if (area == null) continue;
+
+        final overridden = <String, ModuleStatus>{
+          for (final e in cur.entries)
+            if (e.value != null) e.key: e.value!,
+        };
+        await _repo.setServiceAreaModules(
+          area,
+          ServiceModuleConfig(overridden),
+          updatedBy: by,
+        );
+        _overrides[areaId] = cur;
+        _savedOverrides[areaId] = Map<String, ModuleStatus?>.from(cur);
+        cascaded++;
+      }
+
+      _savedDefaults
+        ..clear()
+        ..addAll(newDefaults);
+
+      if (mounted) setState(() {});
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          cascaded == 0
+              ? 'Global baseline saqlandi'
+              : 'Global baseline saqlandi — $cascaded zona yangilandi',
+        ),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {

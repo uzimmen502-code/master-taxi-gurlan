@@ -4,8 +4,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 
 ## home (`features/home/`)
 - Entry `home_screen.dart` (re-exported by screens/home_screen.dart); home_controller.dart, home_grid_layout.dart, home_modules_catalog.dart (HomeModulesCatalog.modules: bread,food,sell,cheap_products_home,marshrut,local_taxi,intercity,jobs).
-- widgets featured_products_section, product_feed_section, promo_carousel, wallet_card, home_info_ticker/home_ticker_bar, home_bottom_bar. Reads IntercityBookingsRepository,UserRepository,HomeTickerRepository; routes to feature screens (orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile, **yuk_birja**).
-- `_UnifiedServicesGrid`: 4×3 per page. **1-page**: local, intercity, marshrut, **yuk_birja** (was courier), sell, food, jobs, market, bread, oil, circles, dating. **2-page**: **courier**, milk, tire, car_wash, carpet.
+- widgets featured_products_section, product_feed_section, promo_carousel, **services_spotlight_carousel** (replaces grid: 1 row × 4 tiles visible, snap **1 cell** right→left, auto 2s, infinite; first touch stops auto; `_servicesCarouselEpoch` on Home return restarts). WalletCard auto-hides after 5s (`AnimatedSize` collapse); `_walletRevealEpoch` + `_onHomeResurface` shows again on Home return. Order: local, intercity, marshrut, yuk_birja, sell, food, jobs, market, bread, oil, circles, dating, courier, milk, tire, car_wash, carpet. wallet_card, home_info_ticker/home_ticker_bar, home_bottom_bar. Routes: orders,cheap_products,bread,food,courier hub,intercity,jobs,local_taxi,marshrut,sell,circles,wallet,profile, yuk_birja.
 - Module id `yuk_birja` in `kKnownModuleIds`; icon `assets/images/services/service_yuk_birja.png`.
 
 ## yuk_birja (`features/yuk_birja/`) — dual scope 2026-08

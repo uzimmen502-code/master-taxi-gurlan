@@ -1217,7 +1217,7 @@
   "price_per_passenger": "💰 {price} {sum} / пассажир",
   "price_sum_short": "{price} сўм",
   "profile": "Профиль",
-  "profile_address_incomplete_banner": "Ваш адрес не заполнен. Обязательно для доставки курьером.",
+  "profile_address_incomplete_banner": "Введите адрес проживания, чтобы курьер мог доставить ваш заказ",
   "profile_address_not_entered": "Адрес не введён",
   "profile_address_tap_to_fill": "Адрес не введён — нажмите для заполнения",
   "profile_birth_date_add": "Добавить дату рождения",

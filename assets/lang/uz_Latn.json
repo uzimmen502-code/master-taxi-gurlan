@@ -1217,7 +1217,7 @@
   "price_per_passenger": "💰 {price} {sum} / yo'lovchi",
   "price_sum_short": "{price} сўм",
   "profile": "Profil",
-  "profile_address_incomplete_banner": "Yashash manzilingiz to'ldirilmagan. Kuryer sizga tovar olib borishi uchun majburiy.",
+  "profile_address_incomplete_banner": "Kuryer buyurtmangizni yetkazib berishi uchun yashash manzilingizni kiriting",
   "profile_address_not_entered": "Manzil kiritilmagan",
   "profile_address_tap_to_fill": "Manzil kiritilmagan — tegib to'ldiring",
   "profile_birth_date_add": "Tug'ilgan kun kiritish",

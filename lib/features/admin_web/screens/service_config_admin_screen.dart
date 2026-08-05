@@ -77,6 +77,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   bool _savingMatrix = false;
 
   bool _enforce = false;
+  bool _savedEnforce = false;
   final Map<String, ModuleStatus> _defaults = {};
   /// Oxirgi saqlangan baseline — cascade uchun (eski qiymat bilan solishtirish).
   final Map<String, ModuleStatus> _savedDefaults = {};
@@ -143,6 +144,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
       setState(() {
         _enforce = defaultsRes.enforce;
+        _savedEnforce = defaultsRes.enforce;
         _defaults
           ..clear()
           ..addEntries(kKnownModuleIds.map((id) => MapEntry(
@@ -255,6 +257,14 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     return _overrides[areaId]?[moduleId] == null;
   }
 
+  bool get _hasDirtyDefaults {
+    if (_enforce != _savedEnforce) return true;
+    for (final id in kKnownModuleIds) {
+      if (_defaults[id] != _savedDefaults[id]) return true;
+    }
+    return false;
+  }
+
   bool get _hasDirtyMatrix {
     for (final areaId in _overrides.keys) {
       final cur = _overrides[areaId] ?? const {};
@@ -271,6 +281,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     }
     return false;
   }
+
+  bool get _hasDirtyAny => _hasDirtyDefaults || _hasDirtyMatrix;
 
   void _toggleDistrict(String districtId) {
     setState(() {
@@ -329,6 +341,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       _savedDefaults
         ..clear()
         ..addAll(newDefaults);
+      _savedEnforce = _enforce;
 
       if (mounted) setState(() {});
       messenger.showSnackBar(SnackBar(
@@ -343,6 +356,21 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       );
     } finally {
       if (mounted) setState(() => _savingGlobal = false);
+    }
+  }
+
+  Future<void> _saveAll() async {
+    if (!_hasDirtyAny) return;
+    final hadDefaults = _hasDirtyDefaults;
+    final hadMatrix = _hasDirtyMatrix;
+    if (hadDefaults) {
+      await _saveGlobal();
+      if (!mounted) return;
+    }
+    // Baseline cascade local holatni tozalagan boʻlishi mumkin — zona
+    // dirty qolgan boʻlsa alohida saqlaymiz.
+    if (hadMatrix && _hasDirtyMatrix) {
+      await _saveMatrix();
     }
   }
 
@@ -514,12 +542,21 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilledButton.icon(
-                onPressed: _savingMatrix || !_hasDirtyMatrix ? null : _saveMatrix,
-                icon: _savingMatrix
+                onPressed: (_savingMatrix || _savingGlobal || !_hasDirtyAny)
+                    ? null
+                    : _saveAll,
+                icon: (_savingMatrix || _savingGlobal)
                     ? const _Spinner()
                     : const Icon(Icons.save_outlined, size: 18),
                 label: Text(
-                    _hasDirtyMatrix ? 'Zonalarni saqlash' : 'Oʻzgarish yoʻq'),
+                  !_hasDirtyAny
+                      ? 'Oʻzgarish yoʻq'
+                      : _hasDirtyDefaults && _hasDirtyMatrix
+                          ? 'Baseline + zonalarni saqlash'
+                          : _hasDirtyDefaults
+                              ? 'Baseline saqlash'
+                              : 'Zonalarni saqlash',
+                ),
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -849,11 +886,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             ),
           ),
           FilledButton.icon(
-            onPressed: _savingGlobal ? null : _saveGlobal,
+            onPressed: _savingGlobal || !_hasDirtyDefaults ? null : _saveGlobal,
             icon: _savingGlobal
                 ? const _Spinner()
                 : const Icon(Icons.tune, size: 16),
-            label: const Text('Baseline'),
+            label: Text(_hasDirtyDefaults ? 'Baseline*' : 'Baseline'),
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 12),

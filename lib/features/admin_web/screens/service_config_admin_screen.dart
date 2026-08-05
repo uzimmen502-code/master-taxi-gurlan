@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -120,22 +122,19 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       final saved = <String, Map<String, ModuleStatus?>>{};
       final manuals = <String, Set<String>>{};
       final savedManuals = <String, Set<String>>{};
+      final staleSeedAreaIds = <String>[];
       for (final area in areas) {
         final packed = batch[area.id];
         final cfg = packed?.config ?? ServiceModuleConfig.empty;
         final manual = packed?.manualModules ?? <String>{};
-        // Faqat qoʻlda belgilangan (yoki eski seed boʻlsa — keyin Baseline tozalaydi)
-        // kalitlar override sifatida saqlanadi; qolganlari inherit.
+        // Faqat qoʻlda belgilangan kalitlar override. Eski seed (manual yoʻq)
+        // → UI da inherit (Baseline koʻrinadi); Firestore keyin tozalanadi.
         overrides[area.id] = {
           for (final id in kKnownModuleIds)
             id: manual.contains(id) ? cfg.modules[id] : null,
         };
-        // Agar manualModules boʻsh lekin modules toʻla (seed) — UI da hozirgi
-        // qiymatni koʻrsatamiz, lekin manual emas → Baseline tozalaydi.
         if (manual.isEmpty && cfg.modules.isNotEmpty) {
-          overrides[area.id] = {
-            for (final id in kKnownModuleIds) id: cfg.modules[id],
-          };
+          staleSeedAreaIds.add(area.id);
         }
         saved[area.id] = Map<String, ModuleStatus?>.from(overrides[area.id]!);
         manuals[area.id] = Set<String>.from(manual);
@@ -169,6 +168,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           ..addAll(savedManuals);
         _loading = false;
       });
+
+      if (staleSeedAreaIds.isNotEmpty) {
+        unawaited(_purgeStaleSeedOverrides(staleSeedAreaIds));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -176,6 +179,34 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         SnackBar(content: Text('Yuklash xatosi: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  /// Eski seed override'larini Firestore'dan olib tashlash (manualModules yoʻq).
+  Future<void> _purgeStaleSeedOverrides(List<String> areaIds) async {
+    final by = _adminId();
+    var n = 0;
+    for (final areaId in areaIds) {
+      final area = _areaById[areaId];
+      if (area == null) continue;
+      try {
+        await _repo.setServiceAreaModules(
+          area,
+          ServiceModuleConfig.empty,
+          manualModules: const {},
+          updatedBy: by,
+        );
+        n++;
+      } catch (_) {
+        // Bitta zona xatosi — qolganlarini davom ettiramiz.
+      }
+    }
+    if (!mounted || n == 0) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        'Eski zona override tozalandi ($n) — endi Baseline barcha tumanga tatbiq',
+      ),
+      backgroundColor: AppColors.button,
+    ));
   }
 
   List<ServiceArea> _areasForDistrict(String districtId) =>

@@ -151,6 +151,8 @@ class _HomeViewState extends State<_HomeView> {
       _walletVisible = true;
     });
     _armWalletHideTimer();
+    // Admin config (Ёпиқ/Очиқ) янгиланиши учун.
+    unawaited(ServiceConfigHolder.bootstrap());
   }
 
   void _armWalletHideTimer() {

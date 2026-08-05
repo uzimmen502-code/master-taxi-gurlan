@@ -50,10 +50,21 @@ class ServiceConfigRepository {
     }
   }
 
-  /// MFY override (`service_area_modules/{areaId}`). Yo'q/bo'sh → [ServiceModuleConfig.empty].
+  /// MFY override (`service_area_modules/{areaId}`).
+  ///
+  /// Faqat `manualModules` dagi kalitlar qaytariladi. Maydon yoʻq/boʻsh
+  /// (eski seed) → boʻsh config — Baseline hukmron (seed appda koʻrinmasin).
   Future<ServiceModuleConfig> fetchServiceAreaModules(String areaId) async {
     final detailed = await fetchServiceAreaModulesDetailed(areaId);
-    return detailed.config;
+    if (detailed.manualModules.isEmpty) {
+      return ServiceModuleConfig.empty;
+    }
+    final filtered = <String, ModuleStatus>{
+      for (final id in detailed.manualModules)
+        if (detailed.config.modules.containsKey(id))
+          id: detailed.config.modules[id]!,
+    };
+    return ServiceModuleConfig(filtered);
   }
 
   /// Override + qaysi modullar admin tomonidan qoʻlda belgilangan.

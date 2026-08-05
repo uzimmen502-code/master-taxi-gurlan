@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../home_module_gate.dart';
 
@@ -54,6 +55,7 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
   Timer? _timer;
   bool _userStoppedAuto = false;
   List<ServiceSpotlightItem> _visible = const [];
+  VoidCallback? _configListener;
 
   @override
   void initState() {
@@ -62,6 +64,11 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
       initialPage: _initialVirtualPage,
       viewportFraction: _viewportFraction,
     );
+    _configListener = () {
+      if (!mounted) return;
+      setState(_refreshVisible);
+    };
+    ServiceConfigHolder.revision.addListener(_configListener!);
   }
 
   @override
@@ -116,6 +123,9 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
 
   @override
   void dispose() {
+    if (_configListener != null) {
+      ServiceConfigHolder.revision.removeListener(_configListener!);
+    }
     _timer?.cancel();
     _controller.dispose();
     super.dispose();

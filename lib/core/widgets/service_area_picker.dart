@@ -20,6 +20,7 @@ class ServiceAreaPicker extends StatefulWidget {
     this.repository,
     this.showAreaDropdown = true,
     this.showRegionDropdown = true,
+    this.districtLabel = 'Туман',
   });
 
   final String initialRegionId;
@@ -34,6 +35,9 @@ class ServiceAreaPicker extends StatefulWidget {
   /// `false` — viloyat yashirin; birinchi (yoki yagona) region avto-tanlanadi.
   /// AVA Хоразм учун: рўйхатдан ўтишда фақат туман етарли.
   final bool showRegionDropdown;
+
+  /// Туман dropdown label (l10n).
+  final String districtLabel;
 
   /// (regionId, districtId, serviceAreaId) — har biri bo'sh bo'lishi mumkin.
   final void Function(String regionId, String districtId, String serviceAreaId)
@@ -161,7 +165,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
           const SizedBox(height: 12),
         ],
         _dropdown<GeoDistrict>(
-          label: 'Туман',
+          label: widget.districtLabel,
           icon: Icons.location_city,
           value: _districtId.isEmpty ? null : _districtId,
           loading: _loadingDistricts ||

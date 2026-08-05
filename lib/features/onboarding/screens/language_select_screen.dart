@@ -14,7 +14,7 @@ import '../../../repositories/device_binding_repository.dart';
 import '../../../utils/locale_utils.dart';
 import 'onboarding_screen.dart';
 
-/// Тил + туман — рўйхатдан олдин битта экран.
+/// Тил + туман — рўйхатдан олдин хабар ихчам экран.
 class LanguageSelectScreen extends StatefulWidget {
   const LanguageSelectScreen({super.key});
   @override
@@ -43,7 +43,6 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
       if (_selected != null && mounted) {
         await context.read<LocaleNotifier>().setLocale(_selected!);
       }
-      // Auth CF cold start ни олдиндан иситиш (europe-west1).
       unawaited(DeviceBindingRepository().warmup());
     });
   }
@@ -113,7 +112,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 16, 22, 20),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -121,179 +120,132 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                   BrandLabels.brand,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: AppColors.primaryDark,
-                    letterSpacing: 0.6,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   context.tr('ob_pre_title'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: _ink,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  context.tr('ob_pre_subtitle'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    fontWeight: FontWeight.w500,
-                    color: _muted,
-                  ),
-                ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 Expanded(
                   child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                context.tr('ob_pre_language'),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: _ink,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ..._options.map((opt) {
-                                final on = _selected == opt.locale;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(999),
-                                      onTap: () => _onLanguageTap(opt.locale),
-                                      child: AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 180),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: on
-                                              ? const Color(0xFFE8F5E9)
-                                              : const Color(0xFFF3F4F6),
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                          border: Border.all(
-                                            color: on
-                                                ? AppColors.primary
-                                                : Colors.transparent,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(opt.flag,
-                                                style: const TextStyle(
-                                                    fontSize: 20)),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Text(
-                                                opt.label,
-                                                style: TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: on
-                                                      ? AppColors.primaryDark
-                                                      : _ink,
-                                                ),
-                                              ),
-                                            ),
-                                            if (on)
-                                              const Icon(Icons.check_circle,
-                                                  color: AppColors.primary,
-                                                  size: 22),
-                                          ],
-                                        ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            context.tr('ob_pre_language'),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: _ink,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ..._options.map((opt) {
+                            final on = _selected == opt.locale;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () => _onLanguageTap(opt.locale),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 160),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 9,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: on
+                                          ? const Color(0xFFE8F5E9)
+                                          : const Color(0xFFF3F4F6),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: on
+                                            ? AppColors.primary
+                                            : Colors.transparent,
+                                        width: 1.4,
                                       ),
                                     ),
+                                    child: Row(
+                                      children: [
+                                        Text(opt.flag,
+                                            style:
+                                                const TextStyle(fontSize: 18)),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            opt.label,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                              color: on
+                                                  ? AppColors.primaryDark
+                                                  : _ink,
+                                            ),
+                                          ),
+                                        ),
+                                        if (on)
+                                          const Icon(Icons.check_circle,
+                                              color: AppColors.primary,
+                                              size: 20),
+                                      ],
+                                    ),
                                   ),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                context.tr('ob_pre_district'),
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: _ink,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                context.tr('ob_pre_district_hint'),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: _muted,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ServiceAreaPicker(
-                                showRegionDropdown: false,
-                                showAreaDropdown: false,
-                                onChanged: (r, d, a) {
-                                  setState(() {
-                                    _regionId = r;
-                                    _districtId = d;
-                                    _areaId = a;
-                                  });
-                                },
-                              ),
-                            ],
+                            );
+                          }),
+                          const SizedBox(height: 10),
+                          Divider(
+                            height: 1,
+                            color: _muted.withValues(alpha: 0.18),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 12),
+                          ServiceAreaPicker(
+                            showRegionDropdown: false,
+                            showAreaDropdown: false,
+                            districtLabel: context.tr('ob_pre_district'),
+                            onChanged: (r, d, a) {
+                              setState(() {
+                                _regionId = r;
+                                _districtId = d;
+                                _areaId = a;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 54,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: _canContinue ? _confirm : null,
                     style: ElevatedButton.styleFrom(
@@ -303,7 +255,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                           AppColors.primaryDark.withValues(alpha: 0.35),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                     child: _saving

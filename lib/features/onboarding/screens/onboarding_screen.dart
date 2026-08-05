@@ -407,9 +407,19 @@ class _OnboardingViewState extends State<_OnboardingView> {
                     style: TextStyle(color: Colors.red.shade700, fontSize: 13),
                   ),
                 ],
-                if (c.isCheckingDevice) ...[
+                if (c.isCheckingDevice || _isLoading) ...[
                   const SizedBox(height: 12),
                   const LinearProgressIndicator(color: _green),
+                  const SizedBox(height: 8),
+                  Text(
+                    loc.translate('ob_device_linking'),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: _muted,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 14),
                 Row(

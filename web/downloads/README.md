@@ -1,6 +1,6 @@
 # APK — Variant A (bitta QR)
 
-Йўловчи ва ҳайдовчи **битта илова** — QR to'g'ridan APK havolasiga yo'naltiriladi.
+Битта AVA иловаси (такси, маршрут, дўкон, бозор ва бошқа хизматлар) — QR to'g'ridan APK havolasiga yo'naltiriladi.
 
 ## QR / havola
 

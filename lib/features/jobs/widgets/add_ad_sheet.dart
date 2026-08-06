@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../controllers/jobs_controller.dart';
+import '../jobs_colors.dart';
 import 'urgent_toggle.dart';
 
 /// Янги эълон қўшиш bottom sheet — тур танлаш.
@@ -46,16 +47,7 @@ class _AddAdViewState extends State<_AddAdView> {
   bool _isUrgent = false;
   bool _submitting = false;
 
-  Color get _color {
-    switch (_kind) {
-      case AdKind.work:
-        return const Color(0xFFD84315);
-      case AdKind.service:
-        return AppColors.primary;
-      case AdKind.ad:
-        return AppColors.primary;
-    }
-  }
+  Color get _color => JobsColors.accentFor(_kind);
 
   String get _hint {
     switch (_kind) {
@@ -99,8 +91,8 @@ class _AddAdViewState extends State<_AddAdView> {
       messenger.showSnackBar(SnackBar(
         content: Text(result.error ?? 'Хатолик'),
         backgroundColor: result.error?.startsWith('⚠️') == true
-            ? Colors.orange
-            : Colors.red,
+            ? Colors.orange.shade800
+            : JobsColors.urgent,
         behavior: SnackBarBehavior.floating,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -109,7 +101,7 @@ class _AddAdViewState extends State<_AddAdView> {
     }
     navigator.pop();
     messenger.showSnackBar(SnackBar(
-      content: const Text('✅ Эълон текширувга юборилди'),
+      content: const Text('Эълон текширувга юборилди'),
       backgroundColor: _color,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -120,7 +112,7 @@ class _AddAdViewState extends State<_AddAdView> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: JobsColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -133,7 +125,7 @@ class _AddAdViewState extends State<_AddAdView> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: JobsColors.border,
                       borderRadius: BorderRadius.circular(2))),
             ),
             const SizedBox(height: 14),
@@ -142,14 +134,15 @@ class _AddAdViewState extends State<_AddAdView> {
               const Text('Тур:',
                   style: TextStyle(
                       fontSize: AppText.labelSmall,
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w600,
+                      color: JobsColors.ink)),
               const SizedBox(height: 6),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: AdKindX.userPanelKinds.map((k) {
                     final sel = k == _kind;
-                    final col = _kindColor(k);
+                    final col = JobsColors.accentFor(k);
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: GestureDetector(
@@ -163,10 +156,10 @@ class _AddAdViewState extends State<_AddAdView> {
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: sel ? col : Colors.grey.shade100,
+                            color: sel ? col : JobsColors.fieldFill,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: sel ? col : Colors.grey.shade200,
+                              color: sel ? col : JobsColors.border,
                             ),
                           ),
                           child: Row(
@@ -180,8 +173,8 @@ class _AddAdViewState extends State<_AddAdView> {
                                     fontSize: AppText.labelTiny,
                                     fontWeight: FontWeight.bold,
                                     color: sel
-                                        ? Colors.white
-                                        : Colors.grey.shade700,
+                                        ? JobsColors.onBar
+                                        : JobsColors.muted,
                                   )),
                             ],
                           ),
@@ -215,41 +208,48 @@ class _AddAdViewState extends State<_AddAdView> {
               controller: _textCtrl,
               maxLines: 4,
               maxLength: 300,
+              style: const TextStyle(color: JobsColors.ink),
               decoration: InputDecoration(
                 hintText: _hint,
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400, fontSize: AppText.bodyMedium),
+                hintStyle: const TextStyle(
+                    color: JobsColors.hint, fontSize: AppText.bodyMedium),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300)),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: _color, width: 1.5)),
                 filled: true,
-                fillColor: Colors.grey.shade50,
+                fillColor: JobsColors.fieldFill,
               ),
             ),
 
-            // Price (ихтиёрий).
             const SizedBox(height: 8),
             TextField(
               controller: _priceCtrl,
               maxLength: 40,
+              style: const TextStyle(color: JobsColors.ink),
               decoration: InputDecoration(
                 hintText: _kind == AdKind.ad
-                    ? '💰 Нарх (масалан: 200 000 сўм)'
-                    : '💰 Нарх / шартнома',
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400,
+                    ? 'Нарх (масалан: 200 000 сўм)'
+                    : 'Нарх / шартнома',
+                hintStyle: const TextStyle(
+                    color: JobsColors.hint,
                     fontSize: AppText.bodyMedium),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.grey.shade300)),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(color: _color, width: 1.5)),
                 filled: true,
-                fillColor: Colors.grey.shade50,
+                fillColor: JobsColors.fieldFill,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12, vertical: 10),
@@ -273,7 +273,7 @@ class _AddAdViewState extends State<_AddAdView> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: JobsColors.onBar))
                   : const Icon(Icons.send, size: 18),
               label: Text(
                 _submitting ? 'Юборилмоқда...' : 'ЭЪЛОН ҚЎШИШ',
@@ -282,7 +282,7 @@ class _AddAdViewState extends State<_AddAdView> {
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _color,
-                foregroundColor: Colors.white,
+                foregroundColor: JobsColors.onBar,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
@@ -292,22 +292,11 @@ class _AddAdViewState extends State<_AddAdView> {
             Center(
               child: Text(
                 '$_visibleDays кун давомида кўринади • Кунига ${JobsController.dailyAdLimit} та эълон',
-                style: TextStyle(
-                    fontSize: AppText.labelTiny, color: Colors.grey.shade400),
+                style: const TextStyle(
+                    fontSize: AppText.labelTiny, color: JobsColors.muted),
               ),
             ),
           ]),
     );
-  }
-
-  Color _kindColor(AdKind k) {
-    switch (k) {
-      case AdKind.work:
-        return const Color(0xFFD84315);
-      case AdKind.service:
-        return AppColors.primary;
-      case AdKind.ad:
-        return AppColors.primary;
-    }
   }
 }

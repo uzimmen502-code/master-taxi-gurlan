@@ -5,6 +5,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../core/theme/app_theme.dart';
+import '../jobs_colors.dart';
 import '../jobs_tabs.dart';
 import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
@@ -37,8 +38,6 @@ class _JobsView extends StatefulWidget {
 
 class _JobsViewState extends State<_JobsView>
     with SingleTickerProviderStateMixin {
-  static const _brand = AppColors.primary;
-
   late TabController _tabCtrl;
   final _searchCtrl = TextEditingController();
 
@@ -77,14 +76,14 @@ class _JobsViewState extends State<_JobsView>
   Widget build(BuildContext context) {
     final c = context.watch<JobsController>();
     return Scaffold(
-      backgroundColor: AppColors.scaffold,
+      backgroundColor: JobsColors.scaffold,
       appBar: AppBar(
         title: Text(
           context.tr('home_module_jobs'),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: _brand,
-        foregroundColor: Colors.white,
+        backgroundColor: JobsColors.bar,
+        foregroundColor: JobsColors.onBar,
         elevation: 0,
         actions: [
           Padding(
@@ -103,8 +102,8 @@ class _JobsViewState extends State<_JobsView>
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    backgroundColor: JobsColors.kindAd,
+                    foregroundColor: JobsColors.onBar,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 9),
                     minimumSize: Size.zero,
@@ -122,16 +121,16 @@ class _JobsViewState extends State<_JobsView>
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
           child: Container(
-            color: _brand,
+            color: JobsColors.bar,
             child: TabBar(
               controller: _tabCtrl,
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-              indicatorColor: Colors.white,
+              indicatorColor: JobsColors.onBar,
               indicatorWeight: 3,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
+              labelColor: JobsColors.onBar,
+              unselectedLabelColor: JobsColors.tabUnselected,
               labelStyle: const TextStyle(
                   fontWeight: FontWeight.bold, fontSize: AppText.bodyLarge),
               unselectedLabelStyle: const TextStyle(
@@ -145,35 +144,45 @@ class _JobsViewState extends State<_JobsView>
       ),
       body: Column(children: [
         Container(
-          color: Colors.white,
+          color: JobsColors.surface,
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: TextField(
             controller: _searchCtrl,
             onChanged: _onSearchChanged,
+            style: const TextStyle(
+              color: JobsColors.ink,
+              fontWeight: FontWeight.w600,
+            ),
             decoration: InputDecoration(
               hintText: 'Қидириш... (масалан: ҳайдовчи, тозалаш)',
-              hintStyle: TextStyle(
-                  color: Colors.grey.shade400, fontSize: AppText.bodyMedium),
-              prefixIcon:
-                  const Icon(Icons.search, color: _brand, size: 20),
+              hintStyle: const TextStyle(
+                  color: JobsColors.hint, fontSize: AppText.bodyMedium),
+              prefixIcon: const Icon(
+                Icons.search,
+                color: JobsColors.bar,
+                size: 20,
+              ),
               suffixIcon: c.searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear,
-                          color: Colors.grey, size: 18),
+                          color: JobsColors.muted, size: 18),
                       onPressed: () {
                         _searchCtrl.clear();
                         c.clearSearch();
                       })
                   : null,
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor: JobsColors.fieldFill,
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200)),
+                  borderSide: const BorderSide(color: JobsColors.border)),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: JobsColors.border)),
               focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide:
-                      const BorderSide(color: _brand, width: 1.5)),
+                      const BorderSide(color: JobsColors.bar, width: 1.5)),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
@@ -208,14 +217,14 @@ class _Feed extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting &&
             !snap.hasData) {
           return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary));
+              child: CircularProgressIndicator(color: JobsColors.bar));
         }
         if (snap.hasError) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Text('Хатолик: ${snap.error}',
-                  style: TextStyle(color: Colors.grey.shade500)),
+                  style: const TextStyle(color: JobsColors.muted)),
             ),
           );
         }
@@ -260,19 +269,19 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 isSearching ? 'Натижа топилмади' : 'Ҳозирча эълон йўқ',
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600),
+                    color: JobsColors.ink),
               ),
               const SizedBox(height: 6),
               Text(
                 isSearching
                     ? 'Қидирув матнини ўзгартиринг'
                     : 'Биринчи бўлиб «$label» қўшинг!',
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: AppText.bodySmall,
-                    color: Colors.grey.shade400),
+                    color: JobsColors.muted),
                 textAlign: TextAlign.center,
               ),
             ]),

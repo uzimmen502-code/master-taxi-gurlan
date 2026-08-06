@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../jobs_colors.dart';
 
 /// "Шошилинч" чекбокс — «Эълон» учун.
 class UrgentToggle extends StatelessWidget {
@@ -23,26 +24,29 @@ class UrgentToggle extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isUrgent ? Colors.red.shade50 : Colors.grey.shade50,
+          color: isUrgent ? JobsColors.urgentSoft : JobsColors.fieldFill,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: isUrgent ? Colors.red.shade300 : Colors.grey.shade300),
+              color: isUrgent ? JobsColors.urgent : JobsColors.border),
         ),
         child: Row(children: [
-          Text(isUrgent ? '🚨' : '⏰',
-              style: const TextStyle(fontSize: AppText.titleLarge)),
+          Icon(
+            isUrgent ? Icons.priority_high_rounded : Icons.schedule_rounded,
+            size: 22,
+            color: isUrgent ? JobsColors.urgent : JobsColors.muted,
+          ),
           const SizedBox(width: 10),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Шошилинч',
                 style: TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.w600,
-                    color: isUrgent ? Colors.red : Colors.grey.shade600)),
+                    color: isUrgent ? JobsColors.urgent : JobsColors.muted)),
             if (showHint)
-              Text('Алоҳида «Шошилинч» бўлимида кўринади',
+              const Text('Алоҳида «Шошилинч» бўлимида кўринади',
                   style: TextStyle(
                       fontSize: AppText.labelTiny,
-                      color: Colors.grey.shade500)),
+                      color: JobsColors.hint)),
           ]),
           const Spacer(),
           AnimatedContainer(
@@ -50,13 +54,13 @@ class UrgentToggle extends StatelessWidget {
             width: 22,
             height: 22,
             decoration: BoxDecoration(
-              color: isUrgent ? Colors.red : Colors.transparent,
+              color: isUrgent ? JobsColors.urgent : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                  color: isUrgent ? Colors.red : Colors.grey.shade400),
+                  color: isUrgent ? JobsColors.urgent : JobsColors.hint),
             ),
             child: isUrgent
-                ? const Icon(Icons.check, color: Colors.white, size: 14)
+                ? const Icon(Icons.check, color: JobsColors.onBar, size: 14)
                 : null,
           ),
         ]),

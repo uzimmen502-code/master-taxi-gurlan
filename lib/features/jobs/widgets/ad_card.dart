@@ -6,6 +6,7 @@ import '../../../models/job_ad.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../controllers/jobs_controller.dart';
+import '../jobs_colors.dart';
 import 'complaint_sheet.dart';
 
 /// Эълонлар (mini-OLX) рўйхатидаги бир карта.
@@ -17,16 +18,7 @@ class AdCard extends StatelessWidget {
 
   final JobAd ad;
 
-  Color get _kindColor {
-    switch (ad.kind) {
-      case AdKind.work:
-        return const Color(0xFFD84315);
-      case AdKind.service:
-        return AppColors.primary;
-      case AdKind.ad:
-        return AppColors.primary;
-    }
-  }
+  Color get _kindColor => JobsColors.accentFor(ad.kind);
 
   Future<void> _call(BuildContext context) async {
     if (ad.authorPhone.isEmpty || phoneDigits(ad.authorPhone).length < 9) return;
@@ -58,7 +50,8 @@ class AdCard extends StatelessWidget {
       content: Text(result.success
           ? 'Шикоят юборилди'
           : (result.error ?? 'Хатолик')),
-      backgroundColor: result.success ? AppColors.primary : Colors.red.shade700,
+      backgroundColor:
+          result.success ? JobsColors.bar : JobsColors.urgent,
       behavior: SnackBarBehavior.floating,
     ));
   }
@@ -81,9 +74,9 @@ class AdCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: JobsColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: JobsColors.border),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -98,25 +91,25 @@ class AdCard extends StatelessWidget {
             if (ad.isUrgent) ...[
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: JobsColors.urgentSoft,
                     borderRadius: BorderRadius.circular(6)),
-                child: const Text('🚨 Шошилинч',
+                child: const Text('Шошилинч',
                     style: TextStyle(
                         fontSize: AppText.labelTiny,
                         fontWeight: FontWeight.w700,
-                        color: Colors.red)),
+                        color: JobsColors.urgent)),
               ),
             ],
             const Spacer(),
             if (ad.postedDateLabel.isNotEmpty)
               Text(
                 ad.postedDateLabel,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: AppText.labelTiny,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
+                  color: JobsColors.muted,
                 ),
               ),
             IconButton(
@@ -124,8 +117,8 @@ class AdCard extends StatelessWidget {
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               tooltip: 'Шикоят',
-              icon: Icon(Icons.flag_outlined,
-                  size: 18, color: Colors.grey.shade500),
+              icon: const Icon(Icons.flag_outlined,
+                  size: 18, color: JobsColors.muted),
               onPressed: () => _report(context),
             ),
           ]),
@@ -136,7 +129,7 @@ class AdCard extends StatelessWidget {
                 fontSize: AppText.bodyLarge,
                 fontWeight: FontWeight.w700,
                 height: 1.3,
-                color: Colors.black87),
+                color: JobsColors.ink),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -147,7 +140,7 @@ class AdCard extends StatelessWidget {
               style: const TextStyle(
                   fontSize: AppText.bodyMedium,
                   height: 1.4,
-                  color: Colors.black54),
+                  color: Color(0xFF4A5560)),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -157,15 +150,15 @@ class AdCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
+                color: JobsColors.priceBg,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                '💰 ${ad.priceText}',
+                ad.priceText,
                 style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: JobsColors.priceText,
                 ),
               ),
             ),
@@ -174,8 +167,8 @@ class AdCard extends StatelessWidget {
           Row(children: [
             Expanded(
               child: Row(children: [
-                Icon(Icons.location_on,
-                    size: 14, color: Colors.grey.shade500),
+                const Icon(Icons.location_on,
+                    size: 14, color: JobsColors.muted),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
@@ -183,8 +176,8 @@ class AdCard extends StatelessWidget {
                     style: TextStyle(
                         fontSize: AppText.labelSmall,
                         color: ad.address.isEmpty
-                            ? Colors.grey.shade400
-                            : Colors.grey.shade700,
+                            ? JobsColors.hint
+                            : JobsColors.muted,
                         fontStyle: ad.address.isEmpty
                             ? FontStyle.italic
                             : FontStyle.normal),
@@ -202,16 +195,16 @@ class AdCard extends StatelessWidget {
                 onTap: () => _call(context),
                 borderRadius: BorderRadius.circular(8),
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.call, color: Colors.white, size: 8),
-                    SizedBox(width: 3),
+                    Icon(Icons.call, color: JobsColors.onBar, size: 14),
+                    SizedBox(width: 5),
                     Text(
                       'Қўнғироқ',
                       style: TextStyle(
-                          fontSize: AppText.labelTiny,
+                          fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                          color: JobsColors.onBar),
                     ),
                   ]),
                 ),

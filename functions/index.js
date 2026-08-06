@@ -435,6 +435,11 @@ async function isMarketAutoApproveEnabled() {
   return (snap.data() || {}).marketAutoApprove === true;
 }
 
+async function isJobsAutoApproveEnabled() {
+  const snap = await db.collection('settings').doc('app').get();
+  return (snap.data() || {}).jobsAutoApprove === true;
+}
+
 /** Admin yoki auto-rejim: telefon ↔ hash bog'lanishini majburan yangilash. */
 async function forceDeviceBindingLink({
   hash,
@@ -6274,6 +6279,9 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     new Date(Date.now() + days * 24 * 60 * 60 * 1000),
   );
 
+  const autoApprove = await isJobsAutoApproveEnabled();
+  const status = autoApprove ? 'active' : 'pending';
+
   const ref = await db.collection('ads').add({
     type,
     text,
@@ -6283,12 +6291,19 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     authorPhone: uid,
     address,
     isUrgent,
-    status: 'pending',
+    status,
     expiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     editedAt: null,
+    ...(autoApprove
+      ? {
+          moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          moderatedBy: 'auto',
+          autoApproved: true,
+        }
+      : {}),
   });
-  return { ok: true, adId: ref.id };
+  return { ok: true, adId: ref.id, status };
 });
 
 /** Mijoz: Иш топ шикоят (CF-only, auth). */
@@ -12221,6 +12236,17 @@ exports.adminSetMarketAutoApprove = functions.https.onCall(async (data, context)
   const enabled = data.enabled === true;
   await db.collection('settings').doc('app').set({
     marketAutoApprove: enabled,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, enabled };
+});
+
+/** Admin: ИШ ЭЪЛОН — авто / қўлда тасдиқлаш. */
+exports.adminSetJobsAutoApprove = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const enabled = data.enabled === true;
+  await db.collection('settings').doc('app').set({
+    jobsAutoApprove: enabled,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, enabled };

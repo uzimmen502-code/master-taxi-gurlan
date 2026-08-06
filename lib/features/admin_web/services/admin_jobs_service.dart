@@ -67,6 +67,17 @@ class AdminJobsService {
     });
   }
 
+  /// `settings/app.jobsAutoApprove` — ИШ ЭЪЛОН АВТО / ҚЎЛДА тасдиқ.
+  Future<void> setAutoApprove({
+    required String adminPhone,
+    required bool enabled,
+  }) async {
+    await _call('adminSetJobsAutoApprove', {
+      'adminPhone': adminPhone,
+      'enabled': enabled,
+    });
+  }
+
   Future<void> _call(String name, Map<String, dynamic> data) async {
     try {
       await _functions.httpsCallable(name).call(data);

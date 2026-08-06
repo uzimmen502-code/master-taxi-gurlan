@@ -4,6 +4,7 @@
 - `settings/wallet_bot` — depositCard*, limits, enabled, topUpApproveMode, withdrawApproveMode, withdrawAutoLimit (20k|50k|100k).
 - `settings/app.marketAutoApprove` (bool) — Onlayn BOZOR эълонларини авто фаоллаштириш (default false/manual).
 - `settings/app.platformFeaturedAuto` (bool) — Платформа «Тавсия этамиз» витринаси (default true=АВТО; false=фақат featuredOnHome).
+- `settings/app.jobsAutoApprove` (bool) — ИШ ЭЪЛОН авто-тасдиқ (default false=ҚЎЛДА pending; true=дарҳол active).
 - `settings/app.platformDeliveryFeePercent` (number 0..100, default 5) — AVA дўкони етказиб бериш ҳақи % (маҳсулот жами × %).
 - `platform_products.goodsKind` — `food` | `non_food` | '' (админ белгилайди).
 - `platform_products/{id}` — Платформа дўкони каталоги (name, price, imageUrl, unit, totalStock 0=unlimited, soldToday, active, featuredOnHome, showInMarket, sortOrder). read:true; write:isAdmin. Index active+sortOrder. См. `mem:modules/platform_store`.

@@ -1,6 +1,6 @@
 import '../../models/job_ad.dart';
 
-/// ИШ ТОП — фойдаланувчи панели таблари (Иш бор / Хизмат).
+/// ИШ ЭЪЛОН — фойдаланувчи панели таблари (Иш бор / Хизмат).
 abstract final class JobsTabs {
   static const int count = 2;
 

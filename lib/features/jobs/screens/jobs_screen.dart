@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../core/theme/app_theme.dart';
@@ -9,7 +10,7 @@ import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/add_ad_sheet.dart';
 
-/// 📰 ИШ ТОП — 2 таб: Иш бор, Хизмат таклифи.
+/// ИШ ЭЪЛОН — 2 таб: Иш бор, Хизмат таклифи.
 class JobsScreen extends StatelessWidget {
   const JobsScreen({super.key, this.initialTabIndex = JobsTabs.ad});
 
@@ -78,8 +79,10 @@ class _JobsViewState extends State<_JobsView>
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('📰 ИШ ТОП',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          context.tr('home_module_jobs'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: _brand,
         foregroundColor: Colors.white,
         elevation: 0,

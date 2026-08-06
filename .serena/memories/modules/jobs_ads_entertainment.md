@@ -3,7 +3,8 @@
 Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 KEY: jobs board and cheap-product marketplace BOTH live in Firestore `ads` collection, discriminated by `type`, but use DIFFERENT Dart models/repos.
 
-## Jobs board (`features/jobs/`)
+## Jobs board / ИШ ЭЪЛОН (`features/jobs/`)
+User-facing title everywhere: `home_module_jobs` = ИШ ЭЪЛОН (Latn ISH E'LON). Never «ИШ ТОП».
 - `jobs_screen.dart`,`jobs_tabs.dart`,`jobs_controller.dart`, widgets ad_card/add_ad_sheet/edit_ad_sheet/urgent_toggle/complaint_sheet.
 - Model `models/job_ad.dart` JobAd + `enum AdKind{work,service,ad}` + AdKindX. Repo `repositories/jobs_repository.dart` JobsRepository (collection `ads`, `type`∈work|service|ad). Complaints → `complaints`.
 - AdKindX: expiresInDays work=3/service=30/ad=14; urgentExpiryDays=2; supportsUrgent=work|ad; userPanelKinds=[ad,service]. Legacy `type:sell` filtered out (`isJobsBoardType` false); new create blocked in rules/CF.

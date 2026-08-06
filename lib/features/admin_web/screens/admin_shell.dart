@@ -119,7 +119,7 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Курьерларни бошқариш',
     ),
     _AdminSection(
-      label: 'Иш ва хизмат доскаси',
+      label: 'ИШ ЭЪЛОН',
       icon: Icons.work_history,
       description: 'Иш, хизмат, эълон — модерация',
     ),
@@ -382,7 +382,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Буюртма хабар') {
       return const AdminOrderNewsListScreen();
     }
-    if (section.label == 'Иш ва хизмат доскаси') {
+    if (section.label == 'ИШ ЭЪЛОН') {
       return const JobsModerationScreen();
     }
     if (section.label == 'Онлайн бозор') {
@@ -856,7 +856,7 @@ class _Sidebar extends StatelessWidget {
             .where('status', isEqualTo: 'ready')
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Иш ва хизмат доскаси':
+      case 'ИШ ЭЪЛОН':
         return db
             .collection('ads')
             .where('status', isEqualTo: 'pending')

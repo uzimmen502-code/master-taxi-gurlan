@@ -1036,7 +1036,7 @@ exports.onAdUpdate = functions.firestore
         body = preview
           || (isMarket
             ? 'Онлайн бозорда кўринади'
-            : 'Иш топ бўлимида кўринади');
+            : 'ИШ ЭЪЛОН бўлимида кўринади');
         dataType = isMarket ? 'market_ad_published' : 'ad_published';
         break;
       case 'blocked':

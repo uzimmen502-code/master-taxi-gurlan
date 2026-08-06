@@ -8,7 +8,7 @@ import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../services/user_role_sync.dart';
 
-/// ИШ ТОП экранининг controller'и.
+/// ИШ ЭЪЛОН экранининг controller'и.
 class JobsController extends ChangeNotifier {
   JobsController({required JobsRepository repo}) : _repo = repo {
     _init();

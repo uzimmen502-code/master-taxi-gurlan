@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_ride.dart';
+import '../intercity_colors.dart';
 
 class IntercityRideCard extends StatelessWidget {
   final IntercityRide ride;
@@ -17,21 +17,19 @@ class IntercityRideCard extends StatelessWidget {
     required this.onBook,
   });
 
-  static const Color _green = AppColors.courierGreen;
-
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: IntercityColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: IntercityColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(15),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: IntercityColors.primary.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -46,15 +44,21 @@ class IntercityRideCard extends StatelessWidget {
             const SizedBox(height: 6),
             _buildInfoRow(
               icon: Icons.directions_car_outlined,
-              iconColor: Colors.grey.shade500,
+              iconColor: IntercityColors.textFaint,
               left: '${ride.carModel}  •  ${ride.carNumber}',
-              leftStyle: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              leftStyle: const TextStyle(
+                fontSize: 12,
+                color: IntercityColors.textMuted,
+              ),
               right: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '${context.tr('available_seats')}:',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: IntercityColors.textMuted,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   _SeatsBadge(seats: ride.availableSeats),
@@ -75,13 +79,13 @@ class IntercityRideCard extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 18,
-          backgroundColor: Colors.green.shade100,
+          backgroundColor: IntercityColors.successSoft,
           child: Text(
             ride.driverName.isNotEmpty
                 ? ride.driverName[0].toUpperCase()
                 : '?',
-            style: TextStyle(
-              color: Colors.green.shade700,
+            style: const TextStyle(
+              color: IntercityColors.primary,
               fontWeight: FontWeight.bold,
               fontSize: 15,
             ),
@@ -97,6 +101,7 @@ class IntercityRideCard extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
+                    color: IntercityColors.text,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -107,24 +112,26 @@ class IntercityRideCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 14),
+                    const Icon(Icons.star, color: IntercityColors.gold, size: 14),
                     const SizedBox(width: 2),
                     Text(
                       ride.rating.toStringAsFixed(1),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.grey,
+                        color: IntercityColors.textMuted,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 )
               else
-                Text(
+                const Text(
                   'Янги ҳайдовчи',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.blue.shade400,
+                    color: IntercityColors.info,
                     fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
             ],
@@ -139,7 +146,7 @@ class IntercityRideCard extends StatelessWidget {
             Text(
               formatPrice(ride.price),
               style: const TextStyle(
-                color: _green,
+                color: IntercityColors.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -147,7 +154,10 @@ class IntercityRideCard extends StatelessWidget {
             const SizedBox(width: 3),
             Text(
               context.tr('sum'),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              style: const TextStyle(
+                fontSize: 10,
+                color: IntercityColors.textFaint,
+              ),
             ),
           ],
         ),
@@ -158,13 +168,20 @@ class IntercityRideCard extends StatelessWidget {
   Widget _buildRouteRow(BuildContext context) {
     return Row(
       children: [
-        Icon(Icons.location_on_outlined,
-            color: Colors.green.shade400, size: 16),
+        const Icon(
+          Icons.location_on_outlined,
+          color: IntercityColors.primaryMid,
+          size: 16,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             _buildRouteLabel(ride, Localizations.localeOf(context)),
-            style: const TextStyle(fontSize: 13),
+            style: const TextStyle(
+              fontSize: 13,
+              color: IntercityColors.text,
+              fontWeight: FontWeight.w500,
+            ),
             overflow: TextOverflow.ellipsis,
             maxLines: 2,
           ),
@@ -188,7 +205,8 @@ class IntercityRideCard extends StatelessWidget {
         Expanded(
           child: Text(
             left,
-            style: leftStyle ?? const TextStyle(fontSize: 13),
+            style: leftStyle ??
+                const TextStyle(fontSize: 13, color: IntercityColors.text),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -216,26 +234,26 @@ class IntercityRideCard extends StatelessWidget {
                 Text(
                   '${ride.femaleCount > 0 ? "${context.tr('gender_female')} 👩: ${ride.femaleCount} ${context.tr('passengers_unit')}  " : ""}'
                   '${ride.maleCount > 0 ? "${context.tr('gender_male')} 👨: ${ride.maleCount} ${context.tr('passengers_unit')}" : ""}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: IntercityColors.textMuted,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.access_time,
-                    color: Colors.grey.shade400,
+                    color: IntercityColors.textFaint,
                     size: 14,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${context.tr('departure_time_label')}: '
                     '${_formatTime(ride.departureTime)}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: IntercityColors.textMuted,
                     ),
                   ),
                 ],
@@ -253,14 +271,14 @@ class IntercityRideCard extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.green.shade300),
+                border: Border.all(color: IntercityColors.border),
                 borderRadius: BorderRadius.circular(10),
+                color: IntercityColors.surfaceSoft,
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.phone,
                 size: 18,
-                weight: 700,
-                color: Colors.green.shade700,
+                color: IntercityColors.primary,
               ),
             ),
           ),
@@ -270,10 +288,10 @@ class IntercityRideCard extends StatelessWidget {
           height: 36,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _green,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade300,
-              disabledForegroundColor: Colors.grey.shade600,
+              backgroundColor: IntercityColors.primary,
+              foregroundColor: IntercityColors.onPrimary,
+              disabledBackgroundColor: IntercityColors.border,
+              disabledForegroundColor: IntercityColors.textFaint,
               elevation: 0,
               minimumSize: const Size(0, 36),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -318,7 +336,7 @@ class _SeatsBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: hasSeats ? Colors.green.shade50 : Colors.red.shade50,
+        color: hasSeats ? IntercityColors.successSoft : IntercityColors.dangerSoft,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -326,7 +344,7 @@ class _SeatsBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: hasSeats ? Colors.green.shade700 : Colors.red.shade700,
+          color: hasSeats ? IntercityColors.success : IntercityColors.danger,
         ),
       ),
     );

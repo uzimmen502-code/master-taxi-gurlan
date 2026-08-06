@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/brand_labels.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
@@ -87,7 +89,7 @@ class PlatformMarketCard extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      'Платформа дўкони',
+                      '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

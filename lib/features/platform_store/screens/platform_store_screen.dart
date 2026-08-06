@@ -3,21 +3,23 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
+import '../ava_store_colors.dart';
 import '../controllers/platform_store_controller.dart';
 import '../widgets/platform_cart_sheet.dart';
 import '../widgets/platform_product_card.dart';
 
-/// Платформа дўкони — каталог + қидирув + сават + миқдор.
+/// AVA дўкони — каталог + қидирув + сават + миқдор.
 class PlatformStoreScreen extends StatelessWidget {
   const PlatformStoreScreen({super.key, this.highlightProductId});
 
-  /// Очилганда шу id'ли маҳсулот рўйхат бошида кўринади (қидирувсиз ҳолатда).
   final String? highlightProductId;
+
+  static const brand = AvaStoreColors.brand;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,8 @@ class _PlatformStoreView extends StatefulWidget {
 class _PlatformStoreViewState extends State<_PlatformStoreView> {
   final _searchCtrl = TextEditingController();
   String _query = '';
+  /// '' | food | non_food
+  String _kindFilter = '';
 
   @override
   void dispose() {
@@ -55,7 +59,11 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
     final c = context.read<PlatformStoreController>();
     if (c.cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('platform_store_cart_empty'))),
+        SnackBar(
+          content: Text(context.tr('platform_store_cart_empty')),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AvaStoreColors.deep,
+        ),
       );
       return;
     }
@@ -72,7 +80,13 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
 
   List<PlatformProduct> _filtered(List<PlatformProduct> all) {
     final q = _query;
-    var list = all.where((p) => CatalogSearch.matchesProduct(p, q)).toList();
+    var list = all.where((p) {
+      if (_kindFilter == PlatformProduct.kindFood && !p.isFood) return false;
+      if (_kindFilter == PlatformProduct.kindNonFood && !p.isNonFood) {
+        return false;
+      }
+      return CatalogSearch.matchesProduct(p, q);
+    }).toList();
     if (CatalogSearch.normalize(q).isNotEmpty) {
       list.sort((a, b) {
         final byScore = CatalogSearch.scoreProduct(b, q)
@@ -96,77 +110,160 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<PlatformStoreController>();
+    final bottomPad = c.cartItemCount > 0 ? 88.0 : 24.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F7),
+      backgroundColor: AvaStoreColors.scaffold,
       appBar: AppBar(
-        title: Text(context.tr('platform_store_title')),
-        backgroundColor: AppColors.button,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            onPressed: () => _openCart(context),
-            icon: Badge(
-              isLabelVisible: c.cartItemCount > 0,
-              label: Text('${c.cartItemCount}'),
-              child: const Icon(Icons.shopping_cart_outlined),
+        title: Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              color: AvaStoreColors.onBrand,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              letterSpacing: 0.2,
             ),
+            children: [
+              const TextSpan(text: BrandLabels.brand),
+              TextSpan(
+                text: ' ${context.tr('platform_store_title_suffix')}',
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: AvaStoreColors.brand,
+        foregroundColor: AvaStoreColors.onBrand,
+        elevation: 0,
+        actions: [
+          _PulsingCartButton(
+            count: c.cartItemCount,
+            onPressed: () => _openCart(context),
           ),
         ],
       ),
-      floatingActionButton: c.cartItemCount == 0
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _openCart(context),
-              backgroundColor: AppColors.button,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.shopping_bag_outlined),
-              label: Text(
-                context.tr('price_sum_short').replaceAll(
-                      '{price}',
-                      formatPrice(c.cartTotal),
-                    ),
-              ),
-            ),
       body: c.loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AvaStoreColors.deep),
+            )
           : c.products.isEmpty
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      context.tr('platform_store_empty'),
-                      textAlign: TextAlign.center,
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.storefront_outlined,
+                          size: 48,
+                          color: AvaStoreColors.deep.withValues(alpha: 0.55),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr('platform_store_empty'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AvaStoreColors.muted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 )
               : Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: (v) => setState(() => _query = v),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AvaStoreColors.ink,
+                        ),
                         decoration: InputDecoration(
                           hintText: context.tr('platform_store_search_hint'),
-                          prefixIcon: const Icon(Icons.search),
+                          hintStyle: const TextStyle(
+                            color: AvaStoreColors.muted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: AvaStoreColors.deep,
+                          ),
                           suffixIcon: _query.trim().isEmpty
                               ? null
                               : IconButton(
-                                  tooltip: context.tr('platform_store_search_clear'),
-                                  icon: const Icon(Icons.clear),
+                                  tooltip: context
+                                      .tr('platform_store_search_clear'),
+                                  icon: const Icon(
+                                    Icons.clear_rounded,
+                                    color: AvaStoreColors.muted,
+                                  ),
                                   onPressed: () {
                                     _searchCtrl.clear();
                                     setState(() => _query = '');
                                   },
                                 ),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: AvaStoreColors.surface,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
                           ),
-                          isDense: true,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: AvaStoreColors.border,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(
+                              color: AvaStoreColors.deep,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _KindChip(
+                              label: context.tr('platform_store_kind_all'),
+                              selected: _kindFilter.isEmpty,
+                              onTap: () => setState(() => _kindFilter = ''),
+                            ),
+                            const SizedBox(width: 8),
+                            _KindChip(
+                              label: context.tr('platform_store_kind_food'),
+                              selected:
+                                  _kindFilter == PlatformProduct.kindFood,
+                              onTap: () => setState(
+                                () => _kindFilter = PlatformProduct.kindFood,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _KindChip(
+                              label:
+                                  context.tr('platform_store_kind_non_food'),
+                              selected: _kindFilter ==
+                                  PlatformProduct.kindNonFood,
+                              onTap: () => setState(
+                                () => _kindFilter =
+                                    PlatformProduct.kindNonFood,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -177,13 +274,17 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                           if (items.isEmpty) {
                             return Center(
                               child: Padding(
-                                padding: const EdgeInsets.all(24),
+                                padding: const EdgeInsets.all(28),
                                 child: Text(
                                   context
                                       .tr('platform_store_search_none')
                                       .replaceAll('{query}', _query.trim()),
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.black54),
+                                  style: const TextStyle(
+                                    color: AvaStoreColors.muted,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             );
@@ -192,7 +293,8 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                padding:
+                                    const EdgeInsets.fromLTRB(18, 10, 18, 2),
                                 child: Text(
                                   CatalogSearch.normalize(_query).isEmpty
                                       ? context
@@ -203,34 +305,38 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                                           )
                                       : context
                                           .tr('platform_store_search_found')
-                                          .replaceAll('{found}', '${items.length}')
+                                          .replaceAll(
+                                            '{found}',
+                                            '${items.length}',
+                                          )
                                           .replaceAll(
                                             '{total}',
                                             '${c.products.length}',
                                           ),
                                   style: const TextStyle(
                                     fontSize: 12.5,
-                                    color: Colors.black54,
-                                    fontWeight: FontWeight.w600,
+                                    color: AvaStoreColors.muted,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
                               Expanded(
                                 child: RefreshIndicator(
+                                  color: AvaStoreColors.deep,
                                   onRefresh: c.refresh,
                                   child: GridView.builder(
-                                    padding: const EdgeInsets.fromLTRB(
+                                    padding: EdgeInsets.fromLTRB(
                                       12,
                                       8,
                                       12,
-                                      88,
+                                      bottomPad,
                                     ),
                                     gridDelegate:
                                         const SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: 2,
-                                      mainAxisSpacing: 10,
-                                      crossAxisSpacing: 10,
-                                      childAspectRatio: 0.68,
+                                      mainAxisSpacing: 12,
+                                      crossAxisSpacing: 12,
+                                      childAspectRatio: 0.62,
                                     ),
                                     itemCount: items.length,
                                     itemBuilder: (context, i) =>
@@ -247,6 +353,202 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                     ),
                   ],
                 ),
+      bottomNavigationBar: c.cartItemCount == 0
+          ? null
+          : _CartCheckoutBar(
+              itemCount: c.cartItemCount,
+              totalLabel: context.tr('price_sum_short').replaceAll(
+                    '{price}',
+                    formatPrice(c.grandTotal),
+                  ),
+              onPressed: () => _openCart(context),
+            ),
+    );
+  }
+}
+
+class _CartCheckoutBar extends StatelessWidget {
+  const _CartCheckoutBar({
+    required this.itemCount,
+    required this.totalLabel,
+    required this.onPressed,
+  });
+
+  final int itemCount;
+  final String totalLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AvaStoreColors.surface,
+      elevation: 14,
+      shadowColor: AvaStoreColors.deep.withValues(alpha: 0.2),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          child: SizedBox(
+            height: 54,
+            child: FilledButton(
+              onPressed: onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: AvaStoreColors.brand,
+                foregroundColor: AvaStoreColors.onBrand,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AvaStoreColors.onBrand.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '$itemCount',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      context.tr('platform_store_go_cart'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    totalLabel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KindChip extends StatelessWidget {
+  const _KindChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AvaStoreColors.brand : AvaStoreColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? AvaStoreColors.deep : AvaStoreColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: selected ? AvaStoreColors.onBrand : AvaStoreColors.ink,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsingCartButton extends StatefulWidget {
+  const _PulsingCartButton({
+    required this.count,
+    required this.onPressed,
+  });
+
+  final int count;
+  final VoidCallback onPressed;
+
+  @override
+  State<_PulsingCartButton> createState() => _PulsingCartButtonState();
+}
+
+class _PulsingCartButtonState extends State<_PulsingCartButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.14).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: widget.onPressed,
+      icon: ScaleTransition(
+        scale: _scale,
+        child: Badge(
+          isLabelVisible: widget.count > 0,
+          backgroundColor: AvaStoreColors.onBrand,
+          label: Text(
+            '${widget.count}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              color: AvaStoreColors.brand,
+            ),
+          ),
+          child: const Icon(
+            Icons.shopping_cart_rounded,
+            color: AvaStoreColors.onBrand,
+            size: 28,
+          ),
+        ),
+      ),
     );
   }
 }

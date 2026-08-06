@@ -53,6 +53,17 @@ class AdminMarketService {
     });
   }
 
+  /// `settings/app.platformDeliveryFeePercent` — етказиб бериш ҳақи %.
+  Future<void> setPlatformDeliveryFeePercent({
+    required String adminPhone,
+    required double percent,
+  }) async {
+    await _call('adminSetPlatformDeliveryFeePercent', {
+      'adminPhone': adminPhone,
+      'percent': percent,
+    });
+  }
+
   Future<void> updateAd({
     required String adminPhone,
     required String adId,

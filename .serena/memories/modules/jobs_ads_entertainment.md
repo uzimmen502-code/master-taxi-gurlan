@@ -12,7 +12,8 @@ KEY: jobs board and cheap-product marketplace BOTH live in Firestore `ads` colle
 - **JobsTabs = 2 tabs** (Иш бор=ad / Хизмат=service). P2P «Сотаман» Jobs tab removed — selling is Sell hub + Online market (`mem:modules/sell`).
 - CF `onAdUpdate`: Jobs → `authorPhone` + screen `jobs`.
 
-## Ads marketplace / cheap products (`features/ads/`)
+## Ads marketplace / Аҳоли бозори (`features/ads/`)
+UI title: `cheap_products_title` / `home_module_cheap_products` = АҲОЛИ БОЗОРИ (Latn AHOLI BOZORI, ru РЫНОК НАСЕЛЕНИЯ).
 - model `ad_model.dart` AdModel (typeKey='cheap_product'); repo `ads_repository.dart`; `ads_storage_service.dart`. screens cheap_products/ad_details/create_ad/edit_ad/my_ads (Фаол/Текширувда/Яширилган); widgets my_ad_actions.
 - Firestore `ads` type==`cheap_product`; status **`pending|active|inactive`**. Create CF-only `submitMarketAd` (auth, ownerId/phone=canonical token, validation, daily/pending/active <=5000 each (count agg); client maxActivePerUser=5000, expiresAt, writes `titleLower`+`searchTokens` кирилл/лотин). Client create false. Complaints CF `submitMarketComplaint` -> reports market_ad. Views auth +1. Storage ads image <=8MB. Feed limit 200; my ads phoneAliases. expirePendingTrips cheap_product -> inactive. Owner phone locked; never self-activate.
 - Search (`cheap_products_screen` / `AdsRepository.searchActiveAds`): same as platform store via `CatalogSearch` — live AND tokens, кирилл↔лотин, name/desc/price/seller/tokens; relevance sort; result count. No price/sort/scope chips. FAB-style red `+` (`#F44336`, elevation) → CreateAdScreen. Owner update writes `searchTokens`. Backfill: CF `migrateCheapProductTitleLower` also fills empty `searchTokens`.

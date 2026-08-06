@@ -36,6 +36,7 @@ class _PlatformProductsAdminScreenState
   final _repo = PlatformProductsRepository();
   final _searchCtrl = TextEditingController();
   String _query = '';
+  final Set<String> _selected = {};
 
   @override
   void dispose() {
@@ -64,6 +65,9 @@ class _PlatformProductsAdminScreenState
         p.active ? 'фаол' : 'нофаол',
         p.showInMarket ? 'бозор' : '',
         p.featuredOnHome ? 'витрина' : '',
+        p.isFood ? 'озиқ' : '',
+        p.isNonFood ? 'но-озиқ' : '',
+        p.isKindSet ? '' : 'белгиланмаган',
       ]);
     }).toList();
     if (CatalogSearch.normalize(q).isNotEmpty) {
@@ -180,6 +184,39 @@ class _PlatformProductsAdminScreenState
     }
   }
 
+  Future<void> _classifySelected(String kind) async {
+    if (_selected.isEmpty) return;
+    final label = kind == PlatformProduct.kindFood ? 'Озиқ' : 'Но-озиқ';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$label қилиш'),
+        content: Text('${_selected.length} та маҳсулот «$label» деб белгилансинми?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Йўқ'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ҳа'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _repo.setGoodsKindBatch(_selected, kind);
+      if (!mounted) return;
+      final n = _selected.length;
+      setState(() => _selected.clear());
+      _toast('$n та маҳсулот «$label» қилинди');
+    } catch (e) {
+      if (!mounted) return;
+      _toast('Хато: $e', error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,6 +231,54 @@ class _PlatformProductsAdminScreenState
       body: Column(
         children: [
           const _PlatformFeaturedAutoBar(),
+          const _PlatformDeliveryFeeBar(),
+          if (_selected.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.shade200),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Танланган: ${_selected.length}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.indigo.shade900,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => setState(() => _selected.clear()),
+                    child: const Text('Бекор'),
+                  ),
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    onPressed: () =>
+                        _classifySelected(PlatformProduct.kindFood),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Озиқ'),
+                  ),
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    onPressed: () =>
+                        _classifySelected(PlatformProduct.kindNonFood),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.blueGrey.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Но-озиқ'),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: TextField(
@@ -289,9 +374,20 @@ class _PlatformProductsAdminScreenState
                             itemCount: items.length,
                             itemBuilder: (context, i) {
                               final p = items[i];
+                              final selected = _selected.contains(p.id);
                               return _ProductTile(
                                 index: i + 1,
                                 product: p,
+                                selected: selected,
+                                onToggleSelect: () {
+                                  setState(() {
+                                    if (selected) {
+                                      _selected.remove(p.id);
+                                    } else {
+                                      _selected.add(p.id);
+                                    }
+                                  });
+                                },
                                 onTap: () => _openEdit(all, p),
                                 onMenu: (v) async {
                                   if (v == 'edit') {
@@ -300,6 +396,16 @@ class _PlatformProductsAdminScreenState
                                     await _repo.setActive(p.id, !p.active);
                                   } else if (v == 'delete') {
                                     await _delete(p);
+                                  } else if (v == 'food') {
+                                    await _repo.setGoodsKindBatch(
+                                      [p.id],
+                                      PlatformProduct.kindFood,
+                                    );
+                                  } else if (v == 'non_food') {
+                                    await _repo.setGoodsKindBatch(
+                                      [p.id],
+                                      PlatformProduct.kindNonFood,
+                                    );
                                   }
                                 },
                               );
@@ -437,23 +543,207 @@ class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
   }
 }
 
+/// `settings/app.platformDeliveryFeePercent` — курьер/етказиб бериш ҳақи %.
+class _PlatformDeliveryFeeBar extends StatefulWidget {
+  const _PlatformDeliveryFeeBar();
+
+  @override
+  State<_PlatformDeliveryFeeBar> createState() =>
+      _PlatformDeliveryFeeBarState();
+}
+
+class _PlatformDeliveryFeeBarState extends State<_PlatformDeliveryFeeBar> {
+  final _ctrl = TextEditingController();
+  bool _busy = false;
+  bool _synced = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final adminPhone = context.read<AdminAuthService>().phoneDigits ?? '';
+    if (adminPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Admin телефон топилмади — қайта киринг'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final raw = _ctrl.text.trim().replaceAll(',', '.');
+    final pct = double.tryParse(raw);
+    if (pct == null || pct < 0 || pct > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Фоиз 0…100 оралиғида бўлиши керак'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await context.read<AdminMarketService>().setPlatformDeliveryFeePercent(
+            adminPhone: adminPhone,
+            percent: pct,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Етказиб бериш ҳақи: $pct% сақланди'),
+          backgroundColor: AppColors.button,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('settings')
+          .doc('app')
+          .snapshots(),
+      builder: (context, snap) {
+        final data = snap.data?.data();
+        final pct = (data?['platformDeliveryFeePercent'] as num?)?.toDouble() ??
+            5.0;
+        if (!_synced && snap.hasData) {
+          _synced = true;
+          final text = pct == pct.roundToDouble()
+              ? '${pct.round()}'
+              : pct.toString();
+          if (_ctrl.text != text) {
+            _ctrl.text = text;
+          }
+        }
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.cyan.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.cyan.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.local_shipping_outlined,
+                  color: Colors.cyan.shade800, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Етказиб бериш ҳақи = маҳсулот нарҳи × X%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.cyan.shade900,
+                      ),
+                    ),
+                    Text(
+                      'Ҳозир: $pct% (мас. 100 000 → '
+                      '${formatPrice((100000 * pct / 100).round())} сўм)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.cyan.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 72,
+                child: TextField(
+                  controller: _ctrl,
+                  enabled: !_busy,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  decoration: InputDecoration(
+                    suffixText: '%',
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (_busy)
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                FilledButton(
+                  onPressed: _save,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.button,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: const Text('Сақлаш', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ProductTile extends StatelessWidget {
   const _ProductTile({
     required this.index,
     required this.product,
+    required this.selected,
+    required this.onToggleSelect,
     required this.onTap,
     required this.onMenu,
   });
 
   final int index;
   final PlatformProduct product;
+  final bool selected;
+  final VoidCallback onToggleSelect;
   final VoidCallback onTap;
   final ValueChanged<String> onMenu;
 
   @override
   Widget build(BuildContext context) {
+    final kindLabel = product.isFood
+        ? 'озиқ'
+        : product.isNonFood
+            ? 'но-озиқ'
+            : '—';
     final meta = [
       '${formatPrice(product.price)} сўм',
+      kindLabel,
       product.active ? 'фаол' : 'нофаол',
       if (product.featuredOnHome) 'витрина',
       if (product.showInMarket) 'бозор',
@@ -461,34 +751,43 @@ class _ProductTile extends StatelessWidget {
     ].join(' · ');
 
     return Material(
-      color: Colors.white,
+      color: selected ? Colors.indigo.shade50 : Colors.white,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onToggleSelect,
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE8ECE8)),
+            border: Border.all(
+              color: selected ? Colors.indigo.shade300 : const Color(0xFFE8ECE8),
+              width: selected ? 1.5 : 1,
+            ),
           ),
-          padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
           child: Row(
             children: [
+              Checkbox(
+                value: selected,
+                onChanged: (_) => onToggleSelect(),
+                visualDensity: VisualDensity.compact,
+              ),
               SizedBox(
-                width: 28,
+                width: 22,
                 child: Text(
                   '$index',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: Colors.grey.shade700,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               _Thumb(url: product.coverImageUrl),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,6 +823,14 @@ class _ProductTile extends StatelessWidget {
                   const PopupMenuItem(
                     value: 'edit',
                     child: Text('Таҳрир'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'food',
+                    child: Text('Озиқ қилиш'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'non_food',
+                    child: Text('Но-озиқ қилиш'),
                   ),
                   PopupMenuItem(
                     value: 'toggle',
@@ -591,6 +898,7 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _active;
   late bool _featured;
   late bool _inMarket;
+  late String _goodsKind;
   late String _docId;
   late List<String> _imageUrls;
   bool _uploading = false;
@@ -614,6 +922,7 @@ class _EditDialogState extends State<_EditDialog> {
     _active = e?.active ?? true;
     _featured = e?.featuredOnHome ?? false;
     _inMarket = e?.showInMarket ?? true;
+    _goodsKind = e?.goodsKind ?? '';
     _imageUrls = List<String>.from(e?.displayImages ?? const <String>[]);
     _pasteSub = html.document.onPaste.listen(_onDocumentPaste);
   }
@@ -819,6 +1128,7 @@ class _EditDialogState extends State<_EditDialog> {
         featuredOnHome: _featured,
         showInMarket: _inMarket,
         sortOrder: int.tryParse(_sort.text.trim()) ?? 0,
+        goodsKind: _goodsKind,
       ),
     );
   }
@@ -998,6 +1308,34 @@ class _EditDialogState extends State<_EditDialog> {
                 decoration: const InputDecoration(labelText: 'Тартиб'),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Категория',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: PlatformProduct.kindFood,
+                    label: Text('Озиқ'),
+                    icon: Icon(Icons.restaurant_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: PlatformProduct.kindNonFood,
+                    label: Text('Но-озиқ'),
+                    icon: Icon(Icons.shopping_bag_outlined, size: 16),
+                  ),
+                ],
+                emptySelectionAllowed: true,
+                selected: _goodsKind.isEmpty ? <String>{} : {_goodsKind},
+                onSelectionChanged: (s) {
+                  setState(() => _goodsKind = s.isEmpty ? '' : s.first);
+                },
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

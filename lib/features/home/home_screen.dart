@@ -48,6 +48,7 @@ import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import '../../models/feed_item.dart';
 import 'widgets/featured_products_section.dart';
+import 'widgets/home_alive_background.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
@@ -467,22 +468,26 @@ class _HomeViewState extends State<_HomeView> {
           if (mounted) _onHomeResurface();
         },
       ),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            if (!home.hasInternet) const NoInternetBanner(),
-            Expanded(
-              child: StreamBuilder<UserModel?>(
-                stream: uid.length >= 9
-                    ? userRepo.watch(uid)
-                    : Stream<UserModel?>.value(null),
-                builder: (context, userSnap) {
-                  final user = userSnap.data;
-                  _maybeApplyUserGeo(user);
-                  // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
-                  // (users.bonusBalance) — wallet_ledger stream yo'q.
-                  return ListView(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const HomeAliveBackground(),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                if (!home.hasInternet) const NoInternetBanner(),
+                Expanded(
+                  child: StreamBuilder<UserModel?>(
+                    stream: uid.length >= 9
+                        ? userRepo.watch(uid)
+                        : Stream<UserModel?>.value(null),
+                    builder: (context, userSnap) {
+                      final user = userSnap.data;
+                      _maybeApplyUserGeo(user);
+                      // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
+                      // (users.bonusBalance) — wallet_ledger stream yo'q.
+                      return ListView(
                     padding: const EdgeInsets.only(bottom: 16),
                     children: [
                       Padding(
@@ -847,6 +852,8 @@ class _HomeViewState extends State<_HomeView> {
             ),
           ],
         ),
+          ),
+        ],
       ),
     );
   }

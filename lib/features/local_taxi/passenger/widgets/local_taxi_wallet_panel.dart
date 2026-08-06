@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../local_taxi_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../services/local_taxi_payment_service.dart';
 import '../../../../utils/wallet_payment.dart';
@@ -94,9 +95,9 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: LocalTaxiColors.surfaceSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade100),
+        border: Border.all(color: LocalTaxiColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -104,7 +105,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
           Row(
             children: [
               Icon(Icons.account_balance_wallet_outlined,
-                  color: Colors.blue.shade800, size: 20),
+                  color: LocalTaxiColors.primary, size: 20),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -143,7 +144,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.blue.shade900,
+                color: LocalTaxiColors.primary,
               ),
             ),
             Slider(
@@ -180,7 +181,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
             ),
           ],
           if (_error != null)
-            Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+            Text(_error!, style: TextStyle(color: LocalTaxiColors.danger, fontSize: 12)),
         ],
       ),
     );

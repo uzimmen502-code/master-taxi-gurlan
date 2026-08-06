@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -23,7 +24,7 @@ class OrderCard extends StatelessWidget {
     final isPlatform = order.type == 'platform';
     final emoji = isPlatform ? '🛒' : (isFood ? '🍽️' : '🫓');
     final title = isPlatform
-        ? 'Платформа дўкони'
+        ? '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}'
         : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
     final color = AppColors.primary;
 

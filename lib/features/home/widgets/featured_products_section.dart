@@ -20,7 +20,7 @@ class FeaturedProductsSection extends StatefulWidget {
 }
 
 class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
-  static const _titleDark = AppColors.limeDeep;
+  static const _titleDark = Color(0xFFFF073A);
   static const _sectionMuted = AppColors.sectionMuted;
 
   final _service = FeaturedProductsService();

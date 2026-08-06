@@ -9,7 +9,7 @@ import '../controllers/searching_controller.dart';
 import '../widgets/passenger_search_map_view.dart';
 import 'local_taxi_active_trip_screen.dart';
 import '../../../../core/l10n/l10n_extension.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../local_taxi_colors.dart';
 
 class SearchingScreen extends StatelessWidget {
   const SearchingScreen({
@@ -62,7 +62,7 @@ class _SearchingView extends StatefulWidget {
 }
 
 class _SearchingViewState extends State<_SearchingView> {
-  static const _blue = AppColors.primary;
+  static const _blue = LocalTaxiColors.primary;
 
   bool _acceptedDialogShown = false;
 
@@ -239,14 +239,14 @@ class _SearchingViewState extends State<_SearchingView> {
           children: [
             _addressRow(
               icon: Icons.circle,
-              color: AppColors.primary,
+              color: LocalTaxiColors.primary,
               text: c.from,
             ),
             if (c.to.isNotEmpty) ...[
               const SizedBox(height: 6),
               _addressRow(
                 icon: Icons.location_on,
-                color: Colors.red,
+                color: LocalTaxiColors.danger,
                 text: c.to,
               ),
             ],
@@ -263,7 +263,7 @@ class _SearchingViewState extends State<_SearchingView> {
                   _fmt('nearby_drivers_count', {'n': '${c.drivers.length}'}),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: AppColors.primary,
+                    color: LocalTaxiColors.primary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -305,7 +305,7 @@ class _SearchingViewState extends State<_SearchingView> {
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: Colors.red,
+      backgroundColor: LocalTaxiColors.danger,
     ));
   }
 

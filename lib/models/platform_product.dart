@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///
 /// `totalStock <= 0` → лимитсиз. Қолдиқ = totalStock − soldToday.
 /// Расмлар: `imageUrls` (1–5). `imageUrl` — қоплама (биринчи расм, back-compat).
+/// `goodsKind`: `food` | `non_food` | '' (белгиланмаган).
 class PlatformProduct {
   const PlatformProduct({
     required this.id,
@@ -21,9 +22,12 @@ class PlatformProduct {
     this.featuredOnHome = false,
     this.showInMarket = true,
     this.sortOrder = 0,
+    this.goodsKind = '',
   });
 
   static const maxImages = 5;
+  static const kindFood = 'food';
+  static const kindNonFood = 'non_food';
 
   final String id;
   final String name;
@@ -40,6 +44,27 @@ class PlatformProduct {
   final bool featuredOnHome;
   final bool showInMarket;
   final int sortOrder;
+
+  /// `food` | `non_food` | ''.
+  final String goodsKind;
+
+  bool get isFood => goodsKind == kindFood;
+  bool get isNonFood => goodsKind == kindNonFood;
+  bool get isKindSet => isFood || isNonFood;
+
+  static String normalizeKind(String? raw) {
+    final k = (raw ?? '').trim().toLowerCase();
+    if (k == kindFood || k == 'oziq' || k == 'озиқ') return kindFood;
+    if (k == kindNonFood ||
+        k == 'nonfood' ||
+        k == 'non-food' ||
+        k == 'no_oziq' ||
+        k == 'но-озиқ' ||
+        k == 'ноозиқ') {
+      return kindNonFood;
+    }
+    return '';
+  }
 
   /// UI учун: imageUrls ёки эски imageUrl.
   List<String> get displayImages {
@@ -113,6 +138,45 @@ class PlatformProduct {
       featuredOnHome: d['featuredOnHome'] as bool? ?? false,
       showInMarket: d['showInMarket'] as bool? ?? true,
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
+      goodsKind: normalizeKind(d['goodsKind']?.toString()),
+    );
+  }
+
+  PlatformProduct copyWith({
+    String? id,
+    String? name,
+    String? description,
+    int? price,
+    String? imageUrl,
+    List<String>? imageUrls,
+    String? unit,
+    int? minQty,
+    int? step,
+    int? totalStock,
+    int? soldToday,
+    bool? active,
+    bool? featuredOnHome,
+    bool? showInMarket,
+    int? sortOrder,
+    String? goodsKind,
+  }) {
+    return PlatformProduct(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      imageUrl: imageUrl ?? this.imageUrl,
+      imageUrls: imageUrls ?? this.imageUrls,
+      unit: unit ?? this.unit,
+      minQty: minQty ?? this.minQty,
+      step: step ?? this.step,
+      totalStock: totalStock ?? this.totalStock,
+      soldToday: soldToday ?? this.soldToday,
+      active: active ?? this.active,
+      featuredOnHome: featuredOnHome ?? this.featuredOnHome,
+      showInMarket: showInMarket ?? this.showInMarket,
+      sortOrder: sortOrder ?? this.sortOrder,
+      goodsKind: goodsKind ?? this.goodsKind,
     );
   }
 
@@ -122,9 +186,7 @@ class PlatformProduct {
         .where((e) => e.isNotEmpty)
         .take(maxImages)
         .toList(growable: false);
-    final cover = urls.isNotEmpty
-        ? urls.first
-        : imageUrl.trim();
+    final cover = urls.isNotEmpty ? urls.first : imageUrl.trim();
     return {
       'imageUrl': cover,
       'imageUrls': urls.isNotEmpty
@@ -147,6 +209,7 @@ class PlatformProduct {
         'featuredOnHome': featuredOnHome,
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
+        'goodsKind': normalizeKind(goodsKind),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -164,6 +227,7 @@ class PlatformProduct {
         'featuredOnHome': featuredOnHome,
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
+        'goodsKind': normalizeKind(goodsKind),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }

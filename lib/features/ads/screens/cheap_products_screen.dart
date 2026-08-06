@@ -17,7 +17,7 @@ import '../widgets/platform_market_card.dart';
 import 'create_ad_screen.dart';
 import 'my_ads_screen.dart';
 
-/// Онлайн бозор / Арзон маҳсулотлар: қидирув (Платформа дўкони каби) + лента.
+/// Аҳоли бозори: қидирув + лента.
 class CheapProductsScreen extends StatefulWidget {
   const CheapProductsScreen({super.key});
 
@@ -137,7 +137,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
-        title: const Text('Арзон маҳсулотлар'),
+        title: Text(context.tr('cheap_products_title')),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [

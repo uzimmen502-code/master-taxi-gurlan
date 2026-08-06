@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../intercity_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/intercity_booking.dart';
@@ -50,7 +51,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       snapSizes: MeAndPassengersController.sheetSnaps,
       builder: (ctx, scroll) => Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: IntercityColors.surface,
           borderRadius: const BorderRadius.vertical(
             top: Radius.circular(20),
           ),
@@ -171,7 +172,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                             '(${c.rosterBookings.length})',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade600,
+                              color: IntercityColors.textMuted,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -186,7 +187,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                             context.tr('no_co_passengers'),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade600,
+                              color: IntercityColors.textMuted,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -242,7 +243,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 height: 5,
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
+                  color: IntercityColors.textFaint,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -274,7 +275,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 children: [
                   Icon(
                     Icons.people_outline,
-                    color: Colors.green.shade700,
+                    color: IntercityColors.primary,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -284,7 +285,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: Colors.green.shade800,
+                        color: IntercityColors.primary,
                       ),
                     ),
                   ),
@@ -346,8 +347,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.green.shade700,
-                  side: BorderSide(color: Colors.green.shade300),
+                  foregroundColor: IntercityColors.primary,
+                  side: BorderSide(color: IntercityColors.border),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -365,8 +366,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade600,
-                  side: BorderSide(color: Colors.red.shade300),
+                  foregroundColor: IntercityColors.danger,
+                  side: BorderSide(color: IntercityColors.danger),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -458,25 +459,25 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
         children: [
           Text(
             c.routeDisplayLabel(Localizations.localeOf(context)),
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 13, color: IntercityColors.textMuted),
           ),
           const SizedBox(height: 4),
           Text(
             'Бўш ўрин: $maxSeats',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 12, color: IntercityColors.textFaint),
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: IntercityColors.surfaceSoft,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: IntercityColors.border),
             ),
             child: Row(
               children: [
                 Icon(Icons.people_outline,
-                    color: Colors.green.shade700, size: 20),
+                    color: IntercityColors.primary, size: 20),
                 const SizedBox(width: 12),
                 Text(
                   context.tr('passengers'),
@@ -491,8 +492,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   taxiCtrl.passengers <= 1
                       ? null
                       : () => taxiCtrl.decPassengersForSeats(),
-                  Colors.grey.shade100,
-                  Colors.grey.shade600,
+                  IntercityColors.surfaceSoft,
+                  IntercityColors.textMuted,
                 ),
                 const SizedBox(width: 12),
                 Text(
@@ -500,7 +501,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
+                    color: IntercityColors.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -509,8 +510,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   taxiCtrl.passengers >= maxSeats
                       ? null
                       : () => taxiCtrl.incPassengersForSeats(maxSeats),
-                  Colors.green.shade600,
-                  Colors.white,
+                  IntercityColors.primary,
+                  IntercityColors.onPrimary,
                 ),
               ],
             ),
@@ -526,7 +527,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               Text(
                 formatMoney(total),
                 style: TextStyle(
-                  color: Colors.green.shade700,
+                  color: IntercityColors.primary,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                 ),
@@ -547,8 +548,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 flex: 2,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
+                    backgroundColor: IntercityColors.primary,
+                    foregroundColor: IntercityColors.onPrimary,
                   ),
                   onPressed: () => c.confirmPassengerCount(),
                   child: const Text(
@@ -610,7 +611,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
           _PreviewRow('🕐', 'Жўнаш', _formatPreviewTime(ride.departureTime)),
           _PreviewRow('💺', 'Йўловчилар', '${taxiCtrl.passengers} та'),
           const SizedBox(height: 10),
-          Divider(color: Colors.grey.shade200),
+          Divider(color: IntercityColors.border),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -622,7 +623,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               Text(
                 formatMoney(total),
                 style: TextStyle(
-                  color: Colors.green.shade700,
+                  color: IntercityColors.primary,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                 ),
@@ -634,13 +635,13 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.red.shade50,
+                color: IntercityColors.dangerSoft,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.red.shade200),
+                border: Border.all(color: IntercityColors.danger),
               ),
               child: Text(
                 _previewError!,
-                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                style: TextStyle(color: IntercityColors.danger, fontSize: 12),
               ),
             ),
           ],
@@ -658,8 +659,8 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 flex: 2,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
+                    backgroundColor: IntercityColors.primary,
+                    foregroundColor: IntercityColors.onPrimary,
                   ),
                   onPressed:
                       _previewLoading ? null : () => _confirmPreview(context, c),
@@ -669,7 +670,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: IntercityColors.surface,
                           ),
                         )
                       : const Text(
@@ -726,7 +727,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('✅ Брон муваффақиятли юборилди!'),
-          backgroundColor: Colors.green.shade600,
+          backgroundColor: IntercityColors.primary,
           duration: const Duration(seconds: 2),
         ),
       );
@@ -761,7 +762,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             child: Text(context.tr('no')),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: IntercityColors.danger),
             onPressed: () => Navigator.pop(context, true),
             child: Text(context.tr('yes_cancel')),
           ),
@@ -787,7 +788,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Хатолик: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: IntercityColors.danger,
         ),
       );
     }
@@ -819,7 +820,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Хатолик: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: IntercityColors.danger,
         ),
       );
     }
@@ -839,17 +840,17 @@ class _StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: isPending
-            ? Colors.orange.shade50
+            ? IntercityColors.warningSoft
             : isCompleted
-                ? Colors.blue.shade50
-                : Colors.green.shade50,
+                ? IntercityColors.infoSoft
+                : IntercityColors.successSoft,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isPending
-              ? Colors.orange.shade300
+              ? IntercityColors.warning
               : isCompleted
-                  ? Colors.blue.shade300
-                  : Colors.green.shade300,
+                  ? IntercityColors.border
+                  : IntercityColors.border,
         ),
       ),
       child: Text(
@@ -861,10 +862,10 @@ class _StatusBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           color: isPending
-              ? Colors.orange.shade700
+              ? IntercityColors.warning
               : isCompleted
-                  ? Colors.blue.shade700
-                  : Colors.green.shade700,
+                  ? IntercityColors.info
+                  : IntercityColors.primary,
         ),
       ),
     );
@@ -888,7 +889,7 @@ class _PreviewRow extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 12, color: IntercityColors.textMuted),
           ),
           Expanded(
             child: Text(
@@ -921,11 +922,11 @@ class _InfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 15, color: Colors.grey.shade500),
+        Icon(icon, size: 15, color: IntercityColors.textFaint),
         const SizedBox(width: 6),
         Text(
           '$label: ',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 12, color: IntercityColors.textMuted),
         ),
         Expanded(
           child: Text(
@@ -984,7 +985,7 @@ class _PassengerTile extends StatelessWidget {
                 if (subtitle != null)
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    style: TextStyle(fontSize: 11, color: IntercityColors.textFaint),
                   ),
               ],
             ),
@@ -994,11 +995,11 @@ class _PassengerTile extends StatelessWidget {
               onPressed: () => callPhone(booking.userPhone),
               icon: Icon(
                 Icons.phone,
-                color: Colors.green.shade600,
+                color: IntercityColors.primary,
                 size: 20,
               ),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.green.shade50,
+                backgroundColor: IntercityColors.successSoft,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1015,7 +1016,7 @@ class _Divider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Divider(height: 1, color: Colors.grey.shade100);
+      Divider(height: 1, color: IntercityColors.surfaceSoft);
 }
 
 class _RatingWidget extends StatelessWidget {
@@ -1067,8 +1068,8 @@ class _RatingWidget extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
+                backgroundColor: IntercityColors.primary,
+                foregroundColor: IntercityColors.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -1080,7 +1081,7 @@ class _RatingWidget extends StatelessWidget {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: IntercityColors.surface,
                       ),
                     )
                   : Text(context.tr('submit')),
@@ -1113,7 +1114,7 @@ class _RatingDone extends StatelessWidget {
         Text(
           context.tr('rating_sent'),
           style: TextStyle(
-            color: Colors.green.shade700,
+            color: IntercityColors.primary,
             fontWeight: FontWeight.w500,
             fontSize: 13,
           ),
@@ -1135,7 +1136,7 @@ class _PickupPromptBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.orange.shade50,
+      color: IntercityColors.warningSoft,
       borderRadius: BorderRadius.circular(compact ? 10 : 12),
       child: InkWell(
         onTap: onTap,
@@ -1149,7 +1150,7 @@ class _PickupPromptBanner extends StatelessWidget {
             children: [
               Icon(
                 Icons.edit_location_alt_outlined,
-                color: Colors.orange.shade800,
+                color: IntercityColors.warning,
                 size: compact ? 18 : 20,
               ),
               const SizedBox(width: 8),
@@ -1159,13 +1160,13 @@ class _PickupPromptBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: compact ? 12 : 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade900,
+                    color: IntercityColors.warning,
                   ),
                 ),
               ),
               Icon(
                 Icons.chevron_right,
-                color: Colors.orange.shade700,
+                color: IntercityColors.warning,
                 size: compact ? 18 : 20,
               ),
             ],

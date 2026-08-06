@@ -16,7 +16,6 @@ import '../../../../repositories/user_repository.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/intercity_rides_repository.dart';
 import '../../../../shared/widgets/driver_car_info_dialog.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../utils/intercity_places.dart';
 import '../../../../utils/locale_utils.dart';
 import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
@@ -24,6 +23,7 @@ import '../../../../shared/widgets/driver_route_application_dialog.dart';
 import '../../../../shared/widgets/driver_application_feedback.dart';
 import '../controllers/intercity_taxi_controller.dart';
 import '../controllers/me_and_passengers_controller.dart';
+import '../intercity_colors.dart';
 import '../services/intercity_place_history.dart';
 import '../widgets/intercity_place_field.dart';
 import '../widgets/intercity_ride_card.dart';
@@ -32,18 +32,6 @@ import '../widgets/intercity_settlement_watcher.dart';
 import '../widgets/me_and_passengers_panel.dart';
 import '../../driver/intercity_driver_resume.dart';
 import '../../driver/screens/intercity_driver_panel_screen.dart';
-
-class IntercityColors {
-  static const Color primary = AppColors.primary;
-  static const Color dark = AppColors.primaryDark;
-  static const Color light = AppColors.scaffoldGradientEnd;
-  static const Color accent = AppColors.primaryMid;
-  static const Color bg = AppColors.scaffold;
-  static const Color green = AppColors.primaryMid;
-  static const Color red = Color(0xFFE53935);
-  static const Color gold = Color(0xFFFFB300);
-  static const Color text = AppColors.primaryDark;
-}
 
 class IntercityTaxiScreen extends StatelessWidget {
   final String? autoFrom;
@@ -431,20 +419,20 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       content: Row(children: [
         Icon(
           isNoDriver ? Icons.info_outline : Icons.warning_amber,
-          color: isNoDriver ? IntercityColors.primary : Colors.white,
+          color: isNoDriver ? IntercityColors.primary : IntercityColors.onPrimary,
         ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             context.trMsg(err),
             style: TextStyle(
-              color: isNoDriver ? IntercityColors.text : Colors.white,
+              color: isNoDriver ? IntercityColors.text : IntercityColors.onPrimary,
             ),
           ),
         ),
       ]),
       backgroundColor:
-          isNoDriver ? AppColors.cardGradientEnd : IntercityColors.red,
+          isNoDriver ? IntercityColors.surfaceSoft : IntercityColors.danger,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
@@ -531,7 +519,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     if (uid.length < 9) {
       _showSnack(
         context.tr('fill_phone_in_profile'),
-        Colors.orange.shade700,
+        IntercityColors.warning,
       );
       return;
     }
@@ -614,21 +602,21 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
         if (!mounted) return;
         _showSnack(
           context.tr('intercity_driver_mode_activated'),
-          AppColors.primaryDark,
+          IntercityColors.primary,
         );
       } else {
         await showDriverApplicationPendingFeedback(
           context,
           result: submitResult,
           resentMessageKey: 'intercity_driver_request_sent',
-          snackColor: Colors.orange.shade700,
+          snackColor: IntercityColors.warning,
         );
       }
     } catch (e) {
       if (!mounted) return;
       _showSnack(
         context.tr('driver_mode_error').replaceAll('{error}', '$e'),
-        IntercityColors.red,
+        IntercityColors.danger,
       );
     }
   }
@@ -672,8 +660,8 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       appBar: c.hasSearched
           ? null
           : AppBar(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: IntercityColors.primary,
+              foregroundColor: IntercityColors.onPrimary,
               elevation: 0,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
@@ -714,7 +702,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     return Column(
       children: [
         Container(
-          color: AppColors.courierGreen,
+          color: IntercityColors.primary,
           padding: EdgeInsets.only(
             top: MediaQuery.of(context).padding.top + 8,
             bottom: 12,
@@ -730,11 +718,11 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: IntercityColors.onPrimary.withValues(alpha: 0.22),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.arrow_back,
-                      color: Colors.white, size: 20),
+                      color: IntercityColors.onPrimary, size: 20),
                 ),
               ),
               const SizedBox(width: 12),
@@ -747,7 +735,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                       ' → '
                       '${c.selectedToLocation ?? ''}',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: IntercityColors.onPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
@@ -758,8 +746,8 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                       c.isSearching
                           ? 'Қидирилмоқда...'
                           : '${c.rides.length} та рейс топилди',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: IntercityColors.onPrimary.withValues(alpha: 0.72),
                         fontSize: 13,
                       ),
                     ),
@@ -773,7 +761,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
           child: c.isSearching
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: AppColors.courierGreen,
+                    color: IntercityColors.primary,
                   ),
                 )
               : c.rides.isEmpty
@@ -784,13 +772,13 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                           Icon(
                             Icons.directions_bus_outlined,
                             size: 64,
-                            color: Colors.grey.shade400,
+                            color: IntercityColors.textFaint,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             'Рейс топилмади',
                             style: TextStyle(
-                              color: Colors.grey.shade600,
+                              color: IntercityColors.textMuted,
                               fontSize: 16,
                             ),
                           ),
@@ -852,7 +840,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
             Align(
               alignment: Alignment.centerLeft,
               child: ActionChip(
-                avatar: Icon(Icons.history, size: 16, color: Colors.grey.shade700),
+                avatar: Icon(Icons.history, size: 16, color: IntercityColors.textMuted),
                 label: Text(
                   '${IntercityPlaces.displayForLocale(_lastRouteFrom!, locale)}'
                   ' → '
@@ -969,9 +957,9 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
         decoration: BoxDecoration(
           gradient: sel
               ? const LinearGradient(
-                  colors: [IntercityColors.dark, IntercityColors.primary])
+                  colors: [IntercityColors.primary, IntercityColors.primaryMid])
               : null,
-          color: sel ? null : Colors.white,
+          color: sel ? null : IntercityColors.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: sel
               ? [
@@ -991,7 +979,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
             Icon(
               sel ? Icons.calendar_today : Icons.calendar_today_outlined,
               size: 14,
-              color: sel ? Colors.white : Colors.grey.shade500,
+              color: sel ? IntercityColors.onPrimary : IntercityColors.textFaint,
             ),
             const SizedBox(width: 6),
             Column(
@@ -1002,11 +990,11 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: sel ? Colors.white : IntercityColors.text)),
+                          color: sel ? IntercityColors.onPrimary : IntercityColors.text)),
                   Text(date,
                       style: TextStyle(
                           fontSize: 11,
-                          color: sel ? Colors.white70 : Colors.grey.shade500)),
+                          color: sel ? IntercityColors.onPrimary.withValues(alpha: 0.72) : IntercityColors.textFaint)),
                 ]),
           ],
         ),
@@ -1073,7 +1061,7 @@ class _RouteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: IntercityColors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -1089,7 +1077,7 @@ class _RouteCard extends StatelessWidget {
             controller: fromCtrl,
             focusNode: fromFocus,
             hint: fromHint,
-            dotColor: IntercityColors.green,
+            dotColor: IntercityColors.fromDot,
             showSuggestions: showFromSuggestions,
             suggestions: fromSuggestions,
             recentCanonical: fromRecent,
@@ -1104,14 +1092,14 @@ class _RouteCard extends StatelessWidget {
             child: Row(
               children: [
                 const SizedBox(width: 4),
-                Container(width: 2, height: 22, color: Colors.grey.shade200),
+                Container(width: 2, height: 22, color: IntercityColors.border),
                 const Spacer(),
                 GestureDetector(
                   onTap: onSwap,
                   child: Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
-                      color: IntercityColors.light,
+                      color: IntercityColors.surfaceSoft,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -1128,7 +1116,7 @@ class _RouteCard extends StatelessWidget {
             controller: toCtrl,
             focusNode: toFocus,
             hint: toHint,
-            dotColor: IntercityColors.red,
+            dotColor: IntercityColors.toDot,
             showSuggestions: showToSuggestions,
             suggestions: toSuggestions,
             recentCanonical: toRecent,
@@ -1157,7 +1145,7 @@ class _SearchButton extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-              colors: [IntercityColors.dark, IntercityColors.accent],
+              colors: [IntercityColors.primary, IntercityColors.accent],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight),
           borderRadius: BorderRadius.circular(16),
@@ -1175,7 +1163,7 @@ class _SearchButton extends StatelessWidget {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
+                      color: IntercityColors.onPrimary, strokeWidth: 2))
               : const Icon(Icons.search, size: 20),
           label: Text(context.tr('intercity_search'),
               style: TextStyle(
@@ -1185,7 +1173,7 @@ class _SearchButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
-            foregroundColor: Colors.white,
+            foregroundColor: IntercityColors.onPrimary,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),

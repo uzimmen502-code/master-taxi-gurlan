@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,6 +17,7 @@ class PlatformStoreController extends ChangeNotifier {
       : _repo = repo ?? PlatformProductsRepository();
 
   final PlatformProductsRepository _repo;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _settingsSub;
 
   List<PlatformProduct> _products = const [];
   final Map<String, int> _cart = {};
@@ -27,6 +29,8 @@ class PlatformStoreController extends ChangeNotifier {
   bool isSubmitting = false;
   /// `delivery` | `pickup`
   String fulfillmentMode = 'delivery';
+  /// `settings/app.platformDeliveryFeePercent` (default 5).
+  double deliveryFeePercent = 5;
 
   void setUseWallet(bool value) {
     if (useWallet == value) return;
@@ -39,6 +43,7 @@ class PlatformStoreController extends ChangeNotifier {
 
   int get cartItemCount => _cart.values.fold(0, (a, b) => a + b);
 
+  /// Фақат маҳсулотлар жами.
   int get cartTotal {
     var sum = 0;
     for (final e in _cart.entries) {
@@ -48,16 +53,82 @@ class PlatformStoreController extends ChangeNotifier {
     return sum;
   }
 
-  int get walletApplyAmount {
-    if (!useWallet || walletBalance <= 0 || cartTotal <= 0) return 0;
-    return walletBalance < cartTotal ? walletBalance : cartTotal;
+  /// Етказиб бериш ҳақи = маҳсулот жами × %.
+  int get deliveryFee {
+    if (cartTotal <= 0 || deliveryFeePercent <= 0) return 0;
+    return (cartTotal * deliveryFeePercent / 100).round();
   }
 
-  int get cashDuePreview => cartTotal - walletApplyAmount;
+  /// Маҳсулот + етказиб бериш.
+  int get grandTotal => cartTotal + deliveryFee;
+
+  int get walletApplyAmount {
+    if (!useWallet || walletBalance <= 0 || grandTotal <= 0) return 0;
+    return walletBalance < grandTotal ? walletBalance : grandTotal;
+  }
+
+  int get cashDuePreview => grandTotal - walletApplyAmount;
 
   bool isInCart(String id) => (_cart[id] ?? 0) > 0;
 
   int qtyOf(String id) => _cart[id] ?? 0;
+
+  /// Саватдаги белгиланган турлар: food / non_food.
+  Set<String> get cartGoodsKinds {
+    final out = <String>{};
+    for (final id in _cart.keys) {
+      final p = _byId(id);
+      if (p != null && p.isKindSet) out.add(p.goodsKind);
+    }
+    return out;
+  }
+
+  /// Фақат озиқ ёки фақат но-озиқ бўлса — қарама-қарши тур; акс ҳолда null.
+  String? get suggestOppositeKind {
+    final kinds = cartGoodsKinds;
+    if (kinds.length != 1) return null;
+    final only = kinds.first;
+    if (only == PlatformProduct.kindFood) return PlatformProduct.kindNonFood;
+    if (only == PlatformProduct.kindNonFood) return PlatformProduct.kindFood;
+    return null;
+  }
+
+  /// Қарши категориядан ақлли таклифлар (нарх яқинлиги + витрина).
+  List<PlatformProduct> suggestOppositeProducts({int take = 6}) {
+    final target = suggestOppositeKind;
+    if (target == null || _cart.isEmpty) return const [];
+    final avg = cartTotal / cartItemCount.clamp(1, 999999);
+    final pool = _products
+        .where(
+          (p) =>
+              p.goodsKind == target &&
+              p.active &&
+              p.inStock &&
+              p.price > 0 &&
+              !isInCart(p.id),
+        )
+        .toList();
+    int score(PlatformProduct p) {
+      var s = 0;
+      if (p.featuredOnHome) s += 30;
+      final diff = (p.price - avg).abs();
+      if (avg > 0) {
+        final ratio = diff / avg;
+        if (ratio <= 0.35) {
+          s += 40;
+        } else if (ratio <= 0.8) {
+          s += 22;
+        } else if (ratio <= 1.5) {
+          s += 10;
+        }
+      }
+      s -= p.sortOrder.clamp(0, 40);
+      return s;
+    }
+
+    pool.sort((a, b) => score(b).compareTo(score(a)));
+    return pool.take(take).toList(growable: false);
+  }
 
   PlatformProduct? _byId(String id) {
     for (final p in _products) {
@@ -75,10 +146,33 @@ class PlatformStoreController extends ChangeNotifier {
     return nextQty > p.remaining;
   }
 
+  void _bindSettings() {
+    _settingsSub ??= FirebaseFirestore.instance
+        .collection('settings')
+        .doc('app')
+        .snapshots()
+        .listen((snap) {
+      final raw = (snap.data()?['platformDeliveryFeePercent'] as num?)
+          ?.toDouble();
+      final next = (raw != null && raw >= 0 && raw <= 100) ? raw : 5.0;
+      if (next == deliveryFeePercent) return;
+      deliveryFeePercent = next;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _settingsSub?.cancel();
+    _settingsSub = null;
+    super.dispose();
+  }
+
   Future<void> init() async {
     loading = true;
     errorMessage = null;
     notifyListeners();
+    _bindSettings();
     try {
       _products = await _repo.fetchActive();
       _pruneMissing();
@@ -230,10 +324,13 @@ class PlatformStoreController extends ChangeNotifier {
         'address': address,
         'phone': phone.isNotEmpty ? phone : userPhone,
         'items': items,
-        'total': cartTotal,
+        'total': grandTotal,
+        'itemsTotal': cartTotal,
+        'deliveryFee': deliveryFee,
+        'deliveryFeePercent': deliveryFeePercent,
         'balanceApplied': apply,
         'useWallet': useWallet,
-        'cashDue': cartTotal - apply,
+        'cashDue': grandTotal - apply,
         'cashPaid': 0,
         'status': 'new',
         'fulfillmentStatus': 'pending',

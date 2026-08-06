@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../intercity_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_booking.dart';
 import '../../../../models/sell_submission.dart';
@@ -41,7 +41,7 @@ class IntercityPickupSheet extends StatefulWidget {
 }
 
 class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
-  static const _green = AppColors.primaryDark;
+  static const _green = IntercityColors.primary;
 
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
@@ -260,7 +260,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
       padding: EdgeInsets.only(bottom: bottom),
       child: Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
+          color: IntercityColors.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SingleChildScrollView(
@@ -275,7 +275,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   height: 5,
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
+                    color: IntercityColors.textFaint,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -291,7 +291,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
               const SizedBox(height: 4),
               Text(
                 context.tr('pickup_where_question'),
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                style: TextStyle(fontSize: 13, color: IntercityColors.textMuted),
               ),
               if (_loadingProfile)
                 const Padding(
@@ -311,7 +311,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                     _profileAddress.formatted,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: IntercityColors.textMuted,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -333,7 +333,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                     '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.green.shade700,
+                      color: IntercityColors.primary,
                     ),
                   ),
                 ],
@@ -378,14 +378,14 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                   const SizedBox(height: 8),
                   Text(
                     errText,
-                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                    style: TextStyle(color: IntercityColors.danger, fontSize: 12),
                   ),
                 ],
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _saving ? null : _save,
                   style: FilledButton.styleFrom(
-                    backgroundColor: _green,
+                    backgroundColor: IntercityColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -397,7 +397,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                           width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: IntercityColors.surface,
                           ),
                         )
                       : Text(context.tr('save_pickup_address')),

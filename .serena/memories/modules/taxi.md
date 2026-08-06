@@ -3,6 +3,7 @@
 Backbone: `RidesRepository` (`repositories/rides_repository.dart`) over `trips`; driver state in `schedules`/`queue`/`drivers`. Phone via `core/utils/formatters.dart` (canonicalPhoneId). MFY normalize `utils/gurlan_places.dart` (GurlanPlaces.normalizeMfyName). Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`. Money: `mem:settlement_ledger`.
 
 ## local_taxi (door-to-door, "alone"/"local")
+- Passenger UI palette: `passenger/local_taxi_colors.dart` (**teal** — distinct from intercity neon lime).
 - `features/local_taxi/passenger/screens/{local_taxi_screen,searching_screen,local_taxi_active_trip_screen}.dart`; controllers `local_taxi_controller.dart`,`searching_controller.dart`; widgets `passenger_search_map_view.dart`; `services/price_service.dart`.
 - `LocalTaxiController` (GPS + saved places pref `saved_places` max6 + optional lat/lng), `SearchingController`, `PriceService` (static).
 - **BROADCAST model (passenger does NOT pick driver — first-accept-wins).** Flow: createSearchRequest (+ `geohash4`) → `SearchingController` radius 3→5→7km → drivers `watchPendingTripsNear` (geohash cells) + radius gate → `acceptRide` first-wins → passenger `LocalTaxiActiveTripScreen`. **P2 passenger UI**: map-centric search+active trip. No `reserved` step. **NOT MFY-based** — pickup = `getFreshCoords` or `MapPickerResult` (no GurlanPlaces autocomplete).
@@ -23,6 +24,7 @@ Backbone: `RidesRepository` (`repositories/rides_repository.dart`) over `trips`;
 - GOTCHAS: panel dispose() ≠ offline (only toggle/forceLeave/app-kill or CF marshrutDriverAutoOffline). Route validity: forward iFrom<iTo, backward iFrom>iTo (normalized stop indices). Block ONLY on cancel-after-accepted (`core/passenger_cancel_block_rules.dart`); pending/waiting cancel free. Reachability probe 5s auto-offline on Firestore unreachable. End-stop dialog within 1.0km of route end.
 
 ## intercity_taxi (city-to-city, seat reservation, direct Firestore txn not CF)
+- Passenger UI palette: `passenger/intercity_colors.dart` (AVA neon lime — no Material green/blue/orange). Screen + ride card + place field + pickup sheet + me_and_passengers_panel + settlement watcher.
 - passenger `intercity_taxi_screen.dart`; controllers `intercity_taxi_controller.dart`,`me_and_passengers_controller.dart`. driver `intercity_driver_panel_screen.dart`; controller `intercity_driver_panel_controller.dart`.
 - Repos IntercityRidesRepository, IntercityBookingsRepository; service IntercityPickupRouteService. Models IntercityRide, IntercityBooking. Places `utils/intercity_places.dart`.
 - Flow: passenger from/to(+Tashkent district)+today/tomorrow+passengers → watchActiveRides (filter city/route/date, seats≥passengers, sort rating) → bookRide → createBooking (TRANSACTION: seat decrement + driver notify) → driver accept/reject/pickUp/complete; calculatePickupRoute optimizes order.

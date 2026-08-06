@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import '../local_taxi_colors.dart';
 import '../../../../models/nearby_driver.dart';
 
 /// Yo'lovchi qidiruv xaritasi — radius halqasi + anonim mashina belgilari.
@@ -79,8 +79,8 @@ class _PassengerSearchMapViewState extends State<PassengerSearchMapView> {
         circleId: const CircleId('search_radius'),
         center: pickup,
         radius: widget.radiusKm * 1000,
-        fillColor: AppColors.primary.withValues(alpha: 0.08),
-        strokeColor: AppColors.primary.withValues(alpha: 0.45),
+        fillColor: LocalTaxiColors.primary.withValues(alpha: 0.08),
+        strokeColor: LocalTaxiColors.primary.withValues(alpha: 0.45),
         strokeWidth: 2,
       ),
     };

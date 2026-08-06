@@ -14,7 +14,7 @@ class HomeInfoTicker extends StatefulWidget {
 
   final List<HomeTickerAd> ads;
 
-  static const _fill     = Color(0xFFFFD600); // to'yingan sariq
+  static const _fill     = Color(0xFFFFFF00); // neon sariq
   static const _question = Color(0xFF2C2C2A);
   static const _answer   = Color(0xFF412402);
 

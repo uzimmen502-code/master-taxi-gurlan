@@ -11,7 +11,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../local_taxi_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../models/active_trip.dart';
@@ -183,7 +183,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.button),
+            style: ElevatedButton.styleFrom(backgroundColor: LocalTaxiColors.primary),
             onPressed: () => Navigator.pop(context),
             child: Text(okLabel),
           ),
@@ -290,7 +290,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
           ],
         ),
         child: Row(children: [
-          const Icon(Icons.phone, color: AppColors.primaryDark, size: 20),
+          const Icon(Icons.phone, color: LocalTaxiColors.primary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -304,7 +304,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
                 ? null
                 : () => _callDriver(trip.driverPhone),
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primaryDark,
+              backgroundColor: LocalTaxiColors.primary,
               visualDensity: VisualDensity.compact,
             ),
             icon: const Icon(Icons.call, size: 18),
@@ -337,7 +337,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary,
+                color: LocalTaxiColors.primary,
               ),
             ),
             const SizedBox(height: 8),
@@ -433,7 +433,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Widget _buildCancelButton(BuildContext context) {
     return TextButton.icon(
       onPressed: () => _confirmCancel(context),
-      icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 18),
+      icon: const Icon(Icons.cancel_outlined, color: LocalTaxiColors.danger, size: 18),
       label: Text(
         context.tr('cancel_trip'),
         style: const TextStyle(color: Colors.red),
@@ -556,7 +556,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
-          backgroundColor: Colors.green,
+          backgroundColor: LocalTaxiColors.success,
         ));
       } else {
         await SettlementService.cancelSettlement(
@@ -568,7 +568,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Settlement: $e'),
-        backgroundColor: Colors.red,
+        backgroundColor: LocalTaxiColors.danger,
       ));
     }
   }
@@ -607,7 +607,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(context.trMsg('error_generic|$e')),
-        backgroundColor: Colors.red,
+        backgroundColor: LocalTaxiColors.danger,
       ));
     }
   }
@@ -675,7 +675,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                    isHard ? Colors.red.shade700 : AppColors.primary,
+                    isHard ? LocalTaxiColors.danger : LocalTaxiColors.primary,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(ctx),
@@ -692,7 +692,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffold,
+      backgroundColor: LocalTaxiColors.bg,
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('trips')

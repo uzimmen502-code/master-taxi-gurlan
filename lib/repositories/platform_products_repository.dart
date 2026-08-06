@@ -99,4 +99,26 @@ class PlatformProductsRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// Танланганларга `food` | `non_food` қўйиш (batch).
+  Future<void> setGoodsKindBatch(Iterable<String> ids, String kind) async {
+    final k = PlatformProduct.normalizeKind(kind);
+    if (k.isEmpty) {
+      throw ArgumentError('goodsKind food|non_food бўлиши керак');
+    }
+    final list = ids.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (list.isEmpty) return;
+    const chunk = 400;
+    for (var i = 0; i < list.length; i += chunk) {
+      final batch = _db.batch();
+      final end = (i + chunk < list.length) ? i + chunk : list.length;
+      for (var j = i; j < end; j++) {
+        batch.update(_col.doc(list[j]), {
+          'goodsKind': k,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+  }
 }

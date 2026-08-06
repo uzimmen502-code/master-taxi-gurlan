@@ -2683,6 +2683,9 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
   let serverHadYopish = null;
   let serverTotal = parseInt(String(orderBase.total || 0), 10);
   let catalogDecs = null;
+  let platformItemsTotal = null;
+  let platformDeliveryFee = null;
+  let platformDeliveryFeePercent = null;
   if (orderType === 'food') {
     const priced = await repriceFoodOrderFromCatalog(orderBase.items);
     pricedItems = priced.items;
@@ -2701,6 +2704,14 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     pricedItems = priced.items;
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
+    const appSettings = await db.collection('settings').doc('app').get();
+    let pct = Number((appSettings.data() || {}).platformDeliveryFeePercent);
+    if (!Number.isFinite(pct) || pct < 0) pct = 5;
+    if (pct > 100) pct = 100;
+    platformItemsTotal = serverTotal;
+    platformDeliveryFeePercent = pct;
+    platformDeliveryFee = Math.round(serverTotal * pct / 100);
+    serverTotal = platformItemsTotal + platformDeliveryFee;
   } else if (!Number.isFinite(serverTotal) || serverTotal <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'invalid order total');
   }
@@ -2875,6 +2886,17 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       if (serverHadYopish === true) {
         orderPayload.cartHadYopishBread = true;
+      }
+    }
+    if (orderType === 'platform') {
+      if (platformItemsTotal != null) {
+        orderPayload.itemsTotal = platformItemsTotal;
+      }
+      if (platformDeliveryFee != null) {
+        orderPayload.deliveryFee = platformDeliveryFee;
+      }
+      if (platformDeliveryFeePercent != null) {
+        orderPayload.deliveryFeePercent = platformDeliveryFeePercent;
       }
     }
     Object.assign(orderPayload, geoReportStamp(userData));
@@ -12213,6 +12235,22 @@ exports.adminSetPlatformFeaturedAuto = functions.https.onCall(async (data, conte
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
   return { ok: true, enabled };
+});
+
+/** AVA дўкони етказиб бериш ҳақи % — `settings/app.platformDeliveryFeePercent`. */
+exports.adminSetPlatformDeliveryFeePercent = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  let pct = Number(data.percent);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'percent 0..100 бўлиши керак');
+  }
+  pct = Math.round(pct * 100) / 100;
+  await db.collection('settings').doc('app').set({
+    platformDeliveryFeePercent: pct,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true, percent: pct };
 });
 
 /** Qiziqish bildirish — o'zaro (mutual) bo'lsa avtomatik match. */

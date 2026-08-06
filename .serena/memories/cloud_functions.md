@@ -111,6 +111,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - adminSetDatingAutoApprove — admin toggle `datingAutoApprove` in `settings/app`.
 - adminSetMarketAutoApprove — toggle `marketAutoApprove` in `settings/app`; submitMarketAd + onAdUpdate(pending) auto→active when on.
 - adminSetPlatformFeaturedAuto — toggle `platformFeaturedAuto` in `settings/app` (Тавсия этамиз витрина АВТО/ҚЎЛДА).
+- adminSetPlatformDeliveryFeePercent — set `platformDeliveryFeePercent` 0..100 in `settings/app`; placeOrderPostPaid platform total += round(items×%).
 - setDatingActive — toggle visibility (active) + lastActive.
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.

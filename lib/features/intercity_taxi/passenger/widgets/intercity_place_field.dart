@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../intercity_colors.dart';
 
 import '../../../../utils/intercity_places.dart';
 
@@ -62,14 +63,14 @@ class IntercityPlaceField extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: hint,
                     hintStyle:
-                        TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                        TextStyle(color: IntercityColors.textFaint, fontSize: 14),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     suffixIcon: controller.text.isNotEmpty
                         ? IconButton(
                             icon: Icon(Icons.clear,
-                                size: 16, color: Colors.grey.shade400),
+                                size: 16, color: IntercityColors.textFaint),
                             onPressed: onClear,
                           )
                         : null,
@@ -84,9 +85,9 @@ class IntercityPlaceField extends StatelessWidget {
             margin: const EdgeInsets.only(left: 22, top: 4),
             constraints: const BoxConstraints(maxHeight: 220),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: IntercityColors.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: IntercityColors.border),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.08),
@@ -100,7 +101,7 @@ class IntercityPlaceField extends StatelessWidget {
               padding: EdgeInsets.zero,
               itemCount: suggestions.length,
               separatorBuilder: (_, __) =>
-                  Divider(height: 1, color: Colors.grey.shade100),
+                  Divider(height: 1, color: IntercityColors.surfaceSoft),
               itemBuilder: (_, i) {
                 final label = suggestions[i];
                 final isRecent = recentDisplay.contains(label);
@@ -117,7 +118,7 @@ class IntercityPlaceField extends StatelessWidget {
                           isRecent ? Icons.history : Icons.location_on_outlined,
                           size: 14,
                           color: isRecent
-                              ? Colors.grey.shade600
+                              ? IntercityColors.textMuted
                               : dotColor,
                         ),
                         const SizedBox(width: 8),

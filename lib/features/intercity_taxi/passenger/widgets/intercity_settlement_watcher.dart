@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../intercity_colors.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../services/settlement_service.dart';
@@ -83,7 +84,7 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${formatMoney(amount)} hamyoningizga qo\'shildi'),
-          backgroundColor: Colors.green,
+          backgroundColor: IntercityColors.success,
         ));
       } else {
         await SettlementService.cancelSettlement(
@@ -96,7 +97,7 @@ class _IntercitySettlementWatcherState extends State<IntercitySettlementWatcher>
       _handledSettlementId = null;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Settlement: $e'),
-        backgroundColor: Colors.red,
+        backgroundColor: IntercityColors.danger,
       ));
     }
   }

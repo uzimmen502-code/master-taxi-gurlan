@@ -129,7 +129,7 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Арзон маҳсулот эълонлари',
     ),
     _AdminSection(
-      label: 'Платформа дўкони',
+      label: 'AVA дўкони',
       icon: Icons.store_mall_directory_outlined,
       description: 'Тавсия / платформа каталоги',
     ),
@@ -388,7 +388,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'Онлайн бозор') {
       return const MarketModerationScreen();
     }
-    if (section.label == 'Платформа дўкони') {
+    if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();
     }
     if (section.label == '❤️ Танишув') {

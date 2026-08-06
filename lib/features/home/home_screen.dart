@@ -49,6 +49,7 @@ import 'home_modules_catalog.dart';
 import '../../models/feed_item.dart';
 import 'widgets/featured_products_section.dart';
 import 'widgets/home_alive_background.dart';
+import 'widgets/home_jobs_preview_section.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
@@ -842,6 +843,23 @@ class _HomeViewState extends State<_HomeView> {
                                 }
                               },
                             ),
+                            if (HomeModuleGate.showInGrid('jobs')) ...[
+                              const SizedBox(height: 16),
+                              HomeJobsPreviewSection(
+                                onOpenBoard: () {
+                                  if (!ServiceConfigHolder.isOpenable(
+                                      'jobs')) {
+                                    _showTezKundaSnack();
+                                    return;
+                                  }
+                                  _push(
+                                    const JobsScreen(
+                                      initialTabIndex: JobsTabs.ad,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ],
                         ),
                       ),

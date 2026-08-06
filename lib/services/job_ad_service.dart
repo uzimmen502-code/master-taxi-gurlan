@@ -18,8 +18,8 @@ class JobAdService {
     final res = await _fn.httpsCallable('submitJobAd').call({
       'type': type,
       'text': text,
+      'title': title,
       'authorName': authorName,
-      if (title.isNotEmpty) 'title': title,
       if (priceText.isNotEmpty) 'priceText': priceText,
       if (address.isNotEmpty) 'address': address,
       'isUrgent': isUrgent,

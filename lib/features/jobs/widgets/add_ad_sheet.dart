@@ -40,6 +40,7 @@ class _AddAdView extends StatefulWidget {
 }
 
 class _AddAdViewState extends State<_AddAdView> {
+  final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
 
@@ -48,6 +49,17 @@ class _AddAdViewState extends State<_AddAdView> {
   bool _submitting = false;
 
   Color get _color => JobsColors.accentFor(_kind);
+
+  String get _titleHint {
+    switch (_kind) {
+      case AdKind.work:
+        return 'Масалан: Шоли экишга ишчилар';
+      case AdKind.service:
+        return 'Масалан: Электрик хизмати';
+      case AdKind.ad:
+        return 'Масалан: Ҳайдовчи керак';
+    }
+  }
 
   String get _hint {
     switch (_kind) {
@@ -69,6 +81,7 @@ class _AddAdViewState extends State<_AddAdView> {
 
   @override
   void dispose() {
+    _titleCtrl.dispose();
     _textCtrl.dispose();
     _priceCtrl.dispose();
     super.dispose();
@@ -81,6 +94,7 @@ class _AddAdViewState extends State<_AddAdView> {
     final navigator = Navigator.of(context);
     final result = await c.submitAd(
       type: _kind.key,
+      title: _titleCtrl.text,
       text: _textCtrl.text,
       priceText: _priceCtrl.text,
       isUrgent: _isUrgent && _kind.userCanMarkUrgent,
@@ -205,14 +219,50 @@ class _AddAdViewState extends State<_AddAdView> {
               ),
 
             TextField(
+              controller: _titleCtrl,
+              maxLength: 80,
+              textInputAction: TextInputAction.next,
+              style: const TextStyle(
+                color: JobsColors.ink,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Сарлавҳа *',
+                hintText: _titleHint,
+                hintStyle: const TextStyle(
+                    color: JobsColors.hint, fontSize: AppText.bodyMedium),
+                labelStyle: const TextStyle(
+                  color: JobsColors.muted,
+                  fontWeight: FontWeight.w600,
+                ),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: JobsColors.border)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: _color, width: 1.5)),
+                filled: true,
+                fillColor: JobsColors.fieldFill,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               controller: _textCtrl,
               maxLines: 4,
               maxLength: 300,
               style: const TextStyle(color: JobsColors.ink),
               decoration: InputDecoration(
+                labelText: 'Матн *',
                 hintText: _hint,
                 hintStyle: const TextStyle(
                     color: JobsColors.hint, fontSize: AppText.bodyMedium),
+                labelStyle: const TextStyle(
+                  color: JobsColors.muted,
+                  fontWeight: FontWeight.w600,
+                ),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: JobsColors.border)),

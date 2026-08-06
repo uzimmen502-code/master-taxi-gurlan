@@ -6246,6 +6246,9 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'text 3..2000');
   }
   const title = String((data && data.title) || '').trim().slice(0, 120);
+  if (title.length < 3 || title.length > 120) {
+    throw new functions.https.HttpsError('invalid-argument', 'title 3..120');
+  }
   const priceText = String((data && data.priceText) || '').trim().slice(0, 80);
   const authorName = String((data && data.authorName) || '').trim().slice(0, 80);
   const address = String((data && data.address) || '').trim().slice(0, 300);
@@ -6285,7 +6288,7 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
   const ref = await db.collection('ads').add({
     type,
     text,
-    ...(title ? { title } : {}),
+    title,
     ...(priceText ? { priceText } : {}),
     authorName: authorName || 'Фойдаланувчи',
     authorPhone: uid,

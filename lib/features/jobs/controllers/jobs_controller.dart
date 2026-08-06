@@ -142,6 +142,10 @@ class JobsController extends ChangeNotifier {
     String title = '',
     String priceText = '',
   }) async {
+    final t = title.trim();
+    if (t.length < 3) {
+      return (success: false, error: 'Сарлавҳани киритинг (камида 3 белги)');
+    }
     if (text.trim().isEmpty) {
       return (success: false, error: 'Матнни киритинг');
     }
@@ -164,7 +168,7 @@ class JobsController extends ChangeNotifier {
       await _repo.addAd(
         type: type,
         text: text.trim(),
-        title: title.trim(),
+        title: t,
         priceText: priceText.trim(),
         authorName: userName,
         authorPhone: userPhone,

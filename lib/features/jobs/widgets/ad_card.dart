@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../controllers/jobs_controller.dart';
 import '../jobs_colors.dart';
 import 'complaint_sheet.dart';
+import 'edit_ad_sheet.dart';
 
 /// Эълонлар (mini-OLX) рўйхатидаги бир карта.
 class AdCard extends StatelessWidget {
@@ -21,7 +22,9 @@ class AdCard extends StatelessWidget {
   Color get _kindColor => JobsColors.accentFor(ad.kind);
 
   Future<void> _call(BuildContext context) async {
-    if (ad.authorPhone.isEmpty || phoneDigits(ad.authorPhone).length < 9) return;
+    if (ad.authorPhone.isEmpty || phoneDigits(ad.authorPhone).length < 9) {
+      return;
+    }
     final url = Uri.parse('tel:${phoneForCall(ad.authorPhone)}');
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -56,6 +59,11 @@ class AdCard extends StatelessWidget {
     ));
   }
 
+  void _edit(BuildContext context) {
+    final c = context.read<JobsController>();
+    showEditAdSheet(context: context, ad: ad, controller: c);
+  }
+
   String get _body => ad.text;
 
   String get _headline {
@@ -70,13 +78,18 @@ class AdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.watch<JobsController>();
+    final mine = c.isOwner(ad);
+    final canEdit = mine || c.isAdmin;
     final color = _kindColor;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: JobsColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: JobsColors.border),
+        border: Border.all(
+          color: mine ? color.withValues(alpha: 0.45) : JobsColors.border,
+        ),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -88,6 +101,21 @@ class AdCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            if (mine) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6)),
+                child: Text('Менинг эълоним',
+                    style: TextStyle(
+                        fontSize: AppText.labelTiny,
+                        fontWeight: FontWeight.w700,
+                        color: color)),
+              ),
+              const SizedBox(width: 6),
+            ],
             if (ad.isUrgent) ...[
               Container(
                 padding:
@@ -112,15 +140,25 @@ class AdCard extends StatelessWidget {
                   color: JobsColors.muted,
                 ),
               ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              tooltip: 'Шикоят',
-              icon: const Icon(Icons.flag_outlined,
-                  size: 18, color: JobsColors.muted),
-              onPressed: () => _report(context),
-            ),
+            if (canEdit)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: 'Таҳрирлаш',
+                icon: Icon(Icons.edit_outlined, size: 18, color: color),
+                onPressed: () => _edit(context),
+              )
+            else
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: 'Шикоят',
+                icon: const Icon(Icons.flag_outlined,
+                    size: 18, color: JobsColors.muted),
+                onPressed: () => _report(context),
+              ),
           ]),
           const SizedBox(height: 6),
           Text(
@@ -192,16 +230,21 @@ class AdCard extends StatelessWidget {
               color: color,
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
-                onTap: () => _call(context),
+                onTap: () => canEdit ? _edit(context) : _call(context),
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.call, color: JobsColors.onBar, size: 14),
-                    SizedBox(width: 5),
+                    Icon(
+                      canEdit ? Icons.edit : Icons.call,
+                      color: JobsColors.onBar,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 5),
                     Text(
-                      'Қўнғироқ',
-                      style: TextStyle(
+                      canEdit ? 'Таҳрирлаш' : 'Қўнғироқ',
+                      style: const TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
                           color: JobsColors.onBar),

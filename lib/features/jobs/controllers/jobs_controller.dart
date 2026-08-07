@@ -213,14 +213,23 @@ class JobsController extends ChangeNotifier {
     String? title,
     String? priceText,
   }) async {
-    if (text.trim().isEmpty) {
-      return (success: false, error: 'Матнни киритинг');
+    await ensureReady();
+    final body = text.trim();
+    if (body.length < 3) {
+      return (success: false, error: 'Матнни киритинг (камида 3 белги)');
+    }
+    final t = (title ?? '').trim();
+    if (t.isNotEmpty && t.length < 3) {
+      return (
+        success: false,
+        error: 'Сарлавҳани киритинг (камида 3 белги)',
+      );
     }
     try {
       if (isAdmin) {
         await _repo.updateAd(
           adId: adId,
-          text: text.trim(),
+          text: body,
           isUrgent: isUrgent,
           type: type,
           status: status,
@@ -228,10 +237,16 @@ class JobsController extends ChangeNotifier {
           priceText: priceText,
         );
       } else {
+        if (phoneDigits(userPhone).length < 9) {
+          return (
+            success: false,
+            error: 'Профилда телефон рақамини киритинг',
+          );
+        }
         await _repo.updateAdByOwner(
           adId: adId,
           callerPhone: userPhone,
-          text: text.trim(),
+          text: body,
           isUrgent: isUrgent,
           type: type,
           title: title,
@@ -245,10 +260,17 @@ class JobsController extends ChangeNotifier {
   }
 
   Future<({bool success, String? error})> deleteAd(String adId) async {
+    await ensureReady();
     try {
       if (isAdmin) {
         await _repo.deleteAdAdmin(adId);
       } else {
+        if (phoneDigits(userPhone).length < 9) {
+          return (
+            success: false,
+            error: 'Профилда телефон рақамини киритинг',
+          );
+        }
         await _repo.deleteAdByOwner(adId: adId, callerPhone: userPhone);
       }
       return (success: true, error: null);

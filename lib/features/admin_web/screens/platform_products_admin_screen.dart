@@ -155,6 +155,75 @@ class _PlatformProductsAdminScreenState
     }
   }
 
+  static const _bulkMax = 20;
+
+  String _nameFromFilename(String filename) {
+    var n = filename.trim();
+    final slash = n.replaceAll('\\', '/').lastIndexOf('/');
+    if (slash >= 0) n = n.substring(slash + 1);
+    final dot = n.lastIndexOf('.');
+    if (dot > 0) n = n.substring(0, dot);
+    n = n
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return n;
+  }
+
+  Future<void> _openBulkAdd() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: true,
+      );
+      if (res == null || res.files.isEmpty || !mounted) return;
+
+      final readable = <_BulkImageSeed>[];
+      for (final f in res.files) {
+        final bytes = f.bytes;
+        if (bytes == null || bytes.isEmpty) continue;
+        final lower = f.name.toLowerCase();
+        final mime = lower.endsWith('.png')
+            ? 'image/png'
+            : lower.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg';
+        readable.add(
+          _BulkImageSeed(
+            bytes: bytes,
+            mime: mime,
+            name: _nameFromFilename(f.name),
+          ),
+        );
+        if (readable.length >= _bulkMax) break;
+      }
+      if (readable.isEmpty) {
+        _toast('Файллар ўқилмади — кичикроқ JPG/PNG танланг.', error: true);
+        return;
+      }
+      if (res.files.length > _bulkMax) {
+        _toast('Фақат биринчи $_bulkMax та расм олинди');
+      }
+
+      final created = await showDialog<int>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _BulkAddDialog(
+          seeds: readable,
+          repo: _repo,
+        ),
+      );
+      if (!mounted || created == null) return;
+      if (created > 0) {
+        _toast('$created та маҳсулот қўшилди');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _toast('Хато: $e', error: true);
+    }
+  }
+
   Future<void> _delete(PlatformProduct p) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -186,12 +255,21 @@ class _PlatformProductsAdminScreenState
 
   Future<void> _classifySelected(String kind) async {
     if (_selected.isEmpty) return;
-    final label = kind == PlatformProduct.kindFood ? 'Озиқ' : 'Но-озиқ';
+    final isNonFood = kind == PlatformProduct.kindNonFood;
+    final nSel = _selected.length;
+    final nRest = isNonFood
+        ? _latestCatalog.where((p) => !_selected.contains(p.id)).length
+        : 0;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$label қилиш'),
-        content: Text('${_selected.length} та маҳсулот «$label» деб белгилансинми?'),
+        title: Text(isNonFood ? 'Но-озиқ + қолганлари Озиқ' : 'Озиқ қилиш'),
+        content: Text(
+          isNonFood
+              ? '$nSel та → Но-озиқ.\n'
+                  'Қолган $nRest та → Озиқ (автомат).'
+              : '$nSel та маҳсулот «Озиқ» деб белгилансинми?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -206,11 +284,22 @@ class _PlatformProductsAdminScreenState
     );
     if (ok != true || !mounted) return;
     try {
-      await _repo.setGoodsKindBatch(_selected, kind);
-      if (!mounted) return;
-      final n = _selected.length;
-      setState(() => _selected.clear());
-      _toast('$n та маҳсулот «$label» қилинди');
+      if (isNonFood) {
+        await _repo.setNonFoodSelectedRestFood(
+          nonFoodIds: _selected,
+          allIds: _latestCatalog.map((p) => p.id),
+        );
+        if (!mounted) return;
+        setState(() => _selected.clear());
+        _toast(
+          '$nSel та Но-озиқ, $nRest та Озиқ қилинди',
+        );
+      } else {
+        await _repo.setGoodsKindBatch(_selected, kind);
+        if (!mounted) return;
+        setState(() => _selected.clear());
+        _toast('$nSel та маҳсулот «Озиқ» қилинди');
+      }
     } catch (e) {
       if (!mounted) return;
       _toast('Хато: $e', error: true);
@@ -221,13 +310,7 @@ class _PlatformProductsAdminScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7F5),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEdit(_latestCatalog),
-        backgroundColor: AppColors.button,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Маҳсулот'),
-      ),
+      floatingActionButton: null,
       body: Column(
         children: [
           const _PlatformFeaturedAutoBar(),
@@ -274,36 +357,95 @@ class _PlatformProductsAdminScreenState
                       backgroundColor: Colors.blueGrey.shade700,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Но-озиқ'),
+                    child: const Text('Но-озиқ (+қолганлари Озиқ)'),
                   ),
                 ],
               ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v),
-              decoration: InputDecoration(
-                hintText: 'Қидирув: ном, нарх, тавсиф, ID…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Тозалаш',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() => _query = '');
-                        },
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final narrow = c.maxWidth < 640;
+                final search = TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) => setState(() => _query = v),
+                  decoration: InputDecoration(
+                    hintText: 'Қидирув: ном, нарх, тавсиф, ID…',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Тозалаш',
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                  ),
+                );
+                final actions = [
+                  FilledButton.icon(
+                    onPressed: () => _openBulkAdd(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.teal.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
                       ),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                isDense: true,
-              ),
+                    ),
+                    icon: const Icon(Icons.library_add_outlined, size: 20),
+                    label: const Text('Кўп қўшиш'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _openEdit(_latestCatalog),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.button,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                    ),
+                    icon: const Icon(Icons.add, size: 20),
+                    label: const Text('Маҳсулот'),
+                  ),
+                ];
+                if (narrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      search,
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: actions,
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: search),
+                    const SizedBox(width: 8),
+                    ...[
+                      for (var i = 0; i < actions.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        actions[i],
+                      ],
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           Expanded(
@@ -316,6 +458,22 @@ class _PlatformProductsAdminScreenState
                 }
                 final all = snap.data ?? const <PlatformProduct>[];
                 _latestCatalog = all;
+                // Ажратилган ID лар танловда қолмасин (катакча яширилади).
+                if (_selected.isNotEmpty) {
+                  final unclassifiedIds = <String>{
+                    for (final p in all)
+                      if (!p.isKindSet) p.id,
+                  };
+                  final stale = _selected
+                      .where((id) => !unclassifiedIds.contains(id))
+                      .toList(growable: false);
+                  if (stale.isNotEmpty) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      setState(() => _selected.removeAll(stale));
+                    });
+                  }
+                }
                 final items = _filter(all);
                 if (all.isEmpty) {
                   return const Center(
@@ -363,7 +521,7 @@ class _PlatformProductsAdminScreenState
                                           : 1;
                           return GridView.builder(
                             padding:
-                                const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                                const EdgeInsets.fromLTRB(12, 8, 12, 24),
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: cols,
@@ -374,12 +532,16 @@ class _PlatformProductsAdminScreenState
                             itemCount: items.length,
                             itemBuilder: (context, i) {
                               final p = items[i];
-                              final selected = _selected.contains(p.id);
+                              final canSelect = !p.isKindSet;
+                              final selected =
+                                  canSelect && _selected.contains(p.id);
                               return _ProductTile(
                                 index: i + 1,
                                 product: p,
                                 selected: selected,
+                                showSelect: canSelect,
                                 onToggleSelect: () {
+                                  if (!canSelect) return;
                                   setState(() {
                                     if (selected) {
                                       _selected.remove(p.id);
@@ -401,11 +563,20 @@ class _PlatformProductsAdminScreenState
                                       [p.id],
                                       PlatformProduct.kindFood,
                                     );
+                                    if (mounted) {
+                                      setState(() => _selected.remove(p.id));
+                                    }
                                   } else if (v == 'non_food') {
-                                    await _repo.setGoodsKindBatch(
-                                      [p.id],
-                                      PlatformProduct.kindNonFood,
+                                    await _repo.setNonFoodSelectedRestFood(
+                                      nonFoodIds: [p.id],
+                                      allIds: all.map((e) => e.id),
                                     );
+                                    if (mounted) {
+                                      setState(() => _selected.clear());
+                                      _toast(
+                                        'Но-озиқ қилинди; қолганлари Озиқ',
+                                      );
+                                    }
                                   }
                                 },
                               );
@@ -722,6 +893,7 @@ class _ProductTile extends StatelessWidget {
     required this.index,
     required this.product,
     required this.selected,
+    required this.showSelect,
     required this.onToggleSelect,
     required this.onTap,
     required this.onMenu,
@@ -730,6 +902,8 @@ class _ProductTile extends StatelessWidget {
   final int index;
   final PlatformProduct product;
   final bool selected;
+  /// Фақат `goodsKind` бўш (янги / ажратилмаган) маҳсулотларда катакча.
+  final bool showSelect;
   final VoidCallback onToggleSelect;
   final VoidCallback onTap;
   final ValueChanged<String> onMenu;
@@ -755,7 +929,7 @@ class _ProductTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
-        onLongPress: onToggleSelect,
+        onLongPress: showSelect ? onToggleSelect : null,
         borderRadius: BorderRadius.circular(10),
         child: Ink(
           decoration: BoxDecoration(
@@ -768,11 +942,14 @@ class _ProductTile extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
           child: Row(
             children: [
-              Checkbox(
-                value: selected,
-                onChanged: (_) => onToggleSelect(),
-                visualDensity: VisualDensity.compact,
-              ),
+              if (showSelect)
+                Checkbox(
+                  value: selected,
+                  onChanged: (_) => onToggleSelect(),
+                  visualDensity: VisualDensity.compact,
+                )
+              else
+                const SizedBox(width: 8),
               SizedBox(
                 width: 22,
                 child: Text(
@@ -1305,7 +1482,15 @@ class _EditDialogState extends State<_EditDialog> {
               ),
               TextField(
                 controller: _sort,
-                decoration: const InputDecoration(labelText: 'Тартиб'),
+                enabled: widget.existing != null,
+                decoration: InputDecoration(
+                  labelText: widget.existing == null
+                      ? 'Тартиб (авто: рўйхат охири)'
+                      : 'Тартиб',
+                  helperText: widget.existing == null
+                      ? 'Янги маҳсулот жойлаштириш вақти бўйича охирига қўшилади'
+                      : null,
+                ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
@@ -1368,6 +1553,506 @@ class _EditDialogState extends State<_EditDialog> {
         FilledButton(
           onPressed: _uploading ? null : _save,
           child: const Text('Сақлаш'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BulkImageSeed {
+  const _BulkImageSeed({
+    required this.bytes,
+    required this.mime,
+    required this.name,
+  });
+
+  final Uint8List bytes;
+  final String mime;
+  final String name;
+}
+
+class _BulkRow {
+  _BulkRow({
+    required this.bytes,
+    required this.mime,
+    required String name,
+  }) : nameCtrl = TextEditingController(text: name),
+       priceCtrl = TextEditingController();
+
+  final Uint8List bytes;
+  final String mime;
+  final TextEditingController nameCtrl;
+  final TextEditingController priceCtrl;
+  String goodsKind = '';
+
+  void dispose() {
+    nameCtrl.dispose();
+    priceCtrl.dispose();
+  }
+}
+
+/// Бирданига кўп маҳсулот: ҳар расм = битта товар.
+class _BulkAddDialog extends StatefulWidget {
+  const _BulkAddDialog({
+    required this.seeds,
+    required this.repo,
+  });
+
+  final List<_BulkImageSeed> seeds;
+  final PlatformProductsRepository repo;
+
+  @override
+  State<_BulkAddDialog> createState() => _BulkAddDialogState();
+}
+
+class _BulkAddDialogState extends State<_BulkAddDialog> {
+  late final List<_BulkRow> _rows;
+  late String _defaultKind;
+  bool _saving = false;
+  int _progress = 0;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _defaultKind = '';
+    _rows = widget.seeds
+        .map(
+          (s) => _BulkRow(bytes: s.bytes, mime: s.mime, name: s.name),
+        )
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final r in _rows) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  void _applyKindToAll(String kind) {
+    setState(() {
+      _defaultKind = kind;
+      for (final r in _rows) {
+        r.goodsKind = kind;
+      }
+    });
+  }
+
+  /// Бир қатор Но-озиқ → қолган қаторлар Озиқ.
+  void _setRowKind(int index, String kind) {
+    setState(() {
+      _rows[index].goodsKind = kind;
+      if (kind == PlatformProduct.kindNonFood) {
+        for (var i = 0; i < _rows.length; i++) {
+          if (i == index) continue;
+          if (_rows[i].goodsKind != PlatformProduct.kindNonFood) {
+            _rows[i].goodsKind = PlatformProduct.kindFood;
+          }
+        }
+        _defaultKind = '';
+      }
+    });
+  }
+
+  void _removeAt(int i) {
+    if (_saving || _rows.length <= 1) return;
+    setState(() {
+      _rows.removeAt(i).dispose();
+    });
+  }
+
+  Future<void> _saveAll() async {
+    if (_saving) return;
+    for (var i = 0; i < _rows.length; i++) {
+      final r = _rows[i];
+      final name = r.nameCtrl.text.trim();
+      final price = int.tryParse(r.priceCtrl.text.trim()) ?? -1;
+      if (name.isEmpty || price < 0) {
+        setState(() {
+          _error = 'Қатор ${i + 1}: ном ва нарх мажбурий';
+        });
+        return;
+      }
+    }
+    setState(() {
+      _saving = true;
+      _progress = 0;
+      _error = null;
+    });
+
+    final storage = BreadImageStorage();
+    var ok = 0;
+    try {
+      var nextOrder = await widget.repo.nextSortOrder();
+      for (var i = 0; i < _rows.length; i++) {
+        if (!mounted) return;
+        setState(() => _progress = i + 1);
+        final r = _rows[i];
+        final docId =
+            FirebaseFirestore.instance.collection('platform_products').doc().id;
+        final prepared = await WebImageCompress.prepareForUpload(
+          r.bytes,
+          mimeHint: r.mime,
+        );
+        final url = await storage.uploadPlatformImage(
+          docId: docId,
+          bytes: prepared.bytes,
+          contentType: prepared.mime,
+          index: 0,
+        );
+        final product = PlatformProduct(
+          id: docId,
+          name: r.nameCtrl.text.trim(),
+          price: int.parse(r.priceCtrl.text.trim()),
+          imageUrl: url,
+          imageUrls: [url],
+          unit: 'дона',
+          active: true,
+          featuredOnHome: false,
+          showInMarket: true,
+          sortOrder: nextOrder,
+          goodsKind: r.goodsKind.isEmpty
+              ? PlatformProduct.kindFood
+              : r.goodsKind,
+        );
+        // create() ҳам nextSortOrder қилади — бажаришдан олдин force қиламиз.
+        await widget.repo.createAppended(product, sortOrder: nextOrder);
+        nextOrder++;
+        ok++;
+      }
+      if (!mounted) return;
+      Navigator.pop(context, ok);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = ok > 0
+            ? '$ok та сақланди, кейин хато: $e'
+            : 'Хато: $e';
+      });
+    }
+  }
+
+  void _previewImage(Uint8List bytes, String title) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) {
+        final size = MediaQuery.sizeOf(ctx);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: size.width,
+            height: size.height * 0.9,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 5,
+                    child: Center(
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Material(
+                    color: Colors.black54,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title.isEmpty ? 'Расм' : title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Ёпиш',
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Positioned(
+                  bottom: 12,
+                  left: 0,
+                  right: 0,
+                  child: Text(
+                    'Катталаштириш: сичқонча ғилдираги / pinch',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    final dialogW = w >= 900 ? 720.0 : (w - 48).clamp(320.0, 720.0);
+    return AlertDialog(
+      title: Text('Кўп қўшиш (${_rows.length} та)'),
+      content: SizedBox(
+        width: dialogW,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Ҳар бир расм — алоҳида маҳсулот. Ном ва нархни тўлдиринг.\n'
+              'Но-озиқ белгиланса, қолганлари автомат Озиқ бўлади.',
+              style: TextStyle(fontSize: 12.5, color: Colors.black54),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Ҳаммасига категория:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PlatformProduct.kindFood,
+                      label: Text('Озиқ'),
+                    ),
+                    ButtonSegment(
+                      value: PlatformProduct.kindNonFood,
+                      label: Text('Но-озиқ'),
+                    ),
+                  ],
+                  emptySelectionAllowed: true,
+                  selected:
+                      _defaultKind.isEmpty ? <String>{} : {_defaultKind},
+                  onSelectionChanged: _saving
+                      ? null
+                      : (s) => _applyKindToAll(s.isEmpty ? '' : s.first),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                ),
+              ),
+            if (_saving)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    LinearProgressIndicator(
+                      value: _rows.isEmpty
+                          ? null
+                          : _progress / _rows.length,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Юкланмоқда: $_progress / ${_rows.length}',
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                  ],
+                ),
+              ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _rows.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, i) {
+                    final r = _rows[i];
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Tooltip(
+                              message: 'Катта кўриш',
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _saving
+                                      ? null
+                                      : () => _previewImage(
+                                            r.bytes,
+                                            r.nameCtrl.text.trim().isEmpty
+                                                ? 'Расм ${i + 1}'
+                                                : r.nameCtrl.text.trim(),
+                                          ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.memory(
+                                          r.bytes,
+                                          width: 64,
+                                          height: 64,
+                                          fit: BoxFit.cover,
+                                          gaplessPlayback: true,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 2,
+                                        bottom: 2,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black54,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: const Icon(
+                                            Icons.zoom_in,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  TextField(
+                                    controller: r.nameCtrl,
+                                    enabled: !_saving,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Ном',
+                                      isDense: true,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: r.priceCtrl,
+                                          enabled: !_saving,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Нарх',
+                                            isDense: true,
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SegmentedButton<String>(
+                                        style: const ButtonStyle(
+                                          visualDensity: VisualDensity.compact,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        segments: const [
+                                          ButtonSegment(
+                                            value: PlatformProduct.kindFood,
+                                            label: Text('Озиқ'),
+                                          ),
+                                          ButtonSegment(
+                                            value: PlatformProduct.kindNonFood,
+                                            label: Text('Но'),
+                                          ),
+                                        ],
+                                        emptySelectionAllowed: true,
+                                        selected: r.goodsKind.isEmpty
+                                            ? <String>{}
+                                            : {r.goodsKind},
+                                        onSelectionChanged: _saving
+                                            ? null
+                                            : (s) {
+                                                _setRowKind(
+                                                  i,
+                                                  s.isEmpty ? '' : s.first,
+                                                );
+                                              },
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!_saving && _rows.length > 1)
+                              IconButton(
+                                tooltip: 'Ўчириш',
+                                onPressed: () => _removeAt(i),
+                                icon: const Icon(Icons.close, size: 20),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, 0),
+          child: const Text('Бекор'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _saveAll,
+          child: Text(
+            _saving
+                ? 'Сақланмоқда…'
+                : 'Ҳаммасини сақлаш (${_rows.length})',
+          ),
         ),
       ],
     );

@@ -49,17 +49,25 @@ class _AuthRestoreScreenState extends State<AuthRestoreScreen> {
         snapshot: snapshot,
       );
 
-      if (result.status == DeviceBindingStatus.trustedDevice) {
-        final token = result.customToken;
-        if (token != null && token.isNotEmpty) {
-          await FirebaseAuth.instance.signInWithCustomToken(token);
-          await FirebaseAuth.instance.currentUser?.getIdToken(true);
-          if (FirebaseAuth.instance.currentUser != null) {
-            await prefs.setBool('phone_reverified', true);
-            _goHome();
-            return;
-          }
-        }
+      if (result.status != DeviceBindingStatus.trustedDevice) {
+        _goReverify();
+        return;
+      }
+
+      // checkDeviceBinding faqat bind qiladi — token createPhoneSession dan.
+      var token = (result.customToken ?? '').trim();
+      if (token.isEmpty) {
+        token = await repo.createPhoneSession(
+          phone: phone,
+          snapshot: snapshot,
+        );
+      }
+      await FirebaseAuth.instance.signInWithCustomToken(token);
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      if (FirebaseAuth.instance.currentUser != null) {
+        await prefs.setBool('phone_reverified', true);
+        _goHome();
+        return;
       }
     } catch (_) {
       // Trusted device failed — full reverify wizard.

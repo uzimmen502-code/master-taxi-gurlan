@@ -9,10 +9,16 @@ import '../../../services/featured_products_service.dart';
 
 /// «Улгуржи нарҳларда тавсия этамиз» — Платформа дўконидан 2×3 та маҳсулот.
 class FeaturedProductsSection extends StatefulWidget {
-  const FeaturedProductsSection({super.key, required this.onProductTap});
+  const FeaturedProductsSection({
+    super.key,
+    required this.onProductTap,
+    this.onTitleTap,
+  });
 
   /// Босилган маҳсулот id'сини қайтаради (Платформа дўкони шу id билан очилади).
   final void Function(String productId) onProductTap;
+  /// Сарлавҳа → AVA дўкони.
+  final VoidCallback? onTitleTap;
 
   @override
   State<FeaturedProductsSection> createState() =>
@@ -46,47 +52,66 @@ class _FeaturedProductsSectionState extends State<FeaturedProductsSection> {
         }
 
         final items = snap.data ?? const <FeaturedProduct>[];
-        if (items.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              context.tr('home_featured_empty'),
-              style: TextStyle(
-                fontSize: 12,
-                color: _sectionMuted.withValues(alpha: 0.9),
-              ),
-            ),
-          );
-        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.tr('home_featured_title'),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: _titleDark,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: widget.onTitleTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          context.tr('home_featured_title'),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _titleDark,
+                          ),
+                        ),
+                      ),
+                      if (widget.onTitleTap != null)
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 22,
+                          color: _titleDark,
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 10),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                // Платформа дўкони (0.68) билан яқин — баннер расм тўлиқ сиғсин.
-                childAspectRatio: 0.78,
+            if (items.isEmpty)
+              Text(
+                context.tr('home_featured_empty'),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _sectionMuted.withValues(alpha: 0.9),
+                ),
+              )
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  // Платформа дўкони (0.68) билан яқин — баннер расм тўлиқ сиғсин.
+                  childAspectRatio: 0.78,
+                ),
+                itemCount: items.length,
+                itemBuilder: (context, index) => _FeaturedProductCard(
+                  product: items[index],
+                  onTap: () => widget.onProductTap(items[index].id),
+                ),
               ),
-              itemCount: items.length,
-              itemBuilder: (context, index) => _FeaturedProductCard(
-                product: items[index],
-                onTap: () => widget.onProductTap(items[index].id),
-              ),
-            ),
           ],
         );
       },

@@ -47,8 +47,11 @@ import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import '../../models/feed_item.dart';
+import '../../models/search_index_entry.dart';
+import 'widgets/all_services_screen.dart';
 import 'widgets/featured_products_section.dart';
 import 'widgets/home_alive_background.dart';
+import 'widgets/home_global_search.dart';
 import 'widgets/home_jobs_preview_section.dart';
 import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
@@ -443,6 +446,120 @@ class _HomeViewState extends State<_HomeView> {
     );
   }
 
+  Future<void> _openSearchEntry(SearchIndexEntry e) async {
+    final module = e.moduleId.trim();
+    if (module.isEmpty) return;
+
+    if (e.type == SearchIndexEntry.typeIntercityRoute) {
+      await _push(
+        IntercityTaxiScreen(
+          autoFrom: e.from.isNotEmpty ? e.from : null,
+          autoTo: e.to.isNotEmpty ? e.to : null,
+        ),
+      );
+      return;
+    }
+
+    if (e.type == SearchIndexEntry.typePlatformProduct ||
+        module == 'platform') {
+      await _push(
+        PlatformStoreScreen(
+          highlightProductId:
+              e.type == SearchIndexEntry.typePlatformProduct ? e.sourceId : null,
+        ),
+      );
+      return;
+    }
+
+    if (e.type == SearchIndexEntry.typeBreadProduct ||
+        (module == 'bread' && e.sourceId.isNotEmpty && e.type != SearchIndexEntry.typeService)) {
+      await _push(
+        BreadScreen(
+          highlightProductId:
+              e.type == SearchIndexEntry.typeBreadProduct ? e.sourceId : null,
+        ),
+      );
+      return;
+    }
+
+    if (e.type == SearchIndexEntry.typeFoodProduct ||
+        (module == 'food' && e.sourceId.isNotEmpty && e.type != SearchIndexEntry.typeService)) {
+      await _push(
+        FoodScreen(
+          highlightProductId:
+              e.type == SearchIndexEntry.typeFoodProduct ? e.sourceId : null,
+        ),
+      );
+      return;
+    }
+
+    if (e.type == SearchIndexEntry.typeLocalPlace) {
+      await _openModule(HomeModulesCatalog.byId('local_taxi'));
+      return;
+    }
+
+    switch (module) {
+      case 'yuk_birja':
+        if (!ServiceConfigHolder.isOpenable('yuk_birja')) {
+          _showTezKundaSnack();
+          return;
+        }
+        await _push(
+          YukBirjaScreen(
+            initialScope: e.type == SearchIndexEntry.typeYukListing
+                ? 'intercity'
+                : null,
+            highlightListingId:
+                e.type == SearchIndexEntry.typeYukListing ? e.sourceId : null,
+            autoFrom: e.from.isNotEmpty ? e.from : null,
+            autoTo: e.to.isNotEmpty ? e.to : null,
+          ),
+        );
+        return;
+      case 'milk':
+        await _push(const MilkPickupScreen());
+        return;
+      case 'oil_change':
+        await _push(const OilChangeHomeScreen());
+        return;
+      case 'carpet_wash':
+        await _push(const CarpetWashScreen());
+        return;
+      case 'circles':
+        await _push(const RelativesScreen());
+        return;
+      case 'courier':
+        if (!ServiceConfigHolder.isOpenable('courier')) {
+          _showTezKundaSnack();
+          return;
+        }
+        await _push(const CourierServicesHubScreen());
+        return;
+      case 'dating':
+        await _openDatingTelegramBot();
+        return;
+      case 'jobs':
+        await _push(
+          JobsScreen(
+            initialTabIndex: e.type == SearchIndexEntry.typeService
+                ? JobsTabs.service
+                : JobsTabs.ad,
+          ),
+        );
+        return;
+      case 'sell':
+        await _openModule(HomeModulesCatalog.byId('sell'));
+        return;
+      default:
+        try {
+          final m = HomeModulesCatalog.byId(module);
+          await _openModule(m);
+        } catch (_) {
+          _showTezKundaSnack();
+        }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final home = context.watch<HomeController>();
@@ -617,9 +734,9 @@ class _HomeViewState extends State<_HomeView> {
                               ),
                             ),
                             SizedBox(height: _sectionGap(context, base: 12)),
-                            ServicesSpotlightCarousel(
-                              key: ValueKey(_servicesCarouselEpoch),
-                              items: [
+                            Builder(
+                              builder: (context) {
+                                final spotlightItems = <ServiceSpotlightItem>[
                                 ServiceSpotlightItem(
                                   moduleId: 'local_taxi',
                                   label: context.tr('home_module_local'),
@@ -803,7 +920,19 @@ class _HomeViewState extends State<_HomeView> {
                                   onTap: () =>
                                       _push(const CarpetWashScreen()),
                                 ),
-                              ],
+                                ];
+                                return ServicesSpotlightCarousel(
+                                  key: ValueKey(_servicesCarouselEpoch),
+                                  items: spotlightItems,
+                                  onTitleTap: () => _push(
+                                    AllServicesScreen(items: spotlightItems),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            HomeGlobalSearchBar(
+                              onOpenEntry: _openSearchEntry,
                             ),
                             const SizedBox(height: 16),
                             FeaturedProductsSection(
@@ -811,6 +940,9 @@ class _HomeViewState extends State<_HomeView> {
                                 PlatformStoreScreen(
                                   highlightProductId: productId,
                                 ),
+                              ),
+                              onTitleTap: () => _push(
+                                const PlatformStoreScreen(),
                               ),
                             ),
                             if (HomeModuleGate.showInGrid('sell')) ...[
@@ -846,7 +978,7 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('jobs')) ...[
                               const SizedBox(height: 16),
                               HomeJobsPreviewSection(
-                                onOpenBoard: () {
+                                onSeeAll: () {
                                   if (!ServiceConfigHolder.isOpenable(
                                       'jobs')) {
                                     _showTezKundaSnack();
@@ -855,6 +987,19 @@ class _HomeViewState extends State<_HomeView> {
                                   _push(
                                     const JobsScreen(
                                       initialTabIndex: JobsTabs.ad,
+                                    ),
+                                  );
+                                },
+                                onOpenAd: (ad) {
+                                  if (!ServiceConfigHolder.isOpenable(
+                                      'jobs')) {
+                                    _showTezKundaSnack();
+                                    return;
+                                  }
+                                  _push(
+                                    JobsScreen(
+                                      initialTabIndex:
+                                          JobsTabs.indexForKind(ad.kind),
                                     ),
                                   );
                                 },

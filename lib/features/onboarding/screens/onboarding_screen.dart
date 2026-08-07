@@ -1,21 +1,18 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/user_repository.dart';
-import '../../../shared/navigation/app_home_route.dart';
 import '../../../services/location_service.dart';
 import '../controllers/onboarding_controller.dart';
 import 'onboarding_bootstrap_screen.dart';
 
-/// Ихчам онбординг: исм + телефон → Home (тил/туман олдинда).
+/// Ихчам онбординг: исм + телефон → fingerprint bind → Home.
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
 
@@ -48,10 +45,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
   static const _green = AppColors.primary;
   static const _greenDark = AppColors.primaryDark;
 
-  final _pageController = PageController();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _otpCtrl = TextEditingController();
   final _birthDateCtrl = TextEditingController();
 
   bool _isLoading = false;
@@ -76,10 +71,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
 
   @override
   void dispose() {
-    _pageController.dispose();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _otpCtrl.dispose();
     _birthDateCtrl.dispose();
     super.dispose();
   }
@@ -97,106 +90,41 @@ class _OnboardingViewState extends State<_OnboardingView> {
     final c = context.read<OnboardingController>();
     final loc = AppLocalizations.of(context)!;
 
-    if (c.currentPage == 0) {
-      final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
-      if (err != null) {
-        _showError(loc.translate(err));
+    final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
+    if (err != null) {
+      _showError(loc.translate(err));
+      return;
+    }
+    final raw = _phoneCtrl.text.trim();
+    setState(() => _isLoading = true);
+    try {
+      final ok = await c.checkPhoneDeviceLock(raw);
+      if (!ok || !mounted) {
+        final stepErr = c.phoneStepError;
+        if (stepErr != null && mounted) {
+          _showError(loc.translate(stepErr) == stepErr
+              ? stepErr
+              : loc.translate(stepErr));
+        }
         return;
       }
-      final raw = _phoneCtrl.text.trim();
-      setState(() => _isLoading = true);
-      try {
-        final ok = await c.checkPhoneDeviceLock(raw);
-        if (!ok || !mounted) return;
 
-        final fullPhone = '+${phoneDigits(raw)}';
-
-        if (c.otpVerified || c.skipSmsVerification) {
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) => ChangeNotifierProvider<OnboardingController>.value(
-                value: c,
-                child: OnboardingBootstrapScreen(
-                  name: _nameCtrl.text,
-                  phone: raw,
-                ),
-              ),
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => ChangeNotifierProvider<OnboardingController>.value(
+            value: c,
+            child: OnboardingBootstrapScreen(
+              name: _nameCtrl.text,
+              phone: raw,
             ),
-          );
-          return;
-        }
-
-        final current = FirebaseAuth.instance.currentUser;
-        if (current != null &&
-            current.phoneNumber == fullPhone &&
-            current.phoneNumber != null) {
-          c.otpVerified = true;
-          await _finish();
-          return;
-        }
-
-        // Fallback: needsVerification — админ код оқими.
-        final sent = await c.requestAdminCode(raw);
-        if (!mounted) return;
-        if (!sent) {
-          _showError(
-              c.otpError ?? loc.translate('ob_code_request_failed'));
-          return;
-        }
-        c.advance();
-        await _pageController.nextPage(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeInOut,
-        );
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
-      }
-      return;
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
-    if (err != null) {
-      _showError(loc.translate(err));
-      return;
-    }
-    if (c.isLastPage) {
-      await _finish();
-      return;
-    }
-    c.advance();
-    await _pageController.nextPage(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  void _prev() {
-    final c = context.read<OnboardingController>();
-    c.back();
-    _pageController.previousPage(
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  Future<void> _finish() async {
-    final c = context.read<OnboardingController>();
-    final loc = AppLocalizations.of(context)!;
-    final err = c.validate(name: _nameCtrl.text, phone: _phoneCtrl.text);
-    if (err != null) {
-      _showError(loc.translate(err));
-      return;
-    }
-    final ok = await c.finish(
-      name: _nameCtrl.text,
-      phone: _phoneCtrl.text,
-    );
-    final finishErr = c.consumeError();
-    if (finishErr != null && mounted) _showError(finishErr);
-    if (!ok || !mounted) return;
-    pushAppHome(context);
   }
 
   @override
@@ -219,57 +147,19 @@ class _OnboardingViewState extends State<_OnboardingView> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                child: Column(
-                  children: [
-                    Text(
-                      BrandLabels.brand,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: _greenDark,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    if (c.currentPage > 0) ...[
-                      const SizedBox(height: 10),
-                      _progressBar(c.currentPage),
-                    ],
-                  ],
+                child: Text(
+                  BrandLabels.brand,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: _greenDark,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  onPageChanged: c.goToPage,
-                  children: [
-                    _pageIdentity(loc, c),
-                    _pageOtp(loc, c),
-                  ],
-                ),
-              ),
+              Expanded(child: _pageIdentity(loc, c)),
               _footer(c, loc),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _progressBar(int currentPage) {
-    return Row(
-      children: List.generate(
-        OnboardingController.totalPages,
-        (i) => Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            height: 6,
-            decoration: BoxDecoration(
-              color: i <= currentPage
-                  ? _green
-                  : _green.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(99),
-            ),
           ),
         ),
       ),
@@ -279,57 +169,38 @@ class _OnboardingViewState extends State<_OnboardingView> {
   Widget _footer(OnboardingController c, AppLocalizations loc) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-      child: Row(
-        children: [
-          if (c.currentPage > 0)
-            TextButton(
-              onPressed: _isLoading ? null : _prev,
-              child: Text(
-                loc.translate('ob_back'),
-                style: const TextStyle(
-                  color: _muted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          if (c.currentPage > 0) const SizedBox(width: 8),
-          Expanded(
-            child: SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
-                    ? null
-                    : _next,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _greenDark,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: c.isSubmitting || _isLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        c.isLastPage
-                            ? loc.translate('ob_start')
-                            : loc.translate('continue'),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-              ),
+      child: SizedBox(
+        height: 52,
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: c.isSubmitting || c.isCheckingDevice || _isLoading
+              ? null
+              : _next,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _greenDark,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
           ),
-        ],
+          child: c.isSubmitting || c.isCheckingDevice || _isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  loc.translate('continue'),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        ),
       ),
     );
   }
@@ -471,136 +342,6 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   text: loc.translate('ob_birth_benefit'),
                   warm: true,
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Page 1 ───────────────────────────────────────────────────────────
-  Widget _pageOtp(AppLocalizations loc, OnboardingController c) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('🔐', style: TextStyle(fontSize: 40)),
-          const SizedBox(height: 8),
-          Text(
-            loc.translate('ob_otp_title'),
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: _ink,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            c.isAdminCodeReady
-                ? loc.translate('ob_admin_code_ready')
-                : loc
-                    .translate('ob_admin_code_creating')
-                    .replaceAll('{phone}', _phoneCtrl.text),
-            style: const TextStyle(
-              fontSize: 14,
-              color: _muted,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _card(
-            child: Column(
-              children: [
-                if (c.isAdminCodeReady && c.generatedAdminCode != null) ...[
-                  Text(
-                    loc
-                        .translate('ob_admin_code_label')
-                        .replaceAll('{code}', c.generatedAdminCode!),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: _greenDark,
-                      letterSpacing: 4,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                TextField(
-                  controller: _otpCtrl,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  maxLength: 6,
-                  autofocus: true,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 8,
-                    color: _ink,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '------',
-                    counterText: '',
-                    filled: true,
-                    fillColor: const Color(0xFFF3F4F6),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                  ),
-                  onChanged: (val) async {
-                    if (c.isAdminCodeReady &&
-                        c.generatedAdminCode != null &&
-                        val.trim().isEmpty) {
-                      _otpCtrl.text = c.generatedAdminCode!;
-                      _otpCtrl.selection = TextSelection.collapsed(
-                        offset: c.generatedAdminCode!.length,
-                      );
-                    }
-                    if (val.trim().length == 6) {
-                      final ok = await c.verifyAdminCode(
-                        _phoneCtrl.text,
-                        val.trim(),
-                      );
-                      if (ok && mounted) {
-                        await _finish();
-                      } else if (mounted && c.otpError != null) {
-                        _showError(c.otpError!);
-                      }
-                    }
-                  },
-                ),
-                if (c.isSendingOtp ||
-                    (!c.isAdminCodeReady && !c.otpVerified)) ...[
-                  const SizedBox(height: 12),
-                  const LinearProgressIndicator(color: _green),
-                  const SizedBox(height: 8),
-                  Text(
-                    c.isSendingOtp
-                        ? loc.translate('ob_admin_code_sending')
-                        : loc.translate('ob_admin_code_waiting'),
-                    style: const TextStyle(color: _muted, fontSize: 13),
-                  ),
-                ],
-                if (c.otpVerified) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: _green, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        loc.translate('ob_otp_verified'),
-                        style: const TextStyle(
-                          color: _greenDark,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),

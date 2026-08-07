@@ -10,9 +10,13 @@ import '../../../repositories/orders_repository.dart';
 import '../controllers/food_controller.dart';
 import '../widgets/food_cart_sheet.dart';
 import '../widgets/product_card.dart';
+import '../../../models/food_product.dart';
 
 class FoodScreen extends StatelessWidget {
-  const FoodScreen({super.key});
+  const FoodScreen({super.key, this.highlightProductId});
+
+  /// `food_catalog` doc id (`food_12`) ёки `inventoryId`.
+  final String? highlightProductId;
 
   @override
   Widget build(BuildContext context) {
@@ -25,19 +29,35 @@ class FoodScreen extends StatelessWidget {
         unawaited(c.init());
         return c;
       },
-      child: const _FoodView(),
+      child: _FoodView(highlightProductId: highlightProductId),
     );
   }
 }
 
 class _FoodView extends StatefulWidget {
-  const _FoodView();
+  const _FoodView({this.highlightProductId});
+
+  final String? highlightProductId;
 
   @override
   State<_FoodView> createState() => _FoodViewState();
 }
 
 class _FoodViewState extends State<_FoodView> {
+  List<FoodProduct> _orderedFoodProducts(List<FoodProduct> list) {
+    final id = widget.highlightProductId?.trim() ?? '';
+    if (id.isEmpty) return list;
+    final idx = list.indexWhere((p) {
+      final inv = p.inventoryId;
+      return inv == id || 'food_${p.id}' == id || '${p.id}' == id;
+    });
+    if (idx <= 0) return list;
+    final copy = List<FoodProduct>.from(list);
+    final item = copy.removeAt(idx);
+    copy.insert(0, item);
+    return copy;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -163,7 +183,7 @@ class _FoodViewState extends State<_FoodView> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final products = c.filteredProducts;
+                final products = _orderedFoodProducts(c.filteredProducts);
                 if (constraints.maxWidth >= 700) {
                   final horizontalPad =
                       (constraints.maxWidth * 0.05).clamp(18.0, 56.0);

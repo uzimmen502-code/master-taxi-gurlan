@@ -11,11 +11,15 @@ import '../../jobs/jobs_colors.dart';
 class HomeJobsPreviewSection extends StatelessWidget {
   const HomeJobsPreviewSection({
     super.key,
-    required this.onOpenBoard,
+    required this.onSeeAll,
+    required this.onOpenAd,
   });
 
-  /// «Барчаси» ва қатор босиш → ИШ ЭЪЛОН экрани.
-  final VoidCallback onOpenBoard;
+  /// «Барчаси» → ИШ ЭЪЛОН (Иш бор таб).
+  final VoidCallback onSeeAll;
+
+  /// Қатор → шу эълон турига мос таб (Иш бор / Хизмат таклифи).
+  final ValueChanged<JobAd> onOpenAd;
 
   static const int maxItems = 8;
 
@@ -72,7 +76,7 @@ class HomeJobsPreviewSection extends StatelessWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: onOpenBoard,
+                  onPressed: onSeeAll,
                   style: TextButton.styleFrom(
                     foregroundColor: JobsColors.bar,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -93,7 +97,10 @@ class HomeJobsPreviewSection extends StatelessWidget {
             ...items.map(
               (ad) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _JobsPreviewTile(ad: ad, onTap: onOpenBoard),
+                child: _JobsPreviewTile(
+                  ad: ad,
+                  onTap: () => onOpenAd(ad),
+                ),
               ),
             ),
           ],

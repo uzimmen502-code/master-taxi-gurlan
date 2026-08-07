@@ -37,9 +37,15 @@ class ServicesSpotlightCarousel extends StatefulWidget {
   const ServicesSpotlightCarousel({
     super.key,
     required this.items,
+    this.onTitleTap,
   });
 
   final List<ServiceSpotlightItem> items;
+  /// «Хизматлар - танланг» — барча хизматлар экранига.
+  final VoidCallback? onTitleTap;
+
+  /// 3D «оёқ» сояси учун қўшимча баландлик (катак ичидан емайди).
+  static const shadowFoot = 5.0;
 
   @override
   State<ServicesSpotlightCarousel> createState() =>
@@ -53,8 +59,6 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
   static const _initialVirtualPage = 50000;
   static const _aspectRatio = 0.92;
   static const _colGap = 10.0;
-  /// 3D «оёқ» сояси учун қўшимча баландлик (катак ичидан емайди).
-  static const _shadowFoot = 5.0;
   static const _viewportFraction = 1.0 / _visibleCount;
 
   late final PageController _controller;
@@ -144,29 +148,40 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              context.tr('home_services_spotlight_title'),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF102418),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTitleTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Text(
+                    context.tr('home_services_spotlight_title'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF102418),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 22,
+                    color: Color(0xFF102418),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 2),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 22,
-              color: Color(0xFF102418),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, c) {
             final cellW = c.maxWidth * _viewportFraction;
-            final rowH = (cellW - _colGap) / _aspectRatio + _shadowFoot;
+            final rowH =
+                (cellW - _colGap) / _aspectRatio + ServicesSpotlightCarousel.shadowFoot;
             return SizedBox(
               height: rowH,
               child: Listener(
@@ -187,7 +202,7 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
                       final item = _visible[index % _visible.length];
                       return Padding(
                         padding: const EdgeInsets.only(right: _colGap),
-                        child: _SpotlightTile(item: item),
+                        child: ServiceSpotlightTile(item: item),
                       );
                     },
                   ),
@@ -201,16 +216,17 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
   }
 }
 
-class _SpotlightTile extends StatefulWidget {
-  const _SpotlightTile({required this.item});
+/// Хизмат катакчаси — карусель ва «барча хизматлар» гриди учун.
+class ServiceSpotlightTile extends StatefulWidget {
+  const ServiceSpotlightTile({super.key, required this.item});
 
   final ServiceSpotlightItem item;
 
   @override
-  State<_SpotlightTile> createState() => _SpotlightTileState();
+  State<ServiceSpotlightTile> createState() => _ServiceSpotlightTileState();
 }
 
-class _SpotlightTileState extends State<_SpotlightTile> {
+class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
   static const _radius = 14.0;
   static const _facePressed = Color(0xFFEEF6D8);
 
@@ -255,7 +271,9 @@ class _SpotlightTileState extends State<_SpotlightTile> {
       onTapCancel: () => _setPressed(false),
       child: Padding(
         // 3D «оёқ» сояси учун жой — қатор баландлигига қўшилган.
-        padding: EdgeInsets.only(bottom: pressed ? 1 : _ServicesSpotlightCarouselState._shadowFoot),
+        padding: EdgeInsets.only(
+          bottom: pressed ? 1 : ServicesSpotlightCarousel.shadowFoot,
+        ),
         child: SizedBox.expand(
           child: AnimatedContainer(
           duration: const Duration(milliseconds: 90),

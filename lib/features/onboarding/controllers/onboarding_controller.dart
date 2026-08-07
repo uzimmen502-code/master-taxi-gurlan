@@ -6,13 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/firebase_functions_client.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/user_address.dart';
 import '../../../repositories/device_binding_repository.dart';
-import '../../../repositories/pending_code_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
@@ -25,18 +23,15 @@ class OnboardingController extends ChangeNotifier {
     required LocationService locationService,
     DeviceFingerprintService? fingerprintService,
     DeviceBindingRepository? deviceBindingRepo,
-    PendingCodeRepository? pendingCodeRepo,
   })  : _userRepo = userRepo,
         _locationService = locationService,
         _fingerprintService = fingerprintService ?? DeviceFingerprintService(),
-        _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository(),
-        _pendingCodeRepo = pendingCodeRepo ?? PendingCodeRepository();
+        _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository();
 
   final UserRepository _userRepo;
   final LocationService _locationService;
   final DeviceFingerprintService _fingerprintService;
   final DeviceBindingRepository _deviceBindingRepo;
-  final PendingCodeRepository _pendingCodeRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   /// Custom token sign-in + force-refresh so Firestore rules see
@@ -46,20 +41,15 @@ class OnboardingController extends ChangeNotifier {
     await _auth.currentUser?.getIdToken(true);
   }
 
-  StreamSubscription<PendingCodeStatusUpdate>? _pendingCodeSubscription;
-  bool isVerifyingOtp = false;
-  bool isSendingOtp = false;
-  String? otpError;
+  /// Fingerprint binding OK (eski nom: otpVerified — bootstrap/finish учун).
   bool otpVerified = false;
-  bool isAdminCodeReady = false;
-  String? generatedAdminCode;
 
   DeviceFingerprintSnapshot? _fingerprintSnapshot;
   bool _bindingRegistered = false;
   String _deviceLockedUid = '';
 
-  /// Ихчам онбординг: шахс+телефон → (керак бўлса) админ код. Тил/туман олдинда.
-  static const totalPages = 2;
+  /// Ихчам онбординг: шахс+телефон → fingerprint bind → Home. Тил/туман олдинда.
+  static const totalPages = 1;
 
   int currentPage = 0;
   String gender = 'male';
@@ -291,19 +281,12 @@ class OnboardingController extends ChangeNotifier {
     required String name,
     required String phone,
   }) {
-    switch (currentPage) {
-      case 0:
-        if (name.trim().isEmpty) return 'ob_err_name';
-        final d = phoneDigits(phone);
-        if (d.length < 12) return 'ob_phone_required';
-        if (birthDate.trim().isNotEmpty &&
-            parseBirthDate(birthDate.trim()) == null) {
-          return 'ob_birth_invalid_format';
-        }
-        break;
-      case 1:
-        if (!otpVerified) return 'ob_err_otp';
-        break;
+    if (name.trim().isEmpty) return 'ob_err_name';
+    final d = phoneDigits(phone);
+    if (d.length < 12) return 'ob_phone_required';
+    if (birthDate.trim().isNotEmpty &&
+        parseBirthDate(birthDate.trim()) == null) {
+      return 'ob_birth_invalid_format';
     }
     return null;
   }
@@ -351,14 +334,6 @@ class OnboardingController extends ChangeNotifier {
   }
 
   void back() {
-    if (currentPage == 1) {
-      cancelPendingCodeWatch();
-      otpVerified = false;
-      otpError = null;
-      isAdminCodeReady = false;
-      generatedAdminCode = null;
-      resetPhoneStepError();
-    }
     if (currentPage > 0) {
       currentPage--;
       notifyListeners();
@@ -425,9 +400,10 @@ class OnboardingController extends ChangeNotifier {
           return true;
 
         case DeviceBindingStatus.needsVerification:
-          _deviceLockedUid = digits;
-          phoneStepError = null;
-          return true;
+          // Pending-code оқими олиб ташланди — фақат fingerprint bind.
+          phoneStepError = result.message ??
+              'Қурилмани боғлаб бўлмади. Қайта уриниб кўринг.';
+          return false;
 
         case DeviceBindingStatus.deviceBoundOtherPhone:
           phoneStepError =
@@ -466,144 +442,10 @@ class OnboardingController extends ChangeNotifier {
     }
   }
 
-  String _pendingDocId(String rawPhone) => phoneDigits(rawPhone);
-
-  void cancelPendingCodeWatch() {
-    _pendingCodeSubscription?.cancel();
-    _pendingCodeSubscription = null;
-  }
-
-  /// Admin panel orqali kod (real SMS yo'q).
-  Future<bool> requestAdminCode(String rawPhone) async {
-    final digits = _pendingDocId(rawPhone);
-    if (digits.length < 12) {
-      otpError = 'Telefon raqamini to\'liq kiriting';
-      notifyListeners();
-      return false;
-    }
-
-    isSendingOtp = true;
-    otpError = null;
-    isAdminCodeReady = false;
-    generatedAdminCode = null;
-    _deviceLockedUid = digits;
-    notifyListeners();
-
-    try {
-      if (!await _requireValidFingerprintHash()) {
-        return false;
-      }
-      final snapshot = _fingerprintSnapshot!;
-      await _pendingCodeRepo.requestPendingCode(
-        phone: digits,
-        snapshot: snapshot,
-      );
-
-      cancelPendingCodeWatch();
-      _pendingCodeSubscription = _pendingCodeRepo
-          .watchStatus(
-            phone: digits,
-            deviceFingerprintHash: snapshot.hash,
-          )
-          .listen((update) {
-        if (update.status == 'expired') {
-          otpError = 'Код муддати ўтган. Қайта урининг.';
-          isAdminCodeReady = false;
-          generatedAdminCode = null;
-          notifyListeners();
-          return;
-        }
-
-        if (update.isApproved) {
-          generatedAdminCode = update.code;
-          isAdminCodeReady = true;
-          otpError = null;
-          notifyListeners();
-        }
-      }, onError: (Object e) {
-        otpError = 'Xatolik: $e';
-        notifyListeners();
-      });
-
-      return true;
-    } catch (e) {
-      otpError = 'Xatolik: $e';
-      return false;
-    } finally {
-      isSendingOtp = false;
-      notifyListeners();
-    }
-  }
-
-  /// Eski nomlar — onboarding UI bilan mos.
-  Future<bool> sendOtp(String rawPhone) => requestAdminCode(rawPhone);
-
-  Future<bool> verifyAdminCode(String rawPhone, String enteredCode) async {
-    final digits = _pendingDocId(rawPhone);
-    final code = enteredCode.trim();
-    if (digits.length < 12) {
-      otpError = 'Telefon raqamini to\'liq kiriting';
-      notifyListeners();
-      return false;
-    }
-    if (code.length != 6) {
-      otpError = '6 рақамли кодни киритинг';
-      notifyListeners();
-      return false;
-    }
-
-    isVerifyingOtp = true;
-    otpError = null;
-    notifyListeners();
-
-    try {
-      if (!await _requireValidFingerprintHash()) {
-        return false;
-      }
-      final snapshot = _fingerprintSnapshot!;
-      final callable =
-          AvaFunctions.auth.httpsCallable(
-        'verifyPendingCodeAndRegister',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
-      );
-      final result = await callable.call<Map<String, dynamic>>({
-        'phone': digits,
-        'code': code,
-        'deviceFingerprintHash': snapshot.hash,
-        'fingerprint': Map<String, String>.from(snapshot.components),
-      });
-      final data = Map<String, dynamic>.from(result.data as Map);
-      final token = data['customToken'] as String?;
-      if (token != null && token.isNotEmpty) {
-        await _signInWithPhoneCustomToken(token);
-      }
-      otpVerified = true;
-      _bindingRegistered = true;
-      _deviceLockedUid = digits;
-      cancelPendingCodeWatch();
-      return true;
-    } on FirebaseFunctionsException catch (e) {
-      otpError = _callableErrorMessage(e);
-      return false;
-    } catch (e) {
-      otpError = 'Xatolik: $e';
-      return false;
-    } finally {
-      isVerifyingOtp = false;
-      notifyListeners();
-    }
-  }
-
-  Future<bool> verifyOtp(String code) =>
-      verifyAdminCode(_deviceLockedUid, code);
-
   void resetPhoneStepError() {
     phoneStepError = null;
     notifyListeners();
   }
-
-  String _callableErrorMessage(FirebaseFunctionsException e) =>
-      firebaseFunctionsUserMessage(e);
 
   Future<bool> _hasNetworkInterface() async {
     if (kIsWeb) return true;

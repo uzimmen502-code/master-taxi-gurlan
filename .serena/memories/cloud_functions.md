@@ -77,7 +77,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 
 ## Auth / Device Binding / Phone
 - checkDeviceBinding / registerDeviceBinding — device fingerprint binding (`device_bindings`).
-- requestPendingCode / getPendingCodeStatus / verifyPendingCodeAndRegister — admin-code phone verify flow (`pending_codes`).
+- requestPendingCode / getPendingCodeStatus / verifyPendingCodeAndRegister — legacy admin-code flow (`pending_codes`); client onboarding/reverify **no longer** uses them (fingerprint + checkDeviceBinding + createPhoneSession).
 - autoApprovePendingCode / autoApprovePendingCodeOnUpdate (triggers) — auto-approve codes.
 - changeDevicePhone — change phone bound to device.
 - migrateOldBindings / migrateCheapProductTitleLower / migratePhoneFormats — one-off migrations (onCall).

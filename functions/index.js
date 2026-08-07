@@ -5321,9 +5321,10 @@ exports.checkDeviceBinding = authFunctions
     });
   } catch (linkErr) {
     console.error('checkDeviceBinding first bind failed:', linkErr.message || linkErr);
+    // Pending-code fallback олиб ташланди — клиент қайта уринишни кўрсатади.
     return {
       status: 'needs_verification',
-      skipSms: false,
+      skipSms: true,
       message: 'Qurilmani bog\'lab bo\'lmadi. Qayta urinib ko\'ring.',
     };
   }

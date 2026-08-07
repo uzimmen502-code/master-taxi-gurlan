@@ -3,23 +3,20 @@ import 'dart:async';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/firebase_functions_client.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/firebase_functions_errors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../repositories/pending_code_repository.dart';
+import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
 
-/// Mavjud foydalanuvchi — Firebase sessiyasi yo'qolganda qayta kirish wizard.
+/// Mavjud foydalanuvchi — Firebase sessiyasi yo'qolganda qayta kirish.
 ///
-/// Ma'lumot: SharedPreferences + ixtiyoriy Firestore. Har qadam foydalanuvchi
-/// tasdiqlashi bilan ochiladi (avtomatik kod so'rovi / verify yo'q).
+/// Fingerprint + device_bindings → createPhoneSession (pending-code yo'q).
 class PhoneReverifyScreen extends StatefulWidget {
   const PhoneReverifyScreen({super.key});
 
@@ -28,17 +25,17 @@ class PhoneReverifyScreen extends StatefulWidget {
 }
 
 class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
-  static const _stepCount = 4;
-
   final _pageController = PageController();
-  final _otpCtrl = TextEditingController();
   final _auth = FirebaseAuth.instance;
   final _fingerprintService = DeviceFingerprintService();
-  final _pendingCodeRepo = PendingCodeRepository();
+  final _bindingRepo = DeviceBindingRepository();
   final _userRepo = UserRepository();
 
   int _step = 0;
   bool _loadingProfile = true;
+  bool _signingIn = false;
+  bool _signedIn = false;
+  String? _error;
 
   String _phoneDigits = '';
   String _phoneE164 = '';
@@ -47,16 +44,10 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   String _birthDate = '';
   String _address = '';
 
-  StreamSubscription<PendingCodeStatusUpdate>? _codeSub;
-  bool _waitingCode = false;
-  bool _codeReady = false;
-  String? _generatedCode;
-  bool _verifying = false;
-  bool _otpVerified = false;
-  String? _error;
-
   bool get _showProfileStep =>
       _birthDate.trim().isNotEmpty && _address.trim().isNotEmpty;
+
+  int get _stepCount => _showProfileStep ? 3 : 2;
 
   @override
   void initState() {
@@ -66,9 +57,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
 
   @override
   void dispose() {
-    _codeSub?.cancel();
     _pageController.dispose();
-    _otpCtrl.dispose();
     super.dispose();
   }
 
@@ -145,134 +134,66 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
         await _goToStep(1);
         return;
       case 1:
-        await _requestAdminCodeAndContinue();
+        await _bindAndSignIn();
         return;
       case 2:
-        if (_otpVerified) {
-          await _advanceAfterOtp();
-        } else {
-          await _verifyCode(_otpCtrl.text.trim());
-        }
-        return;
-      case 3:
         await _goHome();
         return;
     }
   }
 
-  Future<void> _advanceAfterOtp() async {
-    if (_showProfileStep) {
-      await _goToStep(3);
-    } else {
-      await _goHome(showProfileHint: true);
-    }
-  }
-
-  void _resetCodeState() {
-    _codeSub?.cancel();
-    _codeSub = null;
-    _waitingCode = false;
-    _codeReady = false;
-    _generatedCode = null;
-    _otpVerified = false;
-    _verifying = false;
-    _otpCtrl.clear();
-  }
-
-  Future<void> _requestAdminCodeAndContinue() async {
-    _resetCodeState();
+  Future<void> _bindAndSignIn() async {
+    if (_signingIn || _signedIn) return;
+    final invalidDeviceMsg = context.tr('reverify_device_id_invalid');
+    final bindFailedMsg = context.tr('reverify_bind_failed');
+    final errorPrefix = context.tr('error');
     setState(() {
-      _waitingCode = true;
+      _signingIn = true;
       _error = null;
     });
 
     try {
       final snapshot = await _fingerprintService.collect();
-      await _pendingCodeRepo.requestPendingCode(
+      if (!DeviceBindingRepository.isValidFingerprintHash(snapshot.hash)) {
+        throw StateError(invalidDeviceMsg);
+      }
+
+      final result = await _bindingRepo.checkDeviceBinding(
         phone: _phoneDigits,
         snapshot: snapshot,
       );
 
-      _codeSub = _pendingCodeRepo
-          .watchStatus(
-            phone: _phoneDigits,
-            deviceFingerprintHash: snapshot.hash,
-          )
-          .listen((update) {
+      if (result.status != DeviceBindingStatus.trustedDevice) {
         if (!mounted) return;
-
-        if (update.status == 'expired') {
-          setState(() {
-            _error = context.tr('reverify_code_expired');
-            _waitingCode = false;
-            _codeReady = false;
-          });
-          return;
-        }
-
-        if (update.isApproved) {
-          final code = update.code!;
-          setState(() {
-            _generatedCode = code;
-            _codeReady = true;
-            _waitingCode = false;
-            _error = null;
-          });
-          if (_otpCtrl.text != code) {
-            _otpCtrl.text = code;
-            _otpCtrl.selection = TextSelection.collapsed(offset: code.length);
-          }
-        }
-      }, onError: (Object e) {
-        if (!mounted) return;
-        setState(() => _error = '${context.tr('error')}: $e');
-      });
-
-      await _goToStep(2);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = '${context.tr('error')}: $e');
-    }
-  }
-
-  Future<void> _verifyCode(String code) async {
-    if (code.trim().length != 6 || _verifying || _otpVerified) return;
-    if (!_codeReady) return;
-
-    setState(() {
-      _verifying = true;
-      _error = null;
-    });
-
-    try {
-      final snapshot = await _fingerprintService.collect();
-      final callable = AvaFunctions.auth.httpsCallable(
-        'verifyPendingCodeAndRegister',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 45)),
-      );
-      final result = await callable.call<Map<String, dynamic>>({
-        'phone': _phoneDigits,
-        'code': code.trim(),
-        'deviceFingerprintHash': snapshot.hash,
-        'fingerprint': Map<String, String>.from(snapshot.components),
-      });
-      final data = Map<String, dynamic>.from(result.data as Map);
-      final token = data['customToken'] as String?;
-      if (token != null && token.isNotEmpty) {
-        await _auth.signInWithCustomToken(token);
-        await _auth.currentUser?.getIdToken(true);
+        setState(() {
+          _error = result.message ?? bindFailedMsg;
+        });
+        return;
       }
-      _codeSub?.cancel();
+
+      final token = await _bindingRepo.createPhoneSession(
+        phone: _phoneDigits,
+        snapshot: snapshot,
+      );
+      await _auth.signInWithCustomToken(token);
+      await _auth.currentUser?.getIdToken(true);
+
       if (!mounted) return;
-      setState(() => _otpVerified = true);
+      setState(() => _signedIn = true);
+
+      if (_showProfileStep) {
+        await _goToStep(2);
+      } else {
+        await _goHome(showProfileHint: true);
+      }
     } on FirebaseFunctionsException catch (e) {
       if (!mounted) return;
       setState(() => _error = firebaseFunctionsUserMessage(e));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '${context.tr('error')}: $e');
+      setState(() => _error = '$errorPrefix: $e');
     } finally {
-      if (mounted) setState(() => _verifying = false);
+      if (mounted) setState(() => _signingIn = false);
     }
   }
 
@@ -311,8 +232,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   }
 
   Future<void> _back() async {
-    if (_step == 0) return;
-    if (_step == 2) _resetCodeState();
+    if (_step == 0 || _signingIn) return;
     await _goToStep(_step - 1);
   }
 
@@ -325,20 +245,16 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   String _primaryLabel(BuildContext context) {
     return switch (_step) {
       0 => context.tr('reverify_confirm_yes'),
-      1 => context.tr('reverify_request_code'),
-      2 => _otpVerified
-          ? context.tr('continue')
-          : context.tr('reverify_confirm_code'),
+      1 => _signingIn
+          ? context.tr('ob_otp_verifying')
+          : context.tr('reverify_enter_app'),
       _ => context.tr('reverify_enter_app'),
     };
   }
 
   bool _primaryEnabled() {
-    if (_loadingProfile || _phoneDigits.length < 12) return false;
-    if (_step == 2) {
-      if (_verifying) return false;
-      if (_otpVerified) return true;
-      return _codeReady && _otpCtrl.text.trim().length == 6;
+    if (_loadingProfile || _phoneDigits.length < 12 || _signingIn) {
+      return false;
     }
     return true;
   }
@@ -404,8 +320,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                   children: [
                     _stepIdentity(context),
                     _stepPhone(context),
-                    _stepCode(context),
-                    _stepProfile(context),
+                    if (_showProfileStep) _stepProfile(context),
                   ],
                 ),
               ),
@@ -538,145 +453,19 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             label: context.tr('reverify_phone_label'),
             value: _phoneE164,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepCode(BuildContext context) {
-    final statusText = _codeReady
-        ? context.tr('reverify_code_ready').replaceAll('{phone}', _phoneE164)
-        : context.tr('reverify_code_waiting').replaceAll('{phone}', _phoneE164);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('🔐', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 12),
-          Text(
-            context.tr('reverify_title'),
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          if (_signingIn) ...[
+            const SizedBox(height: 28),
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.tr('reverify_code_confirm_hint'),
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            statusText,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withValues(alpha: 0.85),
-            ),
-          ),
-          if (_codeReady && _generatedCode != null) ...[
             const SizedBox(height: 12),
-            Text(
-              'Код: $_generatedCode',
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 6,
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: TextField(
-              controller: _otpCtrl,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              enabled: _codeReady && !_verifying && !_otpVerified,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 8,
-              ),
-              decoration: const InputDecoration(
-                hintText: '------',
-                counterText: '',
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 18,
-                ),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          if (_waitingCode && !_codeReady) ...[
-            const SizedBox(height: 20),
             Center(
-              child: Column(
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.tr('reverify_code_pending'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (_verifying) ...[
-            const SizedBox(height: 20),
-            Center(
-              child: Column(
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.tr('ob_otp_verifying'),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (_otpVerified) ...[
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  context.tr('ob_otp_verified'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
+              child: Text(
+                context.tr('ob_otp_verifying'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            ),
-          ],
-          if (!_waitingCode && !_codeReady && !_otpVerified) ...[
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: _requestAdminCodeAndContinue,
-              icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
-              label: Text(
-                context.tr('reverify_resend'),
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ),
           ],
@@ -724,7 +513,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
           ),
           const SizedBox(height: 12),
           _readOnlyCard(
-            icon: Icons.location_on_outlined,
+            icon: Icons.home_outlined,
             label: context.tr('reverify_profile_address'),
             value: _address.isNotEmpty ? _address : '—',
           ),
@@ -740,17 +529,16 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Colors.white, size: 20),
-          const SizedBox(width: 10),
+          Icon(icon, color: Colors.white70, size: 22),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -758,16 +546,16 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   value,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -810,7 +598,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
         children: [
           if (_step > 0)
             GestureDetector(
-              onTap: _verifying ? null : _back,
+              onTap: _signingIn ? null : _back,
               child: Container(
                 width: 50,
                 height: 50,
@@ -835,13 +623,19 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: Text(
-                  _primaryLabel(context),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _signingIn
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _primaryLabel(context),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ),

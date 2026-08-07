@@ -1,23 +1,69 @@
 import '../../features/ads/utils/ad_search_text.dart';
 import '../../models/platform_product.dart';
 
-/// Платформа дўкони / онлайн бозор / эълонлар учун умумий қидирув.
+/// Платформа дўкони / онлайн бозор / эълонлар / глобал қидирув.
 ///
 /// Фильтр: AND токенлар + кирилл ↔ лотин.
 /// Жойлаштириш (каттароқ = юқорироқ):
-/// 1 exact title · 2 whole word · 3 prefix · 4 stem/affix ·
-/// 5 compound · 6 extra fields · 7 weak contains ·
-/// тенгликда: кўпроқ номдаги токен · қисқароқ ном.
+/// 1 exact title · 2 whole word · 3 prefix (+ morph) · 4 morph stem ·
+/// 5 compound · 6 extra fields.
+///
+/// Stem-only / умумий ҳарфлар (такси↔таклиф) — натижа эмас.
 class CatalogSearch {
   CatalogSearch._();
 
-  static const _wExact = 1000;
-  static const _wWholeWord = 800;
-  static const _wPrefix = 600;
-  static const _wStem = 400;
-  static const _wCompound = 250;
-  static const _wExtra = 100;
-  static const _wWeak = 40;
+  static const wExact = 1000;
+  static const wWholeWord = 800;
+  static const wPrefix = 600;
+  static const wStem = 400;
+  static const wCompound = 250;
+  static const wExtra = 100;
+
+  /// Кучли мослик пасти (prefix ва ундан юқори) — gate учун.
+  static const strongMatchMin = wPrefix;
+
+  static const _wExact = wExact;
+  static const _wWholeWord = wWholeWord;
+  static const _wPrefix = wPrefix;
+  static const _wStem = wStem;
+  static const _wCompound = wCompound;
+  static const _wExtra = wExtra;
+
+  /// Қисқа morph / дериват суффикслари (кирилл + лотин).
+  static const _morphSuffixes = <String>{
+    'чи',
+    'ли',
+    'лик',
+    'лар',
+    'га',
+    'да',
+    'ни',
+    'дан',
+    'нинг',
+    'хона',
+    'вой',
+    'вор',
+    'каш',
+    'кор',
+    'чилар',
+    'ликлар',
+    'chi',
+    'li',
+    'lik',
+    'lar',
+    'ga',
+    'da',
+    'ni',
+    'dan',
+    'ning',
+    'xona',
+    'voy',
+    'vor',
+    'kash',
+    'kor',
+    'chilar',
+    'liklar',
+  };
 
   static final _wordSplit =
       RegExp(r"[^0-9a-zA-Zа-яёўқғҳА-ЯЁЎҚҒҲʻʼ']+", unicode: true);
@@ -45,22 +91,79 @@ class CatalogSearch {
     }.where((x) => x.isNotEmpty).toSet();
   }
 
-  /// [fields] ичида барча сўров сўзлари топилса true.
+  static int _commonPrefixLen(String a, String b) {
+    final n = a.length < b.length ? a.length : b.length;
+    var i = 0;
+    while (i < n && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
+  }
+
+  /// [wf] сўров [qf] дан morph/prefix даражада ўсадими?
+  static bool isMorphExtension(String queryForm, String wordForm) {
+    final qf = queryForm.trim().toLowerCase();
+    final wf = wordForm.trim().toLowerCase();
+    if (qf.isEmpty || wf.isEmpty) return false;
+    if (qf == wf) return true;
+    if (!wf.startsWith(qf) || wf.length <= qf.length) return false;
+    final rest = wf.substring(qf.length);
+    if (_morphSuffixes.contains(rest)) return true;
+    for (final s in _morphSuffixes) {
+      if (rest.startsWith(s)) return true;
+    }
+    return false;
+  }
+
+  /// Умумий илдиз фақат morph/prefix билан ва мин. 4 ҳарф.
+  static bool isValidatedStem(String queryForm, String wordForm) {
+    final qf = queryForm.trim().toLowerCase();
+    final wf = wordForm.trim().toLowerCase();
+    if (qf.length < 2 || wf.length < 2) return false;
+    if (qf == wf) return true;
+    if (isMorphExtension(qf, wf)) return true;
+    // Умумий илдиз: мин 4 + morph қолдиқ (ёлғон такси/таклиф ёпилади)
+    final rootLen = _commonPrefixLen(qf, wf);
+    if (rootLen < 4) return false;
+    if (rootLen < (qf.length * 0.6).ceil()) return false;
+    final root = qf.substring(0, rootLen);
+    return isMorphExtension(root, wf);
+  }
+
+  /// [fields] ичида барча сўров сўзлари кучли мос келса true.
+  /// Substring-contains эмас — whole / prefix / morph.
   static bool matches(String query, Iterable<String> fields) {
     final q = normalize(query);
     if (q.isEmpty) return true;
     final tokens = q.split(' ').where((t) => t.isNotEmpty).toList();
     if (tokens.isEmpty) return true;
 
-    final joined = normalize(
-      fields.map((f) => f.trim()).where((f) => f.isNotEmpty).join(' '),
-    );
-    final hay =
-        '$joined ${AdSearchText.toLatin(joined)} ${AdSearchText.toCyrillic(joined)}';
+    final fieldWords = <String>[];
+    for (final f in fields) {
+      final n = normalize(f.trim());
+      if (n.isEmpty) continue;
+      fieldWords.addAll(_words(n));
+      fieldWords.addAll(_words(AdSearchText.toLatin(n)));
+      fieldWords.addAll(_words(AdSearchText.toCyrillic(n)));
+    }
+    if (fieldWords.isEmpty) return false;
 
     for (final t in tokens) {
       final forms = _scriptForms(t);
-      final ok = forms.any(hay.contains);
+      var ok = false;
+      for (final qf in forms) {
+        for (final word in fieldWords) {
+          final wForms = _scriptForms(word);
+          for (final wf in wForms) {
+            if (qf == wf || isValidatedStem(qf, wf) || isMorphExtension(qf, wf)) {
+              ok = true;
+              break;
+            }
+          }
+          if (ok) break;
+        }
+        if (ok) break;
+      }
       if (!ok) return false;
     }
     return true;
@@ -91,24 +194,17 @@ class CatalogSearch {
             best = best < _wWholeWord ? _wWholeWord : best;
             continue;
           }
-          // Префикс: сўз сўров билан бошланади (Нон → Нонли)
-          if (qf.length >= 2 && wf.startsWith(qf)) {
+          // Фақат morph/дериват префикс (нон→нонвой, такси→таксичи).
+          // Оддий startsWith йўқ — иш→ишонч (ish…) ёлғонларини ёпади.
+          if (isMorphExtension(qf, wf)) {
             best = best < _wPrefix ? _wPrefix : best;
             continue;
           }
-          // Stem/affix: сўров сўз ildизидан ўсади (нон → нончи сўрови)
-          if (wf.length >= 3 && qf.startsWith(wf) && qf.length > wf.length) {
+          if (isValidatedStem(qf, wf)) {
             best = best < _wStem ? _wStem : best;
             continue;
           }
-          // Умумий ildиз (мин. 3): нонлар / нонвой
-          final rootLen = _commonPrefixLen(qf, wf);
-          if (rootLen >= 3 && rootLen >= (qf.length * 0.6).ceil()) {
-            best = best < _wStem ? _wStem : best;
-            continue;
-          }
-          // Бирикма ичида
-          if (qf.length >= 3 && wf.contains(qf) && !wf.startsWith(qf)) {
+          if (qf.length >= 4 && wf.contains(qf) && !wf.startsWith(qf)) {
             best = best < _wCompound ? _wCompound : best;
           }
         }
@@ -117,23 +213,22 @@ class CatalogSearch {
     return best;
   }
 
-  static int _commonPrefixLen(String a, String b) {
-    final n = a.length < b.length ? a.length : b.length;
-    var i = 0;
-    while (i < n && a.codeUnitAt(i) == b.codeUnitAt(i)) {
-      i++;
-    }
-    return i;
-  }
-
-  static bool _hayHasAny(String hay, Set<String> forms) {
-    for (final f in forms) {
-      if (f.isNotEmpty && hay.contains(f)) return true;
+  static bool _hayHasStrong(String hayWordsJoined, Set<String> forms) {
+    final words = _words(hayWordsJoined);
+    for (final qf in forms) {
+      for (final w in words) {
+        for (final wf in _scriptForms(w)) {
+          if (qf == wf || isMorphExtension(qf, wf) || isValidatedStem(qf, wf)) {
+            return true;
+          }
+        }
+      }
     }
     return false;
   }
 
-  /// Каттароқ = яхшироқ (номга тўғри келиш устун).
+  /// Каттароқ = яхшироқ. Мос келмаса 0 (stem-only / weak йўқ).
+  /// Барча сўров токенлари мос келиши шарт (AND).
   static int score(
     String query, {
     required String title,
@@ -149,7 +244,6 @@ class CatalogSearch {
 
     var s = 0;
 
-    // 1) Аниқ ном = сўров
     if (qForms.any(titleForms.contains)) {
       s += _wExact;
     }
@@ -173,25 +267,23 @@ class CatalogSearch {
         titleTokenHits++;
         continue;
       }
-      // Ном ичида заиф (сўз бўлинмаган бирикма)
-      if (_hayHasAny(titleHay, forms)) {
-        s += forms.any((f) => f.length >= 3) ? _wCompound : _wWeak;
+      if (_hayHasStrong(titleHay, forms)) {
+        s += _wCompound;
         titleTokenHits++;
         continue;
       }
-      // 6) Фақат тавсиф/бошқа майдон
-      if (_hayHasAny(extraHay, forms)) {
+      if (_hayHasStrong(extraHay, forms)) {
         s += _wExtra;
         continue;
       }
-      // 7) Заиф — matches() аллақачон ўтказган бўлиши мумкин
-      s += _wWeak;
+      // Бирор токен мос келмаса — бутун сўров номос (AND)
+      return 0;
     }
 
-    // Тенглик: кўпроқ ном токенлари, кейин қисқароқ ном
+    if (s <= 0) return 0;
+
     s += titleTokenHits * 10;
     s += (200 - titleN.length.clamp(0, 200));
-
     return s;
   }
 
@@ -203,7 +295,6 @@ class CatalogSearch {
     );
   }
 
-  /// score каттароқ биринчи; тенг бўлса [tieBreak] (мас. янгилик).
   static int compare(
     String query, {
     required String titleA,

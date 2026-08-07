@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 
 import '../../../l10n/app_localizations.dart';
 
+import '../../../models/bread_product.dart';
+
 import '../../../repositories/bread_repository.dart';
 
 import '../../../repositories/inventory_repository.dart';
@@ -28,9 +30,10 @@ import '../widgets/bread_product_card.dart';
 
 class BreadScreen extends StatelessWidget {
 
-  const BreadScreen({super.key});
+  const BreadScreen({super.key, this.highlightProductId});
 
-
+  /// `bread_products` Firestore doc id.
+  final String? highlightProductId;
 
   @override
 
@@ -48,7 +51,7 @@ class BreadScreen extends StatelessWidget {
 
       ),
 
-      child: const _BreadView(),
+      child: _BreadView(highlightProductId: highlightProductId),
 
     );
 
@@ -60,9 +63,9 @@ class BreadScreen extends StatelessWidget {
 
 class _BreadView extends StatefulWidget {
 
-  const _BreadView();
+  const _BreadView({this.highlightProductId});
 
-
+  final String? highlightProductId;
 
   @override
 
@@ -73,6 +76,17 @@ class _BreadView extends StatefulWidget {
 
 
 class _BreadViewState extends State<_BreadView> {
+
+  List<BreadProduct> _withHighlight(List<BreadProduct> list) {
+    final id = widget.highlightProductId?.trim() ?? '';
+    if (id.isEmpty) return list;
+    final idx = list.indexWhere((p) => (p.firestoreId ?? '') == id);
+    if (idx <= 0) return list;
+    final copy = List<BreadProduct>.from(list);
+    final item = copy.removeAt(idx);
+    copy.insert(0, item);
+    return copy;
+  }
 
   @override
 
@@ -260,15 +274,15 @@ class _BreadViewState extends State<_BreadView> {
 
                 _sectionHeader(loc.translate('bread_section_yopish')),
 
-                _productGrid(c.yopishProducts, c),
+                _productGrid(_withHighlight(c.yopishProducts), c),
 
                 _sectionHeader(loc.translate('bread_section_ready')),
 
-                _productGrid(c.readyProducts, c),
+                _productGrid(_withHighlight(c.readyProducts), c),
 
                 _sectionHeader(loc.translate('bread_section_wedding')),
 
-                _productGrid(c.toyProducts, c),
+                _productGrid(_withHighlight(c.toyProducts), c),
 
                 _sectionHeader(loc.translate('bread_section_extras')),
 

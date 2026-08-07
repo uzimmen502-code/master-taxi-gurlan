@@ -46,8 +46,6 @@ class _PlatformStoreView extends StatefulWidget {
 class _PlatformStoreViewState extends State<_PlatformStoreView> {
   final _searchCtrl = TextEditingController();
   String _query = '';
-  /// '' | food | non_food
-  String _kindFilter = '';
 
   @override
   void dispose() {
@@ -80,13 +78,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
 
   List<PlatformProduct> _filtered(List<PlatformProduct> all) {
     final q = _query;
-    var list = all.where((p) {
-      if (_kindFilter == PlatformProduct.kindFood && !p.isFood) return false;
-      if (_kindFilter == PlatformProduct.kindNonFood && !p.isNonFood) {
-        return false;
-      }
-      return CatalogSearch.matchesProduct(p, q);
-    }).toList();
+    var list = all.where((p) => CatalogSearch.matchesProduct(p, q)).toList();
     if (CatalogSearch.normalize(q).isNotEmpty) {
       list.sort((a, b) {
         final byScore = CatalogSearch.scoreProduct(b, q)
@@ -229,41 +221,6 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                               width: 1.5,
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _KindChip(
-                              label: context.tr('platform_store_kind_all'),
-                              selected: _kindFilter.isEmpty,
-                              onTap: () => setState(() => _kindFilter = ''),
-                            ),
-                            const SizedBox(width: 8),
-                            _KindChip(
-                              label: context.tr('platform_store_kind_food'),
-                              selected:
-                                  _kindFilter == PlatformProduct.kindFood,
-                              onTap: () => setState(
-                                () => _kindFilter = PlatformProduct.kindFood,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _KindChip(
-                              label:
-                                  context.tr('platform_store_kind_non_food'),
-                              selected: _kindFilter ==
-                                  PlatformProduct.kindNonFood,
-                              onTap: () => setState(
-                                () => _kindFilter =
-                                    PlatformProduct.kindNonFood,
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ),
@@ -439,48 +396,6 @@ class _CartCheckoutBar extends StatelessWidget {
                   const Icon(Icons.arrow_forward_rounded, size: 20),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _KindChip extends StatelessWidget {
-  const _KindChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AvaStoreColors.brand : AvaStoreColors.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? AvaStoreColors.deep : AvaStoreColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: selected ? AvaStoreColors.onBrand : AvaStoreColors.ink,
             ),
           ),
         ),

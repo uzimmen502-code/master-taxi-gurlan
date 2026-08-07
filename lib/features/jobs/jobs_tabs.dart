@@ -23,5 +23,16 @@ abstract final class JobsTabs {
     }
   }
 
+  /// Преью/қидирувдан тегишли табга ўтиш.
+  static int indexForKind(AdKind kind) {
+    switch (kind) {
+      case AdKind.service:
+        return service;
+      case AdKind.ad:
+      case AdKind.work:
+        return ad;
+    }
+  }
+
   static int clampIndex(int index) => index.clamp(0, count - 1);
 }

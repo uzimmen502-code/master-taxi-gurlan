@@ -102,8 +102,6 @@ class PlatformStoreController extends ChangeNotifier {
         .where(
           (p) =>
               p.goodsKind == target &&
-              p.active &&
-              p.inStock &&
               p.price > 0 &&
               !isInCart(p.id),
         )
@@ -174,7 +172,7 @@ class PlatformStoreController extends ChangeNotifier {
     notifyListeners();
     _bindSettings();
     try {
-      _products = await _repo.fetchActive();
+      _products = await _repo.fetchCatalog();
       _pruneMissing();
       await _loadWallet();
     } catch (e) {

@@ -23,6 +23,7 @@ class PlatformProduct {
     this.showInMarket = true,
     this.sortOrder = 0,
     this.goodsKind = '',
+    this.createdAt,
   });
 
   static const maxImages = 5;
@@ -47,6 +48,9 @@ class PlatformProduct {
 
   /// `food` | `non_food` | ''.
   final String goodsKind;
+
+  /// Жойлаштириш вақти (тартиб учун).
+  final DateTime? createdAt;
 
   bool get isFood => goodsKind == kindFood;
   bool get isNonFood => goodsKind == kindNonFood;
@@ -139,6 +143,9 @@ class PlatformProduct {
       showInMarket: d['showInMarket'] as bool? ?? true,
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
       goodsKind: normalizeKind(d['goodsKind']?.toString()),
+      createdAt: d['createdAt'] is Timestamp
+          ? (d['createdAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -159,6 +166,7 @@ class PlatformProduct {
     bool? showInMarket,
     int? sortOrder,
     String? goodsKind,
+    DateTime? createdAt,
   }) {
     return PlatformProduct(
       id: id ?? this.id,
@@ -177,6 +185,7 @@ class PlatformProduct {
       showInMarket: showInMarket ?? this.showInMarket,
       sortOrder: sortOrder ?? this.sortOrder,
       goodsKind: goodsKind ?? this.goodsKind,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 

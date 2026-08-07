@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/formatters.dart' as fmt;
 
-/// Admin web auth: [trustedAdminPhoneDigits] — SMSsiz (CF custom token).
-/// Boshqa raqamlar — Firebase Phone OTP.
+/// Admin web auth: panel roli bor telefon — SMSsiz/parolsiz
+/// (`adminWebSignIn` custom token). Maxfiy PIN — `adminWebSignInWithCode`.
 class AdminAuthService extends ChangeNotifier {
   AdminAuthService({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -18,7 +16,7 @@ class AdminAuthService extends ChangeNotifier {
 
   static const _kPhoneKey = 'admin_web_phone';
 
-  /// Yagona SMSsiz admin web operator raqami.
+  /// Legacy operator raqami (PIN orqali ham shu hisobga kiradi).
   static const String trustedAdminPhoneDigits = '998912778777';
 
   String? _phone;
@@ -26,12 +24,9 @@ class AdminAuthService extends ChangeNotifier {
   String? _displayName;
   String? _role;
 
-  String _verificationId = '';
-  int? _resendToken;
   bool isSendingOtp = false;
   bool isVerifyingOtp = false;
   String? otpError;
-  bool otpSent = false;
 
   bool get isLoggedIn => _phoneDigits != null && _phoneDigits!.isNotEmpty;
 
@@ -138,17 +133,14 @@ class AdminAuthService extends ChangeNotifier {
     }
 
     final saved = await _savedPhoneRaw();
-    if (saved != null && saved.isNotEmpty && isTrustedAdminPhone(saved)) {
-      final err = await signInWithTrustedPhone(saved);
+    if (saved != null && saved.isNotEmpty) {
+      final err = await signInWithPhonePasswordless(saved);
       if (err == null) return;
     }
   }
 
-  /// Trusted raqam: SMSsiz — `adminWebSignIn` → custom token → Firestore role.
-  Future<String?> signInWithTrustedPhone(String rawPhone) async {
-    if (!isTrustedAdminPhone(rawPhone)) {
-      return 'Bu panel uchun faqat ishonchli operator raqami';
-    }
+  /// Panel roli bor telefon: SMSsiz — `adminWebSignIn` → custom token.
+  Future<String?> signInWithPhonePasswordless(String rawPhone) async {
     final digits = fmt.phoneDigits(rawPhone);
     if (digits.length < 9) {
       return 'Telefon raqamini to\'liq kiriting';
@@ -259,7 +251,7 @@ class AdminAuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Telefon: trusted → SMSsiz; boshqa → OTP.
+  /// Telefon bilan parolsiz kirish (SMS/OTP yo'q).
   Future<bool> sendOtp(String rawPhone) async {
     final digits = fmt.phoneDigits(rawPhone);
     if (digits.length < 9) {
@@ -267,91 +259,18 @@ class AdminAuthService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    if (isTrustedAdminPhone(rawPhone)) {
-      isSendingOtp = true;
-      otpError = null;
-      notifyListeners();
-      final err = await signInWithTrustedPhone(rawPhone);
-      isSendingOtp = false;
-      if (err != null) {
-        otpError = err;
-        notifyListeners();
-        return false;
-      }
-      notifyListeners();
-      return true;
-    }
-
     isSendingOtp = true;
     otpError = null;
-    otpSent = false;
     notifyListeners();
-    final completer = Completer<bool>();
-    await _auth.verifyPhoneNumber(
-      phoneNumber: '+$digits',
-      forceResendingToken: _resendToken,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await _auth.signInWithCredential(credential);
-        isSendingOtp = false;
-        otpSent = true;
-        notifyListeners();
-        if (!completer.isCompleted) completer.complete(true);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        otpError = _otpErrorMsg(e.code);
-        isSendingOtp = false;
-        notifyListeners();
-        if (!completer.isCompleted) completer.complete(false);
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        _verificationId = verificationId;
-        _resendToken = resendToken;
-        isSendingOtp = false;
-        otpSent = true;
-        notifyListeners();
-        if (!completer.isCompleted) completer.complete(true);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        _verificationId = verificationId;
-      },
-      timeout: const Duration(seconds: 60),
-    );
-    return completer.future;
-  }
-
-  Future<String?> verifyOtpAndSignIn(String rawPhone, String smsCode) async {
-    if (_verificationId.isEmpty) {
-      return 'Avval SMS yuboring';
-    }
-    isVerifyingOtp = true;
-    otpError = null;
-    notifyListeners();
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId,
-        smsCode: smsCode.trim(),
-      );
-      await _auth.signInWithCredential(credential);
-      final snap = await _findUserDoc(rawPhone);
-      if (snap == null) {
-        await _auth.signOut();
-        return 'Bu telefon Firestore\'da topilmadi.';
-      }
-      final role = snap.data()?['role'] as String? ?? '';
-      if (!_isPanelRole(role)) {
-        await _auth.signOut();
-        return 'Siz admin emassiz (hozirgi rol: ${role.isEmpty ? 'user' : role}).';
-      }
-      await _applyAdminSession(rawPhone: rawPhone, snap: snap);
-      return null;
-    } on FirebaseAuthException catch (e) {
-      return _otpErrorMsg(e.code);
-    } catch (e) {
-      return 'Xatolik: $e';
-    } finally {
-      isVerifyingOtp = false;
+    final err = await signInWithPhonePasswordless(rawPhone);
+    isSendingOtp = false;
+    if (err != null) {
+      otpError = err;
       notifyListeners();
+      return false;
     }
+    notifyListeners();
+    return true;
   }
 
   Future<void> logout() async {
@@ -361,8 +280,6 @@ class AdminAuthService extends ChangeNotifier {
     _phone = null;
     _phoneDigits = null;
     _displayName = null;
-    _verificationId = '';
-    otpSent = false;
     otpError = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kPhoneKey);
@@ -371,12 +288,4 @@ class AdminAuthService extends ChangeNotifier {
     await prefs.remove('user_name');
     notifyListeners();
   }
-
-  String _otpErrorMsg(String code) => switch (code) {
-        'invalid-verification-code' => 'SMS kod noto\'g\'ri.',
-        'session-expired' => 'Muddat tugadi. Qayta yuboring.',
-        'invalid-phone-number' => 'Telefon raqami noto\'g\'ri.',
-        'too-many-requests' => 'Ko\'p urinish. Keyinroq.',
-        _ => 'Xatolik: $code',
-      };
 }

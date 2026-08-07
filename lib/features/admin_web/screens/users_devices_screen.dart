@@ -973,11 +973,16 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
 
     final label = _roleLabels[role] ?? role;
     final isRemove = role == 'user';
+    final isAdminGrant = role == 'admin';
     final title = isRemove ? 'Rolni olib tashlash' : '$label roli';
     final body = isRemove
         ? '${widget.phone} dan rol olib tashlanib, oddiy '
             'foydalanuvchi qilinsinmi?'
-        : '${widget.phone} рақамига $label roli berilsinmi?';
+        : isAdminGrant
+            ? '${widget.phone} рақамига Admin roli berilsinmi?\n\n'
+                'Шундан сўнг у /admin/ га ўз телефони билан '
+                'паролсиз (SMS/OTP сиз) кира олади.'
+            : '${widget.phone} рақамига $label roli berilsinmi?';
 
     final ok = await showDialog<bool>(
       context: context,
@@ -1018,6 +1023,28 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         ),
       ),
     );
+
+    if (err == null && isAdminGrant && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Админ кириш'),
+          content: Text(
+            '${widget.phone} энди Admin.\n\n'
+            'Компьютерда /admin/ га кириш:\n'
+            '• ўз телефон рақамини киритиб «Кириш» — '
+            'парол, SMS ва OTP шарт эмас.\n\n'
+            'Зарур бўлса, махфий код билан ҳам кириш мумкин.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Тушундим'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override

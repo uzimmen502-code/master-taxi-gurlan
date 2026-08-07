@@ -12,18 +12,13 @@ class AdminLoginScreen extends StatefulWidget {
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _phoneCtrl = TextEditingController();
-  final _otpCtrl = TextEditingController();
   final _codeCtrl = TextEditingController();
-  bool _showOtp = false;
   bool _codeMode = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _phoneCtrl.addListener(() {
-      if (mounted) setState(() {});
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _tryAutoLogin());
   }
 
@@ -36,7 +31,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   @override
   void dispose() {
     _phoneCtrl.dispose();
-    _otpCtrl.dispose();
     _codeCtrl.dispose();
     super.dispose();
   }
@@ -51,9 +45,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     }
   }
 
-  bool get _isTrustedPhone =>
-      AdminAuthService.isTrustedAdminPhone(_phoneCtrl.text);
-
   Future<void> _submitPhone() async {
     setState(() => _error = null);
     final auth = context.read<AdminAuthService>();
@@ -61,27 +52,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     if (!mounted) return;
     if (!sent) {
       setState(() => _error = auth.otpError ?? 'Kirishda xatolik');
-      return;
-    }
-    if (_isTrustedPhone) {
-      return;
-    }
-    setState(() {
-      _showOtp = true;
-      _error = null;
-    });
-  }
-
-  Future<void> _verifyOtp() async {
-    setState(() => _error = null);
-    final auth = context.read<AdminAuthService>();
-    final result = await auth.verifyOtpAndSignIn(
-      _phoneCtrl.text,
-      _otpCtrl.text,
-    );
-    if (!mounted) return;
-    if (result != null) {
-      setState(() => _error = result);
     }
   }
 
@@ -110,11 +80,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   Text(
                     _codeMode
                         ? 'Maxfiy kirish kodini kiriting (telefon shart emas)'
-                        : _showOtp
-                            ? '${_phoneCtrl.text} raqamiga SMS yuborildi'
-                            : _isTrustedPhone
-                                ? 'Telefon raqamingizni kiriting va «Kirish»ni bosing (SMS yo\'q)'
-                                : 'Admin roli berilgan telefon raqam bilan kiring',
+                        : 'Admin roli berilgan telefonni kiriting — '
+                            'SMS va parol shart emas',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 24),
@@ -134,9 +101,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     TextField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      enabled: !_showOtp,
-                      inputFormatters: [FilteringTextInputFormatter.allow(
-                          RegExp(r'[0-9 +\-()]'))],
+                      onSubmitted: (_) => _submitPhone(),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9 +\-()]'))
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Telefon raqam',
                         hintText: '+998 91 277 87 77',
@@ -144,29 +113,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         border: OutlineInputBorder(),
                       ),
                     ),
-                  if (!_codeMode && _showOtp) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _otpCtrl,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      maxLength: 6,
-                      autofocus: true,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly
-                      ],
-                      style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8),
-                      decoration: const InputDecoration(
-                        hintText: '------',
-                        counterText: '',
-                        border: OutlineInputBorder(),
-                        labelText: 'SMS kod',
-                      ),
-                    ),
-                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -186,25 +132,17 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     child: FilledButton(
                       onPressed: auth.isSendingOtp || auth.isVerifyingOtp
                           ? null
-                          : (_codeMode
-                              ? _submitCode
-                              : (_showOtp ? _verifyOtp : _submitPhone)),
+                          : (_codeMode ? _submitCode : _submitPhone),
                       child: auth.isSendingOtp || auth.isVerifyingOtp
                           ? const SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                   strokeWidth: 2, color: Colors.white))
-                          : Text(_codeMode
-                              ? 'Kirish'
-                              : (_showOtp
-                                  ? 'Tasdiqlash'
-                                  : (_isTrustedPhone
-                                      ? 'Kirish'
-                                      : 'SMS yuborish'))),
+                          : const Text('Kirish'),
                     ),
                   ),
-                  if (!_codeMode && !_showOtp)
+                  if (!_codeMode)
                     TextButton.icon(
                       onPressed: () => setState(() {
                         _codeMode = true;
@@ -223,26 +161,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       icon: const Icon(Icons.phone, size: 18),
                       label: const Text('Telefon bilan kirish'),
                     ),
-                  if (!_codeMode && _showOtp) ...[
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: auth.isSendingOtp
-                          ? null
-                          : () {
-                              _otpCtrl.clear();
-                              _submitPhone();
-                            },
-                      child: const Text('SMS-ni qayta yuborish'),
-                    ),
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _showOtp = false;
-                        _otpCtrl.clear();
-                        _error = null;
-                      }),
-                      child: const Text('Telefonni o\'zgartirish'),
-                    ),
-                  ],
                 ],
               ),
             ),

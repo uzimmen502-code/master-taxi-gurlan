@@ -11,7 +11,7 @@ import '../../../services/user_role_sync.dart';
 /// ИШ ЭЪЛОН экранининг controller'и.
 class JobsController extends ChangeNotifier {
   JobsController({required JobsRepository repo}) : _repo = repo {
-    _init();
+    _ready = _init();
   }
 
   static const int dailyAdLimit = 10;
@@ -23,6 +23,10 @@ class JobsController extends ChangeNotifier {
   String userAddress = '';
   bool isAdmin = false;
   String searchQuery = '';
+
+  Future<void>? _ready;
+
+  Future<void> ensureReady() => _ready ??= _init();
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -135,22 +139,39 @@ class JobsController extends ChangeNotifier {
     return 'Хатолик: $e';
   }
 
-  Future<({bool success, String? error})> submitAd({
+  Future<({bool success, String? error, String? status})> submitAd({
     required String type,
     required String text,
     required bool isUrgent,
     String title = '',
     String priceText = '',
   }) async {
+    await ensureReady();
     final t = title.trim();
+    final body = text.trim();
     if (t.length < 3) {
-      return (success: false, error: 'Сарлавҳани киритинг (камида 3 белги)');
+      return (
+        success: false,
+        error: 'Сарлавҳани киритинг (камида 3 белги)',
+        status: null,
+      );
     }
-    if (text.trim().isEmpty) {
-      return (success: false, error: 'Матнни киритинг');
+    if (body.length < 3) {
+      return (
+        success: false,
+        error: 'Матнни киритинг (камида 3 белги)',
+        status: null,
+      );
+    }
+    if (!JobAd.isJobsBoardType(type)) {
+      return (success: false, error: 'Номаълум эълон тури', status: null);
     }
     if (phoneDigits(userPhone).length < 9) {
-      return (success: false, error: 'Профилда телефон рақамини киритинг');
+      return (
+        success: false,
+        error: 'Профилда телефон рақамини киритинг',
+        status: null,
+      );
     }
     try {
       // UI hint; сервер `submitJobAd` ҳам текширади.
@@ -158,16 +179,17 @@ class JobsController extends ChangeNotifier {
       if (dailyCount >= dailyAdLimit) {
         return (
           success: false,
-          error: '⚠️ Кунига максимум $dailyAdLimit та эълон!'
+          error: '⚠️ Кунига максимум $dailyAdLimit та эълон!',
+          status: null,
         );
       }
       final days = isUrgent
           ? AdKindX.urgentExpiryDays
           : AdKindX.parse(type).expiresInDays;
       final expiresAt = DateTime.now().add(Duration(days: days));
-      await _repo.addAd(
+      final status = await _repo.addAd(
         type: type,
-        text: text.trim(),
+        text: body,
         title: t,
         priceText: priceText.trim(),
         authorName: userName,
@@ -176,9 +198,9 @@ class JobsController extends ChangeNotifier {
         isUrgent: isUrgent,
         expiresAt: expiresAt,
       );
-      return (success: true, error: null);
+      return (success: true, error: null, status: status);
     } catch (e) {
-      return (success: false, error: _cfError(e));
+      return (success: false, error: _cfError(e), status: null);
     }
   }
 

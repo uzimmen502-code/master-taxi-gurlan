@@ -2385,10 +2385,7 @@ async function repricePlatformOrderFromCatalog(itemsIn) {
           'not-found', `Маҳсулот топилмади: ${productId}`);
     }
     const d = snap.data() || {};
-    if (d.active === false) {
-      throw new functions.https.HttpsError(
-          'failed-precondition', `Нофаол: ${d.name || productId}`);
-    }
+    // Каталогдаги барча маҳсулотлар буюртма қилиниши мумкин (active чекловсиз).
     const unitPrice = Math.trunc(Number(d.price || 0));
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
       throw new functions.https.HttpsError(
@@ -6026,20 +6023,34 @@ exports.migrateOldBindings = functions.https.onCall(async (data, context) => {
   };
 });
 
+/**
+ * Admin web: telefon bilan SMSsiz / parolsiz kirish.
+ * Faqat Firestore'da panel roli bor raqamlar: admin, superadmin,
+ * dispatcher, finance, auditor. Rol yo'q bo'lsa — permission-denied.
+ */
 exports.adminWebSignIn = functions.https.onCall(async (data) => {
   const phone = canonicalUid(data.phone || '');
-  if (phone !== TRUSTED_ADMIN_WEB_PHONE) {
+  if (!phone || phone.length < 9) {
     throw new functions.https.HttpsError(
-      'permission-denied',
-      'Trusted admin phone only',
+      'invalid-argument',
+      'Telefon raqami noto\'g\'ri',
     );
   }
   const found = await findUserDocByPhone(phone);
   if (!found) {
     throw new functions.https.HttpsError('not-found', 'User not found');
   }
-  const role = (found.snap.data() || {}).role || 'user';
-  if (!['admin', 'superadmin', 'dispatcher'].includes(role)) {
+  const role = String((found.snap.data() || {}).role || 'user')
+    .trim()
+    .toLowerCase();
+  const panelRoles = [
+    'admin',
+    'superadmin',
+    'dispatcher',
+    'finance',
+    'auditor',
+  ];
+  if (!panelRoles.includes(role)) {
     throw new functions.https.HttpsError('permission-denied', 'Not an admin');
   }
   const e164 = `+${phone}`;
@@ -6267,9 +6278,14 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     const recentSnap = await db.collection('ads')
       .where('authorPhone', '==', phoneKey)
       .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(dayStart))
-      .limit(JOBS_DAILY_AD_LIMIT + 1)
+      .limit(40)
       .get();
-    todayCount += recentSnap.size;
+    for (const doc of recentSnap.docs) {
+      const t = String((doc.data() || {}).type || '');
+      if (['work', 'service', 'ad'].includes(t)) {
+        todayCount += 1;
+      }
+    }
     if (todayCount >= JOBS_DAILY_AD_LIMIT) break;
   }
   if (todayCount >= JOBS_DAILY_AD_LIMIT) {
@@ -12281,6 +12297,609 @@ exports.adminSetPlatformDeliveryFeePercent = functions.https.onCall(async (data,
   }, { merge: true });
   return { ok: true, percent: pct };
 });
+
+// ══════════════════════════════════════
+// GLOBAL SEARCH INDEX (`search_index`)
+// ══════════════════════════════════════
+
+const SEARCH_INDEX_MAX_TOKENS = 64;
+
+function searchIndexDocId(type, sourceId) {
+  const sid = String(sourceId || '').trim().replace(/[/\\]/g, '_');
+  return `${type}_${sid}`.slice(0, 700);
+}
+
+function buildSearchIndexTokens(...parts) {
+  const text = parts.filter(Boolean).join(' ').toLowerCase();
+  const words = text.split(/[^0-9a-zа-яёўқғҳʻʼ']+/i).filter(
+    (w) => w && w.length >= 2,
+  );
+  const out = new Set();
+  for (const w of words) {
+    out.add(w);
+    const latin = marketToLatin(w);
+    const cyrl = marketToCyrillic(w);
+    if (latin.length >= 2) out.add(latin);
+    if (cyrl.length >= 2) out.add(cyrl);
+    if (out.size >= SEARCH_INDEX_MAX_TOKENS) break;
+  }
+  return Array.from(out).slice(0, SEARCH_INDEX_MAX_TOKENS);
+}
+
+async function upsertSearchIndexEntry(entry) {
+  const type = String(entry.type || '').trim();
+  const sourceId = String(entry.sourceId || '').trim();
+  if (!type || !sourceId) return;
+  const id = searchIndexDocId(type, sourceId);
+  const keywords = Array.isArray(entry.keywords)
+    ? entry.keywords.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 48)
+    : [];
+  const tokens = Array.isArray(entry.searchTokens) && entry.searchTokens.length
+    ? entry.searchTokens.slice(0, SEARCH_INDEX_MAX_TOKENS)
+    : buildSearchIndexTokens(
+      entry.title, entry.subtitle, ...(keywords),
+      entry.geo && entry.geo.from, entry.geo && entry.geo.to,
+    );
+  const payload = {
+    type,
+    moduleId: String(entry.moduleId || '').trim(),
+    sourceCollection: String(entry.sourceCollection || '').trim(),
+    sourceId,
+    title: String(entry.title || '').trim().slice(0, 160),
+    subtitle: String(entry.subtitle || '').trim().slice(0, 200),
+    imageUrl: String(entry.imageUrl || '').trim(),
+    iconKey: String(entry.iconKey || '').trim(),
+    keywords,
+    searchTokens: tokens,
+    priorityBoost: Math.trunc(Number(entry.priorityBoost) || 0),
+    active: entry.active !== false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (entry.price != null && Number.isFinite(Number(entry.price))) {
+    payload.price = Math.trunc(Number(entry.price));
+  } else {
+    payload.price = admin.firestore.FieldValue.delete();
+  }
+  if (entry.geo && typeof entry.geo === 'object') {
+    const geo = {};
+    if (entry.geo.from) geo.from = String(entry.geo.from).trim();
+    if (entry.geo.to) geo.to = String(entry.geo.to).trim();
+    if (entry.geo.districtId) geo.districtId = String(entry.geo.districtId).trim();
+    if (Object.keys(geo).length) payload.geo = geo;
+  }
+  await db.collection('search_index').doc(id).set(payload, { merge: true });
+}
+
+async function deleteSearchIndexEntry(type, sourceId) {
+  const id = searchIndexDocId(type, sourceId);
+  await db.collection('search_index').doc(id).delete().catch(() => null);
+}
+
+function platformProductToSearchEntry(id, d) {
+  const name = String(d.name || '').trim();
+  const active = d.active !== false && name.length > 0;
+  const urls = Array.isArray(d.imageUrls) ? d.imageUrls : [];
+  const cover = String((urls[0] || d.imageUrl || '')).trim();
+  const kind = String(d.goodsKind || '').trim();
+  const keywords = ['ава', 'дукон', 'дўкон', 'ava', 'store', 'платформа'];
+  if (kind === 'food') keywords.push('озиқ', 'oziq', 'food');
+  if (kind === 'non_food') keywords.push('но-озиқ', 'non_food');
+  return {
+    type: 'platform_product',
+    moduleId: 'platform',
+    sourceCollection: 'platform_products',
+    sourceId: id,
+    title: name,
+    subtitle: 'AVA дўкони',
+    price: Math.trunc(Number(d.price) || 0),
+    imageUrl: cover,
+    iconKey: 'shop',
+    keywords,
+    priorityBoost: 0,
+    active,
+  };
+}
+
+function adToSearchEntry(id, d) {
+  const adType = String(d.type || '').trim();
+  const isMarket = adType === 'cheap_product';
+  const isJob = ['work', 'service', 'ad'].includes(adType);
+  if (!isMarket && !isJob) return null;
+  const title = String(d.title || '').trim()
+    || String(d.text || '').trim().slice(0, 80);
+  const status = String(d.status || '');
+  const active = status === 'active' && title.length > 0;
+  const desc = String(d.description || d.text || '');
+  const tokens = Array.isArray(d.searchTokens) && d.searchTokens.length
+    ? d.searchTokens
+    : buildSearchIndexTokens(title, desc);
+  if (isMarket) {
+    return {
+      type: 'market_ad',
+      moduleId: 'cheap_products_home',
+      sourceCollection: 'ads',
+      sourceId: id,
+      title,
+      subtitle: 'Онлайн бозор',
+      price: Math.trunc(Number(d.price) || 0),
+      imageUrl: Array.isArray(d.imageUrls) && d.imageUrls[0]
+        ? String(d.imageUrls[0])
+        : '',
+      iconKey: 'shop',
+      keywords: ['бозор', 'bozor', 'эълон', 'сотиш'],
+      searchTokens: tokens,
+      priorityBoost: 0,
+      active,
+    };
+  }
+  return {
+    type: 'job',
+    moduleId: 'jobs',
+    sourceCollection: 'ads',
+    sourceId: id,
+    title,
+    subtitle: 'ИШ ЭЪЛОН',
+    imageUrl: '',
+    iconKey: 'job',
+    keywords: ['иш', 'ish', 'вакансия', 'эълон', adType],
+    searchTokens: tokens,
+    priorityBoost: 0,
+    active,
+  };
+}
+
+function breadImageUrl(d) {
+  return String(
+    d.imageUrl || d.imageURL || d.image_url || d.photoUrl || d.image || '',
+  ).trim();
+}
+
+function breadProductToSearchEntry(id, d) {
+  const name = String(d.name || '').trim();
+  const typeRaw = String(d.type || '').trim();
+  const keywords = ['нон', 'non', 'патир', 'чўрек', typeRaw];
+  return {
+    type: 'bread_product',
+    moduleId: 'bread',
+    sourceCollection: 'bread_products',
+    sourceId: id,
+    title: name,
+    subtitle: 'Нон',
+    price: Math.trunc(Number(d.price) || 0),
+    imageUrl: breadImageUrl(d),
+    iconKey: 'bread',
+    keywords,
+    priorityBoost: 4,
+    active: name.length > 0,
+  };
+}
+
+function foodProductToSearchEntry(id, d) {
+  const name = String(d.name || '').trim();
+  const category = String(d.category || '').trim();
+  const keywords = ['овқат', 'ovqat', 'таом', 'кафе', category];
+  return {
+    type: 'food_product',
+    moduleId: 'food',
+    sourceCollection: 'food_catalog',
+    sourceId: id,
+    title: name,
+    subtitle: category || 'Овқат',
+    price: Math.trunc(Number(d.price) || 0),
+    imageUrl: String(d.imageUrl || '').trim(),
+    iconKey: 'food',
+    keywords,
+    priorityBoost: 4,
+    active: name.length > 0,
+  };
+}
+
+function yukExpiresMs(d) {
+  const e = d.expiresAt;
+  if (!e) return 0;
+  if (typeof e.toMillis === 'function') return e.toMillis();
+  if (e._seconds != null) return Number(e._seconds) * 1000;
+  const parsed = Date.parse(String(e));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function yukListingToSearchEntry(id, d) {
+  const from = String(d.from || '').trim();
+  const to = String(d.to || '').trim();
+  const status = String(d.status || '').trim();
+  const cargo = String(d.cargo || '').trim();
+  const vehicle = String(d.vehicleType || '').trim();
+  const listingType = String(d.type || '').trim();
+  const expiresMs = yukExpiresMs(d);
+  const notExpired = !expiresMs || expiresMs > Date.now();
+  const title = from && to
+    ? `${from} → ${to}`
+    : (cargo || vehicle || 'Юк эълони');
+  const subtitle = listingType === 'truck'
+    ? (vehicle || 'Юк машина')
+    : (cargo || 'Юк');
+  const stops = Array.isArray(d.stops) ? d.stops.map((s) => String(s || '')) : [];
+  return {
+    type: 'yuk_listing',
+    moduleId: 'yuk_birja',
+    sourceCollection: 'yuk_listings',
+    sourceId: id,
+    title,
+    subtitle,
+    price: Math.trunc(Number(d.price) || 0),
+    imageUrl: '',
+    iconKey: 'yuk',
+    keywords: [
+      'юк', 'yuk', 'биржа', listingType, vehicle, cargo, from, to, ...stops,
+    ],
+    geo: { from, to },
+    priorityBoost: 6,
+    active: status === 'active' && notExpired && title.length > 0,
+  };
+}
+
+const {onDocumentWritten} = require('firebase-functions/v2/firestore');
+
+exports.onSearchIndexPlatformProductWrite = onDocumentWritten(
+  {
+    document: 'platform_products/{id}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const id = event.params.id;
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) {
+      await deleteSearchIndexEntry('platform_product', id);
+      return;
+    }
+    const d = after.data() || {};
+    await upsertSearchIndexEntry(platformProductToSearchEntry(id, d));
+  },
+);
+
+exports.onSearchIndexAdWrite = onDocumentWritten(
+  {
+    document: 'ads/{adId}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const id = event.params.adId;
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) {
+      await deleteSearchIndexEntry('market_ad', id);
+      await deleteSearchIndexEntry('job', id);
+      return;
+    }
+    const d = after.data() || {};
+    const entry = adToSearchEntry(id, d);
+    if (!entry) return;
+    if (entry.type === 'market_ad') {
+      await deleteSearchIndexEntry('job', id);
+    } else {
+      await deleteSearchIndexEntry('market_ad', id);
+    }
+    await upsertSearchIndexEntry(entry);
+  },
+);
+
+exports.onSearchIndexBreadProductWrite = onDocumentWritten(
+  {
+    document: 'bread_products/{id}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const id = event.params.id;
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) {
+      await deleteSearchIndexEntry('bread_product', id);
+      return;
+    }
+    await upsertSearchIndexEntry(
+      breadProductToSearchEntry(id, after.data() || {}),
+    );
+  },
+);
+
+exports.onSearchIndexFoodProductWrite = onDocumentWritten(
+  {
+    document: 'food_catalog/{id}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const id = event.params.id;
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) {
+      await deleteSearchIndexEntry('food_product', id);
+      return;
+    }
+    await upsertSearchIndexEntry(
+      foodProductToSearchEntry(id, after.data() || {}),
+    );
+  },
+);
+
+exports.onSearchIndexYukListingWrite = onDocumentWritten(
+  {
+    document: 'yuk_listings/{id}',
+    region: 'europe-west1',
+  },
+  async (event) => {
+    const id = event.params.id;
+    const after = event.data && event.data.after;
+    if (!after || !after.exists) {
+      await deleteSearchIndexEntry('yuk_listing', id);
+      return;
+    }
+    await upsertSearchIndexEntry(
+      yukListingToSearchEntry(id, after.data() || {}),
+    );
+  },
+);
+
+const SEARCH_SERVICE_SEEDS = [
+  {
+    id: 'local_taxi',
+    moduleId: 'local_taxi',
+    title: 'Маҳаллий такси',
+    subtitle: 'Туман ичида такси',
+    iconKey: 'taxi',
+    keywords: ['такси', 'taxi', 'маҳаллий', 'махаллий', 'йўловчи'],
+    boost: 22,
+  },
+  {
+    id: 'intercity',
+    moduleId: 'intercity',
+    title: 'Шаҳарлараро такси',
+    subtitle: 'Шаҳарлараро йўналиш',
+    iconKey: 'taxi',
+    keywords: ['такси', 'taxi', 'шаҳарлараро', 'тошкент', 'йўловчи'],
+    boost: 24,
+  },
+  {
+    id: 'marshrut',
+    moduleId: 'marshrut',
+    title: 'Маршрут такси',
+    subtitle: 'Маршрут бўйича',
+    iconKey: 'taxi',
+    keywords: ['такси', 'taxi', 'маршрут', 'marshrut'],
+    boost: 20,
+  },
+  {
+    id: 'yuk_birja',
+    moduleId: 'yuk_birja',
+    title: 'Юк биржа',
+    subtitle: 'Юк ташиш',
+    iconKey: 'yuk',
+    keywords: ['юк', 'yuk', 'биржа', 'груз', 'такси'],
+    boost: 18,
+  },
+  {
+    id: 'platform',
+    moduleId: 'platform',
+    title: 'AVA дўкони',
+    subtitle: 'Платформа дўкони',
+    iconKey: 'shop',
+    keywords: ['ава', 'ava', 'дўкон', 'дукон', 'магазин', 'платформа'],
+    boost: 20,
+  },
+  {
+    id: 'food',
+    moduleId: 'food',
+    title: 'Овқат',
+    subtitle: 'Таом буюртма',
+    iconKey: 'food',
+    keywords: ['овқат', 'ovqat', 'таом', 'кафе', 'емак'],
+    boost: 20,
+  },
+  {
+    id: 'bread',
+    moduleId: 'bread',
+    title: 'Нон',
+    subtitle: 'Нон буюртма',
+    iconKey: 'bread',
+    keywords: ['нон', 'non', 'патир', 'чўрек'],
+    boost: 20,
+  },
+  {
+    id: 'jobs',
+    moduleId: 'jobs',
+    title: 'ИШ ЭЪЛОН',
+    subtitle: 'Иш ва хизмат эълонлари',
+    iconKey: 'job',
+    keywords: ['иш', 'ish', 'вакансия', 'эълон', 'лаборант'],
+    boost: 22,
+  },
+  {
+    id: 'cheap_products_home',
+    moduleId: 'cheap_products_home',
+    title: 'Онлайн бозор',
+    subtitle: 'Арзон маҳсулотлар',
+    iconKey: 'shop',
+    keywords: ['бозор', 'bozor', 'сотиш', 'магазин'],
+    boost: 18,
+  },
+  {
+    id: 'milk',
+    moduleId: 'milk',
+    title: 'Сут қабул',
+    subtitle: 'Сут ва қишлоқ маҳсулотлари',
+    iconKey: 'milk',
+    keywords: ['сут', 'sut', 'қатиқ', 'тухум'],
+    boost: 16,
+  },
+  {
+    id: 'oil_change',
+    moduleId: 'oil_change',
+    title: 'Мой алмаштириш',
+    subtitle: 'Авто сервис',
+    iconKey: 'oil',
+    keywords: ['мой', 'oil', 'авто', 'машина'],
+    boost: 14,
+  },
+  {
+    id: 'sell',
+    moduleId: 'sell',
+    title: 'Сотиш',
+    subtitle: 'Сотиш маркази',
+    iconKey: 'sell',
+    keywords: ['сотиш', 'sotish', 'продаж'],
+    boost: 14,
+  },
+  {
+    id: 'carpet_wash',
+    moduleId: 'carpet_wash',
+    title: 'Гилам ювиш',
+    subtitle: 'Гилам хизмати',
+    iconKey: 'carpet',
+    keywords: ['гилам', 'gilam', 'ювиш'],
+    boost: 12,
+  },
+];
+
+const SEARCH_ROUTE_HUBS = ['Гурлан', 'Урганч', 'Хива'];
+const SEARCH_ROUTE_DESTS = [
+  'Тошкент', 'Самарқанд', 'Бухоро', 'Навоий', 'Нукус',
+  'Андижон', 'Фарғона', 'Қарши', 'Термиз', 'Урганч', 'Хива',
+];
+
+/** Гурлан МФЙ — маҳаллий такси қидирув (P1 local_place). */
+const SEARCH_GURLAN_MFY = [
+  'Ёрмиш МФЙ', 'Обод МФЙ', 'Ишонч МФЙ', 'Дўстлик МФЙ', 'Навбаҳор МФЙ',
+  'Чинобод МФЙ', 'Боғишамол МФЙ', 'Марифат МФЙ', 'Мевазор МФЙ', 'Дўсимбий МФЙ',
+  'Фидокор МФЙ', 'Навбир-ёп МФЙ', 'Нукус МФЙ', 'Нурафшон МФЙ', 'Қатариқ МФЙ',
+  'Чаккалар МФЙ', 'Зиёкор МФЙ', 'Сахтиён МФЙ', 'Янги боғ МФЙ', 'Эсабий МФЙ',
+  'Қангли МФЙ', 'Ватанпарвар МФЙ', 'Марбугат МФЙ', 'Бирлашган МФЙ', 'Гулшан МФЙ',
+  'Бўзқалъа МФЙ', 'Олчин МФЙ', 'Ўйилма МФЙ', 'Деҳқонобод МФЙ', 'Тахтакўпир МФЙ',
+  'Мойли МФЙ', 'Шанғи МФЙ', 'Олға МФЙ', 'Янги аср МФЙ', 'Болдоқли МФЙ',
+  'Шодлик МФЙ', 'Эшимжирон МФЙ', 'Жалойир МФЙ', 'Пахтачи МФЙ', 'Нурли йўл МФЙ',
+  'Совунчи МФЙ', 'Пахтакор МФЙ', 'Деҳқон МФЙ', 'Беш уй МФЙ', 'Боғистон МФЙ',
+  'Оққум МФЙ', 'Нуробод МФЙ', 'Дўстлик боғи МФЙ',
+];
+
+/** Admin: хизмат + йўналиш seed + мавжуд товар/эълон backfill. */
+exports.adminSeedSearchIndex = functions
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(async (data, context) => {
+    await assertAdmin(String(data.adminPhone || ''), context);
+    let services = 0;
+    let routes = 0;
+    let products = 0;
+    let ads = 0;
+    let bread = 0;
+    let food = 0;
+    let yuk = 0;
+    let places = 0;
+
+    for (const s of SEARCH_SERVICE_SEEDS) {
+      await upsertSearchIndexEntry({
+        type: 'service',
+        moduleId: s.moduleId,
+        sourceCollection: 'seed',
+        sourceId: s.id,
+        title: s.title,
+        subtitle: s.subtitle,
+        iconKey: s.iconKey,
+        keywords: s.keywords,
+        priorityBoost: s.boost,
+        active: true,
+      });
+      services += 1;
+    }
+
+    for (const from of SEARCH_ROUTE_HUBS) {
+      for (const to of SEARCH_ROUTE_DESTS) {
+        if (from === to) continue;
+        const sid = `${from}_${to}`.replace(/\s+/g, '_');
+        await upsertSearchIndexEntry({
+          type: 'intercity_route',
+          moduleId: 'intercity',
+          sourceCollection: 'seed',
+          sourceId: sid,
+          title: `${from} → ${to}`,
+          subtitle: 'Шаҳарлараро такси',
+          iconKey: 'taxi',
+          keywords: [
+            'такси', 'taxi', 'шаҳарлараро', from, to,
+            `${to}га`, 'йўловчи',
+          ],
+          geo: { from, to },
+          priorityBoost: 10,
+          active: true,
+        });
+        routes += 1;
+      }
+    }
+
+    for (const mfy of SEARCH_GURLAN_MFY) {
+      const sid = mfy.replace(/\s+/g, '_');
+      await upsertSearchIndexEntry({
+        type: 'local_place',
+        moduleId: 'local_taxi',
+        sourceCollection: 'seed_mfy',
+        sourceId: sid,
+        title: mfy,
+        subtitle: 'Гурлан · маҳаллий такси',
+        iconKey: 'taxi',
+        keywords: [
+          'такси', 'taxi', 'мфй', 'mfy', 'маҳалла', 'гурлан', 'gurlan', mfy,
+        ],
+        geo: { districtId: 'gurlan', from: mfy },
+        priorityBoost: 8,
+        active: true,
+      });
+      places += 1;
+    }
+
+    const prodSnap = await db.collection('platform_products').limit(2000).get();
+    for (const doc of prodSnap.docs) {
+      await upsertSearchIndexEntry(platformProductToSearchEntry(doc.id, doc.data() || {}));
+      products += 1;
+    }
+
+    const adsSnap = await db.collection('ads').limit(2000).get();
+    for (const doc of adsSnap.docs) {
+      const entry = adToSearchEntry(doc.id, doc.data() || {});
+      if (!entry) continue;
+      await upsertSearchIndexEntry(entry);
+      ads += 1;
+    }
+
+    const breadSnap = await db.collection('bread_products').limit(500).get();
+    for (const doc of breadSnap.docs) {
+      await upsertSearchIndexEntry(
+        breadProductToSearchEntry(doc.id, doc.data() || {}),
+      );
+      bread += 1;
+    }
+
+    const foodSnap = await db.collection('food_catalog').limit(500).get();
+    for (const doc of foodSnap.docs) {
+      await upsertSearchIndexEntry(
+        foodProductToSearchEntry(doc.id, doc.data() || {}),
+      );
+      food += 1;
+    }
+
+    const yukSnap = await db.collection('yuk_listings').limit(500).get();
+    for (const doc of yukSnap.docs) {
+      await upsertSearchIndexEntry(
+        yukListingToSearchEntry(doc.id, doc.data() || {}),
+      );
+      yuk += 1;
+    }
+
+    return {
+      ok: true,
+      services,
+      routes,
+      places,
+      products,
+      ads,
+      bread,
+      food,
+      yuk,
+    };
+  });
 
 /** Qiziqish bildirish — o'zaro (mutual) bo'lsa avtomatik match. */
 exports.sendDatingInterest = functions.https.onCall(async (data, context) => {

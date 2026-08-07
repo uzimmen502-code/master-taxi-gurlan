@@ -121,7 +121,8 @@ class JobsRepository {
     return JobAd.fromDoc(snap);
   }
 
-  /// Бугунги эълонлар сони (UI hint; сервер ҳам текширади).
+  /// Бугунги ИШ ЭЪЛОН сони (UI hint; сервер ҳам текширади).
+  /// `cheap_product` ва бошқа турлар ҳисобга олинмайди.
   Future<int> dailyCountByAuthor(String authorPhone) async {
     final aliases = phoneAliases(authorPhone)
         .map(phoneDigits)
@@ -140,7 +141,10 @@ class JobsRepository {
             .where('createdAt',
                 isGreaterThan: Timestamp.fromDate(startOfDay))
             .get();
-        total += snap.docs.length;
+        for (final doc in snap.docs) {
+          final type = (doc.data()['type'] ?? '') as String;
+          if (JobAd.isJobsBoardType(type)) total += 1;
+        }
       }
       return total;
     } catch (e) {
@@ -149,7 +153,8 @@ class JobsRepository {
   }
 
   /// Янги эълон — CF `submitJobAd` (auth + canonical phone + лимит).
-  Future<void> addAd({
+  /// Қайтиш: сервер статуси (`pending` | `active`).
+  Future<String> addAd({
     required String type,
     required String text,
     required String authorName,
@@ -163,7 +168,7 @@ class JobsRepository {
     if (!JobAd.isJobsBoardType(type)) {
       throw StateError('Номаълум эълон тури');
     }
-    await JobAdService.submitAd(
+    final result = await JobAdService.submitAd(
       type: type,
       text: text,
       authorName: authorName,
@@ -172,6 +177,7 @@ class JobsRepository {
       address: address,
       isUrgent: isUrgent,
     );
+    return result.status;
   }
 
   /// Муаллиф ўз эълони (authorPhone текшируви).

@@ -84,7 +84,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - adminSetDeviceBindingAutoApprove / adminAutoApproveDeviceBinding / adminManualApproveDeviceBinding / adminUnblockDeviceBinding / adminRejectDeviceBinding — admin device binding mgmt.
 
 ## Admin / Roles / Driver apps
-- adminWebSignIn / adminWebSignInWithCode — admin web login (custom token; trusted phone `998912778777` / PIN code).
+- adminWebSignIn / adminWebSignInWithCode — admin web login (custom token). adminWebSignIn: any Firestore panel role phone (admin/superadmin/dispatcher/finance/auditor), passwordless. adminWebSignInWithCode: PIN → trusted operator `998912778777`.
 - setUserRoleByAdmin — assign role (allowed: user/admin/finance/auditor).
 - promoteToAdminWithPin / bootstrapAdminUser — bootstrap admin.
 - autoApproveDriverApplication / approveDriverRequest / rejectDriverRequest / revokeDriverApproval — driver application lifecycle (`driver_requests`,`drivers`).
@@ -113,6 +113,8 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - adminSetPlatformFeaturedAuto — toggle `platformFeaturedAuto` in `settings/app` (Тавсия этамиз витрина АВТО/ҚЎЛДА).
 - adminSetJobsAutoApprove — `settings/app.jobsAutoApprove`; submitJobAd → active if true else pending.
 - adminSetPlatformDeliveryFeePercent — set `platformDeliveryFeePercent` 0..100 in `settings/app`; placeOrderPostPaid platform total += round(items×%).
+- onSearchIndexPlatformProductWrite / onSearchIndexAdWrite / onSearchIndexBreadProductWrite / onSearchIndexFoodProductWrite / onSearchIndexYukListingWrite — Gen2 `onDocumentWritten` (europe-west1) → `search_index` (platform_products, ads, bread_products, food_catalog, yuk_listings).
+- adminSeedSearchIndex — services + routes + Gurlen MFY local_place + backfill products/ads/bread/food/yuk; ops: `node functions/tools/seed_search_index.js`.
 - setDatingActive — toggle visibility (active) + lastActive.
 - adminModerateDatingProfile — approve/reject/block.
 - sendDatingInterest — like; mutual → auto-create `dating_matches`.

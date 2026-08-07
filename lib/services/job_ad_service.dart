@@ -6,7 +6,7 @@ class JobAdService {
 
   static final FirebaseFunctions _fn = FirebaseFunctions.instance;
 
-  static Future<String> submitAd({
+  static Future<({String adId, String status})> submitAd({
     required String type,
     required String text,
     required String authorName,
@@ -25,7 +25,10 @@ class JobAdService {
       'isUrgent': isUrgent,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
-    return (data['adId'] ?? '') as String;
+    return (
+      adId: (data['adId'] ?? '') as String,
+      status: (data['status'] ?? '') as String,
+    );
   }
 
   static Future<String> submitComplaint({

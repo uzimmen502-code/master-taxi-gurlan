@@ -62,7 +62,14 @@ class _JobsViewState extends State<_JobsView>
     context.read<JobsController>().setSearch(v);
   }
 
-  AdKind? _kindForCurrentTab() => JobsTabs.kindForIndex(_tabCtrl.index);
+  AdKind? _kindForCurrentTab() {
+    // Свайп анимацияси давомида эски индекс қолмасин.
+    if (_tabCtrl.indexIsChanging) {
+      return JobsTabs.kindForIndex(_tabCtrl.animation?.value.round()
+              ?? _tabCtrl.index);
+    }
+    return JobsTabs.kindForIndex(_tabCtrl.index);
+  }
 
   void _openAddAdSheet() {
     showAddAdSheet(

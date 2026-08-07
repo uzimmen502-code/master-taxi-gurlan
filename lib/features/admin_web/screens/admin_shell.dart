@@ -338,7 +338,7 @@ class _AdminShellState extends State<AdminShell> {
               foregroundColor: Colors.white,
               title: Text(
                 visible[safeIndex].label,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: const TextStyle(fontWeight: FontWeight.w500),
               ),
               actions: [
                 IconButton(
@@ -540,6 +540,13 @@ class _Sidebar extends StatelessWidget {
   static const _iconIdle = Color(0xD9FFFFFF); // ~85% white
   static const _muted = Color(0xCCFFFFFF); // ~80% white
 
+  /// Sidebar матн — стандарт (семиз w700/w800 эмас).
+  static const _labelSize = 14.0;
+  static const _labelWeight = FontWeight.w400;
+  static const _labelWeightSelected = FontWeight.w500;
+  static const _metaSize = 12.0;
+  static const _metaWeight = FontWeight.w400;
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AdminAuthService>();
@@ -604,9 +611,12 @@ class _Sidebar extends StatelessWidget {
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 15,
-                        fontWeight: FontWeight.bold)),
+                        fontWeight: FontWeight.w500)),
                 Text('Admin Panel',
-                    style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400)),
               ],
             ),
           ),
@@ -715,7 +725,7 @@ class _Sidebar extends StatelessWidget {
                 style: const TextStyle(
                   color: _labelSelected,
                   fontSize: 11,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: _labelWeightSelected,
                   height: 1.15,
                 ),
               ),
@@ -760,10 +770,10 @@ class _Sidebar extends StatelessWidget {
                 s.label,
                 style: TextStyle(
                   color: selected ? _labelSelected : _labelIdle,
-                  fontSize: selected ? 15 : 14,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  letterSpacing: selected ? 0.15 : 0,
-                  height: 1.2,
+                  fontSize: _labelSize,
+                  fontWeight:
+                      selected ? _labelWeightSelected : _labelWeight,
+                  height: 1.25,
                 ),
               ),
               if (selected) ...[
@@ -772,9 +782,9 @@ class _Sidebar extends StatelessWidget {
                   s.description,
                   style: const TextStyle(
                     color: _muted,
-                    fontSize: 12,
+                    fontSize: _metaSize,
                     height: 1.3,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: _metaWeight,
                   ),
                 ),
               ],
@@ -981,7 +991,7 @@ class _Sidebar extends StatelessWidget {
                         : '👤')
                     .toUpperCase(),
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
+                    color: Colors.white, fontWeight: FontWeight.w500)),
           ),
           if (!compact) ...[
             const SizedBox(width: 10),
@@ -995,8 +1005,8 @@ class _Sidebar extends StatelessWidget {
                           : 'Админ',
                       style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold),
+                          fontSize: _metaSize,
+                          fontWeight: _labelWeightSelected),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1004,7 +1014,9 @@ class _Sidebar extends StatelessWidget {
                       '${auth.roleDisplayLabel}'
                       '${auth.phone != null && auth.phone!.isNotEmpty ? ' · ${auth.phone}' : ''}',
                       style: const TextStyle(
-                          color: _muted, fontSize: 11),
+                          color: _muted,
+                          fontSize: 11,
+                          fontWeight: _metaWeight),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1059,27 +1071,27 @@ class _Sidebar extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 9,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: _labelWeight,
                       height: 1.05,
                     ),
                   ),
                 ],
               )
-            : Row(children: [
-                const Icon(Icons.home_outlined,
+            : const Row(children: [
+                Icon(Icons.home_outlined,
                     color: Colors.white70, size: 20),
-                const SizedBox(width: 10),
-                const Expanded(
+                SizedBox(width: 10),
+                Expanded(
                   child: Text(
                     'Фойдаланувчи иловаси',
                     style: TextStyle(
                       color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontSize: _metaSize,
+                      fontWeight: _labelWeight,
                     ),
                   ),
                 ),
-                const Icon(Icons.open_in_new, color: Colors.white38, size: 14),
+                Icon(Icons.open_in_new, color: Colors.white38, size: 14),
               ]),
       ),
     );

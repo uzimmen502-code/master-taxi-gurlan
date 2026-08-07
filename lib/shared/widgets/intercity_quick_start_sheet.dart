@@ -203,207 +203,245 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
   Widget build(BuildContext context) {
     final color = widget.primaryColor;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final maxH = MediaQuery.sizeOf(context).height * 0.92;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Row(children: [
-                  Icon(Icons.route, color: color, size: 24),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Шаҳарлараро — ишга чиқиш',
-                      style:
-                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                _placeField(
-                  ctrl: _fromCtrl,
-                  hint: 'Қаердан (шаҳар)',
-                  color: color,
-                  showSug: _showFromSug,
-                  query: _fromQuery,
-                  onChanged: (q) => setState(() {
-                    _fromQuery = q;
-                    _showFromSug = q.trim().length >= 2;
-                  }),
-                  onSelected: (v) => setState(() {
-                    _fromCtrl.text = v;
-                    _fromQuery = v;
-                    _showFromSug = false;
-                  }),
-                ),
-                const SizedBox(height: 12),
-                _placeField(
-                  ctrl: _toCtrl,
-                  hint: 'Қаерга (шаҳар)',
-                  color: color,
-                  showSug: _showToSug,
-                  query: _toQuery,
-                  onChanged: (q) => setState(() {
-                    _toQuery = q;
-                    _showToSug = q.trim().length >= 2;
-                  }),
-                  onSelected: (v) => setState(() {
-                    _toCtrl.text = v;
-                    _toQuery = v;
-                    _showToSug = false;
-                  }),
-                ),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(
-                    child: ChoiceChip(
-                      label: const Text('Бугун'),
-                      selected: !_departureIsTomorrow,
-                      onSelected: (_) =>
-                          setState(() => _departureIsTomorrow = false),
-                      selectedColor: color.withValues(alpha: 0.18),
-                      labelStyle: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: !_departureIsTomorrow ? color : Colors.grey,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ChoiceChip(
-                      label: const Text('Эртага'),
-                      selected: _departureIsTomorrow,
-                      onSelected: (_) =>
-                          setState(() => _departureIsTomorrow = true),
-                      selectedColor: color.withValues(alpha: 0.18),
-                      labelStyle: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _departureIsTomorrow ? color : Colors.grey,
-                      ),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 14),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickTime,
-                      icon: Icon(Icons.access_time, size: 18, color: color),
-                      label: Text(
-                        'Жўнаш: ${_fmtTime(_departure)}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: Colors.grey.shade300),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _priceCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Material(
+            color: Colors.white,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+            clipBehavior: Clip.antiAlias,
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                        Row(children: [
+                          Icon(Icons.route, color: color, size: 24),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Шаҳарлараро — ишга чиқиш',
+                              style: TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ]),
                       ],
-                      decoration: InputDecoration(
-                        hintText: 'Нарх (сўм)',
-                        prefixIcon: Icon(Icons.payments_outlined,
-                            color: color, size: 20),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _placeField(
+                            ctrl: _fromCtrl,
+                            hint: 'Қаердан (шаҳар)',
+                            color: color,
+                            showSug: _showFromSug,
+                            query: _fromQuery,
+                            onChanged: (q) => setState(() {
+                              _fromQuery = q;
+                              _showFromSug = q.trim().length >= 2;
+                            }),
+                            onSelected: (v) => setState(() {
+                              _fromCtrl.text = v;
+                              _fromQuery = v;
+                              _showFromSug = false;
+                            }),
+                          ),
+                          const SizedBox(height: 12),
+                          _placeField(
+                            ctrl: _toCtrl,
+                            hint: 'Қаерга (шаҳар)',
+                            color: color,
+                            showSug: _showToSug,
+                            query: _toQuery,
+                            onChanged: (q) => setState(() {
+                              _toQuery = q;
+                              _showToSug = q.trim().length >= 2;
+                            }),
+                            onSelected: (v) => setState(() {
+                              _toCtrl.text = v;
+                              _toQuery = v;
+                              _showToSug = false;
+                            }),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Бугун'),
+                                selected: !_departureIsTomorrow,
+                                onSelected: (_) => setState(
+                                    () => _departureIsTomorrow = false),
+                                selectedColor: color.withValues(alpha: 0.18),
+                                labelStyle: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: !_departureIsTomorrow
+                                      ? color
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Эртага'),
+                                selected: _departureIsTomorrow,
+                                onSelected: (_) => setState(
+                                    () => _departureIsTomorrow = true),
+                                selectedColor: color.withValues(alpha: 0.18),
+                                labelStyle: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: _departureIsTomorrow
+                                      ? color
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 14),
+                          Row(children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _pickTime,
+                                icon: Icon(Icons.access_time,
+                                    size: 18, color: color),
+                                label: Text(
+                                  'Жўнаш: ${_fmtTime(_departure)}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14),
+                                  side:
+                                      BorderSide(color: Colors.grey.shade300),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _priceCtrl,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly
+                                ],
+                                decoration: InputDecoration(
+                                  hintText: 'Нарх (сўм)',
+                                  prefixIcon: Icon(Icons.payments_outlined,
+                                      color: color, size: 20),
+                                  border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                ),
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                            decoration: BoxDecoration(
+                              border:
+                                  Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(children: [
+                              Icon(Icons.event_seat, color: color, size: 20),
+                              const SizedBox(width: 8),
+                              const Text('Ўриндиқлар',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w600)),
+                              const Spacer(),
+                              IconButton(
+                                onPressed: _seats > 1
+                                    ? () => setState(() => _seats--)
+                                    : null,
+                                icon: const Icon(Icons.remove_circle_outline),
+                                color: color,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              SizedBox(
+                                width: 24,
+                                child: Text('$_seats',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                              IconButton(
+                                onPressed: _seats < _maxSeats
+                                    ? () => setState(() => _seats++)
+                                    : null,
+                                icon: const Icon(Icons.add_circle_outline),
+                                color: color,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ]),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ]),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(children: [
-                    Icon(Icons.event_seat, color: color, size: 20),
-                    const SizedBox(width: 8),
-                    const Text('Ўриндиқлар',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: _seats > 1
-                          ? () => setState(() => _seats--)
-                          : null,
-                      icon: const Icon(Icons.remove_circle_outline),
-                      color: color,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    SizedBox(
-                      width: 24,
-                      child: Text('$_seats',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                    IconButton(
-                      onPressed: _seats < _maxSeats
-                          ? () => setState(() => _seats++)
-                          : null,
-                      icon: const Icon(Icons.add_circle_outline),
-                      color: color,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ]),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _confirm,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.check_circle_outline, size: 22),
-                    label: Text(_saving ? 'Сақланмоқда...' : 'Тасдиқлаш'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey.shade300,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _saving ? null : _confirm,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.check_circle_outline,
+                                size: 22),
+                        label:
+                            Text(_saving ? 'Сақланмоқда...' : 'Тасдиқлаш'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: color,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

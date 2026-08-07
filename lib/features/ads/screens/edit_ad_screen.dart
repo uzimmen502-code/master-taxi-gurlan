@@ -146,6 +146,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.paddingOf(context).bottom;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Таҳрирлаш'),
@@ -154,136 +155,160 @@ class _EditAdScreenState extends State<EditAdScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ..._keptUrls.map(
-                  (url) => Stack(
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: url,
-                          width: 72,
-                          height: 72,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: _loading
-                              ? null
-                              : () => setState(() => _keptUrls.remove(url)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...List.generate(_newImages.length, (i) {
-                  final f = _newImages[i];
-                  return Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: kIsWeb
-                            ? Image.network(
-                                f.path,
-                                width: 72,
-                                height: 72,
-                                fit: BoxFit.cover,
-                              )
-                            : Image.file(
-                                File(f.path),
+                      ..._keptUrls.map(
+                        (url) => Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImage(
+                                imageUrl: url,
                                 width: 72,
                                 height: 72,
                                 fit: BoxFit.cover,
                               ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: _loading
-                              ? null
-                              : () => setState(() => _newImages.removeAt(i)),
+                            ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: _loading
+                                    ? null
+                                    : () =>
+                                        setState(() => _keptUrls.remove(url)),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  );
-                }),
-                OutlinedButton.icon(
-                  onPressed: _loading ? null : _pickImages,
-                  icon: const Icon(Icons.add_photo_alternate),
-                  label: const Text('Расм'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _titleCtrl,
-              maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Номи *'),
-              validator: (v) {
-                final t = v?.trim() ?? '';
-                if (t.length < 3) return 'Камида 3 белги';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _priceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Нархи (сўм) *'),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Нархни киритинг';
-                final n = int.tryParse(v.trim());
-                if (n == null) return 'Фақат рақам';
-                if (n < 1) return 'Нарх 0 дан катта бўлсин';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descCtrl,
-              maxLines: 4,
-              maxLength: 2000,
-              decoration: const InputDecoration(labelText: 'Тавсиф *'),
-              validator: (v) {
-                final t = v?.trim() ?? '';
-                if (t.length < 3) return 'Камида 3 белги';
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Телефон: ${widget.ad.phone} (ўзгартирилмайди)',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _loading ? null : _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                minimumSize: const Size.fromHeight(48),
-              ),
-              child: _loading
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                      ...List.generate(_newImages.length, (i) {
+                        final f = _newImages[i];
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: kIsWeb
+                                  ? Image.network(
+                                      f.path,
+                                      width: 72,
+                                      height: 72,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.file(
+                                      File(f.path),
+                                      width: 72,
+                                      height: 72,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: _loading
+                                    ? null
+                                    : () => setState(
+                                        () => _newImages.removeAt(i)),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                      OutlinedButton.icon(
+                        onPressed: _loading ? null : _pickImages,
+                        icon: const Icon(Icons.add_photo_alternate),
+                        label: const Text('Расм'),
                       ),
-                    )
-                  : const Text('Сақлаш'),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _titleCtrl,
+                    maxLength: 120,
+                    decoration: const InputDecoration(labelText: 'Номи *'),
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.length < 3) return 'Камида 3 белги';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _priceCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Нархи (сўм) *'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Нархни киритинг';
+                      }
+                      final n = int.tryParse(v.trim());
+                      if (n == null) return 'Фақат рақам';
+                      if (n < 1) return 'Нарх 0 дан катта бўлсин';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _descCtrl,
+                    maxLines: 4,
+                    maxLength: 2000,
+                    decoration: const InputDecoration(labelText: 'Тавсиф *'),
+                    validator: (v) {
+                      final t = v?.trim() ?? '';
+                      if (t.length < 3) return 'Камида 3 белги';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Телефон: ${widget.ad.phone} (ўзгартирилмайди)',
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + bottomPad),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 12,
+                    offset: const Offset(0, -3),
+                  ),
+                ],
+              ),
+              child: FilledButton(
+                onPressed: _loading ? null : _save,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Сақлаш'),
+              ),
             ),
           ],
         ),

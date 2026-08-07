@@ -1,7 +1,7 @@
 name: ava_gurlan
 description: "AVA Zona - 5 modulli mobil ilova"
 publish_to: 'none'
-version: 1.0.12+50
+version: 1.0.13+51
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

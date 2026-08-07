@@ -190,182 +190,230 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final maxH = MediaQuery.sizeOf(context).height * 0.92;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: _border,
-                  borderRadius: BorderRadius.circular(99),
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: _border,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      context.tr('yuk_local_publish_title'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.tr('yuk_local_publish_hint'),
+                      style: const TextStyle(color: _muted, fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              context.tr('yuk_local_publish_title'),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: _vehicle,
+                        dropdownColor: const Color(0xFF131A22),
+                        decoration: _deco(context.tr('yuk_vehicle_all')),
+                        items: [
+                          for (final t in kYukVehicleTypes)
+                            DropdownMenuItem(
+                              value: t.value,
+                              child: Text(
+                                context.tr(t.labelKey),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _vehicle = v);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _plate,
+                        style: const TextStyle(color: Colors.white),
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: _deco(context.tr('yuk_local_plate_hint')),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _capacity,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.,]')),
+                        ],
+                        decoration: _deco(context.tr('yuk_capacity_tons')),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _len,
+                              style: const TextStyle(color: Colors.white),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: _deco(context.tr('yuk_local_body_l')),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _width,
+                              style: const TextStyle(color: Colors.white),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: _deco(context.tr('yuk_local_body_w')),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _height,
+                              style: const TextStyle(color: Colors.white),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration: _deco(context.tr('yuk_local_body_h')),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _location,
+                        style: const TextStyle(color: Colors.white),
+                        decoration:
+                            _deco(context.tr('yuk_local_location_hint')),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        context.tr('yuk_local_radius_title'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final o in YukAcceptRadius.options)
+                            ChoiceChip(
+                              label: Text(context.tr(o.labelKey)),
+                              selected: _radiusKm == o.valueKm,
+                              selectedColor: _accent.withValues(alpha: 0.25),
+                              labelStyle: TextStyle(
+                                color:
+                                    _radiusKm == o.valueKm ? _accent : _muted,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                              side: BorderSide(
+                                color: _radiusKm == o.valueKm
+                                    ? _accent
+                                    : _border,
+                              ),
+                              backgroundColor: const Color(0xFF0B0E14),
+                              onSelected: (_) =>
+                                  setState(() => _radiusKm = o.valueKm),
+                            ),
+                        ],
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          style: const TextStyle(
+                              color: Color(0xFFFCA5A5), fontSize: 13),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.tr('yuk_local_publish_hint'),
-              style: const TextStyle(color: _muted, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              initialValue: _vehicle,
-              dropdownColor: const Color(0xFF131A22),
-              decoration: _deco(context.tr('yuk_vehicle_all')),
-              items: [
-                for (final t in kYukVehicleTypes)
-                  DropdownMenuItem(
-                    value: t.value,
-                    child: Text(
-                      context.tr(t.labelKey),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-              ],
-              onChanged: (v) {
-                if (v != null) setState(() => _vehicle = v);
-              },
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _plate,
-              style: const TextStyle(color: Colors.white),
-              textCapitalization: TextCapitalization.characters,
-              decoration: _deco(context.tr('yuk_local_plate_hint')),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _capacity,
-              style: const TextStyle(color: Colors.white),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-              ],
-              decoration: _deco(context.tr('yuk_capacity_tons')),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _len,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _deco(context.tr('yuk_local_body_l')),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton(
+                        onPressed:
+                            _busy ? null : () => _submit(goOnline: true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: _busy
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : Text(context.tr('yuk_local_go_online')),
+                      ),
+                      if (widget.initial?.online == true) ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton(
+                          onPressed: _busy
+                              ? null
+                              : () => _submit(goOnline: false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _muted,
+                            side: const BorderSide(color: _border),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(context.tr('yuk_local_go_offline')),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _width,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _deco(context.tr('yuk_local_body_w')),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _height,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _deco(context.tr('yuk_local_body_h')),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _location,
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_local_location_hint')),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              context.tr('yuk_local_radius_title'),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final o in YukAcceptRadius.options)
-                  ChoiceChip(
-                    label: Text(context.tr(o.labelKey)),
-                    selected: _radiusKm == o.valueKm,
-                    selectedColor: _accent.withValues(alpha: 0.25),
-                    labelStyle: TextStyle(
-                      color: _radiusKm == o.valueKm ? _accent : _muted,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                    side: BorderSide(
-                      color: _radiusKm == o.valueKm ? _accent : _border,
-                    ),
-                    backgroundColor: const Color(0xFF0B0E14),
-                    onSelected: (_) =>
-                        setState(() => _radiusKm = o.valueKm),
-                  ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13),
               ),
             ],
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _busy ? null : () => _submit(goOnline: true),
-              style: FilledButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: _busy
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(context.tr('yuk_local_go_online')),
-            ),
-            if (widget.initial?.online == true) ...[
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _busy ? null : () => _submit(goOnline: false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _muted,
-                  side: const BorderSide(color: _border),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: Text(context.tr('yuk_local_go_offline')),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

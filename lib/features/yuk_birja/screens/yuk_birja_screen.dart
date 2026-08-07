@@ -16,7 +16,19 @@ import 'yuk_local_nearby_panel.dart';
 
 /// Юк биржаси — туман ичида (GPS) + шаҳарлараро эълонлар.
 class YukBirjaScreen extends StatefulWidget {
-  const YukBirjaScreen({super.key});
+  const YukBirjaScreen({
+    super.key,
+    this.initialScope,
+    this.highlightListingId,
+    this.autoFrom,
+    this.autoTo,
+  });
+
+  /// `local` | `intercity`
+  final String? initialScope;
+  final String? highlightListingId;
+  final String? autoFrom;
+  final String? autoTo;
 
   @override
   State<YukBirjaScreen> createState() => _YukBirjaScreenState();
@@ -68,7 +80,24 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
   @override
   void initState() {
     super.initState();
+    final scope = (widget.initialScope ?? '').trim();
+    if (scope == 'intercity' || scope == 'local') {
+      _scope = scope;
+    }
+    final from = (widget.autoFrom ?? '').trim();
+    final to = (widget.autoTo ?? '').trim();
+    if (from.isNotEmpty) {
+      _fromCtrl.text = from;
+      _appliedFrom = from;
+    }
+    if (to.isNotEmpty) {
+      _toCtrl.text = to;
+      _appliedTo = to;
+    }
     _bootstrapOwner();
+    if (_scope == 'intercity') {
+      unawaited(_ensureIntercityLoaded());
+    }
     _fromFocus.addListener(() {
       if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
     });
@@ -149,12 +178,22 @@ class _YukBirjaScreenState extends State<YukBirjaScreen> {
 
   Locale get _locale => Localizations.localeOf(context);
 
-  List<YukListing> get _visible => _store.filtered(
-        tab: _tab,
-        from: _appliedFrom,
-        to: _appliedTo,
-        vehicleType: _appliedVehicle,
-      );
+  List<YukListing> get _visible {
+    final list = _store.filtered(
+      tab: _tab,
+      from: _appliedFrom,
+      to: _appliedTo,
+      vehicleType: _appliedVehicle,
+    );
+    final hid = (widget.highlightListingId ?? '').trim();
+    if (hid.isEmpty) return list;
+    final idx = list.indexWhere((e) => e.id == hid);
+    if (idx <= 0) return list;
+    final copy = List<YukListing>.from(list);
+    final item = copy.removeAt(idx);
+    copy.insert(0, item);
+    return copy;
+  }
 
   void _refreshFromSuggestions(String q) {
     setState(() {
@@ -1384,192 +1423,243 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final maxH = MediaQuery.sizeOf(context).height * 0.92;
     final title = _editing
         ? context.tr('yuk_edit')
         : (widget.isCargo
             ? context.tr('yuk_create_cargo')
             : context.tr('yuk_create_truck'));
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Material(
+            color: const Color(0xFF0F172A),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(24)),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF334155),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Color(0xFFFACC15),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.tr('yuk_ttl_hint'),
+                        style: const TextStyle(
+                            color: Color(0xFF64748B), fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFFFACC15),
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.tr('yuk_ttl_hint'),
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _from,
-              focusNode: _fromFocus,
-              onChanged: (q) => setState(() {
-                _fromSuggestions = IntercityPlaces.search(q, locale: _locale);
-              }),
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_from')),
-            ),
-            _placeSuggestions(_fromSuggestions, (s) {
-              final c = IntercityPlaces.normalizeLocation(s);
-              _from.text = IntercityPlaces.displayForLocale(c, _locale);
-              setState(() => _fromSuggestions = []);
-              _fromFocus.unfocus();
-            }),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _to,
-              focusNode: _toFocus,
-              onChanged: (q) => setState(() {
-                _toSuggestions = IntercityPlaces.search(q, locale: _locale);
-              }),
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_to')),
-            ),
-            _placeSuggestions(_toSuggestions, (s) {
-              final c = IntercityPlaces.normalizeLocation(s);
-              _to.text = IntercityPlaces.displayForLocale(c, _locale);
-              setState(() => _toSuggestions = []);
-              _toFocus.unfocus();
-            }),
-            const SizedBox(height: 10),
-            Text(context.tr('yuk_stops'),
-                style: const TextStyle(color: Color(0xFF94A3B8))),
-            const SizedBox(height: 6),
-            ..._stopCtrls.asMap().entries.map((e) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: e.value,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: _deco(context.tr('yuk_stop_hint')),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          controller: _from,
+                          focusNode: _fromFocus,
+                          onChanged: (q) => setState(() {
+                            _fromSuggestions =
+                                IntercityPlaces.search(q, locale: _locale);
+                          }),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _deco(context.tr('yuk_from')),
+                        ),
+                        _placeSuggestions(_fromSuggestions, (s) {
+                          final c = IntercityPlaces.normalizeLocation(s);
+                          _from.text =
+                              IntercityPlaces.displayForLocale(c, _locale);
+                          setState(() => _fromSuggestions = []);
+                          _fromFocus.unfocus();
+                        }),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _to,
+                          focusNode: _toFocus,
+                          onChanged: (q) => setState(() {
+                            _toSuggestions =
+                                IntercityPlaces.search(q, locale: _locale);
+                          }),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _deco(context.tr('yuk_to')),
+                        ),
+                        _placeSuggestions(_toSuggestions, (s) {
+                          final c = IntercityPlaces.normalizeLocation(s);
+                          _to.text =
+                              IntercityPlaces.displayForLocale(c, _locale);
+                          setState(() => _toSuggestions = []);
+                          _toFocus.unfocus();
+                        }),
+                        const SizedBox(height: 10),
+                        Text(context.tr('yuk_stops'),
+                            style:
+                                const TextStyle(color: Color(0xFF94A3B8))),
+                        const SizedBox(height: 6),
+                        ..._stopCtrls.asMap().entries.map((e) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: e.value,
+                                    style:
+                                        const TextStyle(color: Colors.white),
+                                    decoration:
+                                        _deco(context.tr('yuk_stop_hint')),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => setState(() {
+                                    _stopCtrls.removeAt(e.key).dispose();
+                                  }),
+                                  icon: const Icon(Icons.close,
+                                      color: Colors.white54),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () => setState(
+                                () => _stopCtrls.add(TextEditingController())),
+                            icon: const Icon(Icons.add),
+                            label: Text(context.tr('yuk_add_stop')),
+                          ),
+                        ),
+                        if (widget.isCargo) ...[
+                          TextField(
+                            controller: _cargo,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: _deco(context.tr('yuk_cargo_type')),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _weight,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.]')),
+                            ],
+                            style: const TextStyle(color: Colors.white),
+                            decoration: _deco(context.tr('yuk_weight_tons')),
+                          ),
+                        ] else ...[
+                          TextField(
+                            controller: _capacity,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.]')),
+                            ],
+                            style: const TextStyle(color: Colors.white),
+                            decoration: _deco(context.tr('yuk_capacity_tons')),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _free,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.]')),
+                            ],
+                            style: const TextStyle(color: Colors.white),
+                            decoration: _deco(context.tr('yuk_free_tons')),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use
+                          value: _vehicle,
+                          dropdownColor: const Color(0xFF1A232E),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _deco(context.tr('yuk_vehicle_type')),
+                          items: kYukVehicleTypes
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t.value,
+                                  child: Text(context.tr(t.labelKey)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _vehicle = v ?? _vehicle),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _price,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _deco(context.tr('yuk_price_optional')),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _comment,
+                          maxLines: 2,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _deco(context.tr('yuk_comment')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _submit,
+                      child: Text(
+                        _editing
+                            ? context.tr('yuk_save')
+                            : context.tr('yuk_post'),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => setState(() {
-                        _stopCtrls.removeAt(e.key).dispose();
-                      }),
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                    ),
-                  ],
+                  ),
                 ),
-              );
-            }),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () =>
-                    setState(() => _stopCtrls.add(TextEditingController())),
-                icon: const Icon(Icons.add),
-                label: Text(context.tr('yuk_add_stop')),
-              ),
+              ],
             ),
-            if (widget.isCargo) ...[
-              TextField(
-                controller: _cargo,
-                style: const TextStyle(color: Colors.white),
-                decoration: _deco(context.tr('yuk_cargo_type')),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _weight,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
-                style: const TextStyle(color: Colors.white),
-                decoration: _deco(context.tr('yuk_weight_tons')),
-              ),
-            ] else ...[
-              TextField(
-                controller: _capacity,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
-                style: const TextStyle(color: Colors.white),
-                decoration: _deco(context.tr('yuk_capacity_tons')),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _free,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                ],
-                style: const TextStyle(color: Colors.white),
-                decoration: _deco(context.tr('yuk_free_tons')),
-              ),
-            ],
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use
-              value: _vehicle,
-              dropdownColor: const Color(0xFF1A232E),
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_vehicle_type')),
-              items: kYukVehicleTypes
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t.value,
-                      child: Text(context.tr(t.labelKey)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _vehicle = v ?? _vehicle),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _price,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_price_optional')),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _comment,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white),
-              decoration: _deco(context.tr('yuk_comment')),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF16A34A),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              onPressed: _submit,
-              child: Text(
-                _editing ? context.tr('yuk_save') : context.tr('yuk_post'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -334,9 +334,12 @@ class _AdminShellState extends State<AdminShell> {
       appBar: isMedium
           ? null
           : AppBar(
-              backgroundColor: AppColors.primary,
+              backgroundColor: const Color(0xFF1F4A00),
               foregroundColor: Colors.white,
-              title: Text(visible[safeIndex].label),
+              title: Text(
+                visible[safeIndex].label,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.home_outlined),
@@ -529,14 +532,26 @@ class _Sidebar extends StatelessWidget {
   final VoidCallback onLogout;
   final bool compact;
 
+  /// Қоронғи яшил — оқ матн контрасти (ёруғ limeEdge устида ўқиш қийин эди).
+  static const _sidebarBg = Color(0xFF1F4A00);
+  static const _sidebarBgTop = Color(0xFF2A6200);
+  static const _labelIdle = Color(0xF0FFFFFF); // ~94% white
+  static const _labelSelected = Colors.white;
+  static const _iconIdle = Color(0xD9FFFFFF); // ~85% white
+  static const _muted = Color(0xCCFFFFFF); // ~80% white
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AdminAuthService>();
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.primary,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [_sidebarBgTop, _sidebarBg],
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(2, 0)),
+          BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(2, 0)),
         ],
       ),
       child: Column(children: [
@@ -561,7 +576,7 @@ class _Sidebar extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const PendingCodeAutoModeSwitch(compact: true),
@@ -610,7 +625,7 @@ class _Sidebar extends StatelessWidget {
     VoidCallback onTap,
   ) {
     final badgeStream = _badgeCountStream(context, s.label);
-    final iconColor = selected ? Colors.white : Colors.white60;
+    final iconColor = selected ? _labelSelected : _iconIdle;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Material(
@@ -623,45 +638,14 @@ class _Sidebar extends StatelessWidget {
             curve: _tabCurve,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.22),
-                        blurRadius: 14,
-                        spreadRadius: 0,
-                        offset: const Offset(0, 0),
-                      ),
-                    ]
-                  : const [],
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.transparent,
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
                 children: [
-                  // Chap → o'ng glow / gradient
-                  Positioned.fill(
-                    child: AnimatedOpacity(
-                      duration: _tabAnim,
-                      curve: _tabCurve,
-                      opacity: selected ? 1 : 0,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              Colors.white.withValues(alpha: 0.34),
-                              Colors.white.withValues(alpha: 0.14),
-                              Colors.white.withValues(alpha: 0.04),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.28, 0.62, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Chap chetda yorqin chiziq
                   if (selected)
                     Positioned(
                       left: 0,
@@ -670,15 +654,8 @@ class _Sidebar extends StatelessWidget {
                       child: Container(
                         width: 3,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.limeBright,
                           borderRadius: BorderRadius.circular(99),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.75),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ],
                         ),
                       ),
                     ),
@@ -687,7 +664,7 @@ class _Sidebar extends StatelessWidget {
                     curve: _tabCurve,
                     padding: EdgeInsets.symmetric(
                       horizontal: compact ? (selected ? 6 : 0) : 14,
-                      vertical: selected ? 14 : 8,
+                      vertical: selected ? 12 : 9,
                     ),
                     child: AnimatedSize(
                       duration: _tabAnim,
@@ -735,17 +712,11 @@ class _Sidebar extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
+                style: const TextStyle(
+                  color: _labelSelected,
+                  fontSize: 11,
                   fontWeight: FontWeight.w800,
                   height: 1.15,
-                  shadows: [
-                    Shadow(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      blurRadius: 8,
-                    ),
-                  ],
                 ),
               ),
             ],
@@ -788,28 +759,21 @@ class _Sidebar extends StatelessWidget {
               Text(
                 s.label,
                 style: TextStyle(
-                  color: selected ? Colors.white : Colors.white60,
-                  fontSize: selected ? 14.5 : 13,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                  letterSpacing: selected ? 0.2 : 0,
-                  shadows: selected
-                      ? [
-                          Shadow(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            blurRadius: 10,
-                          ),
-                        ]
-                      : null,
+                  color: selected ? _labelSelected : _labelIdle,
+                  fontSize: selected ? 15 : 14,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  letterSpacing: selected ? 0.15 : 0,
+                  height: 1.2,
                 ),
               ),
               if (selected) ...[
                 const SizedBox(height: 3),
                 Text(
                   s.description,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontSize: 11,
-                    height: 1.25,
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 12,
+                    height: 1.3,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1040,13 +1004,13 @@ class _Sidebar extends StatelessWidget {
                       '${auth.roleDisplayLabel}'
                       '${auth.phone != null && auth.phone!.isNotEmpty ? ' · ${auth.phone}' : ''}',
                       style: const TextStyle(
-                          color: Colors.white60, fontSize: 10),
+                          color: _muted, fontSize: 11),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ]),
             ),
-            const Icon(Icons.logout, color: Colors.white60, size: 18),
+            const Icon(Icons.logout, color: _muted, size: 18),
           ],
         ]),
       ),

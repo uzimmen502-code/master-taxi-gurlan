@@ -48,6 +48,21 @@ class OnboardingController extends ChangeNotifier {
   bool _bindingRegistered = false;
   String _deviceLockedUid = '';
 
+  /// Peer-transfer approve dan keyin bootstrap uchun.
+  void markBindingRegistered(String phone) {
+    final digits = phoneDigits(phone);
+    otpVerified = true;
+    _bindingRegistered = true;
+    _deviceLockedUid = digits;
+    phoneStepError = null;
+    notifyListeners();
+  }
+
+  DeviceFingerprintSnapshot? get fingerprintSnapshot => _fingerprintSnapshot;
+
+  /// Oxirgi checkDeviceBinding natijasi (conflict sheet uchun).
+  DeviceBindingCheckResult? lastBindingResult;
+
   /// Ихчам онбординг: шахс+телефон → fingerprint bind → Home. Тил/туман олдинда.
   static const totalPages = 1;
 
@@ -389,6 +404,7 @@ class OnboardingController extends ChangeNotifier {
         phone: phone,
         snapshot: snapshot,
       );
+      lastBindingResult = result;
 
       switch (result.status) {
         case DeviceBindingStatus.trustedDevice:
@@ -406,21 +422,10 @@ class OnboardingController extends ChangeNotifier {
           return false;
 
         case DeviceBindingStatus.deviceBoundOtherPhone:
-          phoneStepError =
-              result.message ??
-              'Бу қурилма boshqa raqamga bog\'liq. Adminga murojaat qiling.';
-          return false;
-
         case DeviceBindingStatus.phoneBoundOtherDevice:
-          phoneStepError =
-              result.message ??
-              'Bu raqam boshqa qurilmaga bog\'liq. Adminga murojaat qiling.';
-          return false;
-
         case DeviceBindingStatus.blocked:
-          phoneStepError =
-              result.message ??
-              'Qurilma vaqtincha bloklangan. Adminga murojaat qiling.';
+          // UI conflict sheet ko‘rsatadi (self-serve / soft limit).
+          phoneStepError = result.message;
           return false;
 
         case DeviceBindingStatus.unknown:

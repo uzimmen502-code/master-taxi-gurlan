@@ -19,12 +19,13 @@ class YukListing {
     required this.phone,
     required this.status,
     this.cargo,
-    this.weight,
-    this.capacity,
-    this.freeSpace,
+    this.weightKg,
+    this.capacityKg,
+    this.freeSpaceKg,
     this.price = 0,
     this.comment = '',
     this.stars = 5.0,
+    this.isDemo = false,
     DateTime? createdAt,
     DateTime? expiresAt,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -45,12 +46,21 @@ class YukListing {
   final String phone;
   YukListingStatus status;
   final String? cargo;
-  final double? weight;
-  final double? capacity;
-  final double? freeSpace;
+
+  /// Оғирлик/юк кўтариши/бўш жой — ҳаммаси **килограмм**.
+  /// Firestore'да майдон номлари ўзгармаган (`weight`/`capacity`/`freeSpace`),
+  /// бирлик `unit` майдони билан белгиланади: `kg`. Эски (`unit` йўқ)
+  /// эълонлардаги қийматлар тонна деб қабул қилиниб, ўқишда ×1000 бўлади.
+  final double? weightKg;
+  final double? capacityKg;
+  final double? freeSpaceKg;
   final double price;
   final String comment;
   final double stars;
+
+  /// Намойиш (сийд) эълони — картада «Намойиш» белгиси кўринади.
+  /// Ҳақиқий фойдаланувчилар етарли бўлганда бу ёзувлар ўчирилади.
+  final bool isDemo;
   final DateTime createdAt;
   final DateTime expiresAt;
 
@@ -79,15 +89,24 @@ class YukListing {
         'phone': phone,
         'status': status.name,
         'cargo': cargo,
-        'weight': weight,
-        'capacity': capacity,
-        'freeSpace': freeSpace,
+        'unit': 'kg',
+        'weight': weightKg,
+        'capacity': capacityKg,
+        'freeSpace': freeSpaceKg,
         'price': price,
         'comment': comment,
         'stars': stars,
+        'isDemo': isDemo,
         'createdAt': createdAt.toIso8601String(),
         'expiresAt': expiresAt.toIso8601String(),
       };
+
+  /// `unit == 'kg'` бўлмаса — эски эълон (тонна), кг га айлантирамиз.
+  static double? _asKg(dynamic v, Map<String, dynamic> j) {
+    final n = (v as num?)?.toDouble();
+    if (n == null) return null;
+    return j['unit']?.toString() == 'kg' ? n : n * 1000;
+  }
 
   static DateTime _asDate(dynamic v, DateTime fallback) {
     if (v is Timestamp) return v.toDate();
@@ -117,12 +136,13 @@ class YukListing {
           ? YukListingStatus.closed
           : YukListingStatus.active,
       cargo: j['cargo']?.toString(),
-      weight: (j['weight'] as num?)?.toDouble(),
-      capacity: (j['capacity'] as num?)?.toDouble(),
-      freeSpace: (j['freeSpace'] as num?)?.toDouble(),
+      weightKg: _asKg(j['weight'], j),
+      capacityKg: _asKg(j['capacity'], j),
+      freeSpaceKg: _asKg(j['freeSpace'], j),
       price: (j['price'] as num?)?.toDouble() ?? 0,
       comment: (j['comment'] ?? '').toString(),
       stars: (j['stars'] as num?)?.toDouble() ?? 5,
+      isDemo: j['isDemo'] == true,
       createdAt: created,
       expiresAt: expires,
     );
@@ -143,9 +163,9 @@ class YukListing {
     String? phone,
     YukListingStatus? status,
     String? cargo,
-    double? weight,
-    double? capacity,
-    double? freeSpace,
+    double? weightKg,
+    double? capacityKg,
+    double? freeSpaceKg,
     double? price,
     String? comment,
     double? stars,
@@ -164,12 +184,13 @@ class YukListing {
       phone: phone ?? this.phone,
       status: status ?? this.status,
       cargo: cargo ?? this.cargo,
-      weight: weight ?? this.weight,
-      capacity: capacity ?? this.capacity,
-      freeSpace: freeSpace ?? this.freeSpace,
+      weightKg: weightKg ?? this.weightKg,
+      capacityKg: capacityKg ?? this.capacityKg,
+      freeSpaceKg: freeSpaceKg ?? this.freeSpaceKg,
       price: price ?? this.price,
       comment: comment ?? this.comment,
       stars: stars ?? this.stars,
+      isDemo: isDemo,
       createdAt: createdAt ?? this.createdAt,
       expiresAt: expiresAt ?? this.expiresAt,
     );

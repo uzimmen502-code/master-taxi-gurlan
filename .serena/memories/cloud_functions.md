@@ -61,6 +61,7 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - expirePendingTrips (sched) — trips expire via **txn status guard** (faqat hali `searching`/`pending`); accepted trip race himoyalangan.
 - onMarshrutTripCreate (trigger) / onTripUpdate (trigger) — trip dispatch/side effects.
 - expirePendingTrips (sched) / releaseStaleReservations (sched) — cleanup stale trips/holds; closes expired `yuk_listings` (active→closed) + FCM via `notifications` (`yuk_listing_closed`); T−6h warn (`yuk_listing_expire_soon`, flag `expireSoonNotified`); jobs `ads` active|pending → `completed`; cheap_product expired → `inactive`.
+- refreshYukDemoPresence (sched, every 10 minutes) — demo `yuk_local_drivers` ga `workStartMinutes=0`, `workEndMinutes=1440`, uzoq `expiresAt` (+180k) backfill; `online`/`lastOnlineAt` delete. Online/heartbeat model olib tashlangan (2026-08): ko'rinish = GPS + ish vaqti + TTL.
 - submitJobAd / submitJobComplaint (onCall) — Иш топ CF-only create (auth+canonical phone; ad daily 10; complaint daily 20).
 - submitMarketAd / submitMarketComplaint (onCall) — Onlayn BOZOR CF-only create + reports type market_ad (ads daily/pending/active <=5000; complaints daily 20; phone=token; images under ads/{uid}/; submit/adminUpdate write `searchTokens`).
 - migrateCheapProductTitleLower (onCall admin) — backfill `titleLower` + empty `searchTokens` on cheap_product.
@@ -76,7 +77,8 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - autoUpdateDepartureTime — roll intercity departure to next slot.
 
 ## Auth / Device Binding / Phone
-- checkDeviceBinding / registerDeviceBinding — device fingerprint binding (`device_bindings`).
+- checkDeviceBinding / createPhoneSession / registerDeviceBinding — device fingerprint binding (`device_bindings`). Soft block 30m.
+- requestDeviceTransfer / getDeviceTransferStatus / respondDeviceTransfer / listMyPendingDeviceTransfers — Faza 1 peer transfer (`device_transfer_requests`); approve → limited trust 24s on `users.security`.
 - requestPendingCode / getPendingCodeStatus / verifyPendingCodeAndRegister — legacy admin-code flow (`pending_codes`); client onboarding/reverify **no longer** uses them (fingerprint + checkDeviceBinding + createPhoneSession).
 - autoApprovePendingCode / autoApprovePendingCodeOnUpdate (triggers) — auto-approve codes.
 - changeDevicePhone — change phone bound to device.

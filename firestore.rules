@@ -626,6 +626,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Peer device transfer (Faza 1) — yozish faqat CF; o‘qish: egasi yoki admin.
+    match /device_transfer_requests/{id} {
+      allow read: if isAdmin()
+          || (isAuth() && resource.data.phone == phoneFromToken());
+      allow create, update, delete: if false;
+    }
+
     match /risk_events/{id} {
       allow create: if true;
       // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
@@ -2135,35 +2142,51 @@ service cloud.firestore {
     }
 
     // ─── Туман ичида юк (live машиналар) ───────────────────────────────
-    function yukLocalDriverCreateOk(driverId) {
+    // Эгалик faqat `ownerId` бўйича — ҳужжат ID'си auto-ID (бир рақам остида
+    // бир нечта эълон). Эски телефон-ID ҳужжатларда ҳам `ownerId` бор,
+    // шунинг учун улар ҳам ишлашда давом этади.
+    // Туман ичида: жойлашув + иш вақти + TTL. Онлайн/heartbeat йўқ.
+    function yukLocalDriverCreateOk() {
       let d = request.resource.data;
       return isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), d.ownerId)
           && d.vehicleType is string
           && d.phone is string
           && d.ownerName is string
-          && d.online is bool
+          && d.lat is number
+          && d.lng is number
+          && d.workStartMinutes is int
+          && d.workEndMinutes is int
           && d.loadStatus in ['empty', 'busy', 'offline'];
     }
 
-    function yukLocalDriverOwnerUpdateOk(driverId) {
+    function yukLocalDriverOwnerUpdateOk() {
       return isAuth()
-          && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId)
           && notChanged('ownerId')
           && notChanged('rating')
-          && notChanged('completedLoads');
+          && notChanged('completedLoads')
+          && notChanged('createdAt')
+          && notChanged('expiresAt');
     }
 
     match /yuk_local_drivers/{driverId} {
       allow read: if isAuth();
-      allow create: if yukLocalDriverCreateOk(driverId);
-      allow update: if isAdmin() || yukLocalDriverOwnerUpdateOk(driverId);
+      allow create: if yukLocalDriverCreateOk();
+      allow update: if isAdmin() || yukLocalDriverOwnerUpdateOk();
       allow delete: if isAdmin()
           || (isAuth()
-              && phoneDocIdsMatch(userDocIdFromPhoneToken(), driverId)
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerId));
+    }
+
+    // Биринчи эълон TTL (60 кун) учун тарихий белги.
+    match /yuk_local_owner_meta/{ownerId} {
+      allow read: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerId);
+      allow create, update: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerId)
+          && request.resource.data.ownerId == ownerId
+          && request.resource.data.everPublished == true;
     }
 
   }

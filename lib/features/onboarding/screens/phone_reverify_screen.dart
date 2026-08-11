@@ -13,6 +13,7 @@ import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../shared/navigation/app_home_route.dart';
+import '../widgets/device_binding_conflict_sheet.dart';
 
 /// Mavjud foydalanuvchi — Firebase sessiyasi yo'qolganda qayta kirish.
 ///
@@ -165,6 +166,39 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
 
       if (result.status != DeviceBindingStatus.trustedDevice) {
         if (!mounted) return;
+        final conflict = result.status ==
+                DeviceBindingStatus.phoneBoundOtherDevice ||
+            result.status == DeviceBindingStatus.deviceBoundOtherPhone ||
+            result.status == DeviceBindingStatus.blocked;
+        if (conflict) {
+          setState(() => _signingIn = false);
+          final transferred = await showDeviceBindingConflictSheet(
+            context: context,
+            result: result,
+            phone: _phoneDigits,
+            name: _userName,
+            snapshot: snapshot,
+          );
+          if (transferred == true && mounted) {
+            // Pending screen approve qilgan — session ochamiz.
+            final token = await _bindingRepo.createPhoneSession(
+              phone: _phoneDigits,
+              snapshot: snapshot,
+            );
+            await _auth.signInWithCustomToken(token);
+            await _auth.currentUser?.getIdToken(true);
+            if (!mounted) return;
+            setState(() => _signedIn = true);
+            if (_showProfileStep) {
+              await _goToStep(2);
+            } else {
+              await _goHome(showProfileHint: true);
+            }
+            return;
+          }
+          setState(() => _error = result.message ?? bindFailedMsg);
+          return;
+        }
         setState(() {
           _error = result.message ?? bindFailedMsg;
         });

@@ -15,6 +15,7 @@ import '../../../utils/locale_utils.dart';
 import 'onboarding_screen.dart';
 
 /// Тил + туман — рўйхатдан олдин хабар ихчам экран.
+/// Туман танланмаса кейинги экранга ўтилмайди (сариқ енгил огоҳлантириш).
 class LanguageSelectScreen extends StatefulWidget {
   const LanguageSelectScreen({super.key});
   @override
@@ -28,8 +29,14 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
   String _areaId = '';
   bool _saving = false;
 
+  /// «Давом этиш» тумансиз босилганда — сариқ баннер.
+  bool _showDistrictWarn = false;
+
   static const _ink = Color(0xFF102418);
   static const _muted = Color(0xFF4A6741);
+  static const _warnBg = Color(0xFFFEF9C3);
+  static const _warnBorder = Color(0xFFFDE68A);
+  static const _warnText = Color(0xFF854D0E);
 
   @override
   void initState() {
@@ -53,22 +60,33 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
     (label: 'Русский', flag: '🇷🇺', locale: LocaleUtils.ru),
   ];
 
-  bool get _canContinue =>
-      _selected != null &&
+  bool get _districtReady =>
       _regionId.isNotEmpty &&
       _districtId.isNotEmpty &&
-      _areaId.isNotEmpty &&
-      !_saving;
+      _areaId.isNotEmpty;
 
   Future<void> _onLanguageTap(Locale locale) async {
     setState(() => _selected = locale);
     await context.read<LocaleNotifier>().setLocale(locale);
   }
 
+  Future<void> _onContinuePressed() async {
+    if (_saving) return;
+    if (!_districtReady) {
+      setState(() => _showDistrictWarn = true);
+      return;
+    }
+    await _confirm();
+  }
+
   Future<void> _confirm() async {
     final chosen = _selected;
-    if (chosen == null || !_canContinue) return;
-    setState(() => _saving = true);
+    // Қатъий қулф: тумансиз навбатдаги экранга йўл йўқ.
+    if (chosen == null || !_districtReady || _saving) return;
+    setState(() {
+      _saving = true;
+      _showDistrictWarn = false;
+    });
     try {
       await context.read<LocaleNotifier>().setLocale(chosen);
       await ServiceConfigHolder.applyGeo(
@@ -226,17 +244,86 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                             color: _muted.withValues(alpha: 0.18),
                           ),
                           const SizedBox(height: 12),
-                          ServiceAreaPicker(
-                            showRegionDropdown: false,
-                            showAreaDropdown: false,
-                            districtLabel: context.tr('ob_pre_district'),
-                            onChanged: (r, d, a) {
-                              setState(() {
-                                _regionId = r;
-                                _districtId = d;
-                                _areaId = a;
-                              });
-                            },
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: _showDistrictWarn
+                                ? const EdgeInsets.all(8)
+                                : EdgeInsets.zero,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: _showDistrictWarn
+                                    ? _warnBorder
+                                    : Colors.transparent,
+                                width: 1.5,
+                              ),
+                              color: _showDistrictWarn
+                                  ? _warnBg.withValues(alpha: 0.35)
+                                  : Colors.transparent,
+                            ),
+                            child: ServiceAreaPicker(
+                              showRegionDropdown: false,
+                              showAreaDropdown: false,
+                              districtLabel: context.tr('ob_pre_district'),
+                              onChanged: (r, d, a) {
+                                setState(() {
+                                  _regionId = r;
+                                  _districtId = d;
+                                  _areaId = a;
+                                  if (r.isNotEmpty &&
+                                      d.isNotEmpty &&
+                                      a.isNotEmpty) {
+                                    _showDistrictWarn = false;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                            child: _showDistrictWarn
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _warnBg,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: _warnBorder),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 18,
+                                            color: _warnText,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              context.tr(
+                                                'ob_pre_district_required',
+                                              ),
+                                              style: const TextStyle(
+                                                color: _warnText,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
                         ],
                       ),
@@ -247,7 +334,8 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _canContinue ? _confirm : null,
+                    // Тугма доим босилади; тумансиз — баннер, ўтиш йўқ.
+                    onPressed: _saving ? null : _onContinuePressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryDark,
                       foregroundColor: Colors.white,

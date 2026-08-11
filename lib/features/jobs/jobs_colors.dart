@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../models/job_ad.dart';
 
 /// ИШ ЭЪЛОН палитраси (бошқа модулларга таъсир қилмайди).
@@ -8,8 +7,11 @@ abstract final class JobsColors {
   /// Лента / экран фони — юмшоқ яшил (ёруғ lime эмас).
   static const scaffold = Color(0xFFF7FFEF);
 
-  /// AppBar ва оқ матнли CTA фон — чуқур лайм.
-  static const bar = AppColors.button; // #4E9F00
+  /// Иш бор / Хизмат таклифи — битта кўк акцент.
+  static const accentBlue = Color(0xFF0277BD);
+
+  /// AppBar, таблар, «+ Эълон қўшиш», «Таҳрирлаш» фон.
+  static const bar = accentBlue;
 
   /// Оқ матн бар/CTA устида.
   static const onBar = Colors.white;
@@ -35,11 +37,11 @@ abstract final class JobsColors {
   /// Қидирув fill.
   static const fieldFill = Color(0xFFF5F8F0);
 
-  /// Эълон акцент.
-  static const kindAd = AppColors.button;
+  /// «Иш бор» (ad) акцент — кўк.
+  static const kindAd = accentBlue;
 
-  /// Хизмат акцент.
-  static const kindService = Color(0xFF0277BD);
+  /// «Хизмат таклифи» акцент — кўк.
+  static const kindService = accentBlue;
 
   /// Legacy «Иш» (work).
   static const kindWork = Color(0xFFD84315);
@@ -49,8 +51,8 @@ abstract final class JobsColors {
   static const urgentSoft = Color(0xFFFFEBEE);
 
   /// Нарх chip.
-  static const priceBg = Color(0xFFEEF8E0);
-  static const priceText = AppColors.button;
+  static const priceBg = Color(0xFFE3F2FD);
+  static const priceText = accentBlue;
 
   static Color accentFor(AdKind kind) {
     switch (kind) {

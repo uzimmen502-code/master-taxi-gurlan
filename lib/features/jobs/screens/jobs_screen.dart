@@ -100,7 +100,7 @@ class _JobsViewState extends State<_JobsView>
                 height: 34,
                 child: ElevatedButton.icon(
                   onPressed: _openAddAdSheet,
-                  icon: const Icon(Icons.add, size: 15),
+                  icon: const Icon(Icons.add, size: 16),
                   label: const Text(
                     'Эълон қўшиш',
                     style: TextStyle(
@@ -108,16 +108,20 @@ class _JobsViewState extends State<_JobsView>
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  // Оқ фон + кўк матн; контур — дизайнга мос қизил.
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: JobsColors.kindAd,
-                    foregroundColor: JobsColors.onBar,
+                    backgroundColor: Colors.white,
+                    foregroundColor: JobsColors.accentBlue,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 9),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
-                      side: const BorderSide(color: Colors.white24),
+                      side: const BorderSide(
+                        color: Color(0xFFC62828),
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),

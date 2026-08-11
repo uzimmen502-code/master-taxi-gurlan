@@ -883,7 +883,7 @@ class _FiltersBar extends StatelessWidget {
                 value: '',
                 child: Text(context.tr('yuk_vehicle_all')),
               ),
-              ...kYukVehicleTypes.map(
+              ...yukVehicleTypesForIntercity().map(
                 (t) => DropdownMenuItem(
                   value: t.value,
                   child: Text(context.tr(t.labelKey)),
@@ -918,6 +918,10 @@ class _FiltersBar extends StatelessWidget {
 String _yukRemainingLabel(BuildContext context, YukListing item) {
   final left = item.remaining();
   if (left.inMinutes < 1) return context.tr('yuk_expires_soon');
+  // Узоқ муддатли (намойиш) эълонда «4320 соат» ёзилмаслиги учун — кунда.
+  if (left.inDays >= 3) {
+    return context.tr('yuk_days_left').replaceAll('{n}', '${left.inDays}');
+  }
   if (left.inHours >= 1) {
     return context.tr('yuk_hours_left').replaceAll('{n}', '${left.inHours}');
   }
@@ -943,13 +947,10 @@ class _ListingCard extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onReport;
 
-  static String _tonNum(double? v) {
-    final n = v ?? 0;
-    return n == n.roundToDouble() ? '${n.round()}' : '$n';
-  }
+  static String _kgNum(double? v) => formatPrice(v ?? 0);
 
   String _factsLine(BuildContext context) {
-    final ton = context.tr('yuk_ton_short');
+    final kg = context.tr('yuk_kg_short');
     final vLabel = context.tr(yukVehicleLabelKey(item.vehicleType));
     final price = item.price > 0
         ? '${formatPrice(item.price.round())} ${context.tr('sum')}'
@@ -958,15 +959,15 @@ class _ListingCard extends StatelessWidget {
     if (item.isCargo) {
       final cargo = (item.cargo ?? '').trim();
       return [
-        '${_tonNum(item.weight)}$ton',
+        '${_kgNum(item.weightKg)}$kg',
         if (cargo.isNotEmpty) cargo,
         vLabel,
         price,
       ].join(' · ');
     }
 
-    return '${_tonNum(item.capacity)}$ton / '
-        '${context.tr('yuk_free')} ${_tonNum(item.freeSpace)}$ton · '
+    return '${_kgNum(item.capacityKg)}$kg / '
+        '${context.tr('yuk_free')} ${_kgNum(item.freeSpaceKg)}$kg · '
         '$vLabel · $price';
   }
 
@@ -1037,16 +1038,20 @@ class _ListingCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        _Pill(
-                          text: _yukRemainingLabel(context, item),
-                          fg: urgent
-                              ? const Color(0xFFFCA5A5)
-                              : const Color(0xFF94A3B8),
-                          bg: urgent
-                              ? const Color(0xFF3F1D1D)
-                              : const Color(0xFF0B0E14),
-                        ),
+                        // Намойиш эълонида муддат ҳисоблагичи маъносиз —
+                        // ўрнини йўналиш матнига берамиз.
+                        if (!item.isDemo) ...[
+                          const SizedBox(width: 6),
+                          _Pill(
+                            text: _yukRemainingLabel(context, item),
+                            fg: urgent
+                                ? const Color(0xFFFCA5A5)
+                                : const Color(0xFF94A3B8),
+                            bg: urgent
+                                ? const Color(0xFF3F1D1D)
+                                : const Color(0xFF0B0E14),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -1064,6 +1069,15 @@ class _ListingCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        // Йўналиш матни қисилмаслиги учун — тугмалар қаторида.
+                        if (item.isDemo) ...[
+                          _Pill(
+                            text: context.tr('yuk_demo_badge'),
+                            fg: const Color(0xFF93C5FD),
+                            bg: const Color(0xFF1E3A5F),
+                          ),
+                          const Spacer(),
+                        ],
                         if (mine) ...[
                           _CompactAction(
                             label: context.tr('yuk_edit'),
@@ -1251,10 +1265,15 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
       _from.text = init.from;
       _to.text = init.to;
       _vehicle = normalizeYukVehicleType(init.vehicleType);
+      if (kYukLocalOnlyVehicleValues.contains(_vehicle)) {
+        _vehicle = 'fura';
+      }
       _cargo.text = init.cargo ?? '';
-      if (init.weight != null) _weight.text = _num(init.weight!);
-      if (init.capacity != null) _capacity.text = _num(init.capacity!);
-      if (init.freeSpace != null) _free.text = _num(init.freeSpace!);
+      if (init.weightKg != null) _weight.text = '${init.weightKg!.round()}';
+      if (init.capacityKg != null) {
+        _capacity.text = '${init.capacityKg!.round()}';
+      }
+      if (init.freeSpaceKg != null) _free.text = '${init.freeSpaceKg!.round()}';
       if (init.price > 0) _price.text = init.price.toStringAsFixed(0);
       _comment.text = init.comment;
       for (final s in init.stops) {
@@ -1268,9 +1287,6 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
       if (!_toFocus.hasFocus) setState(() => _toSuggestions = []);
     });
   }
-
-  String _num(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
   @override
   void dispose() {
@@ -1363,7 +1379,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
           from: from,
           to: to,
           stops: _stops,
-          vehicleType: normalizeYukVehicleType(_vehicle),
+          vehicleType: normalizeYukVehicleTypeForIntercity(_vehicle),
           ownerId: widget.ownerId,
           ownerName: widget.ownerName,
           phone: widget.ownerPhone,
@@ -1371,7 +1387,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
           cargo: _cargo.text.trim().isEmpty
               ? context.tr('yuk_badge_cargo')
               : _cargo.text.trim(),
-          weight: w,
+          weightKg: w,
           price: double.tryParse(_price.text.trim()) ?? 0,
           comment: _comment.text.trim(),
           createdAt: createdAt,
@@ -1404,13 +1420,13 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
         from: from,
         to: to,
         stops: _stops,
-        vehicleType: normalizeYukVehicleType(_vehicle),
+        vehicleType: normalizeYukVehicleTypeForIntercity(_vehicle),
         ownerId: widget.ownerId,
         ownerName: widget.ownerName,
         phone: widget.ownerPhone,
         status: YukListingStatus.active,
-        capacity: cap,
-        freeSpace: free,
+        capacityKg: cap,
+        freeSpaceKg: free,
         price: double.tryParse(_price.text.trim()) ?? 0,
         comment: _comment.text.trim(),
         createdAt: createdAt,
@@ -1566,38 +1582,32 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                           const SizedBox(height: 10),
                           TextField(
                             controller: _weight,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                            keyboardType: TextInputType.number,
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             style: const TextStyle(color: Colors.white),
-                            decoration: _deco(context.tr('yuk_weight_tons')),
+                            decoration: _deco(context.tr('yuk_weight_kg')),
                           ),
                         ] else ...[
                           TextField(
                             controller: _capacity,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                            keyboardType: TextInputType.number,
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             style: const TextStyle(color: Colors.white),
-                            decoration: _deco(context.tr('yuk_capacity_tons')),
+                            decoration: _deco(context.tr('yuk_capacity_kg')),
                           ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _free,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
+                            keyboardType: TextInputType.number,
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                  RegExp(r'[0-9.]')),
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             style: const TextStyle(color: Colors.white),
-                            decoration: _deco(context.tr('yuk_free_tons')),
+                            decoration: _deco(context.tr('yuk_free_kg')),
                           ),
                         ],
                         const SizedBox(height: 10),
@@ -1607,7 +1617,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                           dropdownColor: const Color(0xFF1A232E),
                           style: const TextStyle(color: Colors.white),
                           decoration: _deco(context.tr('yuk_vehicle_type')),
-                          items: kYukVehicleTypes
+                          items: yukVehicleTypesForIntercity()
                               .map(
                                 (t) => DropdownMenuItem(
                                   value: t.value,

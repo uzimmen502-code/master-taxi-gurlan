@@ -26,6 +26,7 @@ import '../features/profile/screens/news_hub_screen.dart';
 import '../features/sell/screens/sell_hub_screen.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/yuk_birja/screens/yuk_birja_screen.dart';
+import '../features/onboarding/screens/device_transfer_approve_screen.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
@@ -72,6 +73,20 @@ class PushNavigation {
     final type = (data['type'] ?? '').trim();
     final screen = (data['screen'] ?? '').trim();
     final tab = (data['tab'] ?? '').trim();
+
+    if (type == 'device_transfer_request' || screen == 'device_transfer') {
+      final requestId = (data['requestId'] ?? '').trim();
+      if (requestId.isEmpty) return;
+      await nav.push(
+        MaterialPageRoute(
+          builder: (_) => DeviceTransferApproveScreen(
+            requestId: requestId,
+            newDeviceLabel: (data['newDeviceLabel'] ?? '').trim(),
+          ),
+        ),
+      );
+      return;
+    }
 
     if (type == 'intercity_passenger_gps') {
       _showPassiveSnack(nav, 'passenger_gps_received');

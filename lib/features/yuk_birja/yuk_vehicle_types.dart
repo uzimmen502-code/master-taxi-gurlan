@@ -11,7 +11,13 @@ class YukVehicleType {
   final String labelKey;
 }
 
+/// Фақат «Туман ичида» (шаҳарлараро учун мос эмас).
+const Set<String> kYukLocalOnlyVehicleValues = {'moto', 'traktor'};
+
 const List<YukVehicleType> kYukVehicleTypes = [
+  // Доимий биринчи: Юк Мотоцикли (Туман ичида рўйхат + танлов).
+  YukVehicleType('moto', 'yuk_vehicle_moto'),
+  YukVehicleType('traktor', 'yuk_vehicle_traktor'),
   YukVehicleType('fura', 'yuk_vehicle_fura'),
   YukVehicleType('ref', 'yuk_vehicle_ref'),
   YukVehicleType('isoterm', 'yuk_vehicle_isoterm'),
@@ -32,6 +38,21 @@ const List<YukVehicleType> kYukVehicleTypes = [
   YukVehicleType('pickup', 'yuk_vehicle_pickup'),
   YukVehicleType('other', 'yuk_vehicle_other'),
 ];
+
+/// Туман ичида: тўлиқ рўйхат (moto биринчи).
+List<YukVehicleType> yukVehicleTypesForLocal() => kYukVehicleTypes;
+
+/// Шаҳарлараро: faqat йўл учун мос турлар (moto/traktor йўқ).
+List<YukVehicleType> yukVehicleTypesForIntercity() => kYukVehicleTypes
+    .where((t) => !kYukLocalOnlyVehicleValues.contains(t.value))
+    .toList(growable: false);
+
+/// Туман ичида яқин рўйхатда доимий устунлик (кичик → аввал).
+int yukVehicleListPriority(String raw) {
+  final code = normalizeYukVehicleType(raw);
+  if (code == 'moto') return 0;
+  return 1;
+}
 
 /// Эски кириллча қийматлар → янги барқарор код.
 const Map<String, String> kYukVehicleLegacyMap = {
@@ -57,6 +78,12 @@ const Map<String, String> kYukVehicleLegacyMap = {
   'эвакуатор': 'evac',
   'шаланда': 'shalanda',
   'пикап': 'pickup',
+  'юк мотоцикли': 'moto',
+  'юк мотоцикл': 'moto',
+  'мотоцикл': 'moto',
+  'moto': 'moto',
+  'трактор': 'traktor',
+  'traktor': 'traktor',
   'бошқа': 'other',
 };
 
@@ -68,6 +95,13 @@ String normalizeYukVehicleType(String raw) {
     if (t.value == v) return v;
   }
   return 'other';
+}
+
+/// Шаҳарлараро сақлаш: local-only турларни fura га айлантиради.
+String normalizeYukVehicleTypeForIntercity(String raw) {
+  final code = normalizeYukVehicleType(raw);
+  if (kYukLocalOnlyVehicleValues.contains(code)) return 'fura';
+  return code;
 }
 
 String yukVehicleLabelKey(String value) {

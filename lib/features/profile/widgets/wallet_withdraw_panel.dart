@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../repositories/device_binding_repository.dart';
 
 /// Фойдаланувчи ўз ҳамёнидан пул ечиш аризаси.
 class WalletWithdrawPanel extends StatelessWidget {
@@ -22,6 +23,29 @@ class WalletWithdrawPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 12),
+        StreamBuilder<bool>(
+          stream: DeviceBindingRepository().watchDeviceTrustLimited(phone),
+          builder: (context, snap) {
+            if (snap.data != true) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Text(
+                'Yangi qurilma: pul yechish 24 soatga vaqtincha cheklangan.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.orange.shade900,
+                  height: 1.35,
+                ),
+              ),
+            );
+          },
+        ),
         OutlinedButton.icon(
           onPressed: () => _showWithdrawDialog(context),
           icon: const Icon(Icons.account_balance_wallet_outlined),

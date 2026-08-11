@@ -37,6 +37,7 @@ function attachTelegramWalletBot(exports, deps) {
     canonicalUid,
     notifyUserInApp,
     isIdentifiedUser,
+    assertNotDeviceTrustLimited,
   } = deps;
 
   function tgConfig() {
@@ -471,6 +472,9 @@ function attachTelegramWalletBot(exports, deps) {
     if (!(await isIdentifiedUser(uid))) {
       throw new functions.https.HttpsError(
           'failed-precondition', 'Avval ilovada ro\'yxatdan o\'ting');
+    }
+    if (typeof assertNotDeviceTrustLimited === 'function') {
+      await assertNotDeviceTrustLimited(uid);
     }
 
     const settings = await loadBotSettings();

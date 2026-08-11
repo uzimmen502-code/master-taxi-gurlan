@@ -1,8 +1,8 @@
 import '../../services/geo_math_service.dart';
 import 'models/yuk_local_driver.dart';
-import 'repositories/yuk_local_drivers_repository.dart';
+import 'yuk_vehicle_types.dart';
 
-/// Туман ичида рўйхатни GPS бўйича саралаш.
+/// Туман ичида рўйхатни қидирувчи GPS ↔ эълон жойи бўйича саралаш.
 class YukLocalRanking {
   YukLocalRanking({GeoMathService? geo}) : _geo = geo ?? const GeoMathService();
 
@@ -18,17 +18,15 @@ class YukLocalRanking {
     required List<YukLocalDriver> drivers,
     required double userLat,
     required double userLng,
-    Duration staleAfter = const Duration(
-      minutes: YukLocalDriversRepository.onlineStaleMinutes,
-    ),
+    DateTime? now,
   }) {
-    final now = DateTime.now();
+    final at = now ?? DateTime.now();
     final ranked = <YukLocalDriverRanked>[];
 
     for (final d in drivers) {
-      if (!d.online || !d.hasGps) continue;
-      final last = d.lastOnlineAt;
-      if (last != null && now.difference(last) > staleAfter) continue;
+      if (!d.hasGps) continue;
+      if (d.isExpired(at)) continue;
+      if (!d.isWithinWorkHours(at)) continue;
 
       final straight = _geo.haversineKm(userLat, userLng, d.lat!, d.lng!);
       final road = straight * roadFactor;
@@ -51,21 +49,20 @@ class YukLocalRanking {
     }
 
     ranked.sort((a, b) {
+      // 0) Мотоцикл доимий биринчи
+      final vp = yukVehicleListPriority(a.driver.vehicleType)
+          .compareTo(yukVehicleListPriority(b.driver.vehicleType));
+      if (vp != 0) return vp;
       // 1) Тайёрлик
       final r = readiness(a.driver).compareTo(readiness(b.driver));
       if (r != 0) return r;
-      // 2) Радиус мослиги (ичида аввал)
+      // 2) Радиус мослиги
       if (a.inRadius != b.inRadius) return a.inRadius ? -1 : 1;
       // 3) ETA
       final e = a.etaMinutes.compareTo(b.etaMinutes);
       if (e != 0) return e;
-      // 4) Масофа (йўл)
-      final dist = a.roadKm.compareTo(b.roadKm);
-      if (dist != 0) return dist;
-      // 5) Рейтинг (юқори аввал) + бажарилган юк
-      final rate = b.driver.rating.compareTo(a.driver.rating);
-      if (rate != 0) return rate;
-      return b.driver.completedLoads.compareTo(a.driver.completedLoads);
+      // 4) Масофа
+      return a.roadKm.compareTo(b.roadKm);
     });
 
     return ranked;

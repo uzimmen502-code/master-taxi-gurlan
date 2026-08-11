@@ -100,9 +100,9 @@ class YukBirjaStore extends ChangeNotifier {
       phone: item.phone,
       status: YukListingStatus.active,
       cargo: item.cargo,
-      weight: item.weight,
-      capacity: item.capacity,
-      freeSpace: item.freeSpace,
+      weightKg: item.weightKg,
+      capacityKg: item.capacityKg,
+      freeSpaceKg: item.freeSpaceKg,
       price: item.price,
       comment: item.comment,
       stars: item.stars,
@@ -181,7 +181,7 @@ class YukBirjaStore extends ChangeNotifier {
     required String tab,
     String from = '',
     String to = '',
-    double? maxWeightTons,
+    double? maxWeightKg,
     String vehicleType = '',
     Set<String> matchedIds = const {},
   }) {
@@ -192,6 +192,11 @@ class YukBirjaStore extends ChangeNotifier {
 
     var list = _listings.where((item) {
       if (!item.isActive || item.isExpired(now)) return false;
+      // moto/traktor — фақат туман ичи; шаҳарлараро рўйхатда кўринмайди.
+      if (kYukLocalOnlyVehicleValues
+          .contains(normalizeYukVehicleType(item.vehicleType))) {
+        return false;
+      }
       final cities = item.routeCities.map((c) => c.toLowerCase()).toList();
       if (f.isNotEmpty && !cities.any((c) => c.contains(f))) return false;
       if (t.isNotEmpty && !cities.any((c) => c.contains(t))) return false;
@@ -200,9 +205,9 @@ class YukBirjaStore extends ChangeNotifier {
               normalizeYukVehicleType(vt)) {
         return false;
       }
-      if (maxWeightTons != null && maxWeightTons > 0) {
-        if (item.isCargo && (item.weight ?? 0) > maxWeightTons) return false;
-        if (!item.isCargo && (item.freeSpace ?? 0) < maxWeightTons) {
+      if (maxWeightKg != null && maxWeightKg > 0) {
+        if (item.isCargo && (item.weightKg ?? 0) > maxWeightKg) return false;
+        if (!item.isCargo && (item.freeSpaceKg ?? 0) < maxWeightKg) {
           return false;
         }
       }

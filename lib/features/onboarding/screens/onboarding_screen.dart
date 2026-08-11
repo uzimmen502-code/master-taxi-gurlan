@@ -10,6 +10,8 @@ import '../../../l10n/app_localizations.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../controllers/onboarding_controller.dart';
+import '../widgets/device_binding_conflict_sheet.dart';
+import '../../../repositories/device_binding_repository.dart';
 import 'onboarding_bootstrap_screen.dart';
 
 /// Ихчам онбординг: исм + телефон → fingerprint bind → Home.
@@ -100,8 +102,26 @@ class _OnboardingViewState extends State<_OnboardingView> {
     try {
       final ok = await c.checkPhoneDeviceLock(raw);
       if (!ok || !mounted) {
+        final result = c.lastBindingResult;
+        final snap = c.fingerprintSnapshot;
+        final conflict = result != null &&
+            snap != null &&
+            (result.status == DeviceBindingStatus.phoneBoundOtherDevice ||
+                result.status == DeviceBindingStatus.deviceBoundOtherPhone ||
+                result.status == DeviceBindingStatus.blocked);
+        if (conflict && mounted) {
+          final transferred = await showDeviceBindingConflictSheet(
+            context: context,
+            result: result,
+            phone: raw,
+            name: _nameCtrl.text,
+            snapshot: snap,
+            controller: c,
+          );
+          if (transferred || !mounted) return;
+        }
         final stepErr = c.phoneStepError;
-        if (stepErr != null && mounted) {
+        if (stepErr != null && mounted && !conflict) {
           _showError(loc.translate(stepErr) == stepErr
               ? stepErr
               : loc.translate(stepErr));

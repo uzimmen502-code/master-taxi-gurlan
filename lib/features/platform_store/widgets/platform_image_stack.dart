@@ -13,6 +13,7 @@ class PlatformImageStack extends StatefulWidget {
     this.showDots = true,
     this.padding = EdgeInsets.zero,
     this.borderRadius = 12,
+    this.onDoubleTap,
   });
 
   final List<String> urls;
@@ -20,6 +21,9 @@ class PlatformImageStack extends StatefulWidget {
   final bool showDots;
   final EdgeInsets padding;
   final double borderRadius;
+
+  /// Икки марта босилганда жорий расм индекси билан чақирилади.
+  final ValueChanged<int>? onDoubleTap;
 
   @override
   State<PlatformImageStack> createState() => _PlatformImageStackState();
@@ -77,9 +81,18 @@ class _PlatformImageStackState extends State<PlatformImageStack> {
     if (urls.length == 1) {
       return Padding(
         padding: widget.padding,
-        child: _Frame(
-          borderRadius: widget.borderRadius,
-          child: _NetImage(url: urls.first, memCacheWidth: widget.memCacheWidth),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onDoubleTap: widget.onDoubleTap == null
+              ? null
+              : () => widget.onDoubleTap!(0),
+          child: _Frame(
+            borderRadius: widget.borderRadius,
+            child: _NetImage(
+              url: urls.first,
+              memCacheWidth: widget.memCacheWidth,
+            ),
+          ),
         ),
       );
     }
@@ -139,20 +152,26 @@ class _PlatformImageStackState extends State<PlatformImageStack> {
               ),
             ),
           ),
-          // Олд расм — ўнгга/чапга свайп.
+          // Олд расм — ўнгга/чапга свайп; икки марта босиш → тўлиқ экран.
           Positioned.fill(
             child: Padding(
               padding: const EdgeInsets.only(right: peekReserve),
-              child: PageView.builder(
-                controller: ctrl,
-                itemCount: urls.length,
-                onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (_, i) => _Frame(
-                  borderRadius: widget.borderRadius,
-                  elevated: true,
-                  child: _NetImage(
-                    url: urls[i],
-                    memCacheWidth: widget.memCacheWidth,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onDoubleTap: widget.onDoubleTap == null
+                    ? null
+                    : () => widget.onDoubleTap!(_index),
+                child: PageView.builder(
+                  controller: ctrl,
+                  itemCount: urls.length,
+                  onPageChanged: (i) => setState(() => _index = i),
+                  itemBuilder: (_, i) => _Frame(
+                    borderRadius: widget.borderRadius,
+                    elevated: true,
+                    child: _NetImage(
+                      url: urls[i],
+                      memCacheWidth: widget.memCacheWidth,
+                    ),
                   ),
                 ),
               ),

@@ -43,6 +43,7 @@ import 'services/admin_service.dart';
 import 'services/user_role_sync.dart';
 import 'services/daily_report_service.dart';
 import 'services/fcm_service.dart';
+import 'services/device_transfer_inbox_service.dart';
 import 'services/background_gps_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_delivery.dart';
@@ -150,6 +151,8 @@ Future<void> _deferredMobileBootstrap({required bool deferRoleSync}) async {
   } catch (e, st) {
     debugPrint('FCM init (deferred): $e\n$st');
   }
+
+  unawaited(DeviceTransferInboxService.instance.checkOnce());
 
   if (defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS) {

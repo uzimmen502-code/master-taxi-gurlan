@@ -227,7 +227,8 @@ class AdCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Material(
-              color: color,
+              // Таҳрирлаш / Қўнғироқ — иккала табда ҳам бир хил кўк CTA.
+              color: canEdit ? JobsColors.accentBlue : color,
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: () => canEdit ? _edit(context) : _call(context),

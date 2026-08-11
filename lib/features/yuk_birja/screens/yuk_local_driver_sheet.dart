@@ -6,9 +6,10 @@ import '../../../services/location_service.dart';
 import '../models/yuk_local_driver.dart';
 import '../repositories/yuk_local_drivers_repository.dart';
 import '../yuk_accept_radius.dart';
+import '../yuk_local_schedule.dart';
 import '../yuk_vehicle_types.dart';
 
-/// Ҳайдовчи: машинани туман ичида жойлаштириш / радиус.
+/// Ҳайдовчи: туман ичида эълон (GPS + иш вақти). Онлайн/офлайн йўқ.
 Future<bool?> showYukLocalDriverSheet({
   required BuildContext context,
   required String ownerId,
@@ -62,8 +63,10 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
   final _height = TextEditingController();
   final _location = TextEditingController();
 
-  String _vehicle = 'gazel';
+  String _vehicle = 'moto';
   int _radiusKm = YukAcceptRadius.defaultKm;
+  int _workStart = 8 * 60;
+  int _workEnd = 20 * 60;
   bool _busy = false;
   String? _error;
 
@@ -74,14 +77,16 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
     if (i != null) {
       _vehicle = i.vehicleType;
       _plate.text = i.plateNumber;
-      if (i.capacityTons > 0) {
-        _capacity.text = _fmtNum(i.capacityTons);
+      if (i.capacityKg > 0) {
+        _capacity.text = '${i.capacityKg.round()}';
       }
       if (i.bodyLengthM > 0) _len.text = _fmtNum(i.bodyLengthM);
       if (i.bodyWidthM > 0) _width.text = _fmtNum(i.bodyWidthM);
       if (i.bodyHeightM > 0) _height.text = _fmtNum(i.bodyHeightM);
       _radiusKm = i.acceptRadiusKm;
       _location.text = i.locationLabel;
+      _workStart = i.workStartMinutes;
+      _workEnd = i.workEndMinutes;
     }
   }
 
@@ -126,24 +131,47 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         ),
       );
 
-  Future<void> _submit({required bool goOnline}) async {
+  Future<void> _pickWorkTime({required bool isStart}) async {
+    final current = isStart ? _workStart : _workEnd;
+    final parts = YukLocalSchedule.splitMinutes(current);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: parts.$1, minute: parts.$2),
+      builder: (ctx, child) {
+        return Theme(
+          data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: _accent,
+              surface: Color(0xFF131A22),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final minutes =
+        YukLocalSchedule.timeOfDayToMinutes(picked.hour, picked.minute);
+    setState(() {
+      if (isStart) {
+        _workStart = minutes;
+      } else {
+        // 00:00 танланса — кун охири (24:00) деб қабул.
+        _workEnd = minutes == 0 ? 24 * 60 : minutes;
+      }
+    });
+  }
+
+  Future<void> _submit() async {
     if (widget.ownerId.isEmpty) {
       setState(() => _error = context.tr('yuk_need_phone'));
       return;
     }
-    // Мажбурий: машина тури + қамров радиуси (ҳар доим танланган).
-    // Қолган майдонлар ихтиёрий.
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (!goOnline) {
-        await _repo.setOffline(widget.ownerId);
-        if (!mounted) return;
-        Navigator.pop(context, true);
-        return;
-      }
       LocationCoords coords;
       try {
         coords = await const LocationService().getCurrentCoords();
@@ -160,13 +188,14 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
             .addressFromCoords(coords.lat, coords.lng);
         label = (addr ?? '').trim();
       }
-      await _repo.publishPresence(
+      await _repo.publishListing(
+        docId: widget.initial?.id,
         ownerId: widget.ownerId,
         ownerName: widget.ownerName,
         phone: widget.ownerPhone,
         vehicleType: _vehicle,
         plateNumber: _plate.text.trim(),
-        capacityTons: _num(_capacity),
+        capacityKg: _num(_capacity),
         bodyLengthM: _num(_len),
         bodyWidthM: _num(_width),
         bodyHeightM: _num(_height),
@@ -175,6 +204,8 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         lat: coords.lat,
         lng: coords.lng,
         locationLabel: label,
+        workStartMinutes: _workStart,
+        workEndMinutes: _workEnd,
       );
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -185,6 +216,45 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
         _error = context.tr('yuk_local_publish_fail');
       });
     }
+  }
+
+  Widget _workTimeChip({
+    required String label,
+    required int minutes,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: const Color(0xFF0B0E14),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
+                const SizedBox(height: 2),
+                Text(
+                  YukLocalSchedule.formatMinutes(minutes),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -218,7 +288,11 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      context.tr('yuk_local_publish_title'),
+                      context.tr(
+                        widget.initial == null
+                            ? 'yuk_local_publish_title'
+                            : 'yuk_local_edit_title',
+                      ),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -244,7 +318,7 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                         dropdownColor: const Color(0xFF131A22),
                         decoration: _deco(context.tr('yuk_vehicle_all')),
                         items: [
-                          for (final t in kYukVehicleTypes)
+                          for (final t in yukVehicleTypesForLocal())
                             DropdownMenuItem(
                               value: t.value,
                               child: Text(
@@ -268,13 +342,11 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                       TextField(
                         controller: _capacity,
                         style: const TextStyle(color: Colors.white),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
+                        keyboardType: TextInputType.number,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[0-9.,]')),
+                          FilteringTextInputFormatter.digitsOnly,
                         ],
-                        decoration: _deco(context.tr('yuk_capacity_tons')),
+                        decoration: _deco(context.tr('yuk_capacity_kg')),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -319,6 +391,31 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                         style: const TextStyle(color: Colors.white),
                         decoration:
                             _deco(context.tr('yuk_local_location_hint')),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        context.tr('yuk_local_work_hours'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _workTimeChip(
+                            label: context.tr('yuk_local_work_from'),
+                            minutes: _workStart,
+                            onTap: () => _pickWorkTime(isStart: true),
+                          ),
+                          const SizedBox(width: 8),
+                          _workTimeChip(
+                            label: context.tr('yuk_local_work_to'),
+                            minutes: _workEnd,
+                            onTap: () => _pickWorkTime(isStart: false),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 14),
                       Text(
@@ -372,43 +469,20 @@ class _YukLocalDriverSheetState extends State<_YukLocalDriverSheet> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      FilledButton(
-                        onPressed:
-                            _busy ? null : () => _submit(goOnline: true),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _accent,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: _busy
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
-                              )
-                            : Text(context.tr('yuk_local_go_online')),
-                      ),
-                      if (widget.initial?.online == true) ...[
-                        const SizedBox(height: 8),
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _submit(goOnline: false),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _muted,
-                            side: const BorderSide(color: _border),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text(context.tr('yuk_local_go_offline')),
-                        ),
-                      ],
-                    ],
+                  child: FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(context.tr('yuk_local_save')),
                   ),
                 ),
               ),

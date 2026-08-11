@@ -458,10 +458,13 @@ async function createPhoneCustomToken(phone) {
     // phone_number must be a durable custom claim — createCustomToken developer
     // claims alone are dropped on ID token refresh (~1h), and Firestore isOwner()
     // / isAdmin() rely on token.phone_number (same pattern as adminWebSignIn).
-    await admin.auth().setCustomUserClaims(authUser.uid, {
-      ...(authUser.customClaims || {}),
-      phone_number: e164,
-    });
+    const existing = (authUser.customClaims || {}).phone_number;
+    if (existing !== e164) {
+      await admin.auth().setCustomUserClaims(authUser.uid, {
+        ...(authUser.customClaims || {}),
+        phone_number: e164,
+      });
+    }
     return await admin.auth().createCustomToken(authUser.uid, {
       phone_number: e164,
     });
@@ -472,6 +475,23 @@ async function createPhoneCustomToken(phone) {
       `Custom token creation failed: ${code}`,
     );
   }
+}
+
+/** trusted_device + optional customToken (UI 2-chi CF kutmasin). */
+async function trustedDevicePayload(phone, extra = {}) {
+  const out = {
+    status: 'trusted_device',
+    skipSms: true,
+    sessionRequired: true,
+    ...extra,
+  };
+  try {
+    out.customToken = await createPhoneCustomToken(phone);
+    out.sessionRequired = false;
+  } catch (e) {
+    console.error('trustedDevicePayload token:', e.message || e);
+  }
+  return out;
 }
 
 async function isDeviceBindingAutoApproveEnabled() {
@@ -5291,12 +5311,8 @@ exports.checkDeviceBinding = authFunctions
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      // Auth/token — alohida createPhoneSession (UI kutmasin).
-      return {
-        status: 'trusted_device',
-        skipSms: true,
-        sessionRequired: true,
-      };
+      // Auth token шу жавобда — bootstrap 2-чи CF чақирувини кутмайди.
+      return trustedDevicePayload(phone);
     }
 
     if (await isDeviceBindingAutoApproveEnabled()) {
@@ -5309,12 +5325,7 @@ exports.checkDeviceBinding = authFunctions
         verifiedMethod: 'admin_auto',
         fingerprint,
       });
-      return {
-        status: 'trusted_device',
-        skipSms: true,
-        sessionRequired: true,
-        autoApproved: true,
-      };
+      return trustedDevicePayload(phone, { autoApproved: true });
     }
 
     const failedAttempts = (binding.failedAttempts || 0) + 1;
@@ -5357,12 +5368,7 @@ exports.checkDeviceBinding = authFunctions
           verifiedMethod: 'admin_auto',
           fingerprint,
         });
-        return {
-          status: 'trusted_device',
-          skipSms: true,
-          sessionRequired: true,
-          autoApproved: true,
-        };
+        return trustedDevicePayload(phone, { autoApproved: true });
       }
       let oldDeviceLabel = '';
       try {
@@ -5403,12 +5409,7 @@ exports.checkDeviceBinding = authFunctions
     };
   }
 
-  return {
-    status: 'trusted_device',
-    skipSms: true,
-    sessionRequired: true,
-    firstBind: true,
-  };
+  return trustedDevicePayload(phone, { firstBind: true });
 });
 
 /**

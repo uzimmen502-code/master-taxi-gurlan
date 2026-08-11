@@ -27,6 +27,7 @@ class OnboardingScreen extends StatelessWidget {
           locationService: ctx.read<LocationService>(),
         );
         unawaited(c.loadPreselectedGeo());
+        c.prefetchFingerprint();
         return c;
       },
       child: const _OnboardingView(),
@@ -126,6 +127,14 @@ class _OnboardingViewState extends State<_OnboardingView> {
               ? stepErr
               : loc.translate(stepErr));
         }
+        return;
+      }
+
+      // Token checkDeviceBinding жавобида бўлса — шу ерда sign-in (2-чи CF йўқ).
+      final sessionOk = await c.establishPhoneSession(raw);
+      if (!sessionOk || !mounted) {
+        final err = c.consumeError();
+        if (err != null && mounted) _showError(err);
         return;
       }
 

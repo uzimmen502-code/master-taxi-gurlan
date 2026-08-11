@@ -360,6 +360,11 @@ class OnboardingController extends ChangeNotifier {
     return _fingerprintSnapshot!;
   }
 
+  /// Тил экрани / онboarding очилишида фонда — кейинги CF кутмасin.
+  void prefetchFingerprint() {
+    unawaited(_ensureFingerprint());
+  }
+
   /// Faqat SHA-256 fingerprintHash (64 hex) — eski `device_bindings` ID lar ishlatilmaydi.
   Future<bool> _requireValidFingerprintHash() async {
     final snapshot = await _ensureFingerprint();
@@ -507,6 +512,7 @@ class OnboardingController extends ChangeNotifier {
   }
 
   /// Binding OK → Auth session (createUser/claims/token).
+  /// `checkDeviceBinding` trusted жавобида `customToken` бўлса — 2-чи CF чақирилмайди.
   Future<bool> establishPhoneSession(String phone) async {
     isSubmitting = true;
     errorMessage = null;
@@ -516,10 +522,25 @@ class OnboardingController extends ChangeNotifier {
         errorMessage = phoneStepError ?? 'Қурилма аниқланмади';
         return false;
       }
-      final token = await _deviceBindingRepo.createPhoneSession(
-        phone: phone,
-        snapshot: _fingerprintSnapshot!,
-      );
+      final cached = lastBindingResult?.customToken?.trim() ?? '';
+      final token = cached.isNotEmpty
+          ? cached
+          : await _deviceBindingRepo.createPhoneSession(
+              phone: phone,
+              snapshot: _fingerprintSnapshot!,
+            );
+      // Бир марта ишлатилади.
+      if (cached.isNotEmpty && lastBindingResult != null) {
+        lastBindingResult = DeviceBindingCheckResult(
+          status: lastBindingResult!.status,
+          message: lastBindingResult!.message,
+          failedAttempts: lastBindingResult!.failedAttempts,
+          selfServeAvailable: lastBindingResult!.selfServeAvailable,
+          oldDeviceLabel: lastBindingResult!.oldDeviceLabel,
+          selfServeHint: lastBindingResult!.selfServeHint,
+          retryAfterMs: lastBindingResult!.retryAfterMs,
+        );
+      }
       await _signInWithPhoneCustomToken(token);
       return true;
     } on FirebaseFunctionsException catch (e) {

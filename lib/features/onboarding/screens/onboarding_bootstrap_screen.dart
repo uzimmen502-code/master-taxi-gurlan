@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -49,7 +50,10 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
       _retrying = true;
     });
 
-    final sessionOk = await c.establishPhoneSession(widget.phone);
+    // Онбординг экранида аллақачон sign-in бўлган бўлиши мумкин.
+    final alreadySignedIn = FirebaseAuth.instance.currentUser != null;
+    final sessionOk = alreadySignedIn ||
+        await c.establishPhoneSession(widget.phone);
     if (!mounted) return;
     if (!sessionOk) {
       setState(() {

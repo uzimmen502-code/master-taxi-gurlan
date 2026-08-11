@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/navigation/app_home_route.dart';
 import '../controllers/onboarding_controller.dart';
@@ -50,8 +51,12 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
       _retrying = true;
     });
 
-    // Онбординг экранида аллақачон sign-in бўлган бўлиши мумкин.
-    final alreadySignedIn = FirebaseAuth.instance.currentUser != null;
+    // Онбординг экранида аллақачон sign-in бўлган бўлиши мумкин — лекин
+    // сессия айнан шу телефонга тегишли бўлса.
+    final signedInPhone =
+        FirebaseAuth.instance.currentUser?.phoneNumber?.trim() ?? '';
+    final alreadySignedIn = signedInPhone.isNotEmpty &&
+        canonicalPhoneId(signedInPhone) == canonicalPhoneId(widget.phone);
     final sessionOk = alreadySignedIn ||
         await c.establishPhoneSession(widget.phone);
     if (!mounted) return;

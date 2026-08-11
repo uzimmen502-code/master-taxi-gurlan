@@ -523,12 +523,6 @@ class OnboardingController extends ChangeNotifier {
         return false;
       }
       final cached = lastBindingResult?.customToken?.trim() ?? '';
-      final token = cached.isNotEmpty
-          ? cached
-          : await _deviceBindingRepo.createPhoneSession(
-              phone: phone,
-              snapshot: _fingerprintSnapshot!,
-            );
       // Бир марта ишлатилади.
       if (cached.isNotEmpty && lastBindingResult != null) {
         lastBindingResult = DeviceBindingCheckResult(
@@ -541,6 +535,18 @@ class OnboardingController extends ChangeNotifier {
           retryAfterMs: lastBindingResult!.retryAfterMs,
         );
       }
+      if (cached.isNotEmpty) {
+        try {
+          await _signInWithPhoneCustomToken(cached);
+          return true;
+        } catch (_) {
+          // Токен эскирган/яроқсиз бўлса — одатдаги йўлга қайтамиз.
+        }
+      }
+      final token = await _deviceBindingRepo.createPhoneSession(
+        phone: phone,
+        snapshot: _fingerprintSnapshot!,
+      );
       await _signInWithPhoneCustomToken(token);
       return true;
     } on FirebaseFunctionsException catch (e) {

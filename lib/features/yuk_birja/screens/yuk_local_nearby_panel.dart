@@ -76,7 +76,8 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   }
 
   Future<void> _bootstrap() async {
-    await ensureGps();
+    // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
+    unawaited(ensureGps());
     _sub = _repo.watchCatalog().listen(
       (list) {
         if (!mounted) return;

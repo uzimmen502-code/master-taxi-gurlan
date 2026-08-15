@@ -49,6 +49,7 @@ import 'services/location_service.dart';
 import 'services/notification_delivery.dart';
 import 'services/notification_service.dart';
 import 'features/dating/services/dating_youth_promo_service.dart';
+import 'core/navigation/app_route_observer.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
 import 'core/widgets/zone_gate.dart';
@@ -287,6 +288,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             supportedLocales: LocaleUtils.supportedAppLocales,
             localeResolutionCallback: LocaleUtils.localeResolutionCallback,
             navigatorKey: MyApp.navigatorKey,
+            navigatorObservers: [appRouteObserver],
             debugShowCheckedModeBanner: false,
             title: 'AVA',
             theme: AppTheme.light,

@@ -12,6 +12,7 @@ import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../screens/tv_market_feed_screen.dart';
 import '../services/tv_player_pool.dart';
+import '../services/tv_screen_playback.dart';
 import 'tv_clip_poster.dart';
 
 /// Home пастидаги овозсиз видеолар — пастга скролл кейинги клип, босиш → feed.
@@ -22,12 +23,13 @@ class HomeVideoStage extends StatefulWidget {
   State<HomeVideoStage> createState() => _HomeVideoStageState();
 }
 
-class _HomeVideoStageState extends State<HomeVideoStage> {
+class _HomeVideoStageState extends State<HomeVideoStage>
+    with WidgetsBindingObserver, RouteAware, TvScreenPlayback {
   static const _firstPage = 7;
   static const _nextPage = 10;
 
   final _repo = TvClipsRepository();
-  final _pool = TvPlayerPool();
+  final _pool = TvPlayerPool(alwaysMuted: true);
   final _cardKeys = <GlobalKey>[];
 
   List<TvClip> _clips = [];
@@ -46,12 +48,14 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
   @override
   void initState() {
     super.initState();
+    tvBindPlayback();
     _load();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    tvSubscribeRoute();
     final pos = Scrollable.maybeOf(context)?.position;
     if (!identical(pos, _scrollPos)) {
       _scrollPos?.removeListener(_onScroll);
@@ -101,8 +105,21 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
     });
   }
 
+  @override
+  void tvOnPlaybackBlocked() {
+    _clipPlaying = false;
+    _pool.pauseAll();
+    _pool.muteAll();
+  }
+
+  @override
+  void tvOnPlaybackAllowed() {
+    if (!tvCanPlay) return;
+    _pickActive();
+  }
+
   void _pickActive() {
-    if (_clips.isEmpty) return;
+    if (_clips.isEmpty || !tvCanPlay) return;
     final mq = MediaQuery.of(context);
     final screen = Offset.zero & mq.size;
     var best = _activeIndex;
@@ -135,15 +152,24 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
   }
 
   Future<void> _syncPlayback() async {
-    if (_clips.isEmpty) return;
+    if (_clips.isEmpty || !tvCanPlay) return;
     final gen = ++_playGen;
     final clip = _clips[_activeIndex];
     _pool.pauseAllExcept(clip.videoUrl);
     final ctrl = await _pool.prepare(clip.videoUrl);
-    if (!mounted || gen != _playGen) return;
+    if (!mounted || gen != _playGen || !tvCanPlay) {
+      _pool.pauseAll();
+      _pool.muteAll();
+      return;
+    }
     if (ctrl != null && ctrl.value.isInitialized) {
-      await ctrl.setVolume(0);
+      await _pool.applyOutputVolume(ctrl);
       await ctrl.play();
+      await ctrl.setVolume(0);
+      if (!tvCanPlay) {
+        ctrl.pause();
+        return;
+      }
       if (mounted) setState(() {});
     }
     final keep = <String>[clip.videoUrl];
@@ -191,19 +217,19 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
   }
 
   void _openFeed(TvClip clip) {
-    _pool.pauseAllExcept('');
+    tvOnPlaybackBlocked();
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => TvMarketFeedScreen(initialClip: clip),
       ),
-    ).then((_) {
-      if (mounted) unawaited(_syncPlayback());
-    });
+    );
   }
 
   Future<void> _onContact(TvClip clip) async {
+    tvOnPlaybackBlocked();
     final ok = await callPhone(clip.ownerPhone);
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_market_call_failed'))),
@@ -213,6 +239,7 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
 
   @override
   void dispose() {
+    tvUnbindPlayback();
     _scrollPos?.removeListener(_onScroll);
     unawaited(_pool.dispose());
     super.dispose();

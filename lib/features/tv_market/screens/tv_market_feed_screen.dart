@@ -10,6 +10,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../services/tv_player_pool.dart';
+import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
@@ -26,9 +27,10 @@ class TvMarketFeedScreen extends StatefulWidget {
   State<TvMarketFeedScreen> createState() => _TvMarketFeedScreenState();
 }
 
-class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
+class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
+    with WidgetsBindingObserver, RouteAware, TvScreenPlayback {
   final _repo = TvClipsRepository();
-  final _pool = TvPlayerPool();
+  final _pool = TvPlayerPool(alwaysMuted: false);
   final _clips = <TvClip>[];
   bool _loading = true;
   int _currentIndex = 0;
@@ -40,8 +42,27 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
   @override
   void initState() {
     super.initState();
+    tvBindPlayback();
     _pageCtrl = PageController();
     _loadClips();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    tvSubscribeRoute();
+  }
+
+  @override
+  void tvOnPlaybackBlocked() {
+    _pool.pauseAll();
+    _pool.muteAll();
+  }
+
+  @override
+  void tvOnPlaybackAllowed() {
+    if (!tvCanPlay || _clips.isEmpty) return;
+    unawaited(_activate(_currentIndex));
   }
 
   Future<void> _loadClips() async {
@@ -97,18 +118,28 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
   }
 
   Future<void> _activate(int index) async {
-    if (index < 0 || index >= _clips.length) return;
+    if (index < 0 || index >= _clips.length || !tvCanPlay) return;
     final gen = ++_activateGen;
     final clip = _clips[index];
     _pool.pauseAllExcept(clip.videoUrl);
 
     final ctrl = await _pool.prepare(clip.videoUrl);
     if (!mounted || gen != _activateGen || _currentIndex != index) return;
+    if (!tvCanPlay) {
+      _pool.pauseAll();
+      _pool.muteAll();
+      return;
+    }
     if (ctrl != null && ctrl.value.isInitialized) {
       if (!mounted || gen != _activateGen) return;
       setState(() => _showPlayPause = false);
-      await ctrl.setVolume(1);
+      await _pool.applyOutputVolume(ctrl);
       await ctrl.play();
+      if (!tvCanPlay) {
+        ctrl.pause();
+        ctrl.setVolume(0);
+        return;
+      }
     }
     unawaited(_pool.retain(_urlsAround(index)));
   }
@@ -123,6 +154,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
   }
 
   void _togglePlayPause() {
+    if (!tvCanPlay) return;
     final ctrl = _activeCtrl;
     if (ctrl == null || !ctrl.value.isInitialized) return;
     _hideBadgeTimer?.cancel();
@@ -130,6 +162,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
       ctrl.pause();
       setState(() => _showPlayPause = true);
     } else {
+      unawaited(_pool.applyOutputVolume(ctrl));
       ctrl.play();
       setState(() => _showPlayPause = true);
       _hideBadgeTimer = Timer(const Duration(milliseconds: 700), () {
@@ -142,7 +175,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
   }
 
   Future<void> _onContact(TvClip clip) async {
+    tvOnPlaybackBlocked();
     final ok = await callPhone(clip.ownerPhone);
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_market_call_failed'))),
@@ -151,20 +186,22 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen> {
   }
 
   Future<void> _openPublish() async {
-    _activeCtrl?.pause();
+    tvOnPlaybackBlocked();
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const TvPublishScreen()),
     );
-    if (result == true && mounted) {
+    if (!mounted) return;
+    if (result == true) {
       await _loadClips();
-    } else if (mounted) {
-      _activeCtrl?.play();
+    } else if (tvCanPlay) {
+      tvOnPlaybackAllowed();
     }
   }
 
   @override
   void dispose() {
+    tvUnbindPlayback();
     _hideBadgeTimer?.cancel();
     unawaited(_pool.dispose());
     _pageCtrl.dispose();

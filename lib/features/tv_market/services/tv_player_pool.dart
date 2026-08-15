@@ -4,6 +4,11 @@ import 'package:video_player/video_player.dart';
 /// Ҳозирги + қўшни клиплар учун плеер пули.
 /// initialize аввал; қўшнилар кетма-кет (параллел эмас) — декодер тўлмасин.
 class TvPlayerPool {
+  TvPlayerPool({this.alwaysMuted = false});
+
+  /// Home — ҳеч қачон овоз чиқмасин.
+  final bool alwaysMuted;
+
   final _ready = <String, VideoPlayerController>{};
   final _inflight = <String, Future<VideoPlayerController?>>{};
 
@@ -35,6 +40,18 @@ class TvPlayerPool {
       _inflight.remove(url);
     }
   }
+
+  Future<void> applyOutputVolume(VideoPlayerController ctrl) async {
+    await ctrl.setVolume(alwaysMuted ? 0 : 1);
+  }
+
+  void muteAll() {
+    for (final ctrl in _ready.values) {
+      ctrl.setVolume(0);
+    }
+  }
+
+  void pauseAll() => pauseAllExcept('');
 
   Future<void> retain(Iterable<String> urls) async {
     final keep = urls.where((u) => u.isNotEmpty).toSet();

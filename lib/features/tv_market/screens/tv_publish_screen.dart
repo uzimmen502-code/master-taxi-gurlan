@@ -21,7 +21,8 @@ class TvPublishScreen extends StatefulWidget {
   State<TvPublishScreen> createState() => _TvPublishScreenState();
 }
 
-class _TvPublishScreenState extends State<TvPublishScreen> {
+class _TvPublishScreenState extends State<TvPublishScreen>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
@@ -38,7 +39,25 @@ class _TvPublishScreenState extends State<TvPublishScreen> {
   String _publishStage = '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final ctrl = _previewCtrl;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    if (state == AppLifecycleState.resumed) {
+      ctrl.play();
+    } else {
+      ctrl.pause();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _titleCtrl.dispose();
     _priceCtrl.dispose();
     _descCtrl.dispose();

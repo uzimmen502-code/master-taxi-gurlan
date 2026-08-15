@@ -1,10 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
 /// Ҳозирги + қўшни клиплар учун плеер пули.
-/// Свайпда initialize кутилмайди — тайёр контроллер дарҳол play.
+/// initialize аввал; қўшнилар кетма-кет (параллел эмас) — декодер тўлмасин.
 class TvPlayerPool {
   final _ready = <String, VideoPlayerController>{};
   final _inflight = <String, Future<VideoPlayerController?>>{};
@@ -24,9 +22,9 @@ class TvPlayerPool {
     VideoPlayerController? ctrl;
     try {
       ctrl = VideoPlayerController.networkUrl(Uri.parse(url));
+      await ctrl.initialize();
       await ctrl.setLooping(true);
       await ctrl.setVolume(0);
-      await ctrl.initialize();
       _ready[url] = ctrl;
       return ctrl;
     } catch (e) {
@@ -45,14 +43,18 @@ class TvPlayerPool {
       final ctrl = _ready.remove(url);
       await ctrl?.dispose();
     }
-    await Future.wait(keep.map(prepare));
+    for (final url in keep) {
+      await prepare(url);
+    }
   }
 
   void pauseAllExcept(String? url) {
     for (final entry in _ready.entries) {
       if (entry.key == url) continue;
       final ctrl = entry.value;
-      if (ctrl.value.isPlaying) ctrl.pause();
+      if (ctrl.value.isPlaying) {
+        ctrl.pause();
+      }
       ctrl.setVolume(0);
     }
   }

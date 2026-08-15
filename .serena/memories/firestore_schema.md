@@ -8,7 +8,7 @@
 - `settings/app.platformFeaturedAuto` (bool) — Платформа «Тавсия этамиз» витринаси (default true=АВТО; false=фақат featuredOnHome).
 - `settings/app.jobsAutoApprove` (bool) — ИШ ЭЪЛОН авто-тасдиқ (default false=ҚЎЛДА pending; true=дарҳол active).
 - `settings/app.tvAutoApprove` (bool) — TV Market клиплар (default false=ҚЎЛДА pending; true=дарҳол active).
-- `tv_clips/{id}` — video commerce clips: videoUrl, posterUrl, title, price (0=hidden), districtId, ownerPhone, category product|service, status pending|active|blocked, like/comment/view counts, createdAt. Read: true; create: isAuth; update/delete: admin or ownerPhone. Indexes: status+districtId+createdAt DESC; status+districtId+viewCount DESC; ownerPhone+createdAt DESC. Storage `tv_clips/{ownerPhone}/`. См. `mem:modules/tv_market`.
+- `tv_clips/{id}` — video commerce clips: videoUrl, posterUrl, title, price (0=hidden), districtId, ownerPhone, category product|service, status pending|active|blocked, like/comment/view counts, createdAt. Read: true; create: isAuth; update/delete: admin or ownerPhone. Indexes: status+districtId+createdAt DESC; status+districtId+viewCount DESC; ownerPhone+createdAt DESC; status+createdAt DESC. Storage `tv_clips/{ownerPhone}/`. См. `mem:modules/tv_market`.
 - `settings/app.platformDeliveryFeePercent` (number 0..100, default 5) — AVA дўкони етказиб бериш ҳақи % (маҳсулот жами × %).
 - `platform_products.goodsKind` — `food` | `non_food` | '' (админ белгилайди).
 - `platform_products/{id}` — Платформа дўкони каталоги (name, price, imageUrl, unit, totalStock 0=unlimited, soldToday, active, featuredOnHome, showInMarket, sortOrder). read:true; write:isAdmin. Index active+sortOrder. См. `mem:modules/platform_store`.

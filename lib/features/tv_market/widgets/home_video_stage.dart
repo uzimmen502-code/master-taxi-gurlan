@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -22,13 +23,22 @@ class HomeVideoStage extends StatefulWidget {
 }
 
 class _HomeVideoStageState extends State<HomeVideoStage> {
+  static const _firstPage = 7;
+  static const _nextPage = 10;
+
   final _repo = TvClipsRepository();
   final _pool = TvPlayerPool();
   final _cardKeys = <GlobalKey>[];
 
-  List<TvClip> _clips = const [];
+  List<TvClip> _clips = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  bool _nearbyExhausted = false;
+  DocumentSnapshot<Map<String, dynamic>>? _nearbyCursor;
+  DocumentSnapshot<Map<String, dynamic>>? _allCursor;
   int _activeIndex = 0;
+  bool _clipPlaying = false;
   ScrollPosition? _scrollPos;
   bool _pickScheduled = false;
   int _playGen = 0;
@@ -52,22 +62,26 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
 
   Future<void> _load() async {
     try {
-      final clips = await _repo.fetchHomeClips(
+      final page = await _repo.fetchHomePage(
         districtId: ServiceConfigHolder.districtId,
-        limit: 5,
+        limit: _firstPage,
       );
       if (!mounted) return;
       _cardKeys
         ..clear()
-        ..addAll(List.generate(clips.length, (_) => GlobalKey()));
+        ..addAll(List.generate(page.clips.length, (_) => GlobalKey()));
       setState(() {
-        _clips = clips;
+        _clips = page.clips;
+        _nearbyCursor = page.nearbyCursor;
+        _allCursor = page.allCursor;
+        _nearbyExhausted = page.nearbyExhausted;
+        _hasMore = page.hasMore;
         _loading = false;
         _activeIndex = 0;
       });
-      if (clips.isNotEmpty) {
+      if (page.clips.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) unawaited(_syncPlayback());
+          if (mounted) _pickActive();
         });
       }
     } catch (e) {
@@ -105,28 +119,19 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
         best = i;
       }
     }
-    if (bestFrac < 0.4) {
-      _pool.pauseAllExcept('');
+    if (bestFrac < 0.35) {
+      if (_clipPlaying) {
+        _clipPlaying = false;
+        _pool.pauseAllExcept('');
+      }
       return;
     }
-    if (best == _activeIndex) return;
-    setState(() => _activeIndex = best);
+    unawaited(_maybeLoadMore(best));
+    if (best == _activeIndex && _clipPlaying) return;
+    _activeIndex = best;
+    _clipPlaying = true;
+    setState(() {});
     unawaited(_syncPlayback());
-  }
-
-  List<String> _urlsAround(int index) {
-    final urls = <String>[];
-    void add(int i) {
-      if (i >= 0 && i < _clips.length) {
-        final url = _clips[i].videoUrl;
-        if (url.isNotEmpty) urls.add(url);
-      }
-    }
-
-    add(index);
-    add(index + 1);
-    add(index - 1);
-    return urls;
   }
 
   Future<void> _syncPlayback() async {
@@ -141,7 +146,48 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
       await ctrl.play();
       if (mounted) setState(() {});
     }
-    unawaited(_pool.retain(_urlsAround(_activeIndex)));
+    final keep = <String>[clip.videoUrl];
+    if (_activeIndex + 1 < _clips.length) {
+      keep.add(_clips[_activeIndex + 1].videoUrl);
+    }
+    unawaited(_pool.retain(keep));
+  }
+
+  Future<void> _maybeLoadMore(int visibleIndex) async {
+    if (!_hasMore || _loadingMore || _clips.isEmpty) return;
+    final triggerAt = _clips.length <= 3 ? 0 : _clips.length - 3;
+    if (visibleIndex < triggerAt) return;
+    _loadingMore = true;
+    if (mounted) setState(() {});
+    try {
+      var attempts = 0;
+      while (mounted && _hasMore && attempts < 3) {
+        attempts++;
+        final page = await _repo.fetchHomePage(
+          districtId: ServiceConfigHolder.districtId,
+          limit: _nextPage,
+          excludeIds: _clips.map((c) => c.id).toSet(),
+          nearbyCursor: _nearbyCursor,
+          allCursor: _allCursor,
+          nearbyExhausted: _nearbyExhausted,
+        );
+        if (!mounted) return;
+        _nearbyCursor = page.nearbyCursor;
+        _allCursor = page.allCursor;
+        _nearbyExhausted = page.nearbyExhausted;
+        _hasMore = page.hasMore;
+        final fresh = page.clips
+            .where((c) => _clips.every((e) => e.id != c.id))
+            .toList();
+        if (fresh.isEmpty) continue;
+        _cardKeys.addAll(List.generate(fresh.length, (_) => GlobalKey()));
+        _clips = [..._clips, ...fresh];
+        break;
+      }
+    } catch (e) {
+      debugPrint('[HomeVideoStage] more: $e');
+    }
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   void _openFeed(TvClip clip) {
@@ -197,6 +243,17 @@ class _HomeVideoStageState extends State<HomeVideoStage> {
               controller: _pool[_clips[i].videoUrl],
               onOpen: () => _openFeed(_clips[i]),
               onContact: () => _onContact(_clips[i]),
+            ),
+          ),
+        if (_loadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           ),
       ],

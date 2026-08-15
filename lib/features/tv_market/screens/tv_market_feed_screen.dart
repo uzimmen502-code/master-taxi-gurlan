@@ -127,6 +127,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
     add(index);
     add(index + 1);
+    add(index - 1);
     return urls;
   }
 

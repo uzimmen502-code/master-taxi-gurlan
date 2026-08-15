@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 /// Ҳозирги + қўшни клиплар учун плеер пули.
 /// initialize аввал; қўшнилар кетма-кет (параллел эмас) — декодер тўлмасин.
+/// retain тартиби сақланади: ҳозирги, кейинги, олдинги.
 class TvPlayerPool {
   TvPlayerPool({this.alwaysMuted = false});
 
@@ -54,13 +55,18 @@ class TvPlayerPool {
   void pauseAll() => pauseAllExcept('');
 
   Future<void> retain(Iterable<String> urls) async {
-    final keep = urls.where((u) => u.isNotEmpty).toSet();
+    final ordered = <String>[];
+    final keep = <String>{};
+    for (final url in urls) {
+      if (url.isEmpty || !keep.add(url)) continue;
+      ordered.add(url);
+    }
     final drop = _ready.keys.where((k) => !keep.contains(k)).toList();
     for (final url in drop) {
       final ctrl = _ready.remove(url);
       await ctrl?.dispose();
     }
-    for (final url in keep) {
+    for (final url in ordered) {
       await prepare(url);
     }
   }

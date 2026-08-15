@@ -179,6 +179,9 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     if (_activeIndex + 1 < _clips.length) {
       keep.add(_clips[_activeIndex + 1].videoUrl);
     }
+    if (_activeIndex - 1 >= 0) {
+      keep.add(_clips[_activeIndex - 1].videoUrl);
+    }
     unawaited(_pool.retain(keep));
   }
 

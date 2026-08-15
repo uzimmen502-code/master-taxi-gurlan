@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/tv_clip.dart';
+import '../services/tv_storage_service.dart';
 
 /// Home / TV Market клип саҳифаси — курсор билан давом эттириш учун.
 class TvClipPage {
@@ -176,5 +177,14 @@ class TvClipsRepository {
         .limit(limit)
         .get();
     return snap.docs.map(TvClip.fromFirestore).toList();
+  }
+
+  /// Эгаси ўз клипини ўчиради — аввал Firestore, сўнг файллар.
+  Future<void> deleteOwnClip(TvClip clip) async {
+    await _col.doc(clip.id).delete();
+    await TvStorageService().deleteClipFiles(
+      videoUrl: clip.videoUrl,
+      posterUrl: clip.posterUrl,
+    );
   }
 }

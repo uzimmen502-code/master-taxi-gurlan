@@ -54,4 +54,22 @@ class TvStorageService {
     await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
     return ref.getDownloadURL();
   }
+
+  /// Видео ва постерни Storage'дан ўчириш (йўқ файл хатосини ютади).
+  Future<void> deleteClipFiles({
+    required String videoUrl,
+    required String posterUrl,
+  }) async {
+    Future<void> one(String url) async {
+      if (url.isEmpty) return;
+      try {
+        await _storage.refFromURL(url).delete();
+      } catch (e) {
+        debugPrint('[TvStorage] delete $e');
+      }
+    }
+
+    await one(videoUrl);
+    await one(posterUrl);
+  }
 }

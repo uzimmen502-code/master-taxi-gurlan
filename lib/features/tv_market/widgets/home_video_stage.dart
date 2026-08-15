@@ -2,15 +2,18 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../home/controllers/home_controller.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../screens/tv_market_feed_screen.dart';
+import '../services/tv_clip_delete.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import 'tv_clip_poster.dart';
@@ -237,6 +240,44 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     }
   }
 
+  bool _isOwner(TvClip clip) {
+    final me = context.read<HomeController>().phone;
+    return phonesMatch(clip.ownerPhone, me);
+  }
+
+  Future<void> _onDelete(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    try {
+      final deleted = await confirmDeleteTvClip(context, clip);
+      if (!deleted || !mounted) {
+        if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+        return;
+      }
+      final i = _clips.indexWhere((c) => c.id == clip.id);
+      if (i >= 0) {
+        _clips.removeAt(i);
+        _cardKeys.removeAt(i);
+        if (_activeIndex >= _clips.length) {
+          _activeIndex = _clips.isEmpty ? 0 : _clips.length - 1;
+        }
+        _clipPlaying = false;
+      }
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_delete_done'))),
+      );
+      if (_clips.isNotEmpty && tvCanPlay) _pickActive();
+    } catch (e) {
+      debugPrint('[HomeVideoStage] delete $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('tv_market_delete_failed'))),
+        );
+        if (tvCanPlay) tvOnPlaybackAllowed();
+      }
+    }
+  }
+
   @override
   void dispose() {
     tvUnbindPlayback();
@@ -268,8 +309,10 @@ class _HomeVideoStageState extends State<HomeVideoStage>
               height: cardH,
               playing: i == _activeIndex,
               controller: _pool[_clips[i].videoUrl],
+              isOwner: _isOwner(_clips[i]),
               onOpen: () => _openFeed(_clips[i]),
               onContact: () => _onContact(_clips[i]),
+              onDelete: () => _onDelete(_clips[i]),
             ),
           ),
         if (_loadingMore)
@@ -296,6 +339,8 @@ class _HomeClipCard extends StatelessWidget {
     required this.controller,
     required this.onOpen,
     required this.onContact,
+    required this.onDelete,
+    this.isOwner = false,
   });
 
   final TvClip clip;
@@ -304,6 +349,8 @@ class _HomeClipCard extends StatelessWidget {
   final VideoPlayerController? controller;
   final VoidCallback onOpen;
   final VoidCallback onContact;
+  final VoidCallback onDelete;
+  final bool isOwner;
 
   @override
   Widget build(BuildContext context) {
@@ -452,19 +499,27 @@ class _HomeClipCard extends StatelessWidget {
                     width: double.infinity,
                     height: 40,
                     child: ElevatedButton.icon(
-                      onPressed: onContact,
-                      icon: const Icon(Icons.chat_bubble_outline_rounded,
-                          size: 17),
+                      onPressed: isOwner ? onDelete : onContact,
+                      icon: Icon(
+                        isOwner
+                            ? Icons.delete_outline_rounded
+                            : Icons.chat_bubble_outline_rounded,
+                        size: 17,
+                      ),
                       label: Text(
-                        context.tr('tv_market_contact'),
+                        context.tr(
+                          isOwner ? 'tv_market_delete' : 'tv_market_contact',
+                        ),
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00E676),
-                        foregroundColor: Colors.black,
+                        backgroundColor: isOwner
+                            ? const Color(0xFFFF1744)
+                            : const Color(0xFF00E676),
+                        foregroundColor: isOwner ? Colors.white : Colors.black,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

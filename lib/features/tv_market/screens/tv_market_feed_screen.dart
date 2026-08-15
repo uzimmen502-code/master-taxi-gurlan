@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
+import '../services/tv_clip_delete.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
@@ -38,13 +41,23 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _showPlayPause = false;
   Timer? _hideBadgeTimer;
   int _activateGen = 0;
+  String _mePhone = '';
 
   @override
   void initState() {
     super.initState();
     tvBindPlayback();
     _pageCtrl = PageController();
+    unawaited(_loadMe());
     _loadClips();
+  }
+
+  Future<void> _loadMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
+    });
   }
 
   @override
@@ -185,6 +198,46 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
+
+  Future<void> _onDelete(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    try {
+      final deleted = await confirmDeleteTvClip(context, clip);
+      if (!deleted || !mounted) {
+        if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+        return;
+      }
+      final i = _clips.indexWhere((c) => c.id == clip.id);
+      if (i >= 0) _clips.removeAt(i);
+      if (_clips.isEmpty) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('tv_market_delete_done'))),
+        );
+        return;
+      }
+      final next = i.clamp(0, _clips.length - 1);
+      _currentIndex = next;
+      setState(() {});
+      if (_pageCtrl.hasClients) {
+        _pageCtrl.jumpToPage(next);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_delete_done'))),
+      );
+      if (tvCanPlay) unawaited(_activate(next));
+    } catch (e) {
+      debugPrint('[TvMarketFeed] delete $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('tv_market_delete_failed'))),
+        );
+        if (tvCanPlay) tvOnPlaybackAllowed();
+      }
+    }
+  }
+
   Future<void> _openPublish() async {
     tvOnPlaybackBlocked();
     final result = await Navigator.push(
@@ -298,7 +351,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           ),
                         TvClipOverlay(
                           clip: clip,
+                          isOwner: _isOwner(clip),
                           onContact: () => _onContact(clip),
+                          onDelete: () => _onDelete(clip),
                           onLike: () {},
                           onComment: () {},
                           onShare: () {},

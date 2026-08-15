@@ -16,6 +16,8 @@ class TvClipOverlay extends StatelessWidget {
     required this.onShare,
     required this.onSave,
     required this.onProfile,
+    this.isOwner = false,
+    this.onDelete,
   });
 
   final TvClip clip;
@@ -25,6 +27,8 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback onProfile;
+  final bool isOwner;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -45,18 +49,27 @@ class TvClipOverlay extends StatelessWidget {
                 width: double.infinity,
                 height: 44,
                 child: ElevatedButton.icon(
-                  onPressed: onContact,
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                  onPressed: isOwner ? onDelete : onContact,
+                  icon: Icon(
+                    isOwner
+                        ? Icons.delete_outline_rounded
+                        : Icons.chat_bubble_outline_rounded,
+                    size: 18,
+                  ),
                   label: Text(
-                    context.tr('tv_market_contact'),
+                    context.tr(
+                      isOwner ? 'tv_market_delete' : 'tv_market_contact',
+                    ),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
-                    foregroundColor: Colors.black,
+                    backgroundColor: isOwner
+                        ? const Color(0xFFFF1744)
+                        : const Color(0xFF00E676),
+                    foregroundColor: isOwner ? Colors.white : Colors.black,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

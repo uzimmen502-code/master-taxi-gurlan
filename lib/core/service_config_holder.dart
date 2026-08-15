@@ -105,7 +105,9 @@ class ServiceConfigHolder {
 
   /// Startda: keshdan tez tiklash + `config/module_defaults` ni yangilash.
   /// Kesh'da serviceAreaId bo'lsa (qaytgan foydalanuvchi) — override ham yangilanadi.
+  /// UI revision — faqat ko‘rinadigan holat o‘zgaganda (ortiqcha rebuild yo‘q).
   static Future<void> bootstrap() async {
+    final before = _uiFingerprint();
     await _loadFromCache();
     // Eski seed area keshini Baseline ustidan bosmasin — yangi fetch
     // kelgunicha faqat defaults ishlaydi.
@@ -132,7 +134,29 @@ class ServiceConfigHolder {
       await _resolveDistrictLabel(_districtId);
       await _saveAreaToCache();
     }
-    _notifyRevision();
+    if (_uiFingerprint() != before) {
+      _notifyRevision();
+    }
+  }
+
+  /// Home / gate UI uchun barqaror imprint — o‘zgarish bo‘lmasa rebuild yo‘q.
+  static String _uiFingerprint() {
+    final eff = effective;
+    final b = StringBuffer()
+      ..write(_enforce)
+      ..write('|')
+      ..write(_serviceAreaId)
+      ..write('|')
+      ..write(_districtLabel)
+      ..write('|');
+    for (final id in kKnownModuleIds) {
+      b
+        ..write(id)
+        ..write(':')
+        ..write(eff.statusOf(id).wire)
+        ..write(';');
+    }
+    return b.toString();
   }
 
   /// User serviceAreaId ma'lum bo'lgach — MFY override yuklash.

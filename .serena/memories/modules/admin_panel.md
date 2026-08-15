@@ -13,6 +13,7 @@ Web-only entry `lib/main_admin.dart` (built `-t lib/main_admin.dart --base-href 
 - **Role assign SoD**: ordinary `admin` → only `seller`/`user`; `superadmin` → admin/finance/auditor/seller/superadmin/user. CF `setUserRoleByAdmin` enforces.
 - **Иш топ writes**: `AdminJobsService` → CF `adminDeleteJobAd`, `adminUpdateJobAdStatus`, `adminUpdateJobAd`, `adminResolveJobComplaint` (Firestore rules `isAdmin()` unreliable with admin custom token).
 - **Onlayn BOZOR writes**: `AdminMarketService` → CF `adminDeleteMarketAd`, `adminUpdateMarketAdStatus`, `adminUpdateMarketAd`.
+- **TV Market**: `tv_clips_moderation_screen.dart` — АВТО/ҚЎЛДА (`settings/app.tvAutoApprove` merge write), activate/block/delete `tv_clips` directly (admin rules). Sidebar badge = pending count.
 - `admin_role_service.dart`: setUserRole → CF setUserRoleByAdmin.
 - CF guard `assertAdmin`. Role sets: general admin {admin,superadmin,dispatcher}; finance ops {admin,superadmin,finance}; read-only ledger/audit {admin,superadmin,finance,auditor}.
 

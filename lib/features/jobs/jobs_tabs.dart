@@ -8,7 +8,7 @@ abstract final class JobsTabs {
   static const int service = 1;
 
   static const List<String> labels = [
-    'Иш бор',
+    'Эълонлар',
     'Хизмат таклифи',
   ];
 

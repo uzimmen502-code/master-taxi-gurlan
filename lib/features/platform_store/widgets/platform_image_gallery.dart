@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../ava_store_colors.dart';
 
-/// Тўлиқ экран галерея: ўнг/чап свайп, бир марта босилса ёпилади.
+/// Тўлиқ экран галерея: ўнг/чап свайп, pinch/pan зум, ✕ ёки пастга свайп билан ёпиш.
 Future<void> openPlatformImageGallery(
   BuildContext context, {
   required List<String> urls,
@@ -55,6 +55,9 @@ class _PlatformImageGalleryPageState extends State<_PlatformImageGalleryPage> {
   late final PageController _ctrl;
   late int _index;
 
+  /// Зумланган бўлса PageView свайпи ўчирилади.
+  bool _zoomed = false;
+
   @override
   void initState() {
     super.initState();
@@ -78,38 +81,47 @@ class _PlatformImageGalleryPageState extends State<_PlatformImageGalleryPage> {
     final multi = widget.urls.length > 1;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _close,
-        child: SafeArea(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Бир марта босиш → ёпиш (свайп ўнг/чап — кейинги расм).
-              PageView.builder(
-                controller: _ctrl,
-                itemCount: widget.urls.length,
-                onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (_, i) {
-                  return Center(
-                    child: _GalleryImage(url: widget.urls[i]),
-                  );
-                },
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _ctrl,
+              physics: _zoomed
+                  ? const NeverScrollableScrollPhysics()
+                  : const BouncingScrollPhysics(),
+              itemCount: widget.urls.length,
+              onPageChanged: (i) => setState(() {
+                _index = i;
+                _zoomed = false;
+              }),
+              itemBuilder: (_, i) {
+                return _GalleryZoomPane(
+                  key: ValueKey('gal_${widget.urls[i]}_$i'),
+                  url: widget.urls[i],
+                  onZoomedChanged: (z) {
+                    if (_zoomed == z) return;
+                    setState(() => _zoomed = z);
+                  },
+                  onDismiss: _zoomed ? null : _close,
+                );
+              },
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                onPressed: _close,
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
               ),
+            ),
+            if (multi)
               Positioned(
-                top: 4,
-                right: 4,
-                child: IconButton(
-                  onPressed: _close,
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-                ),
-              ),
-              if (multi)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 16,
+                left: 0,
+                right: 0,
+                bottom: 16,
+                child: IgnorePointer(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -129,8 +141,112 @@ class _PlatformImageGalleryPageState extends State<_PlatformImageGalleryPage> {
                     ],
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GalleryZoomPane extends StatefulWidget {
+  const _GalleryZoomPane({
+    super.key,
+    required this.url,
+    required this.onZoomedChanged,
+    this.onDismiss,
+  });
+
+  final String url;
+  final ValueChanged<bool> onZoomedChanged;
+  final VoidCallback? onDismiss;
+
+  @override
+  State<_GalleryZoomPane> createState() => _GalleryZoomPaneState();
+}
+
+class _GalleryZoomPaneState extends State<_GalleryZoomPane>
+    with SingleTickerProviderStateMixin {
+  final _transform = TransformationController();
+  late final AnimationController _animCtrl;
+  Animation<Matrix4>? _anim;
+  TapDownDetails? _doubleTapDetails;
+
+  static const _min = 1.0;
+  static const _max = 4.0;
+  static const _doubleTapScale = 2.5;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addListener(() {
+        final a = _anim;
+        if (a != null) _transform.value = a.value;
+      });
+    _transform.addListener(_onTransform);
+  }
+
+  @override
+  void dispose() {
+    _transform.removeListener(_onTransform);
+    _transform.dispose();
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onTransform() {
+    final s = _transform.value.getMaxScaleOnAxis();
+    widget.onZoomedChanged(s > 1.02);
+  }
+
+  void _animateTo(Matrix4 end) {
+    _anim = Matrix4Tween(begin: _transform.value, end: end).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutCubic),
+    );
+    _animCtrl.forward(from: 0);
+  }
+
+  void _onDoubleTap() {
+    final s = _transform.value.getMaxScaleOnAxis();
+    if (s > 1.05) {
+      _animateTo(Matrix4.identity());
+      return;
+    }
+    final details = _doubleTapDetails;
+    final m = Matrix4.identity();
+    if (details == null) {
+      m.scaleByDouble(_doubleTapScale, _doubleTapScale, 1, 1);
+      _animateTo(m);
+      return;
+    }
+    final pos = details.localPosition;
+    final x = -pos.dx * (_doubleTapScale - 1);
+    final y = -pos.dy * (_doubleTapScale - 1);
+    m
+      ..translateByDouble(x, y, 0, 1)
+      ..scaleByDouble(_doubleTapScale, _doubleTapScale, 1, 1);
+    _animateTo(m);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onDismiss,
+      onDoubleTapDown: (d) => _doubleTapDetails = d,
+      onDoubleTap: _onDoubleTap,
+      child: InteractiveViewer(
+        transformationController: _transform,
+        minScale: _min,
+        maxScale: _max,
+        clipBehavior: Clip.none,
+        panEnabled: true,
+        scaleEnabled: true,
+        child: SizedBox.expand(
+          child: Center(child: _GalleryImage(url: widget.url)),
         ),
       ),
     );

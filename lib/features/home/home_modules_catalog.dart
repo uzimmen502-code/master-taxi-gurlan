@@ -55,5 +55,13 @@ class HomeModulesCatalog {
       id: 'jobs',
       label: 'home_module_jobs',
     ),
+    HomeModule(
+      id: 'platform_store',
+      label: 'home_module_platform_store',
+    ),
+    HomeModule(
+      id: 'tv_market',
+      label: 'home_module_tv_market',
+    ),
   ];
 }

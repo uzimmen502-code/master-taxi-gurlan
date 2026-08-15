@@ -18,6 +18,8 @@ const List<String> kKnownModuleIds = [
   'tire',
   'car_wash',
   'oil_change',
+  'platform_store',
+  'tv_market',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

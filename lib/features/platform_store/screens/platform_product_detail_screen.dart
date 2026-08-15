@@ -63,34 +63,18 @@ class _PlatformProductDetailScreenState
     super.dispose();
   }
 
+  /// Ўхшаш танланса — оралиқ саҳифаларсиз жорий ўринда алмаштириш (crossfade).
   void _goToProduct(PlatformProduct p) {
     final i = _catalog.indexWhere((x) => x.id == p.id);
     if (i < 0 || i == _index) return;
     HapticFeedback.mediumImpact();
     setState(() {
+      final current = _catalog[_index];
+      _catalog[i] = current;
+      _catalog[_index] = p;
       _pulseProductId = p.id;
       _pulseEpoch++;
     });
-    _pageCtrl.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  void _addSimilarToCart(PlatformProduct p) {
-    final c = context.read<PlatformStoreController>();
-    if (c.isOutOfStock(p) || p.price <= 0) return;
-    HapticFeedback.mediumImpact();
-    c.addToCart(p);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${p.name} — ${context.tr('added_to_cart')}'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AvaStoreColors.deep,
-        duration: const Duration(milliseconds: 1400),
-      ),
-    );
   }
 
   Future<void> _openCart() async {
@@ -181,7 +165,6 @@ class _PlatformProductDetailScreenState
             pageCount: _catalog.length,
             pulseEpoch: live.id == _pulseProductId ? _pulseEpoch : 0,
             onOpenSimilar: _goToProduct,
-            onAddSimilar: _addSimilarToCart,
             onOpenCart: _openCart,
           );
         },
@@ -198,7 +181,6 @@ class _ProductPage extends StatefulWidget {
     required this.pageCount,
     required this.pulseEpoch,
     required this.onOpenSimilar,
-    required this.onAddSimilar,
     required this.onOpenCart,
   });
 
@@ -210,7 +192,6 @@ class _ProductPage extends StatefulWidget {
   /// Ўхшашдан ўтилганда >0 — ном бир марта пульс қилади.
   final int pulseEpoch;
   final ValueChanged<PlatformProduct> onOpenSimilar;
-  final ValueChanged<PlatformProduct> onAddSimilar;
   final VoidCallback onOpenCart;
 
   @override
@@ -299,7 +280,15 @@ class _ProductPageState extends State<_ProductPage>
     final hasNext = widget.pageIndex < widget.pageCount - 1;
     final h = MediaQuery.sizeOf(context).height;
 
-    return Column(
+    void openGallery(int index) {
+      openPlatformImageGallery(
+        context,
+        urls: product.displayImages,
+        initialIndex: index,
+      );
+    }
+
+    final body = Column(
       children: [
         Expanded(
           child: Column(
@@ -317,13 +306,8 @@ class _ProductPageState extends State<_ProductPage>
                         memCacheWidth: 900,
                         borderRadius: 14,
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                        onDoubleTap: (index) {
-                          openPlatformImageGallery(
-                            context,
-                            urls: product.displayImages,
-                            initialIndex: index,
-                          );
-                        },
+                        onTap: openGallery,
+                        onDoubleTap: openGallery,
                       ),
                       if (out)
                         IgnorePointer(
@@ -401,47 +385,20 @@ class _ProductPageState extends State<_ProductPage>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              priceText,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: AvaStoreColors.deep,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                          if (product.unit.trim().isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AvaStoreColors.soft,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AvaStoreColors.border),
-                              ),
-                              child: Text(
-                                product.unit,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: AvaStoreColors.deep,
-                                ),
-                              ),
-                            ),
-                        ],
+                      Text(
+                        priceText,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: AvaStoreColors.deep,
+                          height: 1,
+                        ),
                       ),
                       if (!out && !product.isUnlimitedStock) ...[
                         const SizedBox(height: 8),
                         Text(
                           '${context.tr('platform_store_stock_left')}: '
-                          '${product.remaining} ${product.unit}',
+                          '${product.remaining}',
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
@@ -470,7 +427,6 @@ class _ProductPageState extends State<_ProductPage>
                             key: ValueKey('similar_${product.id}'),
                             items: similar,
                             onTap: widget.onOpenSimilar,
-                            onAdd: widget.onAddSimilar,
                           ),
                         ),
                       ] else
@@ -526,6 +482,26 @@ class _ProductPageState extends State<_ProductPage>
           onOpenCart: widget.onOpenCart,
         ),
       ],
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, anim) {
+        final offset = Tween<Offset>(
+          begin: const Offset(0.03, 0),
+          end: Offset.zero,
+        ).animate(anim);
+        return FadeTransition(
+          opacity: anim,
+          child: SlideTransition(position: offset, child: child),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey(product.id),
+        child: body,
+      ),
     );
   }
 }
@@ -703,12 +679,10 @@ class _SimilarStrip extends StatefulWidget {
     super.key,
     required this.items,
     required this.onTap,
-    required this.onAdd,
   });
 
   final List<PlatformProduct> items;
   final ValueChanged<PlatformProduct> onTap;
-  final ValueChanged<PlatformProduct> onAdd;
 
   @override
   State<_SimilarStrip> createState() => _SimilarStripState();
@@ -802,7 +776,6 @@ class _SimilarStripState extends State<_SimilarStrip> {
                   return _SimilarCard(
                     product: p,
                     onTap: () => widget.onTap(p),
-                    onAdd: () => widget.onAdd(p),
                   );
                 },
               ),
@@ -843,17 +816,13 @@ class _SimilarCard extends StatelessWidget {
   const _SimilarCard({
     required this.product,
     required this.onTap,
-    required this.onAdd,
   });
 
   final PlatformProduct product;
   final VoidCallback onTap;
-  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.watch<PlatformStoreController>();
-    final out = c.isOutOfStock(product);
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
           formatPrice(product.price),
@@ -877,38 +846,9 @@ class _SimilarCard extends StatelessWidget {
                 flex: 6,
                 child: ColoredBox(
                   color: AvaStoreColors.soft,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: _Thumb(url: product.coverImageUrl),
-                      ),
-                      // Карта босиш = детал; + = саватга (деталга кирмасдан).
-                      if (!out)
-                        Positioned(
-                          right: 4,
-                          bottom: 4,
-                          child: Material(
-                            color: AvaStoreColors.brand,
-                            shape: const CircleBorder(),
-                            elevation: 2,
-                            child: InkWell(
-                              customBorder: const CircleBorder(),
-                              onTap: onAdd,
-                              child: const SizedBox(
-                                width: 28,
-                                height: 28,
-                                child: Icon(
-                                  Icons.add_rounded,
-                                  size: 18,
-                                  color: AvaStoreColors.onBrand,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: _Thumb(url: product.coverImageUrl),
                   ),
                 ),
               ),

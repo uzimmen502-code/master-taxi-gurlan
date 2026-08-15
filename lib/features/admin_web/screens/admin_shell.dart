@@ -27,6 +27,7 @@ import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
 import 'dating_moderation_screen.dart';
+import 'tv_clips_moderation_screen.dart';
 import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
@@ -132,6 +133,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'AVA дўкони',
       icon: Icons.store_mall_directory_outlined,
       description: 'Тавсия / платформа каталоги',
+    ),
+    _AdminSection(
+      label: 'TV Market',
+      icon: Icons.play_circle_outline,
+      description: 'Видео клиплар модерацияси',
     ),
     _AdminSection(
       label: '❤️ Танишув',
@@ -393,6 +399,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();
+    }
+    if (section.label == 'TV Market') {
+      return const TvClipsModerationScreen();
     }
     if (section.label == '❤️ Танишув') {
       return const DatingModerationScreen();
@@ -855,6 +864,13 @@ class _Sidebar extends StatelessWidget {
       case '❤️ Танишув':
         return db
             .collection('dating_profiles')
+            .where('status', isEqualTo: 'pending')
+            .limit(200)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'TV Market':
+        return db
+            .collection('tv_clips')
             .where('status', isEqualTo: 'pending')
             .limit(200)
             .snapshots()

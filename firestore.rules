@@ -2189,5 +2189,14 @@ service cloud.firestore {
           && request.resource.data.everPublished == true;
     }
 
+    // TV Market клиплари — ўқиш ҳаммага; ёзиш authed.
+    match /tv_clips/{clipId} {
+      allow read: if true;
+      allow create: if isAuth();
+      allow update, delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
+    }
+
   }
 }

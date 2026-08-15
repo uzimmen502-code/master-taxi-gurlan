@@ -32,7 +32,8 @@ class ServiceSpotlightItem {
 /// Хизматлар карусели — грид ўрнига.
 ///
 /// Бир қаторда 4 та квадрат; ҳар 2 с **1 катак** чапдан ўнгга snap.
-/// Infinite loop; биринчи touch → авто тўхтайди; виджет recreate → яна бошланади.
+/// Infinite loop; биринчи touch → авто тўхтайди.
+/// Home га қайтганда жойлашув сақланади (State recreate қилинмайди).
 class ServicesSpotlightCarousel extends StatefulWidget {
   const ServicesSpotlightCarousel({
     super.key,
@@ -290,7 +291,10 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
               width: double.infinity,
               height: double.infinity,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(_radius),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(_radius),
+                  topRight: Radius.circular(_radius),
+                ),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,

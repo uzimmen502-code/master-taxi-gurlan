@@ -41,23 +41,20 @@ import '../marshrut/passenger/screens/marshrut_accepted_screen.dart';
 import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
-import '../sell/screens/sell_hub_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import 'controllers/home_controller.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
-import '../../models/feed_item.dart';
 import '../../models/search_index_entry.dart';
 import 'widgets/all_services_screen.dart';
-import 'widgets/featured_products_section.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
-import 'widgets/home_jobs_preview_section.dart';
-import 'widgets/product_feed_section.dart';
 import 'widgets/promo_carousel.dart';
 import 'widgets/seller_cta_banner.dart';
 import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
+import '../tv_market/screens/tv_market_feed_screen.dart';
+import '../tv_market/widgets/home_video_stage.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const _bg = AppColors.lime;
@@ -123,12 +120,12 @@ class _HomeViewState extends State<_HomeView> {
   VoidCallback? _configListener;
   bool _tripResumeDone = false;
   String? _lastAppliedServiceAreaId;
-  /// Profile/orders/wallet дан қайтганда spotlight автони қайта ёқиш.
-  int _servicesCarouselEpoch = 0;
   /// Home қайта очилганда ҳамён 11 с яна кўринсин.
   int _walletRevealEpoch = 0;
   bool _walletVisible = true;
   Timer? _walletHideTimer;
+  Timer? _deferredBootstrapTimer;
+  DateTime? _lastDeferredBootstrapAt;
 
   @override
   void initState() {
@@ -149,16 +146,36 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
-  void _onHomeResurface() {
+  /// Home яна кўринганда.
+  /// [revealWallet]: фақат профил/буюртма/ҳамён дан қайтганда — хизматдан
+  /// қайтганда ҳамён мажбурий очилмайди (сатҳ силжиши йўқ).
+  void _onHomeResurface({bool revealWallet = false}) {
     if (!mounted) return;
-    setState(() {
-      _servicesCarouselEpoch++;
-      _walletRevealEpoch++;
-      _walletVisible = true;
+    if (revealWallet) {
+      setState(() {
+        _walletRevealEpoch++;
+        _walletVisible = true;
+      });
+      _armWalletHideTimer();
+    }
+    // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
+    _scheduleDeferredConfigBootstrap();
+  }
+
+  /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.
+  void _scheduleDeferredConfigBootstrap() {
+    final now = DateTime.now();
+    if (_lastDeferredBootstrapAt != null &&
+        now.difference(_lastDeferredBootstrapAt!) <
+            const Duration(seconds: 45)) {
+      return;
+    }
+    _deferredBootstrapTimer?.cancel();
+    _deferredBootstrapTimer = Timer(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      _lastDeferredBootstrapAt = DateTime.now();
+      unawaited(ServiceConfigHolder.bootstrap());
     });
-    _armWalletHideTimer();
-    // Admin config (Ёпиқ/Очиқ) янгиланиши учун.
-    unawaited(ServiceConfigHolder.bootstrap());
   }
 
   void _armWalletHideTimer() {
@@ -308,6 +325,7 @@ class _HomeViewState extends State<_HomeView> {
   @override
   void dispose() {
     _walletHideTimer?.cancel();
+    _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
     if (_configListener != null) {
       ServiceConfigHolder.revision.removeListener(_configListener!);
@@ -379,21 +397,7 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
     if (m.id == 'sell') {
-      final phone = phoneDigits(context.read<HomeController>().phone);
-      if (phone.length < 9) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tr('fill_phone_first'))),
-        );
-        return;
-      }
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SellHubScreen(phone: phone),
-        ),
-      );
-      if (mounted) _onHomeResurface();
+      SellerCtaBanner.openOnlineMarketSellFlow(context);
       return;
     }
 
@@ -420,6 +424,12 @@ class _HomeViewState extends State<_HomeView> {
       case 'jobs':
         screen = const JobsScreen();
         break;
+      case 'platform_store':
+        screen = const PlatformStoreScreen();
+        break;
+      case 'tv_market':
+        screen = const TvMarketFeedScreen();
+        break;
       default:
         return;
     }
@@ -434,7 +444,15 @@ class _HomeViewState extends State<_HomeView> {
     if (name.isEmpty) {
       return phone.isNotEmpty ? phone : context.tr('user_default_name');
     }
-    return context.tr('home_display_name_aka').replaceAll('{name}', name);
+    final gender = (user?.gender.trim().isNotEmpty == true
+            ? user!.gender
+            : home.gender)
+        .trim()
+        .toLowerCase();
+    final key = gender == 'female'
+        ? 'home_display_name_opa'
+        : 'home_display_name_aka';
+    return context.tr(key).replaceAll('{name}', name);
   }
 
   void _showTezKundaSnack() {
@@ -573,17 +591,17 @@ class _HomeViewState extends State<_HomeView> {
           await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const OrdersScreen()),
           );
-          if (mounted) _onHomeResurface();
+          if (mounted) _onHomeResurface(revealWallet: true);
         },
         onWallet: () async {
           await _HomeBottomNav.openWallet(context);
-          if (mounted) _onHomeResurface();
+          if (mounted) _onHomeResurface(revealWallet: true);
         },
         onProfile: () async {
           await _HomeBottomNav.openProfile(context);
           if (!context.mounted) return;
           await context.read<HomeController>().refreshUser();
-          if (mounted) _onHomeResurface();
+          if (mounted) _onHomeResurface(revealWallet: true);
         },
       ),
       body: Stack(
@@ -652,7 +670,10 @@ class _HomeViewState extends State<_HomeView> {
                                                     phone: home.phone),
                                               ),
                                             );
-                                            if (mounted) _onHomeResurface();
+                                            if (mounted) {
+                                              _onHomeResurface(
+                                                  revealWallet: true);
+                                            }
                                           },
                                         ),
                                         SizedBox(
@@ -790,9 +811,15 @@ class _HomeViewState extends State<_HomeView> {
                                   label: context.tr('home_module_sell'),
                                   imagePath:
                                       'assets/images/services/service_sell.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('sell'),
-                                  ),
+                                  onTap: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'cheap_products_home')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    SellerCtaBanner.openOnlineMarketSellFlow(
+                                        context);
+                                  },
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'food',
@@ -831,6 +858,36 @@ class _HomeViewState extends State<_HomeView> {
                                     HomeModulesCatalog.byId(
                                         'cheap_products_home'),
                                   ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'platform_store',
+                                  label: context
+                                      .tr('home_module_platform_store'),
+                                  icon: Icons.storefront_rounded,
+                                  iconColor: const Color(0xFF00BCD4),
+                                  onTap: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'platform_store')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    _push(const PlatformStoreScreen());
+                                  },
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'tv_market',
+                                  label:
+                                      context.tr('home_module_tv_market'),
+                                  icon: Icons.play_circle_filled_rounded,
+                                  iconColor: const Color(0xFFFF1744),
+                                  onTap: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'tv_market')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    _push(const TvMarketFeedScreen());
+                                  },
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'bread',
@@ -922,7 +979,6 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                                 ];
                                 return ServicesSpotlightCarousel(
-                                  key: ValueKey(_servicesCarouselEpoch),
                                   items: spotlightItems,
                                   onTitleTap: () => _push(
                                     AllServicesScreen(items: spotlightItems),
@@ -934,77 +990,8 @@ class _HomeViewState extends State<_HomeView> {
                             HomeGlobalSearchBar(
                               onOpenEntry: _openSearchEntry,
                             ),
-                            const SizedBox(height: 16),
-                            FeaturedProductsSection(
-                              onProductTap: (productId) => _push(
-                                PlatformStoreScreen(
-                                  highlightProductId: productId,
-                                ),
-                              ),
-                              onTitleTap: () => _push(
-                                const PlatformStoreScreen(),
-                              ),
-                            ),
-                            if (HomeModuleGate.showInGrid('sell')) ...[
-                              const SizedBox(height: 12),
-                              SellerCtaBanner(
-                                onTap: () =>
-                                    SellerCtaBanner.openOnlineMarketSellFlow(
-                                  context,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-                            ProductFeedSection(
-                              onProductTap: (source) {
-                                switch (source) {
-                                  case FeedSource.bread:
-                                    _openModule(
-                                      HomeModulesCatalog.byId('bread'),
-                                    );
-                                  case FeedSource.food:
-                                    _openModule(
-                                      HomeModulesCatalog.byId('food'),
-                                    );
-                                  case FeedSource.market:
-                                    _openModule(
-                                      HomeModulesCatalog.byId(
-                                        'cheap_products_home',
-                                      ),
-                                    );
-                                }
-                              },
-                            ),
-                            if (HomeModuleGate.showInGrid('jobs')) ...[
-                              const SizedBox(height: 16),
-                              HomeJobsPreviewSection(
-                                onSeeAll: () {
-                                  if (!ServiceConfigHolder.isOpenable(
-                                      'jobs')) {
-                                    _showTezKundaSnack();
-                                    return;
-                                  }
-                                  _push(
-                                    const JobsScreen(
-                                      initialTabIndex: JobsTabs.ad,
-                                    ),
-                                  );
-                                },
-                                onOpenAd: (ad) {
-                                  if (!ServiceConfigHolder.isOpenable(
-                                      'jobs')) {
-                                    _showTezKundaSnack();
-                                    return;
-                                  }
-                                  _push(
-                                    JobsScreen(
-                                      initialTabIndex:
-                                          JobsTabs.indexForKind(ad.kind),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
+                            if (HomeModuleGate.showInGrid('tv_market'))
+                              const HomeVideoStage(),
                           ],
                         ),
                       ),

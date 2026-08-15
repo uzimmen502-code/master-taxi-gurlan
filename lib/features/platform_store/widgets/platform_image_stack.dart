@@ -13,6 +13,7 @@ class PlatformImageStack extends StatefulWidget {
     this.showDots = true,
     this.padding = EdgeInsets.zero,
     this.borderRadius = 12,
+    this.onTap,
     this.onDoubleTap,
   });
 
@@ -21,6 +22,9 @@ class PlatformImageStack extends StatefulWidget {
   final bool showDots;
   final EdgeInsets padding;
   final double borderRadius;
+
+  /// Бир марта босилганда жорий расм индекси (зум/галерея).
+  final ValueChanged<int>? onTap;
 
   /// Икки марта босилганда жорий расм индекси билан чақирилади.
   final ValueChanged<int>? onDoubleTap;
@@ -83,6 +87,7 @@ class _PlatformImageStackState extends State<PlatformImageStack> {
         padding: widget.padding,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap == null ? null : () => widget.onTap!(0),
           onDoubleTap: widget.onDoubleTap == null
               ? null
               : () => widget.onDoubleTap!(0),
@@ -152,12 +157,15 @@ class _PlatformImageStackState extends State<PlatformImageStack> {
               ),
             ),
           ),
-          // Олд расм — ўнгга/чапга свайп; икки марта босиш → тўлиқ экран.
+          // Олд расм — ўнгга/чапга свайп; босиш → тўлиқ экран/зум.
           Positioned.fill(
             child: Padding(
               padding: const EdgeInsets.only(right: peekReserve),
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
+                onTap: widget.onTap == null
+                    ? null
+                    : () => widget.onTap!(_index),
                 onDoubleTap: widget.onDoubleTap == null
                     ? null
                     : () => widget.onDoubleTap!(_index),

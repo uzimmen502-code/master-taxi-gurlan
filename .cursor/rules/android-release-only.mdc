@@ -1,0 +1,13 @@
+---
+description: Device installs — release APK only, never debug
+alwaysApply: true
+---
+
+# Android ўрнатиш — фақат release
+
+Қурилмага APK ўрнатишда:
+
+- **Фақат** `flutter build apk --release` (ёки `app-release.apk`)
+- **Ҳеч қачон** `flutter build apk --debug`, `flutter install --debug`, `app-debug.apk` ўрнатилмасин
+- Имзо мос келмаса: эски пакетни олиб ташлаб **release**ни қайта ўрнат (debugга ўтиш йўқ)
+- Тест/текширув учун ҳам release билд ишлатилсин

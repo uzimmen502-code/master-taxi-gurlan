@@ -23,7 +23,7 @@ Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Mo
 - Storage tv_shop: authed write ≤8MB
 
 ## Gotchas
-- `users` is not publicly readable — persist given name on clip/item at publish from prefs `user_name` first (Firestore `users.name` often empty). Own clips with phone/empty/`Фойдаланувчи` get patched on play.
+- `users` is not publicly readable — persist given name on clip at publish (`resolveLocalTvOwnerGivenName`: prefs → Firestore `users.name` → Auth; writes back to prefs). Overlay: own clips always show profile given name (`@nick` / `Фойдаланувчи` ignored). Own clip `ownerName` patched on play if it differs.
 - Clip-only publish (shop declined) has no product photo and no `shopItemId`.
 - Meta auto-post is **not** implemented; consent + admin manual flag only.
 - Home bottom «Магазиним» tab only if `tv_shops/{phone}` exists.

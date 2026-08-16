@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
-import '../../../core/l10n/offline_l10n.dart';
 import '../../../services/user_role_sync.dart';
 import '../../dating/services/dating_youth_promo_service.dart';
 
@@ -45,8 +44,7 @@ class HomeController extends ChangeNotifier {
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
     role = await UserRoleSync().syncToPreferences();
-    name = prefs.getString('user_name') ??
-        await OfflineL10n.tr('user_default_name');
+    name = (prefs.getString('user_name') ?? '').trim();
     gender = prefs.getString('user_gender') ?? 'male';
     phone = phoneDigits(prefs.getString('user_phone') ?? '');
     if (!_disposed) notifyListeners();

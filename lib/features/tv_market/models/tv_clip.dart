@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Профил исмидан биринчи сўз. Телефон / бўш / @nick — бўш қайтаради.
+/// Профил исмидан биринчи сўз. Телефон / бўш / @nick / UI fallback — бўш.
 String tvOwnerGivenName(String raw) {
   var s = raw.trim();
-  if (s.startsWith('@')) s = s.substring(1).trim();
+  if (s.startsWith('@')) return '';
   if (s.isEmpty) return '';
   final compact = s.replaceAll(RegExp(r'[\s+\-()]'), '');
   if (RegExp(r'^\d{7,}$').hasMatch(compact)) return '';

@@ -232,6 +232,22 @@ class ProfileController extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_birth_date', user.birthDate);
       }
+      final fromFs = user.name.trim();
+      final localLower = name.trim().toLowerCase();
+      const fake = {
+        'фойдаланувчи',
+        'foydalanuvchi',
+        'пользователь',
+        'user',
+      };
+      if (fromFs.isNotEmpty &&
+          (name.trim().isEmpty ||
+              name.trim().startsWith('@') ||
+              fake.contains(localLower))) {
+        name = fromFs;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_name', fromFs);
+      }
       notifyListeners();
     } catch (_) {
       // Internet yo'q ёки rules denied — bu yerda silent fail.

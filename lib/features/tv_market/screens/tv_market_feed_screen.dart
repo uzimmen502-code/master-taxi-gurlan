@@ -265,15 +265,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
   String _overlayName(BuildContext context, TvClip clip) {
+    if (_isOwner(clip) && _meGivenName.isNotEmpty) return _meGivenName;
     final stored = clip.displayOwnerName('');
     if (stored.isNotEmpty) return stored;
-    if (_isOwner(clip) && _meGivenName.isNotEmpty) return _meGivenName;
     return context.tr('tv_market_user');
   }
 
   Future<void> _maybePatchOwnerName(TvClip clip) async {
     if (!_isOwner(clip) || _meGivenName.isEmpty) return;
-    if (!tvOwnerNameLooksFake(clip.ownerName)) return;
+    final stored = clip.displayOwnerName('');
+    if (stored == _meGivenName) return;
     try {
       await _repo.patchOwnerName(clipId: clip.id, ownerName: _meGivenName);
       if (!mounted) return;
@@ -504,7 +505,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     } else {
       screen = TvOwnerClipsScreen(
         ownerPhone: clip.ownerPhone,
-        ownerName: clip.displayOwnerName(context.tr('tv_market_user')),
+        ownerName: _overlayName(context, clip),
       );
     }
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));

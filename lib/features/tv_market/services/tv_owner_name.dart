@@ -30,10 +30,17 @@ Future<String> resolveLocalTvOwnerGivenName({String phone = ''}) async {
     try {
       final profile = await UserRepository().getById(uid);
       final fromFs = tvOwnerGivenName(profile?.name ?? '');
-      if (fromFs.isNotEmpty) return fromFs;
+      if (fromFs.isNotEmpty) {
+        await prefs.setString('user_name', fromFs);
+        return fromFs;
+      }
     } catch (_) {}
   }
 
   final authName = FirebaseAuth.instance.currentUser?.displayName ?? '';
-  return tvOwnerGivenName(authName);
+  final fromAuth = tvOwnerGivenName(authName);
+  if (fromAuth.isNotEmpty) {
+    await prefs.setString('user_name', fromAuth);
+  }
+  return fromAuth;
 }

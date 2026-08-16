@@ -14,6 +14,7 @@ import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../screens/tv_market_feed_screen.dart';
 import '../services/tv_clip_delete.dart';
+import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import 'tv_clip_poster.dart';
@@ -47,12 +48,20 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   ScrollPosition? _scrollPos;
   bool _pickScheduled = false;
   int _playGen = 0;
+  String _meGivenName = '';
 
   @override
   void initState() {
     super.initState();
     tvBindPlayback();
+    unawaited(_loadMeName());
     _load();
+  }
+
+  Future<void> _loadMeName() async {
+    final resolved = await resolveLocalTvOwnerGivenName();
+    if (!mounted || resolved.isEmpty) return;
+    setState(() => _meGivenName = resolved);
   }
 
   @override
@@ -313,6 +322,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
               playing: i == _activeIndex,
               controller: _pool[_clips[i].videoUrl],
               isOwner: _isOwner(_clips[i]),
+              meGivenName: _meGivenName,
               onOpen: () => _openFeed(_clips[i]),
               onContact: () => _onContact(_clips[i]),
               onDelete: () => _onDelete(_clips[i]),
@@ -344,6 +354,7 @@ class _HomeClipCard extends StatelessWidget {
     required this.onContact,
     required this.onDelete,
     this.isOwner = false,
+    this.meGivenName = '',
   });
 
   final TvClip clip;
@@ -354,6 +365,7 @@ class _HomeClipCard extends StatelessWidget {
   final VoidCallback onContact;
   final VoidCallback onDelete;
   final bool isOwner;
+  final String meGivenName;
 
   @override
   Widget build(BuildContext context) {
@@ -361,11 +373,11 @@ class _HomeClipCard extends StatelessWidget {
         controller != null &&
         controller!.value.isInitialized;
     final stored = clip.displayOwnerName('');
-    final ownerLabel = stored.isNotEmpty
-        ? stored
-        : (isOwner
-            ? tvOwnerGivenName(context.read<HomeController>().name)
-            : '');
+    final ownerLabel = (isOwner && meGivenName.isNotEmpty)
+        ? meGivenName
+        : (stored.isNotEmpty
+            ? stored
+            : tvOwnerGivenName(context.read<HomeController>().name));
     final name = ownerLabel.isNotEmpty
         ? ownerLabel
         : context.tr('tv_market_user');

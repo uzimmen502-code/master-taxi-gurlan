@@ -11,6 +11,12 @@ Foydalanuvchi topshirig‘i: **zarur bo‘lganda** `git commit`, `git push` va F
 - Oddiy UI/fix → kod + CF/hosting deploy yetarli; AAB/Play — foydalanuvchi so‘raganda yoki batch kuni.
 - Play build: `pubspec` bump (`+N`) + `scripts/build_play_release.ps1` → Desktop/releases AAB.
 
+## Qurilmaga APK (2026-08-16)
+- Har o‘zgarishdan keyin **adb install qilma**.
+- Faqat foydalanuvchi aniq tasdiqlaganda (`o‘rnat`, `APK qo‘y`, `telefonga`).
+- Doimiy commit/push/deploy roziligi APK o‘rnatishni o‘z ichiga olmaydi.
+- Build ham so‘ralmasa shart emas; o‘rnatish = release APK only (`mem:task_completion`, `.cursor/rules/android-release-only.mdc`).
+
 ## Cheklovlar
 - Force push / hard reset — yo‘q (ayniqsa main).
 - Secrets, `.env`, `service-account.json` — commit qilma.

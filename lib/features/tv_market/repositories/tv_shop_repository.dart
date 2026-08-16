@@ -63,7 +63,7 @@ class TvShopRepository {
     return TvShopItem.fromFirestore(snap);
   }
 
-  /// Фаол витрина: расм + нарх + видео мажбурий (клиентда фильтр).
+  /// Фаол витрина: расм + видео мажбурий; нарх ихтиёрий (клиентда фильтр).
   Future<List<TvShopItem>> fetchVitrine({
     String districtId = '',
     int limit = 80,

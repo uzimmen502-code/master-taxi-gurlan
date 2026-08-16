@@ -7,11 +7,12 @@ Five layers, flat Firestore + IDs — not nested subcollections (feed needs top-
 - `users/{uid}` 🔒 private account (wallet, address, role)
 - `tv_public_profiles/{uid}` 👤 public face (name; photo later). App-wide display, not `users` reads
 - `tv_shops/{uid}` 🏪 one shop per user
-- `tv_shop_items/{id}` 🛍️ Offer (commerce source of truth: title/price/`photoUrl`+`photoUrls` 1–5/kind). Domain name Offer; keep collection id
+- `tv_shop_items/{id}` 🛍️ Offer (commerce source of truth: title/optional price/`photoUrl`+`photoUrls` 1–5/kind). Domain name Offer; keep collection id
 - `tv_clips/{id}` 🎥 video; `shopItemId` optional (clip-only posts allowed). Feed denorms title/price/ownerName/district
 Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store / ads). Owner edit/delete on overlay, home card, own clip grid; edit syncs offer if `shopItemId` set; delete unlinks `clipIds`.
 
 ## Files
+- `lib/features/tv_market/models/tv_shop.dart` — offer `photoUrls` 1–5, `photoUrl` cover; price 0 = optional/hidden (vitrine does not require price)
 - `lib/features/tv_market/models/tv_clip.dart` — status `pending|active|blocked`; price 0 = optional/hidden; `shopItemId`, `socialConsent`, `socialPostedAt`, `searchTokens`; `tvOwnerDisplayName` (full profile name; @nick/phone/«Фойдаланувчи» → empty); `tvOwnerGivenName` = first word for search tokens only
 - `lib/features/tv_market/utils/tv_clip_search.dart` — CatalogSearch wrapper: title/desc/district/owner/category 3-lang (uz_Cyrl/uz_Latn/ru) + score; `buildTokens` (both scripts, category, district, title prefixes)
 - `lib/features/tv_market/repositories/tv_public_profiles_repository.dart` — `tv_public_profiles/{phone}` + shop-name hydrate

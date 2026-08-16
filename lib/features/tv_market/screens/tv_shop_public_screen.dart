@@ -201,15 +201,17 @@ class _ShopItemCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    formatMoney(item.price),
-                    style: const TextStyle(
-                      color: Color(0xFF00A853),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                  if (item.hasPrice) ...[
+                    Text(
+                      formatMoney(item.price),
+                      style: const TextStyle(
+                        color: Color(0xFF00A853),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
+                    const SizedBox(height: 4),
+                  ],
                   Text(
                     item.districtLabel,
                     style: TextStyle(

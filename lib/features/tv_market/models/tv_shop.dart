@@ -120,11 +120,12 @@ class TvShopItem {
 
   bool get isActive => status == 'active';
   bool get hasVideo => clipIds.isNotEmpty;
+  bool get hasPrice => price > 0;
   bool get isBoosted =>
       boostUntil != null && boostUntil!.isAfter(DateTime.now());
   bool get socialPosted => socialPostedAt != null;
   bool get isVitrineReady =>
-      isActive && coverPhotoUrl.isNotEmpty && price > 0 && hasVideo;
+      isActive && coverPhotoUrl.isNotEmpty && hasVideo;
 
   factory TvShopItem.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,

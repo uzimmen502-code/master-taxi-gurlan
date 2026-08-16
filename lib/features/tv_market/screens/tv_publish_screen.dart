@@ -361,12 +361,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       );
       return;
     }
-    if (shopMode && (int.tryParse(_priceCtrl.text.trim()) ?? 0) <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('tv_shop_price_required'))),
-      );
-      return;
-    }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -671,9 +665,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 keyboardType: TextInputType.number,
                 enabled: _isEdit || _attachItemId.isEmpty,
                 decoration: InputDecoration(
-                  labelText: (_openShop || _attachItemId.isNotEmpty)
-                      ? context.tr('tv_publish_price_required')
-                      : context.tr('tv_publish_price'),
+                  labelText: context.tr('tv_publish_price'),
                   suffixText: 'сўм',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),

@@ -53,4 +53,23 @@ void main() {
     expect(item.coverPhotoUrl, 'cover.jpg');
     expect(item.displayPhotos, ['cover.jpg', 'two.jpg']);
   });
+
+  test('нархсиз витринага чиқади', () {
+    const item = TvShopItem(
+      id: 'i2',
+      ownerPhone: '998901111111',
+      ownerName: 'Ali',
+      title: 't',
+      price: 0,
+      photoUrl: 'cover.jpg',
+      photoUrls: ['cover.jpg'],
+      kind: 'product',
+      districtId: 'd',
+      districtLabel: 'D',
+      clipIds: ['c1'],
+      status: 'active',
+    );
+    expect(item.hasPrice, isFalse);
+    expect(item.isVitrineReady, isTrue);
+  });
 }

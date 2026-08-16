@@ -177,7 +177,9 @@ class _TvMyShopScreenState extends State<TvMyShopScreen> {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: Text(
-                          '${formatMoney(item.price)} · ${item.clipIds.length}',
+                          item.hasPrice
+                              ? '${formatMoney(item.price)} · ${item.clipIds.length}'
+                              : '${item.clipIds.length}',
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         trailing: IconButton(

@@ -381,6 +381,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final districtLabel = ServiceConfigHolder.districtLabel;
 
       final ownerName = await resolveLocalTvOwnerGivenName(phone: phone);
+      final ownerDisplay = tvOwnerDisplayName(ownerName);
 
       final settingsSnap = await FirebaseFirestore.instance
           .collection('settings')
@@ -444,7 +445,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
       final shopMode = _openShop || _attachItemId.isNotEmpty;
       if (!mounted) return;
-      final ownerDisplay = ownerName;
 
       if (shopMode) {
         if (mounted) {

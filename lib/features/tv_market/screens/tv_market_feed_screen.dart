@@ -52,6 +52,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   int _activateGen = 0;
   String _mePhone = '';
   String _meDisplayName = '';
+  final _publicNames = <String, String>{};
   String _filterDistrictId = '';
   List<GeoDistrict> _districts = const [];
   final _likedIds = <String>{};
@@ -263,22 +264,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
   Future<void> _hydratePublisherNames() async {
-    final updated = await applyPublicPublisherNames(_clips);
+    final hydrated = await hydrateTvPublisherNames(_clips);
     if (!mounted) return;
-    var changed = false;
-    if (updated.length == _clips.length) {
-      for (var i = 0; i < updated.length; i++) {
-        if (updated[i].ownerName != _clips[i].ownerName) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (!changed) return;
     setState(() {
+      _publicNames
+        ..clear()
+        ..addAll(hydrated.publicNames);
       _clips
         ..clear()
-        ..addAll(updated);
+        ..addAll(hydrated.clips);
     });
   }
 
@@ -287,6 +281,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       clip: clip,
       viewerPhone: _mePhone,
       viewerDisplayName: _meDisplayName,
+      publicNames: _publicNames,
     );
   }
 

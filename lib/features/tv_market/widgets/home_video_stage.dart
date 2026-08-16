@@ -51,6 +51,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   bool _pickScheduled = false;
   int _playGen = 0;
   String _meDisplayName = '';
+  final _publicNames = <String, String>{};
 
   @override
   void initState() {
@@ -262,19 +263,14 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   }
 
   Future<void> _hydratePublisherNames() async {
-    final updated = await applyPublicPublisherNames(_clips);
+    final hydrated = await hydrateTvPublisherNames(_clips);
     if (!mounted) return;
-    var changed = false;
-    if (updated.length == _clips.length) {
-      for (var i = 0; i < updated.length; i++) {
-        if (updated[i].ownerName != _clips[i].ownerName) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    if (!changed) return;
-    setState(() => _clips = updated);
+    setState(() {
+      _publicNames
+        ..clear()
+        ..addAll(hydrated.publicNames);
+      _clips = hydrated.clips;
+    });
   }
 
   String _overlayName(TvClip clip) {
@@ -282,6 +278,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       clip: clip,
       viewerPhone: context.read<HomeController>().phone,
       viewerDisplayName: _meDisplayName,
+      publicNames: _publicNames,
     );
   }
 

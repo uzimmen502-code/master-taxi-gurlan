@@ -27,23 +27,43 @@ String tvPublisherOverlayName({
   return '';
 }
 
-/// `ownerName` бўш/@nick/fallback бўлган клипларга оммавий исм қўяди.
+/// `ownerName` бўш/@nick/телефон бўлган клипларга оммавий исм қўяди.
 Future<List<TvClip>> applyPublicPublisherNames(List<TvClip> clips) async {
-  final need = clips
-      .where((c) => tvOwnerDisplayName(c.ownerName).isEmpty)
-      .map((c) => c.ownerPhone);
-  if (need.isEmpty) return clips;
-  final names = await TvPublicProfilesRepository().fetchMany(need);
-  if (names.isEmpty) return clips;
-  return [
-    for (final c in clips)
-      if (tvOwnerDisplayName(c.ownerName).isNotEmpty)
-        c
-      else
-        c.copyWith(
-          ownerName: names[canonicalPhoneId(c.ownerPhone)] ?? c.ownerName,
-        ),
-  ];
+  final hydrated = await hydrateTvPublisherNames(clips);
+  return hydrated.clips;
+}
+
+class TvPublisherHydrate {
+  const TvPublisherHydrate({
+    required this.clips,
+    required this.publicNames,
+  });
+  final List<TvClip> clips;
+  final Map<String, String> publicNames;
+}
+
+/// Барча жойлаштирувчилар учун `tv_public_profiles` / дўкон номи.
+Future<TvPublisherHydrate> hydrateTvPublisherNames(List<TvClip> clips) async {
+  if (clips.isEmpty) {
+    return const TvPublisherHydrate(clips: [], publicNames: {});
+  }
+  final names =
+      await TvPublicProfilesRepository().fetchMany(clips.map((c) => c.ownerPhone));
+  if (names.isEmpty) {
+    return TvPublisherHydrate(clips: clips, publicNames: names);
+  }
+  return TvPublisherHydrate(
+    publicNames: names,
+    clips: [
+      for (final c in clips)
+        if (tvOwnerDisplayName(c.ownerName).isNotEmpty)
+          c
+        else
+          c.copyWith(
+            ownerName: names[canonicalPhoneId(c.ownerPhone)] ?? c.ownerName,
+          ),
+    ],
+  );
 }
 
 /// Жойлаштирувчи исми: prefs → Firestore `users.name` → Auth.

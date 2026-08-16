@@ -75,7 +75,31 @@ void main() {
       );
     });
 
-    test('оммавий профилдан жойлаштирувчи', () {
+    test('телефон ownerName + оммавий профил', () {
+      expect(
+        tvPublisherOverlayName(
+          clip: clip(ownerName: '+998901111111', ownerPhone: '+998901111111'),
+          viewerPhone: '998902222222',
+          viewerDisplayName: 'Томошабин',
+          publicNames: {'998901111111': 'Alisher'},
+        ),
+        'Alisher',
+      );
+    });
+
+    test('бўш ownerName + оммавий профил', () {
+      expect(
+        tvPublisherOverlayName(
+          clip: clip(ownerName: '', ownerPhone: '998901111111'),
+          viewerPhone: '998902222222',
+          viewerDisplayName: 'Томошабин',
+          publicNames: {'998901111111': 'Нилуфар'},
+        ),
+        'Нилуфар',
+      );
+    });
+
+    test('Фойдаланувчи + оммавий профил', () {
       expect(
         tvPublisherOverlayName(
           clip: clip(ownerName: 'Фойдаланувчи', ownerPhone: '998901111111'),

@@ -138,7 +138,8 @@ class _InfoColumn extends StatelessWidget {
   final String? ownerLabel;
 
   String get _name {
-    if (ownerLabel != null) return tvOwnerDisplayName(ownerLabel!);
+    final labeled = ownerLabel == null ? '' : tvOwnerDisplayName(ownerLabel!);
+    if (labeled.isNotEmpty) return labeled;
     return tvOwnerDisplayName(clip.ownerName);
   }
 

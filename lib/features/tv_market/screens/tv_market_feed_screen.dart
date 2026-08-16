@@ -51,7 +51,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Timer? _hideBadgeTimer;
   int _activateGen = 0;
   String _mePhone = '';
-  String _meGivenName = '';
+  String _meDisplayName = '';
   String _filterDistrictId = '';
   List<GeoDistrict> _districts = const [];
   final _likedIds = <String>{};
@@ -75,13 +75,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (!mounted) return;
     setState(() {
       _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
-      _meGivenName = tvOwnerGivenName(prefs.getString('user_name') ?? '');
     });
-    if (_meGivenName.isEmpty) {
-      final resolved = await resolveLocalTvOwnerGivenName(phone: _mePhone);
-      if (mounted && resolved.isNotEmpty) {
-        setState(() => _meGivenName = resolved);
-      }
+    final resolved = await resolveLocalTvOwnerGivenName(phone: _mePhone);
+    if (mounted && resolved.isNotEmpty) {
+      setState(() => _meDisplayName = resolved);
     }
     await _refreshSocialState();
   }
@@ -167,6 +164,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       });
       if (_clips.isNotEmpty) unawaited(_activate(0));
       unawaited(_refreshSocialState());
+      unawaited(_hydratePublisherNames());
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
       if (mounted) setState(() => _loading = false);
@@ -264,24 +262,45 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
-  String _overlayName(BuildContext context, TvClip clip) {
-    if (_isOwner(clip) && _meGivenName.isNotEmpty) return _meGivenName;
-    final stored = clip.displayOwnerName('');
-    if (stored.isNotEmpty) return stored;
-    return context.tr('tv_market_user');
+  Future<void> _hydratePublisherNames() async {
+    final updated = await applyPublicPublisherNames(_clips);
+    if (!mounted) return;
+    var changed = false;
+    if (updated.length == _clips.length) {
+      for (var i = 0; i < updated.length; i++) {
+        if (updated[i].ownerName != _clips[i].ownerName) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) return;
+    setState(() {
+      _clips
+        ..clear()
+        ..addAll(updated);
+    });
+  }
+
+  String _overlayName(TvClip clip) {
+    return tvPublisherOverlayName(
+      clip: clip,
+      viewerPhone: _mePhone,
+      viewerDisplayName: _meDisplayName,
+    );
   }
 
   Future<void> _maybePatchOwnerName(TvClip clip) async {
-    if (!_isOwner(clip) || _meGivenName.isEmpty) return;
-    final stored = clip.displayOwnerName('');
-    if (stored == _meGivenName) return;
+    if (!_isOwner(clip) || _meDisplayName.isEmpty) return;
+    final stored = tvOwnerDisplayName(clip.ownerName);
+    if (stored == _meDisplayName) return;
     try {
-      await _repo.patchOwnerName(clipId: clip.id, ownerName: _meGivenName);
+      await _repo.patchOwnerName(clipId: clip.id, ownerName: _meDisplayName);
       if (!mounted) return;
       final i = _clips.indexWhere((c) => c.id == clip.id);
       if (i >= 0) {
         setState(() {
-          _clips[i] = _clips[i].copyWith(ownerName: _meGivenName);
+          _clips[i] = _clips[i].copyWith(ownerName: _meDisplayName);
         });
       }
     } catch (e) {
@@ -505,7 +524,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     } else {
       screen = TvOwnerClipsScreen(
         ownerPhone: clip.ownerPhone,
-        ownerName: _overlayName(context, clip),
+        ownerName: _overlayName(clip),
       );
     }
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -684,7 +703,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         TvClipOverlay(
                           clip: clip,
                           isOwner: _isOwner(clip),
-                          ownerLabel: _overlayName(context, clip),
+                          ownerLabel: _overlayName(clip),
                           liked: _likedIds.contains(clip.id),
                           saved: _savedIds.contains(clip.id),
                           onContact: () => _onContact(clip),

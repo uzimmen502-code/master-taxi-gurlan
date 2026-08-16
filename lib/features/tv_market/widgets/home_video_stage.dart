@@ -48,7 +48,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   ScrollPosition? _scrollPos;
   bool _pickScheduled = false;
   int _playGen = 0;
-  String _meGivenName = '';
+  String _meDisplayName = '';
 
   @override
   void initState() {
@@ -61,7 +61,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   Future<void> _loadMeName() async {
     final resolved = await resolveLocalTvOwnerGivenName();
     if (!mounted || resolved.isEmpty) return;
-    setState(() => _meGivenName = resolved);
+    setState(() => _meDisplayName = resolved);
   }
 
   @override
@@ -100,6 +100,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
           if (mounted) _pickActive();
         });
       }
+      unawaited(_hydratePublisherNames());
     } catch (e) {
       debugPrint('[HomeVideoStage] $e');
       if (mounted) setState(() => _loading = false);
@@ -223,6 +224,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
         if (fresh.isEmpty) continue;
         _cardKeys.addAll(List.generate(fresh.length, (_) => GlobalKey()));
         _clips = [..._clips, ...fresh];
+        unawaited(_hydratePublisherNames());
         break;
       }
     } catch (e) {
@@ -255,6 +257,30 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   bool _isOwner(TvClip clip) {
     final me = context.read<HomeController>().phone;
     return phonesMatch(clip.ownerPhone, me);
+  }
+
+  Future<void> _hydratePublisherNames() async {
+    final updated = await applyPublicPublisherNames(_clips);
+    if (!mounted) return;
+    var changed = false;
+    if (updated.length == _clips.length) {
+      for (var i = 0; i < updated.length; i++) {
+        if (updated[i].ownerName != _clips[i].ownerName) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) return;
+    setState(() => _clips = updated);
+  }
+
+  String _overlayName(TvClip clip) {
+    return tvPublisherOverlayName(
+      clip: clip,
+      viewerPhone: context.read<HomeController>().phone,
+      viewerDisplayName: _meDisplayName,
+    );
   }
 
   Future<void> _onDelete(TvClip clip) async {
@@ -322,7 +348,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
               playing: i == _activeIndex,
               controller: _pool[_clips[i].videoUrl],
               isOwner: _isOwner(_clips[i]),
-              meGivenName: _meGivenName,
+              ownerLabel: _overlayName(_clips[i]),
               onOpen: () => _openFeed(_clips[i]),
               onContact: () => _onContact(_clips[i]),
               onDelete: () => _onDelete(_clips[i]),
@@ -354,7 +380,7 @@ class _HomeClipCard extends StatelessWidget {
     required this.onContact,
     required this.onDelete,
     this.isOwner = false,
-    this.meGivenName = '',
+    this.ownerLabel = '',
   });
 
   final TvClip clip;
@@ -365,22 +391,14 @@ class _HomeClipCard extends StatelessWidget {
   final VoidCallback onContact;
   final VoidCallback onDelete;
   final bool isOwner;
-  final String meGivenName;
+  final String ownerLabel;
 
   @override
   Widget build(BuildContext context) {
     final ready = playing &&
         controller != null &&
         controller!.value.isInitialized;
-    final stored = clip.displayOwnerName('');
-    final ownerLabel = (isOwner && meGivenName.isNotEmpty)
-        ? meGivenName
-        : (stored.isNotEmpty
-            ? stored
-            : tvOwnerGivenName(context.read<HomeController>().name));
-    final name = ownerLabel.isNotEmpty
-        ? ownerLabel
-        : context.tr('tv_market_user');
+    final name = tvOwnerDisplayName(ownerLabel);
     return GestureDetector(
       onTap: onOpen,
       child: Container(
@@ -447,25 +465,27 @@ class _HomeClipCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            shadows: [
-                              Shadow(blurRadius: 4, color: Colors.black54)
-                            ],
+                  if (name.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              shadows: [
+                                Shadow(blurRadius: 4, color: Colors.black54)
+                              ],
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   Text(
                     clip.title,
                     maxLines: 1,

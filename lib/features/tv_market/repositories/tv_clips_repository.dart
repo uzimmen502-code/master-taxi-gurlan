@@ -273,8 +273,9 @@ class TvClipsRepository {
     required String clipId,
     required String ownerName,
   }) async {
-    if (clipId.isEmpty || ownerName.trim().isEmpty) return;
-    await _col.doc(clipId).update({'ownerName': ownerName.trim()});
+    final name = tvOwnerDisplayName(ownerName);
+    if (clipId.isEmpty || name.isEmpty) return;
+    await _col.doc(clipId).update({'ownerName': name});
   }
 
   Future<bool> isLiked({

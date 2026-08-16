@@ -28,6 +28,7 @@ import '../../../services/location_service.dart';
 import '../../../services/profile_photo_storage.dart';
 import '../../../services/user_role_sync.dart';
 import '../../relatives/services/tree_service.dart';
+import '../../tv_market/services/tv_owner_name.dart';
 
 /// ProfileScreen uchun butun holatni boshqaradigan ChangeNotifier.
 ///
@@ -247,6 +248,7 @@ class ProfileController extends ChangeNotifier {
         name = fromFs;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_name', fromFs);
+        unawaited(syncTvPublisherPublicName(fromFs, phone: phone));
       }
       notifyListeners();
     } catch (_) {
@@ -518,6 +520,7 @@ class ProfileController extends ChangeNotifier {
     }
 
     await prefs.setString('user_name', newName.trim());
+    unawaited(syncTvPublisherPublicName(newName.trim(), phone: phone));
     if (!phoneChanged) {
       await prefs.setString('user_phone', requestedPhone);
     }

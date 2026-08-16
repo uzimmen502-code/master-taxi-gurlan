@@ -2241,6 +2241,19 @@ service cloud.firestore {
       }
     }
 
+    // TV жойлаштирувчи исми — `users` оммавий эмас; роликдаги исм бўш бўлса шу ердан.
+    match /tv_public_profiles/{ownerPhone} {
+      allow read: if true;
+      allow create, update: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 80;
+      allow delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));
+    }
+
     match /tv_shops/{ownerPhone} {
       allow read: if true;
       allow create: if isAuth()

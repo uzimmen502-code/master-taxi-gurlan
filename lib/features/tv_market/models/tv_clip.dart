@@ -1,21 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Профил исмидан биринчи сўз. Телефон / бўш / @nick / UI fallback — бўш.
-String tvOwnerGivenName(String raw) {
-  var s = raw.trim();
-  if (s.startsWith('@')) return '';
-  if (s.isEmpty) return '';
+/// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
+String tvOwnerDisplayName(String raw) {
+  final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (s.isEmpty || s.startsWith('@')) return '';
   final compact = s.replaceAll(RegExp(r'[\s+\-()]'), '');
   if (RegExp(r'^\d{7,}$').hasMatch(compact)) return '';
-  final first = s.split(RegExp(r'\s+')).first;
   const fake = {
     'фойдаланувчи',
     'foydalanuvchi',
     'пользователь',
     'user',
   };
-  if (fake.contains(first.toLowerCase())) return '';
-  return first;
+  if (fake.contains(s.toLowerCase())) return '';
+  final first = s.split(' ').first.toLowerCase();
+  if (fake.contains(first)) return '';
+  return s;
+}
+
+/// Қидирув токени учун биринчи сўз.
+String tvOwnerGivenName(String raw) {
+  final d = tvOwnerDisplayName(raw);
+  if (d.isEmpty) return '';
+  return d.split(' ').first;
 }
 
 class TvClip {
@@ -82,8 +89,8 @@ class TvClip {
   bool get socialPosted => socialPostedAt != null;
 
   String displayOwnerName(String fallback) {
-    final g = tvOwnerGivenName(ownerName);
-    return g.isEmpty ? fallback : g;
+    final n = tvOwnerDisplayName(ownerName);
+    return n.isEmpty ? fallback : n;
   }
 
   TvClip copyWith({

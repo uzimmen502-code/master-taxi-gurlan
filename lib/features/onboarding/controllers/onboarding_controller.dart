@@ -15,6 +15,7 @@ import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
 import '../../../services/location_service.dart';
+import '../../tv_market/services/tv_owner_name.dart';
 
 /// Onboarding wizard uchun ChangeNotifier.
 class OnboardingController extends ChangeNotifier {
@@ -599,6 +600,7 @@ class OnboardingController extends ChangeNotifier {
     await prefs.setString('userId', uid);
     await prefs.setString('userName', name.trim());
     await prefs.setString('user_name', name.trim());
+    unawaited(syncTvPublisherPublicName(name.trim(), phone: uid));
     await prefs.setString('user_phone', canonicalPhoneId(phone.trim()));
     await prefs.setString('user_gender', gender);
     if (birthDate.isNotEmpty) {

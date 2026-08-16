@@ -140,26 +140,31 @@ class _InfoColumn extends StatelessWidget {
   final TvClip clip;
   final String? ownerLabel;
 
+  String get _name {
+    if (ownerLabel != null) return tvOwnerDisplayName(ownerLabel!);
+    return tvOwnerDisplayName(clip.ownerName);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final name = (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
-        ? ownerLabel!.trim()
-        : clip.displayOwnerName(context.tr('tv_market_user'));
+    final name = _name;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          name,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+        if (name.isNotEmpty) ...[
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         Text(
           clip.title,
           maxLines: 2,
@@ -268,9 +273,11 @@ class _ActionButtons extends StatelessWidget {
             backgroundColor: Colors.white24,
             child: Text(
               _initial(
-                (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
-                    ? ownerLabel!.trim()
-                    : clip.displayOwnerName(context.tr('tv_market_user')),
+                tvOwnerDisplayName(
+                  (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
+                      ? ownerLabel!
+                      : clip.ownerName,
+                ),
               ),
               style: const TextStyle(
                 color: Colors.white,

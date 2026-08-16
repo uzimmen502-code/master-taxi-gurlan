@@ -96,7 +96,7 @@ class TvClipOverlay extends StatelessWidget {
             liked: liked,
             saved: saved,
             ownerLabel: ownerLabel,
-            showShop: onOpenShop != null && !isOwner,
+            showShop: onOpenShop != null,
             onLike: onLike,
             onShare: onShare,
             onProfile: onProfile,

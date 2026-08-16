@@ -60,6 +60,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _likeBusy = <String>{};
   final _saveBusy = <String>{};
   final _shopRepo = TvShopRepository();
+  bool _hasMyShop = false;
 
   @override
   void initState() {
@@ -77,6 +78,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     setState(() {
       _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
     });
+    try {
+      final hasShop = await _shopRepo.hasShop(_mePhone);
+      if (mounted && hasShop != _hasMyShop) {
+        setState(() => _hasMyShop = hasShop);
+      }
+    } catch (e) {
+      debugPrint('[TvMarketFeed] shop flag $e');
+    }
     final resolved = await resolveLocalTvOwnerGivenName(phone: _mePhone);
     if (mounted && resolved.isNotEmpty) {
       setState(() => _meDisplayName = resolved);
@@ -262,6 +271,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
+
+  bool _showShopBtn(TvClip clip) {
+    if (_isOwner(clip)) return _hasMyShop || clip.hasShopItem;
+    return clip.hasShopItem;
+  }
 
   Future<void> _hydratePublisherNames() async {
     final hydrated = await hydrateTvPublisherNames(_clips);
@@ -546,15 +560,26 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   Future<void> _onOpenShop(TvClip clip) async {
     tvOnPlaybackBlocked();
+    final owner = _isOwner(clip);
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TvShopPublicScreen(
-          ownerPhone: clip.ownerPhone,
-          highlightItemId: clip.shopItemId,
-        ),
+        builder: (_) => owner
+            ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
+            : TvShopPublicScreen(
+                ownerPhone: clip.ownerPhone,
+                highlightItemId: clip.shopItemId,
+              ),
       ),
     );
+    if (owner && mounted) {
+      try {
+        final ok = await _shopRepo.hasShop(_mePhone);
+        if (mounted && ok != _hasMyShop) {
+          setState(() => _hasMyShop = ok);
+        }
+      } catch (_) {}
+    }
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
   }
 
@@ -726,7 +751,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onShare: () => _onShare(clip),
                           onSave: () => _onSave(clip),
                           onProfile: () => _onProfile(clip),
-                          onOpenShop: clip.hasShopItem
+                          onOpenShop: _showShopBtn(clip)
                               ? () => _onOpenShop(clip)
                               : null,
                         ),

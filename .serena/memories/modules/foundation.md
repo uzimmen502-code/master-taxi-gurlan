@@ -24,7 +24,7 @@ Schema: `mem:firestore_schema`. CFs: `mem:cloud_functions`.
 ## Cold-start (`lib/main.dart`)
 - Blocking before `runApp`: Firebase + Firestore settings, SharedPreferences routing flags, `ServiceConfigHolder.loadCacheOnly()`, `SplashTaglinesHolder.prepareSessionSync()`.
 - Parallel unawaited: splash network `load()`, `PassengerCancelRulesHolder.load()`, daily report.
-- `AppLaunchSplash` ~3.0s (900+1600+500ms); composition: top `BrandTitleColumn` (AVA+district), center logo spiral/pulse/exit, bottom rotating `SplashTaglinesHolder.sessionWords`. `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init. Home refreshes `ServiceConfigHolder.bootstrap()` post-frame.
+- `AppLaunchSplash` ~1.8s (3×0.5s slam + 280ms exit); top `BrandTitleColumn` (AVA+district), center logo grows from a point and hits screen width 3 times (0.5s apart); no bottom taglines. `onFinished` → `_deferredMobileBootstrap`: UserRoleSync, NotificationDelivery → NotificationService → FCM init/listeners → BackgroundGpsService.init. Home refreshes `ServiceConfigHolder.bootstrap()` post-frame.
 - Brand hierarchy: display `AVA` + short district context (`BrandLabels` / `ServiceConfigHolder.districtLabel`); package/applicationId stay `ava_gurlan` / `uz.ava.gurlan`. Never `AVA Zona`.
 
 ## Core services (`lib/services/`)

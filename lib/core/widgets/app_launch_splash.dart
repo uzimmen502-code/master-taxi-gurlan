@@ -1,14 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../brand_labels.dart';
-import '../splash_taglines_holder.dart';
 
-/// Qora fon: spiral → pulsatsiya → chiqish (~3.0 s) → UI fade-in.
+/// Қора фон: лого нуқтадан ўсиб 3 марта экранга урилади, сўнг UI.
 ///
-/// Kompozitsiya: yuqori brand (AVA) · markaz logo · past ayluvchi tagline.
+/// Юқори: AVA + туман. Паст сўзлар йўқ. ~1.8 с.
 class AppLaunchSplash extends StatefulWidget {
   const AppLaunchSplash({
     super.key,
@@ -21,15 +18,15 @@ class AppLaunchSplash extends StatefulWidget {
   /// Splash overlay yopilganda (bir marta) — FCM/notification shu paytda.
   final VoidCallback? onFinished;
 
-  static const Duration spiralDuration = Duration(milliseconds: 900);
-  static const Duration pulseDuration = Duration(milliseconds: 1600);
-  static const Duration exitDuration = Duration(milliseconds: 500);
+  /// Урилишлар ораси.
+  static const Duration hitInterval = Duration(milliseconds: 500);
+  static const int hitCount = 3;
+  static const Duration exitDuration = Duration(milliseconds: 280);
 
-  // Too many turns in a short window looks like stutter on 60 Hz.
-  static const int spiralTurns = 3;
-
-  static Duration get totalDuration =>
-      spiralDuration + pulseDuration + exitDuration;
+  static Duration get totalDuration => Duration(
+        milliseconds: hitInterval.inMilliseconds * hitCount +
+            exitDuration.inMilliseconds,
+      );
 
   @override
   State<AppLaunchSplash> createState() => _AppLaunchSplashState();
@@ -39,13 +36,10 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  static const List<double> _pulseStart = [1.0, 1.10];
-  static const List<double> _pulsePeak = [1.30, 1.45];
-  static const List<double> _pulseEnd = [1.10, 1.25];
-
-  static const double _thirdGrowthStart = 1.25;
-  static const double _exitScaleEnd = 5.60;
-  static const Color _taglineColor = Color(0xFF4CD964);
+  static const double _startScale = 0.04;
+  static const double _restScale = 1.0;
+  /// ~экран кенглигига урилиш (лого ~0.52 * width).
+  static const double _slamScale = 2.05;
   static const AssetImage _logoAsset =
       AssetImage('assets/images/splash_logo.png');
 
@@ -54,17 +48,9 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
   bool _warmingLogo = false;
   ImageProvider<Object> _logoImage = _logoAsset;
 
-  late final double _spiralFraction;
-  late final double _pulseFraction;
-
   @override
   void initState() {
     super.initState();
-
-    final totalMs = AppLaunchSplash.totalDuration.inMilliseconds.toDouble();
-    _spiralFraction = AppLaunchSplash.spiralDuration.inMilliseconds / totalMs;
-    _pulseFraction = AppLaunchSplash.pulseDuration.inMilliseconds / totalMs;
-
     _controller = AnimationController(
       vsync: this,
       duration: AppLaunchSplash.totalDuration,
@@ -111,138 +97,52 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
     super.dispose();
   }
 
-  double _pulseScale(double t) {
-    final segment = math.min((t * 3).floor(), 2);
-    final localT = (t * 3) - segment;
-
-    // The third breath and exit use one curve, so there is no pause at 1.60.
-    if (segment == 2) {
-      return _thirdGrowthScale(localT * _thirdGrowthPulseFraction);
+  double _hitScale(int index, double local) {
+    final from = index == 0 ? _startScale : _restScale;
+    const slamAt = 0.58;
+    if (local < slamAt) {
+      final p = Curves.easeInCubic.transform(local / slamAt);
+      return from + (_slamScale - from) * p;
     }
-
-    if (localT < 0.55) {
-      final p = Curves.easeInOutSine.transform(localT / 0.55);
-      return _pulseStart[segment] +
-          (_pulsePeak[segment] - _pulseStart[segment]) * p;
-    }
-    final p = Curves.easeInOutSine.transform((localT - 0.55) / 0.45);
-    return _pulsePeak[segment] + (_pulseEnd[segment] - _pulsePeak[segment]) * p;
-  }
-
-  double get _thirdGrowthPulseFraction {
-    final thirdPulseMs = AppLaunchSplash.pulseDuration.inMilliseconds / 3;
-    return thirdPulseMs /
-        (thirdPulseMs + AppLaunchSplash.exitDuration.inMilliseconds);
-  }
-
-  double _thirdGrowthScale(double progress) {
-    final eased = Curves.easeInCubic.transform(
-      progress.clamp(0.0, 1.0).toDouble(),
-    );
-    return _thirdGrowthStart + (_exitScaleEnd - _thirdGrowthStart) * eased;
-  }
-
-  /// Pulse davomida session tagline'larini navbat bilan aylantiradi.
-  ({String? text, double opacity}) _taglineForPulse(double pulseLocal) {
-    final words = SplashTaglinesHolder.sessionWords;
-    if (!SplashTaglinesHolder.enabled || words.isEmpty) {
-      return (text: null, opacity: 0);
-    }
-    final count = words.length;
-    final segment = math.min((pulseLocal * count).floor(), count - 1);
-    final localT = (pulseLocal * count) - segment;
-    double opacity;
-    if (localT < 0.18) {
-      opacity = Curves.easeOut.transform(localT / 0.18);
-    } else if (localT > 0.82) {
-      opacity = Curves.easeIn.transform((1.0 - localT) / 0.18);
-    } else {
-      opacity = 1;
-    }
-    return (text: words[segment], opacity: opacity.clamp(0.0, 1.0));
-  }
-
-  double _brandOpacityFor(double t) {
-    // Spiral oxirida paydo, pulse davomida to'liq, exitda logo bilan so'nadi.
-    if (t < _spiralFraction * 0.72) return 0;
-    if (t < _spiralFraction) {
-      final local =
-          (t - _spiralFraction * 0.72) / (_spiralFraction * 0.28);
-      return Curves.easeOut.transform(local.clamp(0.0, 1.0));
-    }
-    final pulseEnd = _spiralFraction + _pulseFraction;
-    if (t < pulseEnd) return 1;
-    final local = (t - pulseEnd) / (1 - pulseEnd);
-    if (local < 0.15) return 1;
-    if (local >= 0.60) return 0;
-    return 1 -
-        Curves.easeInOutSine.transform(
-          ((local - 0.15) / 0.45).clamp(0.0, 1.0),
-        );
+    final p = Curves.easeOutCubic.transform((local - slamAt) / (1 - slamAt));
+    return _slamScale + (_restScale - _slamScale) * p;
   }
 
   _SplashFrame _frameFor(double t) {
-    if (t < _spiralFraction) {
-      final local = t / _spiralFraction;
-      final scaleEased = Curves.easeOutCubic.transform(local);
-      final spinEased = Curves.easeInOutSine.transform(local);
-      return _SplashFrame(
-        scale: 0.08 + 0.92 * scaleEased,
-        rotation: AppLaunchSplash.spiralTurns * 2 * math.pi * spinEased,
-        logoOpacity: Curves.easeIn.transform(local.clamp(0, 1)),
-        contentOpacity: 0,
-        backgroundOpacity: 1,
-        brandOpacity: _brandOpacityFor(t),
-      );
-    }
+    final totalMs = AppLaunchSplash.totalDuration.inMilliseconds.toDouble();
+    final ms = t * totalMs;
+    final hitMs =
+        AppLaunchSplash.hitInterval.inMilliseconds * AppLaunchSplash.hitCount;
+    final interval = AppLaunchSplash.hitInterval.inMilliseconds.toDouble();
 
-    final pulseEnd = _spiralFraction + _pulseFraction;
-    if (t < pulseEnd) {
-      final local = (t - _spiralFraction) / _pulseFraction;
-      final tagline = _taglineForPulse(local);
+    if (ms < hitMs) {
+      final i = (ms / interval).floor().clamp(0, AppLaunchSplash.hitCount - 1);
+      final local = ((ms - i * interval) / interval).clamp(0.0, 1.0);
       return _SplashFrame(
-        scale: _pulseScale(local),
-        rotation: 0,
+        scale: _hitScale(i, local),
         logoOpacity: 1,
         contentOpacity: 0,
         backgroundOpacity: 1,
-        brandOpacity: _brandOpacityFor(t),
-        tagline: tagline.text,
-        taglineOpacity: tagline.opacity,
+        brandOpacity: 1,
       );
     }
 
-    final local = (t - pulseEnd) / (1 - pulseEnd);
-    final growthProgress =
-        _thirdGrowthPulseFraction + (1 - _thirdGrowthPulseFraction) * local;
-    final logoFade = local < 0.15
-        ? 1.0
-        : local >= 0.60
-            ? 0.0
-            : 1 -
-                Curves.easeInOutSine.transform(
-                  ((local - 0.15) / 0.45).clamp(0.0, 1.0),
-                );
-    // splash_logo.png has an opaque black background. Finish its fade before
-    // revealing the route below, otherwise its square bounds become visible.
-    final contentOpacity = local < 0.55
+    final local = ((ms - hitMs) /
+            AppLaunchSplash.exitDuration.inMilliseconds)
+        .clamp(0.0, 1.0);
+    final logoFade = local < 0.55
+        ? 1.0 - Curves.easeIn.transform(local / 0.55)
+        : 0.0;
+    final contentOpacity = local < 0.35
         ? 0.0
-        : Curves.easeInOutSine.transform(
-            ((local - 0.55) / 0.45).clamp(0.0, 1.0),
-          );
-    final words = SplashTaglinesHolder.sessionWords;
-    final lastTagline =
-        words.isNotEmpty ? words.last : null;
+        : Curves.easeOut.transform(((local - 0.35) / 0.65).clamp(0.0, 1.0));
 
     return _SplashFrame(
-      scale: _thirdGrowthScale(growthProgress),
-      rotation: 0,
+      scale: _restScale,
       logoOpacity: logoFade,
       contentOpacity: contentOpacity,
       backgroundOpacity: 1 - contentOpacity,
-      brandOpacity: _brandOpacityFor(t),
-      tagline: lastTagline,
-      taglineOpacity: logoFade * (lastTagline == null ? 0 : 1),
+      brandOpacity: logoFade,
     );
   }
 
@@ -267,6 +167,9 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
         ),
         builder: (context, logoChild) {
           final frame = _frameFor(_controller.value);
+          final logoOp = _warmingLogo && frame.logoOpacity < 0.01
+              ? 0.01
+              : frame.logoOpacity;
 
           return Stack(
             fit: StackFit.expand,
@@ -284,7 +187,6 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Yuqori — brand
                         Positioned(
                           top: padding.top + 36,
                           left: 28,
@@ -310,47 +212,13 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
                             ),
                           ),
                         ),
-                        // Markaz — logo
                         Center(
                           child: Opacity(
-                            opacity: math
-                                .max(
-                                  frame.logoOpacity,
-                                  _warmingLogo ? 0.01 : 0.0,
-                                )
-                                .clamp(0.0, 1.0)
-                                .toDouble(),
-                            child: Transform.rotate(
-                              angle: frame.rotation,
-                              child: Transform.scale(
-                                scale: frame.scale,
-                                child: logoChild,
-                              ),
+                            opacity: logoOp.clamp(0.0, 1.0),
+                            child: Transform.scale(
+                              scale: frame.scale,
+                              child: logoChild,
                             ),
-                          ),
-                        ),
-                        // Past — ayluvchi tagline
-                        Positioned(
-                          left: 28,
-                          right: 28,
-                          bottom: padding.bottom + 48,
-                          child: Opacity(
-                            opacity: frame.taglineOpacity.clamp(0, 1),
-                            child: frame.tagline == null
-                                ? const SizedBox.shrink()
-                                : Text(
-                                    frame.tagline!,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: _taglineColor,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.8,
-                                      height: 1.2,
-                                    ),
-                                  ),
                           ),
                         ),
                       ],
@@ -368,21 +236,15 @@ class _AppLaunchSplashState extends State<AppLaunchSplash>
 class _SplashFrame {
   const _SplashFrame({
     required this.scale,
-    required this.rotation,
     required this.logoOpacity,
     required this.contentOpacity,
     required this.backgroundOpacity,
     this.brandOpacity = 0,
-    this.tagline,
-    this.taglineOpacity = 0,
   });
 
   final double scale;
-  final double rotation;
   final double logoOpacity;
   final double contentOpacity;
   final double backgroundOpacity;
   final double brandOpacity;
-  final String? tagline;
-  final double taglineOpacity;
 }

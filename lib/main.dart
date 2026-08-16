@@ -62,7 +62,6 @@ import 'features/ads/repositories/ads_repository.dart';
 import 'features/ads/services/ads_storage_service.dart';
 import 'core/l10n/locale_notifier.dart';
 import 'core/passenger_cancel_rules_holder.dart';
-import 'core/splash_taglines_holder.dart';
 import 'core/service_config_holder.dart';
 import 'core/utils/firestore_crash_guard.dart';
 import 'services/deferred_settlement_queue.dart';
@@ -98,11 +97,8 @@ void main() async {
 
   // Module gating — oxirgi kesh; Firestore refresh Home post-frame'da.
   await ServiceConfigHolder.loadCacheOnly();
-  // Splash tagline'lar darhol ko'rinsin (default/pool).
-  SplashTaglinesHolder.prepareSessionSync();
 
   // —— Stage B: splash/UI bilan parallel (Firestore network) ——
-  unawaited(SplashTaglinesHolder.load());
   unawaited(PassengerCancelRulesHolder.load());
 
   final analyticsRepo = AnalyticsRepository();

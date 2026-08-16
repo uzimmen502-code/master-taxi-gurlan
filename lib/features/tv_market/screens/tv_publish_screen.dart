@@ -16,17 +16,26 @@ import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
+import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
+import '../widgets/tv_clip_poster.dart';
 
 /// TV Market — видео жойлаш экрани.
 class TvPublishScreen extends StatefulWidget {
-  const TvPublishScreen({super.key, this.attachItemId = ''});
+  const TvPublishScreen({
+    super.key,
+    this.attachItemId = '',
+    this.editClip,
+  });
 
   /// Мавжуд товар/хизматга яна ролик қўшиш.
   final String attachItemId;
+
+  /// Берилса — жойлаш эмас, шу роликни таҳрирлаш.
+  final TvClip? editClip;
 
   @override
   State<TvPublishScreen> createState() => _TvPublishScreenState();
@@ -60,10 +69,18 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _attachItemId = widget.attachItemId;
+    final edit = widget.editClip;
+    if (edit != null) {
+      _titleCtrl.text = edit.title;
+      _priceCtrl.text = edit.price > 0 ? '${edit.price}' : '';
+      _descCtrl.text = edit.description;
+      _category = edit.category == 'service' ? 'service' : 'product';
+    }
     unawaited(_loadShop());
   }
 
   Future<void> _loadShop() async {
+    if (_isEdit) return;
     final prefs = await SharedPreferences.getInstance();
     final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     if (phone.isEmpty) return;
@@ -170,7 +187,157 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     setState(() => _productPhoto = file);
   }
 
+  bool get _isEdit => widget.editClip != null;
+
+  Future<({String videoUrl, String posterUrl})> _uploadPickedVideo(
+    String phone,
+  ) async {
+    setState(() {
+      _publishStage = context.tr('tv_publish_compressing');
+      _uploadProgress = 0;
+    });
+    final compressed = await VideoCompress.compressVideo(
+      _videoFile!.path,
+      quality: VideoQuality.MediumQuality,
+      deleteOrigin: false,
+      includeAudio: true,
+    );
+    if (!mounted) {
+      throw StateError('unmounted');
+    }
+    final compressedPath = compressed?.file?.path ?? _videoFile!.path;
+    setState(() => _publishStage = context.tr('tv_publish_thumbnail'));
+    Uint8List? thumbBytes;
+    final thumbFile = await VideoCompress.getFileThumbnail(
+      _videoFile!.path,
+      quality: 75,
+      position: -1,
+    );
+    if (thumbFile.existsSync()) {
+      thumbBytes = await thumbFile.readAsBytes();
+    }
+    setState(() {
+      _publishStage = context.tr('tv_publish_uploading');
+      _uploadProgress = 0;
+    });
+    final videoUrl = await _storageService.uploadVideo(
+      ownerPhone: phone,
+      filePath: compressedPath,
+      onProgress: (p) {
+        if (mounted) setState(() => _uploadProgress = p);
+      },
+    );
+    var posterUrl = '';
+    if (thumbBytes != null && thumbBytes.isNotEmpty) {
+      if (mounted) {
+        setState(() => _publishStage = context.tr('tv_publish_poster'));
+      }
+      posterUrl = await _storageService.uploadPoster(
+        ownerPhone: phone,
+        bytes: thumbBytes,
+      );
+    }
+    return (videoUrl: videoUrl, posterUrl: posterUrl);
+  }
+
+  Future<void> _saveEdit() async {
+    if (!_formKey.currentState!.validate()) return;
+    final clip = widget.editClip!;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Auth required')),
+      );
+      return;
+    }
+
+    setState(() {
+      _publishing = true;
+      _uploadProgress = 0;
+      _publishStage = '';
+    });
+
+    try {
+      final phone = canonicalPhoneId(user.phoneNumber ?? user.uid);
+      var videoUrl = clip.videoUrl;
+      var posterUrl = clip.posterUrl;
+      if (_videoFile != null) {
+        final uploaded = await _uploadPickedVideo(phone);
+        videoUrl = uploaded.videoUrl;
+        if (uploaded.posterUrl.isNotEmpty) posterUrl = uploaded.posterUrl;
+      }
+
+      final title = _titleCtrl.text.trim();
+      final price = int.tryParse(_priceCtrl.text.trim()) ?? 0;
+      final description = _descCtrl.text.trim();
+      final tokens = TvClipSearch.buildTokens(
+        title: title,
+        description: description,
+        districtLabel: clip.districtLabel,
+        category: _category,
+        ownerName: clip.ownerName,
+        mfy: clip.mfy ?? '',
+      );
+      await TvClipsRepository().updateOwnClip(
+        clipId: clip.id,
+        title: title,
+        price: price,
+        description: description,
+        category: _category,
+        searchTokens: tokens,
+        videoUrl: _videoFile != null ? videoUrl : null,
+        posterUrl: _videoFile != null ? posterUrl : null,
+      );
+      if (clip.shopItemId.isNotEmpty) {
+        try {
+          await _shopRepo.updateItem(clip.shopItemId, {
+            'title': title,
+            'price': price,
+            'description': description,
+            'kind': _category,
+          });
+        } catch (e) {
+          debugPrint('[TvPublish] shop item patch $e');
+        }
+      }
+      if (_videoFile != null) {
+        unawaited(TvStorageService().deleteClipFiles(
+          videoUrl: clip.videoUrl,
+          posterUrl: clip.posterUrl,
+        ));
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_saved'))),
+      );
+      Navigator.pop(
+        context,
+        clip.copyWith(
+          title: title,
+          price: price,
+          description: description,
+          category: _category,
+          videoUrl: videoUrl,
+          posterUrl: posterUrl,
+          searchTokens: tokens,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_save_failed'))),
+      );
+      debugPrint('[TvPublish] save $e');
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
+  }
+
   Future<void> _publish() async {
+    if (widget.editClip != null) {
+      await _saveEdit();
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (_videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -392,7 +559,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(context.tr('tv_publish_title')),
+        title: Text(
+          context.tr(_isEdit ? 'tv_publish_edit_title' : 'tv_publish_title'),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0.5,
@@ -445,7 +614,29 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                             ),
                           ],
                         )
-                      : Column(
+                      : _isEdit
+                          ? Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                TvClipPoster(
+                                  url: widget.editClip!.posterUrl,
+                                ),
+                                ColoredBox(
+                                  color: Colors.black26,
+                                  child: Center(
+                                    child: Text(
+                                      context.tr('tv_publish_replace_video'),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.video_call_rounded,
@@ -483,7 +674,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               TextFormField(
                 controller: _priceCtrl,
                 keyboardType: TextInputType.number,
-                enabled: _attachItemId.isEmpty,
+                enabled: _isEdit || _attachItemId.isEmpty,
                 decoration: InputDecoration(
                   labelText: (_openShop || _attachItemId.isNotEmpty)
                       ? context.tr('tv_publish_price_required')
@@ -529,6 +720,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               ),
               const SizedBox(height: 16),
 
+              if (!_isEdit) ...[
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 value: _openShop || _attachItemId.isNotEmpty,
@@ -652,6 +844,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
               ],
+              ],
 
               const SizedBox(height: 10),
 
@@ -671,13 +864,19 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        ServiceConfigHolder.districtLabel.isNotEmpty
-                            ? ServiceConfigHolder.districtLabel
-                            : context.tr('tv_publish_no_location'),
+                        _isEdit
+                            ? (widget.editClip!.districtLabel.isNotEmpty
+                                ? widget.editClip!.districtLabel
+                                : context.tr('tv_publish_no_location'))
+                            : (ServiceConfigHolder.districtLabel.isNotEmpty
+                                ? ServiceConfigHolder.districtLabel
+                                : context.tr('tv_publish_no_location')),
                         style: TextStyle(
                           fontSize: 14,
-                          color: ServiceConfigHolder
-                                  .districtLabel.isNotEmpty
+                          color: (_isEdit
+                                  ? widget.editClip!.districtLabel
+                                  : ServiceConfigHolder.districtLabel)
+                              .isNotEmpty
                               ? Colors.black87
                               : Colors.grey,
                         ),
@@ -686,12 +885,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                context.tr('tv_publish_location_hint'),
-                style: TextStyle(
-                    color: Colors.grey.shade500, fontSize: 12),
-              ),
+              if (!_isEdit) ...[
+                const SizedBox(height: 6),
+                Text(
+                  context.tr('tv_publish_location_hint'),
+                  style: TextStyle(
+                      color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ],
               const SizedBox(height: 24),
 
               // Юклаш прогресси
@@ -734,9 +935,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.publish_rounded),
+                      : Icon(
+                          _isEdit
+                              ? Icons.save_rounded
+                              : Icons.publish_rounded,
+                        ),
                   label: Text(
-                    context.tr('tv_publish_submit'),
+                    context.tr(
+                      _isEdit ? 'tv_publish_save' : 'tv_publish_submit',
+                    ),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,

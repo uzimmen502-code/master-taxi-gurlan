@@ -346,6 +346,24 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  Future<void> _onEdit(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    final updated = await Navigator.push<TvClip>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TvPublishScreen(editClip: clip),
+      ),
+    );
+    if (!mounted) return;
+    if (updated != null) {
+      final i = _clips.indexWhere((c) => c.id == updated.id);
+      if (i >= 0) {
+        setState(() => _clips[i] = updated);
+      }
+    }
+    if (tvCanPlay) tvOnPlaybackAllowed();
+  }
+
   Future<void> _openSearch() async {
     tvOnPlaybackBlocked();
     final clip = await Navigator.push<TvClip>(
@@ -708,6 +726,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           saved: _savedIds.contains(clip.id),
                           onContact: () => _onContact(clip),
                           onDelete: () => _onDelete(clip),
+                          onEdit: () => _onEdit(clip),
                           onLike: () => _onLike(clip),
                           onShare: () => _onShare(clip),
                           onSave: () => _onSave(clip),

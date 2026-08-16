@@ -92,4 +92,13 @@ void main() {
       expect(CatalogSearch.score('нон', title: 'нонвой'), greaterThan(0));
     });
   });
+
+  test('copyWith таҳрир майдонлари', () {
+    final c = _clip(title: 'Эски', description: 'а');
+    final u = c.copyWith(title: 'Янги', price: 5000, description: 'б');
+    expect(u.title, 'Янги');
+    expect(u.price, 5000);
+    expect(u.description, 'б');
+    expect(u.id, c.id);
+  });
 }

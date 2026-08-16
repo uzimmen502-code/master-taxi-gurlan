@@ -1,6 +1,15 @@
 # TV Market (video commerce)
 
-Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Module id `tv_market` in `kKnownModuleIds`. Storage: `tv_clips/{ownerPhone}/{file}`, shop photos `tv_shop/{ownerPhone}/{file}`. Firestore: `tv_clips`, `tv_shops/{ownerPhone}`, `tv_shop_items`. Settings: `settings/app.tvAutoApprove` (true → create `active`, false → `pending`).
+Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Module id `tv_market` in `kKnownModuleIds`. Storage: `tv_clips/{ownerPhone}/{file}`, shop photos `tv_shop/{ownerPhone}/{file}`. Settings: `settings/app.tvAutoApprove` (true → create `active`, false → `pending`).
+
+## Domain (do not rebuild collections)
+Five layers, flat Firestore + IDs — not nested subcollections (feed needs top-level `tv_clips`):
+- `users/{uid}` 🔒 private account (wallet, address, role)
+- `tv_public_profiles/{uid}` 👤 public face (name; photo later). App-wide display, not `users` reads
+- `tv_shops/{uid}` 🏪 one shop per user
+- `tv_shop_items/{id}` 🛍️ Offer (commerce source of truth: title/price/photo/kind). Domain name Offer; keep collection id
+- `tv_clips/{id}` 🎥 video; `shopItemId` optional (clip-only posts allowed). Feed denorms title/price/ownerName/district
+Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store / ads). Owner edit/delete on overlay, home card, own clip grid; edit syncs offer if `shopItemId` set; delete unlinks `clipIds`.
 
 ## Files
 - `lib/features/tv_market/models/tv_clip.dart` — status `pending|active|blocked`; price 0 = optional/hidden; `shopItemId`, `socialConsent`, `socialPostedAt`, `searchTokens`; `tvOwnerDisplayName` (full profile name; @nick/phone/«Фойдаланувчи» → empty); `tvOwnerGivenName` = first word for search tokens only
@@ -8,8 +17,9 @@ Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Mo
 - `lib/features/tv_market/repositories/tv_public_profiles_repository.dart` — `tv_public_profiles/{phone}` + shop-name hydrate
 - `lib/features/tv_market/repositories/tv_clips_repository.dart` — Home pagination; likes `tv_clips/{id}/likes/{uid}` ±1 `likeCount`; saves `users/{uid}/saved_tv_clips/{clipId}`; search = recent pool (400, 45s cache) + `searchTokens` array-contains (latin/cyrillic probe) then CatalogSearch AND+rank
 - `lib/features/tv_market/screens/tv_clip_search_screen.dart` — 3-script hint; district scope + «search all districts»; result count; title highlight; tap opens clip in feed
-- `lib/features/tv_market/screens/tv_publish_screen.dart` — tokens via `TvClipSearch.buildTokens` (not raw AdSearchText)
-- `lib/features/tv_market/widgets/tv_clip_overlay.dart` — publisher display name (hide if unknown; never «Фойдаланувчи»), title, description (white, transparent bg, max 4 lines), price, district; Contact/Delete; «Дўконга» if shopItemId
+- `lib/features/tv_market/screens/tv_publish_screen.dart` — create + `editClip` save (tokens, optional new video, sync offer if shopItemId)
+- `lib/features/tv_market/widgets/tv_owner_action_bar.dart` — owner Edit + Delete
+- `lib/features/tv_market/widgets/tv_clip_overlay.dart` — publisher display name (hide if unknown), title, description, price, district; owner Edit/Delete else Contact; «Дўконга» if shopItemId
 - `lib/features/tv_market/screens/tv_market_feed_screen.dart` — district chip (no TV MARKET title); search icon left of camera; videocam + 20% smaller arrow; like/share/save/profile; «Дўконга» if shopItemId
 - Admin: `tv_clips_moderation_screen.dart` — activate/block/delete + «Соцсетда чоп» + «Реклама 7 кун» (`boostUntil`)
 

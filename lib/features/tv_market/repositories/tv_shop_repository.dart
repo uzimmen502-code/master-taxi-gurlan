@@ -110,6 +110,16 @@ class TvShopRepository {
     });
   }
 
+  Future<void> removeClipFromItem({
+    required String itemId,
+    required String clipId,
+  }) async {
+    if (itemId.isEmpty || clipId.isEmpty) return;
+    await _items.doc(itemId).update({
+      'clipIds': FieldValue.arrayRemove([clipId]),
+    });
+  }
+
   Future<void> updateItem(
     String itemId,
     Map<String, dynamic> patch,

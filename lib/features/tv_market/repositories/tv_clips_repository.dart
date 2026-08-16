@@ -4,6 +4,7 @@ import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
+import 'tv_shop_repository.dart';
 
 /// Home / TV Market клип саҳифаси — курсор билан давом эттириш учун.
 class TvClipPage {
@@ -263,6 +264,14 @@ class TvClipsRepository {
   /// Эгаси ўз клипини ўчиради — аввал Firestore, сўнг файллар.
   Future<void> deleteOwnClip(TvClip clip) async {
     await _col.doc(clip.id).delete();
+    if (clip.shopItemId.isNotEmpty) {
+      try {
+        await TvShopRepository(db: _db).removeClipFromItem(
+          itemId: clip.shopItemId,
+          clipId: clip.id,
+        );
+      } catch (_) {}
+    }
     await TvStorageService().deleteClipFiles(
       videoUrl: clip.videoUrl,
       posterUrl: clip.posterUrl,
@@ -276,6 +285,30 @@ class TvClipsRepository {
     final name = tvOwnerDisplayName(ownerName);
     if (clipId.isEmpty || name.isEmpty) return;
     await _col.doc(clipId).update({'ownerName': name});
+  }
+
+  /// Эгаси ном/нарх/тавсиф/видеони янгилайди. status ва likeCount тегилмайди.
+  Future<void> updateOwnClip({
+    required String clipId,
+    required String title,
+    required int price,
+    required String description,
+    required String category,
+    required List<String> searchTokens,
+    String? videoUrl,
+    String? posterUrl,
+  }) async {
+    if (clipId.isEmpty) return;
+    final data = <String, dynamic>{
+      'title': title.trim(),
+      'price': price,
+      'description': description.trim(),
+      'category': category,
+      'searchTokens': searchTokens,
+    };
+    if (videoUrl != null && videoUrl.isNotEmpty) data['videoUrl'] = videoUrl;
+    if (posterUrl != null && posterUrl.isNotEmpty) data['posterUrl'] = posterUrl;
+    await _col.doc(clipId).update(data);
   }
 
   Future<bool> isLiked({

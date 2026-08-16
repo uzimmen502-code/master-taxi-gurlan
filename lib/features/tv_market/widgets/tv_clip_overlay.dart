@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
+import 'tv_owner_action_bar.dart';
 
-/// Видео устидаги UI: ўнг тугмалар + паст маълумот + Боғланиш.
+/// Видео устидаги UI: ўнг тугмалар + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
 class TvClipOverlay extends StatelessWidget {
   const TvClipOverlay({
@@ -19,6 +20,7 @@ class TvClipOverlay extends StatelessWidget {
     this.saved = false,
     this.isOwner = false,
     this.onDelete,
+    this.onEdit,
     this.onOpenShop,
     this.ownerLabel,
   });
@@ -33,6 +35,7 @@ class TvClipOverlay extends StatelessWidget {
   final bool saved;
   final bool isOwner;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
   final VoidCallback? onOpenShop;
 
   /// Берилса, клипдаги `ownerName` ўрнига шу матн кўринади.
@@ -81,38 +84,32 @@ class TvClipOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
               ],
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton.icon(
-                  onPressed: isOwner ? onDelete : onContact,
-                  icon: Icon(
-                    isOwner
-                        ? Icons.delete_outline_rounded
-                        : Icons.call_rounded,
-                    size: 18,
-                  ),
-                  label: Text(
-                    context.tr(
-                      isOwner ? 'tv_market_delete' : 'tv_market_contact',
+              if (isOwner && onEdit != null && onDelete != null)
+                TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!)
+              else
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    onPressed: onContact,
+                    icon: const Icon(Icons.call_rounded, size: 18),
+                    label: Text(
+                      context.tr('tv_market_contact'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
                     ),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E676),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isOwner
-                        ? const Color(0xFFFF1744)
-                        : const Color(0xFF00E676),
-                    foregroundColor: isOwner ? Colors.white : Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
                   ),
                 ),
-              ),
             ],
           ),
         ),

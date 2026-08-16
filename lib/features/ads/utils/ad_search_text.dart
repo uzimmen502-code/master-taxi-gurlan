@@ -11,6 +11,14 @@ class AdSearchText {
   static bool isCyrillic(String s) =>
       s.runes.any((r) => r >= 0x0400 && r <= 0x04FF);
 
+  /// oʻ / gʻ / `'` / ‘’ — ASCII `'` (кирилл ў/ғ диграфлари учун).
+  static String foldMarks(String s) {
+    return s.toLowerCase().replaceAll(
+          RegExp('[\u02BB\u02BC\u02BD\u02C8\u0060\u00B4\u2018\u2019\u2032]'),
+          "'",
+        );
+  }
+
   static String toLatin(String s) {
     const map = {
       'а': 'a',
@@ -53,14 +61,14 @@ class AdSearchText {
       'ң': 'ng',
     };
     final buf = StringBuffer();
-    for (final c in s.toLowerCase().split('')) {
+    for (final c in foldMarks(s).split('')) {
       buf.write(map[c] ?? c);
     }
     return buf.toString();
   }
 
   static String toCyrillic(String s) {
-    var result = s.toLowerCase();
+    var result = foldMarks(s);
     const digraphs = {
       'sh': 'ш',
       'ch': 'ч',

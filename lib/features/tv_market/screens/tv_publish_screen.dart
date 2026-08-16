@@ -14,12 +14,12 @@ import 'package:video_player/video_player.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
-import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_storage_service.dart';
+import '../utils/tv_clip_search.dart';
 
 /// TV Market — видео жойлаш экрани.
 class TvPublishScreen extends StatefulWidget {
@@ -346,9 +346,12 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         status: autoApprove ? 'active' : 'pending',
         shopItemId: shopItemId,
         socialConsent: shopMode && _socialConsent,
-        searchTokens: AdSearchText.buildTokens(
-          _titleCtrl.text.trim(),
-          _descCtrl.text.trim(),
+        searchTokens: TvClipSearch.buildTokens(
+          title: _titleCtrl.text.trim(),
+          description: _descCtrl.text.trim(),
+          districtLabel: districtLabel,
+          category: _category,
+          ownerName: ownerDisplay,
         ),
       );
 

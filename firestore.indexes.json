@@ -1533,6 +1533,20 @@
       ]
     },
     {
+      "collectionGroup": "tv_clips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "searchTokens",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
       "collectionGroup": "tv_shop_items",
       "queryScope": "COLLECTION",
       "fields": [

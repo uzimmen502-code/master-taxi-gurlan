@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../../core/utils/catalog_search.dart';
+import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_storage_service.dart';
+import '../utils/tv_clip_search.dart';
 
 /// Home / TV Market клип саҳифаси — курсор билан давом эттириш учун.
 class TvClipPage {
@@ -29,6 +30,10 @@ class TvClipsRepository {
 
   CollectionReference<Map<String, dynamic>> get _col =>
       _db.collection('tv_clips');
+
+  List<TvClip>? _searchPool;
+  String? _searchPoolKey;
+  DateTime? _searchPoolAt;
 
   /// Яқиндаги клиплар — шу туман, сўнг янги.
   Future<List<TvClip>> fetchNearby({
@@ -170,39 +175,78 @@ class TvClipsRepository {
     return snap.docs.map(TvClip.fromFirestore).toList();
   }
 
-  /// Сарлавҳа бўйича фаол клиплар (туман фильтри ихтиёрий).
+  Future<List<TvClip>> _recentSearchPool(String districtId) async {
+    final key = districtId.isEmpty ? '*' : districtId;
+    final now = DateTime.now();
+    if (_searchPool != null &&
+        _searchPoolKey == key &&
+        _searchPoolAt != null &&
+        now.difference(_searchPoolAt!) < const Duration(seconds: 45)) {
+      return _searchPool!;
+    }
+    final list = districtId.isEmpty
+        ? await fetchAllActive(limit: TvClipSearch.poolLimit)
+        : await fetchNearby(
+            districtId: districtId,
+            limit: TvClipSearch.poolLimit,
+          );
+    _searchPool = list;
+    _searchPoolKey = key;
+    _searchPoolAt = now;
+    return list;
+  }
+
+  Future<List<TvClip>> _bySearchToken(String token) async {
+    if (token.length < AdSearchText.minTokenLen) return const [];
+    try {
+      final snap = await _col
+          .where('status', isEqualTo: 'active')
+          .where('searchTokens', arrayContains: token)
+          .limit(TvClipSearch.tokenQueryLimit)
+          .get();
+      return snap.docs.map(TvClip.fromFirestore).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Сарлавҳа / тавсиф / туман / категория — CatalogSearch + токен сўрови.
   Future<List<TvClip>> searchByTitle({
     required String query,
     String districtId = '',
-    int limit = 200,
+    int limit = TvClipSearch.resultLimit,
   }) async {
     final q = query.trim();
-    if (q.length < 2) return const [];
-    final pool = districtId.isEmpty
-        ? await fetchAllActive(limit: limit)
-        : await fetchNearby(districtId: districtId, limit: limit);
-    final hit = pool
-        .where(
-          (c) => CatalogSearch.matches(q, [
-            c.title,
-            c.description,
-            ...c.searchTokens,
-          ]),
-        )
-        .toList();
+    if (q.length < AdSearchText.minTokenLen) return const [];
+
+    final probe = <String>{};
+    for (final t in AdSearchText.queryTokens(q)) {
+      if (t.length >= AdSearchText.minTokenLen) probe.add(t);
+      if (probe.length >= 3) break;
+    }
+
+    final parts = await Future.wait<List<TvClip>>([
+      _recentSearchPool(districtId),
+      ...probe.map(_bySearchToken),
+    ]);
+
+    final byId = <String, TvClip>{};
+    for (final list in parts) {
+      for (final c in list) {
+        if (districtId.isNotEmpty && c.districtId != districtId) continue;
+        byId[c.id] = c;
+      }
+    }
+
+    final hit = byId.values.where((c) => TvClipSearch.matches(c, q)).toList();
     hit.sort((a, b) {
-      final sb = CatalogSearch.score(
-        q,
-        title: b.title,
-        extra: [b.description, ...b.searchTokens],
-      );
-      final sa = CatalogSearch.score(
-        q,
-        title: a.title,
-        extra: [a.description, ...a.searchTokens],
-      );
-      return sb.compareTo(sa);
+      final byScore = TvClipSearch.score(b, q).compareTo(TvClipSearch.score(a, q));
+      if (byScore != 0) return byScore;
+      final at = a.createdAt?.millisecondsSinceEpoch ?? 0;
+      final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
+      return bt.compareTo(at);
     });
+    if (hit.length > limit) return hit.sublist(0, limit);
     return hit;
   }
 

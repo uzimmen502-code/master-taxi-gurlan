@@ -331,7 +331,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     final clip = await Navigator.push<TvClip>(
       context,
       MaterialPageRoute(
-        builder: (_) => TvClipSearchScreen(districtId: _filterDistrictId),
+        builder: (_) => TvClipSearchScreen(
+          districtId: _filterDistrictId,
+          districtLabel: _filterChipLabel(),
+        ),
       ),
     );
     if (!mounted) return;

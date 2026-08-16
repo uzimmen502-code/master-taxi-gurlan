@@ -101,6 +101,15 @@ void main() {
       expect(CatalogSearch.score('taksi', title: 'таксичи') > 0, isTrue);
     });
 
+    test("oʻ / o' / ў (3 yozuv)", () {
+      const oz = 'o\u02BBqituvchi';
+      expect(CatalogSearch.matches("o'qituvchi", ['ўқитувчи']), isTrue);
+      expect(CatalogSearch.matches(oz, ['ўқитувчи']), isTrue);
+      expect(CatalogSearch.matches('ўқитувчи', ["o'qituvchi"]), isTrue);
+      expect(CatalogSearch.matches('mototsikl', ['мотоцикл']), isTrue);
+      expect(CatalogSearch.matches('мотоцикл', ['mototsikl']), isTrue);
+    });
+
     test('unrelated title → 0 (no weak fallback)', () {
       expect(CatalogSearch.score('такси', title: 'Лабо шоколад'), 0);
       expect(CatalogSearch.score('нон', title: 'Мой алмаштириш'), 0);

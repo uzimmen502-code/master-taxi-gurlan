@@ -171,6 +171,22 @@ class _InfoColumn extends StatelessWidget {
             shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
           ),
         ),
+        if (clip.description.trim().isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            clip.description.trim(),
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFFFFFFFF),
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              height: 1.25,
+              backgroundColor: Colors.transparent,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+            ),
+          ),
+        ],
         const SizedBox(height: 4),
         Row(
           children: [

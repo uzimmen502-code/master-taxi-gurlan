@@ -8,6 +8,7 @@ Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Mo
 - `lib/features/tv_market/repositories/tv_clips_repository.dart` — Home pagination; likes `tv_clips/{id}/likes/{uid}` ±1 `likeCount`; saves `users/{uid}/saved_tv_clips/{clipId}`; search = recent pool (400, 45s cache) + `searchTokens` array-contains (latin/cyrillic probe) then CatalogSearch AND+rank
 - `lib/features/tv_market/screens/tv_clip_search_screen.dart` — 3-script hint; district scope + «search all districts»; result count; title highlight; tap opens clip in feed
 - `lib/features/tv_market/screens/tv_publish_screen.dart` — tokens via `TvClipSearch.buildTokens` (not raw AdSearchText)
+- `lib/features/tv_market/widgets/tv_clip_overlay.dart` — given name, title, description (white, transparent bg, max 4 lines), price, district; Contact/Delete; «Дўконга» if shopItemId
 - `lib/features/tv_market/screens/tv_market_feed_screen.dart` — district chip (no TV MARKET title); search icon left of camera; videocam + 20% smaller arrow; like/share/save/profile; «Дўконга» if shopItemId
 - Admin: `tv_clips_moderation_screen.dart` — activate/block/delete + «Соцсетда чоп» + «Реклама 7 кун» (`boostUntil`)
 

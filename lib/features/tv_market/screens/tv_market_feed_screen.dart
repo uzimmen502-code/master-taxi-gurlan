@@ -21,6 +21,7 @@ import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
+import 'tv_clip_search_screen.dart';
 import 'tv_my_shop_screen.dart';
 import 'tv_owner_clips_screen.dart';
 import 'tv_publish_screen.dart';
@@ -291,6 +292,38 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  Future<void> _openSearch() async {
+    tvOnPlaybackBlocked();
+    final clip = await Navigator.push<TvClip>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TvClipSearchScreen(districtId: _filterDistrictId),
+      ),
+    );
+    if (!mounted) return;
+    if (clip == null) {
+      if (tvCanPlay) tvOnPlaybackAllowed();
+      return;
+    }
+    final existing = _clips.indexWhere((c) => c.id == clip.id);
+    if (existing >= 0) {
+      _currentIndex = existing;
+      setState(() {});
+      if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(existing);
+      unawaited(_activate(existing));
+      return;
+    }
+    setState(() {
+      _clips.insert(0, clip);
+      _currentIndex = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(0);
+      unawaited(_activate(0));
+    });
+  }
+
   Future<void> _openPublish() async {
     tvOnPlaybackBlocked();
     final result = await Navigator.push(
@@ -527,27 +560,19 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         titleSpacing: 0,
-        title: Row(
-          children: [
-            _DistrictFilterChip(
-              label: _filterChipLabel(),
-              onTap: _pickDistrictFilter,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                context.tr('home_module_tv_market'),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 17,
-                ),
-              ),
-            ),
-          ],
+        title: Align(
+          alignment: Alignment.centerLeft,
+          child: _DistrictFilterChip(
+            label: _filterChipLabel(),
+            onTap: _pickDistrictFilter,
+          ),
         ),
         actions: [
+          IconButton(
+            tooltip: context.tr('tv_market_search'),
+            onPressed: _openSearch,
+            icon: const Icon(Icons.search_rounded, color: Colors.white, size: 26),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 10),
             child: Row(

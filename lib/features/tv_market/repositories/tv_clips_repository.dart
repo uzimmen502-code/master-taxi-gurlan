@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/catalog_search.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_storage_service.dart';
 
@@ -167,6 +168,42 @@ class TvClipsRepository {
         .limit(limit)
         .get();
     return snap.docs.map(TvClip.fromFirestore).toList();
+  }
+
+  /// Сарлавҳа бўйича фаол клиплар (туман фильтри ихтиёрий).
+  Future<List<TvClip>> searchByTitle({
+    required String query,
+    String districtId = '',
+    int limit = 200,
+  }) async {
+    final q = query.trim();
+    if (q.length < 2) return const [];
+    final pool = districtId.isEmpty
+        ? await fetchAllActive(limit: limit)
+        : await fetchNearby(districtId: districtId, limit: limit);
+    final hit = pool
+        .where(
+          (c) => CatalogSearch.matches(q, [
+            c.title,
+            c.description,
+            ...c.searchTokens,
+          ]),
+        )
+        .toList();
+    hit.sort((a, b) {
+      final sb = CatalogSearch.score(
+        q,
+        title: b.title,
+        extra: [b.description, ...b.searchTokens],
+      );
+      final sa = CatalogSearch.score(
+        q,
+        title: a.title,
+        extra: [a.description, ...a.searchTokens],
+      );
+      return sb.compareTo(sa);
+    });
+    return hit;
   }
 
   /// Эгаси клиплари.

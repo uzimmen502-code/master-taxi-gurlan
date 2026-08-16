@@ -15,6 +15,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
+import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
@@ -350,6 +351,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         status: autoApprove ? 'active' : 'pending',
         shopItemId: shopItemId,
         socialConsent: shopMode && _socialConsent,
+        searchTokens: AdSearchText.buildTokens(
+          _titleCtrl.text.trim(),
+          _descCtrl.text.trim(),
+        ),
       );
 
       final clipRef = await FirebaseFirestore.instance

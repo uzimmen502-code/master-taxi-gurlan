@@ -34,6 +34,7 @@ class TvClip {
     this.shopItemId = '',
     this.socialConsent = false,
     this.socialPostedAt,
+    this.searchTokens = const [],
   });
 
   final String id;
@@ -65,6 +66,7 @@ class TvClip {
   final String shopItemId;
   final bool socialConsent;
   final DateTime? socialPostedAt;
+  final List<String> searchTokens;
 
   bool get isActive => status == 'active';
   bool get hasPrice => price > 0;
@@ -105,6 +107,7 @@ class TvClip {
       shopItemId: shopItemId ?? this.shopItemId,
       socialConsent: socialConsent ?? this.socialConsent,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
+      searchTokens: searchTokens,
     );
   }
 
@@ -133,6 +136,12 @@ class TvClip {
       shopItemId: (d['shopItemId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
+      searchTokens: (d['searchTokens'] is List)
+          ? (d['searchTokens'] as List)
+              .map((e) => '$e')
+              .where((e) => e.isNotEmpty)
+              .toList()
+          : const [],
     );
   }
 
@@ -161,5 +170,6 @@ class TvClip {
         'socialConsent': socialConsent,
         if (socialPostedAt != null)
           'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
+        if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
       };
 }

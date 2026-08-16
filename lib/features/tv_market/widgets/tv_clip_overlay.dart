@@ -5,7 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import 'tv_owner_action_bar.dart';
 
-/// Видео устидаги UI: ўнг тугмалар + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
+/// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
 class TvClipOverlay extends StatelessWidget {
   const TvClipOverlay({
@@ -59,31 +59,6 @@ class TvClipOverlay extends StatelessWidget {
                 ownerLabel: ownerLabel,
               ),
               const SizedBox(height: 10),
-              if (onOpenShop != null && !isOwner) ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenShop,
-                    icon: const Icon(Icons.storefront_rounded, size: 18),
-                    label: Text(
-                      context.tr('tv_market_go_shop'),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white70, width: 1.4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
               if (isOwner && onEdit != null && onDelete != null)
                 TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!)
               else
@@ -121,10 +96,12 @@ class TvClipOverlay extends StatelessWidget {
             liked: liked,
             saved: saved,
             ownerLabel: ownerLabel,
+            showShop: onOpenShop != null && !isOwner,
             onLike: onLike,
             onShare: onShare,
             onProfile: onProfile,
             onSave: onSave,
+            onOpenShop: onOpenShop,
           ),
         ),
       ],
@@ -234,6 +211,8 @@ class _ActionButtons extends StatelessWidget {
     required this.onShare,
     required this.onProfile,
     required this.onSave,
+    this.onOpenShop,
+    this.showShop = false,
     this.ownerLabel,
   });
 
@@ -244,6 +223,8 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onProfile;
   final VoidCallback onSave;
+  final VoidCallback? onOpenShop;
+  final bool showShop;
   final String? ownerLabel;
 
   @override
@@ -263,6 +244,13 @@ class _ActionButtons extends StatelessWidget {
           label: '',
           onTap: onShare,
         ),
+        if (showShop && onOpenShop != null) ...[
+          const SizedBox(height: 16),
+          _ShopActionBtn(
+            label: context.tr('tv_market_shop'),
+            onTap: onOpenShop!,
+          ),
+        ],
         const SizedBox(height: 16),
         GestureDetector(
           onTap: onProfile,
@@ -345,6 +333,54 @@ class _ActionBtn extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShopActionBtn extends StatelessWidget {
+  const _ShopActionBtn({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF00E676),
+              shape: BoxShape.circle,
+              boxShadow: const [
+                BoxShadow(color: Colors.black54, blurRadius: 6),
+              ],
+            ),
+            child: const Icon(
+              Icons.storefront_rounded,
+              color: Colors.black,
+              size: 22,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -12,23 +12,27 @@ class TvClipOverlay extends StatelessWidget {
     required this.clip,
     required this.onContact,
     required this.onLike,
-    required this.onComment,
     required this.onShare,
     required this.onSave,
     required this.onProfile,
+    this.liked = false,
+    this.saved = false,
     this.isOwner = false,
     this.onDelete,
+    this.onOpenShop,
   });
 
   final TvClip clip;
   final VoidCallback onContact;
   final VoidCallback onLike;
-  final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback onProfile;
+  final bool liked;
+  final bool saved;
   final bool isOwner;
   final VoidCallback? onDelete;
+  final VoidCallback? onOpenShop;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +49,31 @@ class TvClipOverlay extends StatelessWidget {
             children: [
               _InfoColumn(clip: clip),
               const SizedBox(height: 10),
+              if (onOpenShop != null && !isOwner) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: onOpenShop,
+                    icon: const Icon(Icons.storefront_rounded, size: 18),
+                    label: Text(
+                      context.tr('tv_market_go_shop'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white70, width: 1.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               SizedBox(
                 width: double.infinity,
                 height: 44,
@@ -53,7 +82,7 @@ class TvClipOverlay extends StatelessWidget {
                   icon: Icon(
                     isOwner
                         ? Icons.delete_outline_rounded
-                        : Icons.chat_bubble_outline_rounded,
+                        : Icons.call_rounded,
                     size: 18,
                   ),
                   label: Text(
@@ -85,11 +114,12 @@ class TvClipOverlay extends StatelessWidget {
           bottom: bottom + 80,
           child: _ActionButtons(
             clip: clip,
+            liked: liked,
+            saved: saved,
             onLike: onLike,
-            onComment: onComment,
             onShare: onShare,
-            onSave: onSave,
             onProfile: onProfile,
+            onSave: onSave,
           ),
         ),
       ],
@@ -103,33 +133,22 @@ class _InfoColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final name = clip.displayOwnerName(context.tr('tv_market_user'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            const CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.white24,
-              child: Icon(Icons.person, color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '@${clip.ownerName}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
+        Text(
+          name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
+            shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+          ),
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           clip.title,
           maxLines: 2,
@@ -179,19 +198,21 @@ class _InfoColumn extends StatelessWidget {
 class _ActionButtons extends StatelessWidget {
   const _ActionButtons({
     required this.clip,
+    required this.liked,
+    required this.saved,
     required this.onLike,
-    required this.onComment,
     required this.onShare,
-    required this.onSave,
     required this.onProfile,
+    required this.onSave,
   });
 
   final TvClip clip;
+  final bool liked;
+  final bool saved;
   final VoidCallback onLike;
-  final VoidCallback onComment;
   final VoidCallback onShare;
-  final VoidCallback onSave;
   final VoidCallback onProfile;
+  final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -199,15 +220,10 @@ class _ActionButtons extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _ActionBtn(
-          icon: Icons.favorite_border_rounded,
+          icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          color: liked ? const Color(0xFFFF1744) : Colors.white,
           label: clip.likeCount > 0 ? '${clip.likeCount}' : '',
           onTap: onLike,
-        ),
-        const SizedBox(height: 16),
-        _ActionBtn(
-          icon: Icons.chat_bubble_outline_rounded,
-          label: clip.commentCount > 0 ? '${clip.commentCount}' : '',
-          onTap: onComment,
         ),
         const SizedBox(height: 16),
         _ActionBtn(
@@ -216,22 +232,38 @@ class _ActionButtons extends StatelessWidget {
           onTap: onShare,
         ),
         const SizedBox(height: 16),
+        GestureDetector(
+          onTap: onProfile,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: Colors.white24,
+            child: Text(
+              _initial(clip.displayOwnerName(context.tr('tv_market_user'))),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         _ActionBtn(
-          icon: Icons.bookmark_border_rounded,
+          icon: saved
+              ? Icons.bookmark_rounded
+              : Icons.bookmark_border_rounded,
+          color: saved ? const Color(0xFFFFD54F) : Colors.white,
           label: '',
           onTap: onSave,
         ),
-        const SizedBox(height: 16),
-        GestureDetector(
-          onTap: onProfile,
-          child: const CircleAvatar(
-            radius: 18,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.person, color: Colors.white, size: 20),
-          ),
-        ),
       ],
     );
+  }
+
+  String _initial(String name) {
+    final t = name.trim();
+    if (t.isEmpty) return '?';
+    return t.substring(0, 1).toUpperCase();
   }
 }
 
@@ -240,11 +272,13 @@ class _ActionBtn extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.color = Colors.white,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +290,7 @@ class _ActionBtn extends StatelessWidget {
         children: [
           Icon(
             icon,
-            color: Colors.white,
+            color: color,
             size: 28,
             shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
           ),

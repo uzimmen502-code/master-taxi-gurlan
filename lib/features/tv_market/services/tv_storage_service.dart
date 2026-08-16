@@ -72,4 +72,17 @@ class TvStorageService {
     await one(videoUrl);
     await one(posterUrl);
   }
+
+  /// Витрина товар расми — `tv_shop/{ownerPhone}/`.
+  Future<String> uploadShopPhoto({
+    required String ownerPhone,
+    required Uint8List bytes,
+  }) async {
+    final name =
+        'item_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
+    final ref =
+        _storage.ref().child('tv_shop').child(ownerPhone).child(name);
+    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return ref.getDownloadURL();
+  }
 }

@@ -1,21 +1,31 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
+import '../../../core/utils/formatters.dart';
+import '../../../repositories/user_repository.dart';
 import '../models/tv_clip.dart';
+import '../models/tv_shop.dart';
+import '../repositories/tv_shop_repository.dart';
 import '../services/tv_storage_service.dart';
 
 /// TV Market — видео жойлаш экрани.
 class TvPublishScreen extends StatefulWidget {
-  const TvPublishScreen({super.key});
+  const TvPublishScreen({super.key, this.attachItemId = ''});
+
+  /// Мавжуд товар/хизматга яна ролик қўшиш.
+  final String attachItemId;
 
   @override
   State<TvPublishScreen> createState() => _TvPublishScreenState();
@@ -37,11 +47,48 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   bool _publishing = false;
   double _uploadProgress = 0;
   String _publishStage = '';
+  bool _openShop = false;
+  bool _socialConsent = false;
+  String _attachItemId = '';
+  XFile? _productPhoto;
+  List<TvShopItem> _myItems = const [];
+  final _shopRepo = TvShopRepository();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _attachItemId = widget.attachItemId;
+    unawaited(_loadShop());
+  }
+
+  Future<void> _loadShop() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    if (phone.isEmpty) return;
+    try {
+      final exists = await _shopRepo.hasShop(phone);
+      final items = exists ? await _shopRepo.fetchByOwner(phone) : const <TvShopItem>[];
+      if (!mounted) return;
+      setState(() {
+        _myItems = items.where((i) => i.isActive).toList();
+        if (exists) _openShop = true;
+        if (_attachItemId.isNotEmpty) _openShop = true;
+        if (_attachItemId.isNotEmpty) {
+          for (final it in _myItems) {
+            if (it.id == _attachItemId) {
+              _titleCtrl.text = it.title;
+              _priceCtrl.text = it.price > 0 ? '${it.price}' : '';
+              _descCtrl.text = it.description;
+              _category = it.kind;
+              break;
+            }
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('[TvPublish] shop $e');
+    }
   }
 
   @override
@@ -113,11 +160,34 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     );
   }
 
+  Future<void> _pickProductPhoto() async {
+    final file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+    );
+    if (file == null) return;
+    setState(() => _productPhoto = file);
+  }
+
   Future<void> _publish() async {
     if (!_formKey.currentState!.validate()) return;
     if (_videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_publish_video_required'))),
+      );
+      return;
+    }
+
+    final shopMode = _openShop || _attachItemId.isNotEmpty;
+    if (shopMode && _attachItemId.isEmpty && _productPhoto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_shop_photo_required'))),
+      );
+      return;
+    }
+    if (shopMode && (int.tryParse(_priceCtrl.text.trim()) ?? 0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_shop_price_required'))),
       );
       return;
     }
@@ -137,9 +207,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     });
 
     try {
-      final phone = user.phoneNumber ?? user.uid;
+      final phoneRaw = user.phoneNumber ?? user.uid;
+      final phone = canonicalPhoneId(phoneRaw);
       final districtId = ServiceConfigHolder.districtId;
       final districtLabel = ServiceConfigHolder.districtLabel;
+
+      final prefs = await SharedPreferences.getInstance();
+      final profile = await UserRepository().getById(
+        canonicalPhoneId(prefs.getString('user_phone') ?? phone),
+      );
+      final ownerName = tvOwnerGivenName(profile?.name ?? '');
 
       final settingsSnap = await FirebaseFirestore.instance
           .collection('settings')
@@ -199,25 +276,91 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         );
       }
 
+      String shopItemId = _attachItemId;
+      var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
+      final shopMode = _openShop || _attachItemId.isNotEmpty;
+      if (!mounted) return;
+      final ownerDisplay =
+          ownerName.isEmpty ? context.tr('tv_market_user') : ownerName;
+
+      if (shopMode) {
+        if (mounted) {
+          setState(() => _publishStage = context.tr('tv_publish_photo_uploading'));
+        }
+        await _shopRepo.ensureShop(
+          ownerPhone: phone,
+          name: ownerDisplay,
+        );
+        if (_attachItemId.isEmpty) {
+          Uint8List photoBytes = await File(_productPhoto!.path).readAsBytes();
+          try {
+            final compressed = await FlutterImageCompress.compressWithList(
+              photoBytes,
+              quality: 78,
+              minWidth: 1080,
+              minHeight: 1080,
+            );
+            if (compressed.isNotEmpty) {
+              photoBytes = Uint8List.fromList(compressed);
+            }
+          } catch (e) {
+            debugPrint('[TvPublish] photo compress $e');
+          }
+          final photoUrl = await _storageService.uploadShopPhoto(
+            ownerPhone: phone,
+            bytes: photoBytes,
+          );
+          shopItemId = await _shopRepo.createItem(
+            TvShopItem(
+              id: '',
+              ownerPhone: phone,
+              ownerName: ownerDisplay,
+              title: _titleCtrl.text.trim(),
+              price: clipPrice,
+              photoUrl: photoUrl,
+              kind: _category,
+              districtId: districtId,
+              districtLabel: districtLabel,
+              description: _descCtrl.text.trim(),
+              socialConsent: _socialConsent,
+              status: autoApprove ? 'active' : 'pending',
+            ),
+          );
+        } else {
+          final existing = await _shopRepo.fetchItem(_attachItemId);
+          if (existing != null && existing.price > 0) {
+            clipPrice = existing.price;
+          }
+        }
+      }
+
       // 5. Firestore'га ёзиш
       final clip = TvClip(
         id: '',
         videoUrl: videoUrl,
         posterUrl: posterUrl,
         title: _titleCtrl.text.trim(),
-        price: int.tryParse(_priceCtrl.text.trim()) ?? 0,
+        price: clipPrice,
         districtId: districtId,
         districtLabel: districtLabel,
         ownerPhone: phone,
-        ownerName: user.displayName ?? phone,
+        ownerName: ownerDisplay,
         category: _category,
         description: _descCtrl.text.trim(),
         status: autoApprove ? 'active' : 'pending',
+        shopItemId: shopItemId,
+        socialConsent: shopMode && _socialConsent,
       );
 
-      await FirebaseFirestore.instance
+      final clipRef = await FirebaseFirestore.instance
           .collection('tv_clips')
           .add(clip.toMap());
+      if (shopItemId.isNotEmpty) {
+        await _shopRepo.addClipToItem(
+          itemId: shopItemId,
+          clipId: clipRef.id,
+        );
+      }
 
       // Вақтинча кеш тозалаш
       await VideoCompress.deleteAllCache();
@@ -337,8 +480,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               TextFormField(
                 controller: _priceCtrl,
                 keyboardType: TextInputType.number,
+                enabled: _attachItemId.isEmpty,
                 decoration: InputDecoration(
-                  labelText: context.tr('tv_publish_price'),
+                  labelText: (_openShop || _attachItemId.isNotEmpty)
+                      ? context.tr('tv_publish_price_required')
+                      : context.tr('tv_publish_price'),
                   suffixText: 'сўм',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -378,6 +524,132 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 onSelectionChanged: (v) =>
                     setState(() => _category = v.first),
               ),
+              const SizedBox(height: 16),
+
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: _openShop || _attachItemId.isNotEmpty,
+                onChanged: _attachItemId.isNotEmpty
+                    ? null
+                    : (v) => setState(() {
+                          _openShop = v;
+                          if (!v) {
+                            _attachItemId = '';
+                            _productPhoto = null;
+                            _socialConsent = false;
+                          }
+                        }),
+                title: Text(
+                  context.tr('tv_shop_open'),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(context.tr('tv_shop_open_hint')),
+              ),
+
+              if (_openShop || _attachItemId.isNotEmpty) ...[
+                if (_myItems.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    context.tr('tv_shop_existing_item'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  InputDecorator(
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: _attachItemId.isEmpty ? '' : _attachItemId,
+                        items: [
+                          DropdownMenuItem(
+                            value: '',
+                            child: Text(context.tr('tv_shop_new_item')),
+                          ),
+                          for (final it in _myItems)
+                            DropdownMenuItem(
+                              value: it.id,
+                              child: Text(
+                                it.title,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: widget.attachItemId.isNotEmpty
+                            ? null
+                            : (v) {
+                                setState(() {
+                                  _attachItemId = v ?? '';
+                                  if (_attachItemId.isNotEmpty) {
+                                    final it = _myItems.firstWhere(
+                                      (e) => e.id == _attachItemId,
+                                    );
+                                    _titleCtrl.text = it.title;
+                                    _priceCtrl.text =
+                                        it.price > 0 ? '${it.price}' : '';
+                                    _descCtrl.text = it.description;
+                                    _category = it.kind;
+                                    _productPhoto = null;
+                                  }
+                                });
+                              },
+                      ),
+                    ),
+                  ),
+                ],
+                if (_attachItemId.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: _publishing ? null : _pickProductPhoto,
+                    child: Container(
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _productPhoto == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_photo_alternate_outlined,
+                                    size: 36, color: Colors.grey.shade500),
+                                const SizedBox(height: 6),
+                                Text(
+                                  context.tr('tv_shop_photo'),
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Image.file(
+                              File(_productPhoto!.path),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                            ),
+                    ),
+                  ),
+                ],
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _socialConsent,
+                  onChanged: (v) =>
+                      setState(() => _socialConsent = v ?? false),
+                  title: Text(
+                    context.tr('tv_shop_social'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(context.tr('tv_shop_social_hint')),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
+
               const SizedBox(height: 10),
 
               // Жойлашув

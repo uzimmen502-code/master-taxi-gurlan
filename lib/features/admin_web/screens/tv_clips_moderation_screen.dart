@@ -329,6 +329,67 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
     );
   }
 
+  Future<void> _markSocialPosted(TvClip clip) async {
+    try {
+      final now = Timestamp.now();
+      await FirebaseFirestore.instance
+          .collection('tv_clips')
+          .doc(clip.id)
+          .update({'socialPostedAt': now});
+      if (clip.shopItemId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('tv_shop_items')
+            .doc(clip.shopItemId)
+            .update({'socialPostedAt': now});
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.blue.shade700,
+          content: Text('Соцсетда белгиланди: ${clip.title}'),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Xatolik: $e')),
+      );
+    }
+  }
+
+  Future<void> _boostShopItem(TvClip clip) async {
+    if (clip.shopItemId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Бу роликка товар боғланмаган — реклама қўйилмайди'),
+        ),
+      );
+      return;
+    }
+    try {
+      final until = DateTime.now().add(const Duration(days: 7));
+      await FirebaseFirestore.instance
+          .collection('tv_shop_items')
+          .doc(clip.shopItemId)
+          .update({'boostUntil': Timestamp.fromDate(until)});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.deepOrange,
+          content: Text('Реклама 7 кун: ${clip.title}'),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: Colors.red, content: Text('Xatolik: $e')),
+      );
+    }
+  }
+
   Future<void> _showDetail(TvClip clip) async {
     if (!mounted) return;
     await showDialog<void>(
@@ -346,6 +407,14 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         onDelete: () {
           Navigator.pop(ctx);
           _delete(clip);
+        },
+        onSocialPosted: () {
+          Navigator.pop(ctx);
+          _markSocialPosted(clip);
+        },
+        onBoost: () {
+          Navigator.pop(ctx);
+          _boostShopItem(clip);
         },
       ),
     );
@@ -626,12 +695,16 @@ class _TvClipDetailDialog extends StatelessWidget {
     required this.onActivate,
     required this.onBlock,
     required this.onDelete,
+    required this.onSocialPosted,
+    required this.onBoost,
   });
 
   final TvClip clip;
   final VoidCallback onActivate;
   final VoidCallback onBlock;
   final VoidCallback onDelete;
+  final VoidCallback onSocialPosted;
+  final VoidCallback onBoost;
 
   @override
   Widget build(BuildContext context) {
@@ -667,6 +740,9 @@ class _TvClipDetailDialog extends StatelessWidget {
                 _row('Худуд', clip.districtLabel),
                 _row('Кўришлар', '${clip.viewCount}'),
                 _row('Лайклар', '${clip.likeCount}'),
+                _row('Соцсет розилиги', clip.socialConsent ? 'Ҳа' : 'Йўқ'),
+                _row('Соцсетда', clip.socialPosted ? 'Чоп этилган' : '—'),
+                _row('Товар', clip.hasShopItem ? clip.shopItemId : '—'),
                 _row('Изоҳлар', '${clip.commentCount}'),
                 _row('Сана', _fmtDate(clip.createdAt)),
                 if (clip.description.isNotEmpty) ...[
@@ -715,6 +791,18 @@ class _TvClipDetailDialog extends StatelessWidget {
                   style:
                       OutlinedButton.styleFrom(foregroundColor: Colors.red),
                 ),
+                if (clip.socialConsent && !clip.socialPosted)
+                  FilledButton.icon(
+                    onPressed: onSocialPosted,
+                    icon: const Icon(Icons.public, size: 18),
+                    label: const Text('Соцсетда чоп'),
+                  ),
+                if (clip.hasShopItem)
+                  OutlinedButton.icon(
+                    onPressed: onBoost,
+                    icon: const Icon(Icons.campaign_outlined, size: 18),
+                    label: const Text('Реклама 7 кун'),
+                  ),
               ]),
             ),
           ],

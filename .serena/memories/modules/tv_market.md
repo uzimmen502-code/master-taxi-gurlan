@@ -1,26 +1,28 @@
 # TV Market (video commerce)
 
-Home attraction + full-screen vertical feed. Module id `tv_market` in `kKnownModuleIds`. Storage: `tv_clips/{ownerPhone}/{file}`. Firestore: `tv_clips`. Settings: `settings/app.tvAutoApprove` (true → create `active`, false → `pending`).
+Home attraction + full-screen vertical feed + seller mini-shop / AVA vitrine. Module id `tv_market` in `kKnownModuleIds`. Storage: `tv_clips/{ownerPhone}/{file}`, shop photos `tv_shop/{ownerPhone}/{file}`. Firestore: `tv_clips`, `tv_shops/{ownerPhone}`, `tv_shop_items`. Settings: `settings/app.tvAutoApprove` (true → create `active`, false → `pending`).
 
 ## Files
-- `lib/features/tv_market/models/tv_clip.dart` — status `pending|active|blocked`; price 0 = optional/hidden
-- `lib/features/tv_market/repositories/tv_clips_repository.dart` — `fetchHomePage` paginates Home: first 7, then +10; nearby district then all-active; `deleteOwnClip` (owner Firestore + Storage)
-- `lib/features/tv_market/services/tv_storage_service.dart` — video + poster upload
-- `lib/features/tv_market/services/tv_player_pool.dart` — current, then next, then prev sequentially (max 3); `alwaysMuted` for Home
-- `lib/features/tv_market/services/tv_screen_playback.dart` — pause when another route covers the screen or app backgrounds (`appRouteObserver`)
-- `lib/features/tv_market/screens/tv_market_feed_screen.dart` — vertical PageView; sound only while this route is current; AppBar red camera + arrow; tap play/pause badge; contact → `callPhone`
-- `lib/features/tv_market/screens/tv_publish_screen.dart` — `video_compress` MediumQuality + thumbnail; preview pauses in background
-- `lib/features/tv_market/widgets/home_video_stage.dart` — Home bottom: 7 muted clips, infinite append; alwaysMuted; pause when leaving Home; owner sees Ўчириш instead of contact
-- `lib/features/tv_market/services/tv_clip_delete.dart` — confirm dialog + `deleteOwnClip`
-- Admin: `lib/features/admin_web/screens/tv_clips_moderation_screen.dart` — list + АВТО/ҚЎЛДА + activate/block/delete
+- `lib/features/tv_market/models/tv_clip.dart` — status `pending|active|blocked`; price 0 = optional/hidden; `shopItemId`, `socialConsent`, `socialPostedAt`; `displayOwnerName` (given name, never phone)
+- `lib/features/tv_market/models/tv_shop.dart` — `TvShop` + `TvShopItem` (photo+price+clipIds required for vitrine; `boostUntil` paid pin; `socialPostedAt`)
+- `lib/features/tv_market/repositories/tv_clips_repository.dart` — Home pagination; likes `tv_clips/{id}/likes/{uid}` ±1 `likeCount`; saves `users/{uid}/saved_tv_clips/{clipId}`
+- `lib/features/tv_market/repositories/tv_shop_repository.dart` — ensureShop, items, vitrine rank (boosted → video → views → new)
+- `lib/features/tv_market/screens/tv_market_feed_screen.dart` — district filter chip (default all); videocam + 20% smaller arrow; like/share/save/profile; «Дўконга» if shopItemId
+- `lib/features/tv_market/screens/tv_publish_screen.dart` — shop offer on publish; photo+price required if shop; attach extra clip to existing item; social consent checkbox
+- `lib/features/tv_market/screens/tv_my_shop_screen.dart` / `tv_shop_public_screen.dart` / `tv_owner_clips_screen.dart`
+- `lib/features/tv_market/widgets/tv_vitrine_section.dart` — seller cards inside AVA store (Contact only; official AVA SKUs stay on `platform_products` with cart)
+- Admin: `tv_clips_moderation_screen.dart` — activate/block/delete + «Соцсетда чоп» + «Реклама 7 кун» (`boostUntil`)
 
 ## Rules / indexes
-- Firestore: read all; create `isAuth()`; update/delete admin or ownerPhone match
-- Composite: status+districtId+createdAt; status+districtId+viewCount; ownerPhone+createdAt; status+createdAt
-- Storage: authenticated write, 100MB
+- `tv_clips` read all; create auth; update admin/owner **or** likeCount ±1; likes subcol create/delete own uid
+- `tv_shops` / `tv_shop_items` read all; write owner (item update cannot change boostUntil/socialPostedAt/viewCount/ownerPhone)
+- `users/{uid}/saved_tv_clips` owner only
+- Indexes: existing tv_clips + tv_shop_items status+createdAt, status+districtId+createdAt, ownerPhone+createdAt
+- Storage tv_shop: authed write ≤8MB
 
 ## Gotchas
-- Home must not nest a vertical PageView (fights Home scroll). Feed is a separate route.
-- Home pool is `alwaysMuted`; feed unmutes only while its route is current and app resumed.
-- Old clips may lack `posterUrl` (uploaded before compress).
-- No dedicated CF; client writes `tv_clips` directly.
+- `users` is not publicly readable — persist given name on clip/item at publish.
+- Clip-only publish (shop declined) has no product photo and no `shopItemId`.
+- Meta auto-post is **not** implemented; consent + admin manual flag only.
+- Home bottom «Магазиним» tab only if `tv_shops/{phone}` exists.
+- No dedicated CF; client writes + admin flags.

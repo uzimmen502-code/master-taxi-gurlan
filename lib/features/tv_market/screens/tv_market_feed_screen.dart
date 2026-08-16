@@ -9,15 +9,22 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
+import '../../../models/geo_area.dart';
+import '../../../repositories/service_config_repository.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
+import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
+import '../services/tv_clip_share.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
+import 'tv_my_shop_screen.dart';
+import 'tv_owner_clips_screen.dart';
 import 'tv_publish_screen.dart';
+import 'tv_shop_public_screen.dart';
 
 /// TV Market — тўлиқ экран вертикал видео лента.
 class TvMarketFeedScreen extends StatefulWidget {
@@ -42,6 +49,13 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Timer? _hideBadgeTimer;
   int _activateGen = 0;
   String _mePhone = '';
+  String _filterDistrictId = '';
+  List<GeoDistrict> _districts = const [];
+  final _likedIds = <String>{};
+  final _savedIds = <String>{};
+  final _likeBusy = <String>{};
+  final _saveBusy = <String>{};
+  final _shopRepo = TvShopRepository();
 
   @override
   void initState() {
@@ -49,6 +63,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     tvBindPlayback();
     _pageCtrl = PageController();
     unawaited(_loadMe());
+    unawaited(_loadDistricts());
     _loadClips();
   }
 
@@ -58,6 +73,42 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     setState(() {
       _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
     });
+    await _refreshSocialState();
+  }
+
+  Future<void> _loadDistricts() async {
+    final regionId = ServiceConfigHolder.regionId;
+    if (regionId.isEmpty) return;
+    try {
+      final list = await ServiceConfigRepository().fetchDistricts(regionId);
+      if (!mounted) return;
+      setState(() => _districts = list);
+    } catch (e) {
+      debugPrint('[TvMarketFeed] districts $e');
+    }
+  }
+
+  Future<void> _refreshSocialState() async {
+    final uid = canonicalPhoneId(_mePhone);
+    if (uid.isEmpty || _clips.isEmpty) return;
+    try {
+      final liked = await _repo.likedClipIds(
+        likerId: uid,
+        clipIds: _clips.map((c) => c.id).take(40),
+      );
+      final saved = await _repo.savedClipIds(uid);
+      if (!mounted) return;
+      setState(() {
+        _likedIds
+          ..clear()
+          ..addAll(liked);
+        _savedIds
+          ..clear()
+          ..addAll(saved);
+      });
+    } catch (e) {
+      debugPrint('[TvMarketFeed] social $e');
+    }
   }
 
   @override
@@ -79,15 +130,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   Future<void> _loadClips() async {
-    final districtId = ServiceConfigHolder.districtId;
-    if (districtId.isEmpty) {
-      setState(() => _loading = false);
-      return;
-    }
     try {
-      var nearby = await _repo.fetchNearby(districtId: districtId, limit: 30);
-      if (nearby.isEmpty) {
-        nearby = await _repo.fetchAllActive(limit: 30);
+      List<TvClip> nearby;
+      if (_filterDistrictId.isEmpty) {
+        nearby = await _repo.fetchAllActive(limit: 40);
+      } else {
+        nearby = await _repo.fetchNearby(
+          districtId: _filterDistrictId,
+          limit: 40,
+        );
       }
       if (!mounted) return;
       final list = <TvClip>[];
@@ -105,6 +156,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         _currentIndex = 0;
       });
       if (_clips.isNotEmpty) unawaited(_activate(0));
+      unawaited(_refreshSocialState());
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
       if (mounted) setState(() => _loading = false);
@@ -253,6 +305,209 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  String get _meId => canonicalPhoneId(_mePhone);
+
+  Future<void> _onLike(TvClip clip) async {
+    final uid = _meId;
+    if (uid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_like_need_auth'))),
+      );
+      return;
+    }
+    if (!_likeBusy.add(clip.id)) return;
+    final was = _likedIds.contains(clip.id);
+    setState(() {
+      if (was) {
+        _likedIds.remove(clip.id);
+      } else {
+        _likedIds.add(clip.id);
+      }
+      final i = _clips.indexWhere((c) => c.id == clip.id);
+      if (i >= 0) {
+        final n = _clips[i].likeCount + (was ? -1 : 1);
+        _clips[i] = _clips[i].copyWith(likeCount: n < 0 ? 0 : n);
+      }
+    });
+    try {
+      final liked = await _repo.toggleLike(clipId: clip.id, likerId: uid);
+      if (!mounted) return;
+      setState(() {
+        if (liked) {
+          _likedIds.add(clip.id);
+        } else {
+          _likedIds.remove(clip.id);
+        }
+      });
+    } catch (e) {
+      debugPrint('[TvMarketFeed] like $e');
+      if (!mounted) return;
+      setState(() {
+        if (was) {
+          _likedIds.add(clip.id);
+        } else {
+          _likedIds.remove(clip.id);
+        }
+        final i = _clips.indexWhere((c) => c.id == clip.id);
+        if (i >= 0) {
+          final n = _clips[i].likeCount + (was ? 1 : -1);
+          _clips[i] = _clips[i].copyWith(likeCount: n < 0 ? 0 : n);
+        }
+      });
+    } finally {
+      _likeBusy.remove(clip.id);
+    }
+  }
+
+  Future<void> _onShare(TvClip clip) async {
+    try {
+      await shareTvClip(clip);
+    } catch (e) {
+      debugPrint('[TvMarketFeed] share $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.tr('tv_market_share_failed'))),
+        );
+      }
+    }
+  }
+
+  Future<void> _onSave(TvClip clip) async {
+    final uid = _meId;
+    if (uid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_save_need_auth'))),
+      );
+      return;
+    }
+    if (!_saveBusy.add(clip.id)) return;
+    final was = _savedIds.contains(clip.id);
+    setState(() {
+      if (was) {
+        _savedIds.remove(clip.id);
+      } else {
+        _savedIds.add(clip.id);
+      }
+    });
+    try {
+      final saved = await _repo.toggleSave(userId: uid, clipId: clip.id);
+      if (!mounted) return;
+      setState(() {
+        if (saved) {
+          _savedIds.add(clip.id);
+        } else {
+          _savedIds.remove(clip.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr(saved ? 'tv_market_saved' : 'tv_market_unsaved'),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[TvMarketFeed] save $e');
+      if (!mounted) return;
+      setState(() {
+        if (was) {
+          _savedIds.add(clip.id);
+        } else {
+          _savedIds.remove(clip.id);
+        }
+      });
+    } finally {
+      _saveBusy.remove(clip.id);
+    }
+  }
+
+  Future<void> _onProfile(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    final shop = await _shopRepo.fetchShop(clip.ownerPhone);
+    if (!mounted) return;
+    final owner = _isOwner(clip);
+    Widget screen;
+    if (shop != null) {
+      screen = owner
+          ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
+          : TvShopPublicScreen(ownerPhone: clip.ownerPhone);
+    } else {
+      screen = TvOwnerClipsScreen(
+        ownerPhone: clip.ownerPhone,
+        ownerName: clip.displayOwnerName(context.tr('tv_market_user')),
+      );
+    }
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
+  Future<void> _onOpenShop(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TvShopPublicScreen(
+          ownerPhone: clip.ownerPhone,
+          highlightItemId: clip.shopItemId,
+        ),
+      ),
+    );
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
+  Future<void> _pickDistrictFilter() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            children: [
+              ListTile(
+                title: Text(
+                  context.tr('tv_market_all_districts'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                trailing: _filterDistrictId.isEmpty
+                    ? const Icon(Icons.check_rounded, color: Colors.white)
+                    : null,
+                onTap: () => Navigator.pop(ctx, ''),
+              ),
+              for (final d in _districts)
+                ListTile(
+                  title: Text(
+                    d.displayName,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  trailing: _filterDistrictId == d.id
+                      ? const Icon(Icons.check_rounded, color: Colors.white)
+                      : null,
+                  onTap: () => Navigator.pop(ctx, d.id),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _filterDistrictId = picked;
+      _loading = true;
+    });
+    await _loadClips();
+  }
+
+  String _filterChipLabel() {
+    if (_filterDistrictId.isEmpty) {
+      return context.tr('tv_market_all_districts');
+    }
+    for (final d in _districts) {
+      if (d.id == _filterDistrictId) return d.displayName;
+    }
+    return context.tr('tv_market_all_districts');
+  }
+
   @override
   void dispose() {
     tvUnbindPlayback();
@@ -271,13 +526,26 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(
-          context.tr('home_module_tv_market'),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            _DistrictFilterChip(
+              label: _filterChipLabel(),
+              onTap: _pickDistrictFilter,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                context.tr('home_module_tv_market'),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           Padding(
@@ -301,7 +569,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         width: 48,
                         height: 48,
                         child: Icon(
-                          Icons.photo_camera,
+                          Icons.videocam_rounded,
                           color: Colors.white,
                           size: 28,
                         ),
@@ -353,13 +621,17 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         TvClipOverlay(
                           clip: clip,
                           isOwner: _isOwner(clip),
+                          liked: _likedIds.contains(clip.id),
+                          saved: _savedIds.contains(clip.id),
                           onContact: () => _onContact(clip),
                           onDelete: () => _onDelete(clip),
-                          onLike: () {},
-                          onComment: () {},
-                          onShare: () {},
-                          onSave: () {},
-                          onProfile: () {},
+                          onLike: () => _onLike(clip),
+                          onShare: () => _onShare(clip),
+                          onSave: () => _onSave(clip),
+                          onProfile: () => _onProfile(clip),
+                          onOpenShop: clip.hasShopItem
+                              ? () => _onOpenShop(clip)
+                              : null,
                         ),
                         if (isActive)
                           TvPlayPauseBadge(
@@ -375,6 +647,49 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 }
 
+class _DistrictFilterChip extends StatelessWidget {
+  const _DistrictFilterChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Камерага қараган қалин қизил стрелка — «шу ердан қўшинг».
 class _PublishArrowHint extends StatelessWidget {
   const _PublishArrowHint();
@@ -382,7 +697,7 @@ class _PublishArrowHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(42, 28),
+      size: const Size(34, 22),
       painter: _ThickRightArrowPainter(),
     );
   }
@@ -461,7 +776,7 @@ class _EmptyFeed extends StatelessWidget {
             const SizedBox(height: 22),
             FilledButton.icon(
               onPressed: onPublish,
-              icon: const Icon(Icons.photo_camera_outlined, size: 20),
+              icon: const Icon(Icons.videocam_rounded, size: 20),
               label: Text(
                 context.tr('tv_publish_fab'),
                 style: const TextStyle(fontWeight: FontWeight.w700),

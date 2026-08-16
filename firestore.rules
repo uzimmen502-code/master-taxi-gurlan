@@ -459,6 +459,31 @@ service cloud.firestore {
           || (a.size() == 9 && b == ('998' + a));
     }
 
+    function tvClipLikeCountNow() {
+      return ('likeCount' in resource.data && resource.data.likeCount is int)
+          ? resource.data.likeCount
+          : 0;
+    }
+
+    function tvClipLikeCountOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['likeCount'])
+          && request.resource.data.likeCount is int
+          && request.resource.data.likeCount >= 0
+          && (
+            request.resource.data.likeCount == tvClipLikeCountNow() + 1
+            || request.resource.data.likeCount == tvClipLikeCountNow() - 1
+          );
+    }
+
+    function tvShopOwnerFieldsLocked() {
+      return notChanged('boostUntil')
+          && notChanged('socialPostedAt')
+          && notChanged('ownerPhone')
+          && notChanged('viewCount');
+    }
+
     function passengerDocIdMatches(userId, tripPhone) {
       return userId == tripPhone
           || (tripPhone.size() == 9 && userId == ('998' + tripPhone))
@@ -574,6 +599,11 @@ service cloud.firestore {
       match /car_profile_bonus_claims/{claimId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create, update, delete: if false;
+      }
+
+      match /saved_tv_clips/{clipId} {
+        allow read, create, delete: if isOwner(userId);
+        allow update: if false;
       }
     }
 
@@ -2193,7 +2223,42 @@ service cloud.firestore {
     match /tv_clips/{clipId} {
       allow read: if true;
       allow create: if isAuth();
+      allow update: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone))
+          || tvClipLikeCountOnly();
+      allow delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
+
+      match /likes/{likerId} {
+        allow read: if isAuth();
+        allow create: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), likerId);
+        allow update: if false;
+        allow delete: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), likerId);
+      }
+    }
+
+    match /tv_shops/{ownerPhone} {
+      allow read: if true;
+      allow create: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone);
       allow update, delete: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));
+    }
+
+    match /tv_shop_items/{itemId} {
+      allow read: if true;
+      allow create: if isAuth()
+          && phoneDocIdsMatch(userDocIdFromPhoneToken(), request.resource.data.ownerPhone);
+      allow update: if isAdmin()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
+              && tvShopOwnerFieldsLocked());
+      allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
     }

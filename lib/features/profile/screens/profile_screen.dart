@@ -22,6 +22,9 @@ import '../../../repositories/user_repository.dart';
 import '../../../services/location_service.dart';
 import '../../courier/screens/courier_screen.dart';
 import '../../seller/screens/seller_pos_screen.dart';
+import '../../tv_market/repositories/tv_shop_repository.dart';
+import '../../tv_market/screens/tv_my_shop_screen.dart';
+import '../../tv_market/screens/tv_publish_screen.dart';
 import '../../marshrut/driver/screens/driver_panel_marshrut_screen.dart';
 import '../../marshrut/driver/screens/driver_register_marshrut_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
@@ -402,6 +405,37 @@ class _ProfileViewState extends State<_ProfileView> {
                 ),
               );
               if (mounted) controller.load();
+            },
+          ),
+          const SizedBox(height: 10),
+          FutureBuilder<bool>(
+            future: TvShopRepository()
+                .hasShop(canonicalPhoneId(c.phone)),
+            builder: (context, snap) {
+              final hasShop = snap.data == true;
+              return _cardTile(
+                icon: Icons.storefront_rounded,
+                color: _green,
+                title: context.tr(
+                  hasShop ? 'tv_shop_mine' : 'tv_shop_open_cta',
+                ),
+                subtitle: context.tr(
+                  hasShop ? 'tv_shop_open_hint' : 'tv_shop_open_hint',
+                ),
+                onTap: () async {
+                  final phone = canonicalPhoneId(c.phone);
+                  if (phone.isEmpty) return;
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => hasShop
+                          ? TvMyShopScreen(ownerPhone: phone)
+                          : const TvPublishScreen(),
+                    ),
+                  );
+                  if (mounted) setState(() {});
+                },
+              );
             },
           ),
         ]),

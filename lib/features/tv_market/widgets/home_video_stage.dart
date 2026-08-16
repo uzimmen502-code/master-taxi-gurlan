@@ -411,9 +411,6 @@ class _HomeClipCard extends StatelessWidget {
                     label: clip.likeCount > 0 ? '${clip.likeCount}' : '',
                   ),
                   const SizedBox(height: 12),
-                  const _MiniBtn(
-                      icon: Icons.chat_bubble_outline_rounded, label: ''),
-                  const SizedBox(height: 12),
                   const _MiniBtn(icon: Icons.send_rounded, label: ''),
                   const SizedBox(height: 12),
                   const _MiniBtn(
@@ -431,16 +428,11 @@ class _HomeClipCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const CircleAvatar(
-                        radius: 14,
-                        backgroundColor: Colors.white24,
-                        child:
-                            Icon(Icons.person, color: Colors.white, size: 16),
-                      ),
-                      const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          '@${clip.ownerName}',
+                          clip.displayOwnerName(
+                            context.tr('tv_market_user'),
+                          ),
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,

@@ -187,4 +187,85 @@ class TvClipsRepository {
       posterUrl: clip.posterUrl,
     );
   }
+
+  Future<bool> isLiked({
+    required String clipId,
+    required String likerId,
+  }) async {
+    if (clipId.isEmpty || likerId.isEmpty) return false;
+    final snap = await _col.doc(clipId).collection('likes').doc(likerId).get();
+    return snap.exists;
+  }
+
+  Future<Set<String>> likedClipIds({
+    required String likerId,
+    required Iterable<String> clipIds,
+  }) async {
+    final out = <String>{};
+    if (likerId.isEmpty) return out;
+    for (final id in clipIds) {
+      if (id.isEmpty) continue;
+      final snap = await _col.doc(id).collection('likes').doc(likerId).get();
+      if (snap.exists) out.add(id);
+    }
+    return out;
+  }
+
+  /// Бир фойдаланувчи — бир лайк. [likeCount] ±1.
+  Future<bool> toggleLike({
+    required String clipId,
+    required String likerId,
+  }) async {
+    if (clipId.isEmpty || likerId.isEmpty) return false;
+    final clipRef = _col.doc(clipId);
+    final likeRef = clipRef.collection('likes').doc(likerId);
+    return _db.runTransaction((tx) async {
+      final likeSnap = await tx.get(likeRef);
+      final clipSnap = await tx.get(clipRef);
+      final count = (clipSnap.data()?['likeCount'] as num?)?.toInt() ?? 0;
+      if (likeSnap.exists) {
+        tx.delete(likeRef);
+        if (count > 0) {
+          tx.update(clipRef, {'likeCount': FieldValue.increment(-1)});
+        }
+        return false;
+      }
+      tx.set(likeRef, {'createdAt': FieldValue.serverTimestamp()});
+      tx.update(clipRef, {'likeCount': FieldValue.increment(1)});
+      return true;
+    });
+  }
+
+  Future<Set<String>> savedClipIds(String userId) async {
+    if (userId.isEmpty) return {};
+    final snap = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('saved_tv_clips')
+        .limit(200)
+        .get();
+    return snap.docs.map((d) => d.id).toSet();
+  }
+
+  Future<bool> toggleSave({
+    required String userId,
+    required String clipId,
+  }) async {
+    if (userId.isEmpty || clipId.isEmpty) return false;
+    final ref = _db
+        .collection('users')
+        .doc(userId)
+        .collection('saved_tv_clips')
+        .doc(clipId);
+    final snap = await ref.get();
+    if (snap.exists) {
+      await ref.delete();
+      return false;
+    }
+    await ref.set({
+      'clipId': clipId,
+      'savedAt': FieldValue.serverTimestamp(),
+    });
+    return true;
+  }
 }

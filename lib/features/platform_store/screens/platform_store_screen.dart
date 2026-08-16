@@ -8,6 +8,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
+import '../../tv_market/widgets/tv_vitrine_section.dart';
 import '../ava_store_colors.dart';
 import '../controllers/platform_store_controller.dart';
 import '../widgets/platform_cart_sheet.dart';
@@ -138,7 +139,11 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
               child: CircularProgressIndicator(color: AvaStoreColors.deep),
             )
           : c.products.isEmpty
-              ? Center(
+              ? Column(
+                  children: [
+                    const TvVitrineSection(),
+                    Expanded(
+                      child: Center(
                   child: Padding(
                     padding: const EdgeInsets.all(28),
                     child: Column(
@@ -162,6 +167,9 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                       ],
                     ),
                   ),
+                      ),
+                    ),
+                  ],
                 )
               : Column(
                   children: [
@@ -224,6 +232,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                         ),
                       ),
                     ),
+                    const TvVitrineSection(),
                     Expanded(
                       child: Builder(
                         builder: (context) {

@@ -118,6 +118,13 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    match /tv_shop/{ownerPhone}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+          && request.resource.size < 8 * 1024 * 1024;
+      allow delete: if request.auth != null;
+    }
+
     // Telegram wallet top-up receipts — write CF Admin SDK only; finance read via signed URL CF.
     match /topup_receipts/{uid}/{fileName} {
       allow read, write: if false;

@@ -54,7 +54,9 @@ import 'widgets/seller_cta_banner.dart';
 import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
+import '../tv_market/screens/tv_my_shop_screen.dart';
 import '../tv_market/widgets/home_video_stage.dart';
+import '../tv_market/repositories/tv_shop_repository.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const _bg = AppColors.lime;
@@ -126,6 +128,8 @@ class _HomeViewState extends State<_HomeView> {
   Timer? _walletHideTimer;
   Timer? _deferredBootstrapTimer;
   DateTime? _lastDeferredBootstrapAt;
+  bool _hasTvShop = false;
+  String _shopCheckPhone = '';
 
   @override
   void initState() {
@@ -160,6 +164,22 @@ class _HomeViewState extends State<_HomeView> {
     }
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
+    unawaited(_refreshTvShopFlag());
+  }
+
+  Future<void> _refreshTvShopFlag() async {
+    if (!mounted) return;
+    final phone = context.read<HomeController>().phone;
+    final id = canonicalPhoneId(phone);
+    if (id.isEmpty) return;
+    try {
+      final ok = await TvShopRepository().hasShop(id);
+      if (!mounted) return;
+      _shopCheckPhone = id;
+      if (_hasTvShop != ok) setState(() => _hasTvShop = ok);
+    } catch (e) {
+      debugPrint('[Home] tv shop $e');
+    }
   }
 
   /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.
@@ -583,10 +603,33 @@ class _HomeViewState extends State<_HomeView> {
     final home = context.watch<HomeController>();
     final uid = phoneDigits(home.phone);
     final userRepo = context.read<UserRepository>();
+    final shopId = canonicalPhoneId(home.phone);
+    if (shopId.isNotEmpty && shopId != _shopCheckPhone) {
+      unawaited(_refreshTvShopFlag());
+    }
 
     return Scaffold(
       backgroundColor: _bg,
       bottomNavigationBar: _HomeBottomNav(
+        hasShop: _hasTvShop,
+        onStore: () async {
+          final phone = canonicalPhoneId(
+            context.read<HomeController>().phone,
+          );
+          if (phone.isEmpty) {
+            _HomeBottomNav.needPhone(context);
+            return;
+          }
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TvMyShopScreen(ownerPhone: phone),
+            ),
+          );
+          if (mounted) {
+            await _refreshTvShopFlag();
+            _onHomeResurface(revealWallet: true);
+          }
+        },
         onOrders: () async {
           await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const OrdersScreen()),
@@ -1014,11 +1057,15 @@ class _HomeBottomNav extends StatelessWidget {
     required this.onOrders,
     required this.onWallet,
     required this.onProfile,
+    this.onStore,
+    this.hasShop = false,
   });
 
   final VoidCallback onOrders;
   final VoidCallback onWallet;
   final VoidCallback onProfile;
+  final VoidCallback? onStore;
+  final bool hasShop;
 
   static void needPhone(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1073,6 +1120,12 @@ class _HomeBottomNav extends StatelessWidget {
                 label: context.tr('bottom_orders'),
                 onTap: onOrders,
               ),
+              if (hasShop && onStore != null)
+                _NavItem(
+                  icon: _IconKind.store,
+                  label: context.tr('tv_shop_mine'),
+                  onTap: onStore!,
+                ),
               _NavItem(
                 icon: _IconKind.wallet,
                 label: context.tr('bottom_wallet'),

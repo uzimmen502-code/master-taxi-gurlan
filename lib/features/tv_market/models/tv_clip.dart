@@ -1,6 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// TV Market клипи — битта видео = битта таклиф (маҳсулот ёки хизмат).
+/// Профил исмидан биринчи сўз. Телефон / бўш / @nick — бўш қайтаради.
+String tvOwnerGivenName(String raw) {
+  var s = raw.trim();
+  if (s.startsWith('@')) s = s.substring(1).trim();
+  if (s.isEmpty) return '';
+  final compact = s.replaceAll(RegExp(r'[\s+\-()]'), '');
+  if (RegExp(r'^\d{7,}$').hasMatch(compact)) return '';
+  return s.split(RegExp(r'\s+')).first;
+}
+
 class TvClip {
   const TvClip({
     required this.id,
@@ -22,6 +31,9 @@ class TvClip {
     this.viewCount = 0,
     this.status = 'active',
     this.createdAt,
+    this.shopItemId = '',
+    this.socialConsent = false,
+    this.socialPostedAt,
   });
 
   final String id;
@@ -49,8 +61,52 @@ class TvClip {
   final String status;
   final DateTime? createdAt;
 
+  /// Боғланган витрина товар/хизмати. Бўш = фақат ролик.
+  final String shopItemId;
+  final bool socialConsent;
+  final DateTime? socialPostedAt;
+
   bool get isActive => status == 'active';
   bool get hasPrice => price > 0;
+  bool get hasShopItem => shopItemId.trim().isNotEmpty;
+  bool get socialPosted => socialPostedAt != null;
+
+  String displayOwnerName(String fallback) {
+    final g = tvOwnerGivenName(ownerName);
+    return g.isEmpty ? fallback : g;
+  }
+
+  TvClip copyWith({
+    int? likeCount,
+    String? shopItemId,
+    bool? socialConsent,
+    DateTime? socialPostedAt,
+  }) {
+    return TvClip(
+      id: id,
+      videoUrl: videoUrl,
+      posterUrl: posterUrl,
+      title: title,
+      price: price,
+      districtId: districtId,
+      districtLabel: districtLabel,
+      ownerPhone: ownerPhone,
+      ownerName: ownerName,
+      category: category,
+      lat: lat,
+      lng: lng,
+      mfy: mfy,
+      description: description,
+      likeCount: likeCount ?? this.likeCount,
+      commentCount: commentCount,
+      viewCount: viewCount,
+      status: status,
+      createdAt: createdAt,
+      shopItemId: shopItemId ?? this.shopItemId,
+      socialConsent: socialConsent ?? this.socialConsent,
+      socialPostedAt: socialPostedAt ?? this.socialPostedAt,
+    );
+  }
 
   factory TvClip.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data()!;
@@ -74,6 +130,9 @@ class TvClip {
       viewCount: (d['viewCount'] ?? 0) as int,
       status: (d['status'] ?? 'active') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
+      shopItemId: (d['shopItemId'] ?? '') as String,
+      socialConsent: d['socialConsent'] == true,
+      socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -98,5 +157,9 @@ class TvClip {
         'createdAt': createdAt != null
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
+        if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
+        'socialConsent': socialConsent,
+        if (socialPostedAt != null)
+          'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
       };
 }

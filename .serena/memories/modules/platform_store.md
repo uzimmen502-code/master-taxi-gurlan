@@ -8,7 +8,7 @@ Code: `lib/models/platform_product.dart`, `lib/repositories/platform_products_re
 
 Delivery fee: `settings/app.platformDeliveryFeePercent` (default 5). Fee = round(itemsTotal × %). Admin: PlatformProductsAdminScreen bar + CF `adminSetPlatformDeliveryFeePercent`. Cart shows products / delivery (+hint) / pay total. Order: `itemsTotal`,`deliveryFee`,`deliveryFeePercent`; CF reprice adds fee to `total`. Client wallet against `grandTotal`.
 
-Customer UX: catalog search; card add/±; detail stack images + similar. Cart: lines + fee + checkout. Checkout wallet dialog; AddressGate; `fulfillmentMode: delivery`; `placeOrderPostPaid` type=`platform`. Wallet opt-in.
+Customer UX: catalog search; card add/±; detail stack images + similar. Cart: lines + fee + checkout. Checkout wallet dialog; AddressGate; `fulfillmentMode: delivery`; `placeOrderPostPaid` type=`platform`. Wallet opt-in. Seller TV vitrine (`TvVitrineSection`) sits above official catalog — separate cards, Contact-only, not mixed into `PlatformProduct` checkout. См. `mem:modules/tv_market`.
 
 Home «Тавсия этамиз»: bread + food + platform. Tap: bread/food modules, platform→PlatformStoreScreen. Витрина: `settings/app.platformFeaturedAuto` (default true=АВТО all active; false=ҚЎЛДА only featuredOnHome). Admin bar ҚЎЛДА/АВТО + CF `adminSetPlatformFeaturedAuto`.
 

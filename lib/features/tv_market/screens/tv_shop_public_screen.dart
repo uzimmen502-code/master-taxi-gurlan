@@ -7,6 +7,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../widgets/tv_shop_photo_gallery.dart';
 import 'tv_market_feed_screen.dart';
 
 /// Сотувчи дўкони — товар/хизмат карталари + қўнғироқ.
@@ -165,105 +166,64 @@ class _ShopItemCard extends StatelessWidget {
       color: Colors.white,
       elevation: highlight ? 4 : 0,
       borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onVideo,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: highlight
-                  ? const Color(0xFF00E676)
-                  : Colors.grey.shade200,
-              width: highlight ? 1.6 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(16),
-                ),
-                child: SizedBox(
-                  width: 108,
-                  height: 108,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      item.photoUrl.isEmpty
-                          ? ColoredBox(
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.image_outlined),
-                            )
-                          : Image.network(item.photoUrl, fit: BoxFit.cover),
-                      if (item.hasVideo)
-                        const Align(
-                          alignment: Alignment.center,
-                          child: _VideoBadge(),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        formatMoney(item.price),
-                        style: const TextStyle(
-                          color: Color(0xFF00A853),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.districtLabel,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: highlight
+                ? const Color(0xFF00E676)
+                : Colors.grey.shade200,
+            width: highlight ? 1.6 : 1,
           ),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TvShopPhotoCarousel(
+              urls: item.displayPhotos,
+              height: 200,
+              hasVideo: item.hasVideo,
+              onVideo: onVideo,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    formatMoney(item.price),
+                    style: const TextStyle(
+                      color: Color(0xFF00A853),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.districtLabel,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
-}
-
-class _VideoBadge extends StatelessWidget {
-  const _VideoBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white70),
-      ),
-      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
 import 'tv_publish_screen.dart';
+import 'tv_shop_item_photos_screen.dart';
 import 'tv_shop_public_screen.dart';
 
 /// Эгасининг мини-дўкони — товар/нарх/видео таҳрири.
@@ -114,21 +115,59 @@ class _TvMyShopScreenState extends State<TvMyShopScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
                       child: ListTile(
+                        onTap: () async {
+                          final ok = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  TvShopItemPhotosScreen(item: item),
+                            ),
+                          );
+                          if (ok == true && mounted) await _load();
+                        },
                         contentPadding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: SizedBox(
                             width: 56,
                             height: 56,
-                            child: item.photoUrl.isEmpty
-                                ? ColoredBox(
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.image_outlined),
-                                  )
-                                : Image.network(
-                                    item.photoUrl,
-                                    fit: BoxFit.cover,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                item.coverPhotoUrl.isEmpty
+                                    ? ColoredBox(
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(Icons.image_outlined),
+                                      )
+                                    : Image.network(
+                                        item.coverPhotoUrl,
+                                        fit: BoxFit.cover,
+                                      ),
+                                if (item.displayPhotos.length > 1)
+                                  Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: Container(
+                                      margin: const EdgeInsets.all(3),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${item.displayPhotos.length}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                              ],
+                            ),
                           ),
                         ),
                         title: Text(

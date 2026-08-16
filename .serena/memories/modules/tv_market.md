@@ -7,7 +7,7 @@ Five layers, flat Firestore + IDs — not nested subcollections (feed needs top-
 - `users/{uid}` 🔒 private account (wallet, address, role)
 - `tv_public_profiles/{uid}` 👤 public face (name; photo later). App-wide display, not `users` reads
 - `tv_shops/{uid}` 🏪 one shop per user
-- `tv_shop_items/{id}` 🛍️ Offer (commerce source of truth: title/price/photo/kind). Domain name Offer; keep collection id
+- `tv_shop_items/{id}` 🛍️ Offer (commerce source of truth: title/price/`photoUrl`+`photoUrls` 1–5/kind). Domain name Offer; keep collection id
 - `tv_clips/{id}` 🎥 video; `shopItemId` optional (clip-only posts allowed). Feed denorms title/price/ownerName/district
 Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store / ads). Owner edit/delete on overlay, home card, own clip grid; edit syncs offer if `shopItemId` set; delete unlinks `clipIds`.
 
@@ -17,7 +17,8 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - `lib/features/tv_market/repositories/tv_public_profiles_repository.dart` — `tv_public_profiles/{phone}` + shop-name hydrate
 - `lib/features/tv_market/repositories/tv_clips_repository.dart` — Home pagination; likes `tv_clips/{id}/likes/{uid}` ±1 `likeCount`; saves `users/{uid}/saved_tv_clips/{clipId}`; search = recent pool (400, 45s cache) + `searchTokens` array-contains (latin/cyrillic probe) then CatalogSearch AND+rank
 - `lib/features/tv_market/screens/tv_clip_search_screen.dart` — 3-script hint; district scope + «search all districts»; result count; title highlight; tap opens clip in feed
-- `lib/features/tv_market/screens/tv_publish_screen.dart` — create + `editClip` save (tokens, optional new video, sync offer if shopItemId)
+- `lib/features/tv_market/screens/tv_publish_screen.dart` — create + `editClip` save (tokens, optional new video, sync offer if shopItemId); new offer 1–5 photos
+- `lib/features/tv_market/screens/tv_shop_item_photos_screen.dart` — owner adds/removes offer photos (max 5)
 - `lib/features/tv_market/widgets/tv_owner_action_bar.dart` — owner Edit + Delete
 - `lib/features/tv_market/widgets/tv_clip_overlay.dart` — publisher display name (hide if unknown), title, description, price, district; owner Edit/Delete else Contact; «Дўконга» if shopItemId
 - `lib/features/tv_market/screens/tv_market_feed_screen.dart` — district chip (no TV MARKET title); search icon left of camera; videocam + 20% smaller arrow; like/share/save/profile; «Дўконга» if shopItemId
@@ -35,7 +36,7 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - Storage tv_shop: authed write ≤8MB
 
 ## Gotchas
-- `users` is not publicly readable. Publisher name lives on `tv_clips.ownerName` and public `tv_public_profiles/{phone}` (synced on publish, profile save, onboarding, TV open). Overlay: clip name → public profile / `tv_shops.name` → only if viewer is publisher, local profile. Never show viewer name on someone else's clip; never `Фойдаланувчи`. Hide name line if still unknown. Owner play patches `tv_clips.ownerName`.
+- `users` is not publicly readable. Publisher name lives on `tv_clips.ownerName` and public `tv_public_profiles/{phone}` (synced on publish, profile save, onboarding, TV open). Overlay: clip name → public profile / `tv_shops.name` → only if viewer is publisher, local profile. Never show viewer name on someone else's clip; never phone / `Фойдаланувчи`. Hide name line if still unknown. Feed/home hydrate all clip phones from `tv_public_profiles`. Owner play patches `tv_clips.ownerName`. Old empty/phone `ownerName` backfill: `functions/tools/backfill_tv_publisher_names.js --apply` (Admin SDK → `users.name`).
 - Clip-only publish (shop declined) has no product photo and no `shopItemId`.
 - Meta auto-post is **not** implemented; consent + admin manual flag only.
 - Home bottom «Магазиним» tab only if `tv_shops/{phone}` exists.

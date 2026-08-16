@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_compress/video_compress.dart';
@@ -60,7 +59,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   bool _openShop = false;
   bool _socialConsent = false;
   String _attachItemId = '';
-  XFile? _productPhoto;
+  final _productPhotos = <XFile>[];
   List<TvShopItem> _myItems = const [];
   final _shopRepo = TvShopRepository();
 
@@ -178,13 +177,22 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     );
   }
 
-  Future<void> _pickProductPhoto() async {
-    final file = await _picker.pickImage(
-      source: ImageSource.gallery,
+  Future<void> _pickProductPhotos() async {
+    final room = TvShopItem.maxPhotos - _productPhotos.length;
+    if (room <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_shop_photos_max'))),
+      );
+      return;
+    }
+    final picked = await _picker.pickMultiImage(
       imageQuality: 88,
+      limit: room,
     );
-    if (file == null) return;
-    setState(() => _productPhoto = file);
+    if (picked.isEmpty) return;
+    setState(() {
+      _productPhotos.addAll(picked.take(room));
+    });
   }
 
   bool get _isEdit => widget.editClip != null;
@@ -347,7 +355,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     }
 
     final shopMode = _openShop || _attachItemId.isNotEmpty;
-    if (shopMode && _attachItemId.isEmpty && _productPhoto == null) {
+    if (shopMode && _attachItemId.isEmpty && _productPhotos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_shop_photo_required'))),
       );
@@ -455,23 +463,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           name: ownerDisplay,
         );
         if (_attachItemId.isEmpty) {
-          Uint8List photoBytes = await File(_productPhoto!.path).readAsBytes();
-          try {
-            final compressed = await FlutterImageCompress.compressWithList(
-              photoBytes,
-              quality: 78,
-              minWidth: 1080,
-              minHeight: 1080,
-            );
-            if (compressed.isNotEmpty) {
-              photoBytes = Uint8List.fromList(compressed);
-            }
-          } catch (e) {
-            debugPrint('[TvPublish] photo compress $e');
-          }
-          final photoUrl = await _storageService.uploadShopPhoto(
+          final photoUrls = await _storageService.uploadShopPhotos(
             ownerPhone: phone,
-            bytes: photoBytes,
+            filePaths: _productPhotos.map((f) => f.path).toList(),
           );
           shopItemId = await _shopRepo.createItem(
             TvShopItem(
@@ -480,7 +474,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               ownerName: ownerDisplay,
               title: _titleCtrl.text.trim(),
               price: clipPrice,
-              photoUrl: photoUrl,
+              photoUrl: photoUrls.isNotEmpty ? photoUrls.first : '',
+              photoUrls: photoUrls,
               kind: _category,
               districtId: districtId,
               districtLabel: districtLabel,
@@ -730,7 +725,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                           _openShop = v;
                           if (!v) {
                             _attachItemId = '';
-                            _productPhoto = null;
+                            _productPhotos.clear();
                             _socialConsent = false;
                           }
                         }),
@@ -787,7 +782,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                                         it.price > 0 ? '${it.price}' : '';
                                     _descCtrl.text = it.description;
                                     _category = it.kind;
-                                    _productPhoto = null;
+                                    _productPhotos.clear();
                                   }
                                 });
                               },
@@ -797,37 +792,124 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 ],
                 if (_attachItemId.isEmpty) ...[
                   const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: _publishing ? null : _pickProductPhoto,
-                    child: Container(
-                      height: 140,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: _productPhoto == null
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                  Text(
+                    context.tr('tv_shop_photo'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    context.tr('tv_shop_photos_hint'),
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 108,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (var i = 0; i < _productPhotos.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                Icon(Icons.add_photo_alternate_outlined,
-                                    size: 36, color: Colors.grey.shade500),
-                                const SizedBox(height: 6),
-                                Text(
-                                  context.tr('tv_shop_photo'),
-                                  style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w600,
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Image.file(
+                                    File(_productPhotos[i].path),
+                                    width: 108,
+                                    height: 108,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                if (i == 0)
+                                  Positioned(
+                                    left: 6,
+                                    bottom: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        context.tr('tv_shop_cover'),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Material(
+                                    color: Colors.black87,
+                                    shape: const CircleBorder(),
+                                    child: InkWell(
+                                      customBorder: const CircleBorder(),
+                                      onTap: _publishing
+                                          ? null
+                                          : () => setState(
+                                                () => _productPhotos.removeAt(i),
+                                              ),
+                                      child: const SizedBox(
+                                        width: 26,
+                                        height: 26,
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
-                            )
-                          : Image.file(
-                              File(_productPhoto!.path),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
                             ),
+                          ),
+                        if (_productPhotos.length < TvShopItem.maxPhotos)
+                          GestureDetector(
+                            onTap: _publishing ? null : _pickProductPhotos,
+                            child: Container(
+                              width: 108,
+                              height: 108,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    size: 32,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_productPhotos.length}/${TvShopItem.maxPhotos}',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],

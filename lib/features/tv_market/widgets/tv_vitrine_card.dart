@@ -76,12 +76,12 @@ class TvVitrineCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    item.photoUrl.isEmpty
+                    item.coverPhotoUrl.isEmpty
                         ? ColoredBox(
                             color: Colors.grey.shade200,
                             child: const Icon(Icons.image_outlined, size: 36),
                           )
-                        : Image.network(item.photoUrl, fit: BoxFit.cover),
+                        : Image.network(item.coverPhotoUrl, fit: BoxFit.cover),
                     if (item.hasVideo)
                       const Align(
                         alignment: Alignment.center,
@@ -107,6 +107,16 @@ class TvVitrineCard extends StatelessWidget {
                         child: _Pill(
                           text: context.tr('tv_vitrine_ad'),
                           color: const Color(0xFFFF1744),
+                          fg: Colors.white,
+                        ),
+                      ),
+                    if (item.displayPhotos.length > 1)
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: _Pill(
+                          text: '${item.displayPhotos.length}',
+                          color: Colors.black54,
                           fg: Colors.white,
                         ),
                       ),

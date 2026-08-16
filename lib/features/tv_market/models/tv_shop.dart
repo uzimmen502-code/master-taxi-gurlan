@@ -31,6 +31,7 @@ class TvShop {
 }
 
 /// Витрина товар/хизмати — `tv_shop_items/{id}`.
+/// Расмлар: `photoUrls` (1–5). `photoUrl` — қоплама (биринчи расм, back-compat).
 class TvShopItem {
   const TvShopItem({
     required this.id,
@@ -42,6 +43,7 @@ class TvShopItem {
     required this.kind,
     required this.districtId,
     required this.districtLabel,
+    this.photoUrls = const [],
     this.description = '',
     this.clipIds = const [],
     this.viewCount = 0,
@@ -52,12 +54,17 @@ class TvShopItem {
     this.createdAt,
   });
 
+  static const maxPhotos = 5;
+
   final String id;
   final String ownerPhone;
   final String ownerName;
   final String title;
   final int price;
+
+  /// Қоплама (биринчи расм).
   final String photoUrl;
+  final List<String> photoUrls;
 
   /// `product` | `service`
   final String kind;
@@ -74,26 +81,68 @@ class TvShopItem {
   final String status;
   final DateTime? createdAt;
 
+  static List<String> normalizePhotos({
+    List<dynamic>? rawUrls,
+    String photoUrl = '',
+  }) {
+    final out = <String>[];
+    if (rawUrls != null) {
+      for (final e in rawUrls) {
+        final s = '$e'.trim();
+        if (s.isEmpty || out.contains(s)) continue;
+        out.add(s);
+        if (out.length >= maxPhotos) return out;
+      }
+    }
+    if (out.isEmpty) {
+      final one = photoUrl.trim();
+      if (one.isNotEmpty) out.add(one);
+    }
+    return out;
+  }
+
+  List<String> get displayPhotos {
+    if (photoUrls.isNotEmpty) {
+      return photoUrls
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .take(maxPhotos)
+          .toList(growable: false);
+    }
+    final one = photoUrl.trim();
+    return one.isEmpty ? const <String>[] : <String>[one];
+  }
+
+  String get coverPhotoUrl {
+    final list = displayPhotos;
+    return list.isEmpty ? '' : list.first;
+  }
+
   bool get isActive => status == 'active';
   bool get hasVideo => clipIds.isNotEmpty;
   bool get isBoosted =>
       boostUntil != null && boostUntil!.isAfter(DateTime.now());
   bool get socialPosted => socialPostedAt != null;
   bool get isVitrineReady =>
-      isActive && photoUrl.isNotEmpty && price > 0 && hasVideo;
+      isActive && coverPhotoUrl.isNotEmpty && price > 0 && hasVideo;
 
   factory TvShopItem.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final d = doc.data()!;
     final rawClips = d['clipIds'];
+    final photos = normalizePhotos(
+      rawUrls: d['photoUrls'] as List?,
+      photoUrl: (d['photoUrl'] ?? '') as String,
+    );
     return TvShopItem(
       id: doc.id,
       ownerPhone: (d['ownerPhone'] ?? '') as String,
       ownerName: (d['ownerName'] ?? '') as String,
       title: (d['title'] ?? '') as String,
       price: (d['price'] ?? 0) as int,
-      photoUrl: (d['photoUrl'] ?? '') as String,
+      photoUrl: photos.isNotEmpty ? photos.first : '',
+      photoUrls: photos,
       kind: (d['kind'] ?? 'product') as String,
       districtId: (d['districtId'] ?? '') as String,
       districtLabel: (d['districtLabel'] ?? '') as String,
@@ -110,25 +159,29 @@ class TvShopItem {
     );
   }
 
-  Map<String, dynamic> toMap() => {
-        'ownerPhone': ownerPhone,
-        'ownerName': ownerName,
-        'title': title,
-        'price': price,
-        'photoUrl': photoUrl,
-        'kind': kind,
-        'districtId': districtId,
-        'districtLabel': districtLabel,
-        'description': description,
-        'clipIds': clipIds,
-        'viewCount': viewCount,
-        if (boostUntil != null) 'boostUntil': Timestamp.fromDate(boostUntil!),
-        'socialConsent': socialConsent,
-        if (socialPostedAt != null)
-          'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
-        'status': status,
-        'createdAt': createdAt != null
-            ? Timestamp.fromDate(createdAt!)
-            : FieldValue.serverTimestamp(),
-      };
+  Map<String, dynamic> toMap() {
+    final photos = normalizePhotos(rawUrls: photoUrls, photoUrl: photoUrl);
+    return {
+      'ownerPhone': ownerPhone,
+      'ownerName': ownerName,
+      'title': title,
+      'price': price,
+      'photoUrl': photos.isNotEmpty ? photos.first : photoUrl,
+      'photoUrls': photos,
+      'kind': kind,
+      'districtId': districtId,
+      'districtLabel': districtLabel,
+      'description': description,
+      'clipIds': clipIds,
+      'viewCount': viewCount,
+      if (boostUntil != null) 'boostUntil': Timestamp.fromDate(boostUntil!),
+      'socialConsent': socialConsent,
+      if (socialPostedAt != null)
+        'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
+      'status': status,
+      'createdAt': createdAt != null
+          ? Timestamp.fromDate(createdAt!)
+          : FieldValue.serverTimestamp(),
+    };
+  }
 }

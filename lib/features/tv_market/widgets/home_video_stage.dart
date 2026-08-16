@@ -360,6 +360,15 @@ class _HomeClipCard extends StatelessWidget {
     final ready = playing &&
         controller != null &&
         controller!.value.isInitialized;
+    final stored = clip.displayOwnerName('');
+    final ownerLabel = stored.isNotEmpty
+        ? stored
+        : (isOwner
+            ? tvOwnerGivenName(context.read<HomeController>().name)
+            : '');
+    final name = ownerLabel.isNotEmpty
+        ? ownerLabel
+        : context.tr('tv_market_user');
     return GestureDetector(
       onTap: onOpen,
       child: Container(
@@ -430,9 +439,7 @@ class _HomeClipCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          clip.displayOwnerName(
-                            context.tr('tv_market_user'),
-                          ),
+                          name,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,

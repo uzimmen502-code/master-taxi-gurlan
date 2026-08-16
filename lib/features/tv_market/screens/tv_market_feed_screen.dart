@@ -16,6 +16,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
 import '../services/tv_clip_share.dart';
+import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
@@ -50,6 +51,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Timer? _hideBadgeTimer;
   int _activateGen = 0;
   String _mePhone = '';
+  String _meGivenName = '';
   String _filterDistrictId = '';
   List<GeoDistrict> _districts = const [];
   final _likedIds = <String>{};
@@ -73,7 +75,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (!mounted) return;
     setState(() {
       _mePhone = phoneDigits(prefs.getString('user_phone') ?? '');
+      _meGivenName = tvOwnerGivenName(prefs.getString('user_name') ?? '');
     });
+    if (_meGivenName.isEmpty) {
+      final resolved = await resolveLocalTvOwnerGivenName(phone: _mePhone);
+      if (mounted && resolved.isNotEmpty) {
+        setState(() => _meGivenName = resolved);
+      }
+    }
     await _refreshSocialState();
   }
 
@@ -209,6 +218,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       }
     }
     unawaited(_pool.retain(_urlsAround(index)));
+    unawaited(_maybePatchOwnerName(clip));
   }
 
   void _onPageChanged(int index) {
@@ -253,6 +263,30 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
+
+  String _overlayName(BuildContext context, TvClip clip) {
+    final stored = clip.displayOwnerName('');
+    if (stored.isNotEmpty) return stored;
+    if (_isOwner(clip) && _meGivenName.isNotEmpty) return _meGivenName;
+    return context.tr('tv_market_user');
+  }
+
+  Future<void> _maybePatchOwnerName(TvClip clip) async {
+    if (!_isOwner(clip) || _meGivenName.isEmpty) return;
+    if (!tvOwnerNameLooksFake(clip.ownerName)) return;
+    try {
+      await _repo.patchOwnerName(clipId: clip.id, ownerName: _meGivenName);
+      if (!mounted) return;
+      final i = _clips.indexWhere((c) => c.id == clip.id);
+      if (i >= 0) {
+        setState(() {
+          _clips[i] = _clips[i].copyWith(ownerName: _meGivenName);
+        });
+      }
+    } catch (e) {
+      debugPrint('[TvMarketFeed] patch name $e');
+    }
+  }
 
   Future<void> _onDelete(TvClip clip) async {
     tvOnPlaybackBlocked();
@@ -646,6 +680,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         TvClipOverlay(
                           clip: clip,
                           isOwner: _isOwner(clip),
+                          ownerLabel: _overlayName(context, clip),
                           liked: _likedIds.contains(clip.id),
                           saved: _savedIds.contains(clip.id),
                           onContact: () => _onContact(clip),

@@ -7,7 +7,15 @@ String tvOwnerGivenName(String raw) {
   if (s.isEmpty) return '';
   final compact = s.replaceAll(RegExp(r'[\s+\-()]'), '');
   if (RegExp(r'^\d{7,}$').hasMatch(compact)) return '';
-  return s.split(RegExp(r'\s+')).first;
+  final first = s.split(RegExp(r'\s+')).first;
+  const fake = {
+    'фойдаланувчи',
+    'foydalanuvchi',
+    'пользователь',
+    'user',
+  };
+  if (fake.contains(first.toLowerCase())) return '';
+  return first;
 }
 
 class TvClip {
@@ -83,6 +91,7 @@ class TvClip {
     String? shopItemId,
     bool? socialConsent,
     DateTime? socialPostedAt,
+    String? ownerName,
   }) {
     return TvClip(
       id: id,
@@ -93,7 +102,7 @@ class TvClip {
       districtId: districtId,
       districtLabel: districtLabel,
       ownerPhone: ownerPhone,
-      ownerName: ownerName,
+      ownerName: ownerName ?? this.ownerName,
       category: category,
       lat: lat,
       lng: lng,

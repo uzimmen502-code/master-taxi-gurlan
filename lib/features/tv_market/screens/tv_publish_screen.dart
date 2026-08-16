@@ -14,11 +14,11 @@ import 'package:video_player/video_player.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../repositories/user_repository.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/tv_owner_name.dart';
 import '../services/tv_storage_service.dart';
 
 /// TV Market — видео жойлаш экрани.
@@ -213,11 +213,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final districtId = ServiceConfigHolder.districtId;
       final districtLabel = ServiceConfigHolder.districtLabel;
 
-      final prefs = await SharedPreferences.getInstance();
-      final profile = await UserRepository().getById(
-        canonicalPhoneId(prefs.getString('user_phone') ?? phone),
-      );
-      final ownerName = tvOwnerGivenName(profile?.name ?? '');
+      final ownerName = await resolveLocalTvOwnerGivenName(phone: phone);
 
       final settingsSnap = await FirebaseFirestore.instance
           .collection('settings')
@@ -281,8 +277,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
       final shopMode = _openShop || _attachItemId.isNotEmpty;
       if (!mounted) return;
-      final ownerDisplay =
-          ownerName.isEmpty ? context.tr('tv_market_user') : ownerName;
+      final ownerDisplay = ownerName;
 
       if (shopMode) {
         if (mounted) {

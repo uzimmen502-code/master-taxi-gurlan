@@ -20,6 +20,7 @@ class TvClipOverlay extends StatelessWidget {
     this.isOwner = false,
     this.onDelete,
     this.onOpenShop,
+    this.ownerLabel,
   });
 
   final TvClip clip;
@@ -34,6 +35,9 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onOpenShop;
 
+  /// Берилса, клипдаги `ownerName` ўрнига шу матн кўринади.
+  final String? ownerLabel;
+
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
@@ -47,7 +51,10 @@ class TvClipOverlay extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _InfoColumn(clip: clip),
+              _InfoColumn(
+                clip: clip,
+                ownerLabel: ownerLabel,
+              ),
               const SizedBox(height: 10),
               if (onOpenShop != null && !isOwner) ...[
                 SizedBox(
@@ -116,6 +123,7 @@ class TvClipOverlay extends StatelessWidget {
             clip: clip,
             liked: liked,
             saved: saved,
+            ownerLabel: ownerLabel,
             onLike: onLike,
             onShare: onShare,
             onProfile: onProfile,
@@ -128,12 +136,15 @@ class TvClipOverlay extends StatelessWidget {
 }
 
 class _InfoColumn extends StatelessWidget {
-  const _InfoColumn({required this.clip});
+  const _InfoColumn({required this.clip, this.ownerLabel});
   final TvClip clip;
+  final String? ownerLabel;
 
   @override
   Widget build(BuildContext context) {
-    final name = clip.displayOwnerName(context.tr('tv_market_user'));
+    final name = (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
+        ? ownerLabel!.trim()
+        : clip.displayOwnerName(context.tr('tv_market_user'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -204,6 +215,7 @@ class _ActionButtons extends StatelessWidget {
     required this.onShare,
     required this.onProfile,
     required this.onSave,
+    this.ownerLabel,
   });
 
   final TvClip clip;
@@ -213,6 +225,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onProfile;
   final VoidCallback onSave;
+  final String? ownerLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +251,11 @@ class _ActionButtons extends StatelessWidget {
             radius: 18,
             backgroundColor: Colors.white24,
             child: Text(
-              _initial(clip.displayOwnerName(context.tr('tv_market_user'))),
+              _initial(
+                (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
+                    ? ownerLabel!.trim()
+                    : clip.displayOwnerName(context.tr('tv_market_user')),
+              ),
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,

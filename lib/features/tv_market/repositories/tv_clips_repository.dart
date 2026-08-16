@@ -225,6 +225,14 @@ class TvClipsRepository {
     );
   }
 
+  Future<void> patchOwnerName({
+    required String clipId,
+    required String ownerName,
+  }) async {
+    if (clipId.isEmpty || ownerName.trim().isEmpty) return;
+    await _col.doc(clipId).update({'ownerName': ownerName.trim()});
+  }
+
   Future<bool> isLiked({
     required String clipId,
     required String likerId,

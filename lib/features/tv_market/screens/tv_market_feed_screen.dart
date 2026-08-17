@@ -24,7 +24,6 @@ import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_clip_search_screen.dart';
 import 'tv_my_shop_screen.dart';
-import 'tv_owner_clips_screen.dart';
 import 'tv_publish_screen.dart';
 import 'tv_shop_public_screen.dart';
 
@@ -538,26 +537,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
-  Future<void> _onProfile(TvClip clip) async {
-    tvOnPlaybackBlocked();
-    final shop = await _shopRepo.fetchShop(clip.ownerPhone);
-    if (!mounted) return;
-    final owner = _isOwner(clip);
-    Widget screen;
-    if (shop != null) {
-      screen = owner
-          ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
-          : TvShopPublicScreen(ownerPhone: clip.ownerPhone);
-    } else {
-      screen = TvOwnerClipsScreen(
-        ownerPhone: clip.ownerPhone,
-        ownerName: _overlayName(clip),
-      );
-    }
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
-  }
-
   Future<void> _onOpenShop(TvClip clip) async {
     tvOnPlaybackBlocked();
     final owner = _isOwner(clip);
@@ -750,7 +729,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onLike: () => _onLike(clip),
                           onShare: () => _onShare(clip),
                           onSave: () => _onSave(clip),
-                          onProfile: () => _onProfile(clip),
                           onOpenShop: _showShopBtn(clip)
                               ? () => _onOpenShop(clip)
                               : null,

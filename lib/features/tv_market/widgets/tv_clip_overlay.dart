@@ -15,7 +15,6 @@ class TvClipOverlay extends StatelessWidget {
     required this.onLike,
     required this.onShare,
     required this.onSave,
-    required this.onProfile,
     this.liked = false,
     this.saved = false,
     this.isOwner = false,
@@ -30,7 +29,6 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onShare;
   final VoidCallback onSave;
-  final VoidCallback onProfile;
   final bool liked;
   final bool saved;
   final bool isOwner;
@@ -95,11 +93,9 @@ class TvClipOverlay extends StatelessWidget {
             clip: clip,
             liked: liked,
             saved: saved,
-            ownerLabel: ownerLabel,
             showShop: onOpenShop != null,
             onLike: onLike,
             onShare: onShare,
-            onProfile: onProfile,
             onSave: onSave,
             onOpenShop: onOpenShop,
           ),
@@ -209,11 +205,9 @@ class _ActionButtons extends StatelessWidget {
     required this.saved,
     required this.onLike,
     required this.onShare,
-    required this.onProfile,
     required this.onSave,
     this.onOpenShop,
     this.showShop = false,
-    this.ownerLabel,
   });
 
   final TvClip clip;
@@ -221,11 +215,9 @@ class _ActionButtons extends StatelessWidget {
   final bool saved;
   final VoidCallback onLike;
   final VoidCallback onShare;
-  final VoidCallback onProfile;
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
   final bool showShop;
-  final String? ownerLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -252,28 +244,6 @@ class _ActionButtons extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 16),
-        GestureDetector(
-          onTap: onProfile,
-          child: CircleAvatar(
-            radius: 18,
-            backgroundColor: Colors.white24,
-            child: Text(
-              _initial(
-                tvOwnerDisplayName(
-                  (ownerLabel != null && ownerLabel!.trim().isNotEmpty)
-                      ? ownerLabel!
-                      : clip.ownerName,
-                ),
-              ),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
         _ActionBtn(
           icon: saved
               ? Icons.bookmark_rounded
@@ -284,12 +254,6 @@ class _ActionButtons extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _initial(String name) {
-    final t = name.trim();
-    if (t.isEmpty) return '?';
-    return t.substring(0, 1).toUpperCase();
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -556,6 +558,17 @@ class TvShopNetworkImage extends StatelessWidget {
     final u = url.trim();
     if (u.startsWith('assets/')) {
       return Image.asset(u, fit: fit);
+    }
+    if (u.isNotEmpty && !isHttpImageUrl(u) && !isDataImageUrl(u)) {
+      final file = File(u);
+      if (file.existsSync()) {
+        return Image.file(
+          file,
+          fit: fit,
+          width: expand ? double.infinity : null,
+          height: expand ? double.infinity : null,
+        );
+      }
     }
     if (u.isNotEmpty && isHttpImageUrl(u)) {
       return CachedNetworkImage(

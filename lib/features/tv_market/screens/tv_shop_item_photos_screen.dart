@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_storage_service.dart';
+import '../widgets/tv_shop_photo_gallery.dart';
 
 /// Эгаси товар расмларини 5 тагача қўшади / олиб ташлайди.
 class TvShopItemPhotosScreen extends StatefulWidget {
@@ -89,6 +90,19 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
     }
   }
 
+  Future<void> _preview(int index) async {
+    final all = [
+      ..._urls,
+      ..._newFiles.map((f) => f.path),
+    ];
+    if (all.isEmpty) return;
+    await openTvShopPhotoGallery(
+      context,
+      urls: all,
+      initialIndex: index.clamp(0, all.length - 1),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -134,6 +148,7 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
               for (var i = 0; i < _urls.length; i++)
                 _Thumb(
                   cover: i == 0 && _newFiles.isEmpty,
+                  onOpen: _saving ? null : () => _preview(i),
                   onRemove: _saving
                       ? null
                       : () => setState(() => _urls.removeAt(i)),
@@ -142,6 +157,9 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
               for (var i = 0; i < _newFiles.length; i++)
                 _Thumb(
                   cover: _urls.isEmpty && i == 0,
+                  onOpen: _saving
+                      ? null
+                      : () => _preview(_urls.length + i),
                   onRemove: _saving
                       ? null
                       : () => setState(() => _newFiles.removeAt(i)),
@@ -191,11 +209,13 @@ class _Thumb extends StatelessWidget {
   const _Thumb({
     required this.child,
     required this.cover,
+    this.onOpen,
     this.onRemove,
   });
 
   final Widget child;
   final bool cover;
+  final VoidCallback? onOpen;
   final VoidCallback? onRemove;
 
   @override
@@ -205,7 +225,14 @@ class _Thumb extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: SizedBox(width: 108, height: 108, child: child),
+          child: SizedBox(
+            width: 108,
+            height: 108,
+            child: GestureDetector(
+              onTap: onOpen,
+              child: child,
+            ),
+          ),
         ),
         if (cover)
           Positioned(

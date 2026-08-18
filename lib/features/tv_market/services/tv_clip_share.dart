@@ -1,9 +1,8 @@
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../core/app_share.dart';
 import '../models/tv_clip.dart';
-
-const kTvMarketShareUrl = 'https://master-taxi-gurlan.web.app/downloads/';
 
 Future<void> shareTvClip(TvClip clip) async {
   final lines = <String>[
@@ -11,7 +10,7 @@ Future<void> shareTvClip(TvClip clip) async {
     if (clip.hasPrice) formatMoney(clip.price),
     if (clip.districtLabel.trim().isNotEmpty) clip.districtLabel.trim(),
     'AVA',
-    kTvMarketShareUrl,
+    kAvaAppDownloadPage,
   ];
   await Share.share(lines.join('\n'));
 }

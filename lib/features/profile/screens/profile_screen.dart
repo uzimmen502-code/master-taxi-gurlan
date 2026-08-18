@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/brand_labels.dart';
+import '../../../core/app_share.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
@@ -436,6 +437,21 @@ class _ProfileViewState extends State<_ProfileView> {
                   if (mounted) setState(() {});
                 },
               );
+            },
+          ),
+          const SizedBox(height: 10),
+          _cardTile(
+            icon: Icons.share_rounded,
+            color: _green,
+            title: context.tr('app_share_title'),
+            subtitle: context.tr('app_share_subtitle'),
+            onTap: () async {
+              final ok = await shareAvaApp(context);
+              if (!ok && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(context.tr('app_share_failed'))),
+                );
+              }
             },
           ),
         ]),

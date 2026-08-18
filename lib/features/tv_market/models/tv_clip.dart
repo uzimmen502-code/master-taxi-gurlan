@@ -95,6 +95,7 @@ class TvClip {
 
   TvClip copyWith({
     int? likeCount,
+    int? viewCount,
     String? shopItemId,
     bool? socialConsent,
     DateTime? socialPostedAt,
@@ -124,7 +125,7 @@ class TvClip {
       description: description ?? this.description,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount,
-      viewCount: viewCount,
+      viewCount: viewCount ?? this.viewCount,
       status: status,
       createdAt: createdAt,
       shopItemId: shopItemId ?? this.shopItemId,

@@ -50,4 +50,16 @@ class TvPublicProfilesRepository {
     }));
     return out;
   }
+
+  /// Kanal statistikasi — `totalViewCount` (ixtiyoriy).
+  Future<int> fetchTotalViewCount(String phone) async {
+    final id = canonicalPhoneId(phone);
+    if (id.isEmpty) return 0;
+    try {
+      final snap = await _col.doc(id).get();
+      return (snap.data()?['totalViewCount'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
 }

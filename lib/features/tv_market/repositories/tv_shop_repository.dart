@@ -21,6 +21,24 @@ class TvShopRepository {
     return snap.exists;
   }
 
+  /// Feed CTA: qaysi nashriyotchilarda `tv_shops` bor.
+  Future<Set<String>> ownerIdsWithShop(Iterable<String> phones) async {
+    final ids = phones
+        .map(canonicalPhoneId)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (ids.isEmpty) return {};
+    final out = <String>{};
+    await Future.wait(ids.map((id) async {
+      try {
+        final snap = await _shops.doc(id).get();
+        if (snap.exists) out.add(id);
+      } catch (_) {}
+    }));
+    return out;
+  }
+
   Future<TvShop?> fetchShop(String ownerPhone) async {
     final id = canonicalPhoneId(ownerPhone);
     if (id.isEmpty) return null;

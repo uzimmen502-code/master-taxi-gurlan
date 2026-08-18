@@ -477,6 +477,36 @@ service cloud.firestore {
           );
     }
 
+    function tvClipViewCountNow() {
+      return ('viewCount' in resource.data && resource.data.viewCount is int)
+          ? resource.data.viewCount
+          : 0;
+    }
+
+    function tvClipViewCountOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['viewCount'])
+          && request.resource.data.viewCount is int
+          && request.resource.data.viewCount == tvClipViewCountNow() + 1;
+    }
+
+    function tvPublicProfileTotalViewCountNow() {
+      return ('totalViewCount' in resource.data
+              && resource.data.totalViewCount is int)
+          ? resource.data.totalViewCount
+          : 0;
+    }
+
+    function tvPublicProfileViewCountOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['totalViewCount'])
+          && request.resource.data.totalViewCount is int
+          && request.resource.data.totalViewCount
+              == tvPublicProfileTotalViewCountNow() + 1;
+    }
+
     function tvShopOwnerFieldsLocked() {
       return notChanged('boostUntil')
           && notChanged('socialPostedAt')
@@ -2226,7 +2256,8 @@ service cloud.firestore {
       allow update: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone))
-          || tvClipLikeCountOnly();
+          || tvClipLikeCountOnly()
+          || tvClipViewCountOnly();
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
@@ -2239,16 +2270,34 @@ service cloud.firestore {
         allow delete: if isAuth()
             && phoneDocIdsMatch(userDocIdFromPhoneToken(), likerId);
       }
+
+      match /views/{viewerId} {
+        allow read: if isAdmin();
+        allow create: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), viewerId)
+            && request.resource.data.keys().hasOnly(['viewedAt']);
+        allow update: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), viewerId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['viewedAt']);
+        allow delete: if false;
+      }
     }
 
     // TV жойлаштирувчи исми — `users` оммавий эмас; роликдаги исм бўш бўлса шу ердан.
     match /tv_public_profiles/{ownerPhone} {
       allow read: if true;
-      allow create, update: if isAuth()
+      allow create: if isAuth()
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 80;
+      allow update: if tvPublicProfileViewCountOnly()
+          || (isAuth()
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
+              && request.resource.data.name is string
+              && request.resource.data.name.size() > 0
+              && request.resource.data.name.size() <= 80);
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));

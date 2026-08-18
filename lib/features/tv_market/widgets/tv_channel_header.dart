@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../models/tv_clip.dart';
+import '../utils/tv_view_format.dart';
 
-/// Оммaviy канал боши — ism, tuman, qisqa stat.
+/// Оммaviy kanal boshi — ism, tuman, roliklar va jami ko‘rish.
 class TvChannelHeader extends StatelessWidget {
   const TvChannelHeader({
     super.key,
     required this.displayName,
     this.districtLabel = '',
     this.clipCount,
+    this.totalViewCount,
   });
 
   final String displayName;
   final String districtLabel;
   final int? clipCount;
+  final int? totalViewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -72,14 +75,43 @@ class TvChannelHeader extends StatelessWidget {
                   ),
                 ],
                 if (clipCount != null && clipCount! > 0) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.movie_outlined,
+                          size: 15, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        context
+                            .tr('tv_channel_clip_count')
+                            .replaceAll('{n}', '$clipCount'),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (totalViewCount != null && totalViewCount! > 0) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    context.tr('tv_channel_clip_count').replaceAll('{n}', '$clipCount'),
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.visibility_outlined,
+                          size: 15, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        context
+                            .tr('tv_channel_total_views')
+                            .replaceAll('{n}', tvFormatViewCount(totalViewCount!)),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],

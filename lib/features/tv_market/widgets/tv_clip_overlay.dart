@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
+import '../utils/tv_view_format.dart';
 import 'tv_owner_action_bar.dart';
 
 /// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
@@ -21,6 +22,7 @@ class TvClipOverlay extends StatelessWidget {
     this.onDelete,
     this.onEdit,
     this.onOpenShop,
+    this.openChannelAsShop = true,
     this.ownerLabel,
   });
 
@@ -35,6 +37,9 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onOpenShop;
+
+  /// `false` → lime tugma «Канал».
+  final bool openChannelAsShop;
 
   /// Берилса, клипдаги `ownerName` ўрнига шу матн кўринади.
   final String? ownerLabel;
@@ -94,6 +99,7 @@ class TvClipOverlay extends StatelessWidget {
             liked: liked,
             saved: saved,
             showShop: onOpenShop != null,
+            openChannelAsShop: openChannelAsShop,
             onLike: onLike,
             onShare: onShare,
             onSave: onSave,
@@ -178,6 +184,21 @@ class _InfoColumn extends StatelessWidget {
               ),
               const SizedBox(width: 10),
             ],
+            if (clip.viewCount > 0) ...[
+              const Icon(Icons.visibility_outlined,
+                  color: Colors.white70, size: 14),
+              const SizedBox(width: 2),
+              Text(
+                tvFormatViewCount(clip.viewCount),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
             const Icon(Icons.location_on, color: Colors.white70, size: 14),
             const SizedBox(width: 2),
             Flexible(
@@ -207,6 +228,7 @@ class _ActionButtons extends StatelessWidget {
     required this.onShare,
     required this.onSave,
     this.onOpenShop,
+    this.openChannelAsShop = true,
     this.showShop = false,
   });
 
@@ -217,6 +239,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
+  final bool openChannelAsShop;
   final bool showShop;
 
   @override
@@ -239,7 +262,10 @@ class _ActionButtons extends StatelessWidget {
         if (showShop && onOpenShop != null) ...[
           const SizedBox(height: 16),
           _ShopActionBtn(
-            label: context.tr('tv_market_shop'),
+            label: context.tr(
+              openChannelAsShop ? 'tv_market_shop' : 'tv_market_channel',
+            ),
+            isShop: openChannelAsShop,
             onTap: onOpenShop!,
           ),
         ],
@@ -304,10 +330,15 @@ class _ActionBtn extends StatelessWidget {
 }
 
 class _ShopActionBtn extends StatelessWidget {
-  const _ShopActionBtn({required this.label, required this.onTap});
+  const _ShopActionBtn({
+    required this.label,
+    required this.onTap,
+    this.isShop = true,
+  });
 
   final String label;
   final VoidCallback onTap;
+  final bool isShop;
 
   @override
   Widget build(BuildContext context) {
@@ -327,8 +358,8 @@ class _ShopActionBtn extends StatelessWidget {
                 BoxShadow(color: Colors.black54, blurRadius: 6),
               ],
             ),
-            child: const Icon(
-              Icons.storefront_rounded,
+            child: Icon(
+              isShop ? Icons.storefront_rounded : Icons.live_tv_rounded,
               color: Colors.black,
               size: 22,
             ),

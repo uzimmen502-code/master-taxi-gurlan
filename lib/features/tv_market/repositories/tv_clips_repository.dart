@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_storage_service.dart';
@@ -355,6 +356,43 @@ class TvClipsRepository {
       }
       tx.set(likeRef, {'createdAt': FieldValue.serverTimestamp()});
       tx.update(clipRef, {'likeCount': FieldValue.increment(1)});
+      return true;
+    });
+  }
+
+  /// Haqiqiy ko‘rish: viewer 24 soatda 1 marta; clip + kanal jami +1.
+  Future<bool> recordView({
+    required String clipId,
+    required String viewerId,
+    required String ownerPhone,
+  }) async {
+    if (clipId.isEmpty || viewerId.isEmpty) return false;
+    final clipRef = _col.doc(clipId);
+    final viewRef = clipRef.collection('views').doc(viewerId);
+    final ownerId = canonicalPhoneId(ownerPhone);
+    final profileRef = _db.collection('tv_public_profiles').doc(ownerId);
+
+    return _db.runTransaction((tx) async {
+      final viewSnap = await tx.get(viewRef);
+      final now = DateTime.now();
+      if (viewSnap.exists) {
+        final ts = viewSnap.data()?['viewedAt'];
+        if (ts is Timestamp) {
+          if (now.difference(ts.toDate()) < const Duration(hours: 24)) {
+            return false;
+          }
+        }
+        tx.update(viewRef, {'viewedAt': FieldValue.serverTimestamp()});
+      } else {
+        tx.set(viewRef, {'viewedAt': FieldValue.serverTimestamp()});
+      }
+      tx.update(clipRef, {'viewCount': FieldValue.increment(1)});
+      if (ownerId.isNotEmpty) {
+        final profileSnap = await tx.get(profileRef);
+        if (profileSnap.exists) {
+          tx.update(profileRef, {'totalViewCount': FieldValue.increment(1)});
+        }
+      }
       return true;
     });
   }

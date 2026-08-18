@@ -16,6 +16,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
 import '../services/tv_clip_share.dart';
+import '../services/tv_clip_view_recorder.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
@@ -60,6 +61,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _likeBusy = <String>{};
   final _saveBusy = <String>{};
   final _shopRepo = TvShopRepository();
+  final _viewRecorder = TvClipViewRecorder();
+  final _ownersWithShop = <String>{};
   bool _hasMyShop = false;
 
   @override
@@ -175,6 +178,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       if (_clips.isNotEmpty) unawaited(_activate(0));
       unawaited(_refreshSocialState());
       unawaited(_hydratePublisherNames());
+      unawaited(_hydrateOwnerShops());
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
       if (mounted) setState(() => _loading = false);
@@ -227,6 +231,25 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
     unawaited(_pool.retain(_urlsAround(index)));
     unawaited(_maybePatchOwnerName(clip));
+    if (ctrl != null && ctrl.value.isInitialized) {
+      _attachViewRecorder(ctrl, clip);
+    }
+  }
+
+  void _attachViewRecorder(VideoPlayerController ctrl, TvClip clip) {
+    if (_isOwner(clip)) return;
+    final uid = _meId;
+    if (uid.isEmpty) return;
+    final clipId = clip.id;
+    _viewRecorder.attach(
+      controller: ctrl,
+      clip: clip,
+      viewerId: uid,
+      onRecorded: () {
+        if (!mounted) return;
+        setState(() => tvClipViewCountBump(_clips, clipId));
+      },
+    );
   }
 
   void _onPageChanged(int index) {
@@ -273,6 +296,27 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
   bool _showShopBtn(TvClip clip) => true;
+
+  bool _openChannelAsShop(TvClip clip) {
+    if (_isOwner(clip)) return _hasMyShop;
+    return _ownersWithShop.contains(canonicalPhoneId(clip.ownerPhone));
+  }
+
+  Future<void> _hydrateOwnerShops() async {
+    if (_clips.isEmpty) return;
+    try {
+      final phones = _clips.map((c) => c.ownerPhone).toSet();
+      final withShop = await _shopRepo.ownerIdsWithShop(phones);
+      if (!mounted) return;
+      setState(() {
+        _ownersWithShop
+          ..clear()
+          ..addAll(withShop);
+      });
+    } catch (e) {
+      debugPrint('[TvMarketFeed] owner shops $e');
+    }
+  }
 
   Future<void> _hydratePublisherNames() async {
     final hydrated = await hydrateTvPublisherNames(_clips);
@@ -637,6 +681,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   @override
   void dispose() {
     tvUnbindPlayback();
+    _viewRecorder.dispose();
     _hideBadgeTimer?.cancel();
     unawaited(_pool.dispose());
     _pageCtrl.dispose();
@@ -751,6 +796,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onOpenShop: _showShopBtn(clip)
                               ? () => _onOpenShop(clip)
                               : null,
+                          openChannelAsShop: _openChannelAsShop(clip),
                         ),
                         if (isActive)
                           TvPlayPauseBadge(

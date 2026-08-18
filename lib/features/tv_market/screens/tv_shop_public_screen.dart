@@ -41,6 +41,8 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   List<TvShopItem> _items = const [];
   String _displayName = '';
   String _district = '';
+  int _totalViewCount = 0;
+  int _clipCount = 0;
   bool _loading = true;
 
   @override
@@ -70,10 +72,16 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
       if (_district.isEmpty && sorted.isNotEmpty) {
         _district = sorted.first.districtLabel.trim();
       }
+      final totalViews =
+          await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
+      final ownerClips = await _clipsRepo.fetchByOwner(widget.ownerPhone);
+      final clipCount = ownerClips.where((c) => c.isActive).length;
       if (!mounted) return;
       setState(() {
         _shop = shop;
         _items = sorted;
+        _totalViewCount = totalViews;
+        _clipCount = clipCount;
         _loading = false;
       });
     } catch (e) {
@@ -146,6 +154,8 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                     TvChannelHeader(
                       displayName: _displayName,
                       districtLabel: _district,
+                      clipCount: _clipCount > 0 ? _clipCount : null,
+                      totalViewCount: _totalViewCount,
                     ),
                     Text(
                       context.tr('tv_shop_vitrine'),

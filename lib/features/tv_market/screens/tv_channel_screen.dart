@@ -8,6 +8,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../services/tv_clip_delete.dart';
 import '../utils/tv_highlight_order.dart';
+import '../utils/tv_view_format.dart';
 import '../widgets/tv_channel_contact_bar.dart';
 import '../widgets/tv_channel_header.dart';
 import '../widgets/tv_clip_poster.dart';
@@ -41,6 +42,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
   List<TvClip> _clips = const [];
   String _displayName = '';
   String _district = '';
+  int _totalViewCount = 0;
   bool _loading = true;
 
   @override
@@ -67,9 +69,12 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
       if (_district.isEmpty && sorted.isNotEmpty) {
         _district = sorted.first.districtLabel.trim();
       }
+      final totalViews =
+          await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
       if (!mounted) return;
       setState(() {
         _clips = sorted;
+        _totalViewCount = totalViews;
         _loading = false;
       });
     } catch (e) {
@@ -170,6 +175,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
                           displayName: _displayName,
                           districtLabel: _district,
                           clipCount: _clips.length,
+                          totalViewCount: _totalViewCount,
                         ),
                       ),
                     ),
@@ -342,6 +348,22 @@ class _ClipTile extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                         ),
+                      ),
+                    if (clip.viewCount > 0)
+                      Row(
+                        children: [
+                          Icon(Icons.visibility_outlined,
+                              size: 12, color: Colors.grey.shade600),
+                          const SizedBox(width: 3),
+                          Text(
+                            tvFormatViewCount(clip.viewCount),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                   ],
                 ),

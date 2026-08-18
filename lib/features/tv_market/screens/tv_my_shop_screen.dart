@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
+import '../repositories/tv_public_profiles_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../widgets/tv_channel_header.dart';
 import 'tv_publish_screen.dart';
 import 'tv_shop_item_photos_screen.dart';
 import 'tv_shop_public_screen.dart';
@@ -20,7 +23,10 @@ class TvMyShopScreen extends StatefulWidget {
 
 class _TvMyShopScreenState extends State<TvMyShopScreen> {
   final _repo = TvShopRepository();
+  final _profilesRepo = TvPublicProfilesRepository();
   List<TvShopItem> _items = const [];
+  String _displayName = '';
+  String _district = '';
   bool _loading = true;
 
   @override
@@ -31,10 +37,23 @@ class _TvMyShopScreenState extends State<TvMyShopScreen> {
 
   Future<void> _load() async {
     try {
+      final shop = await _repo.fetchShop(widget.ownerPhone);
       final items = await _repo.fetchByOwner(widget.ownerPhone);
+      final names = await _profilesRepo.fetchMany([widget.ownerPhone]);
+      final id = canonicalPhoneId(widget.ownerPhone);
+      final fromProfile = tvOwnerDisplayName(names[id] ?? '');
+      final fromShop = tvOwnerDisplayName(shop?.name ?? '');
+      final displayName =
+          fromProfile.isNotEmpty ? fromProfile : fromShop;
+      var district = '';
+      if (items.isNotEmpty) {
+        district = items.first.districtLabel.trim();
+      }
       if (!mounted) return;
       setState(() {
         _items = items;
+        _displayName = displayName;
+        _district = district;
         _loading = false;
       });
     } catch (e) {
@@ -105,91 +124,102 @@ class _TvMyShopScreenState extends State<TvMyShopScreen> {
                     ),
                   ),
                 )
-              : ListView.separated(
+              : ListView(
                   padding: const EdgeInsets.fromLTRB(14, 14, 14, 96),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) {
-                    final item = _items[i];
-                    return Material(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      child: ListTile(
-                        onTap: () async {
-                          final ok = await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  TvShopItemPhotosScreen(item: item),
-                            ),
-                          );
-                          if (ok == true && mounted) await _load();
-                        },
-                        contentPadding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                item.coverPhotoUrl.isEmpty
-                                    ? ColoredBox(
-                                        color: Colors.grey.shade200,
-                                        child: const Icon(Icons.image_outlined),
-                                      )
-                                    : Image.network(
-                                        item.coverPhotoUrl,
-                                        fit: BoxFit.cover,
-                                      ),
-                                if (item.displayPhotos.length > 1)
-                                  Align(
-                                    alignment: Alignment.bottomRight,
-                                    child: Container(
-                                      margin: const EdgeInsets.all(3),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 5,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${item.displayPhotos.length}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w800,
+                  children: [
+                    if (_displayName.isNotEmpty)
+                      TvChannelHeader(
+                        displayName: _displayName,
+                        districtLabel: _district,
+                      ),
+                    for (var i = 0; i < _items.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        child: ListTile(
+                          onTap: () async {
+                            final item = _items[i];
+                            final ok = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TvShopItemPhotosScreen(item: item),
+                              ),
+                            );
+                            if (ok == true && mounted) await _load();
+                          },
+                          contentPadding:
+                              const EdgeInsets.fromLTRB(10, 8, 8, 8),
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: SizedBox(
+                              width: 56,
+                              height: 56,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  _items[i].coverPhotoUrl.isEmpty
+                                      ? ColoredBox(
+                                          color: Colors.grey.shade200,
+                                          child: const Icon(
+                                            Icons.image_outlined,
+                                          ),
+                                        )
+                                      : Image.network(
+                                          _items[i].coverPhotoUrl,
+                                          fit: BoxFit.cover,
+                                        ),
+                                  if (_items[i].displayPhotos.length > 1)
+                                    Align(
+                                      alignment: Alignment.bottomRight,
+                                      child: Container(
+                                        margin: const EdgeInsets.all(3),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '${_items[i].displayPhotos.length}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        title: Text(
-                          item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          item.hasPrice
-                              ? '${formatMoney(item.price)} · ${item.clipIds.length}'
-                              : '${item.clipIds.length}',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        trailing: IconButton(
-                          tooltip: context.tr('tv_shop_add_clip'),
-                          onPressed: () => _openPublish(attachItemId: item.id),
-                          icon: const Icon(Icons.videocam_outlined),
+                          title: Text(
+                            _items[i].title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            _items[i].hasPrice
+                                ? '${formatMoney(_items[i].price)} · ${_items[i].clipIds.length}'
+                                : '${_items[i].clipIds.length}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          trailing: IconButton(
+                            tooltip: context.tr('tv_shop_add_clip'),
+                            onPressed: () =>
+                                _openPublish(attachItemId: _items[i].id),
+                            icon: const Icon(Icons.videocam_outlined),
+                          ),
                         ),
                       ),
-                    );
-                  },
+                    ],
+                  ],
                 ),
     );
   }

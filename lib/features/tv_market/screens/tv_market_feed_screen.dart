@@ -22,6 +22,7 @@ import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
+import 'tv_channel_screen.dart';
 import 'tv_clip_search_screen.dart';
 import 'tv_my_shop_screen.dart';
 import 'tv_publish_screen.dart';
@@ -271,10 +272,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
-  bool _showShopBtn(TvClip clip) {
-    if (_isOwner(clip)) return _hasMyShop || clip.hasShopItem;
-    return clip.hasShopItem;
-  }
+  bool _showShopBtn(TvClip clip) => true;
 
   Future<void> _hydratePublisherNames() async {
     final hydrated = await hydrateTvPublisherNames(_clips);
@@ -540,16 +538,37 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Future<void> _onOpenShop(TvClip clip) async {
     tvOnPlaybackBlocked();
     final owner = _isOwner(clip);
+    final hasShop = owner
+        ? _hasMyShop
+        : await _shopRepo.hasShop(clip.ownerPhone);
+    if (!mounted) return;
+
+    final displayName = _overlayName(clip);
+    final district = clip.districtLabel.trim();
+
+    Widget screen;
+    if (hasShop) {
+      screen = owner
+          ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
+          : TvShopPublicScreen(
+              ownerPhone: clip.ownerPhone,
+              highlightItemId: clip.shopItemId,
+              ownerDisplayName: displayName,
+              districtLabel: district,
+            );
+    } else {
+      screen = TvChannelScreen(
+        ownerPhone: clip.ownerPhone,
+        ownerDisplayName: displayName,
+        districtLabel: district,
+        highlightClipId: clip.id,
+        isOwner: owner,
+      );
+    }
+
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => owner
-            ? TvMyShopScreen(ownerPhone: clip.ownerPhone)
-            : TvShopPublicScreen(
-                ownerPhone: clip.ownerPhone,
-                highlightItemId: clip.shopItemId,
-              ),
-      ),
+      MaterialPageRoute(builder: (_) => screen),
     );
     if (owner && mounted) {
       try {

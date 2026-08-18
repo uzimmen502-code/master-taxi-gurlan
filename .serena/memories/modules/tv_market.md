@@ -21,8 +21,13 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - `lib/features/tv_market/screens/tv_publish_screen.dart` — create + `editClip` save (tokens, optional new video, sync offer if shopItemId); new offer 1–5 photos
 - `lib/features/tv_market/screens/tv_shop_item_photos_screen.dart` — owner adds/removes offer photos (max 5)
 - `lib/features/tv_market/widgets/tv_owner_action_bar.dart` — owner Edit + Delete
-- `lib/features/tv_market/widgets/tv_clip_overlay.dart` — publisher display name (hide if unknown), title, description, price, district; owner Edit/Delete else Contact; right-rail like/share/lime «Дўкон»/save. No profile avatar (duplicated shop). Lime storefront if shopItemId (any viewer) or owner has tv_shops; tap → TvMyShopScreen (owner) or TvShopPublicScreen
-- `lib/features/tv_market/screens/tv_market_feed_screen.dart` — district chip (no TV MARKET title); search icon left of camera; videocam + 20% smaller arrow; like/share/save; one commerce door = lime Дўкон
+- `lib/features/tv_market/widgets/tv_channel_header.dart` — public channel head (name, district, clip count)
+- `lib/features/tv_market/widgets/tv_shop_item_card.dart` — vitrine product card + «Шу роликдан» badge
+- `lib/features/tv_market/widgets/tv_channel_contact_bar.dart` — bottom call CTA
+- `lib/features/tv_market/screens/tv_channel_screen.dart` — shop-less publisher channel (clips grid, highlight from reel, owner FAB publish)
+- `lib/features/tv_market/screens/tv_shop_public_screen.dart` — channel header + vitrine; highlight item sorted first
+- `lib/features/tv_market/widgets/tv_clip_overlay.dart` — right-rail like/share/lime «Дўкон»/save always for every clip; tap routes shop or channel
+- `lib/features/tv_market/screens/tv_market_feed_screen.dart` — lime Дўкон → TvMyShopScreen / TvShopPublicScreen (has tv_shops) or TvChannelScreen (no shop); highlightItemId / highlightClipId passed
 - Admin: `tv_clips_moderation_screen.dart` — activate/block/delete + «Соцсетда чоп» + «Реклама 7 кун» (`boostUntil`)
 
 ## Search (3 language rule)

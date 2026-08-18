@@ -22,29 +22,14 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - `lib/features/tv_market/screens/tv_shop_item_photos_screen.dart` — owner adds/removes offer photos (max 5)
 - `lib/features/tv_market/widgets/tv_owner_action_bar.dart` — owner Edit + Delete
 - `lib/features/tv_market/widgets/tv_channel_header.dart` — public channel head (name, district, clip count)
-- `lib/features/tv_market/widgets/tv_shop_item_card.dart` — vitrine product card + «Шу роликдан» badge
+- `lib/features/tv_market/widgets/tv_shop_item_card.dart` — vitrine product card: kind, description, highlight badge
+- `lib/features/tv_market/widgets/tv_shop_photo_gallery.dart` — product carousel (swipe + thumbnail select + zoom hint) + fullscreen pinch/double-tap zoom, swipe, thumbnail pick; CachedNetworkImage
 - `lib/features/tv_market/widgets/tv_channel_contact_bar.dart` — bottom call CTA
 - `lib/features/tv_market/screens/tv_channel_screen.dart` — shop-less publisher channel (clips grid, highlight from reel, owner FAB publish)
 - `lib/features/tv_market/screens/tv_shop_public_screen.dart` — channel header + vitrine; highlight item sorted first
 - `lib/features/tv_market/widgets/tv_clip_overlay.dart` — right-rail like/share/lime «Дўкон»/save always for every clip; tap routes shop or channel
 - `lib/features/tv_market/screens/tv_market_feed_screen.dart` — lime Дўкон → TvMyShopScreen / TvShopPublicScreen (has tv_shops) or TvChannelScreen (no shop); highlightItemId / highlightClipId passed
-- Admin: `tv_clips_moderation_screen.dart` — activate/block/delete + «Соцсетда чоп» + «Реклама 7 кун» (`boostUntil`)
-
-## Search (3 language rule)
-- Engine: `CatalogSearch` + `AdSearchText.foldMarks` (‘ ’ ʻ ʼ → `'` so o‘/o'/oʻ ↔ ў)
-- Match fields: title, description, district, mfy, price, given name, category aliases (mahsulot/маҳсулот/товар, xizmat/хизмат/услуга), searchTokens
-- Do not put TV clips into Home `search_index` (CF-write-only)
-
-## Rules / indexes
-- `tv_clips` read all; create auth; update admin/owner **or** likeCount ±1; likes subcol create/delete own uid
-- `tv_public_profiles` read all; write owner phone match
-- Indexes: status+createdAt, status+districtId+createdAt, status+districtId+viewCount, ownerPhone+createdAt, **status + searchTokens CONTAINS**
-- Storage tv_shop: authed write ≤8MB
-
-## Gotchas
-- `users` is not publicly readable. Publisher name lives on `tv_clips.ownerName` and public `tv_public_profiles/{phone}` (synced on publish, profile save, onboarding, TV open). Overlay: clip name → public profile / `tv_shops.name` → only if viewer is publisher, local profile. Never show viewer name on someone else's clip; never phone / `Фойдаланувчи`. Hide name line if still unknown. Feed/home hydrate all clip phones from `tv_public_profiles`. Owner play patches `tv_clips.ownerName`. Old empty/phone `ownerName` backfill: `functions/tools/backfill_tv_publisher_names.js --apply` (Admin SDK → `users.name`).
-- Clip-only publish (shop declined) has no product photo and no `shopItemId`.
-- Meta auto-post is **not** implemented; consent + admin manual flag only.
-- Home bottom «Магазиним» tab only if `tv_shops/{phone}` exists.
-- No dedicated CF; client writes + admin flags.
-- Old clips may lack `searchTokens`; title/description still match in the recent-400 pool. Token query helps newer/prefixed titles beyond that pool.
+- `lib/features/tv_market/services/tv_clip_view_recorder.dart` — 3s/25% watch threshold; session dedup; 24h Firestore dedup via `views/{viewerId}`; skips owner self-view
+- `lib/features/tv_market/utils/tv_view_format.dart` — K/M view display
+- Lime CTA label: `tv_market_shop` if `tv_shops` else `tv_market_channel` (same open handler)
+- Admin:

@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/formatters.dart';
 
+import '../models/analytics/analytics_daily.dart';
 import '../models/analytics/daily_report.dart';
+import '../models/analytics/dashboard_period.dart';
 import '../models/analytics/driver_analytics.dart';
 import '../models/analytics/finance_analytics.dart';
 import '../models/analytics/kpi_summary.dart';
 import '../models/analytics/operations_analytics.dart';
+import '../models/analytics/period_kpis.dart';
 import '../models/analytics/segment.dart';
 import '../models/analytics/time_series.dart';
 import '../models/analytics/top_entity.dart';
@@ -32,6 +35,15 @@ class AnalyticsRepository {
   CollectionReference<Map<String, dynamic>> get _driverRequests => _db.collection('driver_requests');
   CollectionReference<Map<String, dynamic>> get _payoutRequests => _db.collection('payout_requests');
   CollectionReference<Map<String, dynamic>> get _dailyReports => _db.collection('daily_reports');
+  CollectionReference<Map<String, dynamic>> get _analyticsDaily =>
+      _db.collection('analytics_daily');
+  CollectionReference<Map<String, dynamic>> get _tvClips =>
+      _db.collection('tv_clips');
+  CollectionReference<Map<String, dynamic>> get _tvShopItems =>
+      _db.collection('tv_shop_items');
+  CollectionReference<Map<String, dynamic>> get _platformProducts =>
+      _db.collection('platform_products');
+  CollectionReference<Map<String, dynamic>> get _ads => _db.collection('ads');
 
   // ════════════════════════════════════════════════════════════════
   // SECTION: KPI SUMMARY (Dashboard)
@@ -132,6 +144,146 @@ class AnalyticsRepository {
       activeTrips: activeTripsCount,
       blockedUsers: aggCount(13),
       pendingPayouts: aggCount(14),
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // SECTION: PERIOD DASHBOARD (analytics_daily + unique-active live)
+  // ════════════════════════════════════════════════════════════════
+
+  Future<List<AnalyticsDaily>> fetchAnalyticsDaily({
+    required String fromKey,
+    required String toKey,
+  }) async {
+    final snap = await _analyticsDaily
+        .where('date', isGreaterThanOrEqualTo: fromKey)
+        .where('date', isLessThanOrEqualTo: toKey)
+        .orderBy('date')
+        .get();
+    return snap.docs.map(AnalyticsDaily.fromDoc).toList();
+  }
+
+  Future<int> countUniqueActiveSince(DateTime from) async {
+    final snap = await _users
+        .where('lastActiveAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  Future<PeriodKpis> fetchPeriodKpis(DashboardPeriod period) async {
+    final now = DateTime.now();
+    final (from, to) = period.range(now);
+    final fromKey = DashboardPeriodX.dateKey(from);
+    final toKey = DashboardPeriodX.dateKey(to);
+
+    final days = await fetchAnalyticsDaily(fromKey: fromKey, toKey: toKey);
+    final uniqueActive = await countUniqueActiveSince(from);
+
+    if (days.isNotEmpty) {
+      List<AnalyticsDaily> previousDays = const [];
+      final prev = period.previousRange(now);
+      if (prev != null) {
+        previousDays = await fetchAnalyticsDaily(
+          fromKey: DashboardPeriodX.dateKey(prev.$1),
+          toKey: DashboardPeriodX.dateKey(prev.$2),
+        );
+      }
+      return PeriodKpis.fromDailyDocs(
+        period: period,
+        from: from,
+        to: to,
+        days: days,
+        previousDays: previousDays,
+        uniqueActiveUsers: uniqueActive,
+      );
+    }
+
+    return _livePeriodFallback(period, from, to, uniqueActive);
+  }
+
+  /// analytics_daily бўш бўлса: бугун/7 кун учун тирик сўров;
+  /// узун даврларда тушумни сканерламаймиз (аниқ сумма учун backfill).
+  Future<PeriodKpis> _livePeriodFallback(
+    DashboardPeriod period,
+    DateTime from,
+    DateTime to,
+    int uniqueActive,
+  ) async {
+    final toExclusive = to.add(const Duration(days: 1));
+    final fromTs = Timestamp.fromDate(from);
+    final toTs = Timestamp.fromDate(toExclusive);
+    final scanCommerce = period != DashboardPeriod.allTime;
+
+    Query<Map<String, dynamic>> createdIn(
+      CollectionReference<Map<String, dynamic>> col,
+    ) {
+      return col
+          .where('createdAt', isGreaterThanOrEqualTo: fromTs)
+          .where('createdAt', isLessThan: toTs);
+    }
+
+    final results = await Future.wait<dynamic>([
+      _users.count().get(),
+      createdIn(_users).count().get(),
+      _tvClips.count().get(),
+      createdIn(_tvClips).count().get(),
+      _tvShopItems.count().get(),
+      createdIn(_tvShopItems).count().get(),
+      _platformProducts.count().get(),
+      createdIn(_platformProducts).count().get(),
+      _ads.count().get(),
+      createdIn(_ads).count().get(),
+      if (scanCommerce) createdIn(_orders).get() else Future.value(null),
+      if (scanCommerce)
+        _trips
+            .where('createdAt', isGreaterThanOrEqualTo: fromTs)
+            .where('createdAt', isLessThan: toTs)
+            .where('status', isEqualTo: 'completed')
+            .get()
+      else
+        Future.value(null),
+    ]);
+
+    int agg(int i) => (results[i] as AggregateQuerySnapshot).count ?? 0;
+
+    var ordersCreated = 0;
+    var tripsCompleted = 0;
+    var ordersRevenue = 0;
+    var tripsRevenue = 0;
+    if (scanCommerce && results[10] is QuerySnapshot) {
+      final orderSnap = results[10] as QuerySnapshot<Map<String, dynamic>>;
+      ordersCreated = orderSnap.docs.length;
+      ordersRevenue = _sumOrderTotals(orderSnap);
+    }
+    if (scanCommerce && results[11] is QuerySnapshot) {
+      final tripSnap = results[11] as QuerySnapshot<Map<String, dynamic>>;
+      tripsCompleted = tripSnap.docs.length;
+      tripsRevenue = _sumTripFares(tripSnap);
+    }
+
+    return PeriodKpis(
+      period: period,
+      from: from,
+      to: to,
+      fromDaily: false,
+      needsBackfill: !scanCommerce,
+      newUsers: agg(1),
+      uniqueActiveUsers: uniqueActive,
+      totalUsers: agg(0),
+      newClips: agg(3),
+      totalClips: agg(2),
+      newShopItems: agg(5),
+      totalShopItems: agg(4),
+      newPlatformProducts: agg(7),
+      totalPlatformProducts: agg(6),
+      newAds: agg(9),
+      totalAds: agg(8),
+      ordersCreated: ordersCreated,
+      tripsCompleted: tripsCompleted,
+      ordersRevenue: ordersRevenue,
+      tripsRevenue: tripsRevenue,
     );
   }
 

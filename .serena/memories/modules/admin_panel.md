@@ -2,6 +2,12 @@
 
 Web-only entry `lib/main_admin.dart` (built `-t lib/main_admin.dart --base-href /admin/`). Schema: `mem:firestore_schema`. CFs/RBAC: `mem:cloud_functions`.
 
+## Monitoring Center Dashboard (2026-08)
+- Screen: `lib/features/analytics/screens/monitoring_center_screen.dart` tabs Dashboard/Users/Drivers/Finance/Operations. **No new sidebar section** — period analytics live on Dashboard tab.
+- Chips: Бугун | 7 кун | 15 кун | 30 кун | Бугунгача. LIVE banner (online drivers, active trips, pending orders) stays real-time from `fetchKpiSummary`.
+- Historical KPIs from `analytics_daily` via `AnalyticsRepository.fetchPeriodKpis`. SUM additive (new users/clips/shop/platform/ads, orders, trip+order revenue); stock from last day; unique active = `users.lastActiveAt >= periodStart` (never SUM of DAU). Empty daily → live fallback + Backfill button → CF `analyticsHistoricalBackfill` (admin|superadmin).
+- `daily_reports` / Daily Report screen unchanged.
+
 ## Entry & shell
 - `main_admin.dart`: Firebase init + `installFirestoreCrashGuard()` + `Settings(persistenceEnabled:false)` + AdminAuthService.restoreSession + AdminNewsReadService.init. MultiProvider (~20 repos). `_AuthGate` → AdminShell | AdminLoginScreen. Theme `AppTheme.adminWeb`.
 - `screens/admin_shell.dart`: `import 'dart:html'` (web-only, lint-ignored). `_Sidebar` 240/92px or Drawer<700px. Section dispatch by `section.label` string match; pages lazy-cached in `_pageCache` (state persists across tabs). Mobile home btn → `html.window.location.href='/';` `navigateSameOriginPath('/')`.

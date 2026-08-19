@@ -100,7 +100,8 @@ Geo report denormalizatsiya: helper `geoReportStamp(userData)` → {regionId,dis
 - sendDailyOnboardingPromo (sched) — onboarding promo push.
 
 ## Reports / Misc
-- dailyReport20 (sched) / generateDailyReportNow (onCall) — daily report (`daily_reports`).
+- dailyReport20 (sched) / generateDailyReportNow (onCall) — daily report (`daily_reports`). Do **not** replace with analytics_daily.
+- analyticsHistoricalBackfill (onCall, admin|superadmin, 540s/1GB) / analyticsDailyRollup (sched 00:10 Asia/Tashkent) — `functions/analytics_pipeline.js` attach. Reads users/tv_clips/tv_shop_items/platform_products/ads/orders/trips → `analytics_daily/{YYYY-MM-DD}` (Tashkent en-CA). Additive: users.new, content.new*, commerce (orders skip rejected/cancelled total; trips status=completed fare). Stock totals = running SUM of news (never SUM DAU). Job doc `analytics_backfill_jobs/historical_v1`. Dashboard: Monitoring Center → Dashboard chips Бугун|7|15|30|Бугунгача; unique active = live `users.lastActiveAt >= periodStart`.
 - detectAnomaly (trigger) — risk/anomaly signals (`risk_events`).
 - getDirections (http) — Google Directions proxy.
 - onAdUpdate (trigger) — Jobs=`authorPhone`→jobs; cheap_product=`ownerId`→my_ads (`market_ad_*`). onSellSubmissionUpdate / onBirthDateRequestUpdate / onDeviceChangeRequestUpdate — other side effects.

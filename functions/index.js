@@ -15691,3 +15691,12 @@ attachTelegramWalletBot(exports, {
   isIdentifiedUser,
   assertNotDeviceTrustLimited,
 });
+
+// --- Analytics daily pipeline (Monitoring Center Dashboard) ---
+const { attachAnalyticsPipeline } = require('./analytics_pipeline');
+attachAnalyticsPipeline(exports, {
+  functions,
+  db,
+  admin,
+  requireCallerRoles,
+});

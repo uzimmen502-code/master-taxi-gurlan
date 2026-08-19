@@ -1,10 +1,13 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../models/analytics/daily_report.dart';
+import '../../../models/analytics/dashboard_period.dart';
 import '../../../models/analytics/driver_analytics.dart';
 import '../../../models/analytics/finance_analytics.dart';
 import '../../../models/analytics/kpi_summary.dart';
 import '../../../models/analytics/operations_analytics.dart';
+import '../../../models/analytics/period_kpis.dart';
 import '../../../models/analytics/user_analytics.dart';
 import '../../../repositories/analytics_repository.dart';
 import '../../../services/daily_report_service.dart';
@@ -23,6 +26,8 @@ class AnalyticsController extends ChangeNotifier {
   final DailyReportService _reportService;
 
   KpiSummary? kpiSummary;
+  PeriodKpis? periodKpis;
+  DashboardPeriod dashboardPeriod = DashboardPeriod.today;
   UserAnalytics? userAnalytics;
   DriverAnalytics? driverAnalytics;
   OperationsAnalytics? operationsAnalytics;
@@ -31,6 +36,8 @@ class AnalyticsController extends ChangeNotifier {
   List<DailyReport> historicalReports = const [];
 
   bool kpiLoading = false;
+  bool backfillRunning = false;
+  int _kpiEpoch = 0;
   bool usersLoading = false;
   bool driversLoading = false;
   bool operationsLoading = false;
@@ -42,6 +49,7 @@ class AnalyticsController extends ChangeNotifier {
   /// xato ko'rsатaр edi (масалaн, `loadReports` xato bo'lsa, dashboard ҳам
   /// "Reports: ..." кўрсaтар edi).
   String? kpiError;
+  String? backfillError;
   String? usersError;
   String? driversError;
   String? operationsError;
@@ -59,18 +67,55 @@ class AnalyticsController extends ChangeNotifier {
       reportsError;
 
   // ─── KPI dashboard ──────────────────────────────────────────────────
+  Future<void> setDashboardPeriod(DashboardPeriod period) async {
+    if (dashboardPeriod == period && periodKpis != null) return;
+    dashboardPeriod = period;
+    notifyListeners();
+    await loadKpis(force: true);
+  }
+
   Future<void> loadKpis({bool force = false}) async {
-    if (kpiLoading) return;
-    if (kpiSummary != null && !force) return;
+    if (kpiSummary != null && periodKpis != null && !force) return;
+    final epoch = ++_kpiEpoch;
+    final period = dashboardPeriod;
     kpiLoading = true;
     kpiError = null;
     notifyListeners();
     try {
-      kpiSummary = await _repo.fetchKpiSummary();
+      final results = await Future.wait([
+        _repo.fetchKpiSummary(),
+        _repo.fetchPeriodKpis(period),
+      ]);
+      if (epoch != _kpiEpoch) return;
+      kpiSummary = results[0] as KpiSummary;
+      periodKpis = results[1] as PeriodKpis;
     } catch (e) {
+      if (epoch != _kpiEpoch) return;
       kpiError = 'KPI: $e';
     } finally {
-      kpiLoading = false;
+      if (epoch == _kpiEpoch) {
+        kpiLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> runHistoricalBackfill({bool force = false}) async {
+    if (backfillRunning) return;
+    backfillRunning = true;
+    backfillError = null;
+    notifyListeners();
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'analyticsHistoricalBackfill',
+        options: HttpsCallableOptions(timeout: const Duration(minutes: 8)),
+      );
+      await callable.call({'force': force});
+      await loadKpis(force: true);
+    } catch (e) {
+      backfillError = 'Backfill: $e';
+    } finally {
+      backfillRunning = false;
       notifyListeners();
     }
   }

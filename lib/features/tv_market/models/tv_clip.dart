@@ -25,6 +25,17 @@ String tvOwnerGivenName(String raw) {
   return d.split(' ').first;
 }
 
+List<String> _parseSocialNetworks(dynamic raw) {
+  if (raw is! List) return const [];
+  const allowed = {'instagram', 'facebook', 'tiktok'};
+  final out = <String>[];
+  for (final e in raw) {
+    final id = '$e'.trim().toLowerCase();
+    if (allowed.contains(id) && !out.contains(id)) out.add(id);
+  }
+  return out;
+}
+
 class TvClip {
   const TvClip({
     required this.id,
@@ -48,6 +59,7 @@ class TvClip {
     this.createdAt,
     this.shopItemId = '',
     this.socialConsent = false,
+    this.socialNetworks = const [],
     this.socialPostedAt,
     this.searchTokens = const [],
   });
@@ -80,6 +92,8 @@ class TvClip {
   /// Боғланган витрина товар/хизмати. Бўш = фақат ролик.
   final String shopItemId;
   final bool socialConsent;
+  /// `instagram` | `facebook` | `tiktok`
+  final List<String> socialNetworks;
   final DateTime? socialPostedAt;
   final List<String> searchTokens;
 
@@ -98,8 +112,11 @@ class TvClip {
     int? viewCount,
     String? shopItemId,
     bool? socialConsent,
+    List<String>? socialNetworks,
     DateTime? socialPostedAt,
     String? ownerName,
+    String? districtId,
+    String? districtLabel,
     String? title,
     int? price,
     String? description,
@@ -114,8 +131,8 @@ class TvClip {
       posterUrl: posterUrl ?? this.posterUrl,
       title: title ?? this.title,
       price: price ?? this.price,
-      districtId: districtId,
-      districtLabel: districtLabel,
+      districtId: districtId ?? this.districtId,
+      districtLabel: districtLabel ?? this.districtLabel,
       ownerPhone: ownerPhone,
       ownerName: ownerName ?? this.ownerName,
       category: category ?? this.category,
@@ -130,6 +147,7 @@ class TvClip {
       createdAt: createdAt,
       shopItemId: shopItemId ?? this.shopItemId,
       socialConsent: socialConsent ?? this.socialConsent,
+      socialNetworks: socialNetworks ?? this.socialNetworks,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
       searchTokens: searchTokens ?? this.searchTokens,
     );
@@ -159,6 +177,7 @@ class TvClip {
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       shopItemId: (d['shopItemId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
+      socialNetworks: _parseSocialNetworks(d['socialNetworks']),
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
       searchTokens: (d['searchTokens'] is List)
           ? (d['searchTokens'] as List)
@@ -192,6 +211,7 @@ class TvClip {
             : FieldValue.serverTimestamp(),
         if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
         'socialConsent': socialConsent,
+        if (socialNetworks.isNotEmpty) 'socialNetworks': socialNetworks,
         if (socialPostedAt != null)
           'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
         if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/services/tv_social.dart';
 import '../services/admin_auth_service.dart';
 
 /// Админ панел — TV Market клиплар модерацияси.
@@ -740,7 +741,11 @@ class _TvClipDetailDialog extends StatelessWidget {
                 _row('Худуд', clip.districtLabel),
                 _row('Кўришлар', '${clip.viewCount}'),
                 _row('Лайклар', '${clip.likeCount}'),
-                _row('Соцсет розилиги', clip.socialConsent ? 'Ҳа' : 'Йўқ'),
+                _row('Соцсет розилиги', clip.socialConsent
+                    ? (clip.socialNetworks.isEmpty
+                        ? 'Ҳа'
+                        : clip.socialNetworks.join(', '))
+                    : 'Йўқ'),
                 _row('Соцсетда', clip.socialPosted ? 'Чоп этилган' : '—'),
                 _row('Товар', clip.hasShopItem ? clip.shopItemId : '—'),
                 _row('Изоҳлар', '${clip.commentCount}'),
@@ -791,12 +796,30 @@ class _TvClipDetailDialog extends StatelessWidget {
                   style:
                       OutlinedButton.styleFrom(foregroundColor: Colors.red),
                 ),
-                if (clip.socialConsent && !clip.socialPosted)
+                if (clip.socialConsent && !clip.socialPosted) ...[
+                  for (final net in (clip.socialNetworks.isEmpty
+                      ? TvSocial.ordered
+                      : clip.socialNetworks))
+                    OutlinedButton.icon(
+                      onPressed: () => TvSocial.openOfficialComposer(
+                        network: net,
+                        videoUrl: clip.videoUrl,
+                      ),
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      label: Text(
+                        net == TvSocial.tiktok
+                            ? 'TikTok'
+                            : net == TvSocial.facebook
+                                ? 'Facebook'
+                                : 'Instagram',
+                      ),
+                    ),
                   FilledButton.icon(
                     onPressed: onSocialPosted,
                     icon: const Icon(Icons.public, size: 18),
                     label: const Text('Соцсетда чоп'),
                   ),
+                ],
                 if (clip.hasShopItem)
                   OutlinedButton.icon(
                     onPressed: onBoost,

@@ -5,6 +5,7 @@ import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
+import '../utils/tv_clip_shuffle.dart';
 import 'tv_shop_repository.dart';
 
 /// Home / TV Market клип саҳифаси — курсор билан давом эттириш учун.
@@ -48,7 +49,7 @@ class TvClipsRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map(TvClip.fromFirestore).toList();
+    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).
@@ -62,7 +63,7 @@ class TvClipsRepository {
         .orderBy('viewCount', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map(TvClip.fromFirestore).toList();
+    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
   }
 
   /// Уй лентаси — аввал шу туман, етишмаса барча фаол клиплар.
@@ -138,7 +139,7 @@ class TvClipsRepository {
     }
 
     return TvClipPage(
-      clips: out,
+      clips: tvShuffleClips(out),
       nearbyCursor: nCur,
       allCursor: aCur,
       nearbyExhausted: nExh,
@@ -174,7 +175,7 @@ class TvClipsRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map(TvClip.fromFirestore).toList();
+    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
   }
 
   Future<List<TvClip>> _recentSearchPool(String districtId) async {

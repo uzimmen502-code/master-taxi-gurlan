@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../repositories/user_repository.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_public_profiles_repository.dart';
+import 'tv_clip_geo.dart';
 
 /// Телефон, бўш, @nick ва UI fallback матнларини чиқариб ташлайди.
 bool tvOwnerNameLooksFake(String raw) => tvOwnerDisplayName(raw).isEmpty;
@@ -49,19 +50,18 @@ Future<TvPublisherHydrate> hydrateTvPublisherNames(List<TvClip> clips) async {
   }
   final names =
       await TvPublicProfilesRepository().fetchMany(clips.map((c) => c.ownerPhone));
-  if (names.isEmpty) {
-    return TvPublisherHydrate(clips: clips, publicNames: names);
-  }
+  final geos = await TvClipGeo.resolveForOwners(clips.map((c) => c.ownerPhone));
   return TvPublisherHydrate(
     publicNames: names,
     clips: [
       for (final c in clips)
-        if (tvOwnerDisplayName(c.ownerName).isNotEmpty)
-          c
-        else
-          c.copyWith(
-            ownerName: names[canonicalPhoneId(c.ownerPhone)] ?? c.ownerName,
-          ),
+        c.copyWith(
+          ownerName: tvOwnerDisplayName(c.ownerName).isNotEmpty
+              ? c.ownerName
+              : (names[canonicalPhoneId(c.ownerPhone)] ?? c.ownerName),
+          districtId: geos[canonicalPhoneId(c.ownerPhone)]?.id,
+          districtLabel: geos[canonicalPhoneId(c.ownerPhone)]?.label,
+        ),
     ],
   );
 }

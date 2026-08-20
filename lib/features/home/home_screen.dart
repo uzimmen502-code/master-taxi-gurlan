@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/app_share.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
@@ -211,16 +212,21 @@ class _HomeViewState extends State<_HomeView> {
   void _maybeApplyUserGeo(UserModel? user) {
     if (user == null) return;
     final areaId = user.serviceAreaId.trim();
-    if (areaId.isEmpty || areaId == _lastAppliedServiceAreaId) return;
+    final districtId = user.districtId.trim();
+    if (areaId.isEmpty && districtId.isEmpty) return;
+    if (areaId == _lastAppliedServiceAreaId &&
+        districtId == ServiceConfigHolder.districtId) {
+      return;
+    }
     _lastAppliedServiceAreaId = areaId;
     unawaited(() async {
-      if (user.regionId.isNotEmpty && user.districtId.isNotEmpty) {
+      if (user.regionId.isNotEmpty && districtId.isNotEmpty) {
         await ServiceConfigHolder.applyGeo(
           regionId: user.regionId,
-          districtId: user.districtId,
+          districtId: districtId,
           serviceAreaId: areaId,
         );
-      } else {
+      } else if (areaId.isNotEmpty) {
         await ServiceConfigHolder.applyServiceArea(areaId);
       }
       if (mounted) setState(() {});
@@ -1046,7 +1052,96 @@ class _HomeViewState extends State<_HomeView> {
           ],
         ),
           ),
+          Positioned(
+            top: MediaQuery.paddingOf(context).top + 6,
+            right: 0,
+            width: 48,
+            height: 48,
+            child: const _HomeShareButton(),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Карталар устида 48×48 ⋮ — алоҳида қатор йўқ; touch фақат шу квадрат.
+class _HomeShareButton extends StatefulWidget {
+  const _HomeShareButton();
+
+  @override
+  State<_HomeShareButton> createState() => _HomeShareButtonState();
+}
+
+class _HomeShareButtonState extends State<_HomeShareButton> {
+  static const _navy = Color(0xFF0A2540);
+
+  Future<void> _openMenu() async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx + size.width - 220,
+        origin.dy + size.height,
+        origin.dx + size.width,
+        origin.dy + size.height + 8,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'share',
+          child: Row(
+            children: [
+              const Icon(Icons.share_rounded, color: _navy, size: 20),
+              const SizedBox(width: 10),
+              Text(context.tr('app_share_title')),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (selected != 'share') return;
+    final ok = await shareAvaApp(context);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('app_share_failed'))),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: _openMenu,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: const Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.more_vert_rounded,
+                color: Color(0xE6FFFFFF),
+                size: 38,
+              ),
+              Icon(
+                Icons.more_vert_rounded,
+                color: _navy,
+                size: 32,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

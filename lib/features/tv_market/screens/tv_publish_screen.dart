@@ -11,13 +11,14 @@ import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/tv_clip_geo.dart';
 import '../services/tv_owner_name.dart';
+import '../services/tv_social.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../widgets/tv_clip_poster.dart';
@@ -57,11 +58,12 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   double _uploadProgress = 0;
   String _publishStage = '';
   bool _openShop = false;
-  bool _socialConsent = false;
+  final _socialNetworks = <String>{};
   String _attachItemId = '';
   final _productPhotos = <XFile>[];
   List<TvShopItem> _myItems = const [];
   final _shopRepo = TvShopRepository();
+  String _districtPreview = '';
 
   @override
   void initState() {
@@ -86,8 +88,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     try {
       final exists = await _shopRepo.hasShop(phone);
       final items = exists ? await _shopRepo.fetchByOwner(phone) : const <TvShopItem>[];
+      final geo = await TvClipGeo.resolveForPublisher(ownerPhone: phone);
       if (!mounted) return;
       setState(() {
+        _districtPreview = geo.districtLabel;
         _myItems = items.where((i) => i.isActive).toList();
         if (exists) _openShop = true;
         if (_attachItemId.isNotEmpty) _openShop = true;
@@ -379,8 +383,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     try {
       final phoneRaw = user.phoneNumber ?? user.uid;
       final phone = canonicalPhoneId(phoneRaw);
-      final districtId = ServiceConfigHolder.districtId;
-      final districtLabel = ServiceConfigHolder.districtLabel;
+      final geo = await TvClipGeo.resolveForPublisher(ownerPhone: phone);
+      final districtId = geo.districtId;
+      final districtLabel = geo.districtLabel;
 
       final ownerName = await resolveLocalTvOwnerGivenName(phone: phone);
       final ownerDisplay = tvOwnerDisplayName(ownerName);
@@ -474,7 +479,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               districtId: districtId,
               districtLabel: districtLabel,
               description: _descCtrl.text.trim(),
-              socialConsent: _socialConsent,
+              socialConsent: _socialNetworks.isNotEmpty,
               status: autoApprove ? 'active' : 'pending',
             ),
           );
@@ -501,7 +506,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         description: _descCtrl.text.trim(),
         status: autoApprove ? 'active' : 'pending',
         shopItemId: shopItemId,
-        socialConsent: shopMode && _socialConsent,
+        socialConsent: _socialNetworks.isNotEmpty,
+        socialNetworks: _socialNetworks.toList(),
         searchTokens: TvClipSearch.buildTokens(
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
@@ -521,9 +527,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         );
       }
 
-      // Вақтинча кеш тозалаш
-      await VideoCompress.deleteAllCache();
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -532,6 +535,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               : context.tr('tv_publish_pending')),
         ),
       );
+      final sharePath = _videoFile?.path ?? '';
+      if (_socialNetworks.isNotEmpty && sharePath.isNotEmpty) {
+        await TvSocial.showPublishFollowUp(
+          context,
+          filePath: sharePath,
+          networks: _socialNetworks.toList(),
+        );
+      }
+      await VideoCompress.deleteAllCache();
+      if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -718,7 +731,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                           if (!v) {
                             _attachItemId = '';
                             _productPhotos.clear();
-                            _socialConsent = false;
                           }
                         }),
                 title: Text(
@@ -905,19 +917,40 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                     ),
                   ),
                 ],
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _socialConsent,
-                  onChanged: (v) =>
-                      setState(() => _socialConsent = v ?? false),
-                  title: Text(
-                    context.tr('tv_shop_social'),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(context.tr('tv_shop_social_hint')),
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
               ],
+              const SizedBox(height: 8),
+              Text(
+                context.tr('tv_social_title'),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.tr('tv_social_hint'),
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final id in TvSocial.ordered)
+                    FilterChip(
+                      label: Text(context.tr(TvSocial.labelKey(id))),
+                      selected: _socialNetworks.contains(id),
+                      onSelected: (on) => setState(() {
+                        if (on) {
+                          _socialNetworks.add(id);
+                        } else {
+                          _socialNetworks.remove(id);
+                        }
+                      }),
+                    ),
+                ],
+              ),
               ],
 
               const SizedBox(height: 10),
@@ -942,14 +975,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                             ? (widget.editClip!.districtLabel.isNotEmpty
                                 ? widget.editClip!.districtLabel
                                 : context.tr('tv_publish_no_location'))
-                            : (ServiceConfigHolder.districtLabel.isNotEmpty
-                                ? ServiceConfigHolder.districtLabel
+                            : (_districtPreview.isNotEmpty
+                                ? _districtPreview
                                 : context.tr('tv_publish_no_location')),
                         style: TextStyle(
                           fontSize: 14,
                           color: (_isEdit
                                   ? widget.editClip!.districtLabel
-                                  : ServiceConfigHolder.districtLabel)
+                                  : _districtPreview)
                               .isNotEmpty
                               ? Colors.black87
                               : Colors.grey,

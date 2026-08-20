@@ -586,7 +586,7 @@ class OnboardingController extends ChangeNotifier {
       house: house.trim(),
       district: district.trim().isNotEmpty
           ? district.trim()
-          : (districtLabel.isNotEmpty ? districtLabel : 'Gurlan'),
+          : districtLabel,
       note: note.trim(),
       lat: lat,
       lng: lng,
@@ -626,7 +626,7 @@ class OnboardingController extends ChangeNotifier {
       house: house.trim(),
       district: district.trim().isNotEmpty
           ? district.trim()
-          : (districtLabel.isNotEmpty ? districtLabel : 'Gurlan'),
+          : districtLabel,
       note: note.trim(),
       lat: lat,
       lng: lng,

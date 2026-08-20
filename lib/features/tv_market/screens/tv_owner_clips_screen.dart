@@ -78,9 +78,12 @@ class _TvOwnerClipsScreenState extends State<TvOwnerClipsScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        leading: const BackButton(color: Colors.black87),
         title: Text(title),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.4,
       ),
       body: _loading

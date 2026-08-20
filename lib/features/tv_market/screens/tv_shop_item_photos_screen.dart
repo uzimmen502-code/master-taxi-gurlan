@@ -145,9 +145,12 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9),
       appBar: AppBar(
+        leading: const BackButton(color: Colors.black87),
         title: Text(context.tr('tv_shop_photos_edit')),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.4,
         actions: [
           IconButton(

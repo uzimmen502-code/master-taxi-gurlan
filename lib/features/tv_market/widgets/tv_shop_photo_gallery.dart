@@ -350,9 +350,9 @@ class _TvShopPhotoGalleryPageState extends State<TvShopPhotoGalleryPage> {
                 children: [
                   IconButton(
                     onPressed: _close,
-                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
                     tooltip:
-                        MaterialLocalizations.of(context).closeButtonTooltip,
+                        MaterialLocalizations.of(context).backButtonTooltip,
                   ),
                   const Spacer(),
                   Text(

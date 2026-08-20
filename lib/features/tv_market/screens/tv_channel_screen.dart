@@ -132,9 +132,12 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9),
       appBar: AppBar(
+        leading: const BackButton(color: Colors.black87),
         title: Text(_title),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.4,
       ),
       floatingActionButton: widget.isOwner

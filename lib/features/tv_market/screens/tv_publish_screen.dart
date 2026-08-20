@@ -513,11 +513,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        leading: const BackButton(color: Colors.black87),
         title: Text(
           context.tr(_isEdit ? 'tv_publish_edit_title' : 'tv_publish_title'),
         ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        actionsIconTheme: const IconThemeData(color: Colors.black87),
         elevation: 0.5,
       ),
       body: SingleChildScrollView(

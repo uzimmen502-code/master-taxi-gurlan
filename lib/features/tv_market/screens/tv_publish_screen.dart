@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,6 +15,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/tv_clip_compress.dart';
 import '../services/tv_clip_geo.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_social.dart';
@@ -208,26 +208,12 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       _publishStage = context.tr('tv_publish_compressing');
       _uploadProgress = 0;
     });
-    final compressed = await VideoCompress.compressVideo(
-      _videoFile!.path,
-      quality: VideoQuality.MediumQuality,
-      deleteOrigin: false,
-      includeAudio: true,
-    );
+    final compressedPath = await TvClipCompress.forUpload(_videoFile!.path);
     if (!mounted) {
       throw StateError('unmounted');
     }
-    final compressedPath = compressed?.file?.path ?? _videoFile!.path;
     setState(() => _publishStage = context.tr('tv_publish_thumbnail'));
-    Uint8List? thumbBytes;
-    final thumbFile = await VideoCompress.getFileThumbnail(
-      _videoFile!.path,
-      quality: 75,
-      position: -1,
-    );
-    if (thumbFile.existsSync()) {
-      thumbBytes = await thumbFile.readAsBytes();
-    }
+    final thumbBytes = await TvClipCompress.thumbnailBytes(compressedPath);
     setState(() {
       _publishStage = context.tr('tv_publish_uploading');
       _uploadProgress = 0;
@@ -397,56 +383,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final autoApprove =
           settingsSnap.data()?['tvAutoApprove'] == true;
 
-      // 1. Видеони сиқиш (720p, medium)
-      final compressed = await VideoCompress.compressVideo(
-        _videoFile!.path,
-        quality: VideoQuality.MediumQuality,
-        deleteOrigin: false,
-        includeAudio: true,
-      );
+      final uploaded = await _uploadPickedVideo(phone);
       if (!mounted) return;
-      final compressedPath = compressed?.file?.path ?? _videoFile!.path;
-
-      // 2. Thumbnail олиш
-      if (mounted) {
-        setState(() => _publishStage = context.tr('tv_publish_thumbnail'));
-      }
-      Uint8List? thumbBytes;
-      final thumbFile = await VideoCompress.getFileThumbnail(
-        _videoFile!.path,
-        quality: 75,
-        position: -1,
-      );
-      if (thumbFile.existsSync()) {
-        thumbBytes = await thumbFile.readAsBytes();
-      }
-
-      // 3. Видео юклаш
-      if (mounted) {
-        setState(() {
-          _publishStage = context.tr('tv_publish_uploading');
-          _uploadProgress = 0;
-        });
-      }
-      final videoUrl = await _storageService.uploadVideo(
-        ownerPhone: phone,
-        filePath: compressedPath,
-        onProgress: (p) {
-          if (mounted) setState(() => _uploadProgress = p);
-        },
-      );
-
-      // 4. Poster юклаш
-      String posterUrl = '';
-      if (thumbBytes != null && thumbBytes.isNotEmpty) {
-        if (mounted) {
-          setState(() => _publishStage = context.tr('tv_publish_poster'));
-        }
-        posterUrl = await _storageService.uploadPoster(
-          ownerPhone: phone,
-          bytes: thumbBytes,
-        );
-      }
+      final videoUrl = uploaded.videoUrl;
+      final posterUrl = uploaded.posterUrl;
 
       String shopItemId = _attachItemId;
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;

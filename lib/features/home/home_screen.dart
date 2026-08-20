@@ -672,15 +672,19 @@ class _HomeViewState extends State<_HomeView> {
                       _maybeApplyUserGeo(user);
                       // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
                       // (users.bonusBalance) — wallet_ledger stream yo'q.
-                      return ListView(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal:
-                              MediaQuery.sizeOf(context).width < 360 ? 12 : 16,
+                      return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          MediaQuery.sizeOf(context).width < 360 ? 12 : 16,
+                          0,
+                          MediaQuery.sizeOf(context).width < 360 ? 12 : 16,
+                          0,
                         ),
-                        child: Column(
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate(
+                            [
+                              Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(height: _sectionGap(context, base: 10)),
@@ -1039,11 +1043,15 @@ class _HomeViewState extends State<_HomeView> {
                             HomeGlobalSearchBar(
                               onOpenEntry: _openSearchEntry,
                             ),
-                            if (HomeModuleGate.showInGrid('tv_market'))
-                              const HomeVideoStage(),
                           ],
                         ),
+                            ],
+                          ),
+                        ),
                       ),
+                      if (HomeModuleGate.showInGrid('tv_market'))
+                        const HomeVideoStage(),
+                      const SliverToBoxAdapter(child: SizedBox(height: 16)),
                     ],
                   );
                 },

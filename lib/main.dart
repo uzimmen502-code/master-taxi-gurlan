@@ -2,12 +2,14 @@
 // → `/` бу entry, `/admin/` — `main_admin.dart` (firebase.json: public = build/hosting).
 
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugPrint, defaultTargetPlatform, kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -77,6 +79,14 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  if (!kIsWeb) {
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
+
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
@@ -89,6 +99,12 @@ void main() async {
   final hasFirebaseAuth = firebaseUser != null;
   final storedPhone = phoneDigits(prefs.getString('user_phone') ?? '');
   final isReturningUser = onboarding || storedPhone.length >= 12;
+  if (!kIsWeb) {
+    final crashId = (prefs.getString('userId') ?? storedPhone).trim();
+    if (crashId.isNotEmpty) {
+      unawaited(FirebaseCrashlytics.instance.setUserIdentifier(crashId));
+    }
+  }
 
   // Sessiya yo'qolsa (APK yangilash) — kod bilan qayta tasdiqlash kerak.
   if (isReturningUser && !hasFirebaseAuth) {

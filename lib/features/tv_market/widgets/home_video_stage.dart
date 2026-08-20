@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -21,7 +22,7 @@ import '../services/tv_screen_playback.dart';
 import 'tv_clip_poster.dart';
 import 'tv_owner_action_bar.dart';
 
-/// Home пастидаги овозсиз видеолар — пастга скролл кейинги клип, босиш → feed.
+/// Home пастидаги овозсиз видеолар (sliver) — пастга скролл кейинги клип.
 class HomeVideoStage extends StatefulWidget {
   const HomeVideoStage({super.key});
 
@@ -36,7 +37,6 @@ class _HomeVideoStageState extends State<HomeVideoStage>
 
   final _repo = TvClipsRepository();
   final _pool = TvPlayerPool(alwaysMuted: true);
-  final _cardKeys = <GlobalKey>[];
 
   List<TvClip> _clips = [];
   bool _loading = true;
@@ -86,9 +86,6 @@ class _HomeVideoStageState extends State<HomeVideoStage>
         limit: _firstPage,
       );
       if (!mounted) return;
-      _cardKeys
-        ..clear()
-        ..addAll(List.generate(page.clips.length, (_) => GlobalKey()));
       setState(() {
         _clips = page.clips;
         _nearbyCursor = page.nearbyCursor;
@@ -140,23 +137,31 @@ class _HomeVideoStageState extends State<HomeVideoStage>
 
   void _pickActive() {
     if (_clips.isEmpty || !tvCanPlay) return;
-    final mq = MediaQuery.of(context);
-    final screen = Offset.zero & mq.size;
-    var best = _activeIndex;
-    var bestFrac = 0.0;
-    for (var i = 0; i < _cardKeys.length; i++) {
-      final box = _cardKeys[i].currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) continue;
-      final rect = box.localToGlobal(Offset.zero) & box.size;
-      final inter = rect.intersect(screen);
-      if (inter.isEmpty) continue;
-      final frac = inter.height / rect.height;
-      if (frac > bestFrac) {
-        bestFrac = frac;
-        best = i;
+    final ro = context.findRenderObject();
+    if (ro is! RenderSliver) return;
+    final geo = ro.geometry;
+    if (geo == null || !geo.visible) {
+      if (_clipPlaying) {
+        _clipPlaying = false;
+        _pool.pauseAllExcept('');
       }
+      return;
     }
-    if (bestFrac < 0.35) {
+    final stride = _cardStride;
+    if (stride <= 0) return;
+    final leading = ro.constraints.scrollOffset;
+    final viewport = ro.constraints.remainingPaintExtent;
+    final center = leading + viewport * 0.42;
+    var best = (center / stride).floor();
+    if (best < 0) best = 0;
+    if (best >= _clips.length) best = _clips.length - 1;
+    final itemTop = best * stride;
+    final interTop = leading > itemTop ? leading : itemTop;
+    final itemBottom = itemTop + stride;
+    final visEnd = leading + viewport;
+    final interBottom = visEnd < itemBottom ? visEnd : itemBottom;
+    final frac = ((interBottom - interTop) / stride).clamp(0.0, 1.0);
+    if (frac < 0.35) {
       if (_clipPlaying) {
         _clipPlaying = false;
         _pool.pauseAllExcept('');
@@ -169,6 +174,11 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     _clipPlaying = true;
     setState(() {});
     unawaited(_syncPlayback());
+  }
+
+  double get _cardStride {
+    if (!mounted) return 0;
+    return MediaQuery.sizeOf(context).height * 0.80 + 10;
   }
 
   Future<void> _syncPlayback() async {
@@ -222,7 +232,6 @@ class _HomeVideoStageState extends State<HomeVideoStage>
             .where((c) => _clips.every((e) => e.id != c.id))
             .toList();
         if (fresh.isEmpty) continue;
-        _cardKeys.addAll(List.generate(fresh.length, (_) => GlobalKey()));
         _clips = [..._clips, ...fresh];
         unawaited(_hydratePublisherNames());
         break;
@@ -290,7 +299,6 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       final i = _clips.indexWhere((c) => c.id == clip.id);
       if (i >= 0) {
         _clips.removeAt(i);
-        _cardKeys.removeAt(i);
         if (_activeIndex >= _clips.length) {
           _activeIndex = _clips.isEmpty ? 0 : _clips.length - 1;
         }
@@ -343,46 +351,53 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const SizedBox(
-        height: 120,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      return const SliverToBoxAdapter(
+        child: SizedBox(
+          height: 120,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
       );
     }
-    if (_clips.isEmpty) return const SizedBox.shrink();
+    if (_clips.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     final cardH = MediaQuery.sizeOf(context).height * 0.80;
+    final hPad = MediaQuery.sizeOf(context).width < 360 ? 12.0 : 16.0;
 
-    return Column(
-      children: [
-        for (var i = 0; i < _clips.length; i++)
-          Padding(
-            key: _cardKeys[i],
-            padding: EdgeInsets.only(top: i == 0 ? 8 : 10),
-            child: _HomeClipCard(
-              clip: _clips[i],
-              height: cardH,
-              playing: i == _activeIndex,
-              controller: _pool[_clips[i].videoUrl],
-              isOwner: _isOwner(_clips[i]),
-              ownerLabel: _overlayName(_clips[i]),
-              onOpen: () => _openFeed(_clips[i]),
-              onContact: () => _onContact(_clips[i]),
-              onDelete: () => _onDelete(_clips[i]),
-              onEdit: () => _onEdit(_clips[i]),
-            ),
-          ),
-        if (_loadingMore)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 0),
+      sliver: SliverFixedExtentList(
+        itemExtent: cardH + 10,
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            if (i >= _clips.length) {
+              return const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _HomeClipCard(
+                clip: _clips[i],
+                height: cardH,
+                playing: i == _activeIndex,
+                controller: _pool[_clips[i].videoUrl],
+                isOwner: _isOwner(_clips[i]),
+                ownerLabel: _overlayName(_clips[i]),
+                onOpen: () => _openFeed(_clips[i]),
+                onContact: () => _onContact(_clips[i]),
+                onDelete: () => _onDelete(_clips[i]),
+                onEdit: () => _onEdit(_clips[i]),
               ),
-            ),
-          ),
-      ],
+            );
+          },
+          childCount: _clips.length + (_loadingMore ? 1 : 0),
+          addAutomaticKeepAlives: false,
+        ),
+      ),
     );
   }
 }

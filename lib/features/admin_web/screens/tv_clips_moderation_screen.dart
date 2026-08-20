@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/services/tv_social.dart';
 import '../services/admin_auth_service.dart';
+import '../widgets/tv_social_settings_bar.dart';
 
 /// Админ панел — TV Market клиплар модерацияси.
 class TvClipsModerationScreen extends StatefulWidget {
@@ -147,6 +149,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
       children: [
         _header(),
         const _TvAutoApproveBar(),
+        const TvSocialSettingsBar(),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -223,7 +226,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
                 ),
                 SizedBox(height: 3),
                 Text(
-                  'Видео клипларни кўриш, фаоллаштириш ва блоклаш',
+                  'Видео клипларни кўриш, фаоллаштириш ва AVA расмий саҳифаларига жойлаш',
                   style: TextStyle(color: Colors.black54),
                 ),
               ],
@@ -330,24 +333,18 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
     );
   }
 
-  Future<void> _markSocialPosted(TvClip clip) async {
+  Future<void> _publishSocial(TvClip clip) async {
     try {
-      final now = Timestamp.now();
-      await FirebaseFirestore.instance
-          .collection('tv_clips')
-          .doc(clip.id)
-          .update({'socialPostedAt': now});
-      if (clip.shopItemId.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('tv_shop_items')
-            .doc(clip.shopItemId)
-            .update({'socialPostedAt': now});
-      }
+      final fn = FirebaseFunctions.instance.httpsCallable(
+        'adminPublishTvClipSocial',
+        options: HttpsCallableOptions(timeout: const Duration(minutes: 9)),
+      );
+      await fn.call({'clipId': clip.id});
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.blue.shade700,
-          content: Text('Соцсетда белгиланди: ${clip.title}'),
+          content: Text('Соцсетга жойланди: ${clip.title}'),
         ),
       );
       await _load();
@@ -411,7 +408,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         },
         onSocialPosted: () {
           Navigator.pop(ctx);
-          _markSocialPosted(clip);
+          _publishSocial(clip);
         },
         onBoost: () {
           Navigator.pop(ctx);
@@ -746,7 +743,9 @@ class _TvClipDetailDialog extends StatelessWidget {
                         ? 'Ҳа'
                         : clip.socialNetworks.join(', '))
                     : 'Йўқ'),
-                _row('Соцсетда', clip.socialPosted ? 'Чоп этилган' : '—'),
+                _row('Соцсетда', _socialLine(clip)),
+                if ('${clip.socialPost['error'] ?? ''}'.trim().isNotEmpty)
+                  _row('Соцсет хато', '${clip.socialPost['error']}'),
                 _row('Товар', clip.hasShopItem ? clip.shopItemId : '—'),
                 _row('Изоҳлар', '${clip.commentCount}'),
                 _row('Сана', _fmtDate(clip.createdAt)),
@@ -796,30 +795,23 @@ class _TvClipDetailDialog extends StatelessWidget {
                   style:
                       OutlinedButton.styleFrom(foregroundColor: Colors.red),
                 ),
-                if (clip.socialConsent && !clip.socialPosted) ...[
-                  for (final net in (clip.socialNetworks.isEmpty
-                      ? TvSocial.ordered
-                      : clip.socialNetworks))
-                    OutlinedButton.icon(
-                      onPressed: () => TvSocial.openOfficialComposer(
-                        network: net,
-                        videoUrl: clip.videoUrl,
-                      ),
-                      icon: const Icon(Icons.open_in_new, size: 18),
-                      label: Text(
-                        net == TvSocial.tiktok
-                            ? 'TikTok'
-                            : net == TvSocial.facebook
-                                ? 'Facebook'
-                                : 'Instagram',
-                      ),
-                    ),
+                if ((clip.socialConsent || clip.socialNetworks.isNotEmpty) &&
+                    !clip.socialPosted)
                   FilledButton.icon(
-                    onPressed: onSocialPosted,
+                    onPressed: clip.status == 'active' &&
+                            clip.socialPostStatus != 'posting'
+                        ? onSocialPosted
+                        : null,
                     icon: const Icon(Icons.public, size: 18),
-                    label: const Text('Соцсетда чоп'),
+                    label: Text(
+                      clip.socialPostStatus == 'posting'
+                          ? 'Жойланмоқда…'
+                          : (clip.socialPostStatus == 'error' ||
+                                  clip.socialPostStatus == 'partial'
+                              ? 'Қайта жойлаш'
+                              : 'Соцсетга жойлаш'),
+                    ),
                   ),
-                ],
                 if (clip.hasShopItem)
                   OutlinedButton.icon(
                     onPressed: onBoost,
@@ -832,6 +824,20 @@ class _TvClipDetailDialog extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _socialLine(TvClip clip) {
+    final nets = clip.socialPost['networks'];
+    if (nets is! Map) return clip.socialPostSummary();
+    final parts = <String>[];
+    for (final id in TvSocial.ordered) {
+      final row = nets[id];
+      if (row is Map && '${row['status'] ?? ''}'.isNotEmpty) {
+        parts.add('$id: ${row['status']}');
+      }
+    }
+    if (parts.isEmpty) return clip.socialPostSummary();
+    return '${clip.socialPostSummary()} (${parts.join(', ')})';
   }
 
   Widget _row(String label, String value) {
@@ -920,8 +926,8 @@ class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
             Expanded(
               child: Text(
                 auto
-                    ? 'АВТО — янги видеолар дарҳол фийдда кўринади'
-                    : 'ҚЎЛДА — янги видеолар «Кутилмоқда»га тушади, админ тасдиқлайди',
+                    ? 'АВТО — янги видеолар дарҳол фийдда; соцсет чипи бўлса AVA расмий саҳифасига тизим ўзи жойлайди'
+                    : 'ҚЎЛДА — тасдиқдан кейин фийдда чиқади; танланган Instagram / Facebook / TikTok’га ҳам тизим жойлайди',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

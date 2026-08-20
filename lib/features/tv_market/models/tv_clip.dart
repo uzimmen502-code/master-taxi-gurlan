@@ -61,6 +61,7 @@ class TvClip {
     this.socialConsent = false,
     this.socialNetworks = const [],
     this.socialPostedAt,
+    this.socialPost = const {},
     this.searchTokens = const [],
   });
 
@@ -95,12 +96,31 @@ class TvClip {
   /// `instagram` | `facebook` | `tiktok`
   final List<String> socialNetworks;
   final DateTime? socialPostedAt;
+  /// CF жойлаш ҳолати: status posting|posted|partial|error + networks.{ig,fb,tt}.
+  final Map<String, dynamic> socialPost;
   final List<String> searchTokens;
 
   bool get isActive => status == 'active';
   bool get hasPrice => price > 0;
   bool get hasShopItem => shopItemId.trim().isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
+
+  String get socialPostStatus => '${socialPost['status'] ?? ''}'.trim();
+
+  String socialPostSummary() {
+    if (socialPosted) return 'Чоп этилган';
+    switch (socialPostStatus) {
+      case 'posting':
+        return 'Жойланмоқда';
+      case 'partial':
+        return 'Қисман';
+      case 'error':
+        return 'Хато';
+      default:
+        if (socialConsent || socialNetworks.isNotEmpty) return 'Навбатда';
+        return '—';
+    }
+  }
 
   String displayOwnerName(String fallback) {
     final n = tvOwnerDisplayName(ownerName);
@@ -114,6 +134,7 @@ class TvClip {
     bool? socialConsent,
     List<String>? socialNetworks,
     DateTime? socialPostedAt,
+    Map<String, dynamic>? socialPost,
     String? ownerName,
     String? districtId,
     String? districtLabel,
@@ -149,6 +170,7 @@ class TvClip {
       socialConsent: socialConsent ?? this.socialConsent,
       socialNetworks: socialNetworks ?? this.socialNetworks,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
+      socialPost: socialPost ?? this.socialPost,
       searchTokens: searchTokens ?? this.searchTokens,
     );
   }
@@ -179,6 +201,9 @@ class TvClip {
       socialConsent: d['socialConsent'] == true,
       socialNetworks: _parseSocialNetworks(d['socialNetworks']),
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
+      socialPost: d['socialPost'] is Map
+          ? Map<String, dynamic>.from(d['socialPost'] as Map)
+          : const {},
       searchTokens: (d['searchTokens'] is List)
           ? (d['searchTokens'] as List)
               .map((e) => '$e')
@@ -214,6 +239,7 @@ class TvClip {
         if (socialNetworks.isNotEmpty) 'socialNetworks': socialNetworks,
         if (socialPostedAt != null)
           'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
+        if (socialPost.isNotEmpty) 'socialPost': socialPost,
         if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
       };
 }

@@ -56,7 +56,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   String _category = 'product';
   bool _publishing = false;
   double _uploadProgress = 0;
-  String? _shareVideoPath;
   String _publishStage = '';
   bool _openShop = false;
   final _socialNetworks = <String>{};
@@ -215,7 +214,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         if (mounted) setState(() => _uploadProgress = p);
       },
     );
-    _shareVideoPath = compressed.path;
     if (!mounted) {
       throw StateError('unmounted');
     }
@@ -480,21 +478,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(autoApprove
-              ? context.tr('tv_publish_success')
-              : context.tr('tv_publish_pending')),
-        ),
-      );
-      final sharePath = _shareVideoPath ?? _videoFile?.path ?? '';
-      if (_socialNetworks.isNotEmpty && sharePath.isNotEmpty) {
-        await TvSocial.showPublishFollowUp(
-          context,
-          filePath: sharePath,
-          networks: _socialNetworks.toList(),
-        );
+      final lines = <String>[
+        context.tr(autoApprove ? 'tv_publish_success' : 'tv_publish_pending'),
+      ];
+      if (_socialNetworks.isNotEmpty) {
+        lines.add(context.tr('tv_social_queued'));
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(lines.join('\n'))),
+      );
       await VideoCompress.deleteAllCache();
       if (!mounted) return;
       Navigator.pop(context, true);

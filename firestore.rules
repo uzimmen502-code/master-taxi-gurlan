@@ -1217,10 +1217,15 @@ service cloud.firestore {
     // SETTINGS — нархлар ва бошқа созламалар
     // ══════════════════════════════════════
     match /settings/{docId} {
-      allow read: if docId != 'courier';
+      allow read: if docId != 'courier' && docId != 'tv_social';
       // prices/app/anomaly — фақат isAdmin (олдин очиқ update бўлган).
-      allow create, update: if isAdmin();
+      allow create, update: if isAdmin() && docId != 'tv_social';
       allow delete: if false;
+    }
+
+    // Page/IG/TikTok токенлари — фақат Cloud Functions (Admin SDK).
+    match /settings/tv_social {
+      allow read, write: if false;
     }
 
     match /settings/courier {

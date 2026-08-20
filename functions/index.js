@@ -15700,3 +15700,12 @@ attachAnalyticsPipeline(exports, {
   admin,
   requireCallerRoles,
 });
+
+// --- AVA official IG / Facebook / TikTok clip publish ---
+const { attachTvSocialPublish } = require('./tv_social_publish');
+attachTvSocialPublish(exports, {
+  functions,
+  db,
+  admin,
+  requireCallerRoles,
+});

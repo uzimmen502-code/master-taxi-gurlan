@@ -32,6 +32,7 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - `lib/features/tv_market/services/tv_clip_view_recorder.dart` — 3s/25% watch threshold; session dedup; 24h Firestore dedup via `views/{viewerId}`; skips owner self-view
 - `lib/features/tv_market/utils/tv_view_format.dart` — K/M view display
 - Lime CTA label: `tv_market_shop` if `tv_shops` else `tv_market_channel` (same open handler)
+- Players: `TvPlayerPool` maxReady Home=1 / Feed=2; `releaseAll` on route leave/background (do not keep paused ExoPlayers). Play 1.0.24 vitals: OOM in ExoPlayer + Impeller AHBTextureSourceVK SIGSEGV. Android: EnableImpeller=false, largeHeap=true. Posters decode with cacheWidth.
 - Feed order: `tvShuffleClips` on home/nearby/recommended/allActive (not owner grid) so clip positions change each app open/fetch.
 - Clip district stamp: `TvClipGeo.resolveForPublisher` from `users/{phone}.districtId` + `geo_districts` label — never SharedPreferences `ServiceConfigHolder` cache (Urganch user + stale Gurlan cache was writing Гурлан on overlay). `hydrateTvPublisherNames` also overlays owner's current district on existing clips. Onboarding no longer hardcodes address `'Gurlan'`.
 - Social IG/FB/TikTok: `tv_clips.socialNetworks` independent of mini-shop (video share, no photos). After publish: system share sheet. Admin: copy video URL + open official composer, then «Соцсетда чоп».

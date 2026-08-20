@@ -21,7 +21,8 @@
     <application
         android:label="AVA"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:largeHeap="true">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
@@ -46,6 +47,10 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
+            <!-- Impeller Vulkan AHBTextureSourceVK SIGSEGV (Play vitals 1.0.24). -->
+            <meta-data
+                android:name="io.flutter.embedding.android.EnableImpeller"
+                android:value="false"/>
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

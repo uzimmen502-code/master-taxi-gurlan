@@ -124,8 +124,12 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   @override
   void tvOnPlaybackBlocked() {
     _clipPlaying = false;
-    _pool.pauseAll();
-    _pool.muteAll();
+    unawaited(_releasePlayers());
+  }
+
+  Future<void> _releasePlayers() async {
+    await _pool.releaseAll();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -188,14 +192,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       }
       if (mounted) setState(() {});
     }
-    final keep = <String>[clip.videoUrl];
-    if (_activeIndex + 1 < _clips.length) {
-      keep.add(_clips[_activeIndex + 1].videoUrl);
-    }
-    if (_activeIndex - 1 >= 0) {
-      keep.add(_clips[_activeIndex - 1].videoUrl);
-    }
-    unawaited(_pool.retain(keep));
+    unawaited(_pool.retain([clip.videoUrl]));
   }
 
   Future<void> _maybeLoadMore(int visibleIndex) async {

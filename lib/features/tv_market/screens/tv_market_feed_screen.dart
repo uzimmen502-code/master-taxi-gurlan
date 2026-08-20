@@ -43,7 +43,7 @@ class TvMarketFeedScreen extends StatefulWidget {
 class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     with WidgetsBindingObserver, RouteAware, TvScreenPlayback {
   final _repo = TvClipsRepository();
-  final _pool = TvPlayerPool(alwaysMuted: false);
+  final _pool = TvPlayerPool(alwaysMuted: false, maxReady: 2);
   final _clips = <TvClip>[];
   bool _loading = true;
   int _currentIndex = 0;
@@ -139,8 +139,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   @override
   void tvOnPlaybackBlocked() {
-    _pool.pauseAll();
-    _pool.muteAll();
+    unawaited(_releasePlayers());
+  }
+
+  Future<void> _releasePlayers() async {
+    await _pool.releaseAll();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -201,7 +205,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
     add(index);
     add(index + 1);
-    add(index - 1);
     return urls;
   }
 

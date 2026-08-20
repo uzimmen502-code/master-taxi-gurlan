@@ -1,14 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
-/// Ҳозирги + қўшни клиплар учун плеер пули.
-/// initialize аввал; қўшнилар кетма-кет (параллел эмас) — декодер тўлмасин.
-/// retain тартиби сақланади: ҳозирги, кейинги, олдинги.
+/// Ҳозирги + (ихтиёрий) кейинги клип учун плеер пули.
+///
+/// Play vitals 1.0.24: бир нечта тўлиқ ExoPlayer + Home остида Feed
+/// → OutOfMemoryError (`ExoPlayerImplInternal.shouldContinueLoading`).
+/// Паузада декодерни тирик қолдирмаймиз — [releaseAll].
 class TvPlayerPool {
-  TvPlayerPool({this.alwaysMuted = false});
+  TvPlayerPool({
+    this.alwaysMuted = false,
+    this.maxReady = 1,
+  });
 
   /// Home — ҳеч қачон овоз чиқмасин.
   final bool alwaysMuted;
+
+  /// Бир вақтда тирик ExoPlayer сони (Home=1, Feed=2).
+  final int maxReady;
 
   final _ready = <String, VideoPlayerController>{};
   final _inflight = <String, Future<VideoPlayerController?>>{};
@@ -27,11 +35,16 @@ class TvPlayerPool {
   Future<VideoPlayerController?> _create(String url) async {
     VideoPlayerController? ctrl;
     try {
-      ctrl = VideoPlayerController.networkUrl(Uri.parse(url));
+      await _evictIfNeeded(keep: url);
+      ctrl = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
       await ctrl.initialize();
       await ctrl.setLooping(true);
       await ctrl.setVolume(0);
       _ready[url] = ctrl;
+      await _evictIfNeeded(keep: url);
       return ctrl;
     } catch (e) {
       debugPrint('[TvPlayerPool] $e');
@@ -39,6 +52,19 @@ class TvPlayerPool {
       return null;
     } finally {
       _inflight.remove(url);
+    }
+  }
+
+  Future<void> _evictIfNeeded({required String keep}) async {
+    while (_ready.length > maxReady ||
+        (_ready.length >= maxReady && !_ready.containsKey(keep))) {
+      final victim = _ready.keys.firstWhere(
+        (k) => k != keep,
+        orElse: () => '',
+      );
+      if (victim.isEmpty) break;
+      final ctrl = _ready.remove(victim);
+      await ctrl?.dispose();
     }
   }
 
@@ -54,12 +80,25 @@ class TvPlayerPool {
 
   void pauseAll() => pauseAllExcept('');
 
+  /// Хотирани бўшатиш: пауза етарли эмас, ExoPlayer deallocate қилинади.
+  Future<void> releaseAll() async {
+    final all = [..._ready.values];
+    _ready.clear();
+    _inflight.clear();
+    for (final ctrl in all) {
+      try {
+        await ctrl.dispose();
+      } catch (_) {}
+    }
+  }
+
   Future<void> retain(Iterable<String> urls) async {
     final ordered = <String>[];
     final keep = <String>{};
     for (final url in urls) {
       if (url.isEmpty || !keep.add(url)) continue;
       ordered.add(url);
+      if (ordered.length >= maxReady) break;
     }
     final drop = _ready.keys.where((k) => !keep.contains(k)).toList();
     for (final url in drop) {
@@ -82,12 +121,5 @@ class TvPlayerPool {
     }
   }
 
-  Future<void> dispose() async {
-    final all = [..._ready.values];
-    _ready.clear();
-    _inflight.clear();
-    for (final ctrl in all) {
-      await ctrl.dispose();
-    }
-  }
+  Future<void> dispose() => releaseAll();
 }

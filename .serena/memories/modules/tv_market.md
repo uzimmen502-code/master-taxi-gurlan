@@ -33,7 +33,8 @@ Do not rename to generic `shops`/`offers`/`clips` (collides with platform_store 
 - `lib/features/tv_market/utils/tv_view_format.dart` — K/M view display
 - Lime CTA label: `tv_market_shop` if `tv_shops` else `tv_market_channel` (same open handler)
 - Players: `TvPlayerPool` maxReady Home=1 / Feed=2; `releaseAll` on route leave/background (do not keep paused ExoPlayers). Play 1.0.24 vitals: OOM in ExoPlayer + Impeller AHBTextureSourceVK SIGSEGV. Android: EnableImpeller=false, largeHeap=true. Posters decode with cacheWidth.
-- Upload: `TvClipCompress` → 720p/24fps (skip if already ≤720p and ≤3.5MB; still huge → 540p). Home clips are a `SliverFixedExtentList` (not a Column inside ListView).
+- Upload: `TvClipCompress` → 720p/24fps, max 60s trim, skip if already ≤720p and ≤3.5MB; still huge → 540p; poster JPEG 720px. Share uses compressed file. Home clips: `SliverList` + cacheExtent 320; play when ≥50% visible.
+- Crashlytics: `CrashReport.nonFatal` from player/compress; Firestore mobile cache 48MB (not unlimited). Android Impeller OpenGL (not Vulkan) to avoid AHBTextureSourceVK.
 - Feed order: `tvShuffleClips` on home/nearby/recommended/allActive (not owner grid) so clip positions change each app open/fetch.
 - Clip district stamp: `TvClipGeo.resolveForPublisher` from `users/{phone}.districtId` + `geo_districts` label — never SharedPreferences `ServiceConfigHolder` cache (Urganch user + stale Gurlan cache was writing Гурлан on overlay). `hydrateTvPublisherNames` also overlays owner's current district on existing clips. Onboarding no longer hardcodes address `'Gurlan'`.
 - Social IG/FB/TikTok: `tv_clips.socialNetworks` independent of mini-shop (video share, no photos). After publish: system share sheet. Admin: copy video URL + open official composer, then «Соцсетда чоп».

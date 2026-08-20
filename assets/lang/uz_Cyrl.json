@@ -587,6 +587,7 @@
   "tv_publish_success": "Видео муваффақиятли жойланди!",
   "tv_publish_pending": "Видео юборилди — текширувдан кейин чиқади",
   "tv_publish_compressing": "Видео сиқилмоқда...",
+  "tv_publish_trimmed": "Ролик 60 сонияга қисқартирилди",
   "tv_publish_thumbnail": "Расм тайёрланмоқда...",
   "tv_publish_uploading": "Видео юкланмоқда...",
   "tv_publish_poster": "Постер юкланмоқда...",

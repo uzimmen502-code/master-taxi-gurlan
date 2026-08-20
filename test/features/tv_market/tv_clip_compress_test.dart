@@ -27,4 +27,10 @@ void main() {
       VideoQuality.Res960x540Quality,
     );
   });
+
+  test('45с қисқартирилмайди, 90с → 60с', () {
+    expect(TvClipCompress.clipDurationSeconds(45000), isNull);
+    expect(TvClipCompress.clipDurationSeconds(90), 60);
+    expect(TvClipCompress.clipDurationSeconds(120000), 60);
+  });
 }

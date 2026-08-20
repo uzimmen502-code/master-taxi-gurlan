@@ -586,6 +586,7 @@
   "tv_publish_success": "Видео успешно размещено!",
   "tv_publish_pending": "Видео отправлено — появится после проверки",
   "tv_publish_compressing": "Сжатие видео...",
+  "tv_publish_trimmed": "Ролик обрезан до 60 секунд",
   "tv_publish_thumbnail": "Создание превью...",
   "tv_publish_uploading": "Загрузка видео...",
   "tv_publish_poster": "Загрузка постера...",

@@ -586,6 +586,7 @@
   "tv_publish_success": "Video muvaffaqiyatli joylandi!",
   "tv_publish_pending": "Video yuborildi — tekshiruvdan keyin chiqadi",
   "tv_publish_compressing": "Video siqilmoqda...",
+  "tv_publish_trimmed": "Rolik 60 soniyaga qisqartirildi",
   "tv_publish_thumbnail": "Rasm tayyorlanmoqda...",
   "tv_publish_uploading": "Video yuklanmoqda...",
   "tv_publish_poster": "Poster yuklanmoqda...",

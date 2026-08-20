@@ -87,9 +87,11 @@ void main() async {
     };
   }
 
-  FirebaseFirestore.instance.settings = const Settings(
+  FirebaseFirestore.instance.settings = Settings(
     persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    cacheSizeBytes: kIsWeb
+        ? Settings.CACHE_SIZE_UNLIMITED
+        : 48 * 1024 * 1024,
   );
 
   final prefs = await SharedPreferences.getInstance();
@@ -99,12 +101,13 @@ void main() async {
   final hasFirebaseAuth = firebaseUser != null;
   final storedPhone = phoneDigits(prefs.getString('user_phone') ?? '');
   final isReturningUser = onboarding || storedPhone.length >= 12;
-  if (!kIsWeb) {
-    final crashId = (prefs.getString('userId') ?? storedPhone).trim();
-    if (crashId.isNotEmpty) {
-      unawaited(FirebaseCrashlytics.instance.setUserIdentifier(crashId));
+    if (!kIsWeb) {
+      unawaited(FirebaseCrashlytics.instance.setCustomKey('surface', 'mobile'));
+      final crashId = (prefs.getString('userId') ?? storedPhone).trim();
+      if (crashId.isNotEmpty) {
+        unawaited(FirebaseCrashlytics.instance.setUserIdentifier(crashId));
+      }
     }
-  }
 
   // Sessiya yo'qolsa (APK yangilash) — kod bilan qayta tasdiqlash kerak.
   if (isReturningUser && !hasFirebaseAuth) {

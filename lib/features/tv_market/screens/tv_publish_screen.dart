@@ -56,6 +56,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   String _category = 'product';
   bool _publishing = false;
   double _uploadProgress = 0;
+  String? _shareVideoPath;
   String _publishStage = '';
   bool _openShop = false;
   final _socialNetworks = <String>{};
@@ -208,19 +209,30 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       _publishStage = context.tr('tv_publish_compressing');
       _uploadProgress = 0;
     });
-    final compressedPath = await TvClipCompress.forUpload(_videoFile!.path);
+    final compressed = await TvClipCompress.forUpload(
+      _videoFile!.path,
+      onProgress: (p) {
+        if (mounted) setState(() => _uploadProgress = p);
+      },
+    );
+    _shareVideoPath = compressed.path;
     if (!mounted) {
       throw StateError('unmounted');
     }
+    if (compressed.trimmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_trimmed'))),
+      );
+    }
     setState(() => _publishStage = context.tr('tv_publish_thumbnail'));
-    final thumbBytes = await TvClipCompress.thumbnailBytes(compressedPath);
+    final thumbBytes = await TvClipCompress.thumbnailBytes(compressed.path);
     setState(() {
       _publishStage = context.tr('tv_publish_uploading');
       _uploadProgress = 0;
     });
     final videoUrl = await _storageService.uploadVideo(
       ownerPhone: phone,
-      filePath: compressedPath,
+      filePath: compressed.path,
       onProgress: (p) {
         if (mounted) setState(() => _uploadProgress = p);
       },
@@ -475,7 +487,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               : context.tr('tv_publish_pending')),
         ),
       );
-      final sharePath = _videoFile?.path ?? '';
+      final sharePath = _shareVideoPath ?? _videoFile?.path ?? '';
       if (_socialNetworks.isNotEmpty && sharePath.isNotEmpty) {
         await TvSocial.showPublishFollowUp(
           context,

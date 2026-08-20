@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
+
+import '../../../core/utils/crash_report.dart';
 
 /// Ҳозирги + (ихтиёрий) кейинги клип учун плеер пули.
 ///
@@ -38,16 +42,24 @@ class TvPlayerPool {
       await _evictIfNeeded(keep: url);
       ctrl = VideoPlayerController.networkUrl(
         Uri.parse(url),
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: VideoPlayerOptions(
+          mixWithOthers: true,
+          allowBackgroundPlayback: false,
+        ),
       );
-      await ctrl.initialize();
+      await ctrl.initialize().timeout(const Duration(seconds: 15));
       await ctrl.setLooping(true);
       await ctrl.setVolume(0);
       _ready[url] = ctrl;
       await _evictIfNeeded(keep: url);
       return ctrl;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('[TvPlayerPool] $e');
+      unawaited(CrashReport.nonFatal(
+        e,
+        st,
+        reason: 'tv_player_init',
+      ));
       await ctrl?.dispose();
       return null;
     } finally {

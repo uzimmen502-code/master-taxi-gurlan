@@ -673,6 +673,7 @@ class _HomeViewState extends State<_HomeView> {
                       // Oxirgi tranzaksiya Wallet ekranida; Home faqat balans
                       // (users.bonusBalance) — wallet_ledger stream yo'q.
                       return CustomScrollView(
+                    cacheExtent: 320,
                     slivers: [
                       SliverPadding(
                         padding: EdgeInsets.fromLTRB(

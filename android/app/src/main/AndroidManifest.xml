@@ -47,10 +47,13 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
-            <!-- Impeller Vulkan AHBTextureSourceVK SIGSEGV (Play vitals 1.0.24). -->
+            <!-- Impeller Vulkan AHBTextureSourceVK SIGSEGV — OpenGL backend. -->
             <meta-data
                 android:name="io.flutter.embedding.android.EnableImpeller"
-                android:value="false"/>
+                android:value="true"/>
+            <meta-data
+                android:name="io.flutter.embedding.android.ImpellerBackend"
+                android:value="opengles"/>
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -161,7 +161,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     final visEnd = leading + viewport;
     final interBottom = visEnd < itemBottom ? visEnd : itemBottom;
     final frac = ((interBottom - interTop) / stride).clamp(0.0, 1.0);
-    if (frac < 0.35) {
+    if (frac < 0.5) {
       if (_clipPlaying) {
         _clipPlaying = false;
         _pool.pauseAllExcept('');
@@ -365,16 +365,18 @@ class _HomeVideoStageState extends State<HomeVideoStage>
 
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 0),
-      sliver: SliverFixedExtentList(
-        itemExtent: cardH + 10,
+      sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, i) {
             if (i >= _clips.length) {
-              return const Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               );
             }

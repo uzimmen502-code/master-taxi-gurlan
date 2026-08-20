@@ -103,6 +103,43 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
     );
   }
 
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('tv_shop_delete_confirm_title')),
+        content: Text(context.tr('tv_shop_delete_confirm_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: Text(context.tr('tv_shop_delete_item')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.deleteItem(widget.item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_shop_delete_success'))),
+      );
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,6 +150,11 @@ class _TvShopItemPhotosScreenState extends State<TvShopItemPhotosScreen> {
         foregroundColor: Colors.black87,
         elevation: 0.4,
         actions: [
+          IconButton(
+            tooltip: context.tr('tv_shop_delete_item'),
+            onPressed: _saving ? null : _delete,
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+          ),
           TextButton(
             onPressed: _saving ? null : _save,
             child: _saving

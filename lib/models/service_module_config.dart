@@ -63,11 +63,13 @@ enum ModuleStatus {
 
 /// Modul mavjudligi konfiguratsiyasi — `moduleId → ModuleStatus`.
 ///
-/// Ikki qatlam bir-biriga qo'shiladi (merge):
-///   1. `config/module_defaults` — global baseline (masalan intercity hamma joyda)
-///   2. `service_area_modules/{serviceAreaId}` — faqat farqlar (override)
+/// Uch qatlam (chapdan o‘ngga ustunlik):
+///   1. `config/module_defaults` — **Global Baseline** (yangi APK moduli default OFF)
+///   2. `geo_district_modules/{districtId}` — **Region Override** (Gurlan ≠ Urganch)
+///   3. `service_area_modules/{areaId}` — ixtiyoriy MFY nozikligi
 ///
-/// Yakuniy mavjudlik: [merge] = default ustiga area override.
+/// **Service Runtime Gate:** modul shu APK `kKnownModuleIds` da bo‘lmasa
+/// config ON bo‘lsa ham yashirin. APK’da paydo bo‘lish hech qachon ON qilmaydi.
 class ServiceModuleConfig {
   const ServiceModuleConfig(this.modules);
 
@@ -123,6 +125,9 @@ class ServiceModuleConfig {
   /// ilova hozirgidek ishlashi uchun (buzilmaslik kafolati).
   factory ServiceModuleConfig.allEnabled(Iterable<String> ids) =>
       ServiceModuleConfig({for (final id in ids) id: ModuleStatus.enabled});
+
+  factory ServiceModuleConfig.allHidden(Iterable<String> ids) =>
+      ServiceModuleConfig({for (final id in ids) id: ModuleStatus.hidden});
 
   /// Keshga saqlash uchun `moduleId → wire` sodda xaritasi.
   Map<String, String> toCacheMap() =>

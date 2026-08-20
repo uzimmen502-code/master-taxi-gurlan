@@ -267,7 +267,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   const SizedBox(height: 16),
                   if (_enableSimilarAds) ...[
                     const Text(
-                      'Ўхшаш эълонлар',
+                      'Ўхшаш маҳсулотлар',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: AppText.bodyLarge,
@@ -291,7 +291,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('error');
                           }
                           return Text(
-                            'Ўхшаш эълонларни юклаб бўлмади',
+                            'Ўхшаш маҳсулотларни юклаб бўлмади',
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,
@@ -307,7 +307,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             _logSimilarMetrics('empty');
                           }
                           return Text(
-                            'Ҳозирча ўхшаш эълонлар йўқ',
+                            'Ҳозирча ўхшаш маҳсулотлар йўқ',
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontSize: AppText.bodySmall,

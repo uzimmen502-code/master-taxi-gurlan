@@ -17,8 +17,10 @@ import '../services/admin_auth_service.dart';
 ///   - Ustunlar: tuman markazlari (default); tuman bosilsa MFY ustunlari ochiladi
 ///   - Yuqorida: global baseline + enforce kill-switch
 ///
-/// Baseline saqlanganda: faqat `manualModules` dagi zona kataklari saqlanadi;
-/// qolganlari inherit (barcha tumanlarga Baseline tatbiq).
+///   1. Baseline GLOBAL
+///   2. Tuman (Region Override) — `geo_district_modules`
+///   3. MFY (ixtiyoriy) — `service_area_modules`
+/// Runtime (APK): yangi modul hech qachon avtomatik ON.
 class ServiceConfigAdminScreen extends StatefulWidget {
   const ServiceConfigAdminScreen({super.key});
 
@@ -63,13 +65,17 @@ class _MatrixColumn {
   final ServiceArea? area;
   final GeoDistrict? district;
 
-  /// Tuman yig'ilgan holatda ko'rsatiladigan asosiy (markaz) zona.
+  /// Tuman yig'ilgan holatda Region Override ustuni.
   final bool isPrimary;
 
   /// Global baseline ustuni (birinchi ustun).
   final bool isGlobal;
 
-  String get columnKey => isGlobal ? '__global__' : area!.id;
+  String get columnKey {
+    if (isGlobal) return '__global__';
+    if (isPrimary && district != null) return '__d:${district!.id}';
+    return area!.id;
+  }
 }
 
 class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
@@ -100,6 +106,12 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   final Map<String, Set<String>> _manualByArea = {};
   final Map<String, Set<String>> _savedManualByArea = {};
 
+  /// districtId → moduleId → region override (null = inherit baseline).
+  final Map<String, Map<String, ModuleStatus?>> _districtOverrides = {};
+  final Map<String, Map<String, ModuleStatus?>> _savedDistrictOverrides = {};
+  final Map<String, Set<String>> _manualByDistrict = {};
+  final Map<String, Set<String>> _savedManualByDistrict = {};
+
   @override
   void initState() {
     super.initState();
@@ -118,7 +130,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       final areas = await areasFuture;
 
       final areaIds = areas.map((a) => a.id).toList();
+      final districtIds = districts.map((d) => d.id).toList();
       final batch = await _repo.fetchAreaModulesBatch(areaIds);
+      final districtBatch = await _repo.fetchDistrictModulesBatch(districtIds);
 
       if (!mounted) return;
 
@@ -131,8 +145,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         final packed = batch[area.id];
         final cfg = packed?.config ?? ServiceModuleConfig.empty;
         final manual = packed?.manualModules ?? <String>{};
-        // Faqat qoʻlda belgilangan kalitlar override. Eski seed (manual yoʻq)
-        // → UI da inherit (Baseline koʻrinadi); Firestore keyin tozalanadi.
         overrides[area.id] = {
           for (final id in kKnownModuleIds)
             id: manual.contains(id) ? cfg.modules[id] : null,
@@ -145,6 +157,40 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         savedManuals[area.id] = Set<String>.from(manual);
       }
 
+      final dOverrides = <String, Map<String, ModuleStatus?>>{};
+      final dSaved = <String, Map<String, ModuleStatus?>>{};
+      final dManuals = <String, Set<String>>{};
+      final dSavedManuals = <String, Set<String>>{};
+      final liftDistrictIds = <String>[];
+      for (final d in districts) {
+        final packed = districtBatch[d.id];
+        var cfg = packed?.config ?? ServiceModuleConfig.empty;
+        var manual = packed?.manualModules ?? <String>{};
+        if (manual.isEmpty) {
+          final primary = areas.where((a) => a.districtId == d.id).toList()
+            ..sort((a, b) => a.order.compareTo(b.order));
+          if (primary.isNotEmpty) {
+            final fromArea = manuals[primary.first.id] ?? const <String>{};
+            if (fromArea.isNotEmpty) {
+              manual = Set<String>.from(fromArea);
+              cfg = ServiceModuleConfig({
+                for (final id in fromArea)
+                  if (overrides[primary.first.id]?[id] != null)
+                    id: overrides[primary.first.id]![id]!,
+              });
+              liftDistrictIds.add(d.id);
+            }
+          }
+        }
+        dOverrides[d.id] = {
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cfg.modules[id] : null,
+        };
+        dSaved[d.id] = Map<String, ModuleStatus?>.from(dOverrides[d.id]!);
+        dManuals[d.id] = Set<String>.from(manual);
+        dSavedManuals[d.id] = Set<String>.from(manual);
+      }
+
       setState(() {
         _enforce = defaultsRes.enforce;
         _savedEnforce = defaultsRes.enforce;
@@ -152,7 +198,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           ..clear()
           ..addEntries(kKnownModuleIds.map((id) => MapEntry(
                 id,
-                defaultsRes.config.statusOf(id, fallback: ModuleStatus.enabled),
+                defaultsRes.config.statusOf(id, fallback: ModuleStatus.hidden),
               )));
         _savedDefaults
           ..clear()
@@ -171,12 +217,31 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _savedManualByArea
           ..clear()
           ..addAll(savedManuals);
+        _districtOverrides
+          ..clear()
+          ..addAll(dOverrides);
+        _savedDistrictOverrides
+          ..clear()
+          ..addAll(dSaved);
+        _manualByDistrict
+          ..clear()
+          ..addAll(dManuals);
+        _savedManualByDistrict
+          ..clear()
+          ..addAll(dSavedManuals);
         _loading = false;
       });
 
       if (staleSeedAreaIds.isNotEmpty) {
         unawaited(_purgeStaleSeedOverrides(staleSeedAreaIds));
       }
+      if (liftDistrictIds.isNotEmpty) {
+        unawaited(_persistLiftedDistrictOverrides(liftDistrictIds));
+      }
+      unawaited(_syncMissingBaselineModules(
+        defaultsRes.config,
+        defaultsRes.enforce,
+      ));
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -224,6 +289,70 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     ));
   }
 
+  Future<void> _persistLiftedDistrictOverrides(List<String> districtIds) async {
+    final by = _adminId();
+    for (final id in districtIds) {
+      final district = _districtById[id];
+      if (district == null) continue;
+      final manual = _manualByDistrict[id] ?? const <String>{};
+      if (manual.isEmpty) continue;
+      final cur = _districtOverrides[id] ?? const {};
+      final overridden = <String, ModuleStatus>{
+        for (final mid in manual)
+          if (cur[mid] != null) mid: cur[mid]!,
+      };
+      try {
+        await _repo.setDistrictModules(
+          district,
+          ServiceModuleConfig(overridden),
+          manualModules: manual,
+          updatedBy: by,
+        );
+      } catch (e) {
+        debugPrint('[ServiceConfigAdmin] lift district $id: $e');
+      }
+    }
+  }
+
+  Map<String, GeoDistrict> get _districtById => {
+        for (final d in _districts) d.id: d,
+      };
+
+  bool _isDistrictKey(String key) => key.startsWith('__d:');
+
+  String? _districtIdFromKey(String key) =>
+      _isDistrictKey(key) ? key.substring(4) : null;
+
+  /// APK/admin янги модул қўшса — Baseline Global га автоматик ёзилади
+  /// (`hidden`). Админ «Сақлаш» босмаса ҳам қоида жорий бўлади.
+  Future<void> _syncMissingBaselineModules(
+    ServiceModuleConfig remote,
+    bool enforce,
+  ) async {
+    if (remote.modules.isEmpty) return;
+    final missing = kKnownModuleIds
+        .where((id) => !remote.modules.containsKey(id))
+        .toList(growable: false);
+    if (missing.isEmpty) return;
+    final merged = <String, ModuleStatus>{
+      ...remote.modules,
+      for (final id in missing) id: ModuleStatus.hidden,
+    };
+    try {
+      await _repo.setModuleDefaults(
+        ServiceModuleConfig(merged),
+        enforce: enforce,
+        updatedBy: 'apk_module_sync',
+      );
+      if (!mounted) return;
+      _savedDefaults
+        ..clear()
+        ..addAll(_defaults);
+    } catch (e) {
+      debugPrint('[ServiceConfigAdmin] baseline sync: $e');
+    }
+  }
+
   List<ServiceArea> _areasForDistrict(String districtId) =>
       _allAreas.where((a) => a.districtId == districtId).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
@@ -251,23 +380,33 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     return cols;
   }
 
-  ModuleStatus _effective(String areaId, String moduleId) {
-    if (areaId == '__global__') {
-      return _defaults[moduleId] ?? ModuleStatus.enabled;
+  ModuleStatus _effective(String columnKey, String moduleId) {
+    if (columnKey == '__global__') {
+      return _defaults[moduleId] ?? ModuleStatus.hidden;
     }
-    final ov = _overrides[areaId]?[moduleId];
+    if (_isDistrictKey(columnKey)) {
+      final did = _districtIdFromKey(columnKey)!;
+      return _districtOverrides[did]?[moduleId] ??
+          _defaults[moduleId] ??
+          ModuleStatus.hidden;
+    }
+    final ov = _overrides[columnKey]?[moduleId];
     if (ov != null) return ov;
-    return _defaults[moduleId] ?? ModuleStatus.enabled;
+    final area = _areaById[columnKey];
+    if (area != null) {
+      final dOv = _districtOverrides[area.districtId]?[moduleId];
+      if (dOv != null) return dOv;
+    }
+    return _defaults[moduleId] ?? ModuleStatus.hidden;
   }
 
-  bool _isInherited(String areaId, String moduleId) {
-    if (areaId == '__global__') return false;
-    // Qoʻlda emas → baseline (kursiv), hatto modules da qiymat boʻlsa ham.
-    final manual = _manualByArea[areaId];
-    if (manual != null && manual.isNotEmpty) {
-      return !manual.contains(moduleId);
+  bool _isInherited(String columnKey, String moduleId) {
+    if (columnKey == '__global__') return false;
+    if (_isDistrictKey(columnKey)) {
+      final did = _districtIdFromKey(columnKey)!;
+      return !(_manualByDistrict[did]?.contains(moduleId) ?? false);
     }
-    return _overrides[areaId]?[moduleId] == null;
+    return !(_manualByArea[columnKey]?.contains(moduleId) ?? false);
   }
 
   bool get _hasDirtyDefaults {
@@ -279,6 +418,18 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   }
 
   bool get _hasDirtyMatrix {
+    for (final districtId in _districtOverrides.keys) {
+      final cur = _districtOverrides[districtId] ?? const {};
+      final saved = _savedDistrictOverrides[districtId] ?? const {};
+      for (final id in kKnownModuleIds) {
+        if (cur[id] != saved[id]) return true;
+      }
+      final curMan = _manualByDistrict[districtId] ?? const <String>{};
+      final savedMan = _savedManualByDistrict[districtId] ?? const <String>{};
+      if (curMan.length != savedMan.length || !curMan.containsAll(savedMan)) {
+        return true;
+      }
+    }
     for (final areaId in _overrides.keys) {
       final cur = _overrides[areaId] ?? const {};
       final saved = _savedOverrides[areaId] ?? const {};
@@ -322,6 +473,18 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             updatedBy: by,
           )
           .timeout(const Duration(seconds: 20));
+
+      for (final districtId in _districtOverrides.keys) {
+        final manual = _manualByDistrict[districtId] ?? const <String>{};
+        final cur = _districtOverrides[districtId] ?? {};
+        _districtOverrides[districtId] = {
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cur[id] : null,
+        };
+        _savedDistrictOverrides[districtId] =
+            Map<String, ModuleStatus?>.from(_districtOverrides[districtId]!);
+        _savedManualByDistrict[districtId] = Set<String>.from(manual);
+      }
 
       // Local UI: no-manual kataklar inherit koʻrinsin.
       for (final areaId in _overrides.keys) {
@@ -382,6 +545,45 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     final by = _adminId();
     var saved = 0;
     try {
+      for (final districtId in _districtOverrides.keys) {
+        final cur = _districtOverrides[districtId] ?? const {};
+        final prev = _savedDistrictOverrides[districtId] ?? const {};
+        final curMan = _manualByDistrict[districtId] ?? const <String>{};
+        final savedMan = _savedManualByDistrict[districtId] ?? const <String>{};
+        var dirty = curMan.length != savedMan.length ||
+            !curMan.containsAll(savedMan);
+        if (!dirty) {
+          for (final id in kKnownModuleIds) {
+            if (cur[id] != prev[id]) {
+              dirty = true;
+              break;
+            }
+          }
+        }
+        if (!dirty) continue;
+        final district = _districtById[districtId];
+        if (district == null) continue;
+        final manual = Set<String>.from(curMan);
+        final overridden = <String, ModuleStatus>{
+          for (final id in manual)
+            if (cur[id] != null) id: cur[id]!,
+        };
+        await _repo.setDistrictModules(
+          district,
+          ServiceModuleConfig(overridden),
+          manualModules: manual,
+          updatedBy: by,
+        );
+        _districtOverrides[districtId] = {
+          for (final id in kKnownModuleIds)
+            id: manual.contains(id) ? cur[id] : null,
+        };
+        _savedDistrictOverrides[districtId] =
+            Map<String, ModuleStatus?>.from(_districtOverrides[districtId]!);
+        _manualByDistrict[districtId] = manual;
+        _savedManualByDistrict[districtId] = Set<String>.from(manual);
+        saved++;
+      }
       for (final areaId in _overrides.keys) {
         final cur = _overrides[areaId] ?? const {};
         final prev = _savedOverrides[areaId] ?? const {};
@@ -424,7 +626,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         saved++;
       }
       messenger.showSnackBar(SnackBar(
-        content: Text('$saved ta zona saqlandi'),
+        content: Text('$saved ta tuman/zona saqlandi'),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -436,22 +638,36 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     }
   }
 
-  void _setCell(String areaId, String moduleId, ModuleStatus? status) {
-    if (areaId == '__global__') {
+  void _setCell(String columnKey, String moduleId, ModuleStatus? status) {
+    if (columnKey == '__global__') {
       if (status == null) return;
       setState(() => _defaults[moduleId] = status);
       return;
     }
+    if (_isDistrictKey(columnKey)) {
+      final did = _districtIdFromKey(columnKey)!;
+      setState(() {
+        _districtOverrides.putIfAbsent(did, () => {});
+        _manualByDistrict.putIfAbsent(did, () => <String>{});
+        if (status == null) {
+          _districtOverrides[did]![moduleId] = null;
+          _manualByDistrict[did]!.remove(moduleId);
+        } else {
+          _districtOverrides[did]![moduleId] = status;
+          _manualByDistrict[did]!.add(moduleId);
+        }
+      });
+      return;
+    }
     setState(() {
-      _overrides.putIfAbsent(areaId, () => {});
-      _manualByArea.putIfAbsent(areaId, () => <String>{});
+      _overrides.putIfAbsent(columnKey, () => {});
+      _manualByArea.putIfAbsent(columnKey, () => <String>{});
       if (status == null) {
-        // Default (baseline) — qoʻlda emas.
-        _overrides[areaId]![moduleId] = null;
-        _manualByArea[areaId]!.remove(moduleId);
+        _overrides[columnKey]![moduleId] = null;
+        _manualByArea[columnKey]!.remove(moduleId);
       } else {
-        _overrides[areaId]![moduleId] = status;
-        _manualByArea[areaId]!.add(moduleId);
+        _overrides[columnKey]![moduleId] = status;
+        _manualByArea[columnKey]!.add(moduleId);
       }
     });
   }
@@ -495,8 +711,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                         ),
                         if (columns.isNotEmpty)
                           Text(
-                            '${kKnownModuleIds.length} xizmat × ${columns.length} zona — '
-                            'tuman bosilsa MFY ochiladi',
+                            '${kKnownModuleIds.length} xizmat · Baseline GLOBAL → tuman override → APK gate',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey.shade700),
                           ),
@@ -716,8 +931,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         onTap: canExpand ? () => _toggleDistrict(d.id) : null,
         child: _headerCell(
           title: _districtDisplayName(d.displayName),
-          subtitle: canExpand && !expanded
-              ? '${areas.length} zona · bos'
+          subtitle: col.isPrimary
+              ? (canExpand ? 'override · ${areas.length} zona' : 'region override')
               : _zoneDisplayName(col.area!.displayName, d.displayName),
           fontSize: fontSize,
           bg: expanded
@@ -1243,9 +1458,15 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     String moduleId, {
     bool isGlobal = false,
   }) async {
-    final current = isGlobal
-        ? _defaults[moduleId]
-        : _overrides[areaId]?[moduleId];
+    final districtId = _districtIdFromKey(areaId);
+    ModuleStatus? current;
+    if (isGlobal) {
+      current = _defaults[moduleId];
+    } else if (districtId != null) {
+      current = _districtOverrides[districtId]?[moduleId];
+    } else {
+      current = _overrides[areaId]?[moduleId];
+    }
 
     // Bu ikkitasi hali real ekranga ega emas — ilova ularni har doim
     // "Ҳамкорлик" sifatida ko'rsatadi (`HomeModuleGate.placeholderModuleIds`).
@@ -1270,7 +1491,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           if (!isGlobal)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('Default (baseline)'),
+              child: Text(_isDistrictKey(areaId)
+                  ? 'Global baseline (inherit)'
+                  : 'Tuman / baseline (inherit)'),
             ),
           for (final s in ModuleStatus.values)
             if (!isPlaceholder || s != ModuleStatus.enabled)
@@ -1297,7 +1520,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _legend('Ҳамкорлик', Colors.orange),
         _legend('Ёпиқ', Colors.grey),
         Text(
-          'kursiv = baseline · tuman katak = qoʻlda (Baselinedan himoya)',
+          'kursiv = inherit · GLOBAL = baseline · tuman katak = region override',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
       ];

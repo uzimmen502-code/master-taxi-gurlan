@@ -81,6 +81,19 @@ class TvShopRepository {
     return TvShopItem.fromFirestore(snap);
   }
 
+  /// Аҳоли бозори лентаси: фаол товарлар (қоплама расм бор).
+  Future<List<TvShopItem>> fetchForMarket({int limit = 80}) async {
+    final snap = await _items
+        .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs
+        .map(TvShopItem.fromFirestore)
+        .where((i) => i.coverPhotoUrl.isNotEmpty)
+        .toList(growable: false);
+  }
+
   /// Фаол витрина: расм + видео мажбурий; нарх ихтиёрий (клиентда фильтр).
   Future<List<TvShopItem>> fetchVitrine({
     String districtId = '',
@@ -143,5 +156,9 @@ class TvShopRepository {
     Map<String, dynamic> patch,
   ) async {
     await _items.doc(itemId).update(patch);
+  }
+
+  Future<void> deleteItem(String itemId) async {
+    await _items.doc(itemId).update({'status': 'deleted'});
   }
 }

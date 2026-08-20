@@ -7,11 +7,12 @@ import 'brand_labels.dart';
 
 /// Konfiguratsiyaga asoslangan modul mavjudligi — ilova bo'ylab yagona manba.
 ///
-/// Yakuniy holat = `config/module_defaults` (global baseline)
-///   ustiga `service_area_modules/{serviceAreaId}` (MFY override) qo'shiladi.
+/// **Baseline Global → Region Override → Service Runtime Gate**
 ///
-/// Buzilmaslik kafolati: hech qanday konfig hujjati bo'lmasa (yoki offline),
-/// barcha ma'lum modullar `enabled` (ilova hozirgidek ishlaydi).
+///   1. `config/module_defaults` — global baseline (yangi APK moduli default OFF)
+///   2. `geo_district_modules/{districtId}` — tuman override (Gurlan ≠ Urganch)
+///   3. `service_area_modules/{areaId}` — ixtiyoriy MFY
+///   4. Runtime gate: modul shu APK `kKnownModuleIds` da bo‘lmasa yashirin.
 ///
 /// Ishlatish:
 ///   1. `main.dart` da Firebase init dan keyin `bootstrap()` (defaults + kesh).
@@ -24,6 +25,7 @@ class ServiceConfigHolder {
   /// toʻliq seed keshini eʼtiborsiz qoldiramiz (Baseline `hidden`ni bosmasin).
   static const _cacheKeyArea = 'svc_area_modules_v2';
   static const _cacheKeyAreaLegacy = 'svc_area_modules';
+  static const _cacheKeyDistrict = 'svc_district_modules_v1';
   static const _cacheKeyAreaId = 'svc_area_id';
   static const _cacheKeyEnforce = 'svc_enforce';
   static const _cacheKeyRegionId = 'svc_region_id';
@@ -40,6 +42,7 @@ class ServiceConfigHolder {
   static final ServiceConfigRepository _repo = ServiceConfigRepository();
 
   static ServiceModuleConfig _defaults = ServiceModuleConfig.empty;
+  static ServiceModuleConfig _districtOverride = ServiceModuleConfig.empty;
   static ServiceModuleConfig _areaOverride = ServiceModuleConfig.empty;
   static String _serviceAreaId = '';
 
@@ -59,26 +62,30 @@ class ServiceConfigHolder {
   static final ServiceModuleConfig _fallback =
       ServiceModuleConfig.allEnabled(kKnownModuleIds);
 
-  /// Joriy yakuniy konfig: fallback → defaults → area override.
+  /// Joriy yakuniy konfig: Baseline → tuman override → MFY override.
   static ServiceModuleConfig get effective {
-    final base = _defaults.modules.isEmpty ? _fallback : _defaults;
-    return base.merge(_areaOverride);
+    final base = _defaults.modules.isEmpty
+        ? (_enforce ? ServiceModuleConfig.empty : _fallback)
+        : _defaults;
+    return base.merge(_districtOverride).merge(_areaOverride);
   }
 
-  /// Gating o'chiq bo'lsa — har doim [ModuleStatus.enabled] (regressiyasiz).
-  /// Enforce yoqilganda: remote defaults/areada hali yo‘q yangi [kKnownModuleIds]
-  /// → [enabled] (admin yashirmaguncha ko‘rinadi).
+  /// Service Runtime Gate.
+  ///
+  /// - APK da yo‘q modul hech qachon ochilmaydi.
+  /// - Firestore qatlamida yo‘q yangi APK moduli hech qachon ON bo‘lmaydi.
+  /// - `enforce=false` kill-switch: faqat **allaqachon config’dagi** modullarni
+  ///   ochadi; yangi X moduli baribir hidden.
   static ModuleStatus statusOf(String moduleId) {
-    if (!_enforce) return ModuleStatus.enabled;
-    final status =
-        effective.statusOf(moduleId, fallback: ModuleStatus.hidden);
-    if (status == ModuleStatus.hidden &&
-        !_defaults.modules.containsKey(moduleId) &&
-        !_areaOverride.modules.containsKey(moduleId) &&
-        kKnownModuleIds.contains(moduleId)) {
+    if (!kKnownModuleIds.contains(moduleId)) return ModuleStatus.hidden;
+    if (!_enforce) {
+      final configured = _defaults.modules.containsKey(moduleId) ||
+          _districtOverride.modules.containsKey(moduleId) ||
+          _areaOverride.modules.containsKey(moduleId);
+      if (!configured) return ModuleStatus.hidden;
       return ModuleStatus.enabled;
     }
-    return status;
+    return effective.statusOf(moduleId, fallback: ModuleStatus.hidden);
   }
 
   static bool isVisible(String moduleId) => statusOf(moduleId).isVisible;
@@ -112,6 +119,7 @@ class ServiceConfigHolder {
     // Eski seed area keshini Baseline ustidan bosmasin — yangi fetch
     // kelgunicha faqat defaults ishlaydi.
     _areaOverride = ServiceModuleConfig.empty;
+    _districtOverride = ServiceModuleConfig.empty;
     try {
       final res = await _repo.fetchModuleDefaults();
       _defaults = res.config;
@@ -121,6 +129,9 @@ class ServiceConfigHolder {
       // Tarmoq xatosida keshdagi defaults/enforce saqlanadi (enforce=false
       // qilib hamma modulni ochib yubormaymiz).
       debugPrint('ServiceConfigHolder.bootstrap: $e\n$st');
+    }
+    if (_districtId.isNotEmpty) {
+      await _loadDistrictOverride(_districtId);
     }
     if (_serviceAreaId.isNotEmpty) {
       try {
@@ -168,6 +179,7 @@ class ServiceConfigHolder {
       _regionId = '';
       _districtId = '';
       _districtLabel = '';
+      _districtOverride = ServiceModuleConfig.empty;
       _areaOverride = ServiceModuleConfig.empty;
       await _saveAreaToCache();
       _notifyRevision();
@@ -181,11 +193,14 @@ class ServiceConfigHolder {
         _regionId = area.regionId;
         _districtId = area.districtId;
         await _resolveDistrictLabel(area.districtId);
+        await _loadDistrictOverride(area.districtId);
+      } else {
+        _districtOverride = ServiceModuleConfig.empty;
       }
       await _saveAreaToCache();
     } catch (e, st) {
       debugPrint('ServiceConfigHolder.applyServiceArea: $e\n$st');
-      // Xato bo‘lsa eski seed override qolmasin — Baseline hukmron.
+      _districtOverride = ServiceModuleConfig.empty;
       _areaOverride = ServiceModuleConfig.empty;
       await _saveAreaToCache();
     }
@@ -203,6 +218,7 @@ class ServiceConfigHolder {
     _serviceAreaId = id;
     _regionId = regionId.trim();
     _districtId = districtId.trim();
+    await _loadDistrictOverride(_districtId);
     if (id.isEmpty) {
       _areaOverride = ServiceModuleConfig.empty;
     } else {
@@ -215,6 +231,20 @@ class ServiceConfigHolder {
     await _resolveDistrictLabel(_districtId);
     await _saveAreaToCache();
     _notifyRevision();
+  }
+
+  static Future<void> _loadDistrictOverride(String districtId) async {
+    final id = districtId.trim();
+    if (id.isEmpty) {
+      _districtOverride = ServiceModuleConfig.empty;
+      return;
+    }
+    try {
+      _districtOverride = await _repo.fetchDistrictModules(id);
+    } catch (e, st) {
+      debugPrint('ServiceConfigHolder._loadDistrictOverride: $e\n$st');
+      _districtOverride = ServiceModuleConfig.empty;
+    }
   }
 
   static Future<void> _resolveDistrictLabel(String districtId) async {
@@ -246,6 +276,9 @@ class ServiceConfigHolder {
       _areaOverride = ServiceModuleConfig.fromCacheMap(
         _decode(prefs.getStringList(_cacheKeyArea)),
       );
+      _districtOverride = ServiceModuleConfig.fromCacheMap(
+        _decode(prefs.getStringList(_cacheKeyDistrict)),
+      );
       _serviceAreaId = prefs.getString(_cacheKeyAreaId) ?? '';
       _regionId = prefs.getString(_cacheKeyRegionId) ?? '';
       _districtId = prefs.getString(_cacheKeyDistrictId) ?? '';
@@ -268,6 +301,8 @@ class ServiceConfigHolder {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
           _cacheKeyArea, _encode(_areaOverride.toCacheMap()));
+      await prefs.setStringList(
+          _cacheKeyDistrict, _encode(_districtOverride.toCacheMap()));
       await prefs.setString(_cacheKeyAreaId, _serviceAreaId);
       await prefs.setString(_cacheKeyRegionId, _regionId);
       await prefs.setString(_cacheKeyDistrictId, _districtId);
@@ -293,6 +328,7 @@ class ServiceConfigHolder {
   @visibleForTesting
   static void setForTest({
     ServiceModuleConfig? defaults,
+    ServiceModuleConfig? districtOverride,
     ServiceModuleConfig? areaOverride,
     String serviceAreaId = '',
     String regionId = '',
@@ -301,6 +337,7 @@ class ServiceConfigHolder {
     bool enforce = false,
   }) {
     _defaults = defaults ?? ServiceModuleConfig.empty;
+    _districtOverride = districtOverride ?? ServiceModuleConfig.empty;
     _areaOverride = areaOverride ?? ServiceModuleConfig.empty;
     _serviceAreaId = serviceAreaId;
     _regionId = regionId;
@@ -312,6 +349,7 @@ class ServiceConfigHolder {
   @visibleForTesting
   static void resetForTest() {
     _defaults = ServiceModuleConfig.empty;
+    _districtOverride = ServiceModuleConfig.empty;
     _areaOverride = ServiceModuleConfig.empty;
     _serviceAreaId = '';
     _regionId = '';

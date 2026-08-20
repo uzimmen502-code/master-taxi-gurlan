@@ -8,6 +8,7 @@ import '../models/service_module_config.dart';
 ///
 /// Kolleksiyalar:
 ///   - `config/module_defaults`         — global baseline modul holati
+///   - `geo_district_modules/{districtId}` — tuman (region) override
 ///   - `service_area_modules/{areaId}`  — MFY bo'yicha override
 ///   - `geo_regions` / `geo_districts` / `service_areas` — ierarxiya
 class ServiceConfigRepository {
@@ -19,6 +20,7 @@ class ServiceConfigRepository {
   static const String moduleDefaultsCollection = 'config';
   static const String moduleDefaultsDoc = 'module_defaults';
   static const String serviceAreaModulesCollection = 'service_area_modules';
+  static const String districtModulesCollection = 'geo_district_modules';
 
   DocumentReference<Map<String, dynamic>> get _defaultsRef => _db
       .collection(moduleDefaultsCollection)
@@ -26,6 +28,9 @@ class ServiceConfigRepository {
 
   DocumentReference<Map<String, dynamic>> _areaModulesRef(String areaId) =>
       _db.collection(serviceAreaModulesCollection).doc(areaId);
+
+  DocumentReference<Map<String, dynamic>> _districtModulesRef(String districtId) =>
+      _db.collection(districtModulesCollection).doc(districtId);
 
   /// Global baseline (`config/module_defaults`) + `enforce` bayrog'i.
   ///
@@ -152,6 +157,103 @@ class ServiceConfigRepository {
       'updatedAt': FieldValue.serverTimestamp(),
       if (updatedBy != null) 'updatedBy': updatedBy,
     });
+  }
+
+  Future<ServiceModuleConfig> fetchDistrictModules(String districtId) async {
+    final detailed = await fetchDistrictModulesDetailed(districtId);
+    if (detailed.manualModules.isEmpty) {
+      return ServiceModuleConfig.empty;
+    }
+    final filtered = <String, ModuleStatus>{
+      for (final id in detailed.manualModules)
+        if (detailed.config.modules.containsKey(id))
+          id: detailed.config.modules[id]!,
+    };
+    return ServiceModuleConfig(filtered);
+  }
+
+  Future<
+      ({
+        ServiceModuleConfig config,
+        Set<String> manualModules,
+      })> fetchDistrictModulesDetailed(String districtId) async {
+    if (districtId.trim().isEmpty) {
+      return (config: ServiceModuleConfig.empty, manualModules: <String>{});
+    }
+    try {
+      DocumentSnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _districtModulesRef(districtId)
+            .get(const GetOptions(source: Source.server));
+      } catch (_) {
+        snap = await _districtModulesRef(districtId).get();
+      }
+      if (!snap.exists) {
+        return (config: ServiceModuleConfig.empty, manualModules: <String>{});
+      }
+      final data = snap.data() ?? const <String, dynamic>{};
+      final manualRaw = data['manualModules'];
+      final manual = <String>{};
+      if (manualRaw is Iterable) {
+        for (final e in manualRaw) {
+          final id = e.toString().trim();
+          if (id.isNotEmpty) manual.add(id);
+        }
+      }
+      return (
+        config: ServiceModuleConfig.fromMap(data),
+        manualModules: manual,
+      );
+    } catch (e, st) {
+      debugPrint(
+          'ServiceConfigRepository.fetchDistrictModulesDetailed: $e\n$st');
+      return (config: ServiceModuleConfig.empty, manualModules: <String>{});
+    }
+  }
+
+  Future<void> setDistrictModules(
+    GeoDistrict district,
+    ServiceModuleConfig config, {
+    Set<String> manualModules = const {},
+    String? updatedBy,
+  }) async {
+    final manual = manualModules
+        .where((id) => id.trim().isNotEmpty && config.modules.containsKey(id))
+        .toList()
+      ..sort();
+    await _districtModulesRef(district.id).set({
+      'districtId': district.id,
+      'regionId': district.regionId,
+      'modules': {
+        for (final e in config.modules.entries)
+          e.key: {'status': e.value.wire},
+      },
+      'manualModules': manual,
+      'updatedAt': FieldValue.serverTimestamp(),
+      if (updatedBy != null) 'updatedBy': updatedBy,
+    });
+  }
+
+  Future<
+      Map<
+          String,
+          ({
+            ServiceModuleConfig config,
+            Set<String> manualModules,
+          })>> fetchDistrictModulesBatch(
+    Iterable<String> districtIds,
+  ) async {
+    final ids = districtIds.where((id) => id.trim().isNotEmpty).toSet();
+    if (ids.isEmpty) return const {};
+    final out = <String,
+        ({
+          ServiceModuleConfig config,
+          Set<String> manualModules,
+        })>{};
+    await Future.wait(ids.map((id) async {
+      out[id] = await fetchDistrictModulesDetailed(id);
+    }));
+    return out;
   }
 
   // ── Geografik ierarxiya (admin va onboarding kaskadi uchun) ──

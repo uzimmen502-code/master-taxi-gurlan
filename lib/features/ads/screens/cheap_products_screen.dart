@@ -10,6 +10,11 @@ import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
 import '../../../repositories/platform_products_repository.dart';
+import '../../tv_market/models/tv_shop.dart';
+import '../../tv_market/repositories/tv_shop_repository.dart';
+import '../../tv_market/screens/tv_shop_item_detail_screen.dart';
+import '../../tv_market/screens/tv_shop_public_screen.dart';
+import '../../tv_market/widgets/tv_shop_item_grid_card.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../widgets/ad_card.dart';
@@ -30,9 +35,12 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
   final _searchCtrl = TextEditingController();
   final _platformRepo = PlatformProductsRepository();
+  final _shopRepo = TvShopRepository();
   String _query = '';
   List<PlatformProduct> _platform = const [];
+  List<TvShopItem> _shopItems = const [];
   bool _platformLoaded = false;
+  bool _shopLoaded = false;
 
   static const _loadErrorMessage =
       'Маълумотларни юклашда хатолик юз берди. Илтимос кейинроқ қайта уриниб кўринг.';
@@ -41,6 +49,24 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
   void initState() {
     super.initState();
     unawaited(_loadPlatform());
+    unawaited(_loadShopItems());
+  }
+
+  Future<void> _loadShopItems() async {
+    try {
+      final list = await _shopRepo.fetchForMarket(limit: 80);
+      if (!mounted) return;
+      setState(() {
+        _shopItems = list;
+        _shopLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _shopItems = const [];
+        _shopLoaded = true;
+      });
+    }
   }
 
   Future<void> _loadPlatform() async {
@@ -97,27 +123,69 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
     return list;
   }
 
+  List<TvShopItem> _filteredShop() {
+    var list = List<TvShopItem>.from(_shopItems);
+    final q = _query;
+    if (CatalogSearch.normalize(q).isEmpty) return list;
+    list = list.where((i) {
+      return CatalogSearch.matches(q, [
+        i.title,
+        i.description,
+        '${i.price}',
+        i.ownerName,
+        i.districtLabel,
+        i.kind,
+      ]);
+    }).toList();
+    list.sort((a, b) {
+      final byScore = CatalogSearch.score(
+        q,
+        title: b.title,
+        extra: [b.description, '${b.price}', b.ownerName, b.districtLabel],
+      ).compareTo(CatalogSearch.score(
+        q,
+        title: a.title,
+        extra: [a.description, '${a.price}', a.ownerName, a.districtLabel],
+      ));
+      if (byScore != 0) return byScore;
+      return (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .compareTo(a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0));
+    });
+    return list;
+  }
+
   List<_MarketEntry> _mixedEntries(
     List<PlatformProduct> platform,
     List<AdModel> ads,
+    List<TvShopItem> shop,
   ) {
     final q = _query;
     if (CatalogSearch.normalize(q).isEmpty) {
       return FairMix.roundRobin([
         platform.map(_MarketEntry.platform).toList(growable: false),
         ads.map(_MarketEntry.ad).toList(growable: false),
+        shop.map(_MarketEntry.shop).toList(growable: false),
       ]);
     }
 
     final scored = <_MarketEntry>[
       ...platform.map(_MarketEntry.platform),
       ...ads.map(_MarketEntry.ad),
+      ...shop.map(_MarketEntry.shop),
     ];
     return FairMix.byScoreThenFair(
       scored,
       (e) {
         if (e.platform != null) {
           return CatalogSearch.scoreProduct(e.platform!, q);
+        }
+        if (e.shop != null) {
+          final i = e.shop!;
+          return CatalogSearch.score(
+            q,
+            title: i.title,
+            extra: [i.description, '${i.price}', i.ownerName, i.districtLabel],
+          );
         }
         final ad = e.ad!;
         return CatalogSearch.score(
@@ -126,7 +194,11 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
           extra: [ad.description, '${ad.price}', ...ad.searchTokens],
         );
       },
-      laneKey: (e) => e.platform != null ? 'platform' : 'ad',
+      laneKey: (e) {
+        if (e.platform != null) return 'platform';
+        if (e.shop != null) return 'shop';
+        return 'ad';
+      },
     );
   }
 
@@ -220,7 +292,8 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
               builder: (context, snap) {
                 if ((snap.connectionState == ConnectionState.waiting &&
                         !snap.hasData) ||
-                    !_platformLoaded) {
+                    !_platformLoaded ||
+                    !_shopLoaded) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
@@ -242,9 +315,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 
                 final ads = snap.data ?? const <AdModel>[];
                 final platform = _filteredPlatform();
-                final found = platform.length + ads.length;
+                final shop = _filteredShop();
+                final found = platform.length + ads.length + shop.length;
 
-                if (platform.isEmpty && ads.isEmpty) {
+                if (platform.isEmpty && ads.isEmpty && shop.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -264,7 +338,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                   );
                 }
 
-                final entries = _mixedEntries(platform, ads);
+                final entries = _mixedEntries(platform, ads, shop);
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -302,6 +376,36 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                           if (e.platform != null) {
                             return PlatformMarketCard(product: e.platform!);
                           }
+                          if (e.shop != null) {
+                            final item = e.shop!;
+                            return TvShopItemGridCard(
+                              item: item,
+                              showShopBadge: true,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => TvShopItemDetailScreen(
+                                      item: item,
+                                      onOpenShop: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => TvShopPublicScreen(
+                                              ownerPhone: item.ownerPhone,
+                                              highlightItemId: item.id,
+                                              ownerDisplayName: item.ownerName,
+                                              districtLabel: item.districtLabel,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }
                           return AdCard(ad: e.ad!);
                         },
                       ),
@@ -318,11 +422,13 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
 }
 
 class _MarketEntry {
-  const _MarketEntry._({this.ad, this.platform});
+  const _MarketEntry._({this.ad, this.platform, this.shop});
   factory _MarketEntry.ad(AdModel ad) => _MarketEntry._(ad: ad);
   factory _MarketEntry.platform(PlatformProduct p) =>
       _MarketEntry._(platform: p);
+  factory _MarketEntry.shop(TvShopItem item) => _MarketEntry._(shop: item);
 
   final AdModel? ad;
   final PlatformProduct? platform;
+  final TvShopItem? shop;
 }

@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Geografik ierarxiya: Region → District → ServiceArea (MFY).
 ///
-/// Xizmat mavjudligi FAQAT [ServiceArea] (serviceAreaId) orqali aniqlanadi;
-/// [GeoRegion]/[GeoDistrict] — hisobot, dashboard va reklama uchun.
+/// Xizmat mavjudligi: Global Baseline → `geo_district_modules` (tuman)
+/// → ixtiyoriy `service_area_modules` (MFY) → APK Runtime Gate.
+/// [GeoRegion]/[GeoDistrict] hisobot uchun ham ishlatiladi.
 /// Firestore: `geo_regions`, `geo_districts`, `service_areas`.
 
 /// `geo_regions/{regionId}` — viloyat.

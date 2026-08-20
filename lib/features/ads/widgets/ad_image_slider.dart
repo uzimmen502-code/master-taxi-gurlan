@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import 'ad_image_gallery.dart';
+
 /// Full-width image pager with dot indicators.
 class AdImageSlider extends StatefulWidget {
   const AdImageSlider({
@@ -48,14 +50,21 @@ class _AdImageSliderState extends State<AdImageSlider> {
             controller: _pageController,
             itemCount: urls.length,
             onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (_, i) => CachedNetworkImage(
-              imageUrl: urls[i],
-              fit: BoxFit.cover,
-              width: double.infinity,
-              placeholder: (_, __) => const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => openAdImageGallery(
+                context,
+                urls: urls,
+                initialIndex: i,
               ),
-              errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+              child: CachedNetworkImage(
+                imageUrl: urls[i],
+                fit: BoxFit.cover,
+                width: double.infinity,
+                placeholder: (_, __) => const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+              ),
             ),
           ),
           if (urls.length > 1)

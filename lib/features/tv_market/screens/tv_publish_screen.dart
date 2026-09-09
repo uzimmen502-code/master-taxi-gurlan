@@ -879,29 +879,36 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   /// Тури — `ad`/`news` таҳририда ўзгартирилмайди. «Янгилик» фақат янги
   /// жойлашда танланади (🟡8) — авто-таклиф қилинади, лекин эга босса
   /// шу танлов қотиб қолади (_categoryTouched).
+  ///
+  /// 4-сегмент (иконка билан) торроқ телефонларда, айниқса рус тилида,
+  /// сўз ўртасидан бўлиниб кетарди («Тов-ар»). Иконкалар олиб ташланди
+  /// ва матн кичрайтирилди — тор экранда ҳам 1 қаторда сиғади.
   Widget _categorySelector(BuildContext context) => SegmentedButton<String>(
+        // Танланган сегментдаги ✓ белгиси (showSelectedIcon) ортиқча жой
+        // ейди — фон ранги (яшил тонланиш) танловни аллақачон кўрсатади.
+        showSelectedIcon: false,
+        style: SegmentedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+        ),
         segments: [
           ButtonSegment(
             value: 'product',
             label: Text(context.tr('tv_publish_product')),
-            icon: const Icon(Icons.shopping_bag_outlined),
           ),
           ButtonSegment(
             value: 'service',
             label: Text(context.tr('tv_publish_service')),
-            icon: const Icon(Icons.build_outlined),
           ),
           if (!_isEdit)
             ButtonSegment(
               value: 'ad',
               label: Text(context.tr('tv_publish_ad')),
-              icon: const Icon(Icons.campaign_outlined),
             ),
           if (!_isEdit)
             ButtonSegment(
               value: 'news',
               label: Text(context.tr('tv_publish_news')),
-              icon: const Icon(Icons.newspaper_outlined),
             ),
         ],
         selected: {_category},

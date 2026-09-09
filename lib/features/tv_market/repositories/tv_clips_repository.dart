@@ -398,6 +398,44 @@ class TvClipsRepository {
     });
   }
 
+  /// Playback sifat metrikalari — bitta ko'rish uchun bitta yozuv
+  /// (event-stream emas, denormalized counter — `viewCount` bilan bir xil
+  /// naqsh). Monitoring Center shu maydonlardan rebuffer ratio, completion
+  /// rate, first-frame time hisoblaydi.
+  Future<void> recordPlaybackStats({
+    required String clipId,
+    required Duration watched,
+    required Duration buffered,
+    required int bufferEvents,
+    Duration? firstFrame,
+    required bool completed,
+    required bool skipped,
+    bool hadError = false,
+  }) async {
+    if (clipId.isEmpty) return;
+    final data = <String, dynamic>{
+      'playbackStats.views': FieldValue.increment(1),
+      'playbackStats.watchedMs': FieldValue.increment(watched.inMilliseconds),
+      'playbackStats.bufferMs': FieldValue.increment(buffered.inMilliseconds),
+      'playbackStats.bufferEvents': FieldValue.increment(bufferEvents),
+      if (firstFrame != null)
+        'playbackStats.firstFrameMsSum':
+            FieldValue.increment(firstFrame.inMilliseconds),
+      if (firstFrame != null)
+        'playbackStats.firstFrameSamples': FieldValue.increment(1),
+      if (completed) 'playbackStats.completedViews': FieldValue.increment(1),
+      if (skipped) 'playbackStats.skippedViews': FieldValue.increment(1),
+      if (hadError) 'playbackStats.errors': FieldValue.increment(1),
+      'playbackStats.updatedAt': FieldValue.serverTimestamp(),
+    };
+    try {
+      await _col.doc(clipId).update(data);
+    } catch (_) {
+      // Klip o'chirilgan yoki write muvaffaqiyatsiz — analitika uchun
+      // retry qilinmaydi (viewCount'dagi kabi best-effort).
+    }
+  }
+
   Future<Set<String>> savedClipIds(String userId) async {
     if (userId.isEmpty) return {};
     final snap = await _db

@@ -16,6 +16,7 @@ import '../repositories/tv_clips_repository.dart';
 import '../screens/tv_market_feed_screen.dart';
 import '../screens/tv_publish_screen.dart';
 import '../services/tv_clip_delete.dart';
+import '../services/tv_network_quality_service.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
@@ -53,12 +54,23 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   String _meDisplayName = '';
   final _publicNames = <String, String>{};
 
+  /// Feed'dagi kabi — bir marta o'qiladi, ulanish turiga qarab variant.
+  String _quality = '720p';
+
+  String _urlFor(TvClip clip) => clip.urlForQuality(_quality);
+
   @override
   void initState() {
     super.initState();
     tvBindPlayback();
+    unawaited(_loadQuality());
     unawaited(_loadMeName());
     _load();
+  }
+
+  Future<void> _loadQuality() async {
+    final q = await TvNetworkQualityService.preferredQuality();
+    if (mounted) setState(() => _quality = q);
   }
 
   Future<void> _loadMeName() async {
@@ -185,8 +197,9 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     if (_clips.isEmpty || !tvCanPlay) return;
     final gen = ++_playGen;
     final clip = _clips[_activeIndex];
-    _pool.pauseAllExcept(clip.videoUrl);
-    final ctrl = await _pool.prepare(clip.videoUrl);
+    final url = _urlFor(clip);
+    _pool.pauseAllExcept(url);
+    final ctrl = await _pool.prepare(url);
     if (!mounted || gen != _playGen || !tvCanPlay) {
       _pool.pauseAll();
       _pool.muteAll();
@@ -202,7 +215,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       }
       if (mounted) setState(() {});
     }
-    unawaited(_pool.retain([clip.videoUrl]));
+    unawaited(_pool.retain([url]));
   }
 
   Future<void> _maybeLoadMore(int visibleIndex) async {
@@ -386,7 +399,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
                 clip: _clips[i],
                 height: cardH,
                 playing: i == _activeIndex,
-                controller: _pool[_clips[i].videoUrl],
+                controller: _pool[_urlFor(_clips[i])],
                 isOwner: _isOwner(_clips[i]),
                 ownerLabel: _overlayName(_clips[i]),
                 onOpen: () => _openFeed(_clips[i]),

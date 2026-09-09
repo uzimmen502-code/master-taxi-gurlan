@@ -9,6 +9,7 @@ import '../tabs/dashboard_tab.dart';
 import '../tabs/drivers_tab.dart';
 import '../tabs/finance_tab.dart';
 import '../tabs/operations_tab.dart';
+import '../tabs/tv_market_tab.dart';
 import '../tabs/users_tab.dart';
 import 'admin_news_compose_screen.dart';
 import 'admin_orders_screen.dart';
@@ -57,7 +58,7 @@ class _MonitoringViewState extends State<_MonitoringView>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 5, vsync: this);
+    _tabCtrl = TabController(length: 6, vsync: this);
     _checkAdmin();
   }
 
@@ -177,6 +178,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         Tab(text: '🚖 Ҳайдовчи'),
         Tab(text: '💰 Молия'),
         Tab(text: '⚙️ Операция'),
+        Tab(text: '🎬 TV Market'),
       ],
     );
 
@@ -188,6 +190,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         DriversTab(),
         FinanceTab(),
         OperationsTab(),
+        TvMarketTab(),
       ],
     );
 

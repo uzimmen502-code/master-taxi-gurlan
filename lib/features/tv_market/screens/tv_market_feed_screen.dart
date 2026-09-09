@@ -17,8 +17,10 @@ import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
 import '../services/tv_clip_share.dart';
 import '../services/tv_clip_view_recorder.dart';
+import '../services/tv_network_quality_service.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
+import '../services/tv_playback_analytics_recorder.dart';
 import '../services/tv_screen_playback.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_clip_poster.dart';
@@ -43,7 +45,11 @@ class TvMarketFeedScreen extends StatefulWidget {
 class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     with WidgetsBindingObserver, RouteAware, TvScreenPlayback {
   final _repo = TvClipsRepository();
-  final _pool = TvPlayerPool(alwaysMuted: false, maxReady: 2);
+  // 3 = previous+current+next tirik player. Avvalgi OOM insidenti (bu klass
+  // ustidagi izohga qarang) 2 dan boshlangan edi — bu qiymatni oshirishdan
+  // oldin real qurilmada xotira profilini tekshirish shart (tez-tez svayp,
+  // uzoq sessiya).
+  final _pool = TvPlayerPool(alwaysMuted: false, maxReady: 3);
   final _clips = <TvClip>[];
   bool _loading = true;
   int _currentIndex = 0;
@@ -62,17 +68,32 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _saveBusy = <String>{};
   final _shopRepo = TvShopRepository();
   final _viewRecorder = TvClipViewRecorder();
+  final _playbackAnalytics = TvPlaybackAnalyticsRecorder();
   final _ownersWithShop = <String>{};
   bool _hasMyShop = false;
+
+  /// Ulanish turiga qarab tanlangan variant ('720p'/'480p'/'360p').
+  /// Feed ochilganda bir marta o'qiladi — playback davomida o'zgarmaydi
+  /// (to'liq mid-playback adaptive bitrate — video_engine'ning keyingi
+  /// bosqichi, bu yerda faqat boshlang'ich tanlov).
+  String _quality = '720p';
+
+  String _urlFor(TvClip clip) => clip.urlForQuality(_quality);
 
   @override
   void initState() {
     super.initState();
     tvBindPlayback();
     _pageCtrl = PageController();
+    unawaited(_loadQuality());
     unawaited(_loadMe());
     unawaited(_loadDistricts());
     _loadClips();
+  }
+
+  Future<void> _loadQuality() async {
+    final q = await TvNetworkQualityService.preferredQuality();
+    if (mounted) setState(() => _quality = q);
   }
 
   Future<void> _loadMe() async {
@@ -143,6 +164,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   Future<void> _releasePlayers() async {
+    // Controller dispose bo'lishidan oldin yakuniy analitika yozuvi.
+    _playbackAnalytics.detach();
     await _pool.releaseAll();
     if (mounted) setState(() {});
   }
@@ -191,20 +214,23 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   VideoPlayerController? get _activeCtrl {
     if (_clips.isEmpty || _currentIndex >= _clips.length) return null;
-    return _pool[_clips[_currentIndex].videoUrl];
+    return _pool[_urlFor(_clips[_currentIndex])];
   }
 
   List<String> _urlsAround(int index) {
     final urls = <String>[];
     void add(int i) {
       if (i >= 0 && i < _clips.length) {
-        final url = _clips[i].videoUrl;
+        final url = _urlFor(_clips[i]);
         if (url.isNotEmpty) urls.add(url);
       }
     }
 
+    // Tartib muhim: retain() maxReady'gacha birinchilarni saqlaydi.
+    // current > next > previous ustuvorligi bilan.
     add(index);
     add(index + 1);
+    add(index - 1);
     return urls;
   }
 
@@ -212,9 +238,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (index < 0 || index >= _clips.length || !tvCanPlay) return;
     final gen = ++_activateGen;
     final clip = _clips[index];
-    _pool.pauseAllExcept(clip.videoUrl);
+    final url = _urlFor(clip);
+    _pool.pauseAllExcept(url);
 
-    final ctrl = await _pool.prepare(clip.videoUrl);
+    final ctrl = await _pool.prepare(url);
     if (!mounted || gen != _activateGen || _currentIndex != index) return;
     if (!tvCanPlay) {
       _pool.pauseAll();
@@ -236,6 +263,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     unawaited(_maybePatchOwnerName(clip));
     if (ctrl != null && ctrl.value.isInitialized) {
       _attachViewRecorder(ctrl, clip);
+      _playbackAnalytics.attach(controller: ctrl, clipId: clip.id);
+    } else {
+      _playbackAnalytics.detach();
     }
   }
 
@@ -685,6 +715,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   void dispose() {
     tvUnbindPlayback();
     _viewRecorder.dispose();
+    _playbackAnalytics.dispose();
     _hideBadgeTimer?.cancel();
     unawaited(_pool.dispose());
     _pageCtrl.dispose();
@@ -763,7 +794,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                   itemBuilder: (context, index) {
                     final clip = _clips[index];
                     final isActive = index == _currentIndex;
-                    final ctrl = _pool[clip.videoUrl];
+                    final ctrl = _pool[_urlFor(clip)];
                     return Stack(
                       fit: StackFit.expand,
                       children: [

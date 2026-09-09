@@ -11179,6 +11179,154 @@ exports.transcodeEntertainmentVideo = onObjectFinalized(
       }
     });
 
+// ─────────────────────────────────────────────────────────────────────
+// TV Market — yangi/yangilangan klip videosidan 720p+480p variant.
+//   Trigger: Firestore onCreate/onUpdate `tv_clips/{clipId}` — Storage
+//   finalize EMAS. Sabab: klient avval videoni Storage'ga yuklaydi,
+//   Firestore hujjatini FAQAT shundan keyin `.add()` bilan (avto-ID)
+//   yaratadi — Storage trigger paytida hali hech qanday Firestore
+//   hujjat yo'q, uni topib bo'lmaydi. Hujjatning o'zi (`videoUrl`
+//   allaqachon yozilgan holda) yagona ishonchli trigger nuqtasi.
+//   Original `videoUrl`/fayl o'zgarishsiz qoladi (entertainment
+//   funksiyasidan farqli — u yerda joy ustiga yoziladi); variantlar
+//   alohida `tv_clip_variants/{clipId}/{quality}.mp4` yo'lida
+//   saqlanadi. Xato bo'lsa `processingStatus: 'error'` — klient
+//   `TvClip.urlForQuality()` avtomatik asl `videoUrl`ga qaytadi.
+// ─────────────────────────────────────────────────────────────────────
+const TV_CLIP_VARIANT_SPECS = [
+  {key: '720p', maxHeight: 720},
+  {key: '480p', maxHeight: 480},
+];
+
+function tvClipStoragePathFromUrl(url) {
+  const match = /\/o\/([^?]+)/.exec(url || '');
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function transcodeTvClipVideo(clipId, videoUrl) {
+  const clipRef = db.collection('tv_clips').doc(clipId);
+  const srcPath = tvClipStoragePathFromUrl(videoUrl);
+  if (!srcPath) {
+    console.error('transcodeTvClipVideo: bad videoUrl for', clipId);
+    return;
+  }
+
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const {spawnSync} = require('child_process');
+  const ffmpegPath = require('ffmpeg-static');
+
+  const bucketName = 'master-taxi-gurlan.firebasestorage.app';
+  const bucket = admin.storage().bucket(bucketName);
+  const tmpIn = path.join(
+      os.tmpdir(), `${clipId}_in${path.extname(srcPath) || '.mp4'}`);
+  const tmpOutputs = [];
+
+  try {
+    await clipRef.update({processingStatus: 'processing'});
+    await bucket.file(srcPath).download({destination: tmpIn});
+
+    try {
+      fs.chmodSync(ffmpegPath, 0o755);
+    } catch (_) {}
+
+    const variants = {};
+    for (const spec of TV_CLIP_VARIANT_SPECS) {
+      const tmpOut = path.join(os.tmpdir(), `${clipId}_${spec.key}.mp4`);
+      tmpOutputs.push(tmpOut);
+      const res = spawnSync(ffmpegPath, [
+        '-i', tmpIn,
+        '-vf', `scale=-2:'min(${spec.maxHeight},ih)'`,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '26',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        '-y', tmpOut,
+      ], {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+
+      if (res.status !== 0 || !fs.existsSync(tmpOut)) {
+        console.error(
+            `tv clip ${clipId} ffmpeg ${spec.key} failed`,
+            res.status, res.error);
+        continue;
+      }
+
+      const destPath = `tv_clip_variants/${clipId}/${spec.key}.mp4`;
+      const token = crypto.randomUUID();
+      await bucket.upload(tmpOut, {
+        destination: destPath,
+        metadata: {
+          contentType: 'video/mp4',
+          metadata: {firebaseStorageDownloadTokens: token},
+        },
+      });
+      const encoded = encodeURIComponent(destPath);
+      variants[spec.key] =
+          `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
+          `/o/${encoded}?alt=media&token=${token}`;
+    }
+
+    if (Object.keys(variants).length > 0) {
+      await clipRef.update({
+        videoVariants: variants,
+        processingStatus: 'ready',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await clipRef.update({processingStatus: 'error'});
+    }
+  } catch (e) {
+    console.error('transcodeTvClipVideo error:', clipId, e.message || e);
+    try {
+      await clipRef.update({processingStatus: 'error'});
+    } catch (_) {}
+  } finally {
+    for (const f of [tmpIn, ...tmpOutputs]) {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      } catch (_) {}
+    }
+  }
+}
+
+exports.onTvClipCreated = functions
+    .runWith({timeoutSeconds: 540, memory: '2GB'})
+    .firestore.document('tv_clips/{clipId}')
+    .onCreate(async (snap) => {
+      const data = snap.data() || {};
+      const videoUrl = data.videoUrl || '';
+      if (!videoUrl) return;
+      await transcodeTvClipVideo(snap.id, videoUrl);
+    });
+
+exports.onTvClipVideoReplaced = functions
+    .runWith({timeoutSeconds: 540, memory: '2GB'})
+    .firestore.document('tv_clips/{clipId}')
+    .onUpdate(async (change) => {
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
+      await transcodeTvClipVideo(change.after.id, after.videoUrl);
+    });
+
+// Klip o'chirilganda `tv_clip_variants/{clipId}/` papkasini ham tozalash —
+// aks holda transcode variantlari Storage'da "yetim" qolib, xarajat oshadi.
+exports.onTvClipDeleted = functions.firestore
+    .document('tv_clips/{clipId}')
+    .onDelete(async (snap) => {
+      const clipId = snap.id;
+      try {
+        const bucket = admin.storage().bucket(
+            'master-taxi-gurlan.firebasestorage.app');
+        await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+      } catch (e) {
+        console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
+      }
+    });
+
 exports.migratePhoneFormats = functions.https.onCall(
     async (data, context) => {
       if (!context.auth) {

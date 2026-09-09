@@ -8,6 +8,7 @@ import '../../../models/analytics/finance_analytics.dart';
 import '../../../models/analytics/kpi_summary.dart';
 import '../../../models/analytics/operations_analytics.dart';
 import '../../../models/analytics/period_kpis.dart';
+import '../../../models/analytics/tv_playback_analytics.dart';
 import '../../../models/analytics/user_analytics.dart';
 import '../../../repositories/analytics_repository.dart';
 import '../../../services/daily_report_service.dart';
@@ -32,6 +33,7 @@ class AnalyticsController extends ChangeNotifier {
   DriverAnalytics? driverAnalytics;
   OperationsAnalytics? operationsAnalytics;
   FinanceAnalytics? financeAnalytics;
+  TvPlaybackAnalytics? tvAnalytics;
   DailyReport? todayReport;
   List<DailyReport> historicalReports = const [];
 
@@ -42,6 +44,7 @@ class AnalyticsController extends ChangeNotifier {
   bool driversLoading = false;
   bool operationsLoading = false;
   bool financeLoading = false;
+  bool tvLoading = false;
   bool reportsLoading = false;
 
   /// **Per-tab errors** — ҳар бир таб ўз хатоси билан ишлайди, бошқа табларга
@@ -54,6 +57,7 @@ class AnalyticsController extends ChangeNotifier {
   String? driversError;
   String? operationsError;
   String? financeError;
+  String? tvError;
   String? reportsError;
 
   /// Кенг сафари — барча тiplerga xato bo'lsa, ozгина чекилган xato qaытariш.
@@ -64,6 +68,7 @@ class AnalyticsController extends ChangeNotifier {
       driversError ??
       operationsError ??
       financeError ??
+      tvError ??
       reportsError;
 
   // ─── KPI dashboard ──────────────────────────────────────────────────
@@ -188,6 +193,23 @@ class AnalyticsController extends ChangeNotifier {
     }
   }
 
+  // ─── TV Market (playback analytics) ──────────────────────────────
+  Future<void> loadTv({bool force = false}) async {
+    if (tvLoading) return;
+    if (tvAnalytics != null && !force) return;
+    tvLoading = true;
+    tvError = null;
+    notifyListeners();
+    try {
+      tvAnalytics = await _repo.fetchTvPlaybackAnalytics();
+    } catch (e) {
+      tvError = 'TV: $e';
+    } finally {
+      tvLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ─── Daily reports ─────────────────────────────────────────────────
   Future<void> loadReports({bool force = false}) async {
     if (reportsLoading) return;
@@ -230,6 +252,7 @@ class AnalyticsController extends ChangeNotifier {
       loadDrivers(force: true),
       loadOperations(force: true),
       loadFinance(force: true),
+      loadTv(force: true),
       loadReports(force: true),
     ]);
   }

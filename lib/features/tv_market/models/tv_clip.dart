@@ -63,6 +63,9 @@ class TvClip {
     this.socialPostedAt,
     this.socialPost = const {},
     this.searchTokens = const [],
+    this.videoVariants = const {},
+    this.duration = 0,
+    this.processingStatus = 'ready',
   });
 
   final String id;
@@ -100,10 +103,27 @@ class TvClip {
   final Map<String, dynamic> socialPost;
   final List<String> searchTokens;
 
+  /// Server-tomon transcode natijasi: `{'720p': url, '480p': url, '360p': url}`.
+  /// Bo'sh = faqat `videoUrl` (eski klip yoki hali processing tugamagan).
+  final Map<String, String> videoVariants;
+
+  /// Video davomiyligi (soniya). 0 = noma'lum (eski klip).
+  final int duration;
+
+  /// `uploading` | `processing` | `ready` | `error`. Eski kliplar uchun
+  /// maydon Firestore'da yo'q — shuning uchun default `ready` (allaqachon
+  /// playable, transcode pipeline'idan o'tmagan).
+  final String processingStatus;
+
   bool get isActive => status == 'active';
   bool get hasPrice => price > 0;
   bool get hasShopItem => shopItemId.trim().isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
+  bool get hasVariants => videoVariants.isNotEmpty;
+
+  /// [quality] masalan `'720p'`/`'480p'`/`'360p'`. Variant topilmasa
+  /// asl `videoUrl`ga qaytadi (eski klip yoki processing tugamagan).
+  String urlForQuality(String quality) => videoVariants[quality] ?? videoUrl;
 
   String get socialPostStatus => '${socialPost['status'] ?? ''}'.trim();
 
@@ -145,6 +165,9 @@ class TvClip {
     String? videoUrl,
     String? posterUrl,
     List<String>? searchTokens,
+    Map<String, String>? videoVariants,
+    int? duration,
+    String? processingStatus,
   }) {
     return TvClip(
       id: id,
@@ -172,6 +195,9 @@ class TvClip {
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
       socialPost: socialPost ?? this.socialPost,
       searchTokens: searchTokens ?? this.searchTokens,
+      videoVariants: videoVariants ?? this.videoVariants,
+      duration: duration ?? this.duration,
+      processingStatus: processingStatus ?? this.processingStatus,
     );
   }
 
@@ -210,6 +236,15 @@ class TvClip {
               .where((e) => e.isNotEmpty)
               .toList()
           : const [],
+      videoVariants: d['videoVariants'] is Map
+          ? Map<String, String>.from(
+              (d['videoVariants'] as Map).map(
+                (k, v) => MapEntry('$k', '$v'),
+              ),
+            )
+          : const {},
+      duration: (d['duration'] ?? 0) as int,
+      processingStatus: (d['processingStatus'] ?? 'ready') as String,
     );
   }
 
@@ -241,5 +276,8 @@ class TvClip {
           'socialPostedAt': Timestamp.fromDate(socialPostedAt!),
         if (socialPost.isNotEmpty) 'socialPost': socialPost,
         if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
+        if (videoVariants.isNotEmpty) 'videoVariants': videoVariants,
+        if (duration > 0) 'duration': duration,
+        'processingStatus': processingStatus,
       };
 }

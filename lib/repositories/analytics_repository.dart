@@ -15,6 +15,7 @@ import '../models/analytics/period_kpis.dart';
 import '../models/analytics/segment.dart';
 import '../models/analytics/time_series.dart';
 import '../models/analytics/top_entity.dart';
+import '../models/analytics/tv_playback_analytics.dart';
 import '../models/analytics/user_analytics.dart';
 
 /// Analytics aggregation — Firestore collection'ларидан чуқур кесим.
@@ -1053,6 +1054,90 @@ class AnalyticsRepository {
               ))
           .toList(),
       peakHour: peakHour,
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // SECTION: TV MARKET — PLAYBACK ANALYTICS
+  // ════════════════════════════════════════════════════════════════
+
+  /// `tv_clips.playbackStats` denormalized counter'laridan jamlash.
+  /// Rollup hujjat yo'q — oxirgi 300 faol klipni skanerlab, kamida bitta
+  /// ko'rishi borlarini jamlaydi (video_engine loyihasi, 5-bosqich).
+  Future<TvPlaybackAnalytics> fetchTvPlaybackAnalytics({
+    int scanLimit = 300,
+  }) async {
+    final snap = await _tvClips
+        .where('status', isEqualTo: 'active')
+        .orderBy('createdAt', descending: true)
+        .limit(scanLimit)
+        .get();
+
+    var totalViews = 0;
+    var totalWatchedMs = 0;
+    var totalBufferMs = 0;
+    var completedViews = 0;
+    var skippedViews = 0;
+    var errors = 0;
+    var firstFrameMsSum = 0;
+    var firstFrameSamples = 0;
+    var clipsWithData = 0;
+    final topByViews = <TopEntity>[];
+
+    for (final d in snap.docs) {
+      final data = d.data();
+      final stats = data['playbackStats'];
+      if (stats is! Map) continue;
+      final views = (stats['views'] as num?)?.toInt() ?? 0;
+      if (views <= 0) continue;
+
+      clipsWithData++;
+      totalViews += views;
+      totalWatchedMs += (stats['watchedMs'] as num?)?.toInt() ?? 0;
+      totalBufferMs += (stats['bufferMs'] as num?)?.toInt() ?? 0;
+      completedViews += (stats['completedViews'] as num?)?.toInt() ?? 0;
+      skippedViews += (stats['skippedViews'] as num?)?.toInt() ?? 0;
+      errors += (stats['errors'] as num?)?.toInt() ?? 0;
+      firstFrameMsSum += (stats['firstFrameMsSum'] as num?)?.toInt() ?? 0;
+      firstFrameSamples += (stats['firstFrameSamples'] as num?)?.toInt() ?? 0;
+
+      final title = (data['title'] ?? '') as String;
+      topByViews.add(TopEntity(
+        id: d.id,
+        label: title.isNotEmpty ? title : '(номсиз клип)',
+        value: views,
+        icon: '🎬',
+      ));
+    }
+
+    topByViews.sort((a, b) => b.value.compareTo(a.value));
+
+    double pct(num part, num total) =>
+        total <= 0 ? 0 : part.toDouble() / total.toDouble() * 100.0;
+
+    return TvPlaybackAnalytics(
+      clipsWithData: clipsWithData,
+      totalViews: totalViews,
+      avgFirstFrameMs: firstFrameSamples > 0
+          ? firstFrameMsSum / firstFrameSamples
+          : 0,
+      rebufferRatio: pct(totalBufferMs, totalWatchedMs),
+      completionRate: pct(completedViews, totalViews),
+      skipRate: pct(skippedViews, totalViews),
+      errorRate: pct(errors, totalViews),
+      outcomeBreakdown: SegmentBreakdown(
+        title: 'Натижа',
+        segments: [
+          Segment(label: 'Тугатилган', value: completedViews),
+          Segment(label: "Ўтказиб юборилган", value: skippedViews),
+          Segment(
+            label: 'Бошқа',
+            value: (totalViews - completedViews - skippedViews)
+                .clamp(0, totalViews),
+          ),
+        ],
+      ),
+      topViewed: topByViews.take(10).toList(),
     );
   }
 

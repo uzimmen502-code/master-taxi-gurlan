@@ -65,6 +65,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   XFile? _videoFile;
   VideoPlayerController? _previewCtrl;
   String _category = 'product';
+  /// `true` — эга Товар/Хизмат/Эълон/Янгилик сегментидан бирини ўзи
+  /// босган (🟡8). Шунгача сарлавҳа/тавсифда янгилик калит сўзи топилса
+  /// `_category` авто «Янгилик»га (ёки йўқолса «Товар»га) ўтиб туради —
+  /// шунчаки таклиф, тасдиқ эмас.
+  bool _categoryTouched = false;
   bool _publishing = false;
   double _uploadProgress = 0;
   String _publishStage = '';
@@ -110,9 +115,26 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           ? edit.category
           : (edit.category == 'service' ? 'service' : 'product');
       _showPhone = edit.showPhone;
+      // Таҳрирда сегмент қулф — авто-таклиф ишламасин.
+      _categoryTouched = true;
     }
+    _titleCtrl.addListener(_suggestCategoryFromText);
+    _descCtrl.addListener(_suggestCategoryFromText);
     unawaited(_loadShop());
     unawaited(_loadAdContext());
+  }
+
+  /// Сарлавҳа/тавсифда янгилик калит сўзи топилса — сегментни «Янгилик»га
+  /// таклиф қилади; топилмаса «Товар»га қайтаради. Фақат эга ҳали
+  /// сегментни ўзи танламаган ва дўкон/маҳсулот банд қилмаган пайтда
+  /// (🟡8 — таклиф, эганинг ўз танлови устидан ёзилмайди).
+  void _suggestCategoryFromText() {
+    if (_isEdit || _categoryTouched || _category == 'ad') return;
+    if (_openShop || _attachItemId.isNotEmpty) return;
+    final looksNews =
+        tvLooksLikeNews(_titleCtrl.text.trim(), _descCtrl.text.trim());
+    final suggested = looksNews ? 'news' : 'product';
+    if (_category != suggested) setState(() => _category = suggested);
   }
 
   Future<void> _loadAdContext() async {
@@ -472,18 +494,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     // жойлашда «камида 1 та расм» хатоси чиқарарди (расм UI'си эса
     // эълон режимида умуман кўрсатилмайди).
     final isAd = _category == 'ad';
+    // «Янгилик» энди эга ўзи танлайдиган очиқ сегмент (🟡8) — авто-калит
+    // сўз бўйича таклиф қилинади, лекин якуний манба шу ерда `_category`.
+    final isNews = _category == 'news';
     final title = _titleCtrl.text.trim();
     final description = _descCtrl.text.trim();
 
-    // Янгилик аниқлаш дўкон switch'ига боғлиқ эмас: дўкон эгасида
-    // `_openShop` авто-`true` бўлгани учун улар ҳеч қачон янгилик
-    // жойлай олмасди. Ҳақиқий тижорат сигнали — товар бириктирилгани
-    // ёки расм қўшилгани; шулар бўлмаса ва калит сўз топилса — янгилик.
     final wantsShopItem = _attachItemId.isNotEmpty || _productPhotos.isNotEmpty;
-    final isNewsAuto =
-        !isAd && !wantsShopItem && tvLooksLikeNews(title, description);
     final shopMode =
-        !isAd && !isNewsAuto && (_openShop || _attachItemId.isNotEmpty);
+        !isAd && !isNews && (_openShop || _attachItemId.isNotEmpty);
     if (shopMode && !wantsShopItem) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_shop_photo_required'))),
@@ -625,11 +644,6 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         }
       }
 
-      // Дўкон/витринасиз клип бўлса — сарлавҳа/тавсифда янгилик калит сўзи
-      // борми деб текширамиз (фойдаланувчи ўзи танламайди, автоматик).
-      final isNewsAuto = !shopMode && tvLooksLikeNews(title, description);
-      final effectiveCategory = isNewsAuto ? 'news' : _category;
-
       // 5. Firestore'га ёзиш
       final clip = TvClip(
         id: '',
@@ -641,9 +655,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         districtLabel: districtLabel,
         ownerPhone: phone,
         ownerName: ownerDisplay,
-        category: effectiveCategory,
-        expiresAt:
-            isNewsAuto ? DateTime.now().add(const Duration(hours: 48)) : null,
+        category: _category,
+        expiresAt: isNews ? DateTime.now().add(const Duration(hours: 48)) : null,
         description: description,
         status: autoApprove ? 'active' : 'pending',
         showPhone: _showPhone,
@@ -654,7 +667,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           title: title,
           description: description,
           districtLabel: districtLabel,
-          category: effectiveCategory,
+          category: _category,
           ownerName: ownerDisplay,
         ),
       );
@@ -674,7 +687,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final lines = <String>[
         context.tr(autoApprove ? 'tv_publish_success' : 'tv_publish_pending'),
       ];
-      if (isNewsAuto) {
+      if (isNews) {
         lines.add(context.tr('tv_publish_marked_news'));
       }
       if (_socialNetworks.isNotEmpty) {
@@ -767,7 +780,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                 const SizedBox(height: 16),
               ],
               if (!_isEdit && _category != 'ad') ...[
-                ..._shopSection(context),
+                // Дўкон/маҳсулот — «Янгилик»га тегишли эмас (48 соатда
+                // ўзи ўчади, витринага боғланмайди).
+                if (_category != 'news') ..._shopSection(context),
                 _SocialPicker(
                   selected: _socialNetworks,
                   onToggle: (id, on) => setState(
@@ -861,7 +876,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         const SizedBox(height: 8),
       ];
 
-  /// Тури — `ad`/`news` таҳририда ўзгартирилмайди.
+  /// Тури — `ad`/`news` таҳририда ўзгартирилмайди. «Янгилик» фақат янги
+  /// жойлашда танланади (🟡8) — авто-таклиф қилинади, лекин эга босса
+  /// шу танлов қотиб қолади (_categoryTouched).
   Widget _categorySelector(BuildContext context) => SegmentedButton<String>(
         segments: [
           ButtonSegment(
@@ -880,9 +897,18 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               label: Text(context.tr('tv_publish_ad')),
               icon: const Icon(Icons.campaign_outlined),
             ),
+          if (!_isEdit)
+            ButtonSegment(
+              value: 'news',
+              label: Text(context.tr('tv_publish_news')),
+              icon: const Icon(Icons.newspaper_outlined),
+            ),
         ],
         selected: {_category},
-        onSelectionChanged: (v) => setState(() => _category = v.first),
+        onSelectionChanged: (v) => setState(() {
+          _category = v.first;
+          _categoryTouched = true;
+        }),
       );
 
   /// «Дўкон очиш» блоки: мавжуд товарни танлаш ёки янги товар расмлари.

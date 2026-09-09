@@ -4,8 +4,9 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../services/tv_ad_service.dart';
 
-/// «Эълон» тариф (5) × муддат (7/15/30 кун) — AVA TV тариф жадвали.
-/// Жорий wallet баланси кўринади; етарли бўлмаса огоҳлантириш чиқади.
+/// «Эълон» тариф (5) × муддат (7/15/30 кун) × қамров (туман/вилоят/
+/// республика) — AVA TV тариф жадвали. Жорий wallet баланси кўринади;
+/// етарли бўлмаса огоҳлантириш чиқади.
 ///
 /// Видео жойлаш экранида ҳам, эълонни узайтириш ойнасида ҳам шу битта
 /// виджет ишлатилади (аввал иккита нусха бор эди).
@@ -18,6 +19,11 @@ class TvAdTierPicker extends StatelessWidget {
     required this.walletBalance,
     required this.onTierChanged,
     required this.onDaysChanged,
+    this.selectedScope = 'district',
+    this.scopeMultiplier = tvAdScopeMultiplierDefault,
+    this.onScopeChanged,
+    this.districtLabel = '',
+    this.regionLabel = '',
     this.enabled = true,
   });
 
@@ -28,11 +34,27 @@ class TvAdTierPicker extends StatelessWidget {
   final ValueChanged<String> onTierChanged;
   final ValueChanged<int> onDaysChanged;
 
+  /// Қамров — `null` берилса (масалан узайтириш ойнасида, қамров
+  /// ўзгартирилмайди) селектор умуман кўрсатилмайди.
+  final String selectedScope;
+  final Map<String, num> scopeMultiplier;
+  final ValueChanged<String>? onScopeChanged;
+  final String districtLabel;
+  final String regionLabel;
+
   /// `false` — юбориш жараёнида танловни қотириб қўяди.
   final bool enabled;
 
-  int priceFor(String tier, int days) =>
+  int basePriceFor(String tier, int days) =>
       pricing[tier]?[days] ?? tvAdTierPricingDefault[tier]?[days] ?? 0;
+
+  int priceFor(String tier, int days) {
+    final base = basePriceFor(tier, days);
+    final mult = scopeMultiplier[selectedScope] ??
+        tvAdScopeMultiplierDefault[selectedScope] ??
+        1;
+    return (base * mult).round();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +70,24 @@ class TvAdTierPicker extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (onScopeChanged != null) ...[
+            Text(
+              context.tr('tv_ad_scope_title'),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 10),
+            for (final scope in tvAdScopes)
+              _ScopeTile(
+                scope: scope,
+                selected: scope == selectedScope,
+                sublabel: _scopeSublabel(context, scope),
+                multiplier: scopeMultiplier[scope] ??
+                    tvAdScopeMultiplierDefault[scope] ??
+                    1,
+                onTap: enabled ? () => onScopeChanged!(scope) : null,
+              ),
+            const SizedBox(height: 6),
+          ],
           Text(
             context.tr('tv_ad_tier_title'),
             style: const TextStyle(fontWeight: FontWeight.w800),
@@ -111,6 +151,90 @@ class TvAdTierPicker extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  String _scopeSublabel(BuildContext context, String scope) {
+    switch (scope) {
+      case 'district':
+        return districtLabel.isNotEmpty
+            ? districtLabel
+            : context.tr('tv_ad_scope_district_hint');
+      case 'region':
+        return regionLabel.isNotEmpty
+            ? regionLabel
+            : context.tr('tv_ad_scope_region_hint');
+      default:
+        return context.tr('tv_ad_scope_national_hint');
+    }
+  }
+}
+
+class _ScopeTile extends StatelessWidget {
+  const _ScopeTile({
+    required this.scope,
+    required this.selected,
+    required this.sublabel,
+    required this.multiplier,
+    required this.onTap,
+  });
+
+  final String scope;
+  final bool selected;
+  final String sublabel;
+  final num multiplier;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF00E676).withValues(alpha: 0.14)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? const Color(0xFF00E676) : Colors.grey.shade300,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              size: 18,
+              color: selected ? const Color(0xFF00A853) : Colors.grey,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.tr('tv_ad_scope_$scope'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                  Text(
+                    sublabel,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            if (multiplier != 1)
+              Text(
+                '×${multiplier % 1 == 0 ? multiplier.toInt() : multiplier}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+          ],
+        ),
       ),
     );
   }

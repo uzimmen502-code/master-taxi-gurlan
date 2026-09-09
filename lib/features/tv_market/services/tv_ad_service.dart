@@ -21,6 +21,8 @@ class TvAdService {
     required String description,
     required int durationDays,
     required String tier,
+    String scope = 'district',
+    String regionId = '',
     bool showPhone = true,
     List<String> searchTokens = const [],
   }) async {
@@ -37,6 +39,8 @@ class TvAdService {
       'description': description,
       'durationDays': durationDays,
       'tier': tier,
+      'scope': scope,
+      if (regionId.isNotEmpty) 'regionId': regionId,
       'showPhone': showPhone,
       if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
     });
@@ -89,6 +93,30 @@ class TvAdService {
     }
     return {for (final e in tvAdTierPricingDefault.entries) e.key: Map.of(e.value)};
   }
+
+  /// `settings/app.tvAdScopeMultiplier` — қамров (туман/вилоят/республика)
+  /// кўпайтмаси. Ҳужжат бўлмаса [tvAdScopeMultiplierDefault] қайтади.
+  static Future<Map<String, num>> loadScopeMultiplier() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('settings').doc('app').get();
+      final raw = snap.data()?['tvAdScopeMultiplier'];
+      if (raw is Map) {
+        final parsed = <String, num>{};
+        for (final e in raw.entries) {
+          if (!tvAdScopes.contains('${e.key}')) continue;
+          final v = e.value;
+          if (v is num && v > 0) parsed['${e.key}'] = v;
+        }
+        if (parsed.isNotEmpty) {
+          return {...tvAdScopeMultiplierDefault, ...parsed};
+        }
+      }
+    } catch (e) {
+      debugPrint('[TvAdService] loadScopeMultiplier $e');
+    }
+    return Map.of(tvAdScopeMultiplierDefault);
+  }
 }
 
 /// AVA TV реклама тарифлари: тариф id → l10n калит суффикси.
@@ -96,6 +124,19 @@ class TvAdService {
 const tvAdTiers = ['basic', 'visibility', 'home', 'premium', 'pro_max'];
 
 const tvAdDurationOptions = [7, 15, 30];
+
+/// Ҳудуд қамрови: ўз тумани / вилоят бўйлаб / республика бўйлаб.
+/// Тартиб UI'да шу кетма-кетликда (арзондан қимматга).
+const tvAdScopes = ['district', 'region', 'national'];
+
+/// `settings/app.tvAdScopeMultiplier` билан бир хил шакл — CF'даги
+/// placeholder кўпайтмалар (admin панелдан ўзгартирилмагунча шу
+/// қийматлар кўринади). Нарх = тариф×муддат базаси × шу кўпайтма.
+const tvAdScopeMultiplierDefault = <String, num>{
+  'district': 1,
+  'region': 2,
+  'national': 4,
+};
 
 /// `settings/app.tvAdPricing` билан бир хил шакл — CF'даги placeholder
 /// нархлар (admin панелдан ўзгартирилмагунча шу қийматлар кўринади).

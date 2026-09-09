@@ -70,7 +70,10 @@ class TvClip {
     this.expiresAt,
     this.adDurationDays = 0,
     this.adTier = '',
+    this.adScope = 'district',
+    this.regionId = '',
     this.showPhone = true,
+    this.rejectReason = '',
   });
 
   final String id;
@@ -96,6 +99,15 @@ class TvClip {
 
   /// `category == 'ad'` бўлса — тариф (`basic|visibility|home|premium|pro_max`).
   final String adTier;
+
+  /// `category == 'ad'` бўлса — қамров: `district` (ўз тумани) | `region`
+  /// (вилоят бўйлаб) | `national` (республика бўйлаб). Эски эълонларда
+  /// майдон йўқ — default `district` (ҳозирги хатти-ҳаракат).
+  final String adScope;
+
+  /// Жойлаштирувчи вилояти (`ServiceConfigHolder.regionId` дан денормал.).
+  /// `adScope == 'region'` эълонларини феддда бирлаштириш учун керак.
+  final String regionId;
 
   /// Эгаси телефон рақамини кўрсатишни хоҳлайдими — `false` бўлса
   /// «Боғланиш» тугмаси клип остида умуман кўринмайди. Эски клипларда
@@ -136,8 +148,14 @@ class TvClip {
   /// playable, transcode pipeline'idan o'tmagan).
   final String processingStatus;
 
+  /// Модерация рад этилганда admin ёзган сабаб. Фақат `status == 'blocked'`
+  /// ва category `ad` бўлмаган клипларда маъноли (реклама модерациядан
+  /// умуман ўтмайди — 🔴1/3 қарори).
+  final String rejectReason;
+
   bool get isActive => status == 'active';
   bool get isExpired => status == 'expired';
+  bool get isBlocked => status == 'blocked';
   bool get hasPrice => price > 0;
   bool get hasShopItem => shopItemId.trim().isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
@@ -216,7 +234,10 @@ class TvClip {
     DateTime? expiresAt,
     int? adDurationDays,
     String? adTier,
+    String? adScope,
+    String? regionId,
     bool? showPhone,
+    String? rejectReason,
   }) {
     return TvClip(
       id: id,
@@ -251,7 +272,10 @@ class TvClip {
       expiresAt: expiresAt ?? this.expiresAt,
       adDurationDays: adDurationDays ?? this.adDurationDays,
       adTier: adTier ?? this.adTier,
+      adScope: adScope ?? this.adScope,
+      regionId: regionId ?? this.regionId,
       showPhone: showPhone ?? this.showPhone,
+      rejectReason: rejectReason ?? this.rejectReason,
     );
   }
 
@@ -303,7 +327,12 @@ class TvClip {
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
       adDurationDays: (d['adDurationDays'] ?? 0) as int,
       adTier: (d['adTier'] ?? '') as String,
+      adScope: (d['adScope'] as String?)?.trim().isNotEmpty == true
+          ? d['adScope'] as String
+          : 'district',
+      regionId: (d['regionId'] ?? '') as String,
       showPhone: (d['showPhone'] as bool?) ?? true,
+      rejectReason: (d['rejectReason'] ?? '') as String,
     );
   }
 
@@ -342,6 +371,9 @@ class TvClip {
         if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt!),
         if (adDurationDays > 0) 'adDurationDays': adDurationDays,
         if (adTier.isNotEmpty) 'adTier': adTier,
+        if (isAd) 'adScope': adScope,
+        if (regionId.isNotEmpty) 'regionId': regionId,
         'showPhone': showPhone,
+        if (rejectReason.isNotEmpty) 'rejectReason': rejectReason,
       };
 }

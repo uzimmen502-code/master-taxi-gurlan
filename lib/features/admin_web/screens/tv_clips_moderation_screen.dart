@@ -64,12 +64,16 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
     }
   }
 
-  Future<void> _setStatus(TvClip clip, String status) async {
+  Future<void> _setStatus(TvClip clip, String status, {String reason = ''}) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('tv_clips')
-          .doc(clip.id)
-          .update({'status': status});
+      await FirebaseFirestore.instance.collection('tv_clips').doc(clip.id).update({
+        'status': status,
+        if (status == 'blocked') 'rejectReason': reason,
+        if (status == 'blocked')
+          'rejectedAt': FieldValue.serverTimestamp()
+        else
+          'rejectReason': FieldValue.delete(),
+      });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -90,6 +94,72 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         SnackBar(backgroundColor: Colors.red, content: Text('Xatolik: $e')),
       );
     }
+  }
+
+  /// Рад этиш сабабини сўрайди — тезкор вариантлар + эркин матн. `null` =
+  /// admin бекор қилди (блоклаш амалга ошмайди).
+  Future<String?> _askRejectReason() async {
+    const quick = [
+      'Нолойиқ/шубҳали контент',
+      'Сифатсиз видео (хира/қоронғи)',
+      'Такрорий эълон',
+      'Нотўғри категория',
+    ];
+    final ctrl = TextEditingController();
+    String? picked;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Рад этиш сабаби'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final q in quick)
+                  RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: q,
+                    groupValue: picked,
+                    title: Text(q, style: const TextStyle(fontSize: 13)),
+                    onChanged: (v) => setSt(() {
+                      picked = v;
+                      ctrl.text = v ?? '';
+                    }),
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: ctrl,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    labelText: 'Сабаб (фойдаланувчига кўринади)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setSt(() => picked = null),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Бекор қилиш'),
+            ),
+            FilledButton(
+              onPressed: ctrl.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: const Text('Блоклаш'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result;
   }
 
   Future<void> _delete(TvClip clip) async {
@@ -183,8 +253,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
                                     clips: filtered,
                                     onActivate: (c) =>
                                         _setStatus(c, 'active'),
-                                    onBlock: (c) =>
-                                        _setStatus(c, 'blocked'),
+                                    onBlock: (c) => _blockWithReason(c),
                                     onPending: (c) =>
                                         _setStatus(c, 'pending'),
                                     onDelete: _delete,
@@ -388,6 +457,13 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
     }
   }
 
+  /// Сабаб сўрайди, кейин блоклайди. Бекор қилинса — ҳеч нарса ўзгармайди.
+  Future<void> _blockWithReason(TvClip clip) async {
+    final reason = await _askRejectReason();
+    if (reason == null || reason.isEmpty) return;
+    await _setStatus(clip, 'blocked', reason: reason);
+  }
+
   Future<void> _showDetail(TvClip clip) async {
     if (!mounted) return;
     await showDialog<void>(
@@ -400,7 +476,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         },
         onBlock: () {
           Navigator.pop(ctx);
-          _setStatus(clip, 'blocked');
+          _blockWithReason(clip);
         },
         onDelete: () {
           Navigator.pop(ctx);

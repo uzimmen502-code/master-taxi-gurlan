@@ -10,9 +10,8 @@ class TvClipGeo {
 
   static final _labelCache = <String, String>{};
 
-  static Future<({String districtId, String districtLabel})> resolveForPublisher({
-    String ownerPhone = '',
-  }) async {
+  static Future<({String districtId, String districtLabel, String regionId})>
+      resolveForPublisher({String ownerPhone = ''}) async {
     final phone = canonicalPhoneId(ownerPhone);
     var districtId = '';
     if (phone.isNotEmpty) {
@@ -25,11 +24,24 @@ class TvClipGeo {
       districtId = ServiceConfigHolder.districtId.trim();
     }
     final label = await labelFor(districtId);
+    var regionId = ServiceConfigHolder.regionId.trim();
+    // Эга (owner) ва жорий қурилма ҳудуди фарқли бўлиши мумкин (мас.
+    // администратор бошқа фойдаланувчи номидан жойлаётганда) — шу
+    // туманнинг ўз вилоятини ўқиймиз (реклама «вилоят» қамрови учун шарт).
+    if (districtId.isNotEmpty) {
+      try {
+        final d = await ServiceConfigRepository().fetchDistrict(districtId);
+        if (d != null && d.regionId.trim().isNotEmpty) {
+          regionId = d.regionId.trim();
+        }
+      } catch (_) {}
+    }
     return (
       districtId: districtId,
       districtLabel: label.isNotEmpty
           ? label
           : ServiceConfigHolder.districtLabel.trim(),
+      regionId: regionId,
     );
   }
 

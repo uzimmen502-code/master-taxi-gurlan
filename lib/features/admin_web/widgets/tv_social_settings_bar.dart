@@ -19,6 +19,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   bool _tiktokTokenSet = false;
   bool _ytRefreshSet = false;
   bool _ytSecretSet = false;
+  bool _tgBotTokenSet = false;
   final _pageId = TextEditingController();
   final _igId = TextEditingController();
   final _caption = TextEditingController();
@@ -30,6 +31,8 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   final _ytClientId = TextEditingController();
   final _ytSecret = TextEditingController();
   final _ytRefresh = TextEditingController();
+  final _tgChannelId = TextEditingController();
+  final _tgBotToken = TextEditingController();
 
   @override
   void initState() {
@@ -50,6 +53,8 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
     _ytClientId.dispose();
     _ytSecret.dispose();
     _ytRefresh.dispose();
+    _tgChannelId.dispose();
+    _tgBotToken.dispose();
     super.dispose();
   }
 
@@ -73,6 +78,8 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       _ytClientId.text = '${s['youtubeClientId'] ?? ''}';
       _ytRefreshSet = s['youtubeRefreshSet'] == true;
       _ytSecretSet = s['youtubeSecretSet'] == true;
+      _tgChannelId.text = '${s['telegramChannelId'] ?? ''}';
+      _tgBotTokenSet = s['telegramBotTokenSet'] == true;
       setState(() => _loading = false);
     } catch (e) {
       if (!mounted) return;
@@ -92,6 +99,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
         'captionPrefix': _caption.text.trim(),
         'tiktokClientKey': _tiktokKey.text.trim(),
         'youtubeClientId': _ytClientId.text.trim(),
+        'telegramChannelId': _tgChannelId.text.trim(),
       };
       if (_pageToken.text.trim().isNotEmpty) {
         payload['facebookPageAccessToken'] = _pageToken.text.trim();
@@ -111,6 +119,9 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       if (_ytRefresh.text.trim().isNotEmpty) {
         payload['youtubeRefreshToken'] = _ytRefresh.text.trim();
       }
+      if (_tgBotToken.text.trim().isNotEmpty) {
+        payload['telegramBotToken'] = _tgBotToken.text.trim();
+      }
       await FirebaseFunctions.instance
           .httpsCallable('adminSetTvSocialSettings')
           .call(payload);
@@ -120,6 +131,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       _tiktokSecret.clear();
       _ytSecret.clear();
       _ytRefresh.clear();
+      _tgBotToken.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Соцсет созламалари сақланди')),
@@ -157,7 +169,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
               color: ready ? Colors.green.shade700 : Colors.blueGrey,
             ),
             title: const Text(
-              'AVA расмий Instagram / Facebook / TikTok / YouTube',
+              'AVA расмий Instagram / Facebook / TikTok / YouTube / Telegram',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
             ),
             subtitle: Text(
@@ -219,6 +231,15 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
                           _ytRefreshSet
                               ? 'YouTube refresh token (янги — бўш қолдиринг)'
                               : 'YouTube refresh token',
+                          obscure: true,
+                        ),
+                        _field(_tgChannelId,
+                            'Telegram канал ID (масалан @ava_gurlan)'),
+                        _field(
+                          _tgBotToken,
+                          _tgBotTokenSet
+                              ? 'Telegram bot token (янги — бўш қолдиринг)'
+                              : 'Telegram bot token (BotFather)',
                           obscure: true,
                         ),
                         const SizedBox(height: 8),

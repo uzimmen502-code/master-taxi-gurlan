@@ -50,20 +50,60 @@ class TvClipsRepository {
     return q.where('category', whereIn: categories);
   }
 
-  /// Яқиндаги клиплар — шу туман, сўнг янги.
+  /// Яқиндаги клиплар — шу туман, сўнг янги. `regionId` берилса — «вилоят»
+  /// ва «республика» қамровли эълонлар ҳам туман фильтридан қатъи назар
+  /// шу лентага қўшилади (🟡6 — эълон ҳудуд қамрови).
   Future<List<TvClip>> fetchNearby({
     required String districtId,
     int limit = 20,
     List<String>? categories,
+    String regionId = '',
   }) async {
     var q = _col
         .where('status', isEqualTo: 'active')
         .where('districtId', isEqualTo: districtId);
     q = _withCategory(q, categories);
     final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
-    return tvApplyAdTierPriority(
-      tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList()),
-    );
+    final items = snap.docs.map(TvClip.fromFirestore).toList();
+    // Таб 'ad'ни ичига олмаса (мас. фақат 'news') — қамровли эълонлар
+    // ўша табга умуман тегишли эмас.
+    final adOk = categories == null || categories.isEmpty || categories.contains('ad');
+    if (regionId.isNotEmpty && adOk) {
+      final scoped = await _fetchScopedAds(
+        excludeDistrictId: districtId,
+        regionId: regionId,
+      );
+      for (final c in scoped) {
+        if (items.every((e) => e.id != c.id)) items.add(c);
+      }
+    }
+    return tvApplyAdTierPriority(tvShuffleClips(items));
+  }
+
+  /// «Вилоят»/«республика» қамровли пуллик реклама — бошқа туманнинг
+  /// эълони бўлса ҳам феддда кўринади. Кичик, чекланган сўров (20 та) —
+  /// катта ҳудудларда ҳам лентани тўлдириб юбормаслик учун.
+  Future<List<TvClip>> _fetchScopedAds({
+    required String excludeDistrictId,
+    required String regionId,
+  }) async {
+    try {
+      final snap = await _col
+          .where('category', isEqualTo: 'ad')
+          .where('status', isEqualTo: 'active')
+          .where('adScope', whereIn: ['region', 'national'])
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+      return snap.docs
+          .map(TvClip.fromFirestore)
+          .where((c) =>
+              c.districtId != excludeDistrictId &&
+              (c.adScope == 'national' || c.regionId == regionId))
+          .toList();
+    } catch (e) {
+      return const [];
+    }
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).

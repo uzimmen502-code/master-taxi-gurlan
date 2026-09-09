@@ -48,6 +48,11 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
   Map<String, Map<int, int>> _pricing = {
     for (final e in tvAdTierPricingDefault.entries) e.key: Map.of(e.value),
   };
+  Map<String, num> _scopeMultiplier = Map.of(tvAdScopeMultiplierDefault);
+  // Қамров узайтиришда ўзгармайди (сервер ҳам мавжуд клипдан ўқийди —
+  // арзонроқ scope юбориб нархни пасайтиришнинг олдини олиш учун).
+  String get _scope =>
+      tvAdScopes.contains(widget.clip.adScope) ? widget.clip.adScope : 'district';
   int _balance = 0;
   StreamSubscription<int>? _balanceSub;
   final String _idempotencyKey = const Uuid().v4();
@@ -67,8 +72,16 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
   }
 
   Future<void> _load() async {
-    final pricing = await TvAdService.loadPricing();
-    if (mounted) setState(() => _pricing = pricing);
+    final results = await Future.wait([
+      TvAdService.loadPricing(),
+      TvAdService.loadScopeMultiplier(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _pricing = results[0] as Map<String, Map<int, int>>;
+        _scopeMultiplier = results[1] as Map<String, num>;
+      });
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
@@ -78,8 +91,13 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
     });
   }
 
-  int get _price =>
-      _pricing[_tier]?[_days] ?? tvAdTierPricingDefault[_tier]?[_days] ?? 0;
+  int get _price {
+    final base =
+        _pricing[_tier]?[_days] ?? tvAdTierPricingDefault[_tier]?[_days] ?? 0;
+    final mult =
+        _scopeMultiplier[_scope] ?? tvAdScopeMultiplierDefault[_scope] ?? 1;
+    return (base * mult).round();
+  }
 
   bool get _insufficient => _price > 0 && _balance < _price;
 
@@ -147,6 +165,21 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 14),
+              // Қамров кўрсатилади, лекин таҳрирланмайди — `onScopeChanged`
+              // берилмагани учун селектор яширин, фақат жорий scope
+              // нархга киритилади (сервер ҳам шу scope'дан ҳисоблайди).
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${context.tr('tv_ad_scope_title')}: '
+                  '${context.tr('tv_ad_scope_$_scope')}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
               TvAdTierPicker(
                 selectedTier: _tier,
                 selectedDays: _days,
@@ -155,6 +188,8 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
                 enabled: !_busy,
                 onTierChanged: (t) => setState(() => _tier = t),
                 onDaysChanged: (d) => setState(() => _days = d),
+                selectedScope: _scope,
+                scopeMultiplier: _scopeMultiplier,
               ),
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 6),

@@ -83,9 +83,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
   String _adTier = tvAdTiers.first;
   int _adDurationDays = tvAdDurationOptions.first;
+  String _adScope = tvAdScopes.first;
   Map<String, Map<int, int>> _adPricing = {
     for (final e in tvAdTierPricingDefault.entries) e.key: Map.of(e.value),
   };
+  Map<String, num> _adScopeMultiplier = Map.of(tvAdScopeMultiplierDefault);
   int _walletBalance = 0;
   StreamSubscription<int>? _balanceSub;
   String _adIdempotencyKey = '';
@@ -115,8 +117,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
   Future<void> _loadAdContext() async {
     _adIdempotencyKey = const Uuid().v4();
-    final pricing = await TvAdService.loadPricing();
-    if (mounted) setState(() => _adPricing = pricing);
+    final results = await Future.wait([
+      TvAdService.loadPricing(),
+      TvAdService.loadScopeMultiplier(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _adPricing = results[0] as Map<String, Map<int, int>>;
+        _adScopeMultiplier = results[1] as Map<String, num>;
+      });
+    }
     final prefs = await SharedPreferences.getInstance();
     final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
     if (phone.isEmpty) return;
@@ -260,10 +270,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     return c == 'ad' || c == 'news';
   }
 
-  int get _adSelectedPrice =>
-      _adPricing[_adTier]?[_adDurationDays] ??
-      tvAdTierPricingDefault[_adTier]?[_adDurationDays] ??
-      0;
+  int get _adSelectedPrice {
+    final base = _adPricing[_adTier]?[_adDurationDays] ??
+        tvAdTierPricingDefault[_adTier]?[_adDurationDays] ??
+        0;
+    final mult = _adScopeMultiplier[_adScope] ??
+        tvAdScopeMultiplierDefault[_adScope] ??
+        1;
+    return (base * mult).round();
+  }
 
   bool get _adInsufficientBalance {
     if (_category != 'ad' || _isEdit) return false;
@@ -517,8 +532,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           _publishStage = context.tr('tv_ad_publishing');
           _progressDeterminate = false;
         });
-        // `autoApprove` эълон учун CF ичида ҳисобланади — бу ерда
-        // `settings/app` ўқилмайди (ортиқча Firestore сўрови эди).
+        // Реклама модерациядан ўтмайди — CF тўлов заҳоти `active` қилиб
+        // яратади (🔴1/3 қарори). `scope`/`regionId` — CF'да нархни қайта
+        // текшириш ва feed'да «вилоят»/«республика» бирлаштириш учун.
         final result = await TvAdService.publishTvAd(
           idempotencyKey: _adIdempotencyKey,
           videoUrl: videoUrl,
@@ -531,6 +547,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           description: description,
           durationDays: _adDurationDays,
           tier: _adTier,
+          scope: _adScope,
+          regionId: geo.regionId,
           showPhone: _showPhone,
           searchTokens: TvClipSearch.buildTokens(
             title: title,
@@ -741,6 +759,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   enabled: !_publishing,
                   onTierChanged: (t) => setState(() => _adTier = t),
                   onDaysChanged: (d) => setState(() => _adDurationDays = d),
+                  selectedScope: _adScope,
+                  scopeMultiplier: _adScopeMultiplier,
+                  districtLabel: _districtPreview,
+                  onScopeChanged: (s) => setState(() => _adScope = s),
                 ),
                 const SizedBox(height: 16),
               ],

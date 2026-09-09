@@ -27,11 +27,20 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
     'pro_max': 'Pro Max',
   };
 
+  static const _scopeLabels = <String, String>{
+    'district': 'Туман',
+    'region': 'Вилоят',
+    'national': 'Республика',
+  };
+
   final Map<String, Map<int, TextEditingController>> _ctrls = {
     for (final tier in tvAdTiers)
       tier: {
         for (final d in tvAdDurationOptions) d: TextEditingController(),
       },
+  };
+  final Map<String, TextEditingController> _scopeCtrls = {
+    for (final s in tvAdScopes) s: TextEditingController(),
   };
 
   bool _loading = true;
@@ -51,6 +60,9 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
       for (final c in tierMap.values) {
         c.dispose();
       }
+    }
+    for (final c in _scopeCtrls.values) {
+      c.dispose();
     }
     super.dispose();
   }
@@ -73,6 +85,12 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
           final fallback = tvAdTierPricingDefault[tier]?[d] ?? 0;
           _ctrls[tier]![d]!.text = '${fromDoc ?? fallback}';
         }
+      }
+      final scopeRaw = doc.data()?['tvAdScopeMultiplier'];
+      for (final s in tvAdScopes) {
+        final fromDoc = scopeRaw is Map ? (scopeRaw[s] as num?) : null;
+        final fallback = tvAdScopeMultiplierDefault[s] ?? 1;
+        _scopeCtrls[s]!.text = '${fromDoc ?? fallback}';
       }
     } catch (e) {
       _error = 'Юклашда хатолик: $e';
@@ -101,9 +119,20 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
         }
         pricing[tier] = durations;
       }
+      final scopeMultiplier = <String, dynamic>{};
+      for (final s in tvAdScopes) {
+        final v = double.tryParse(_scopeCtrls[s]!.text.trim());
+        if (v == null || v <= 0) {
+          throw FormatException(
+            '${_scopeLabels[s]} — кўпайтма нотўғри',
+          );
+        }
+        scopeMultiplier[s] = v;
+      }
       await FirebaseFirestore.instance.collection('settings').doc('app').set(
         {
           'tvAdPricing': pricing,
+          'tvAdScopeMultiplier': scopeMultiplier,
           'tvAdPricingUpdatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -151,6 +180,23 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
               ),
               const SizedBox(height: 24),
               for (final tier in tvAdTiers) _tierCard(tier),
+              const SizedBox(height: 8),
+              Text(
+                'Ҳудуд қамрови кўпайтмаси',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Якуний нарх = юқоридаги тариф×муддат нархи × шу кўпайтма '
+                '(масалан «Вилоят» ×2 — 2 баробар қиммат).',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 10),
+              _scopeCard(),
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -224,6 +270,47 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _scopeCard() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            for (final s in tvAdScopes) ...[
+              Expanded(child: _scopeField(s)),
+              if (s != tvAdScopes.last) const SizedBox(width: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _scopeField(String scope) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(_scopeLabels[scope] ?? scope,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _scopeCtrls[scope],
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+          ],
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            prefixText: '×',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      ],
     );
   }
 

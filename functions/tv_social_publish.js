@@ -1,8 +1,14 @@
 'use strict';
 
 /**
- * AVA расмий Instagram / Facebook / TikTok / YouTube — клип active бўлганда
- * жойлаш. Токенлар: settings/tv_social (CF-only) + env fallback.
+ * AVA расмий Instagram / Facebook / TikTok / YouTube / Telegram — клип
+ * active бўлганда жойлаш. Токенлар: settings/tv_social (CF-only) + env
+ * fallback.
+ *
+ * `category === 'ad'` (пуллик реклама) — АЛОҲИДА йўл: модерациядан ўтмайди
+ * (тўлов қилинган заҳоти `active`), ва фойдаланувчи чекбоксларидан қатъи
+ * назар МАЖБУРИЙ фақат Instagram + Facebook + Telegram'га чиқади (TikTok/
+ * YouTube йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
  */
 const axios = require('axios');
 
@@ -10,8 +16,10 @@ const GRAPH = 'https://graph.facebook.com/v21.0';
 const TIKTOK = 'https://open.tiktokapis.com/v2';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const YT_UPLOAD = 'https://www.googleapis.com/upload/youtube/v3/videos';
+const TELEGRAM_API = 'https://api.telegram.org';
 const SETTINGS_PATH = ['settings', 'tv_social'];
-const ORDERED = ['instagram', 'facebook', 'tiktok', 'youtube'];
+const ORDERED = ['instagram', 'facebook', 'tiktok', 'youtube', 'telegram'];
+const AD_FORCED_NETWORKS = ['instagram', 'facebook', 'telegram'];
 const STALE_MS = 12 * 60 * 1000;
 const IG_POLL_MS = 5000;
 const IG_POLL_MAX = 48;
@@ -38,6 +46,8 @@ function str(v, max) {
 }
 
 function requestedNetworks(clip) {
+  // Пуллик реклама — эга танловидан қатъи назар мажбурий 3 та тармоқ.
+  if (clip.category === 'ad') return AD_FORCED_NETWORKS.slice();
   const raw = Array.isArray(clip.socialNetworks) ? clip.socialNetworks : [];
   const picked = [];
   for (const id of ORDERED) {
@@ -81,6 +91,8 @@ function publicSettings(s) {
     youtubeClientId: str(s.youtubeClientId, 200),
     youtubeRefreshSet: Boolean(str(s.youtubeRefreshToken, 800)),
     youtubeSecretSet: Boolean(str(s.youtubeClientSecret, 200)),
+    telegramChannelId: str(s.telegramChannelId, 80),
+    telegramBotTokenSet: Boolean(str(s.telegramBotToken, 200)),
   };
 }
 
@@ -112,6 +124,10 @@ function attachTvSocialPublish(exports, deps) {
           || str(process.env.YOUTUBE_CLIENT_SECRET, 200),
       youtubeRefreshToken: str(s.youtubeRefreshToken, 800)
           || str(process.env.YOUTUBE_REFRESH_TOKEN, 800),
+      telegramBotToken: str(s.telegramBotToken, 200)
+          || str(process.env.TELEGRAM_CHANNEL_BOT_TOKEN, 200),
+      telegramChannelId: str(s.telegramChannelId, 80)
+          || str(process.env.TELEGRAM_CHANNEL_ID, 80),
     };
   }
 
@@ -368,11 +384,47 @@ function attachTvSocialPublish(exports, deps) {
     return { id, url: `https://www.youtube.com/shorts/${id}` };
   }
 
+  /**
+   * Telegram канали — бот `sendVideo`, `video` майдонига тўғридан-тўғри
+   * ошкора Storage URL берилади (IG/FB каби — Telegram ўзи тортиб олади).
+   * Caption лимити 1024 белги.
+   */
+  async function postTelegram(videoUrl, caption, s) {
+    if (!s.telegramBotToken || !s.telegramChannelId) {
+      throw new Error('Telegram bot token ёки канал ID йўқ');
+    }
+    const res = await axios.post(
+        `${TELEGRAM_API}/bot${s.telegramBotToken}/sendVideo`,
+        {
+          chat_id: s.telegramChannelId,
+          video: videoUrl,
+          caption: caption.slice(0, 1024),
+          supports_streaming: true,
+        },
+        { timeout: 120000 },
+    );
+    if (!res.data || res.data.ok !== true) {
+      throw new Error((res.data && res.data.description) || 'Telegram xatolik');
+    }
+    const msg = res.data.result || {};
+    const messageId = msg.message_id;
+    const chatUsername = String(s.telegramChannelId).startsWith('@')
+        ? String(s.telegramChannelId).slice(1)
+        : '';
+    return {
+      id: String(messageId || ''),
+      url: chatUsername && messageId
+          ? `https://t.me/${chatUsername}/${messageId}`
+          : '',
+    };
+  }
+
   async function publishOne(net, videoUrl, caption, s) {
     if (net === 'instagram') return postInstagram(videoUrl, caption, s);
     if (net === 'facebook') return postFacebook(videoUrl, caption, s);
     if (net === 'tiktok') return postTikTok(videoUrl, caption, s);
     if (net === 'youtube') return postYouTube(videoUrl, caption, s);
+    if (net === 'telegram') return postTelegram(videoUrl, caption, s);
     throw new Error(`unknown network ${net}`);
   }
 
@@ -556,6 +608,12 @@ function attachTvSocialPublish(exports, deps) {
     if (data && data.youtubeRefreshToken != null
         && str(data.youtubeRefreshToken, 800)) {
       patch.youtubeRefreshToken = str(data.youtubeRefreshToken, 800);
+    }
+    if (data && data.telegramChannelId != null) {
+      patch.telegramChannelId = str(data.telegramChannelId, 80);
+    }
+    if (data && data.telegramBotToken != null && str(data.telegramBotToken, 200)) {
+      patch.telegramBotToken = str(data.telegramBotToken, 200);
     }
     if (!Object.keys(patch).length) {
       throw new functions.https.HttpsError('invalid-argument', 'empty patch');

@@ -11312,6 +11312,36 @@ exports.onTvClipVideoReplaced = functions
       await transcodeTvClipVideo(change.after.id, after.videoUrl);
     });
 
+// Модератор «Блоклаш» босганда (сабаб билан) — эгасига сабабини кўрсатиб
+// in-app хабар. Реклама (`category == 'ad'`) бу йўлдан ўтмайди — у ҳеч
+// қачон модерацияга тушмайди (🔴1/3 қарори), шунинг учун бу ерга кирмайди.
+exports.onTvClipRejected = functions.firestore
+    .document('tv_clips/{clipId}')
+    .onUpdate(async (change) => {
+      const before = change.before.data() || {};
+      const after = change.after.data() || {};
+      if (after.status !== 'blocked' || before.status === 'blocked') return null;
+      if (after.category === 'ad') return null;
+      const reason = String(after.rejectReason || '').trim();
+      try {
+        await notifyUserInApp({
+          userId: after.ownerPhone,
+          title: 'Видео рад этилди',
+          body: reason
+              ? `«${after.title || ''}» видеосиз сабаб: ${reason}`
+              : `«${after.title || ''}» видеосиз AVAGram'дан рад этилди.`,
+          category: 'tv_market',
+          source: 'tv_clip_moderation',
+          dataType: 'tv_clip_rejected',
+          screen: 'tv_market',
+          extraData: {clipId: change.after.id, reason},
+        });
+      } catch (e) {
+        console.error('[onTvClipRejected] notify', change.after.id, e);
+      }
+      return null;
+    });
+
 // Klip o'chirilganda `tv_clip_variants/{clipId}/` papkasini ham tozalash —
 // aks holda transcode variantlari Storage'da "yetim" qolib, xarajat oshadi.
 exports.onTvClipDeleted = functions.firestore
@@ -11431,17 +11461,32 @@ const TV_AD_TIER_PRICING_DEFAULT = {
   pro_max: {7: 100000, 15: 150000, 30: 250000},
 };
 
-async function tvAdPriceFor(tier, durationDays) {
+// Ҳудуд қамрови — туман (аввалги ягона хатти-ҳаракат) / вилоят / республика.
+// Нарх = тариф×муддат базаси × шу қамров кўпайтма (admin
+// `settings/app.tvAdScopeMultiplier` орқали таҳрирлайди).
+const TV_AD_SCOPES = ['district', 'region', 'national'];
+const TV_AD_SCOPE_MULTIPLIER_DEFAULT = {district: 1, region: 2, national: 4};
+
+async function tvAdPriceFor(tier, durationDays, scope) {
+  let base = 0;
+  let multiplier = TV_AD_SCOPE_MULTIPLIER_DEFAULT[scope] || 1;
   try {
     const snap = await db.collection('settings').doc('app').get();
-    const map = (snap.data() || {}).tvAdPricing;
+    const d = snap.data() || {};
+    const map = d.tvAdPricing;
     const tierMap = map && typeof map === 'object' ? map[tier] : null;
-    if (tierMap && typeof tierMap === 'object' &&
-        tierMap[String(durationDays)] != null) {
-      return Number(tierMap[String(durationDays)]) || 0;
+    base = tierMap && typeof tierMap === 'object' &&
+        tierMap[String(durationDays)] != null
+      ? Number(tierMap[String(durationDays)]) || 0
+      : (TV_AD_TIER_PRICING_DEFAULT[tier] || {})[durationDays] || 0;
+    const scaleMap = d.tvAdScopeMultiplier;
+    if (scaleMap && typeof scaleMap === 'object' && scaleMap[scope] != null) {
+      multiplier = Number(scaleMap[scope]) || multiplier;
     }
-  } catch (_) { /* fallback pastda */ }
-  return (TV_AD_TIER_PRICING_DEFAULT[tier] || {})[durationDays] || 0;
+  } catch (_) {
+    base = (TV_AD_TIER_PRICING_DEFAULT[tier] || {})[durationDays] || 0;
+  }
+  return Math.round(base * multiplier);
 }
 
 exports.publishTvAd = functions.https.onCall(async (data, context) => {
@@ -11473,6 +11518,11 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
           'invalid-argument', `tier must be one of ${TV_AD_TIERS.join(', ')}`);
     }
+    const scope = String(data.scope || 'district').trim();
+    if (!TV_AD_SCOPES.includes(scope)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `scope must be one of ${TV_AD_SCOPES.join(', ')}`);
+    }
 
     const videoUrl = String(data.videoUrl || '').trim();
     const title = String(data.title || '').trim();
@@ -11485,6 +11535,11 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
     const price = parseInt(String(data.price || 0), 10) || 0;
     const districtId = String(data.districtId || '').trim();
     const districtLabel = String(data.districtLabel || '').trim();
+    const regionId = String(data.regionId || '').trim();
+    if (scope !== 'district' && !regionId) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'regionId required for region/national scope');
+    }
     const ownerName = String(data.ownerName || '').trim();
     const showPhone = data.showPhone !== false;
     const searchTokens = Array.isArray(data.searchTokens)
@@ -11497,10 +11552,7 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
           'permission-denied', 'Phone mismatch');
     }
 
-    const adPrice = await tvAdPriceFor(tier, durationDays);
-    const settingsSnap = await db.collection('settings').doc('app').get();
-    const autoApprove = (settingsSnap.data() || {}).tvAutoApprove === true;
-
+    const adPrice = await tvAdPriceFor(tier, durationDays, scope);
     const userRef = db.collection('users').doc(uid);
     const clipRef = db.collection('tv_clips').doc();
     const expiresAt = admin.firestore.Timestamp.fromMillis(
@@ -11539,6 +11591,11 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
         });
       }
 
+      // Реклама — тўлов қилинган заҳоти `active`: пул тўлангач модерация
+      // кутиб турилса, рад этилганда пулни қайтариш муаммоси чиқади (🔴1).
+      // Ижтимоий тармоққа чиқариш (IG+FB+Telegram, мажбурий) —
+      // `onTvClipSocialPublish` триггери shu `active` yozuvidan keyin
+      // avtomatik ishga tushadi (tv_social_publish.js `requestedNetworks`).
       t.set(clipRef, {
         videoUrl,
         posterUrl,
@@ -11553,11 +11610,13 @@ exports.publishTvAd = functions.https.onCall(async (data, context) => {
         likeCount: 0,
         commentCount: 0,
         viewCount: 0,
-        status: autoApprove ? 'active' : 'pending',
+        status: 'active',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         expiresAt,
         adDurationDays: durationDays,
         adTier: tier,
+        adScope: scope,
+        ...(regionId ? {regionId} : {}),
         showPhone,
         socialConsent: false,
         processingStatus: 'ready',
@@ -11630,10 +11689,6 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
           'permission-denied', 'Phone mismatch');
     }
 
-    const adPrice = await tvAdPriceFor(tier, durationDays);
-    const settingsSnap = await db.collection('settings').doc('app').get();
-    const autoApprove = (settingsSnap.data() || {}).tvAutoApprove === true;
-
     const userRef = db.collection('users').doc(uid);
     const clipRef = db.collection('tv_clips').doc(clipId);
 
@@ -11655,6 +11710,10 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
       if (canonicalUid(String(clip.ownerPhone || '')) !== uid) {
         throw new functions.https.HttpsError('permission-denied', 'not_owner');
       }
+      // Қамров клиентдан эмас — мавжуд клипдан ўқилади (арзонроқ
+      // 'district' юбориб нархни пасайтиришнинг олдини олади).
+      const scope = TV_AD_SCOPES.includes(clip.adScope) ? clip.adScope : 'district';
+      const adPrice = await tvAdPriceFor(tier, durationDays, scope);
 
       if (adPrice > 0) {
         const userSnap = await t.get(userRef);
@@ -11695,11 +11754,10 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
         expiresAt,
         adDurationDays: durationDays,
         adTier: tier,
-        // Муддати тугаб `expired` бўлганини қайта фаоллаштирамиз;
-        // `blocked` (админ тўхтатган) ҳолат ўзгармайди.
-        ...(clip.status === 'blocked'
-          ? {}
-          : {status: autoApprove ? 'active' : 'pending'}),
+        // Реклама модерациядан ўтмайди (🔴1/3) — муддати тугаб `expired`
+        // бўлганини тўлов заҳоти қайта фаоллаштирамиз; `blocked` (админ
+        // тўхтатган) ҳолат ўзгармайди.
+        ...(clip.status === 'blocked' ? {} : {status: 'active'}),
         expiredAt: admin.firestore.FieldValue.delete(),
       });
 

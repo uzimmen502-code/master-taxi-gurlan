@@ -2325,7 +2325,8 @@ service cloud.firestore {
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
               && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
               && !request.resource.data.diff(resource.data).affectedKeys()
-                  .hasAny(['expiresAt', 'adDurationDays', 'adTier']))
+                  .hasAny(['expiresAt', 'adDurationDays', 'adTier', 'adScope',
+                           'regionId', 'status', 'rejectReason']))
           || tvClipLikeCountOnly()
           || tvClipViewCountOnly()
           || tvClipCommentCountOnly();

@@ -220,6 +220,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
           districtId: _filterDistrictId,
           limit: 40,
           categories: categories,
+          regionId: ServiceConfigHolder.regionId,
         );
       }
       if (!mounted) return;

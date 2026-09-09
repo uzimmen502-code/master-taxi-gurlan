@@ -178,7 +178,7 @@ class _MonitoringViewState extends State<_MonitoringView>
         Tab(text: '🚖 Ҳайдовчи'),
         Tab(text: '💰 Молия'),
         Tab(text: '⚙️ Операция'),
-        Tab(text: '🎬 TV Market'),
+        Tab(text: '🎬 AVAGram'),
       ],
     );
 

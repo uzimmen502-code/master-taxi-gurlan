@@ -221,7 +221,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'TV Market — модерация',
+                  'AVAGram — модерация',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 3),

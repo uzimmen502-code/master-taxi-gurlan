@@ -135,7 +135,7 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Тавсия / платформа каталоги',
     ),
     _AdminSection(
-      label: 'TV Market',
+      label: 'AVAGram',
       icon: Icons.play_circle_outline,
       description: 'Видео клиплар модерацияси',
     ),
@@ -400,7 +400,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();
     }
-    if (section.label == 'TV Market') {
+    if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();
     }
     if (section.label == '❤️ Танишув') {
@@ -868,7 +868,7 @@ class _Sidebar extends StatelessWidget {
             .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
-      case 'TV Market':
+      case 'AVAGram':
         return db
             .collection('tv_clips')
             .where('status', isEqualTo: 'pending')

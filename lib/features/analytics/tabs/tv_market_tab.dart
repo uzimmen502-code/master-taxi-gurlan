@@ -61,7 +61,7 @@ class _TvMarketTabState extends State<TvMarketTab>
         children: [
           if (t.clipsWithData == 0)
             SectionCard(
-              title: 'TV Market playback',
+              title: 'AVAGram playback',
               icon: '🎬',
               child: Text(
                 'Ҳали playback маълумоти йўқ — фойдаланувчилар клип '
@@ -139,7 +139,7 @@ class _TvMarketTabState extends State<TvMarketTab>
 
   Widget _tvKpis(TvPlaybackAnalytics t) {
     return SectionCard(
-      title: 'TV Market KPI',
+      title: 'AVAGram KPI',
       icon: '🎬',
       child: KpiGrid(
         aspectRatio: 1.45,

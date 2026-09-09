@@ -89,7 +89,6 @@ flutter:
   generate: true
 
   assets:
-    - assets/data/mfy_list.json
     - assets/lang/uz_Latn.json
     - assets/lang/uz_Cyrl.json
     - assets/lang/ru.json

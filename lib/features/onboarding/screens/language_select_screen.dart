@@ -262,7 +262,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                   : Colors.transparent,
                             ),
                             child: ServiceAreaPicker(
-                              showRegionDropdown: false,
+                              showRegionDropdown: true,
                               showAreaDropdown: false,
                               districtLabel: context.tr('ob_pre_district'),
                               onChanged: (r, d, a) {

@@ -14,23 +14,19 @@ import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
 import '../../../services/fcm_service.dart';
-import '../../../services/location_service.dart';
 import '../../tv_market/services/tv_owner_name.dart';
 
 /// Onboarding wizard uchun ChangeNotifier.
 class OnboardingController extends ChangeNotifier {
   OnboardingController({
     required UserRepository userRepo,
-    required LocationService locationService,
     DeviceFingerprintService? fingerprintService,
     DeviceBindingRepository? deviceBindingRepo,
   })  : _userRepo = userRepo,
-        _locationService = locationService,
         _fingerprintService = fingerprintService ?? DeviceFingerprintService(),
         _deviceBindingRepo = deviceBindingRepo ?? DeviceBindingRepository();
 
   final UserRepository _userRepo;
-  final LocationService _locationService;
   final DeviceFingerprintService _fingerprintService;
   final DeviceBindingRepository _deviceBindingRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -65,159 +61,24 @@ class OnboardingController extends ChangeNotifier {
   DeviceBindingCheckResult? lastBindingResult;
 
   /// Ихчам онбординг: шахс+телефон → fingerprint bind → Home. Тил/туман олдинда.
-  static const totalPages = 1;
-
-  int currentPage = 0;
   String gender = 'male';
   String birthDate = '';
 
-  String mfy = '';
-  String street = '';
-  String house = '';
-  String district = 'Гурлан';
-  String note = '';
+  // Манзил (МФЙ/кўча/уй/GPS) онбордингда йиғилмайди — фойдаланувчи уни
+  // Профилда (`AddressEditScreen`) киритади ва ўша ерда таҳрирлайди.
 
   // Config-driven zona (ixtiyoriy — tanlansa xizmat mavjudligini aniqlaydi).
   String geoRegionId = '';
   String geoDistrictId = '';
   String geoServiceAreaId = '';
 
-  /// Ixtiyoriy — onboarding oxirida mashina tavsiyasi (мой setup билан бир хил).
-  String carBrand = 'Chevrolet';
-  String carModel = 'Cobalt';
-  int carYear = 2021;
-  String carEngine = '1.5';
-  String carFuelType = 'cng';
-  List<String> carUsageTags = const ['taxi'];
-  String carColor = '';
-  String carPlate = '';
-  String carSeats = '4';
-  /// Default: автони ўтказиб юбориш; фойдаланувчи тўлдирса `false`.
-  bool skipCarStep = true;
-  /// Онбординг авто саҳифаси ичидаги қадам (0=модель, 1=ёқилғи).
-  int carSetupStep = 0;
-
-  double? lat;
-  double? lng;
-  double? accuracy;
-  DateTime? geoUpdatedAt;
-  bool gpsFromLastKnown = false;
-
-  String? geoHint;
-  bool isGeoHintLoading = false;
-
   bool isSubmitting = false;
-  bool isGpsLoading = false;
   String? errorMessage;
 
   bool isCheckingDevice = false;
   String? phoneStepError;
 
-  bool get isLastPage => currentPage == totalPages - 1;
   bool get skipSmsVerification => otpVerified && _bindingRegistered;
-
-  bool get hasManualParts =>
-      mfy.trim().isNotEmpty &&
-      street.trim().isNotEmpty &&
-      house.trim().isNotEmpty;
-
-  bool get hasGps => lat != null && lng != null;
-
-  bool get hasCompleteAddress => hasManualParts && hasGps;
-
-  bool get hasCarDraft {
-    return carSetupStep >= 1 &&
-        carBrand.trim().isNotEmpty &&
-        carModel.trim().isNotEmpty &&
-        carYear > 0 &&
-        carEngine.trim().isNotEmpty &&
-        carFuelType.trim().isNotEmpty &&
-        carUsageTags.isNotEmpty;
-  }
-
-  bool get hasCarBonusFields {
-    final seats = int.tryParse(carSeats.trim()) ?? 0;
-    return carColor.trim().isNotEmpty &&
-        carPlate.trim().isNotEmpty &&
-        seats > 0;
-  }
-
-  void setCarBrand(String v) {
-    carBrand = v;
-    notifyListeners();
-  }
-
-  void setCarModel(String v) {
-    carModel = v;
-    notifyListeners();
-  }
-
-  void setCarYear(int v) {
-    carYear = v;
-    notifyListeners();
-  }
-
-  void setCarEngine(String v) {
-    carEngine = v;
-    notifyListeners();
-  }
-
-  void setCarFuelType(String v) {
-    carFuelType = v;
-    notifyListeners();
-  }
-
-  void setCarUsageTags(List<String> v) {
-    carUsageTags = v;
-    notifyListeners();
-  }
-
-  void setCarColor(String v) {
-    carColor = v;
-    notifyListeners();
-  }
-
-  void setCarPlate(String v) {
-    carPlate = v;
-    notifyListeners();
-  }
-
-  void setCarSeats(String v) {
-    carSeats = v;
-    notifyListeners();
-  }
-
-  void setSkipCarStep(bool v) {
-    skipCarStep = v;
-    notifyListeners();
-  }
-
-  void setCarSetupStep(int v) {
-    carSetupStep = v;
-    notifyListeners();
-  }
-
-  void clearCarDraft() {
-    carBrand = 'Chevrolet';
-    carModel = 'Cobalt';
-    carYear = 2021;
-    carEngine = '1.5';
-    carFuelType = 'cng';
-    carUsageTags = const ['taxi'];
-    carColor = '';
-    carPlate = '';
-    carSeats = '4';
-    carSetupStep = 0;
-    skipCarStep = true;
-    notifyListeners();
-  }
-
-  bool get hasLowAccuracyGps {
-    if (accuracy == null) return false;
-    return accuracy! > 100;
-  }
-
-  bool isGpsRequiredForPhone(String phone) => false;
 
   void setGender(String v) {
     gender = v;
@@ -259,38 +120,6 @@ class OnboardingController extends ChangeNotifier {
     } catch (_) {
       return null;
     }
-  }
-
-  void setMfy(String v) {
-    mfy = v;
-    notifyListeners();
-  }
-
-  void setStreet(String v) {
-    street = v;
-    notifyListeners();
-  }
-
-  void setHouse(String v) {
-    house = v;
-    notifyListeners();
-  }
-
-  void setDistrict(String v) {
-    district = v;
-    notifyListeners();
-  }
-
-  void setNote(String v) {
-    note = v;
-    notifyListeners();
-  }
-
-  void setGeoArea(String regionId, String districtId, String serviceAreaId) {
-    geoRegionId = regionId;
-    geoDistrictId = districtId;
-    geoServiceAreaId = serviceAreaId;
-    notifyListeners();
   }
 
   String? validate({
@@ -335,25 +164,6 @@ class OnboardingController extends ChangeNotifier {
       } catch (_) {}
     }
     notifyListeners();
-  }
-
-  void goToPage(int page) {
-    currentPage = page;
-    notifyListeners();
-  }
-
-  void advance() {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      notifyListeners();
-    }
-  }
-
-  void back() {
-    if (currentPage > 0) {
-      currentPage--;
-      notifyListeners();
-    }
   }
 
   Future<DeviceFingerprintSnapshot> _ensureFingerprint() async {
@@ -464,54 +274,6 @@ class OnboardingController extends ChangeNotifier {
     return results.any((r) => r != ConnectivityResult.none);
   }
 
-  Future<bool> fetchGps() async {
-    isGpsLoading = true;
-    errorMessage = null;
-    geoHint = null;
-    notifyListeners();
-    try {
-      final coords = await _locationService.getCurrentCoords();
-      lat = coords.lat;
-      lng = coords.lng;
-      accuracy = coords.accuracy;
-      geoUpdatedAt = DateTime.now();
-      gpsFromLastKnown = coords.fromLastKnown;
-
-      isGpsLoading = false;
-      notifyListeners();
-
-      unawaited(_loadGeoHintInBackground(coords.lat, coords.lng));
-      return true;
-    } on LocationException catch (e) {
-      errorMessage = LocationException.userMessage(e.kind);
-      return false;
-    } finally {
-      if (isGpsLoading) {
-        isGpsLoading = false;
-        notifyListeners();
-      }
-    }
-  }
-
-  Future<void> _loadGeoHintInBackground(double lat, double lng) async {
-    isGeoHintLoading = true;
-    notifyListeners();
-    try {
-      final hint = await _locationService.addressFromCoords(
-        lat,
-        lng,
-        timeout: const Duration(seconds: 5),
-        fallbackToCoords: false,
-      );
-      geoHint = hint?.trim().isNotEmpty == true ? hint!.trim() : null;
-    } catch (_) {
-      geoHint = null;
-    } finally {
-      isGeoHintLoading = false;
-      notifyListeners();
-    }
-  }
-
   /// Binding OK → Auth session (createUser/claims/token).
   /// `checkDeviceBinding` trusted жавобида `customToken` бўлса — 2-чи CF чақирилмайди.
   Future<bool> establishPhoneSession(String phone) async {
@@ -579,23 +341,6 @@ class OnboardingController extends ChangeNotifier {
     }
 
     final uid = canonicalPhoneId(phone);
-    final districtLabel = ServiceConfigHolder.districtLabel.trim();
-    final structured = UserAddress(
-      mfy: mfy.trim(),
-      street: street.trim(),
-      house: house.trim(),
-      district: district.trim().isNotEmpty
-          ? district.trim()
-          : districtLabel,
-      note: note.trim(),
-      lat: lat,
-      lng: lng,
-      accuracy: accuracy,
-      geoUpdatedAt: geoUpdatedAt,
-      manualUpdatedAt: hasManualParts ? DateTime.now() : null,
-    );
-    final formatted = structured.formatted;
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userId', uid);
     await prefs.setString('userName', name.trim());
@@ -606,7 +351,9 @@ class OnboardingController extends ChangeNotifier {
     if (birthDate.isNotEmpty) {
       await prefs.setString('user_birth_date', birthDate);
     }
-    await prefs.setString('user_address', formatted);
+    // `user_address` бу ерда ёзилмайди — онбордингда манзил йиғилмайди.
+    // Аввал бўш манзилнинг `formatted`и (фақат туман номи) ёзиларди ва
+    // Профилдаги манзил таҳририда «кўча» майдонига prefill бўлиб қоларди.
     await prefs.setBool('onboarding_done', true);
     await prefs.setBool('phone_reverified', true);
     _deviceLockedUid = uid;
@@ -619,36 +366,23 @@ class OnboardingController extends ChangeNotifier {
     required String phone,
   }) async {
     final uid = canonicalPhoneId(phone);
-    final districtLabel = ServiceConfigHolder.districtLabel.trim();
-    final structured = UserAddress(
-      mfy: mfy.trim(),
-      street: street.trim(),
-      house: house.trim(),
-      district: district.trim().isNotEmpty
-          ? district.trim()
-          : districtLabel,
-      note: note.trim(),
-      lat: lat,
-      lng: lng,
-      accuracy: accuracy,
-      geoUpdatedAt: geoUpdatedAt,
-      manualUpdatedAt: hasManualParts ? DateTime.now() : null,
-    );
-    final formatted = structured.formatted;
     final regionId = geoRegionId;
     final districtId = geoDistrictId;
     final areaId = geoServiceAreaId;
 
     try {
       final writes = <Future<void>>[
+        // Манзил онбордингда йиғилмайди — бўш `UserAddress` юборилади ва
+        // repo уни ёзмайди (мавжуд манзил ўчиб кетмаслиги учун). Манзилни
+        // фойдаланувчи Профилда (`AddressEditScreen`) киритади/таҳрирлайди.
         _userRepo.createOrMergeProfileWithAddress(
           uid: uid,
           phone: phone,
           name: name,
           gender: gender,
           birthDate: birthDate,
-          legacyAddressLine: formatted,
-          address: structured,
+          legacyAddressLine: '',
+          address: const UserAddress(),
           requireCompleteAddress: false,
         ),
       ];
@@ -701,7 +435,6 @@ class OnboardingController extends ChangeNotifier {
 
     isSubmitting = true;
     notifyListeners();
-    skipCarStep = true;
     try {
       final ok = await persistLocalOnboardingPrefs(name: name, phone: phone);
       if (!ok) return false;

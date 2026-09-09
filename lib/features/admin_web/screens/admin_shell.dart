@@ -28,6 +28,7 @@ import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
 import 'dating_moderation_screen.dart';
 import 'tv_clips_moderation_screen.dart';
+import 'tv_ad_pricing_admin_screen.dart';
 import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
@@ -138,6 +139,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'AVAGram',
       icon: Icons.play_circle_outline,
       description: 'Видео клиплар модерацияси',
+    ),
+    _AdminSection(
+      label: 'AVAGram реклама нархи',
+      icon: Icons.price_change_outlined,
+      description: 'Реклама ва эълонлар тарифлари (7/15/30 кун)',
     ),
     _AdminSection(
       label: '❤️ Танишув',
@@ -402,6 +408,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();
+    }
+    if (section.label == 'AVAGram реклама нархи') {
+      return const TvAdPricingAdminScreen();
     }
     if (section.label == '❤️ Танишув') {
       return const DatingModerationScreen();

@@ -117,9 +117,12 @@ class TvPlayerPool {
       final ctrl = _ready.remove(url);
       await ctrl?.dispose();
     }
-    for (final url in ordered) {
-      await prepare(url);
-    }
+    // Керакмаслар юқорида аллақачон бўшатилди — `_ready` энди фақат
+    // `keep` (<= maxReady) дан иборат, шунинг учун параллел prepare
+    // eviction race'сиз хавфсиз (жой олдиндан кафолатланган). Кейинги
+    // видео (swipe'дан кейинги) фонда бир вақтда юклана бошлайди —
+    // навбат билан кутиш ўрнига.
+    await Future.wait(ordered.map(prepare));
   }
 
   void pauseAllExcept(String? url) {

@@ -22,7 +22,9 @@ import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_playback_analytics_recorder.dart';
 import '../services/tv_screen_playback.dart';
+import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
+import '../widgets/tv_comment_sheet.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_channel_screen.dart';
@@ -43,8 +45,14 @@ class TvMarketFeedScreen extends StatefulWidget {
 }
 
 class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
-    with WidgetsBindingObserver, RouteAware, TvScreenPlayback {
+    with
+        WidgetsBindingObserver,
+        RouteAware,
+        TvScreenPlayback,
+        SingleTickerProviderStateMixin {
   final _repo = TvClipsRepository();
+  late final TabController _tabController;
+  bool _firstLoadDone = false;
   // 3 = previous+current+next tirik player. Avvalgi OOM insidenti (bu klass
   // ustidagi izohga qarang) 2 dan boshlangan edi — bu qiymatni oshirishdan
   // oldin real qurilmada xotira profilini tekshirish shart (tez-tez svayp,
@@ -85,10 +93,35 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     super.initState();
     tvBindPlayback();
     _pageCtrl = PageController();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
     unawaited(_loadQuality());
     unawaited(_loadMe());
     unawaited(_loadDistricts());
     _loadClips();
+  }
+
+  /// `null` = AVAGram (ҳамма category). Интерфейс бир хил — фақат манба фарқ.
+  List<String>? _categoriesForTab(int index) {
+    switch (index) {
+      case 1:
+        return const ['news'];
+      case 2:
+        return const ['product', 'service', 'ad'];
+      default:
+        return null;
+    }
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    tvOnPlaybackBlocked();
+    setState(() {
+      _clips.clear();
+      _loading = true;
+      _currentIndex = 0;
+    });
+    unawaited(_loadClips());
   }
 
   Future<void> _loadQuality() async {
@@ -135,7 +168,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     try {
       final liked = await _repo.likedClipIds(
         likerId: uid,
-        clipIds: _clips.map((c) => c.id).take(40),
+        clipIds: _clips.map((c) => c.id).take(40).toList(),
       );
       final saved = await _repo.savedClipIds(uid);
       if (!mounted) return;
@@ -178,23 +211,26 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   Future<void> _loadClips() async {
     try {
+      final categories = _categoriesForTab(_tabController.index);
       List<TvClip> nearby;
       if (_filterDistrictId.isEmpty) {
-        nearby = await _repo.fetchAllActive(limit: 40);
+        nearby = await _repo.fetchAllActive(limit: 40, categories: categories);
       } else {
         nearby = await _repo.fetchNearby(
           districtId: _filterDistrictId,
           limit: 40,
+          categories: categories,
         );
       }
       if (!mounted) return;
       final list = <TvClip>[];
-      if (widget.initialClip != null) {
+      if (!_firstLoadDone && widget.initialClip != null) {
         list.add(widget.initialClip!);
         list.addAll(nearby.where((c) => c.id != widget.initialClip!.id));
       } else {
         list.addAll(nearby);
       }
+      _firstLoadDone = true;
       setState(() {
         _clips
           ..clear()
@@ -550,6 +586,32 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  Future<void> _onComment(TvClip clip) async {
+    final uid = _meId;
+    if (uid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_comment_need_auth'))),
+      );
+      return;
+    }
+    await openTvCommentSheet(
+      context,
+      clip: clip,
+      viewerPhone: uid,
+      viewerDisplayName: _meDisplayName,
+      onCommentAdded: () {
+        final i = _clips.indexWhere((c) => c.id == clip.id);
+        if (i >= 0 && mounted) {
+          setState(() {
+            _clips[i] = _clips[i].copyWith(
+              commentCount: _clips[i].commentCount + 1,
+            );
+          });
+        }
+      },
+    );
+  }
+
   Future<void> _onShare(TvClip clip) async {
     try {
       await shareTvClip(clip);
@@ -719,6 +781,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     _hideBadgeTimer?.cancel();
     unawaited(_pool.dispose());
     _pageCtrl.dispose();
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -778,6 +842,33 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
             ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TabBar(
+            controller: _tabController,
+            isScrollable: false,
+            indicatorColor: const Color(0xFF00E676),
+            indicatorWeight: 2.5,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 11.5,
+              height: 1.15,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 11.5,
+              height: 1.15,
+            ),
+            tabs: [
+              _tvTabLabel(context.tr('tv_tab_avagram')),
+              _tvTabLabel(context.tr('tv_tab_news')),
+              _tvTabLabel(context.tr('tv_tab_ads')),
+            ],
+          ),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
@@ -786,8 +877,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
               : PageView.builder(
                   controller: _pageCtrl,
                   scrollDirection: Axis.vertical,
-                  physics: const PageScrollPhysics(
+                  physics: const TvSwipePhysics(
                     parent: BouncingScrollPhysics(),
+                    commitFraction: 0.20,
                   ),
                   itemCount: _clips.length,
                   onPageChanged: _onPageChanged,
@@ -825,6 +917,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onDelete: () => _onDelete(clip),
                           onEdit: () => _onEdit(clip),
                           onLike: () => _onLike(clip),
+                          onComment: () => _onComment(clip),
                           onShare: () => _onShare(clip),
                           onSave: () => _onSave(clip),
                           onOpenShop: _showShopBtn(clip)
@@ -845,6 +938,18 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 }
+
+/// Узун ёрлиқлар (мас. «Реклама ва эълонлар») экранга сиғиши учун 2
+/// қаторга ўралади — қирқилмайди, isScrollable шарт эмас.
+Tab _tvTabLabel(String text) => Tab(
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        softWrap: true,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
 
 class _DistrictFilterChip extends StatelessWidget {
   const _DistrictFilterChip({required this.label, required this.onTap});

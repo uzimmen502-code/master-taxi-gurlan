@@ -104,6 +104,19 @@ class TvStorageService {
     return photoBytes;
   }
 
+  /// Профиль (жойлаштирувчи) аватар расми — `tv_profile/{ownerPhone}/`.
+  Future<String> uploadProfilePhoto({
+    required String ownerPhone,
+    required Uint8List bytes,
+  }) async {
+    final name =
+        'avatar_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
+    final ref =
+        _storage.ref().child('tv_profile').child(ownerPhone).child(name);
+    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return ref.getDownloadURL();
+  }
+
   /// 1–5 та дўкон расми. Тартиб сақланади.
   Future<List<String>> uploadShopPhotos({
     required String ownerPhone,

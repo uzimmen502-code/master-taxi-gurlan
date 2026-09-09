@@ -60,10 +60,12 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
     (label: 'Русский', flag: '🇷🇺', locale: LocaleUtils.ru),
   ];
 
+  /// МФЙ/хизмат зонаси (`_areaId`) шарт эмас — у фақат конфигурация
+  /// (қайси модуллар мавжудлиги), базада ҳали киритилмаган ҳудудлар бор.
+  /// Реал МФЙ номи фойдаланувчи профилида (`AddressEditScreen`, эркин
+  /// матн, ҳар доим сақланади) киритилади. Шу ерда фақат туман кифоя.
   bool get _districtReady =>
-      _regionId.isNotEmpty &&
-      _districtId.isNotEmpty &&
-      _areaId.isNotEmpty;
+      _regionId.isNotEmpty && _districtId.isNotEmpty;
 
   Future<void> _onLanguageTap(Locale locale) async {
     setState(() => _selected = locale);
@@ -270,9 +272,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                   _regionId = r;
                                   _districtId = d;
                                   _areaId = a;
-                                  if (r.isNotEmpty &&
-                                      d.isNotEmpty &&
-                                      a.isNotEmpty) {
+                                  if (r.isNotEmpty && d.isNotEmpty) {
                                     _showDistrictWarn = false;
                                   }
                                 });

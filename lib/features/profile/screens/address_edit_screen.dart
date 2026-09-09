@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/brand_labels.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/widgets/service_area_picker.dart';
 import '../../../models/user_address.dart';
 import '../../../models/user_model.dart';
 import '../../../repositories/user_repository.dart';
+import '../controllers/profile_controller.dart';
 import '../../../services/location_service.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -36,7 +38,6 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
-  final _districtCtrl = TextEditingController(text: 'Гурлан');
   final _noteCtrl = TextEditingController();
 
   double? _lat;
@@ -51,15 +52,40 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
   String _districtId = '';
   String _serviceAreaId = '';
 
+  /// Зона бўлими default'да ёпиқ — фақат хулоса кўринади («Ўзгартириш»
+  /// босилса очилади). Зона онбордингда аллақачон танланган.
+  bool _editZone = false;
+
+  /// Зона хулосаси — жорий туман номи (маълумот бўлмаса огоҳлантириш).
+  String _zoneSummary(BuildContext context) {
+    final district = ServiceConfigHolder.districtLabel.trim();
+    return district.isEmpty ? context.tr('addr_zone_empty') : district;
+  }
+
+  /// Туман — хизмат зонасидан (қўлда киритилмайди: битта манба).
+  /// Зона ҳали ўқилмаган бўлса — эски сақланган манзилдаги туман.
+  String get _districtLabel {
+    final fromZone = ServiceConfigHolder.districtLabel.trim();
+    if (fromZone.isNotEmpty) return fromZone;
+    return (widget.initial?.district ?? '').trim();
+  }
+
   @override
   void initState() {
     super.initState();
+    // Зона — `ServiceConfigHolder`дан СИНХРОН (у хотирада тайёр: ZoneGate
+    // Home'дан олдин тўлдиради). Аввал бу Firestore'дан async ўқиларди ва
+    // `ServiceAreaPicker` ўз `initState`ида бўш қийматни олиб улгурарди —
+    // dropdown'лар доим бўш қоларди.
+    _regionId = ServiceConfigHolder.regionId.trim();
+    _districtId = ServiceConfigHolder.districtId.trim();
+    _serviceAreaId = ServiceConfigHolder.serviceAreaId.trim();
+
     final a = widget.initial;
     if (a != null) {
       _mfyCtrl.text = a.mfy;
       _streetCtrl.text = a.street;
       _houseCtrl.text = a.house;
-      if (a.district.isNotEmpty) _districtCtrl.text = a.district;
       _noteCtrl.text = a.note;
       _lat = a.lat;
       _lng = a.lng;
@@ -73,30 +99,6 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     } else {
       _hydrateFromLegacy();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_hydrateGeoFromUser());
-    });
-  }
-
-  Future<void> _hydrateGeoFromUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final uid = phoneDigits(prefs.getString('user_phone') ?? '');
-    if (uid.length < 9 || !mounted) return;
-    try {
-      final user = await context.read<UserRepository>().getById(uid);
-      if (user == null || !mounted) return;
-      setState(() {
-        if (_regionId.isEmpty && user.regionId.isNotEmpty) {
-          _regionId = user.regionId;
-        }
-        if (_districtId.isEmpty && user.districtId.isNotEmpty) {
-          _districtId = user.districtId;
-        }
-        if (_serviceAreaId.isEmpty && user.serviceAreaId.isNotEmpty) {
-          _serviceAreaId = user.serviceAreaId;
-        }
-      });
-    } catch (_) {}
   }
 
   Future<void> _hydrateFromLegacy() async {
@@ -117,7 +119,6 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     _mfyCtrl.dispose();
     _streetCtrl.dispose();
     _houseCtrl.dispose();
-    _districtCtrl.dispose();
     _noteCtrl.dispose();
     super.dispose();
   }
@@ -191,25 +192,25 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     final street = _streetCtrl.text.trim();
     final house = _houseCtrl.text.trim();
     if (mfy.isEmpty || street.isEmpty || house.isEmpty) {
-      setState(() => _err =
-          'МФЙ, кўча ва уй рақами — мажбурий майдонлар. Илтимос, тўлдиринг.');
+      setState(() => _err = context.tr('addr_err_manual_required'));
       return;
     }
 
     final prefs = await SharedPreferences.getInstance();
     final uid = phoneDigits(prefs.getString('user_phone') ?? '');
     if (uid.length < 9) {
-      setState(() => _err = 'Аввал телефонни тасдиқланг');
+      setState(() => _err = context.tr('addr_err_phone_first'));
       return;
     }
 
+    // GPS — тавсия этилади, лекин сақлашни бloкламайди: бино ичида /
+    // GPS ўчиқ бўлса ҳам фойдаланувчи манзилини сақлай олсин (аввал
+    // `validationError` GPS'ни мажбурий қилиб, сақлашга йўл бермасди).
     final address = UserAddress(
       mfy: mfy,
       street: street,
       house: house,
-      district: _districtCtrl.text.trim().isEmpty
-          ? 'Гурлан'
-          : _districtCtrl.text.trim(),
+      district: _districtLabel,
       note: _noteCtrl.text.trim(),
       lat: _lat,
       lng: _lng,
@@ -217,11 +218,6 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       geoUpdatedAt: _geoUpdatedAt,
       manualUpdatedAt: DateTime.now(),
     );
-    final validation = address.validationError;
-    if (validation != null) {
-      setState(() => _err = validation);
-      return;
-    }
 
     if (!mounted) return;
     final userRepo = context.read<UserRepository>();
@@ -264,7 +260,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       if (!mounted) return;
       Navigator.pop(context, address);
     } catch (e) {
-      setState(() => _err = 'Сақлашда хатолик: $e');
+      setState(() => _err = '${context.tr('addr_err_save')}: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -278,7 +274,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Яшаш манзили'),
+            Text(context.tr('addr_title')),
             Text(
               BrandLabels.districtContext == null
                   ? BrandLabels.brand
@@ -306,24 +302,24 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               border: Border.all(
                   color: AppColors.primary.withValues(alpha: 0.25)),
             ),
-            child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.info_outline, color: AppColors.primary),
-              SizedBox(width: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.info_outline, color: AppColors.primary),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Икки манба мажбурий:',
-                      style: TextStyle(
+                      context.tr('addr_intro_title'),
+                      style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           color: AppColors.primary),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      '📍  GPS — карта ва ҳайдовчи учун аниқ нуқта\n✍️  Қўлда (МФЙ, кўча, уй, туман) — курьер мўлжал қилади',
-                      style: TextStyle(
+                      context.tr('addr_intro_body'),
+                      style: const TextStyle(
                           fontSize: 12, color: AppColors.primary),
                     ),
                   ],
@@ -356,10 +352,11 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               Row(children: [
                 const Icon(Icons.gps_fixed, color: _green, size: 18),
                 const SizedBox(width: 8),
-                const Text('GPS координаталари (мажбурий)',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                const Spacer(),
+                Expanded(
+                  child: Text(context.tr('addr_gps_title'),
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                ),
                 _gpsStatusBadge(),
               ]),
               const SizedBox(height: 10),
@@ -371,11 +368,11 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                 ],
                 const SizedBox(height: 10),
               ] else
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
                   child: Text(
-                    '⚠️ GPS ҳали олинмаган. Қуйидаги тугмани босинг.',
-                    style: TextStyle(
+                    context.tr('addr_gps_missing_hint'),
+                    style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.primary,
                         fontWeight: FontWeight.w500),
@@ -397,9 +394,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                               ? Icons.refresh
                               : Icons.my_location,
                           size: 18),
-                  label: Text((_lat != null && _lng != null)
-                      ? 'GPS-ни янгилаш'
-                      : 'Жорий GPS манзилни олиш'),
+                  label: Text(context.tr((_lat != null && _lng != null)
+                      ? 'addr_gps_refresh'
+                      : 'addr_gps_get')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _green,
                     foregroundColor: Colors.white,
@@ -426,55 +423,61 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               ],
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Row(children: [
-                Icon(Icons.edit_location_alt, color: _green, size: 18),
-                SizedBox(width: 8),
-                Text('Қўлда тўлдириш (мажбурий)',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              Row(children: [
+                const Icon(Icons.edit_location_alt, color: _green, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(context.tr('addr_manual_title'),
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                ),
               ]),
               const SizedBox(height: 12),
               _field(
                 ctrl: _mfyCtrl,
-                label: 'МФЙ (Маҳалла фуқаролар йиғини) *',
+                label: context.tr('addr_mfy_label'),
                 icon: Icons.location_city,
-                hint: 'Масалан: «Бахт» МФЙ',
+                hint: context.tr('addr_mfy_hint'),
               ),
               const SizedBox(height: 12),
               _field(
                 ctrl: _streetCtrl,
-                label: 'Кўча / гузар *',
+                label: context.tr('addr_street_label'),
                 icon: Icons.signpost,
-                hint: 'Кўча/гузар номи',
+                hint: context.tr('addr_street_hint'),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: _field(
-                    ctrl: _houseCtrl,
-                    label: 'Уй № *',
-                    icon: Icons.home,
-                    hint: '12',
-                    keyboard: TextInputType.text,
+              // Туман энди қўлда киритилмайди — у хизмат зонасидан келади
+              // (иккита манба зиддияти бартараф этилди), шу сабабли «Уй №»
+              /// бутун кенгликни олади ва ёрлиғи қирқилмайди.
+              _field(
+                ctrl: _houseCtrl,
+                label: context.tr('addr_house_label'),
+                icon: Icons.home,
+                hint: '12',
+              ),
+              if (_districtLabel.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(children: [
+                  Icon(Icons.map_outlined, size: 15, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${context.tr('addr_district_label')}: $_districtLabel',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: _field(
-                    ctrl: _districtCtrl,
-                    label: 'Туман',
-                    icon: Icons.map,
-                    hint: 'Гурлан',
-                  ),
-                ),
-              ]),
+                ]),
+              ],
               const SizedBox(height: 12),
               _field(
                 ctrl: _noteCtrl,
-                label: 'Қўшимча (ихтиёрий)',
+                label: context.tr('addr_note_label'),
                 icon: Icons.notes,
-                hint: 'Подъезд, қават, ориентир...',
+                hint: context.tr('addr_note_hint'),
                 maxLines: 2,
               ),
             ]),
@@ -497,26 +500,45 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(children: [
-                    Icon(Icons.hub_outlined, color: _green, size: 18),
-                    SizedBox(width: 8),
+                  Row(children: [
+                    const Icon(Icons.hub_outlined, color: _green, size: 18),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text('Xizmat zonasi (qaysi xizmatlar mavjudligi)',
-                          style: TextStyle(
+                      child: Text(context.tr('addr_zone_title'),
+                          style: const TextStyle(
                               fontSize: 14, fontWeight: FontWeight.bold)),
                     ),
+                    if (!_editZone)
+                      TextButton(
+                        onPressed: () => setState(() => _editZone = true),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(context.tr('addr_zone_change')),
+                      ),
                   ]),
-                  const SizedBox(height: 12),
-                  ServiceAreaPicker(
-                    initialRegionId: _regionId,
-                    initialDistrictId: _districtId,
-                    initialServiceAreaId: _serviceAreaId,
-                    onChanged: (region, district, area) {
-                      _regionId = region;
-                      _districtId = district;
-                      _serviceAreaId = area;
-                    },
-                  ),
+                  const SizedBox(height: 8),
+                  // Зона онбордингда танланган — одатда фақат хулоса
+                  // кўрсатилади, «Ўзгартириш» босилгандагина танлов очилади.
+                  if (!_editZone)
+                    Text(
+                      _zoneSummary(context),
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.grey.shade700),
+                    )
+                  else
+                    ServiceAreaPicker(
+                      initialRegionId: _regionId,
+                      initialDistrictId: _districtId,
+                      initialServiceAreaId: _serviceAreaId,
+                      onChanged: (region, district, area) {
+                        _regionId = region;
+                        _districtId = district;
+                        _serviceAreaId = area;
+                      },
+                    ),
                 ]),
           ),
 
@@ -552,8 +574,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.check, size: 20),
-              label: const Text('Сақлаш',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              label: Text(context.tr('save'),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
                 foregroundColor: Colors.white,
@@ -577,8 +600,8 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: Colors.orange.shade300),
         ),
-        child: const Text('Йўқ',
-            style: TextStyle(
+        child: Text(context.tr('addr_gps_none'),
+            style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary)),
@@ -588,11 +611,16 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
     final addr = UserAddress(lat: _lat, lng: _lng, accuracy: _accuracy);
     final quality = addr.gpsQuality;
     final (label, bg, fg) = switch (quality) {
-      GpsQuality.high => ('Аъло', AppColors.tickerShell, _green),
-      GpsQuality.medium => ('Ўрта', AppColors.scaffold, AppColors.primary),
-      GpsQuality.low => ('Паст', Colors.red.shade50, Colors.red.shade700),
-      GpsQuality.unknown => ('OK', AppColors.tickerShell, AppColors.primaryDark),
-      GpsQuality.none => ('Йўқ', Colors.grey.shade100, Colors.grey),
+      GpsQuality.high =>
+        (context.tr('addr_gps_high'), AppColors.tickerShell, _green),
+      GpsQuality.medium =>
+        (context.tr('addr_gps_medium'), AppColors.scaffold, AppColors.primary),
+      GpsQuality.low =>
+        (context.tr('addr_gps_low'), Colors.red.shade50, Colors.red.shade700),
+      GpsQuality.unknown =>
+        ('OK', AppColors.tickerShell, AppColors.primaryDark),
+      GpsQuality.none =>
+        (context.tr('addr_gps_none'), Colors.grey.shade100, Colors.grey),
     };
 
     return Container(
@@ -631,7 +659,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       const Icon(Icons.adjust, size: 12, color: Colors.grey),
       const SizedBox(width: 4),
       Text(
-        'Аниқлик: ±${_accuracy!.toStringAsFixed(0)} метр',
+        context
+            .tr('addr_gps_accuracy')
+            .replaceAll('{m}', _accuracy!.toStringAsFixed(0)),
         style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
       ),
       if (_geoUpdatedAt != null) ...[
@@ -648,10 +678,14 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
 
   String _relativeTime(DateTime t) {
     final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 1) return 'ҳозиргина';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} дақ. олдин';
-    if (diff.inHours < 24) return '${diff.inHours} соат олдин';
-    return '${diff.inDays} кун олдин';
+    if (diff.inMinutes < 1) return context.tr('addr_time_just_now');
+    if (diff.inMinutes < 60) {
+      return context.tr('addr_time_min').replaceAll('{n}', '${diff.inMinutes}');
+    }
+    if (diff.inHours < 24) {
+      return context.tr('addr_time_hour').replaceAll('{n}', '${diff.inHours}');
+    }
+    return context.tr('addr_time_day').replaceAll('{n}', '${diff.inDays}');
   }
 
   Widget _field({
@@ -707,5 +741,28 @@ class AddressGate {
       MaterialPageRoute(
           builder: (_) => AddressEditScreen(initial: initial)),
     );
+  }
+
+  /// Профилдан манзилни таҳрирлаш — натижа [controller]га қўлланади.
+  /// Профил экрани ва «Фойдаланувчи маълумотлари» экранида бир хил
+  /// такрорланган мантиқ шу ерга йиғилди (битта манба).
+  static Future<void> edit(
+    BuildContext context,
+    ProfileController controller,
+  ) async {
+    final result = await Navigator.push<UserAddress>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddressEditScreen(initial: controller.structuredAddress),
+      ),
+    );
+    if (!context.mounted) return;
+    if (result != null) {
+      controller.applyAddress(result);
+      return;
+    }
+    // Back босилди — манзил бошқа оқимда (AddressGate) сақланган бўлиши
+    // мумкин, шу сабабли локал кешдан қайта ўқилади.
+    await controller.reloadAddressFromPrefs();
   }
 }

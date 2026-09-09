@@ -2,25 +2,31 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../repositories/user_repository.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
+import '../services/tv_ad_service.dart';
 import '../services/tv_clip_compress.dart';
 import '../services/tv_clip_geo.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_social.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
+import '../utils/tv_news_detector.dart';
+import '../widgets/tv_ad_tier_picker.dart';
 import '../widgets/tv_clip_poster.dart';
 
 /// TV Market — видео жойлаш экрани.
@@ -43,6 +49,11 @@ class TvPublishScreen extends StatefulWidget {
 
 class _TvPublishScreenState extends State<TvPublishScreen>
     with WidgetsBindingObserver {
+  /// Матн чегаралари — қидирув токенлари ихтиёрий узунликдаги матндан
+  /// қурилмаслиги ва Firestore ҳужжати шишиб кетмаслиги учун.
+  static const _titleMaxLen = 80;
+  static const _descMaxLen = 500;
+
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
@@ -57,6 +68,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   bool _publishing = false;
   double _uploadProgress = 0;
   String _publishStage = '';
+
+  /// Прогресс аниқ фоиз кўрсатадими (compress/upload босқичлари).
+  /// Аввал бу `_publishStage` матни ичидан «юклан»/«upload» сўзи
+  /// қидириб аниқланарди — рус тилида ишламай қоларди.
+  bool _progressDeterminate = false;
   bool _openShop = false;
   final _socialNetworks = <String>{};
   String _attachItemId = '';
@@ -64,6 +80,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   List<TvShopItem> _myItems = const [];
   final _shopRepo = TvShopRepository();
   String _districtPreview = '';
+
+  String _adTier = tvAdTiers.first;
+  int _adDurationDays = tvAdDurationOptions.first;
+  Map<String, Map<int, int>> _adPricing = {
+    for (final e in tvAdTierPricingDefault.entries) e.key: Map.of(e.value),
+  };
+  int _walletBalance = 0;
+  StreamSubscription<int>? _balanceSub;
+  String _adIdempotencyKey = '';
+  bool _showPhone = true;
 
   @override
   void initState() {
@@ -75,9 +101,34 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       _titleCtrl.text = edit.title;
       _priceCtrl.text = edit.price > 0 ? '${edit.price}' : '';
       _descCtrl.text = edit.description;
-      _category = edit.category == 'service' ? 'service' : 'product';
+      // `ad` / `news` категорияси таҳрирда ўзгармайди — аввал улар
+      // «product»га айлантириб юбориларди (пуллик реклама ўз тарифини,
+      // янгилик эса ўз лентасини йўқотарди).
+      _category = _categoryLocked
+          ? edit.category
+          : (edit.category == 'service' ? 'service' : 'product');
+      _showPhone = edit.showPhone;
     }
     unawaited(_loadShop());
+    unawaited(_loadAdContext());
+  }
+
+  Future<void> _loadAdContext() async {
+    _adIdempotencyKey = const Uuid().v4();
+    final pricing = await TvAdService.loadPricing();
+    if (mounted) setState(() => _adPricing = pricing);
+    final prefs = await SharedPreferences.getInstance();
+    final phone = canonicalPhoneId(prefs.getString('user_phone') ?? '');
+    if (phone.isEmpty) return;
+    // Баланс — жонли обуна (аввал `.first` билан бир марта ўқиларди:
+    // бошқа экранда ҳамённи тўлдириб қайтганда эскирган қиймат
+    // «Жойлаш» тугмасини блоклаб турарди).
+    _balanceSub = UserRepository().watchBonusBalance(phone).listen(
+      (balance) {
+        if (mounted) setState(() => _walletBalance = balance);
+      },
+      onError: (Object e) => debugPrint('[TvPublish] wallet $e'),
+    );
   }
 
   Future<void> _loadShop() async {
@@ -126,6 +177,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_balanceSub?.cancel());
     _titleCtrl.dispose();
     _priceCtrl.dispose();
     _descCtrl.dispose();
@@ -201,12 +253,30 @@ class _TvPublishScreenState extends State<TvPublishScreen>
 
   bool get _isEdit => widget.editClip != null;
 
+  /// `ad`/`news` — таҳрирда категория ўзгартирилмайди (сегмент ҳам
+  /// кўрсатилмайди): реклама тарифи ва янгилик лентаси сақланиб қолсин.
+  bool get _categoryLocked {
+    final c = widget.editClip?.category;
+    return c == 'ad' || c == 'news';
+  }
+
+  int get _adSelectedPrice =>
+      _adPricing[_adTier]?[_adDurationDays] ??
+      tvAdTierPricingDefault[_adTier]?[_adDurationDays] ??
+      0;
+
+  bool get _adInsufficientBalance {
+    if (_category != 'ad' || _isEdit) return false;
+    return _adSelectedPrice > 0 && _walletBalance < _adSelectedPrice;
+  }
+
   Future<({String videoUrl, String posterUrl})> _uploadPickedVideo(
     String phone,
   ) async {
     setState(() {
       _publishStage = context.tr('tv_publish_compressing');
       _uploadProgress = 0;
+      _progressDeterminate = true;
     });
     final compressed = await TvClipCompress.forUpload(
       _videoFile!.path,
@@ -222,11 +292,15 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         SnackBar(content: Text(context.tr('tv_publish_trimmed'))),
       );
     }
-    setState(() => _publishStage = context.tr('tv_publish_thumbnail'));
+    setState(() {
+      _publishStage = context.tr('tv_publish_thumbnail');
+      _progressDeterminate = false;
+    });
     final thumbBytes = await TvClipCompress.thumbnailBytes(compressed.path);
     setState(() {
       _publishStage = context.tr('tv_publish_uploading');
       _uploadProgress = 0;
+      _progressDeterminate = true;
     });
     final videoUrl = await _storageService.uploadVideo(
       ownerPhone: phone,
@@ -238,7 +312,10 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     var posterUrl = '';
     if (thumbBytes != null && thumbBytes.isNotEmpty) {
       if (mounted) {
-        setState(() => _publishStage = context.tr('tv_publish_poster'));
+        setState(() {
+          _publishStage = context.tr('tv_publish_poster');
+          _progressDeterminate = false;
+        });
       }
       posterUrl = await _storageService.uploadPoster(
         ownerPhone: phone,
@@ -265,6 +342,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       _publishStage = '';
     });
 
+    var newVideoUrl = '';
+    var newPosterUrl = '';
+    var saved = false;
     try {
       final phone = canonicalPhoneId(user.phoneNumber ?? user.uid);
       var videoUrl = clip.videoUrl;
@@ -273,6 +353,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         final uploaded = await _uploadPickedVideo(phone);
         videoUrl = uploaded.videoUrl;
         if (uploaded.posterUrl.isNotEmpty) posterUrl = uploaded.posterUrl;
+        newVideoUrl = uploaded.videoUrl;
+        newPosterUrl = uploaded.posterUrl;
       }
 
       final title = _titleCtrl.text.trim();
@@ -293,9 +375,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         description: description,
         category: _category,
         searchTokens: tokens,
+        showPhone: _showPhone,
         videoUrl: _videoFile != null ? videoUrl : null,
         posterUrl: _videoFile != null ? posterUrl : null,
       );
+      saved = true;
       if (clip.shopItemId.isNotEmpty) {
         try {
           await _shopRepo.updateItem(clip.shopItemId, {
@@ -328,6 +412,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           videoUrl: videoUrl,
           posterUrl: posterUrl,
           searchTokens: tokens,
+          showPhone: _showPhone,
         ),
       );
     } catch (e) {
@@ -337,7 +422,20 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       );
       debugPrint('[TvPublish] save $e');
     } finally {
-      if (mounted) setState(() => _publishing = false);
+      // Сақлаш йиқилса — янги юкланган файл «етим» қолмасин (эски
+      // видео эса жойида қолади, чунки ёзув ўзгармаган).
+      if (!saved && newVideoUrl.isNotEmpty) {
+        unawaited(TvStorageService().deleteClipFiles(
+          videoUrl: newVideoUrl,
+          posterUrl: newPosterUrl,
+        ));
+      }
+      if (mounted) {
+        setState(() {
+          _publishing = false;
+          _progressDeterminate = false;
+        });
+      }
     }
   }
 
@@ -354,8 +452,24 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       return;
     }
 
-    final shopMode = _openShop || _attachItemId.isNotEmpty;
-    if (shopMode && _attachItemId.isEmpty && _productPhotos.isEmpty) {
+    // «Эълон» — дўкон/витрина оқимидан мустақил. Аввал дўкони бор
+    // фойдаланувчида `_openShop` авто-`true` бўлиб қолар ва эълон
+    // жойлашда «камида 1 та расм» хатоси чиқарарди (расм UI'си эса
+    // эълон режимида умуман кўрсатилмайди).
+    final isAd = _category == 'ad';
+    final title = _titleCtrl.text.trim();
+    final description = _descCtrl.text.trim();
+
+    // Янгилик аниқлаш дўкон switch'ига боғлиқ эмас: дўкон эгасида
+    // `_openShop` авто-`true` бўлгани учун улар ҳеч қачон янгилик
+    // жойлай олмасди. Ҳақиқий тижорат сигнали — товар бириктирилгани
+    // ёки расм қўшилгани; шулар бўлмаса ва калит сўз топилса — янгилик.
+    final wantsShopItem = _attachItemId.isNotEmpty || _productPhotos.isNotEmpty;
+    final isNewsAuto =
+        !isAd && !wantsShopItem && tvLooksLikeNews(title, description);
+    final shopMode =
+        !isAd && !isNewsAuto && (_openShop || _attachItemId.isNotEmpty);
+    if (shopMode && !wantsShopItem) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_shop_photo_required'))),
       );
@@ -376,6 +490,11 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       _publishStage = context.tr('tv_publish_compressing');
     });
 
+    // Хатолик юз берса Storage'да «етим» файл қолмаслиги учун — юкланган
+    // URL'лар шу ерда сақланади ва `catch`да ўчирилади.
+    var uploadedVideoUrl = '';
+    var uploadedPosterUrl = '';
+    var completed = false;
     try {
       final phoneRaw = user.phoneNumber ?? user.uid;
       final phone = canonicalPhoneId(phoneRaw);
@@ -386,27 +505,74 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final ownerName = await resolveLocalTvOwnerGivenName(phone: phone);
       final ownerDisplay = tvOwnerDisplayName(ownerName);
 
-      final settingsSnap = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('app')
-          .get();
-      final autoApprove =
-          settingsSnap.data()?['tvAutoApprove'] == true;
-
       final uploaded = await _uploadPickedVideo(phone);
       if (!mounted) return;
       final videoUrl = uploaded.videoUrl;
       final posterUrl = uploaded.posterUrl;
+      uploadedVideoUrl = videoUrl;
+      uploadedPosterUrl = posterUrl;
+
+      if (isAd) {
+        setState(() {
+          _publishStage = context.tr('tv_ad_publishing');
+          _progressDeterminate = false;
+        });
+        // `autoApprove` эълон учун CF ичида ҳисобланади — бу ерда
+        // `settings/app` ўқилмайди (ортиқча Firestore сўрови эди).
+        final result = await TvAdService.publishTvAd(
+          idempotencyKey: _adIdempotencyKey,
+          videoUrl: videoUrl,
+          posterUrl: posterUrl,
+          title: title,
+          price: int.tryParse(_priceCtrl.text.trim()) ?? 0,
+          districtId: districtId,
+          districtLabel: districtLabel,
+          ownerName: ownerDisplay,
+          description: description,
+          durationDays: _adDurationDays,
+          tier: _adTier,
+          showPhone: _showPhone,
+          searchTokens: TvClipSearch.buildTokens(
+            title: title,
+            description: description,
+            districtLabel: districtLabel,
+            category: 'ad',
+            ownerName: ownerDisplay,
+          ),
+        );
+        completed = true;
+        if (!mounted) return;
+        final paid = (result['price'] as num?)?.toInt() ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              paid > 0
+                  ? context
+                      .tr('tv_ad_published_paid')
+                      .replaceAll('{price}', formatMoney(paid))
+                  : context.tr('tv_ad_published_free'),
+            ),
+          ),
+        );
+        await VideoCompress.deleteAllCache();
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        return;
+      }
+
+      // `product` / `service` / авто-`news` йўли.
+      final settingsSnap = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('app')
+          .get();
+      final autoApprove = settingsSnap.data()?['tvAutoApprove'] == true;
 
       String shopItemId = _attachItemId;
       var clipPrice = int.tryParse(_priceCtrl.text.trim()) ?? 0;
-      final shopMode = _openShop || _attachItemId.isNotEmpty;
       if (!mounted) return;
 
       if (shopMode) {
-        if (mounted) {
-          setState(() => _publishStage = context.tr('tv_publish_photo_uploading'));
-        }
+        setState(() => _publishStage = context.tr('tv_publish_photo_uploading'));
         await _shopRepo.ensureShop(
           ownerPhone: phone,
           name: ownerDisplay,
@@ -421,14 +587,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               id: '',
               ownerPhone: phone,
               ownerName: ownerDisplay,
-              title: _titleCtrl.text.trim(),
+              title: title,
               price: clipPrice,
               photoUrl: photoUrls.isNotEmpty ? photoUrls.first : '',
               photoUrls: photoUrls,
               kind: _category,
               districtId: districtId,
               districtLabel: districtLabel,
-              description: _descCtrl.text.trim(),
+              description: description,
               socialConsent: _socialNetworks.isNotEmpty,
               status: autoApprove ? 'active' : 'pending',
             ),
@@ -441,28 +607,36 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         }
       }
 
+      // Дўкон/витринасиз клип бўлса — сарлавҳа/тавсифда янгилик калит сўзи
+      // борми деб текширамиз (фойдаланувчи ўзи танламайди, автоматик).
+      final isNewsAuto = !shopMode && tvLooksLikeNews(title, description);
+      final effectiveCategory = isNewsAuto ? 'news' : _category;
+
       // 5. Firestore'га ёзиш
       final clip = TvClip(
         id: '',
         videoUrl: videoUrl,
         posterUrl: posterUrl,
-        title: _titleCtrl.text.trim(),
+        title: title,
         price: clipPrice,
         districtId: districtId,
         districtLabel: districtLabel,
         ownerPhone: phone,
         ownerName: ownerDisplay,
-        category: _category,
-        description: _descCtrl.text.trim(),
+        category: effectiveCategory,
+        expiresAt:
+            isNewsAuto ? DateTime.now().add(const Duration(hours: 48)) : null,
+        description: description,
         status: autoApprove ? 'active' : 'pending',
+        showPhone: _showPhone,
         shopItemId: shopItemId,
         socialConsent: _socialNetworks.isNotEmpty,
         socialNetworks: _socialNetworks.toList(),
         searchTokens: TvClipSearch.buildTokens(
-          title: _titleCtrl.text.trim(),
-          description: _descCtrl.text.trim(),
+          title: title,
+          description: description,
           districtLabel: districtLabel,
-          category: _category,
+          category: effectiveCategory,
           ownerName: ownerDisplay,
         ),
       );
@@ -470,6 +644,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final clipRef = await FirebaseFirestore.instance
           .collection('tv_clips')
           .add(clip.toMap());
+      completed = true;
       if (shopItemId.isNotEmpty) {
         await _shopRepo.addClipToItem(
           itemId: shopItemId,
@@ -481,6 +656,9 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       final lines = <String>[
         context.tr(autoApprove ? 'tv_publish_success' : 'tv_publish_pending'),
       ];
+      if (isNewsAuto) {
+        lines.add(context.tr('tv_publish_marked_news'));
+      }
       if (_socialNetworks.isNotEmpty) {
         lines.add(context.tr('tv_social_queued'));
       }
@@ -490,13 +668,34 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       await VideoCompress.deleteAllCache();
       if (!mounted) return;
       Navigator.pop(context, true);
+    } on FirebaseFunctionsException catch (e) {
+      final msg = e.code == 'failed-precondition' &&
+              e.message == 'insufficient_balance'
+          ? (mounted ? context.tr('tv_ad_insufficient_balance') : '')
+          : 'Хатолик: ${e.message ?? e.code}';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Хатолик: $e')),
       );
     } finally {
-      if (mounted) setState(() => _publishing = false);
+      // Клип яратилмаган бўлса — юкланган видео/постер Storage'да
+      // «етим» қолмасин (айниқса пуллик эълонда: баланс етмаслиги
+      // айнан юклашдан кейин маълум бўлади).
+      if (!completed && uploadedVideoUrl.isNotEmpty) {
+        unawaited(TvStorageService().deleteClipFiles(
+          videoUrl: uploadedVideoUrl,
+          posterUrl: uploadedPosterUrl,
+        ));
+      }
+      if (mounted) {
+        setState(() {
+          _publishing = false;
+          _progressDeterminate = false;
+        });
+      }
     }
   }
 
@@ -522,496 +721,57 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Видео превью / танлаш
-              GestureDetector(
-                onTap: _publishing ? null : _showPickerSheet,
-                child: Container(
-                  height: 280,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _previewCtrl != null &&
-                          _previewCtrl!.value.isInitialized
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Center(
-                              child: AspectRatio(
-                                aspectRatio:
-                                    _previewCtrl!.value.aspectRatio,
-                                child: VideoPlayer(_previewCtrl!),
-                              ),
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: GestureDetector(
-                                onTap: _showPickerSheet,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black54,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.edit,
-                                      color: Colors.white, size: 18),
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : _isEdit
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                TvClipPoster(
-                                  url: widget.editClip!.posterUrl,
-                                ),
-                                ColoredBox(
-                                  color: Colors.black26,
-                                  child: Center(
-                                    child: Text(
-                                      context.tr('tv_publish_replace_video'),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.video_call_rounded,
-                                size: 56, color: Colors.grey.shade400),
-                            const SizedBox(height: 8),
-                            Text(
-                              context.tr('tv_publish_pick_video'),
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
+              _VideoPreviewCard(
+                controller: _previewCtrl,
+                editPosterUrl: _isEdit ? widget.editClip!.posterUrl : null,
+                onPick: _publishing ? null : _showPickerSheet,
               ),
               const SizedBox(height: 20),
-
-              // Ном
-              TextFormField(
-                controller: _titleCtrl,
-                decoration: InputDecoration(
-                  labelText: context.tr('tv_publish_name'),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                validator: (v) =>
-                    (v ?? '').trim().isEmpty ? 'Номни киритинг' : null,
-              ),
-              const SizedBox(height: 14),
-
-              // Нарх
-              TextFormField(
-                controller: _priceCtrl,
-                keyboardType: TextInputType.number,
-                enabled: _isEdit || _attachItemId.isEmpty,
-                decoration: InputDecoration(
-                  labelText: context.tr('tv_publish_price'),
-                  suffixText: 'сўм',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Тавсиф
-              TextFormField(
-                controller: _descCtrl,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: context.tr('tv_publish_description'),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Тури
-              SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: 'product',
-                    label: Text(context.tr('tv_publish_product')),
-                    icon: const Icon(Icons.shopping_bag_outlined),
-                  ),
-                  ButtonSegment(
-                    value: 'service',
-                    label: Text(context.tr('tv_publish_service')),
-                    icon: const Icon(Icons.build_outlined),
-                  ),
-                ],
-                selected: {_category},
-                onSelectionChanged: (v) =>
-                    setState(() => _category = v.first),
-              ),
-              const SizedBox(height: 16),
-
-              if (!_isEdit) ...[
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                value: _openShop || _attachItemId.isNotEmpty,
-                onChanged: _attachItemId.isNotEmpty
-                    ? null
-                    : (v) => setState(() {
-                          _openShop = v;
-                          if (!v) {
-                            _attachItemId = '';
-                            _productPhotos.clear();
-                          }
-                        }),
-                title: Text(
-                  context.tr('tv_shop_open'),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(context.tr('tv_shop_open_hint')),
-              ),
-
-              if (_openShop || _attachItemId.isNotEmpty) ...[
-                if (_myItems.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    context.tr('tv_shop_existing_item'),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  InputDecorator(
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        isExpanded: true,
-                        value: _attachItemId.isEmpty ? '' : _attachItemId,
-                        items: [
-                          DropdownMenuItem(
-                            value: '',
-                            child: Text(context.tr('tv_shop_new_item')),
-                          ),
-                          for (final it in _myItems)
-                            DropdownMenuItem(
-                              value: it.id,
-                              child: Text(
-                                it.title,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: widget.attachItemId.isNotEmpty
-                            ? null
-                            : (v) {
-                                setState(() {
-                                  _attachItemId = v ?? '';
-                                  if (_attachItemId.isNotEmpty) {
-                                    final it = _myItems.firstWhere(
-                                      (e) => e.id == _attachItemId,
-                                    );
-                                    _titleCtrl.text = it.title;
-                                    _priceCtrl.text =
-                                        it.price > 0 ? '${it.price}' : '';
-                                    _descCtrl.text = it.description;
-                                    _category = it.kind;
-                                    _productPhotos.clear();
-                                  }
-                                });
-                              },
-                      ),
-                    ),
-                  ),
-                ],
-                if (_attachItemId.isEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    context.tr('tv_shop_photo'),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    context.tr('tv_shop_photos_hint'),
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 108,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        for (var i = 0; i < _productPhotos.length; i++)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 10),
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Image.file(
-                                    File(_productPhotos[i].path),
-                                    width: 108,
-                                    height: 108,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                                if (i == 0)
-                                  Positioned(
-                                    left: 6,
-                                    bottom: 6,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        context.tr('tv_shop_cover'),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                Positioned(
-                                  right: -4,
-                                  top: -4,
-                                  child: Material(
-                                    color: Colors.black87,
-                                    shape: const CircleBorder(),
-                                    child: InkWell(
-                                      customBorder: const CircleBorder(),
-                                      onTap: _publishing
-                                          ? null
-                                          : () => setState(
-                                                () => _productPhotos.removeAt(i),
-                                              ),
-                                      child: const SizedBox(
-                                        width: 26,
-                                        height: 26,
-                                        child: Icon(
-                                          Icons.close_rounded,
-                                          size: 16,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (_productPhotos.length < TvShopItem.maxPhotos)
-                          GestureDetector(
-                            onTap: _publishing ? null : _pickProductPhotos,
-                            child: Container(
-                              width: 108,
-                              height: 108,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.add_photo_alternate_outlined,
-                                    size: 32,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${_productPhotos.length}/${TvShopItem.maxPhotos}',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+              ..._fields(context),
+              if (!_categoryLocked) ...[
+                _categorySelector(context),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 8),
-              Text(
-                context.tr('tv_social_title'),
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                context.tr('tv_social_hint'),
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final id in TvSocial.ordered)
-                    FilterChip(
-                      label: Text(context.tr(TvSocial.labelKey(id))),
-                      selected: _socialNetworks.contains(id),
-                      onSelected: (on) => setState(() {
-                        if (on) {
-                          _socialNetworks.add(id);
-                        } else {
-                          _socialNetworks.remove(id);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-              ],
-
-              const SizedBox(height: 10),
-
-              // Жойлашув
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.location_on,
-                        color: Colors.grey, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _isEdit
-                            ? (widget.editClip!.districtLabel.isNotEmpty
-                                ? widget.editClip!.districtLabel
-                                : context.tr('tv_publish_no_location'))
-                            : (_districtPreview.isNotEmpty
-                                ? _districtPreview
-                                : context.tr('tv_publish_no_location')),
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: (_isEdit
-                                  ? widget.editClip!.districtLabel
-                                  : _districtPreview)
-                              .isNotEmpty
-                              ? Colors.black87
-                              : Colors.grey,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!_isEdit) ...[
-                const SizedBox(height: 6),
-                Text(
-                  context.tr('tv_publish_location_hint'),
-                  style: TextStyle(
-                      color: Colors.grey.shade500, fontSize: 12),
-                ),
-              ],
-              const SizedBox(height: 24),
-
-              // Юклаш прогресси
-              if (_publishing) ...[
-                LinearProgressIndicator(
-                  value: _publishStage.contains('юклан') || _publishStage.contains('upload')
-                      ? _uploadProgress
-                      : null,
-                  backgroundColor: Colors.grey.shade200,
-                  color: const Color(0xFF00E676),
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _publishStage.isNotEmpty
-                      ? '$_publishStage${_uploadProgress > 0 && _uploadProgress < 1 ? ' ${(_uploadProgress * 100).toInt()}%' : ''}'
-                      : '${(_uploadProgress * 100).toInt()}%',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    color: Colors.grey.shade700,
-                  ),
+              if (!_isEdit && _category == 'ad') ...[
+                TvAdTierPicker(
+                  selectedTier: _adTier,
+                  selectedDays: _adDurationDays,
+                  pricing: _adPricing,
+                  walletBalance: _walletBalance,
+                  enabled: !_publishing,
+                  onTierChanged: (t) => setState(() => _adTier = t),
+                  onDaysChanged: (d) => setState(() => _adDurationDays = d),
                 ),
                 const SizedBox(height: 16),
               ],
-
-              // Жойлаш тугмаси
-              SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _publishing ? null : _publish,
-                  icon: _publishing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(
-                          _isEdit
-                              ? Icons.save_rounded
-                              : Icons.publish_rounded,
-                        ),
-                  label: Text(
-                    context.tr(
-                      _isEdit ? 'tv_publish_save' : 'tv_publish_submit',
-                    ),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 2,
+              if (!_isEdit && _category != 'ad') ...[
+                ..._shopSection(context),
+                _SocialPicker(
+                  selected: _socialNetworks,
+                  onToggle: (id, on) => setState(
+                    () => on ? _socialNetworks.add(id) : _socialNetworks.remove(id),
                   ),
                 ),
+              ],
+              const SizedBox(height: 10),
+              _LocationCard(
+                label: _isEdit ? widget.editClip!.districtLabel : _districtPreview,
+                showHint: !_isEdit,
+              ),
+              const SizedBox(height: 24),
+              if (_publishing) ...[
+                _PublishProgress(
+                  determinate: _progressDeterminate,
+                  progress: _uploadProgress,
+                  stage: _publishStage,
+                ),
+                const SizedBox(height: 16),
+              ],
+              _SubmitButton(
+                isEdit: _isEdit,
+                busy: _publishing,
+                enabled: !_publishing && !_adInsufficientBalance,
+                onPressed: _publish,
               ),
             ],
           ),
@@ -1019,4 +779,566 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       ),
     );
   }
+
+  /// Ном / нарх / тавсиф / телефонни кўрсатиш — контроллерларга боғлиқ
+  /// бўлгани учун State ичида қолади.
+  List<Widget> _fields(BuildContext context) => [
+        TextFormField(
+          controller: _titleCtrl,
+          maxLength: _titleMaxLen,
+          decoration: InputDecoration(
+            labelText: context.tr('tv_publish_name'),
+            counterText: '',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          validator: (v) => (v ?? '').trim().isEmpty
+              ? context.tr('tv_publish_name_required')
+              : null,
+        ),
+        const SizedBox(height: 14),
+        // Эълон режимида бу МАҲСУЛОТ нархи (реклама нархи тариф×муддатдан
+        // келади), шунинг учун ёрлиқ аниқлаштирилади.
+        TextFormField(
+          controller: _priceCtrl,
+          keyboardType: TextInputType.number,
+          enabled: _isEdit || _attachItemId.isEmpty,
+          maxLength: 12,
+          decoration: InputDecoration(
+            labelText: context.tr(
+              _category == 'ad' ? 'tv_publish_price_product' : 'tv_publish_price',
+            ),
+            suffixText: 'сўм',
+            counterText: '',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          controller: _descCtrl,
+          maxLines: 3,
+          maxLength: _descMaxLen,
+          decoration: InputDecoration(
+            labelText: context.tr('tv_publish_description'),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 14),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          value: _showPhone,
+          onChanged: (v) => setState(() => _showPhone = v),
+          title: Text(
+            context.tr('tv_publish_show_phone'),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          subtitle: Text(
+            context.tr('tv_publish_show_phone_hint'),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ];
+
+  /// Тури — `ad`/`news` таҳририда ўзгартирилмайди.
+  Widget _categorySelector(BuildContext context) => SegmentedButton<String>(
+        segments: [
+          ButtonSegment(
+            value: 'product',
+            label: Text(context.tr('tv_publish_product')),
+            icon: const Icon(Icons.shopping_bag_outlined),
+          ),
+          ButtonSegment(
+            value: 'service',
+            label: Text(context.tr('tv_publish_service')),
+            icon: const Icon(Icons.build_outlined),
+          ),
+          if (!_isEdit)
+            ButtonSegment(
+              value: 'ad',
+              label: Text(context.tr('tv_publish_ad')),
+              icon: const Icon(Icons.campaign_outlined),
+            ),
+        ],
+        selected: {_category},
+        onSelectionChanged: (v) => setState(() => _category = v.first),
+      );
+
+  /// «Дўкон очиш» блоки: мавжуд товарни танлаш ёки янги товар расмлари.
+  List<Widget> _shopSection(BuildContext context) {
+    final shopOn = _openShop || _attachItemId.isNotEmpty;
+    return [
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        value: shopOn,
+        onChanged: _attachItemId.isNotEmpty
+            ? null
+            : (v) => setState(() {
+                  _openShop = v;
+                  if (!v) {
+                    _attachItemId = '';
+                    _productPhotos.clear();
+                  }
+                }),
+        title: Text(
+          context.tr('tv_shop_open'),
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: Text(context.tr('tv_shop_open_hint')),
+      ),
+      if (shopOn) ...[
+        if (_myItems.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            context.tr('tv_shop_existing_item'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          InputDecorator(
+            decoration: InputDecoration(
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: _attachItemId,
+                items: [
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(context.tr('tv_shop_new_item')),
+                  ),
+                  for (final it in _myItems)
+                    DropdownMenuItem(
+                      value: it.id,
+                      child: Text(it.title, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged:
+                    widget.attachItemId.isNotEmpty ? null : _onExistingItemPicked,
+              ),
+            ),
+          ),
+        ],
+        if (_attachItemId.isEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            context.tr('tv_shop_photo'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.tr('tv_shop_photos_hint'),
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ProductPhotoStrip(
+            photos: _productPhotos,
+            enabled: !_publishing,
+            onAdd: _pickProductPhotos,
+            onRemove: (i) => setState(() => _productPhotos.removeAt(i)),
+          ),
+        ],
+      ],
+      const SizedBox(height: 8),
+    ];
+  }
+
+  /// Мавжуд товар танланганда — форма шу товар маълумотлари билан тўлади.
+  void _onExistingItemPicked(String? id) {
+    setState(() {
+      _attachItemId = id ?? '';
+      if (_attachItemId.isEmpty) return;
+      final it = _myItems.firstWhere((e) => e.id == _attachItemId);
+      _titleCtrl.text = it.title;
+      _priceCtrl.text = it.price > 0 ? '${it.price}' : '';
+      _descCtrl.text = it.description;
+      _category = it.kind;
+      _productPhotos.clear();
+    });
+  }
 }
+
+/// Танланган видео превьюси; таҳрирда — эски постер «алмаштириш» ёзуви билан.
+class _VideoPreviewCard extends StatelessWidget {
+  const _VideoPreviewCard({
+    required this.controller,
+    required this.editPosterUrl,
+    required this.onPick,
+  });
+
+  final VideoPlayerController? controller;
+  final String? editPosterUrl;
+  final VoidCallback? onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = controller;
+    final ready = ctrl != null && ctrl.value.isInitialized;
+    return GestureDetector(
+      onTap: onPick,
+      child: Container(
+        height: 280,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ready
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  Center(
+                    child: AspectRatio(
+                      aspectRatio: ctrl.value.aspectRatio,
+                      child: VideoPlayer(ctrl),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.edit,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              )
+            : editPosterUrl != null
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      TvClipPoster(url: editPosterUrl!),
+                      ColoredBox(
+                        color: Colors.black26,
+                        child: Center(
+                          child: Text(
+                            context.tr('tv_publish_replace_video'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.video_call_rounded,
+                          size: 56, color: Colors.grey.shade400),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.tr('tv_publish_pick_video'),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+      ),
+    );
+  }
+}
+
+/// Товар расмлари тасмаси — биринчиси муқова.
+class _ProductPhotoStrip extends StatelessWidget {
+  const _ProductPhotoStrip({
+    required this.photos,
+    required this.enabled,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final List<XFile> photos;
+  final bool enabled;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 108,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (var i = 0; i < photos.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(
+                      File(photos[i].path),
+                      width: 108,
+                      height: 108,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  if (i == 0)
+                    Positioned(
+                      left: 6,
+                      bottom: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          context.tr('tv_shop_cover'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Material(
+                      color: Colors.black87,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: enabled ? () => onRemove(i) : null,
+                        child: const SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: Icon(Icons.close_rounded,
+                              size: 16, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (photos.length < TvShopItem.maxPhotos)
+            GestureDetector(
+              onTap: enabled ? onAdd : null,
+              child: Container(
+                width: 108,
+                height: 108,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_photo_alternate_outlined,
+                        size: 32, color: Colors.grey.shade500),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${photos.length}/${TvShopItem.maxPhotos}',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Роликни AVA расмий ижтимоий тармоқларига ҳам юбориш танлови.
+class _SocialPicker extends StatelessWidget {
+  const _SocialPicker({required this.selected, required this.onToggle});
+
+  final Set<String> selected;
+  final void Function(String id, bool on) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          context.tr('tv_social_title'),
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          context.tr('tv_social_hint'),
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final id in TvSocial.ordered)
+              FilterChip(
+                label: Text(context.tr(TvSocial.labelKey(id))),
+                selected: selected.contains(id),
+                onSelected: (on) => onToggle(id, on),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Ролик қайси ҳудудга бириктирилиши.
+class _LocationCard extends StatelessWidget {
+  const _LocationCard({required this.label, required this.showHint});
+
+  final String label;
+  final bool showHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = label.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.location_on, color: Colors.grey, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  has ? label : context.tr('tv_publish_no_location'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: has ? Colors.black87 : Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (showHint) ...[
+          const SizedBox(height: 6),
+          Text(
+            context.tr('tv_publish_location_hint'),
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Юклаш прогресси — сиқиш босқичида фоиз номаълум (indeterminate).
+class _PublishProgress extends StatelessWidget {
+  const _PublishProgress({
+    required this.determinate,
+    required this.progress,
+    required this.stage,
+  });
+
+  final bool determinate;
+  final double progress;
+  final String stage;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (progress * 100).toInt();
+    final showPct = progress > 0 && progress < 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LinearProgressIndicator(
+          value: determinate ? progress : null,
+          backgroundColor: Colors.grey.shade200,
+          color: const Color(0xFF00E676),
+          minHeight: 6,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          stage.isNotEmpty ? '$stage${showPct ? ' $pct%' : ''}' : '$pct%',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SubmitButton extends StatelessWidget {
+  const _SubmitButton({
+    required this.isEdit,
+    required this.busy,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final bool isEdit;
+  final bool busy;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ElevatedButton.icon(
+        onPressed: enabled ? onPressed : null,
+        icon: busy
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : Icon(isEdit ? Icons.save_rounded : Icons.publish_rounded),
+        label: Text(
+          context.tr(isEdit ? 'tv_publish_save' : 'tv_publish_submit'),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF00E676),
+          foregroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          elevation: 2,
+        ),
+      ),
+    );
+  }
+}
+

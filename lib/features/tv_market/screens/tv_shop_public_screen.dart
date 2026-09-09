@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
@@ -42,8 +43,13 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
   List<TvShopItem> _items = const [];
   String _displayName = '';
   String _district = '';
+  String _photoUrl = '';
   int _totalViewCount = 0;
   int _clipCount = 0;
+  String _viewerPhone = '';
+  int _followerCount = 0;
+  bool _isFollowing = false;
+  bool _followBusy = false;
   bool _loading = true;
 
   @override
@@ -70,6 +76,8 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
         final fromShop = tvOwnerDisplayName(shop?.name ?? '');
         _displayName = fromProfile.isNotEmpty ? fromProfile : fromShop;
       }
+      final photos = await _profilesRepo.fetchPhotos([widget.ownerPhone]);
+      final photoUrl = photos[canonicalPhoneId(widget.ownerPhone)] ?? '';
       if (_district.isEmpty && sorted.isNotEmpty) {
         _district = sorted.first.districtLabel.trim();
       }
@@ -77,17 +85,65 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
           await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
       final ownerClips = await _clipsRepo.fetchByOwner(widget.ownerPhone);
       final clipCount = ownerClips.where((c) => c.isActive).length;
+      final followerCount =
+          await _profilesRepo.fetchFollowerCount(widget.ownerPhone);
+      final prefs = await SharedPreferences.getInstance();
+      final viewerPhone = phoneDigits(prefs.getString('user_phone') ?? '');
+      var isFollowing = false;
+      if (viewerPhone.isNotEmpty) {
+        isFollowing = await _profilesRepo.isFollowing(
+          viewerId: viewerPhone,
+          targetId: widget.ownerPhone,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _shop = shop;
         _items = sorted;
         _totalViewCount = totalViews;
         _clipCount = clipCount;
+        _photoUrl = photoUrl;
+        _followerCount = followerCount;
+        _viewerPhone = viewerPhone;
+        _isFollowing = isFollowing;
         _loading = false;
       });
     } catch (e) {
       debugPrint('[TvShopPublic] $e');
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_followBusy) return;
+    if (_viewerPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_channel_follow_need_auth'))),
+      );
+      return;
+    }
+    _followBusy = true;
+    final was = _isFollowing;
+    setState(() {
+      _isFollowing = !was;
+      _followerCount += was ? -1 : 1;
+    });
+    try {
+      final following = await _profilesRepo.toggleFollow(
+        viewerId: _viewerPhone,
+        targetId: widget.ownerPhone,
+      );
+      if (mounted) setState(() => _isFollowing = following);
+    } catch (e) {
+      debugPrint('[TvShopPublic] follow $e');
+      if (mounted) {
+        setState(() {
+          _isFollowing = was;
+          _followerCount += was ? 1 : -1;
+        });
+      }
+    } finally {
+      _followBusy = false;
     }
   }
 
@@ -158,6 +214,10 @@ class _TvShopPublicScreenState extends State<TvShopPublicScreen> {
                           districtLabel: _district,
                           clipCount: _clipCount > 0 ? _clipCount : null,
                           totalViewCount: _totalViewCount,
+                          photoUrl: _photoUrl,
+                          followerCount: _followerCount,
+                          isFollowing: _isFollowing,
+                          onToggleFollow: _toggleFollow,
                         ),
                         Text(
                           context.tr('tv_shop_vitrine'),

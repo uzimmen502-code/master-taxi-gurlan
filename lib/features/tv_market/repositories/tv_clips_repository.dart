@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/utils/formatters.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
+import '../models/tv_comment.dart';
 import '../services/tv_storage_service.dart';
 import '../utils/tv_clip_search.dart';
 import '../utils/tv_clip_shuffle.dart';
@@ -38,18 +39,31 @@ class TvClipsRepository {
   String? _searchPoolKey;
   DateTime? _searchPoolAt;
 
+  /// `categories` берилса — AVAGram'нинг «Кун янгиликлари» / «Реклама ва
+  /// Эълонлар» таблари учун `category whereIn` фильтри (max 30 қиймат).
+  /// `null`/бўш = AVAGram (барча category).
+  Query<Map<String, dynamic>> _withCategory(
+    Query<Map<String, dynamic>> q,
+    List<String>? categories,
+  ) {
+    if (categories == null || categories.isEmpty) return q;
+    return q.where('category', whereIn: categories);
+  }
+
   /// Яқиндаги клиплар — шу туман, сўнг янги.
   Future<List<TvClip>> fetchNearby({
     required String districtId,
     int limit = 20,
+    List<String>? categories,
   }) async {
-    final snap = await _col
+    var q = _col
         .where('status', isEqualTo: 'active')
-        .where('districtId', isEqualTo: districtId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
+        .where('districtId', isEqualTo: districtId);
+    q = _withCategory(q, categories);
+    final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
+    return tvApplyAdTierPriority(
+      tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList()),
+    );
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).
@@ -83,6 +97,7 @@ class TvClipsRepository {
     DocumentSnapshot<Map<String, dynamic>>? nearbyCursor,
     DocumentSnapshot<Map<String, dynamic>>? allCursor,
     bool nearbyExhausted = false,
+    List<String>? categories,
   }) async {
     final out = <TvClip>[];
     final seen = {...excludeIds};
@@ -101,21 +116,26 @@ class TvClipsRepository {
       return q.limit(lim).get();
     }
 
-    Query<Map<String, dynamic>> nearbyQ() => _col
-        .where('status', isEqualTo: 'active')
-        .where('districtId', isEqualTo: districtId)
-        .orderBy('createdAt', descending: true);
+    Query<Map<String, dynamic>> nearbyQ() => _withCategory(
+          _col
+              .where('status', isEqualTo: 'active')
+              .where('districtId', isEqualTo: districtId),
+          categories,
+        ).orderBy('createdAt', descending: true);
 
-    Query<Map<String, dynamic>> allQ() => _col
-        .where('status', isEqualTo: 'active')
-        .orderBy('createdAt', descending: true);
+    Query<Map<String, dynamic>> allQ() => _withCategory(
+          _col.where('status', isEqualTo: 'active'),
+          categories,
+        ).orderBy('createdAt', descending: true);
 
     if (!nExh && out.length < limit) {
       final snap = await run(nearbyQ(), nCur, limit);
       for (final d in snap.docs) {
         nCur = d;
         final c = TvClip.fromFirestore(d);
-        if (seen.add(c.id)) out.add(c);
+        // `seen` барибир белгиланади (тарихда бўлса), тариф жадвали
+        // «Реклама жойлашуви»: basic/visibility Home'да кўринмайди.
+        if (seen.add(c.id) && c.showsOnHome) out.add(c);
       }
       nExh = snap.docs.length < limit;
     }
@@ -130,7 +150,7 @@ class TvClipsRepository {
       for (final d in snap.docs) {
         aCur = d;
         final c = TvClip.fromFirestore(d);
-        if (seen.add(c.id)) {
+        if (seen.add(c.id) && c.showsOnHome) {
           out.add(c);
           if (out.length >= limit) break;
         }
@@ -139,7 +159,7 @@ class TvClipsRepository {
     }
 
     return TvClipPage(
-      clips: tvShuffleClips(out),
+      clips: tvApplyAdTierPriority(tvShuffleClips(out)),
       nearbyCursor: nCur,
       allCursor: aCur,
       nearbyExhausted: nExh,
@@ -169,13 +189,16 @@ class TvClipsRepository {
   }
 
   /// Барча фаол клиплар — ҳудудсиз (fallback).
-  Future<List<TvClip>> fetchAllActive({int limit = 30}) async {
-    final snap = await _col
-        .where('status', isEqualTo: 'active')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
+  Future<List<TvClip>> fetchAllActive({
+    int limit = 30,
+    List<String>? categories,
+  }) async {
+    var q = _col.where('status', isEqualTo: 'active');
+    q = _withCategory(q, categories);
+    final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
+    return tvApplyAdTierPriority(
+      tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList()),
+    );
   }
 
   Future<List<TvClip>> _recentSearchPool(String districtId) async {
@@ -297,6 +320,7 @@ class TvClipsRepository {
     required String description,
     required String category,
     required List<String> searchTokens,
+    required bool showPhone,
     String? videoUrl,
     String? posterUrl,
   }) async {
@@ -307,6 +331,7 @@ class TvClipsRepository {
       'description': description.trim(),
       'category': category,
       'searchTokens': searchTokens,
+      'showPhone': showPhone,
     };
     if (videoUrl != null && videoUrl.isNotEmpty) data['videoUrl'] = videoUrl;
     if (posterUrl != null && posterUrl.isNotEmpty) data['posterUrl'] = posterUrl;
@@ -374,7 +399,11 @@ class TvClipsRepository {
     final profileRef = _db.collection('tv_public_profiles').doc(ownerId);
 
     return _db.runTransaction((tx) async {
+      // Firestore: transaction ичида БАРЧА read'лар write'лардан олдин
+      // бўлиши шарт — иккала get() ҳам аввал.
       final viewSnap = await tx.get(viewRef);
+      final profileSnap =
+          ownerId.isNotEmpty ? await tx.get(profileRef) : null;
       final now = DateTime.now();
       if (viewSnap.exists) {
         final ts = viewSnap.data()?['viewedAt'];
@@ -388,11 +417,8 @@ class TvClipsRepository {
         tx.set(viewRef, {'viewedAt': FieldValue.serverTimestamp()});
       }
       tx.update(clipRef, {'viewCount': FieldValue.increment(1)});
-      if (ownerId.isNotEmpty) {
-        final profileSnap = await tx.get(profileRef);
-        if (profileSnap.exists) {
-          tx.update(profileRef, {'totalViewCount': FieldValue.increment(1)});
-        }
+      if (profileSnap != null && profileSnap.exists) {
+        tx.update(profileRef, {'totalViewCount': FieldValue.increment(1)});
       }
       return true;
     });
@@ -434,6 +460,77 @@ class TvClipsRepository {
       // Klip o'chirilgan yoki write muvaffaqiyatsiz — analitika uchun
       // retry qilinmaydi (viewCount'dagi kabi best-effort).
     }
+  }
+
+  /// Изоҳлар — эскидан янгига (чат тарзида ўқилсин).
+  Future<List<TvComment>> fetchComments(String clipId) async {
+    if (clipId.isEmpty) return const [];
+    final snap = await _col
+        .doc(clipId)
+        .collection('comments')
+        .orderBy('createdAt', descending: false)
+        .limit(200)
+        .get();
+    return snap.docs.map(TvComment.fromFirestore).toList();
+  }
+
+  /// Тайёр савол қўшади (тезкор, spam хавфи паст) — `commentCount` +1.
+  Future<void> addQuickComment({
+    required String clipId,
+    required String authorPhone,
+    required String authorName,
+    required String key,
+  }) async {
+    if (!tvCommentQuickKeys.contains(key)) return;
+    await _addComment(
+      clipId: clipId,
+      authorPhone: authorPhone,
+      authorName: authorName,
+      type: 'quick',
+      key: key,
+    );
+  }
+
+  /// Эркин матнли изоҳ (≤ [tvCommentTextMaxLen] белги) — `commentCount` +1.
+  Future<void> addTextComment({
+    required String clipId,
+    required String authorPhone,
+    required String authorName,
+    required String text,
+  }) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || trimmed.length > tvCommentTextMaxLen) return;
+    await _addComment(
+      clipId: clipId,
+      authorPhone: authorPhone,
+      authorName: authorName,
+      type: 'text',
+      text: trimmed,
+    );
+  }
+
+  Future<void> _addComment({
+    required String clipId,
+    required String authorPhone,
+    required String authorName,
+    required String type,
+    String key = '',
+    String text = '',
+  }) async {
+    if (clipId.isEmpty || authorPhone.isEmpty) return;
+    final clipRef = _col.doc(clipId);
+    final commentRef = clipRef.collection('comments').doc();
+    await _db.runTransaction((tx) async {
+      tx.set(commentRef, {
+        'authorPhone': authorPhone,
+        'authorName': authorName,
+        'type': type,
+        if (key.isNotEmpty) 'key': key,
+        if (text.isNotEmpty) 'text': text,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      tx.update(clipRef, {'commentCount': FieldValue.increment(1)});
+    });
   }
 
   Future<Set<String>> savedClipIds(String userId) async {

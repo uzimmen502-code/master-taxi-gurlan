@@ -128,9 +128,16 @@ class ProfileController extends ChangeNotifier {
   /// эски фойдаланувчилар янги форматда қайта тўлдиришлари керак.
   bool get hasCompleteAddress => structuredAddress.isComplete;
 
+  /// Қўлдаги 3 майдон тўлдирилганми (GPS шарт эмас). Профилдаги
+  /// огоҳлантириш банери шунга қараб кўрсатилади: GPS энди мажбурий
+  /// эмас (`AddressEditScreen`да сақлашни бloкламайди), шунинг учун
+  /// манзилини киритган фойдаланувчи бекорга безовта қилинмайди.
+  /// Буюртма оқимлари (курьер/карта) аввалгидек `isComplete` талаб қилади.
+  bool get hasUsableAddress => structuredAddress.hasManualAddress;
+
   /// UI учун — структурaнli ёки legacy.
   String get addressDisplay {
-    if (structuredAddress.isComplete) return structuredAddress.formatted;
+    if (structuredAddress.hasManualAddress) return structuredAddress.formatted;
     return address;
   }
 

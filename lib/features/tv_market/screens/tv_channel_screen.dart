@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
@@ -7,6 +9,7 @@ import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../services/tv_clip_delete.dart';
+import '../services/tv_storage_service.dart';
 import '../utils/tv_highlight_order.dart';
 import '../utils/tv_view_format.dart';
 import '../widgets/tv_channel_contact_bar.dart';
@@ -39,10 +42,17 @@ class TvChannelScreen extends StatefulWidget {
 class _TvChannelScreenState extends State<TvChannelScreen> {
   final _clipsRepo = TvClipsRepository();
   final _profilesRepo = TvPublicProfilesRepository();
+  final _storage = TvStorageService();
+  final _picker = ImagePicker();
   List<TvClip> _clips = const [];
   String _displayName = '';
   String _district = '';
+  String _photoUrl = '';
   int _totalViewCount = 0;
+  String _viewerPhone = '';
+  int _followerCount = 0;
+  bool _isFollowing = false;
+  bool _followBusy = false;
   bool _loading = true;
 
   @override
@@ -71,15 +81,88 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
       }
       final totalViews =
           await _profilesRepo.fetchTotalViewCount(widget.ownerPhone);
+      final photos = await _profilesRepo.fetchPhotos([widget.ownerPhone]);
+      final followerCount =
+          await _profilesRepo.fetchFollowerCount(widget.ownerPhone);
+      var viewerPhone = '';
+      var isFollowing = false;
+      if (!widget.isOwner) {
+        final prefs = await SharedPreferences.getInstance();
+        viewerPhone = phoneDigits(prefs.getString('user_phone') ?? '');
+        if (viewerPhone.isNotEmpty) {
+          isFollowing = await _profilesRepo.isFollowing(
+            viewerId: viewerPhone,
+            targetId: widget.ownerPhone,
+          );
+        }
+      }
       if (!mounted) return;
       setState(() {
         _clips = sorted;
         _totalViewCount = totalViews;
+        _photoUrl = photos[canonicalPhoneId(widget.ownerPhone)] ?? '';
+        _followerCount = followerCount;
+        _viewerPhone = viewerPhone;
+        _isFollowing = isFollowing;
         _loading = false;
       });
     } catch (e) {
       debugPrint('[TvChannel] $e');
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_followBusy) return;
+    if (_viewerPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_channel_follow_need_auth'))),
+      );
+      return;
+    }
+    _followBusy = true;
+    final was = _isFollowing;
+    setState(() {
+      _isFollowing = !was;
+      _followerCount += was ? -1 : 1;
+    });
+    try {
+      final following = await _profilesRepo.toggleFollow(
+        viewerId: _viewerPhone,
+        targetId: widget.ownerPhone,
+      );
+      if (mounted) setState(() => _isFollowing = following);
+    } catch (e) {
+      debugPrint('[TvChannel] follow $e');
+      if (mounted) {
+        setState(() {
+          _isFollowing = was;
+          _followerCount += was ? 1 : -1;
+        });
+      }
+    } finally {
+      _followBusy = false;
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 88);
+    if (picked == null) return;
+    try {
+      var bytes = await picked.readAsBytes();
+      bytes = await _storage.compressShopPhoto(bytes);
+      final url = await _storage.uploadProfilePhoto(
+        ownerPhone: widget.ownerPhone,
+        bytes: bytes,
+      );
+      await _profilesRepo.upsertPhoto(uid: widget.ownerPhone, photoUrl: url);
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+    } catch (e) {
+      debugPrint('[TvChannel] photo $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
     }
   }
 
@@ -179,6 +262,11 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
                           districtLabel: _district,
                           clipCount: _clips.length,
                           totalViewCount: _totalViewCount,
+                          photoUrl: _photoUrl,
+                          onEditPhoto: widget.isOwner ? _pickPhoto : null,
+                          followerCount: _followerCount,
+                          isFollowing: _isFollowing,
+                          onToggleFollow: widget.isOwner ? null : _toggleFollow,
                         ),
                       ),
                     ),

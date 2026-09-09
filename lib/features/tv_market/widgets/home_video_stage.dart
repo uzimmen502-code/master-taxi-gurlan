@@ -22,6 +22,7 @@ import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
 import 'tv_clip_poster.dart';
 import 'tv_owner_action_bar.dart';
+import 'tv_owner_avatar.dart';
 
 /// Home пастидаги овозсиз видеолар (sliver) — пастга скролл кейинги клип.
 class HomeVideoStage extends StatefulWidget {
@@ -499,6 +500,11 @@ class _HomeClipCard extends StatelessWidget {
                     label: clip.likeCount > 0 ? '${clip.likeCount}' : '',
                   ),
                   const SizedBox(height: 12),
+                  _MiniBtn(
+                    icon: Icons.mode_comment_outlined,
+                    label: clip.commentCount > 0 ? '${clip.commentCount}' : '',
+                  ),
+                  const SizedBox(height: 12),
                   const _MiniBtn(icon: Icons.send_rounded, label: ''),
                   const SizedBox(height: 12),
                   const _MiniBtn(
@@ -517,6 +523,12 @@ class _HomeClipCard extends StatelessWidget {
                   if (name.isNotEmpty) ...[
                     Row(
                       children: [
+                        TvOwnerAvatar(
+                          name: name,
+                          photoUrl: clip.ownerPhotoUrl,
+                          radius: 10,
+                        ),
+                        const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             name,
@@ -587,30 +599,30 @@ class _HomeClipCard extends StatelessWidget {
                         height: 40,
                       ),
                     )
-                  else
+                  else if (clip.showPhone)
                     SizedBox(
                       width: double.infinity,
-                      height: 40,
+                      height: 32,
                       child: ElevatedButton.icon(
                         onPressed: onContact,
                         icon: const Icon(
                           Icons.chat_bubble_outline_rounded,
-                          size: 17,
+                          size: 14,
                         ),
                         label: Text(
                           context.tr('tv_market_contact'),
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
-                            fontSize: 14,
+                            fontSize: 13,
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00E676),
-                          foregroundColor: Colors.black,
+                          backgroundColor: Colors.white.withValues(alpha: 0.28),
+                          foregroundColor: const Color(0xFF00E676),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          elevation: 2,
+                          elevation: 0,
                         ),
                       ),
                     ),

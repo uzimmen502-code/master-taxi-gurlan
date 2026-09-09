@@ -483,6 +483,20 @@ service cloud.firestore {
           : 0;
     }
 
+    function tvClipCommentCountNow() {
+      return ('commentCount' in resource.data
+              && resource.data.commentCount is int)
+          ? resource.data.commentCount : 0;
+    }
+
+    function tvClipCommentCountOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['commentCount'])
+          && request.resource.data.commentCount is int
+          && request.resource.data.commentCount == tvClipCommentCountNow() + 1;
+    }
+
     function tvClipViewCountOnly() {
       return isAuth()
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -498,6 +512,26 @@ service cloud.firestore {
           : 0;
     }
 
+    function tvPublicProfileFollowerCountNow() {
+      return ('followerCount' in resource.data
+              && resource.data.followerCount is int)
+          ? resource.data.followerCount : 0;
+    }
+
+    function tvPublicProfileFollowerCountOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['followerCount'])
+          && request.resource.data.followerCount is int
+          && request.resource.data.followerCount >= 0
+          && (
+            request.resource.data.followerCount
+                == tvPublicProfileFollowerCountNow() + 1
+            || request.resource.data.followerCount
+                == tvPublicProfileFollowerCountNow() - 1
+          );
+    }
+
     function tvPublicProfileViewCountOnly() {
       return isAuth()
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -505,6 +539,12 @@ service cloud.firestore {
           && request.resource.data.totalViewCount is int
           && request.resource.data.totalViewCount
               == tvPublicProfileTotalViewCountNow() + 1;
+    }
+
+    function tvPublicProfilePhotoOk() {
+      return !('photoUrl' in request.resource.data)
+          || (request.resource.data.photoUrl is string
+              && request.resource.data.photoUrl.size() <= 500);
     }
 
     function tvShopOwnerFieldsLocked() {
@@ -2276,15 +2316,42 @@ service cloud.firestore {
     // TV Market клиплари — ўқиш ҳаммага; ёзиш authed.
     match /tv_clips/{clipId} {
       allow read: if true;
-      allow create: if isAuth();
+      // 'ad' — faqat CF (publishTvAd, Admin SDK) yozadi: to'lov wallet'dan
+      // shu yerda debit qilinadi, klient to'g'ridan-to'g'ri yozsa to'lovsiz
+      // reklama joylab qo'yishi mumkin bo'lardi.
+      allow create: if isAuth() && request.resource.data.category != 'ad';
       allow update: if isAdmin()
           || (isAuth()
-              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone))
+              && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone)
+              && !(request.resource.data.category == 'ad' && resource.data.category != 'ad')
+              && !request.resource.data.diff(resource.data).affectedKeys()
+                  .hasAny(['expiresAt', 'adDurationDays', 'adTier']))
           || tvClipLikeCountOnly()
-          || tvClipViewCountOnly();
+          || tvClipViewCountOnly()
+          || tvClipCommentCountOnly();
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), request.resource.data.authorPhone)
+            && request.resource.data.authorName is string
+            && request.resource.data.authorName.size() <= 80
+            && (
+              (request.resource.data.type == 'quick'
+                && request.resource.data.key in ['price', 'location', 'delivery'])
+              || (request.resource.data.type == 'text'
+                && request.resource.data.text is string
+                && request.resource.data.text.size() > 0
+                && request.resource.data.text.size() <= 140)
+            );
+        allow update: if false;
+        allow delete: if isAdmin()
+            || (isAuth()
+                && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.authorPhone));
+      }
 
       match /likes/{likerId} {
         allow read: if isAuth();
@@ -2315,16 +2382,29 @@ service cloud.firestore {
           && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
-          && request.resource.data.name.size() <= 80;
+          && request.resource.data.name.size() <= 80
+          && tvPublicProfilePhotoOk();
       allow update: if tvPublicProfileViewCountOnly()
+          || tvPublicProfileFollowerCountOnly()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone)
               && request.resource.data.name is string
               && request.resource.data.name.size() > 0
-              && request.resource.data.name.size() <= 80);
+              && request.resource.data.name.size() <= 80
+              && tvPublicProfilePhotoOk());
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), ownerPhone));
+
+      match /followers/{followerId} {
+        allow read: if isAuth();
+        allow create: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), followerId)
+            && !phoneDocIdsMatch(followerId, ownerPhone);
+        allow update: if false;
+        allow delete: if isAuth()
+            && phoneDocIdsMatch(userDocIdFromPhoneToken(), followerId);
+      }
     }
 
     match /tv_shops/{ownerPhone} {

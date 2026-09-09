@@ -48,8 +48,9 @@ Future<TvPublisherHydrate> hydrateTvPublisherNames(List<TvClip> clips) async {
   if (clips.isEmpty) {
     return const TvPublisherHydrate(clips: [], publicNames: {});
   }
-  final names =
-      await TvPublicProfilesRepository().fetchMany(clips.map((c) => c.ownerPhone));
+  final profilesRepo = TvPublicProfilesRepository();
+  final names = await profilesRepo.fetchMany(clips.map((c) => c.ownerPhone));
+  final photos = await profilesRepo.fetchPhotos(clips.map((c) => c.ownerPhone));
   final geos = await TvClipGeo.resolveForOwners(clips.map((c) => c.ownerPhone));
   return TvPublisherHydrate(
     publicNames: names,
@@ -59,6 +60,7 @@ Future<TvPublisherHydrate> hydrateTvPublisherNames(List<TvClip> clips) async {
           ownerName: tvOwnerDisplayName(c.ownerName).isNotEmpty
               ? c.ownerName
               : (names[canonicalPhoneId(c.ownerPhone)] ?? c.ownerName),
+          ownerPhotoUrl: photos[canonicalPhoneId(c.ownerPhone)] ?? c.ownerPhotoUrl,
           districtId: geos[canonicalPhoneId(c.ownerPhone)]?.id,
           districtLabel: geos[canonicalPhoneId(c.ownerPhone)]?.label,
         ),

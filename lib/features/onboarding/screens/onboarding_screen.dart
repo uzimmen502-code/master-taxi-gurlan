@@ -8,7 +8,6 @@ import '../../../core/brand_labels.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../repositories/user_repository.dart';
-import '../../../services/location_service.dart';
 import '../controllers/onboarding_controller.dart';
 import '../widgets/device_binding_conflict_sheet.dart';
 import '../../../repositories/device_binding_repository.dart';
@@ -24,7 +23,6 @@ class OnboardingScreen extends StatelessWidget {
       create: (ctx) {
         final c = OnboardingController(
           userRepo: ctx.read<UserRepository>(),
-          locationService: ctx.read<LocationService>(),
         );
         unawaited(c.loadPreselectedGeo());
         c.prefetchFingerprint();

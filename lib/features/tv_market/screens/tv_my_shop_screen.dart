@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
@@ -8,6 +9,8 @@ import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_public_profiles_repository.dart';
 import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
+import '../services/tv_storage_service.dart';
+import '../widgets/tv_ad_renew_sheet.dart';
 import '../widgets/tv_channel_header.dart';
 import '../widgets/tv_shop_photo_gallery.dart';
 import '../../ads/screens/cheap_products_screen.dart';
@@ -30,11 +33,15 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
   final _shopRepo = TvShopRepository();
   final _clipsRepo = TvClipsRepository();
   final _profilesRepo = TvPublicProfilesRepository();
+  final _storage = TvStorageService();
+  final _picker = ImagePicker();
   late final TabController _tabController;
   List<TvShopItem> _items = const [];
   List<TvClip> _clips = const [];
   String _displayName = '';
   String _district = '';
+  String _photoUrl = '';
+  int _followerCount = 0;
   bool _loading = true;
 
   @override
@@ -56,6 +63,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
       final items = await _shopRepo.fetchByOwner(widget.ownerPhone);
       final clips = await _clipsRepo.fetchByOwner(widget.ownerPhone);
       final names = await _profilesRepo.fetchMany([widget.ownerPhone]);
+      final photos = await _profilesRepo.fetchPhotos([widget.ownerPhone]);
       final id = canonicalPhoneId(widget.ownerPhone);
       final fromProfile = tvOwnerDisplayName(names[id] ?? '');
       final fromShop = tvOwnerDisplayName(shop?.name ?? '');
@@ -67,17 +75,41 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
       } else if (clips.isNotEmpty) {
         district = clips.first.districtLabel.trim();
       }
+      final followerCount = await _profilesRepo.fetchFollowerCount(id);
       if (!mounted) return;
       setState(() {
         _items = items.where((i) => i.isActive).toList(growable: false);
         _clips = clips;
         _displayName = displayName;
         _district = district;
+        _photoUrl = photos[id] ?? '';
+        _followerCount = followerCount;
         _loading = false;
       });
     } catch (e) {
       debugPrint('[TvMyShop] $e');
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 88);
+    if (picked == null) return;
+    try {
+      var bytes = await picked.readAsBytes();
+      bytes = await _storage.compressShopPhoto(bytes);
+      final url = await _storage.uploadProfilePhoto(
+        ownerPhone: widget.ownerPhone,
+        bytes: bytes,
+      );
+      await _profilesRepo.upsertPhoto(uid: widget.ownerPhone, photoUrl: url);
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+    } catch (e) {
+      debugPrint('[TvMyShop] photo $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
     }
   }
 
@@ -117,6 +149,9 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
               child: TvChannelHeader(
                 displayName: _displayName,
                 districtLabel: _district,
+                photoUrl: _photoUrl,
+                onEditPhoto: _pickPhoto,
+                followerCount: _followerCount,
               ),
             ),
           ),
@@ -178,6 +213,9 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
               child: TvChannelHeader(
                 displayName: _displayName,
                 districtLabel: _district,
+                photoUrl: _photoUrl,
+                onEditPhoto: _pickPhoto,
+                followerCount: _followerCount,
               ),
             ),
           ),
@@ -198,6 +236,12 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
                   imageUrl: clip.posterUrl,
                   subtitle: clip.viewCount > 0 ? '${clip.viewCount}' : '',
                   isVideo: true,
+                  // Эълон — муддатини узайтириш мумкин (видеони қайта
+                  // юкламасдан). Тугаган эълонда бу ягона тиклаш йўли.
+                  onRenew: clip.isAd ? () => _renewAd(clip) : null,
+                  renewLabel: clip.isExpired
+                      ? context.tr('tv_ad_renew_expired')
+                      : context.tr('tv_ad_renew_extend'),
                   onOpen: () => _openClipEdit(clip),
                   onEdit: () => _openClipEdit(clip),
                   onDelete: () => _deleteClip(clip),
@@ -209,6 +253,15 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
         ),
       ],
     );
+  }
+
+  Future<void> _renewAd(TvClip clip) async {
+    final renewed = await showTvAdRenewSheet(context, clip);
+    if (!mounted || !renewed) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('tv_ad_renew_done'))),
+    );
+    await _load();
   }
 
   Future<void> _openItemPhotos(TvShopItem item) async {
@@ -377,6 +430,8 @@ class _OwnerManageCard extends StatelessWidget {
     this.subtitle = '',
     this.badge = '',
     this.isVideo = false,
+    this.onRenew,
+    this.renewLabel = '',
   });
 
   final String title;
@@ -387,6 +442,10 @@ class _OwnerManageCard extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// `null` эмас бўлса — карточка тагида «Узайтириш» тугмаси (эълонлар).
+  final VoidCallback? onRenew;
+  final String renewLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -523,6 +582,32 @@ class _OwnerManageCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (onRenew != null) ...[
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: onRenew,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF00E676),
+                        foregroundColor: Colors.black,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(0, 36),
+                      ),
+                      icon: const Icon(Icons.autorenew_rounded, size: 14),
+                      label: Text(
+                        renewLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

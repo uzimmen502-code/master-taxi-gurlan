@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
+import 'tv_owner_avatar.dart';
 
 /// Оммaviy kanal boshi — ism, tuman, roliklar va jami ko‘rish.
 class TvChannelHeader extends StatelessWidget {
@@ -12,20 +13,31 @@ class TvChannelHeader extends StatelessWidget {
     this.districtLabel = '',
     this.clipCount,
     this.totalViewCount,
+    this.photoUrl = '',
+    this.onEditPhoto,
+    this.followerCount,
+    this.isFollowing = false,
+    this.onToggleFollow,
   });
 
   final String displayName;
   final String districtLabel;
   final int? clipCount;
   final int? totalViewCount;
+  final String photoUrl;
+  final VoidCallback? onEditPhoto;
+
+  /// `null` = обуначилар сони кўрсатилмайди.
+  final int? followerCount;
+  final bool isFollowing;
+
+  /// `null` = тугма кўринмайди (мас. эгасининг ўз экрани).
+  final VoidCallback? onToggleFollow;
 
   @override
   Widget build(BuildContext context) {
     final name = tvOwnerDisplayName(displayName);
     if (name.isEmpty) return const SizedBox.shrink();
-    final initial = name.trim().isNotEmpty
-        ? name.trim().substring(0, 1).toUpperCase()
-        : '?';
     final district = districtLabel.trim();
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -38,17 +50,11 @@ class TvChannelHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
+          TvOwnerAvatar(
+            name: name,
+            photoUrl: photoUrl,
             radius: 26,
-            backgroundColor: const Color(0xFF00E676).withValues(alpha: 0.18),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: Color(0xFF007A3D),
-                fontWeight: FontWeight.w900,
-                fontSize: 22,
-              ),
-            ),
+            onEdit: onEditPhoto,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -114,10 +120,72 @@ class TvChannelHeader extends StatelessWidget {
                     ],
                   ),
                 ],
+                if (followerCount != null && followerCount! > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.people_alt_outlined,
+                          size: 15, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        context
+                            .tr('tv_channel_follower_count')
+                            .replaceAll('{n}', tvFormatViewCount(followerCount!)),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
+          if (onToggleFollow != null) ...[
+            const SizedBox(width: 8),
+            _FollowButton(
+              following: isFollowing,
+              onTap: onToggleFollow!,
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _FollowButton extends StatelessWidget {
+  const _FollowButton({required this.following, required this.onTap});
+
+  final bool following;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: following ? Colors.white : const Color(0xFF00E676),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: following ? Colors.grey.shade300 : Colors.transparent,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            context.tr(following ? 'tv_channel_following' : 'tv_channel_follow'),
+            style: TextStyle(
+              color: following ? Colors.black87 : Colors.black,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ),
       ),
     );
   }

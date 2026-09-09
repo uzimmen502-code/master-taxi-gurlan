@@ -11327,6 +11327,405 @@ exports.onTvClipDeleted = functions.firestore
       }
     });
 
+// ─────────────────────────────────────────────────────────────────────
+// TV Market — «Кун янгиликлари» (48 соат) ва «Реклама» (7/15/30 кун)
+// муддати ўтган клипларни `expired` қилиш. `status='active'` дан бошқа
+// ҳолатларга тегилмайди (pending/blocked hali ko'rib chiqilmagan).
+// News uchun video/poster/variantlar Storage'dan ham o'chiriladi (foydalanuvchi
+// tanlovi — profil/like statistikasi tv_public_profiles'da alohida saqlanadi,
+// yo'qolmaydi); Ad uchun fayllar saqlanadi (kelajakda qayta faollashtirish
+// ehtimoli uchun).
+// ─────────────────────────────────────────────────────────────────────
+async function deleteTvClipMedia(clipId, data) {
+  try {
+    const bucket = admin.storage().bucket(
+        'master-taxi-gurlan.firebasestorage.app');
+    const paths = [
+      tvClipStoragePathFromUrl(data.videoUrl),
+      tvClipStoragePathFromUrl(data.posterUrl),
+    ].filter(Boolean);
+    await Promise.all(paths.map((p) =>
+      bucket.file(p).delete().catch(() => {})));
+    await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+  } catch (e) {
+    console.error('deleteTvClipMedia:', clipId, e.message || e);
+  }
+}
+
+exports.expireTvContent = functions.pubsub
+  .schedule('every 15 minutes')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const newsCutoff = admin.firestore.Timestamp.fromMillis(
+      now.toMillis() - 48 * 60 * 60 * 1000,
+    );
+
+    const [expiredNewsSnap, expiredAdsSnap] = await Promise.all([
+      db.collection('tv_clips')
+        .where('category', '==', 'news')
+        .where('status', '==', 'active')
+        .where('createdAt', '<', newsCutoff)
+        .limit(200)
+        .get(),
+      db.collection('tv_clips')
+        .where('category', '==', 'ad')
+        .where('status', '==', 'active')
+        .where('expiresAt', '<', now)
+        .limit(200)
+        .get(),
+    ]);
+
+    let batch = db.batch();
+    let writes = 0;
+    async function flush() {
+      if (writes === 0) return;
+      await batch.commit();
+      batch = db.batch();
+      writes = 0;
+    }
+
+    for (const doc of expiredNewsSnap.docs) {
+      batch.update(doc.ref, {
+        status: 'expired',
+        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      writes++;
+      if (writes >= 400) await flush();
+    }
+    for (const doc of expiredAdsSnap.docs) {
+      batch.update(doc.ref, {
+        status: 'expired',
+        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      writes++;
+      if (writes >= 400) await flush();
+    }
+    await flush();
+
+    await Promise.all(expiredNewsSnap.docs.map((doc) =>
+      deleteTvClipMedia(doc.id, doc.data() || {})));
+
+    console.log(
+      `expireTvContent: news=${expiredNewsSnap.size} ads=${expiredAdsSnap.size}`,
+    );
+  });
+
+// ─────────────────────────────────────────────────────────────────────
+// TV Market — «Реклама ва Эълонлар»: 5 тариф (basic/visibility/home/
+// premium/pro_max) × 3 муддат (7/15/30 кун) — AVA TV admin tarif jadvali.
+// Нарх `settings/app.tvAdPricing.{tier}.{durationDays}` (admin panel:
+// `tv_ad_pricing_admin_screen.dart`, `settings/{docId}` rule — isAdmin()
+// client to'g'ridan-to'g'ri yozadi, CF shart emas); topilmasa
+// TV_AD_TIER_PRICING_DEFAULT — jadvaldagi boshlang'ich narxlar.
+// bonusBalance CF orqaligina yoziladi (walletFieldsUntouched rule) —
+// shuning uchun 'ad' klip alohida callable orqali, wallet debit bilan
+// bitta tranzaksiyada yaratiladi (klient to'g'ridan-to'g'ri yoza olmaydi).
+// ─────────────────────────────────────────────────────────────────────
+const TV_AD_TIERS = ['basic', 'visibility', 'home', 'premium', 'pro_max'];
+const TV_AD_DURATIONS = [7, 15, 30];
+const TV_AD_TIER_PRICING_DEFAULT = {
+  basic: {7: 20000, 15: 30000, 30: 50000},
+  visibility: {7: 30000, 15: 50000, 30: 75000},
+  home: {7: 50000, 15: 75000, 30: 100000},
+  premium: {7: 75000, 15: 100000, 30: 175000},
+  pro_max: {7: 100000, 15: 150000, 30: 250000},
+};
+
+async function tvAdPriceFor(tier, durationDays) {
+  try {
+    const snap = await db.collection('settings').doc('app').get();
+    const map = (snap.data() || {}).tvAdPricing;
+    const tierMap = map && typeof map === 'object' ? map[tier] : null;
+    if (tierMap && typeof tierMap === 'object' &&
+        tierMap[String(durationDays)] != null) {
+      return Number(tierMap[String(durationDays)]) || 0;
+    }
+  } catch (_) { /* fallback pastda */ }
+  return (TV_AD_TIER_PRICING_DEFAULT[tier] || {})[durationDays] || 0;
+}
+
+exports.publishTvAd = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+          'unauthenticated', 'Authentication required');
+    }
+
+    const idempotencyKey = String(data.idempotencyKey || '').trim();
+    if (!idempotencyKey) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'idempotencyKey required');
+    }
+    const idemRef = db.collection('wallet_idempotency')
+        .doc('tv_ad_' + idempotencyKey);
+    const existingIdem = await idemRef.get();
+    if (existingIdem.exists) {
+      return existingIdem.data().result || {ok: true, duplicate: true};
+    }
+
+    const durationDays = parseInt(String(data.durationDays || 0), 10);
+    if (!TV_AD_DURATIONS.includes(durationDays)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'durationDays must be 7, 15 or 30');
+    }
+    const tier = String(data.tier || '').trim();
+    if (!TV_AD_TIERS.includes(tier)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `tier must be one of ${TV_AD_TIERS.join(', ')}`);
+    }
+
+    const videoUrl = String(data.videoUrl || '').trim();
+    const title = String(data.title || '').trim();
+    if (!videoUrl || !title) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'videoUrl and title required');
+    }
+    const posterUrl = String(data.posterUrl || '').trim();
+    const description = String(data.description || '').trim();
+    const price = parseInt(String(data.price || 0), 10) || 0;
+    const districtId = String(data.districtId || '').trim();
+    const districtLabel = String(data.districtLabel || '').trim();
+    const ownerName = String(data.ownerName || '').trim();
+    const showPhone = data.showPhone !== false;
+    const searchTokens = Array.isArray(data.searchTokens)
+      ? data.searchTokens.map((t) => String(t)).filter(Boolean)
+      : [];
+
+    const uid = canonicalUid(callerPhone(context));
+    if (!uid || uid.length < 9) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Phone mismatch');
+    }
+
+    const adPrice = await tvAdPriceFor(tier, durationDays);
+    const settingsSnap = await db.collection('settings').doc('app').get();
+    const autoApprove = (settingsSnap.data() || {}).tvAutoApprove === true;
+
+    const userRef = db.collection('users').doc(uid);
+    const clipRef = db.collection('tv_clips').doc();
+    const expiresAt = admin.firestore.Timestamp.fromMillis(
+      Date.now() + durationDays * 24 * 60 * 60 * 1000,
+    );
+
+    const result = await db.runTransaction(async (t) => {
+      const idemSnap = await t.get(idemRef);
+      if (idemSnap.exists) {
+        return idemSnap.data().result || {ok: true, duplicate: true};
+      }
+
+      if (adPrice > 0) {
+        const userSnap = await t.get(userRef);
+        if (!userSnap.exists) {
+          throw new functions.https.HttpsError('not-found', 'user not found');
+        }
+        const balance = (userSnap.data() || {}).bonusBalance || 0;
+        if (balance < adPrice) {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'insufficient_balance');
+        }
+        t.update(userRef, {
+          bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
+          balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        const ledgerRef = userRef.collection('wallet_ledger').doc();
+        t.set(ledgerRef, {
+          type: 'tv_ad_purchase',
+          amount: adPrice,
+          debitCredit: 'debit',
+          note: `TV Market реклама (${tier}) — ${durationDays} кун`,
+          refType: 'tv_clip',
+          refId: clipRef.id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      t.set(clipRef, {
+        videoUrl,
+        posterUrl,
+        title,
+        price,
+        districtId,
+        districtLabel,
+        ownerPhone: uid,
+        ownerName,
+        category: 'ad',
+        description,
+        likeCount: 0,
+        commentCount: 0,
+        viewCount: 0,
+        status: autoApprove ? 'active' : 'pending',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt,
+        adDurationDays: durationDays,
+        adTier: tier,
+        showPhone,
+        socialConsent: false,
+        processingStatus: 'ready',
+        ...(searchTokens.length ? {searchTokens} : {}),
+      });
+
+      const res = {ok: true, clipId: clipRef.id, price: adPrice};
+      t.set(idemRef, {
+        type: 'publishTvAd',
+        result: res,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return res;
+    });
+
+    return result;
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('publishTvAd:', e);
+    throw new functions.https.HttpsError(
+        'internal', e.message || 'publishTvAd failed');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// TV Market — мавжуд эълонни узайтириш. Муддати тугаган (`expired`) ёки
+// ҳали фаол эълонга янги муддат сотиб олинади: видеони қайта юклаш ва
+// нолдан жойлаш шарт эмас. Нарх/тўлов `publishTvAd` билан бир хил
+// (`settings/app.tvAdPricing` → tier × durationDays), wallet debit ва
+// clip янгиланиши битта транзакцияда.
+// ─────────────────────────────────────────────────────────────────────
+exports.renewTvAd = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+          'unauthenticated', 'Authentication required');
+    }
+
+    const idempotencyKey = String(data.idempotencyKey || '').trim();
+    if (!idempotencyKey) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'idempotencyKey required');
+    }
+    const idemRef = db.collection('wallet_idempotency')
+        .doc('tv_ad_renew_' + idempotencyKey);
+    const existingIdem = await idemRef.get();
+    if (existingIdem.exists) {
+      return existingIdem.data().result || {ok: true, duplicate: true};
+    }
+
+    const clipId = String(data.clipId || '').trim();
+    if (!clipId) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'clipId required');
+    }
+    const durationDays = parseInt(String(data.durationDays || 0), 10);
+    if (!TV_AD_DURATIONS.includes(durationDays)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', 'durationDays must be 7, 15 or 30');
+    }
+    const tier = String(data.tier || '').trim();
+    if (!TV_AD_TIERS.includes(tier)) {
+      throw new functions.https.HttpsError(
+          'invalid-argument', `tier must be one of ${TV_AD_TIERS.join(', ')}`);
+    }
+
+    const uid = canonicalUid(callerPhone(context));
+    if (!uid || uid.length < 9) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Phone mismatch');
+    }
+
+    const adPrice = await tvAdPriceFor(tier, durationDays);
+    const settingsSnap = await db.collection('settings').doc('app').get();
+    const autoApprove = (settingsSnap.data() || {}).tvAutoApprove === true;
+
+    const userRef = db.collection('users').doc(uid);
+    const clipRef = db.collection('tv_clips').doc(clipId);
+
+    const result = await db.runTransaction(async (t) => {
+      const idemSnap = await t.get(idemRef);
+      if (idemSnap.exists) {
+        return idemSnap.data().result || {ok: true, duplicate: true};
+      }
+
+      const clipSnap = await t.get(clipRef);
+      if (!clipSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'clip not found');
+      }
+      const clip = clipSnap.data() || {};
+      if (clip.category !== 'ad') {
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'not_an_ad');
+      }
+      if (canonicalUid(String(clip.ownerPhone || '')) !== uid) {
+        throw new functions.https.HttpsError('permission-denied', 'not_owner');
+      }
+
+      if (adPrice > 0) {
+        const userSnap = await t.get(userRef);
+        if (!userSnap.exists) {
+          throw new functions.https.HttpsError('not-found', 'user not found');
+        }
+        const balance = (userSnap.data() || {}).bonusBalance || 0;
+        if (balance < adPrice) {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'insufficient_balance');
+        }
+        t.update(userRef, {
+          bonusBalance: admin.firestore.FieldValue.increment(-adPrice),
+          balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        const ledgerRef = userRef.collection('wallet_ledger').doc();
+        t.set(ledgerRef, {
+          type: 'tv_ad_renew',
+          amount: adPrice,
+          debitCredit: 'debit',
+          note: `TV Market реклама узайтириш (${tier}) — ${durationDays} кун`,
+          refType: 'tv_clip',
+          refId: clipId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Ҳали тугамаган эълон устига қўшилади, тугаган бўлса — ҳозирдан.
+      const now = Date.now();
+      const currentEnd = clip.expiresAt && typeof clip.expiresAt.toMillis ===
+        'function' ? clip.expiresAt.toMillis() : 0;
+      const base = currentEnd > now ? currentEnd : now;
+      const expiresAt = admin.firestore.Timestamp.fromMillis(
+        base + durationDays * 24 * 60 * 60 * 1000,
+      );
+
+      t.update(clipRef, {
+        expiresAt,
+        adDurationDays: durationDays,
+        adTier: tier,
+        // Муддати тугаб `expired` бўлганини қайта фаоллаштирамиз;
+        // `blocked` (админ тўхтатган) ҳолат ўзгармайди.
+        ...(clip.status === 'blocked'
+          ? {}
+          : {status: autoApprove ? 'active' : 'pending'}),
+        expiredAt: admin.firestore.FieldValue.delete(),
+      });
+
+      const res = {
+        ok: true,
+        clipId,
+        price: adPrice,
+        expiresAt: expiresAt.toMillis(),
+      };
+      t.set(idemRef, {
+        type: 'renewTvAd',
+        result: res,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return res;
+    });
+
+    return result;
+  } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error('renewTvAd:', e);
+    throw new functions.https.HttpsError(
+        'internal', e.message || 'renewTvAd failed');
+  }
+});
+
 exports.migratePhoneFormats = functions.https.onCall(
     async (data, context) => {
       if (!context.auth) {

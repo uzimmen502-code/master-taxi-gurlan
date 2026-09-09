@@ -38,9 +38,17 @@ class _ZoneGateState extends State<ZoneGate> {
     _check();
   }
 
+  /// MFY (`service_areas`) hali kiritilmagan hududlar bor — u yerda
+  /// `serviceAreaId` hech qachon to'lmaydi. Tuman darajasi yetarli
+  /// (`applyGeo` bo'sh zonani qabul qiladi); aniq MFY nomi profil
+  /// manzilida erkin matn sifatida kiritiladi (`AddressEditScreen`).
+  bool get _geoReady =>
+      ServiceConfigHolder.districtId.trim().isNotEmpty ||
+      ServiceConfigHolder.serviceAreaId.trim().isNotEmpty;
+
   Future<void> _check() async {
-    // Tez yo'l: kesh allaqachon zonaga ega.
-    if (ServiceConfigHolder.serviceAreaId.trim().isNotEmpty) {
+    // Tez yo'l: kesh allaqachon tuman (yoki zona) ga ega.
+    if (_geoReady) {
       if (mounted) setState(() => _checking = false);
       return;
     }
@@ -52,16 +60,21 @@ class _ZoneGateState extends State<ZoneGate> {
       }
       if (_uid.isNotEmpty) {
         final user = await UserRepository().getById(_uid);
+        final districtId = (user?.districtId ?? '').trim();
         final areaId = (user?.serviceAreaId ?? '').trim();
-        if (areaId.isNotEmpty) {
-          await ServiceConfigHolder.applyServiceArea(areaId);
+        if (districtId.isNotEmpty || areaId.isNotEmpty) {
+          await ServiceConfigHolder.applyGeo(
+            regionId: (user?.regionId ?? '').trim(),
+            districtId: districtId,
+            serviceAreaId: areaId,
+          );
           if (mounted) setState(() => _checking = false);
           return;
         }
       }
     } catch (_) {
-      // Tarmoq xatosi — keshda zona bo'lsa Home, aks holda bloklash.
-      if (ServiceConfigHolder.serviceAreaId.trim().isNotEmpty) {
+      // Tarmoq xatosi — keshda tuman bo'lsa Home, aks holda bloklash.
+      if (_geoReady) {
         if (mounted) setState(() => _checking = false);
         return;
       }

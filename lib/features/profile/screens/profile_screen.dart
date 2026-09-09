@@ -12,7 +12,6 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../models/user_address.dart';
 import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/rides_repository.dart';
@@ -177,7 +176,7 @@ class _ProfileViewState extends State<_ProfileView> {
       body: SingleChildScrollView(
         child: Column(children: [
           _header(c, loc),
-          if (!c.hasCompleteAddress) _addressWarning(loc),
+          if (!c.hasUsableAddress) _addressWarning(loc),
           _cards(c, loc),
           if (c.role == 'courier') _rolePanelButton(
             label: loc.translate('profile_courier_panel'),
@@ -357,23 +356,8 @@ class _ProfileViewState extends State<_ProfileView> {
     );
   }
 
-  Future<void> _openAddress() async {
-    final c = context.read<ProfileController>();
-    final result = await Navigator.push<UserAddress>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddressEditScreen(initial: c.structuredAddress),
-      ),
-    );
-    if (!mounted) return;
-    if (result != null) {
-      c.applyAddress(result);
-    } else {
-      // Foydalanuvchi back tugmasини босди — лекин Firestore'да аввaлги
-      // ҳолат ўзгaрган бўлиши мумкин (бошқа окимдан AddressGate сақлаган).
-      await c.reloadAddressFromPrefs();
-    }
-  }
+  Future<void> _openAddress() =>
+      AddressGate.edit(context, context.read<ProfileController>());
 
   // ────────────────────────────────────────────────────────────────────
   // 4 КАРТА

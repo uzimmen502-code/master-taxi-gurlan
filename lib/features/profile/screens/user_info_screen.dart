@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../l10n/app_localizations.dart';
-import '../../../models/user_address.dart';
 import '../controllers/profile_controller.dart';
 import '../widgets/language_settings_tile.dart';
 import 'address_edit_screen.dart';
@@ -313,22 +312,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               icon: Icons.location_on_outlined,
               label: loc.translate('profile_home_address_label'),
               child: InkWell(
-                onTap: () async {
-                  final result = await Navigator.push<UserAddress>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AddressEditScreen(
-                        initial: c.structuredAddress,
-                      ),
-                    ),
-                  );
-                  if (!mounted) return;
-                  if (result != null) {
-                    c.applyAddress(result);
-                  } else {
-                    await c.reloadAddressFromPrefs();
-                  }
-                },
+                onTap: () => AddressGate.edit(context, c),
                 child: Row(children: [
                   Expanded(
                     child: Text(

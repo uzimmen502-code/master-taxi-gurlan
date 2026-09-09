@@ -232,6 +232,10 @@ class UserRepository {
     // create (new doc) or update (existing). Do not touch createdAt here so
     // re-onboarding cannot rewrite an existing account's createdAt.
     final id = canonicalPhoneId(uid);
+    // Онбордингда манзил йиғилмайди (у Профилда тўлдирилади) — бўш манзил
+    // билан мавжуд манзилни ўчириб юбормаймиз. Қайта рўйхатдан ўтиш /
+    // қурилма кўчириш ҳолатида олдин киритилган манзил сақланиб қолади.
+    final hasAnyAddress = address.hasManualAddress || address.hasGps;
     await _col.doc(id).set({
       'phone': phone.trim(),
       'name': name.trim(),
@@ -239,9 +243,11 @@ class UserRepository {
       if (birthDate.trim().isNotEmpty) 'birthDate': birthDate.trim(),
       if (birthDate.trim().isNotEmpty)
         'birthDateSetAt': FieldValue.serverTimestamp(),
-      'address': address.toMap(),
-      'legacyAddress': legacyAddressLine.trim(),
-      'addressUpdatedAt': FieldValue.serverTimestamp(),
+      if (hasAnyAddress) ...{
+        'address': address.toMap(),
+        'legacyAddress': legacyAddressLine.trim(),
+        'addressUpdatedAt': FieldValue.serverTimestamp(),
+      },
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }

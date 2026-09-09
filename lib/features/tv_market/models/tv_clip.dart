@@ -48,6 +48,7 @@ class TvClip {
     required this.ownerPhone,
     required this.ownerName,
     required this.category,
+    this.ownerPhotoUrl = '',
     this.lat,
     this.lng,
     this.mfy,
@@ -66,6 +67,10 @@ class TvClip {
     this.videoVariants = const {},
     this.duration = 0,
     this.processingStatus = 'ready',
+    this.expiresAt,
+    this.adDurationDays = 0,
+    this.adTier = '',
+    this.showPhone = true,
   });
 
   final String id;
@@ -77,9 +82,25 @@ class TvClip {
   final String districtLabel;
   final String ownerPhone;
   final String ownerName;
+  final String ownerPhotoUrl;
 
-  /// `product` | `service`
+  /// `product` | `service` | `news` | `ad`
   final String category;
+
+  /// `news` (48 соат) ва `ad` (танланган муддат) учун тугаш вақти.
+  /// `product`/`service` — доимий, бу майдон `null`.
+  final DateTime? expiresAt;
+
+  /// `category == 'ad'` бўлса — танланган муддат (7|15|30 кун). Бошқаларда 0.
+  final int adDurationDays;
+
+  /// `category == 'ad'` бўлса — тариф (`basic|visibility|home|premium|pro_max`).
+  final String adTier;
+
+  /// Эгаси телефон рақамини кўрсатишни хоҳлайдими — `false` бўлса
+  /// «Боғланиш» тугмаси клип остида умуман кўринмайди. Эски клипларда
+  /// майдон йўқ — шунинг учун default `true` (ҳозирги хатти-ҳаракат).
+  final bool showPhone;
 
   final double? lat;
   final double? lng;
@@ -116,10 +137,32 @@ class TvClip {
   final String processingStatus;
 
   bool get isActive => status == 'active';
+  bool get isExpired => status == 'expired';
   bool get hasPrice => price > 0;
   bool get hasShopItem => shopItemId.trim().isNotEmpty;
   bool get socialPosted => socialPostedAt != null;
   bool get hasVariants => videoVariants.isNotEmpty;
+  bool get isNews => category == 'news';
+  bool get isAd => category == 'ad';
+
+  static const _adTierWeight = {
+    'basic': 0,
+    'visibility': 1,
+    'home': 2,
+    'premium': 3,
+    'pro_max': 4,
+  };
+
+  /// AVA TV тариф жадвали — «Кўриниш устуворлиги» устуни: тариф қанча
+  /// юқори бўлса, feed'да шунча олдинроқ (`tv_clip_shuffle.dart`
+  /// `tvApplyAdTierPriority`). Ad бўлмаса — 0.
+  int get adBoostWeight => isAd ? (_adTierWeight[adTier] ?? 0) : 0;
+
+  /// Тариф жадвали «Реклама жойлашуви» устуни: `home`/`premium`/`pro_max`
+  /// Home экранида ҳам кўринади; `basic`/`visibility` — фақат AVAGram /
+  /// Реклама лентасида. Ad бўлмаган клипларга тегишли эмас (ҳар доим true).
+  bool get showsOnHome =>
+      !isAd || const {'home', 'premium', 'pro_max'}.contains(adTier);
 
   /// [quality] masalan `'720p'`/`'480p'`/`'360p'`. Variant topilmasa
   /// asl `videoUrl`ga qaytadi (eski klip yoki processing tugamagan).
@@ -149,6 +192,7 @@ class TvClip {
 
   TvClip copyWith({
     int? likeCount,
+    int? commentCount,
     int? viewCount,
     String? shopItemId,
     bool? socialConsent,
@@ -156,6 +200,7 @@ class TvClip {
     DateTime? socialPostedAt,
     Map<String, dynamic>? socialPost,
     String? ownerName,
+    String? ownerPhotoUrl,
     String? districtId,
     String? districtLabel,
     String? title,
@@ -168,6 +213,10 @@ class TvClip {
     Map<String, String>? videoVariants,
     int? duration,
     String? processingStatus,
+    DateTime? expiresAt,
+    int? adDurationDays,
+    String? adTier,
+    bool? showPhone,
   }) {
     return TvClip(
       id: id,
@@ -179,13 +228,14 @@ class TvClip {
       districtLabel: districtLabel ?? this.districtLabel,
       ownerPhone: ownerPhone,
       ownerName: ownerName ?? this.ownerName,
+      ownerPhotoUrl: ownerPhotoUrl ?? this.ownerPhotoUrl,
       category: category ?? this.category,
       lat: lat,
       lng: lng,
       mfy: mfy,
       description: description ?? this.description,
       likeCount: likeCount ?? this.likeCount,
-      commentCount: commentCount,
+      commentCount: commentCount ?? this.commentCount,
       viewCount: viewCount ?? this.viewCount,
       status: status,
       createdAt: createdAt,
@@ -198,6 +248,10 @@ class TvClip {
       videoVariants: videoVariants ?? this.videoVariants,
       duration: duration ?? this.duration,
       processingStatus: processingStatus ?? this.processingStatus,
+      expiresAt: expiresAt ?? this.expiresAt,
+      adDurationDays: adDurationDays ?? this.adDurationDays,
+      adTier: adTier ?? this.adTier,
+      showPhone: showPhone ?? this.showPhone,
     );
   }
 
@@ -213,6 +267,7 @@ class TvClip {
       districtLabel: (d['districtLabel'] ?? '') as String,
       ownerPhone: (d['ownerPhone'] ?? '') as String,
       ownerName: (d['ownerName'] ?? '') as String,
+      ownerPhotoUrl: (d['ownerPhotoUrl'] ?? '') as String,
       category: (d['category'] ?? 'product') as String,
       lat: (d['lat'] as num?)?.toDouble(),
       lng: (d['lng'] as num?)?.toDouble(),
@@ -245,6 +300,10 @@ class TvClip {
           : const {},
       duration: (d['duration'] ?? 0) as int,
       processingStatus: (d['processingStatus'] ?? 'ready') as String,
+      expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
+      adDurationDays: (d['adDurationDays'] ?? 0) as int,
+      adTier: (d['adTier'] ?? '') as String,
+      showPhone: (d['showPhone'] as bool?) ?? true,
     );
   }
 
@@ -257,6 +316,7 @@ class TvClip {
         'districtLabel': districtLabel,
         'ownerPhone': ownerPhone,
         'ownerName': ownerName,
+        if (ownerPhotoUrl.isNotEmpty) 'ownerPhotoUrl': ownerPhotoUrl,
         'category': category,
         if (lat != null) 'lat': lat,
         if (lng != null) 'lng': lng,
@@ -279,5 +339,9 @@ class TvClip {
         if (videoVariants.isNotEmpty) 'videoVariants': videoVariants,
         if (duration > 0) 'duration': duration,
         'processingStatus': processingStatus,
+        if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt!),
+        if (adDurationDays > 0) 'adDurationDays': adDurationDays,
+        if (adTier.isNotEmpty) 'adTier': adTier,
+        'showPhone': showPhone,
       };
 }

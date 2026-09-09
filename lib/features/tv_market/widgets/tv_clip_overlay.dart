@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_owner_action_bar.dart';
+import 'tv_owner_avatar.dart';
 
 /// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
@@ -14,6 +15,7 @@ class TvClipOverlay extends StatelessWidget {
     required this.clip,
     required this.onContact,
     required this.onLike,
+    required this.onComment,
     required this.onShare,
     required this.onSave,
     this.liked = false,
@@ -29,6 +31,7 @@ class TvClipOverlay extends StatelessWidget {
   final TvClip clip;
   final VoidCallback onContact;
   final VoidCallback onLike;
+  final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onSave;
   final bool liked;
@@ -64,27 +67,27 @@ class TvClipOverlay extends StatelessWidget {
               const SizedBox(height: 10),
               if (isOwner && onEdit != null && onDelete != null)
                 TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!)
-              else
+              else if (clip.showPhone)
                 SizedBox(
                   width: double.infinity,
-                  height: 44,
+                  height: 34,
                   child: ElevatedButton.icon(
                     onPressed: onContact,
-                    icon: const Icon(Icons.call_rounded, size: 18),
+                    icon: const Icon(Icons.call_rounded, size: 15),
                     label: Text(
                       context.tr('tv_market_contact'),
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontSize: 13,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00E676),
-                      foregroundColor: Colors.black,
+                      backgroundColor: Colors.white.withValues(alpha: 0.28),
+                      foregroundColor: const Color(0xFF00E676),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      elevation: 2,
+                      elevation: 0,
                     ),
                   ),
                 ),
@@ -101,6 +104,7 @@ class TvClipOverlay extends StatelessWidget {
             showShop: onOpenShop != null,
             openChannelAsShop: openChannelAsShop,
             onLike: onLike,
+            onComment: onComment,
             onShare: onShare,
             onSave: onSave,
             onOpenShop: onOpenShop,
@@ -130,15 +134,24 @@ class _InfoColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (name.isNotEmpty) ...[
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-            ),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TvOwnerAvatar(name: name, photoUrl: clip.ownerPhotoUrl, radius: 12),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
         ],
@@ -225,6 +238,7 @@ class _ActionButtons extends StatelessWidget {
     required this.liked,
     required this.saved,
     required this.onLike,
+    required this.onComment,
     required this.onShare,
     required this.onSave,
     this.onOpenShop,
@@ -236,6 +250,7 @@ class _ActionButtons extends StatelessWidget {
   final bool liked;
   final bool saved;
   final VoidCallback onLike;
+  final VoidCallback onComment;
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
@@ -252,6 +267,12 @@ class _ActionButtons extends StatelessWidget {
           color: liked ? const Color(0xFFFF1744) : Colors.white,
           label: clip.likeCount > 0 ? '${clip.likeCount}' : '',
           onTap: onLike,
+        ),
+        const SizedBox(height: 16),
+        _ActionBtn(
+          icon: Icons.mode_comment_outlined,
+          label: clip.commentCount > 0 ? '${clip.commentCount}' : '',
+          onTap: onComment,
         ),
         const SizedBox(height: 16),
         _ActionBtn(

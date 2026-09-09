@@ -759,6 +759,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               ),
               const SizedBox(height: 20),
               ..._fields(context),
+              const SizedBox(height: 10),
+              _LocationCard(
+                label: _isEdit ? widget.editClip!.districtLabel : _districtPreview,
+                showHint: !_isEdit,
+              ),
+              const SizedBox(height: 20),
+              // Тур танлаш ва унга боғлиқ созламалар (тариф пикери ёки
+              // дўкон/ижтимоий тармоқлар) энг охирида — «Тасдиқлаш»дан
+              // тўғридан-тўғри олдин: эга умумий маълумотни (ном/нарх/
+              // тавсиф/жойлашув) аввал тўлдиради, кейин турни танлайди.
               if (!_categoryLocked) ...[
                 _categorySelector(context),
                 const SizedBox(height: 16),
@@ -790,12 +800,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
                   ),
                 ),
               ],
-              const SizedBox(height: 10),
-              _LocationCard(
-                label: _isEdit ? widget.editClip!.districtLabel : _districtPreview,
-                showHint: !_isEdit,
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
               if (_publishing) ...[
                 _PublishProgress(
                   determinate: _progressDeterminate,

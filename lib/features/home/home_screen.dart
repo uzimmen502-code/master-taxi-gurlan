@@ -1101,11 +1101,15 @@ class _HomeShareButtonState extends State<_HomeShareButton> {
       items: [
         PopupMenuItem(
           value: 'share',
+          // Ёрлиқ узун тилларда (рус) менюга сиғмай оверфлоу берарди —
+          // Flexible + 2 қатор ҳар қандай тил/шрифт ўлчамида сиғдиради.
           child: Row(
             children: [
               const Icon(Icons.share_rounded, color: _navy, size: 20),
               const SizedBox(width: 10),
-              Text(context.tr('app_share_title')),
+              Flexible(
+                child: Text(context.tr('app_share_title'), maxLines: 2),
+              ),
             ],
           ),
         ),
@@ -1264,20 +1268,33 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active ? _brandGreen : _inactiveTab;
+    // Тизим шрифти катта бўлганда 56px'лик панелдан ошиб кетарди
+    // (BOTTOM OVERFLOWED) ва узун ёрлиқ («Буюртмалар») қирқиларди.
+    final scale = MediaQuery.textScalerOf(context).scale(10) / 10;
     return Expanded(
       child: InkWell(
         onTap: onTap,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _StrokeIcon(icon, color: color, size: 20),
             const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                color: color,
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  textScaler: TextScaler.linear(scale.clamp(1.0, 1.2)),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                    color: color,
+                  ),
+                ),
               ),
             ),
           ],

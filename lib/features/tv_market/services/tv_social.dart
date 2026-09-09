@@ -1,11 +1,13 @@
-/// AVA расмий Instagram / Facebook / TikTok — фойдаланувчи чипи = қайси саҳифа.
+/// AVA расмий Instagram / Facebook / TikTok / YouTube — фойдаланувчи чипи =
+/// қайси саҳифа.
 class TvSocial {
   TvSocial._();
 
   static const instagram = 'instagram';
   static const facebook = 'facebook';
   static const tiktok = 'tiktok';
-  static const ordered = [instagram, facebook, tiktok];
+  static const youtube = 'youtube';
+  static const ordered = [instagram, facebook, tiktok, youtube];
 
   static String labelKey(String id) => 'tv_social_$id';
 

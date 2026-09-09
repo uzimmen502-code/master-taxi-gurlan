@@ -1,18 +1,23 @@
 'use strict';
 
 /**
- * AVA расмий Instagram / Facebook / TikTok — клип active бўлганда жойлаш.
- * Токенлар: settings/tv_social (CF-only) + env fallback.
+ * AVA расмий Instagram / Facebook / TikTok / YouTube — клип active бўлганда
+ * жойлаш. Токенлар: settings/tv_social (CF-only) + env fallback.
  */
 const axios = require('axios');
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TIKTOK = 'https://open.tiktokapis.com/v2';
+const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
+const YT_UPLOAD = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const SETTINGS_PATH = ['settings', 'tv_social'];
-const ORDERED = ['instagram', 'facebook', 'tiktok'];
+const ORDERED = ['instagram', 'facebook', 'tiktok', 'youtube'];
 const STALE_MS = 12 * 60 * 1000;
 const IG_POLL_MS = 5000;
 const IG_POLL_MAX = 48;
+/// Ролик 60 сониягача сиқилган — амалда 10-30 MB. Ундан каттасини
+/// хотирага олмаймиз (CF 512MB).
+const YT_MAX_BYTES = 128 * 1024 * 1024;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -73,6 +78,9 @@ function publicSettings(s) {
     tiktokTokenSet: Boolean(str(s.tiktokAccessToken, 800)),
     tiktokRefreshSet: Boolean(str(s.tiktokRefreshToken, 800)),
     tiktokClientKeySet: Boolean(str(s.tiktokClientKey, 80)),
+    youtubeClientId: str(s.youtubeClientId, 200),
+    youtubeRefreshSet: Boolean(str(s.youtubeRefreshToken, 800)),
+    youtubeSecretSet: Boolean(str(s.youtubeClientSecret, 200)),
   };
 }
 
@@ -98,6 +106,12 @@ function attachTvSocialPublish(exports, deps) {
           || str(process.env.TIKTOK_CLIENT_KEY, 80),
       tiktokClientSecret: str(s.tiktokClientSecret, 200)
           || str(process.env.TIKTOK_CLIENT_SECRET, 200),
+      youtubeClientId: str(s.youtubeClientId, 200)
+          || str(process.env.YOUTUBE_CLIENT_ID, 200),
+      youtubeClientSecret: str(s.youtubeClientSecret, 200)
+          || str(process.env.YOUTUBE_CLIENT_SECRET, 200),
+      youtubeRefreshToken: str(s.youtubeRefreshToken, 800)
+          || str(process.env.YOUTUBE_REFRESH_TOKEN, 800),
     };
   }
 
@@ -267,10 +281,98 @@ function attachTvSocialPublish(exports, deps) {
     return { id: publishId, url: '' };
   }
 
+  /**
+   * YouTube — refresh token'дан қисқа муддатли access token. Google
+   * refresh token'ни алмаштирмайди, шунинг учун сақлаб ўтирилмайди.
+   */
+  async function youtubeAccessToken(s) {
+    if (!s.youtubeRefreshToken || !s.youtubeClientId || !s.youtubeClientSecret) {
+      throw new Error('YouTube client id/secret ёки refresh token йўқ');
+    }
+    const body = new URLSearchParams({
+      client_id: s.youtubeClientId,
+      client_secret: s.youtubeClientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: s.youtubeRefreshToken,
+    });
+    const res = await axios.post(GOOGLE_TOKEN, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 30000,
+    });
+    const access = str(res.data && res.data.access_token, 2000);
+    if (!access) throw new Error('YouTube access token бўш');
+    return access;
+  }
+
+  /**
+   * YouTube Shorts — resumable upload: сессия очилади, кейин байтлар PUT.
+   * IG/FB/TikTok'дан фарқли, YouTube URL'дан ўзи тортмайди — файлни
+   * Storage'дан юклаб, ўзимиз юборамиз.
+   */
+  async function postYouTube(videoUrl, caption, s) {
+    const token = await youtubeAccessToken(s);
+
+    const dl = await axios.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 180000,
+      maxContentLength: YT_MAX_BYTES,
+      maxBodyLength: YT_MAX_BYTES,
+    });
+    const bytes = Buffer.from(dl.data);
+    if (!bytes.length) throw new Error('YouTube: видео бўш юкланди');
+
+    // Сарлавҳа 100 белги, `<` ва `>` тақиқланган; #Shorts — вертикал
+    // 60 сониялик ролик Shorts лентасига тушиши учун.
+    const lines = caption.split('\n');
+    const title = str(lines[0], 90).replace(/[<>]/g, '') || 'AVA';
+    const description = `${caption}\n#Shorts`.slice(0, 4900);
+
+    const init = await axios.post(
+        YT_UPLOAD,
+        {
+          snippet: { title: `${title} #Shorts`.slice(0, 100), description },
+          status: {
+            privacyStatus: 'public',
+            selfDeclaredMadeForKids: false,
+          },
+        },
+        {
+          params: { uploadType: 'resumable', part: 'snippet,status' },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+            'X-Upload-Content-Length': String(bytes.length),
+            'X-Upload-Content-Type': 'video/mp4',
+          },
+          timeout: 60000,
+        },
+    );
+    const uploadUrl = str(
+        init.headers && (init.headers.location || init.headers.Location),
+        2000,
+    );
+    if (!uploadUrl) throw new Error('YouTube upload сессия URL йўқ');
+
+    const put = await axios.put(uploadUrl, bytes, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(bytes.length),
+      },
+      timeout: 300000,
+      maxContentLength: YT_MAX_BYTES,
+      maxBodyLength: YT_MAX_BYTES,
+    });
+    const id = str(put.data && put.data.id, 40);
+    if (!id) throw new Error('YouTube video id йўқ');
+    return { id, url: `https://www.youtube.com/shorts/${id}` };
+  }
+
   async function publishOne(net, videoUrl, caption, s) {
     if (net === 'instagram') return postInstagram(videoUrl, caption, s);
     if (net === 'facebook') return postFacebook(videoUrl, caption, s);
     if (net === 'tiktok') return postTikTok(videoUrl, caption, s);
+    if (net === 'youtube') return postYouTube(videoUrl, caption, s);
     throw new Error(`unknown network ${net}`);
   }
 
@@ -443,6 +545,17 @@ function attachTvSocialPublish(exports, deps) {
     }
     if (data && data.tiktokClientSecret != null && str(data.tiktokClientSecret, 200)) {
       patch.tiktokClientSecret = str(data.tiktokClientSecret, 200);
+    }
+    if (data && data.youtubeClientId != null) {
+      patch.youtubeClientId = str(data.youtubeClientId, 200);
+    }
+    if (data && data.youtubeClientSecret != null
+        && str(data.youtubeClientSecret, 200)) {
+      patch.youtubeClientSecret = str(data.youtubeClientSecret, 200);
+    }
+    if (data && data.youtubeRefreshToken != null
+        && str(data.youtubeRefreshToken, 800)) {
+      patch.youtubeRefreshToken = str(data.youtubeRefreshToken, 800);
     }
     if (!Object.keys(patch).length) {
       throw new functions.https.HttpsError('invalid-argument', 'empty patch');

@@ -1,7 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
-/// AVA расмий IG / Facebook / TikTok токенлари (CF `settings/tv_social`).
+/// AVA расмий IG / Facebook / TikTok / YouTube токенлари
+/// (CF `settings/tv_social`).
 class TvSocialSettingsBar extends StatefulWidget {
   const TvSocialSettingsBar({super.key});
 
@@ -16,6 +17,8 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   String? _error;
   bool _pageTokenSet = false;
   bool _tiktokTokenSet = false;
+  bool _ytRefreshSet = false;
+  bool _ytSecretSet = false;
   final _pageId = TextEditingController();
   final _igId = TextEditingController();
   final _caption = TextEditingController();
@@ -24,6 +27,9 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   final _tiktokRefresh = TextEditingController();
   final _tiktokKey = TextEditingController();
   final _tiktokSecret = TextEditingController();
+  final _ytClientId = TextEditingController();
+  final _ytSecret = TextEditingController();
+  final _ytRefresh = TextEditingController();
 
   @override
   void initState() {
@@ -41,6 +47,9 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
     _tiktokRefresh.dispose();
     _tiktokKey.dispose();
     _tiktokSecret.dispose();
+    _ytClientId.dispose();
+    _ytSecret.dispose();
+    _ytRefresh.dispose();
     super.dispose();
   }
 
@@ -61,6 +70,9 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       _caption.text = '${s['captionPrefix'] ?? ''}';
       _pageTokenSet = s['pageTokenSet'] == true;
       _tiktokTokenSet = s['tiktokTokenSet'] == true;
+      _ytClientId.text = '${s['youtubeClientId'] ?? ''}';
+      _ytRefreshSet = s['youtubeRefreshSet'] == true;
+      _ytSecretSet = s['youtubeSecretSet'] == true;
       setState(() => _loading = false);
     } catch (e) {
       if (!mounted) return;
@@ -79,6 +91,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
         'instagramUserId': _igId.text.trim(),
         'captionPrefix': _caption.text.trim(),
         'tiktokClientKey': _tiktokKey.text.trim(),
+        'youtubeClientId': _ytClientId.text.trim(),
       };
       if (_pageToken.text.trim().isNotEmpty) {
         payload['facebookPageAccessToken'] = _pageToken.text.trim();
@@ -92,6 +105,12 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       if (_tiktokSecret.text.trim().isNotEmpty) {
         payload['tiktokClientSecret'] = _tiktokSecret.text.trim();
       }
+      if (_ytSecret.text.trim().isNotEmpty) {
+        payload['youtubeClientSecret'] = _ytSecret.text.trim();
+      }
+      if (_ytRefresh.text.trim().isNotEmpty) {
+        payload['youtubeRefreshToken'] = _ytRefresh.text.trim();
+      }
       await FirebaseFunctions.instance
           .httpsCallable('adminSetTvSocialSettings')
           .call(payload);
@@ -99,6 +118,8 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       _tiktokToken.clear();
       _tiktokRefresh.clear();
       _tiktokSecret.clear();
+      _ytSecret.clear();
+      _ytRefresh.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Соцсет созламалари сақланди')),
@@ -136,7 +157,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
               color: ready ? Colors.green.shade700 : Colors.blueGrey,
             ),
             title: const Text(
-              'AVA расмий Instagram / Facebook / TikTok',
+              'AVA расмий Instagram / Facebook / TikTok / YouTube',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
             ),
             subtitle: Text(
@@ -185,6 +206,21 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
                         _field(_tiktokKey, 'TikTok client key'),
                         _field(_tiktokSecret, 'TikTok client secret',
                             obscure: true),
+                        _field(_ytClientId, 'YouTube OAuth client ID'),
+                        _field(
+                          _ytSecret,
+                          _ytSecretSet
+                              ? 'YouTube client secret (янги — бўш қолдиринг)'
+                              : 'YouTube client secret',
+                          obscure: true,
+                        ),
+                        _field(
+                          _ytRefresh,
+                          _ytRefreshSet
+                              ? 'YouTube refresh token (янги — бўш қолдиринг)'
+                              : 'YouTube refresh token',
+                          obscure: true,
+                        ),
                         const SizedBox(height: 8),
                         Align(
                           alignment: Alignment.centerRight,

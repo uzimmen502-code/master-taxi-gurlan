@@ -16306,6 +16306,16 @@ attachAnalyticsPipeline(exports, {
   requireCallerRoles,
 });
 
+// --- Anonymous Session + Account Merge (1-bosqich: data model & merge) ---
+const { attachAnonSessionMerge } = require('./anon_session_merge');
+attachAnonSessionMerge(exports, {
+  functions,
+  db,
+  admin,
+  canonicalUid,
+  requireCallerRoles,
+});
+
 // --- AVA official IG / Facebook / TikTok clip publish ---
 const { attachTvSocialPublish } = require('./tv_social_publish');
 attachTvSocialPublish(exports, {

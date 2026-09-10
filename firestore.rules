@@ -710,6 +710,33 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Anonymous Session + Account Merge (1-bosqich) — sessionId = Firebase
+    // Anonymous Auth uid. device_bindings'ga tegilmaydi, mustaqil kolleksiya.
+    match /anon_sessions/{sessionId} {
+      allow read: if request.auth != null && request.auth.uid == sessionId;
+      allow create: if request.auth != null && request.auth.uid == sessionId
+          && request.auth.token.firebase.sign_in_provider == 'anonymous';
+      // status'ni faqat CF (mergeAnonymousSession, Admin SDK) o'zgartiradi.
+      allow update: if request.auth != null && request.auth.uid == sessionId
+          && request.resource.data.status == resource.data.status;
+      allow delete: if false;
+
+      match /engagement/{eventId} {
+        allow read: if request.auth != null && request.auth.uid == sessionId;
+        allow create: if request.auth != null && request.auth.uid == sessionId;
+        allow update, delete: if false;
+      }
+    }
+
+    // Teskari indeks (like/save/view) — faqat CF (mergeAnonymousSession /
+    // backfillEngagementIndex, Admin SDK) yozadi, xuddi device_bindings kabi.
+    match /user_engagement_index/{userId} {
+      allow read: if isOwner(userId)
+          || (request.auth != null && request.auth.uid == userId)
+          || isAdmin();
+      allow create, update, delete: if false;
+    }
+
     match /device_bindings_legacy/{legacyId} {
       allow read: if true;
       allow create, update, delete: if false;

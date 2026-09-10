@@ -48,7 +48,7 @@ class TvClipCompressResult {
   final bool trimmed;
   final bool skipped;
 
-  /// To'liq zinapoya sinalgandan keyin ham natija ≤5MB emas (yoki
+  /// To'liq zinapoya sinalgandan keyin ham natija ≤15MB emas (yoki
   /// barcha urinishlar muvaffaqiyatsiz) — [path] bu holatda siqilmagan
   /// (yoki eng yaxshi urinishning) fayliga ishora qiladi va
   /// YUKLANMASLIGI kerak.
@@ -62,7 +62,7 @@ class TvClipCompress {
   static const maxHeight = 720;
   static const maxSeconds = 60;
   static const skipIfAtMostBytes = 3500000;
-  static const recompressIfOverBytes = 5000000;
+  static const recompressIfOverBytes = 15000000;
 
   /// Post-compression xavfsizlik-tekshiruvi: `forUpload()` natijasining
   /// haqiqiy ijro davomiyligi shundan oshsa — yuklash bloklanadi (native

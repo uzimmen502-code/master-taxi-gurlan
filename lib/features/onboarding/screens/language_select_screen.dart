@@ -46,9 +46,12 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
           LocaleUtils.supportedAppLocales,
         ) ??
         LocaleUtils.uzCyrl;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Faqat jonli preview — saved_language "Davom etish" tasdiqlangach
+      // (_confirm()) yoziladi, aks holda tuman tanlanmasdan ilova
+      // o'chirilsa, keyingi ochilishda bu ekran o'tkazib yuboriladi.
       if (_selected != null && mounted) {
-        await context.read<LocaleNotifier>().setLocale(_selected!);
+        context.read<LocaleNotifier>().previewLocale(_selected!);
       }
       unawaited(DeviceBindingRepository().warmup());
     });
@@ -67,9 +70,9 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
   bool get _districtReady =>
       _regionId.isNotEmpty && _districtId.isNotEmpty;
 
-  Future<void> _onLanguageTap(Locale locale) async {
+  void _onLanguageTap(Locale locale) {
     setState(() => _selected = locale);
-    await context.read<LocaleNotifier>().setLocale(locale);
+    context.read<LocaleNotifier>().previewLocale(locale);
   }
 
   Future<void> _onContinuePressed() async {

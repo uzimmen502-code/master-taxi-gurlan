@@ -41,6 +41,21 @@ class LocaleNotifier extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// `setLocale()` kabi, lekin prefs'ga yozmaydi — faqat ekranni jonli
+  /// (preview) yangilaydi. Til/tuman ekranida foydalanuvchi hali tumanni
+  /// tanlamagan/tasdiqlamagan bo'lishi mumkin — `saved_language` faqat
+  /// haqiqiy tasdiq (`setLocale`) paytida yozilishi kerak.
+  void previewLocale(Locale locale) {
+    final normalized = LocaleUtils.localeResolutionCallback(
+          locale,
+          LocaleUtils.supportedAppLocales,
+        ) ??
+        LocaleUtils.uzCyrl;
+    _locale = normalized;
+    OfflineL10n.invalidate();
+    notifyListeners();
+  }
+
   /// Saqlangan tilni o'chirib, qurilma tiliga qaytish.
   Future<void> setFollowDeviceLocale() async {
     await LocaleUtils.saveFollowDeviceChoice();

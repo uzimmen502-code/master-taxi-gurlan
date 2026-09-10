@@ -276,6 +276,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     final gen = ++_activateGen;
     final clip = _clips[index];
     final url = _urlFor(clip);
+    // Yangi generatsiya boshlanishi bilanoq, prepare()dan OLDIN: tez
+    // svayp paytida eskirib qolgan oldingi so'rovlarni pool'ga "endi
+    // kerak emas" deb bildiradi — ular initialize() tugagan zahoti
+    // (retain() kutilmasdan) o'z-o'zidan dispose bo'ladi.
+    _pool.markWanted(_urlsAround(index));
     _pool.pauseAllExcept(url);
 
     final ctrl = await _pool.prepare(url);

@@ -19,13 +19,30 @@ class TvPlayerPool {
   /// Home — ҳеч қачон овоз чиқмасин.
   final bool alwaysMuted;
 
-  /// Бир вақтда тирик ExoPlayer сони (Home=1, Feed=2).
+  /// Бир вақтда тирик (ready) ExoPlayer сони — чақирувчи белгилайди
+  /// (масалан `TvMarketFeedScreen` — 3).
   final int maxReady;
 
   final _ready = <String, VideoPlayerController>{};
   final _inflight = <String, Future<VideoPlayerController?>>{};
 
+  /// Joriy generatsiya endi qaysi url'larni xohlashi — tez svayp paytida
+  /// eskirgan (superseded) so'rovlarni "bekor qilish" signali sifatida
+  /// ishlatiladi (`_create` va `_evictIfNeeded`ga qarang). `VideoPlayerController`
+  /// haqiqiy cancel()ni qo'llab-quvvatlamaydi — shuning uchun bekor qilish
+  /// amalda "kerak emas" deb belgilash va tugagan zahoti dispose qilishdan
+  /// iborat.
+  final _wanted = <String>{};
+
   VideoPlayerController? operator [](String url) => _ready[url];
+
+  /// Sinxron, dispose qilmaydi — faqat signal. Screen har yangi
+  /// generatsiya boshida (`prepare()`dan OLDIN) chaqiradi.
+  void markWanted(Iterable<String> urls) {
+    _wanted
+      ..clear()
+      ..addAll(urls.where((u) => u.isNotEmpty));
+  }
 
   Future<VideoPlayerController?> prepare(String url) {
     if (url.isEmpty) return Future.value(null);
@@ -50,6 +67,13 @@ class TvPlayerPool {
       await ctrl.initialize().timeout(const Duration(seconds: 15));
       await ctrl.setLooping(true);
       await ctrl.setVolume(0);
+      if (shouldDiscardOnComplete(url, _wanted)) {
+        // Shu url tayyor bo'lguncha generatsiya eskirib ulgurdi (foydalanuvchi
+        // allaqachon boshqa joyga svayp qilgan) — _ready'ga hech qachon
+        // qo'shilmaydi, zudlik bilan dispose qilinadi.
+        await ctrl.dispose();
+        return null;
+      }
       _ready[url] = ctrl;
       await _evictIfNeeded(keep: url);
       return ctrl;
@@ -68,13 +92,15 @@ class TvPlayerPool {
   }
 
   Future<void> _evictIfNeeded({required String keep}) async {
-    while (_ready.length > maxReady ||
-        (_ready.length >= maxReady && !_ready.containsKey(keep))) {
-      final victim = _ready.keys.firstWhere(
-        (k) => k != keep,
-        orElse: () => '',
+    while (true) {
+      final victim = selectEvictionVictim(
+        readyKeys: _ready.keys.toList(),
+        inflightKeys: _inflight.keys.toSet(),
+        wanted: _wanted,
+        keep: keep,
+        maxReady: maxReady,
       );
-      if (victim.isEmpty) break;
+      if (victim == null) break;
       final ctrl = _ready.remove(victim);
       await ctrl?.dispose();
     }
@@ -112,6 +138,7 @@ class TvPlayerPool {
       ordered.add(url);
       if (ordered.length >= maxReady) break;
     }
+    markWanted(ordered);
     final drop = _ready.keys.where((k) => !keep.contains(k)).toList();
     for (final url in drop) {
       final ctrl = _ready.remove(url);
@@ -138,3 +165,36 @@ class TvPlayerPool {
 
   Future<void> dispose() => releaseAll();
 }
+
+/// Sof qaror mantig'i (VideoPlayerController'siz, testlanadigan): `ready`
+/// va `inflight`ni birlashtirib (dublikatsiz) sig'imni hisoblaydi va
+/// kerak bo'lsa qaysi `ready` controller evict qilinishini tanlaydi —
+/// `wanted`da yo'qlarga ustuvorlik berib, `keep`ni hech qachon tanlamay.
+/// `inflight` controller'lar (hali `initialize()` tugamagan) haqiqiy
+/// cancel API yo'qligi sababli bu yerda majburan evict qilinmaydi — ular
+/// `shouldDiscardOnComplete` orqali tugagan zahoti o'z-o'zidan tozalanadi.
+/// Evict qilish kerak bo'lmasa yoki qiladigan hech narsa topilmasa — `null`.
+String? selectEvictionVictim({
+  required List<String> readyKeys,
+  required Set<String> inflightKeys,
+  required Set<String> wanted,
+  required String keep,
+  required int maxReady,
+}) {
+  final live = <String>{...readyKeys, ...inflightKeys};
+  final over = live.length > maxReady ||
+      (live.length >= maxReady && !live.contains(keep));
+  if (!over) return null;
+  for (final k in readyKeys) {
+    if (k != keep && !wanted.contains(k)) return k;
+  }
+  for (final k in readyKeys) {
+    if (k != keep) return k;
+  }
+  return null;
+}
+
+/// `_create()` uchun: `initialize()` muvaffaqiyatli tugagan controller
+/// hali ham kerakmi (generatsiya eskirmaganmi)?
+bool shouldDiscardOnComplete(String url, Set<String> wanted) =>
+    !wanted.contains(url);

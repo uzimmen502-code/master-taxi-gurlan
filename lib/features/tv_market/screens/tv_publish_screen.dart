@@ -324,6 +324,17 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     if (!mounted) {
       throw StateError('unmounted');
     }
+    if (compressed.oversized) {
+      throw const TvClipTooLargeException();
+    }
+    final tooLong =
+        await TvClipCompress.checkPostCompressDuration(compressed.path);
+    if (!mounted) {
+      throw StateError('unmounted');
+    }
+    if (tooLong) {
+      throw const TvClipTooLongException();
+    }
     if (compressed.trimmed) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_publish_trimmed'))),
@@ -451,6 +462,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
           searchTokens: tokens,
           showPhone: _showPhone,
         ),
+      );
+    } on TvClipTooLargeException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_too_large'))),
+      );
+    } on TvClipTooLongException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_too_long'))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -699,6 +720,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       await VideoCompress.deleteAllCache();
       if (!mounted) return;
       Navigator.pop(context, true);
+    } on TvClipTooLargeException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_too_large'))),
+      );
+    } on TvClipTooLongException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_too_long'))),
+      );
     } on FirebaseFunctionsException catch (e) {
       final msg = e.code == 'failed-precondition' &&
               e.message == 'insufficient_balance'

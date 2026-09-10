@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -52,6 +53,13 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Anonim (guest) foydalanuvchida telefon-orqali profil hali mavjud
+    // emas — to'liq ProfileController oqimi o'rniga ixtiyoriy ravishda
+    // telefon-registratsiyaga (mavjud OnboardingScreen, o'zgarishsiz)
+    // o'tkazuvchi qisqa taklif ko'rsatiladi.
+    if (FirebaseAuth.instance.currentUser?.isAnonymous ?? false) {
+      return const _AnonymousProfileView();
+    }
     return ChangeNotifierProvider<ProfileController>(
       create: (ctx) => ProfileController(
         driverRepo: ctx.read<DriverRepository>(),
@@ -63,6 +71,65 @@ class ProfileScreen extends StatelessWidget {
       child: _ProfileView(
         autoOpenCarEdit: autoOpenCarEdit,
         returnAfterSave: returnAfterSave,
+      ),
+    );
+  }
+}
+
+class _AnonymousProfileView extends StatelessWidget {
+  const _AnonymousProfileView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.scaffold,
+      appBar: AppBar(title: Text(context.tr('profile'))),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.person_outline_rounded,
+                  size: 64, color: AppColors.primary),
+              const SizedBox(height: 16),
+              Text(
+                context.tr('profile_login_cta'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                          builder: (_) => const OnboardingScreen()),
+                      (_) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryDark,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    context.tr('ob_start'),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

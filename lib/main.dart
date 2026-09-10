@@ -52,14 +52,16 @@ import 'services/notification_delivery.dart';
 import 'services/notification_service.dart';
 import 'features/dating/services/dating_youth_promo_service.dart';
 import 'core/navigation/app_route_observer.dart';
+import 'core/navigation/home_screen_resolver.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_launch_splash.dart';
 import 'core/widgets/zone_gate.dart';
 import 'features/home/screens/home_screen.dart';
 import 'core/utils/formatters.dart';
 import 'features/onboarding/screens/auth_restore_screen.dart';
+import 'features/onboarding/screens/guest_intro_screen.dart';
 import 'features/onboarding/screens/language_select_screen.dart';
-import 'features/onboarding/screens/onboarding_screen.dart';
+import 'services/anon_session_service.dart';
 import 'features/ads/repositories/ads_repository.dart';
 import 'features/ads/services/ads_storage_service.dart';
 import 'core/l10n/locale_notifier.dart';
@@ -99,6 +101,7 @@ void main() async {
   final onboarding = prefs.getBool('onboarding_done') ?? false;
   final firebaseUser = FirebaseAuth.instance.currentUser;
   final hasFirebaseAuth = firebaseUser != null;
+  final isAnonymousAuth = firebaseUser?.isAnonymous ?? false;
   final storedPhone = phoneDigits(prefs.getString('user_phone') ?? '');
   final isReturningUser = onboarding || storedPhone.length >= 12;
     if (!kIsWeb) {
@@ -129,6 +132,7 @@ void main() async {
     isReturningUser: isReturningUser,
     languageSelected: languageSelected,
     hasFirebaseAuth: hasFirebaseAuth,
+    isAnonymousAuth: isAnonymousAuth,
     userId: userId,
     analyticsRepo: analyticsRepo,
     reportService: reportService,
@@ -137,13 +141,22 @@ void main() async {
 }
 
 /// Splash tugagach: FCM / GPS / notification / role sync.
-Future<void> _deferredMobileBootstrap({required bool deferRoleSync}) async {
+Future<void> _deferredMobileBootstrap({
+  required bool deferRoleSync,
+  required bool isAnonymousAuth,
+}) async {
   if (deferRoleSync) {
     try {
       await UserRoleSync().syncToPreferences();
     } catch (e, st) {
       debugPrint('UserRoleSync (deferred): $e\n$st');
     }
+  }
+
+  if (isAnonymousAuth) {
+    // Qaytgan anonim (guest) foydalanuvchi — lastActiveAt yangilanadi;
+    // hujjat allaqachon mavjud bo'lgani uchun signInAnonymously chaqirilmaydi.
+    unawaited(AnonSessionService().ensureAnonymousSession());
   }
 
   if (kIsWeb) return;
@@ -180,12 +193,26 @@ Future<void> _deferredMobileBootstrap({required bool deferRoleSync}) async {
   }
 }
 
+Widget _homeFor(HomeScreenKind kind) {
+  switch (kind) {
+    case HomeScreenKind.languageSelect:
+      return const LanguageSelectScreen();
+    case HomeScreenKind.guestIntro:
+      return const GuestIntroScreen();
+    case HomeScreenKind.authRestore:
+      return const AuthRestoreScreen();
+    case HomeScreenKind.home:
+      return const ZoneGate(child: HomeScreen());
+  }
+}
+
 class MyApp extends StatefulWidget {
   const MyApp({
     super.key,
     required this.isReturningUser,
     required this.languageSelected,
     required this.hasFirebaseAuth,
+    required this.isAnonymousAuth,
     required this.userId,
     required this.analyticsRepo,
     required this.reportService,
@@ -195,6 +222,7 @@ class MyApp extends StatefulWidget {
   final bool isReturningUser;
   final bool languageSelected;
   final bool hasFirebaseAuth;
+  final bool isAnonymousAuth;
   final String userId;
   final AnalyticsRepository analyticsRepo;
   final DailyReportService reportService;
@@ -224,6 +252,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _deferredBootstrapped = true;
     unawaited(_deferredMobileBootstrap(
       deferRoleSync: widget.deferRoleSync,
+      isAnonymousAuth: widget.isAnonymousAuth,
     ));
   }
 
@@ -307,13 +336,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             debugShowCheckedModeBanner: false,
             title: 'AVA',
             theme: AppTheme.light,
-            home: !widget.languageSelected
-                ? const LanguageSelectScreen()
-                : !widget.isReturningUser
-                    ? const OnboardingScreen()
-                    : widget.hasFirebaseAuth
-                        ? const ZoneGate(child: HomeScreen())
-                        : const AuthRestoreScreen(),
+            home: _homeFor(resolveHomeScreenKind(
+              languageSelected: widget.languageSelected,
+              isReturningUser: widget.isReturningUser,
+              hasFirebaseAuth: widget.hasFirebaseAuth,
+              isAnonymousAuth: widget.isAnonymousAuth,
+            )),
             ),
           );
         },

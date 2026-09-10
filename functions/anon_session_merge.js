@@ -56,8 +56,11 @@ function attachAnonSessionMerge(exports, deps) {
   }
 
   /**
-   * Callable: {sessionId} — chaqiruvchi Auth qilingan bo'lishi kerak
-   * (custom token, checkPhoneDeviceLock muvaffaqiyatli bo'lgach).
+   * Callable: {sessionId, anonIdToken} — chaqiruvchi Auth qilingan bo'lishi
+   * kerak (custom token, checkPhoneDeviceLock muvaffaqiyatli bo'lgach).
+   * `anonIdToken` — sessionId'ga tegishli Firebase Anonymous Auth ID token
+   * (egalik isboti): faqat shu sessionId bilan haqiqatan anonim kirgan
+   * klient merge so'rashi mumkin, sessionId'ni bilishning o'zi kifoya emas.
    * Idempotent: `anon_sessions/{sessionId}.status` merge holatini belgilaydi,
    * har bir engagement yozuvi deterministik hujjat ID bilan (clipId) yoziladi
    * — qayta chaqirilsa ustidan yozadi, ikki marta qo'shilmaydi.
@@ -73,6 +76,25 @@ function attachAnonSessionMerge(exports, deps) {
     const sessionId = String((data && data.sessionId) || '').trim();
     if (!sessionId) {
       throw new functions.https.HttpsError('invalid-argument', 'sessionId required');
+    }
+    const anonIdToken = String((data && data.anonIdToken) || '').trim();
+    if (!anonIdToken) {
+      throw new functions.https.HttpsError('invalid-argument', 'anonIdToken required');
+    }
+
+    let decodedAnon;
+    try {
+      decodedAnon = await admin.auth().verifyIdToken(anonIdToken);
+    } catch (e) {
+      throw new functions.https.HttpsError('unauthenticated', 'Invalid or expired anonIdToken');
+    }
+    if (decodedAnon.uid !== sessionId) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'anonIdToken does not match sessionId');
+    }
+    if (!decodedAnon.firebase || decodedAnon.firebase.sign_in_provider !== 'anonymous') {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'anonIdToken is not from an anonymous sign-in');
     }
 
     const sessionRef = db.collection('anon_sessions').doc(sessionId);

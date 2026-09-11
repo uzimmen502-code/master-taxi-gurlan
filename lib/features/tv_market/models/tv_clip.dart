@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../services/tv_social.dart';
+
 /// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
 String tvOwnerDisplayName(String raw) {
   final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -25,13 +27,17 @@ String tvOwnerGivenName(String raw) {
   return d.split(' ').first;
 }
 
+/// Bug fix (social-publish audit, 2026-09): ilgari faqat 3 ta t
+/// (instagram/facebook/tiktok) tan olinardi — YouTube/Telegram tanlovi
+/// Firestore'dan qayta o'qilganda jimgina o'chib qolardi, garchi yozish
+/// tomoni (`tv_publish_screen.dart`, server) 5 tasini ham qo'llab-
+/// quvvatlasa ham. Endi `TvSocial.ordered` — yagona manba.
 List<String> _parseSocialNetworks(dynamic raw) {
   if (raw is! List) return const [];
-  const allowed = {'instagram', 'facebook', 'tiktok'};
   final out = <String>[];
   for (final e in raw) {
     final id = '$e'.trim().toLowerCase();
-    if (allowed.contains(id) && !out.contains(id)) out.add(id);
+    if (TvSocial.ordered.contains(id) && !out.contains(id)) out.add(id);
   }
   return out;
 }

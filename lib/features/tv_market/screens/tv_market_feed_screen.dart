@@ -53,11 +53,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _repo = TvClipsRepository();
   late final TabController _tabController;
   bool _firstLoadDone = false;
-  // 3 = previous+current+next tirik player. Avvalgi OOM insidenti (bu klass
-  // ustidagi izohga qarang) 2 dan boshlangan edi — bu qiymatni oshirishdan
-  // oldin real qurilmada xotira profilini tekshirish shart (tez-tez svayp,
-  // uzoq sessiya).
-  final _pool = TvPlayerPool(alwaysMuted: false, maxReady: 3);
+  // Butun ilova bo'yicha bitta pool (T3: dual-pool OOM xavfi tuzatildi) —
+  // `HomeVideoStage` ham shu instance'ni ishlatadi.
+  TvPlayerPool get _pool => TvPlayerPool.shared;
   final _clips = <TvClip>[];
   bool _loading = true;
   int _currentIndex = 0;
@@ -81,10 +79,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _hasMyShop = false;
 
   /// Ulanish turiga qarab tanlangan variant ('720p'/'480p'/'360p').
-  /// Feed ochilganda bir marta o'qiladi — playback davomida o'zgarmaydi
-  /// (to'liq mid-playback adaptive bitrate — video_engine'ning keyingi
-  /// bosqichi, bu yerda faqat boshlang'ich tanlov).
+  /// T4: `onConnectivityChanged`ga obuna bo'lib yangilanadi (Wi-Fi↔mobil
+  /// almashinuvi endi hisobga olinadi) — lekin faqat KEYINGI prepare
+  /// qilinadigan URL uchun; hozir ijro etilayotgan controller uzilmaydi
+  /// (to'liq mid-playback adaptive bitrate emas).
   String _quality = '720p';
+  StreamSubscription<String>? _qualitySub;
 
   String _urlFor(TvClip clip) => clip.urlForQuality(_quality);
 
@@ -96,6 +96,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
     unawaited(_loadQuality());
+    _qualitySub = TvNetworkQualityService.watch((q) {
+      if (mounted) setState(() => _quality = q);
+    });
     unawaited(_loadMe());
     unawaited(_loadDistricts());
     _loadClips();
@@ -293,7 +296,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (ctrl != null && ctrl.value.isInitialized) {
       if (!mounted || gen != _activateGen) return;
       setState(() => _showPlayPause = false);
-      await _pool.applyOutputVolume(ctrl);
+      await _pool.applyOutputVolume(ctrl, muted: false);
       await ctrl.play();
       if (!tvCanPlay) {
         ctrl.pause();
@@ -345,7 +348,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       ctrl.pause();
       setState(() => _showPlayPause = true);
     } else {
-      unawaited(_pool.applyOutputVolume(ctrl));
+      unawaited(_pool.applyOutputVolume(ctrl, muted: false));
       ctrl.play();
       setState(() => _showPlayPause = true);
       _hideBadgeTimer = Timer(const Duration(milliseconds: 700), () {
@@ -785,7 +788,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     _viewRecorder.dispose();
     _playbackAnalytics.dispose();
     _hideBadgeTimer?.cancel();
-    unawaited(_pool.dispose());
+    _qualitySub?.cancel();
+    // `_pool` endi shared (T3) — instance'ni emas, faqat shu screen ishlatgan
+    // controller'larni bo'shatamiz; boshqa screen (Home) o'zi qayta prepare
+    // qiladi (`didPopNext` → `tvOnPlaybackAllowed`).
+    unawaited(_pool.releaseAll());
     _pageCtrl.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();

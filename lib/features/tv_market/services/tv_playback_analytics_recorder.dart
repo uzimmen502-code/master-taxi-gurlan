@@ -78,7 +78,15 @@ class TvPlaybackAnalyticsRecorder {
     if (ctrl != null && listener != null) {
       ctrl.removeListener(listener);
     }
-    if (ctrl != null && clipId != null && attachedAt != null) {
+    // T5: tez svayp paytida ba'zi klip'lar bir kadr ham chizilmasdan
+    // attach→detach bo'lib o'tadi (`_maxPosition` va `_bufferEvents` hali
+    // ham 0) — bunday holatda yozadigan hech narsa yo'q, Firestore'ga
+    // bo'sh statistika yozuvi yuborilmaydi (hot-document write bosimini
+    // kamaytiradi, audit 12/16-bo'lim).
+    if (ctrl != null &&
+        clipId != null &&
+        attachedAt != null &&
+        (_maxPosition > Duration.zero || _bufferEvents > 0)) {
       if (_wasBuffering && _bufferStartedAt != null) {
         _bufferedTotal += DateTime.now().difference(_bufferStartedAt!);
       }

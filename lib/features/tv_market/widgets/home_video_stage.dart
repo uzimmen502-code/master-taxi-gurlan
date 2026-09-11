@@ -38,7 +38,9 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   static const _nextPage = 10;
 
   final _repo = TvClipsRepository();
-  final _pool = TvPlayerPool(alwaysMuted: true);
+  // Butun ilova bo'yicha bitta pool (T3: dual-pool OOM xavfi tuzatildi) —
+  // `TvMarketFeedScreen` ham shu instance'ni ishlatadi.
+  TvPlayerPool get _pool => TvPlayerPool.shared;
 
   List<TvClip> _clips = [];
   bool _loading = true;
@@ -55,8 +57,10 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   String _meDisplayName = '';
   final _publicNames = <String, String>{};
 
-  /// Feed'dagi kabi — bir marta o'qiladi, ulanish turiga qarab variant.
+  /// T4: `onConnectivityChanged`ga obuna (feed'dagi kabi) — Wi-Fi↔mobil
+  /// almashinuvi keyingi prepare qilinadigan URL uchun hisobga olinadi.
   String _quality = '720p';
+  StreamSubscription<String>? _qualitySub;
 
   String _urlFor(TvClip clip) => clip.urlForQuality(_quality);
 
@@ -65,6 +69,9 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     super.initState();
     tvBindPlayback();
     unawaited(_loadQuality());
+    _qualitySub = TvNetworkQualityService.watch((q) {
+      if (mounted) setState(() => _quality = q);
+    });
     unawaited(_loadMeName());
     _load();
   }
@@ -207,7 +214,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       return;
     }
     if (ctrl != null && ctrl.value.isInitialized) {
-      await _pool.applyOutputVolume(ctrl);
+      await _pool.applyOutputVolume(ctrl, muted: true);
       await ctrl.play();
       await ctrl.setVolume(0);
       if (!tvCanPlay) {
@@ -358,7 +365,11 @@ class _HomeVideoStageState extends State<HomeVideoStage>
   void dispose() {
     tvUnbindPlayback();
     _scrollPos?.removeListener(_onScroll);
-    unawaited(_pool.dispose());
+    _qualitySub?.cancel();
+    // `_pool` endi shared (T3) — Feed screen ochilganda o'zi retain()
+    // orqali bu yerdagi controller'ni evict qiladi, shuning uchun bu yerda
+    // butun pool'ni emas, faqat shu screen bog'lagan resurslarni bo'shatamiz.
+    unawaited(_pool.releaseAll());
     super.dispose();
   }
 

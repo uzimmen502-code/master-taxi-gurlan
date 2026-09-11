@@ -11,16 +11,17 @@ import '../../../core/utils/crash_report.dart';
 /// → OutOfMemoryError (`ExoPlayerImplInternal.shouldContinueLoading`).
 /// Паузада декодерни тирик қолдирмаймиз — [releaseAll].
 class TvPlayerPool {
-  TvPlayerPool({
-    this.alwaysMuted = false,
-    this.maxReady = 1,
-  });
+  TvPlayerPool._({this.maxReady = 3});
 
-  /// Home — ҳеч қачон овоз чиқмасин.
-  final bool alwaysMuted;
+  /// Butun ilova bo'yicha YAGONA pool — screen'lar o'z pool'ini
+  /// yaratmaydi (avvalgi dual-pool OOM xavfi: `TvMarketFeedScreen`
+  /// (maxReady 3) + `HomeVideoStage` (maxReady 1) bir vaqtda tirik
+  /// bo'lganda jami 4 tagacha ExoPlayer). Screen almashganda `retain()`
+  /// yangi `wanted` to'plamiga mos kelmagan eski controller'larni
+  /// avtomatik evict qiladi — shared bo'lgani uchun ham xavfsiz.
+  static final TvPlayerPool shared = TvPlayerPool._(maxReady: 3);
 
-  /// Бир вақтда тирик (ready) ExoPlayer сони — чақирувчи белгилайди
-  /// (масалан `TvMarketFeedScreen` — 3).
+  /// Бир вақтда тирик (ready) ExoPlayer сони — бутун илова учун умумий чегара.
   final int maxReady;
 
   final _ready = <String, VideoPlayerController>{};
@@ -106,8 +107,11 @@ class TvPlayerPool {
     }
   }
 
-  Future<void> applyOutputVolume(VideoPlayerController ctrl) async {
-    await ctrl.setVolume(alwaysMuted ? 0 : 1);
+  /// [muted] — chaqiruvchi screen belgilaydi (Home — doim `true`,
+  /// TV Market feed — doim `false`). Pool o'zi ovoz siyosatini bilmaydi,
+  /// chunki endi bir nechta screen o'rtasida umumiy.
+  Future<void> applyOutputVolume(VideoPlayerController ctrl, {required bool muted}) async {
+    await ctrl.setVolume(muted ? 0 : 1);
   }
 
   void muteAll() {

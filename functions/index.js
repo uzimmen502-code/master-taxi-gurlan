@@ -11357,6 +11357,199 @@ exports.onTvClipDeleted = functions.firestore
       }
     });
 
+// ═════════════════════════════════════════════════════════════════════
+// T1 SPIKE — HLS feasibility (video_engine ADR, video-core audit 2026-09).
+//   Maqsad: `video_player` (Flutter) HLS multi-bitrate manifestni real
+//   qurilmada o'ynata oladimi, ExoPlayer ichida ABR (bitrate switch)
+//   o'zi ishlaydimi — shuni ARZON, IZOLYATSIYALANGAN dalilga aylantirish.
+//   PROD PIPELINE'GA TEGMAYDI: `onTvClipCreated`/`transcodeTvClipVideo`,
+//   `videoVariants`, `tv_clip_variants/` — hech biriga yozmaydi/o'qimaydi.
+//   Faqat qo'lda (`hlsSpikeTranscode` callable) chaqiriladi, hech qanday
+//   Firestore/Storage trigger yo'q. Natija butunlay alohida prefiksda:
+//   `hls_spike/{clipId}/` — spike tugagach `deleteHlsSpike` bilan yoki
+//   `hls_spike/` papkasini qo'lda o'chirib butunlay tozalanadi.
+// ═════════════════════════════════════════════════════════════════════
+const HLS_SPIKE_BUCKET = 'master-taxi-gurlan.firebasestorage.app';
+
+const HLS_SPIKE_RENDITIONS = [
+  {name: 'v0', height: 720, videoBitrate: '2000k', maxrate: '2140k', bufsize: '3000k'},
+  {name: 'v1', height: 480, videoBitrate: '800k', maxrate: '856k', bufsize: '1200k'},
+];
+
+async function hlsSpikeRequireCaller(context) {
+  if (!context || !context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login kerak');
+  }
+  const uid = context.auth.uid;
+  const doc = await db.collection('users').doc(uid).get();
+  const role = (doc.data() || {}).role || 'user';
+  if (!['admin', 'superadmin'].includes(role)) {
+    throw new functions.https.HttpsError(
+        'permission-denied', 'Faqat admin — bu vaqtinchalik spike funksiya');
+  }
+}
+
+function hlsSpikeStoragePathFromUrl(url) {
+  const match = /\/o\/([^?]+)/.exec(url || '');
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function hlsSpikeUploadWithToken(bucket, localPath, destPath, contentType) {
+  const token = crypto.randomUUID();
+  await bucket.upload(localPath, {
+    destination: destPath,
+    metadata: {
+      contentType,
+      metadata: {firebaseStorageDownloadTokens: token},
+    },
+  });
+  const encoded = encodeURIComponent(destPath);
+  return `https://firebasestorage.googleapis.com/v0/b/${HLS_SPIKE_BUCKET}` +
+      `/o/${encoded}?alt=media&token=${token}`;
+}
+
+exports.hlsSpikeTranscode = functions
+    .runWith({timeoutSeconds: 540, memory: '2GB'})
+    .https.onCall(async (data, context) => {
+      await hlsSpikeRequireCaller(context);
+
+      const clipId = String((data && data.clipId) || '').trim();
+      const videoUrl = String((data && data.videoUrl) || '').trim();
+      if (!clipId || !videoUrl) {
+        throw new functions.https.HttpsError(
+            'invalid-argument', 'clipId va videoUrl kerak');
+      }
+      const srcPath = hlsSpikeStoragePathFromUrl(videoUrl);
+      if (!srcPath) {
+        throw new functions.https.HttpsError(
+            'invalid-argument', 'videoUrl Firebase Storage download URL emas');
+      }
+
+      const os = require('os');
+      const path = require('path');
+      const fs = require('fs');
+      const {spawnSync} = require('child_process');
+      const ffmpegPath = require('ffmpeg-static');
+
+      const bucket = admin.storage().bucket(HLS_SPIKE_BUCKET);
+      const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hls_${clipId}_`));
+      const tmpIn = path.join(workDir, 'in.mp4');
+
+      try {
+        await bucket.file(srcPath).download({destination: tmpIn});
+
+        try {
+          fs.chmodSync(ffmpegPath, 0o755);
+        } catch (_) {}
+
+        for (const r of HLS_SPIKE_RENDITIONS) {
+          fs.mkdirSync(path.join(workDir, r.name), {recursive: true});
+        }
+
+        const splitLabels = HLS_SPIKE_RENDITIONS.map((_, i) => `[vsplit${i}]`).join('');
+        const scaleFilters = HLS_SPIKE_RENDITIONS
+            .map((r, i) => `[vsplit${i}]scale=-2:${r.height}[v${i}out]`)
+            .join('; ');
+        const filterComplex =
+            `[0:v]split=${HLS_SPIKE_RENDITIONS.length}${splitLabels}; ${scaleFilters}`;
+        const varStreamMap = HLS_SPIKE_RENDITIONS
+            .map((r, i) => `v:${i},a:${i},name:${r.name}`)
+            .join(' ');
+
+        const args = ['-i', tmpIn, '-filter_complex', filterComplex];
+        HLS_SPIKE_RENDITIONS.forEach((r, i) => {
+          args.push(
+              '-map', `[v${i}out]`,
+              `-c:v:${i}`, 'libx264', '-preset', 'veryfast',
+              `-b:v:${i}`, r.videoBitrate,
+              `-maxrate:v:${i}`, r.maxrate,
+              `-bufsize:v:${i}`, r.bufsize,
+              '-map', '0:a', `-c:a:${i}`, 'aac', `-b:a:${i}`, '128k',
+          );
+        });
+        args.push(
+            '-f', 'hls',
+            '-hls_time', '6',
+            '-hls_playlist_type', 'vod',
+            '-hls_flags', 'independent_segments',
+            '-hls_segment_filename', '%v/seg_%03d.ts',
+            '-master_pl_name', 'master.m3u8',
+            '-var_stream_map', varStreamMap,
+            '-y', '%v/prog.m3u8',
+        );
+
+        const res = spawnSync(ffmpegPath, args, {
+          stdio: 'inherit',
+          maxBuffer: 128 * 1024 * 1024,
+          cwd: workDir,
+        });
+        if (res.status !== 0) {
+          throw new functions.https.HttpsError(
+              'internal', `ffmpeg hls failed: ${res.status}`);
+        }
+
+        const destPrefix = `hls_spike/${clipId}`;
+        const variantUrls = {};
+        for (const r of HLS_SPIKE_RENDITIONS) {
+          const localDir = path.join(workDir, r.name);
+          const segFiles = fs.readdirSync(localDir).filter((f) => f.endsWith('.ts'));
+          const segUrlByName = {};
+          for (const segFile of segFiles) {
+            const url = await hlsSpikeUploadWithToken(
+                bucket, path.join(localDir, segFile),
+                `${destPrefix}/${r.name}/${segFile}`, 'video/mp2t');
+            segUrlByName[segFile] = url;
+          }
+
+          let playlistText = fs.readFileSync(
+              path.join(localDir, 'prog.m3u8'), 'utf8');
+          for (const [segFile, url] of Object.entries(segUrlByName)) {
+            playlistText = playlistText.split(segFile).join(url);
+          }
+          const rewrittenLocal = path.join(localDir, 'prog_rewritten.m3u8');
+          fs.writeFileSync(rewrittenLocal, playlistText, 'utf8');
+
+          variantUrls[r.name] = await hlsSpikeUploadWithToken(
+              bucket, rewrittenLocal, `${destPrefix}/${r.name}/prog.m3u8`,
+              'application/vnd.apple.mpegurl');
+        }
+
+        let masterText = fs.readFileSync(
+            path.join(workDir, 'master.m3u8'), 'utf8');
+        for (const r of HLS_SPIKE_RENDITIONS) {
+          masterText = masterText.split(`${r.name}/prog.m3u8`).join(variantUrls[r.name]);
+        }
+        const masterRewritten = path.join(workDir, 'master_rewritten.m3u8');
+        fs.writeFileSync(masterRewritten, masterText, 'utf8');
+
+        const masterUrl = await hlsSpikeUploadWithToken(
+            bucket, masterRewritten, `${destPrefix}/master.m3u8`,
+            'application/vnd.apple.mpegurl');
+
+        return {ok: true, clipId, masterUrl, variantUrls};
+      } catch (e) {
+        console.error('hlsSpikeTranscode error:', clipId, e.message || e);
+        if (e instanceof functions.https.HttpsError) throw e;
+        throw new functions.https.HttpsError('internal', e.message || 'hls spike failed');
+      } finally {
+        try {
+          fs.rmSync(workDir, {recursive: true, force: true});
+        } catch (_) {}
+      }
+    });
+
+/** T1 spike tozalash — sinov tugagach `hls_spike/{clipId}/` ni butunlay o'chiradi. */
+exports.deleteHlsSpike = functions.https.onCall(async (data, context) => {
+  await hlsSpikeRequireCaller(context);
+  const clipId = String((data && data.clipId) || '').trim();
+  if (!clipId) {
+    throw new functions.https.HttpsError('invalid-argument', 'clipId kerak');
+  }
+  const bucket = admin.storage().bucket(HLS_SPIKE_BUCKET);
+  await bucket.deleteFiles({prefix: `hls_spike/${clipId}/`});
+  return {ok: true};
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // TV Market — «Кун янгиликлари» (48 соат) ва «Реклама» (7/15/30 кун)
 // муддати ўтган клипларни `expired` қилиш. `status='active'` дан бошқа

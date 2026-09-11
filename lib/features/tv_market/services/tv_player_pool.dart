@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/utils/crash_report.dart';
+import 'tv_clip_cache_service.dart';
 
 /// Ҳозирги + (ихтиёрий) кейинги клип учун плеер пули.
 ///
@@ -27,22 +28,39 @@ class TvPlayerPool {
   final _ready = <String, VideoPlayerController>{};
   final _inflight = <String, Future<VideoPlayerController?>>{};
 
+  /// T6: hali `initialize()` tugamagan controller'larga ishora — `markWanted()`
+  /// shu url endi kerak emasligini bilishi bilanoq shu yerdan topib DARHOL
+  /// dispose qiladi (native ExoPlayer yuklashni to'xtatadi). `initialize()`
+  /// to'liq tugaguncha kutib, keyin `shouldDiscardOnComplete` orqali
+  /// tashlashdan farqli — bu yerda network/decoder resursi ancha ertaroq
+  /// bo'shatiladi.
+  final _inflightCtrls = <String, VideoPlayerController>{};
+
   /// Joriy generatsiya endi qaysi url'larni xohlashi — tez svayp paytida
   /// eskirgan (superseded) so'rovlarni "bekor qilish" signali sifatida
   /// ishlatiladi (`_create` va `_evictIfNeeded`ga qarang). `VideoPlayerController`
-  /// haqiqiy cancel()ni qo'llab-quvvatlamaydi — shuning uchun bekor qilish
-  /// amalda "kerak emas" deb belgilash va tugagan zahoti dispose qilishdan
-  /// iborat.
+  /// haqiqiy tarmoq-cancel()ni qo'llab-quvvatlamaydi — shuning uchun bekor
+  /// qilish amalda "kerak emas" deb belgilash va (agar hali initialize()
+  /// tugamagan bo'lsa — [_inflightCtrls] orqali darhol, aks holda tugagan
+  /// zahoti) dispose qilishdan iborat.
   final _wanted = <String>{};
 
   VideoPlayerController? operator [](String url) => _ready[url];
 
-  /// Sinxron, dispose qilmaydi — faqat signal. Screen har yangi
-  /// generatsiya boshida (`prepare()`dan OLDIN) chaqiradi.
+  /// Sinxron. Screen har yangi generatsiya boshida (`prepare()`dan OLDIN)
+  /// chaqiradi. Endi signal berish bilan bir qatorda — hali tayyor
+  /// bo'lmagan, lekin endi kerak bo'lmay qolgan controller'larni ham
+  /// shu yerda darhol dispose qiladi (T6: true(r) cancellation).
   void markWanted(Iterable<String> urls) {
     _wanted
       ..clear()
       ..addAll(urls.where((u) => u.isNotEmpty));
+    final stale =
+        _inflightCtrls.keys.where((u) => !_wanted.contains(u)).toList();
+    for (final u in stale) {
+      final ctrl = _inflightCtrls.remove(u);
+      unawaited(ctrl?.dispose());
+    }
   }
 
   Future<VideoPlayerController?> prepare(String url) {
@@ -58,14 +76,35 @@ class TvPlayerPool {
     VideoPlayerController? ctrl;
     try {
       await _evictIfNeeded(keep: url);
-      ctrl = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        videoPlayerOptions: VideoPlayerOptions(
-          mixWithOthers: true,
-          allowBackgroundPlayback: false,
-        ),
-      );
-      await ctrl.initialize().timeout(const Duration(seconds: 15));
+      // T7: bounded lokal cache'da bo'lsa — darhol fayldan (tarmoqsiz);
+      // bo'lmasa avvalgidek network stream + fon'da keyingi ko'rish uchun
+      // yuklab olish.
+      final cached = await TvClipCacheService.instance.localFile(url);
+      ctrl = cached != null
+          ? VideoPlayerController.file(
+              cached,
+              videoPlayerOptions: VideoPlayerOptions(
+                mixWithOthers: true,
+                allowBackgroundPlayback: false,
+              ),
+            )
+          : VideoPlayerController.networkUrl(
+              Uri.parse(url),
+              videoPlayerOptions: VideoPlayerOptions(
+                mixWithOthers: true,
+                allowBackgroundPlayback: false,
+              ),
+            );
+      _inflightCtrls[url] = ctrl;
+      try {
+        await ctrl.initialize().timeout(const Duration(seconds: 15));
+      } finally {
+        // T6: markWanted() shu vaqt ichida allaqachon dispose qilib
+        // ulgurgan bo'lishi mumkin — natija (muvaffaqiyat yoki xato)
+        // quyida `_wanted` orqali baholanadi, shuning uchun bu yerda
+        // shunchaki ro'yxatdan olib tashlaymiz.
+        _inflightCtrls.remove(url);
+      }
       await ctrl.setLooping(true);
       await ctrl.setVolume(0);
       if (shouldDiscardOnComplete(url, _wanted)) {
@@ -77,15 +116,26 @@ class TvPlayerPool {
       }
       _ready[url] = ctrl;
       await _evictIfNeeded(keep: url);
+      if (cached == null) {
+        unawaited(TvClipCacheService.instance.ensureCached(url));
+      }
       return ctrl;
     } catch (e, st) {
+      _inflightCtrls.remove(url);
+      await ctrl?.dispose();
+      if (!_wanted.contains(url)) {
+        // T6: `markWanted()` shu url'ni allaqachon "kerak emas" deb topib,
+        // yuqorida erta dispose qilgan bo'lishi mumkin (`initialize()` shu
+        // sabab xato/timeout bilan tugaydi) — bu kutilgan holat, xato emas,
+        // Crashlytics'ga yubormaymiz.
+        return null;
+      }
       debugPrint('[TvPlayerPool] $e');
       unawaited(CrashReport.nonFatal(
         e,
         st,
         reason: 'tv_player_init',
       ));
-      await ctrl?.dispose();
       return null;
     } finally {
       _inflight.remove(url);
@@ -174,9 +224,12 @@ class TvPlayerPool {
 /// va `inflight`ni birlashtirib (dublikatsiz) sig'imni hisoblaydi va
 /// kerak bo'lsa qaysi `ready` controller evict qilinishini tanlaydi —
 /// `wanted`da yo'qlarga ustuvorlik berib, `keep`ni hech qachon tanlamay.
-/// `inflight` controller'lar (hali `initialize()` tugamagan) haqiqiy
-/// cancel API yo'qligi sababli bu yerda majburan evict qilinmaydi — ular
-/// `shouldDiscardOnComplete` orqali tugagan zahoti o'z-o'zidan tozalanadi.
+/// `inflight` controller'lar bu funksiya darajasida majburan evict
+/// qilinmaydi (sig'im hisobiga kiradi, xolos) — ularning haqiqiy erta
+/// dispose qilinishi `TvPlayerPool.markWanted()`da, `_inflightCtrls`
+/// orqali sodir bo'ladi (T6); shu yerga yetib kelmagan bo'lsa,
+/// `shouldDiscardOnComplete` orqali `initialize()` tugagan zahoti
+/// o'z-o'zidan tozalanadi.
 /// Evict qilish kerak bo'lmasa yoki qiladigan hech narsa topilmasa — `null`.
 String? selectEvictionVictim({
   required List<String> readyKeys,

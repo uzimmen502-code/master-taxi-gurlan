@@ -266,11 +266,13 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       }
     }
 
-    // Tartib muhim: retain() maxReady'gacha birinchilarni saqlaydi.
-    // current > next > previous ustuvorligi bilan.
+    // T8: CURRENT/NEXT/NEXT+1 (video-core audit target). Tartib muhim:
+    // retain() maxReady (3) tagacha birinchilarni saqlaydi. PREVIOUS
+    // ataylab preload qilinmaydi — orqaga svayp qilinsa oldingi klip
+    // qayta bufer bo'ladi (audit'da ma'qullangan trade-off).
     add(index);
     add(index + 1);
-    add(index - 1);
+    add(index + 2);
     return urls;
   }
 

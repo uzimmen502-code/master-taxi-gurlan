@@ -11240,29 +11240,65 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       fs.chmodSync(ffmpegPath, 0o755);
     } catch (_) {}
 
-    const variants = {};
-    for (const spec of TV_CLIP_VARIANT_SPECS) {
-      const tmpOut = path.join(os.tmpdir(), `${clipId}_${spec.key}.mp4`);
-      tmpOutputs.push(tmpOut);
-      const res = spawnSync(ffmpegPath, [
-        '-i', tmpIn,
-        '-t', String(TV_CLIP_MAX_SECONDS),
-        '-vf', `scale=-2:'min(${spec.maxHeight},ih)'`,
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '26',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-movflags', '+faststart',
-        '-y', tmpOut,
-      ], {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+    // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
+    // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб
+    // ўз файлига ёзилади. Илгари ҳар вариант учун алоҳида чақирув бўлиб,
+    // файл бошидан қайта-қайта декодланарди — узун клипда бу 540с
+    // бюджетни бекорга ейди. (Кодлаш барибир ҳар вариант учун алоҳида —
+    // тежов декодлаш ва процесс устида, икки баравар эмас.)
+    const outPaths = TV_CLIP_VARIANT_SPECS.map((spec) => {
+      const p = path.join(os.tmpdir(), `${clipId}_${spec.key}.mp4`);
+      tmpOutputs.push(p);
+      return p;
+    });
 
-      if (res.status !== 0 || !fs.existsSync(tmpOut)) {
-        console.error(
-            `tv clip ${clipId} ffmpeg ${spec.key} failed`,
-            res.status, res.error);
-        continue;
-      }
+    const splitLabels =
+        TV_CLIP_VARIANT_SPECS.map((_, i) => `[s${i}]`).join('');
+    const scaleChain = TV_CLIP_VARIANT_SPECS
+        .map((spec, i) => `[s${i}]scale=-2:'min(${spec.maxHeight},ih)'[v${i}]`)
+        .join('; ');
+
+    // `-t` айнан `-i`дан ОЛДИН — кириш опцияси сифатида. Шунда манба
+    // ўқишнинг ўзи чегарада тўхтайди (ҳар бир чиқишга алоҳида ёзиш
+    // шарт бўлмайди, ва ортиқча қисм умуман декодланмайди).
+    const args = [
+      '-y',
+      '-t', String(TV_CLIP_MAX_SECONDS),
+      '-i', tmpIn,
+      '-filter_complex',
+      `[0:v]split=${TV_CLIP_VARIANT_SPECS.length}${splitLabels}; ${scaleChain}`,
+    ];
+    TV_CLIP_VARIANT_SPECS.forEach((spec, i) => {
+      args.push(
+          '-map', `[v${i}]`,
+          // `?` — овозсиз видео бутун transcode'ни йиқитмаслиги учун.
+          // `filter_complex` ишлатилганда оқимлар автоматик танланмайди,
+          // шунинг учун овозни ошкора map қилиш ШАРТ.
+          '-map', '0:a?',
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '26',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-movflags', '+faststart',
+          outPaths[i],
+      );
+    });
+
+    const res = spawnSync(ffmpegPath, args,
+        {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+    if (res.status !== 0) {
+      console.error(
+          `tv clip ${clipId} ffmpeg failed`, res.status, res.error);
+    }
+
+    const variants = {};
+    for (let i = 0; i < TV_CLIP_VARIANT_SPECS.length; i++) {
+      const spec = TV_CLIP_VARIANT_SPECS[i];
+      const tmpOut = outPaths[i];
+      // ffmpeg умуман йиқилган бўлса ҳам ҳар бир файл алоҳида
+      // текширилади: қисман чиққан натижа бўлса, у ҳам ишга ярайди.
+      if (!fs.existsSync(tmpOut) || fs.statSync(tmpOut).size <= 0) continue;
 
       const destPath = `tv_clip_variants/${clipId}/${spec.key}.mp4`;
       const token = crypto.randomUUID();

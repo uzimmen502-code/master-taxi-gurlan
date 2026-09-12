@@ -1124,7 +1124,7 @@ class _AreaFilterChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+          padding: const EdgeInsets.fromLTRB(9, 6, 4, 6),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1135,14 +1135,14 @@ class _AreaFilterChip extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                    fontSize: 11.5,
                   ),
                 ),
               ),
               const Icon(
                 Icons.arrow_drop_down_rounded,
                 color: Colors.white,
-                size: 20,
+                size: 18,
               ),
             ],
           ),

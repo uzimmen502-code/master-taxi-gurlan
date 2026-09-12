@@ -8,7 +8,7 @@ import '../services/tv_social.dart';
 /// functions/index.js) ffmpeg `-t` орқали бажарилади. Бу ердагиси фақат
 /// фойдаланувчи узун видеони бекорга юклаб, кейин у кесилганини
 /// билмаслиги учун. Икки қиймат мос туриши шарт.
-const tvClipMaxUploadSeconds = 180;
+const tvClipMaxUploadSeconds = 600;
 
 /// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
 String tvOwnerDisplayName(String raw) {

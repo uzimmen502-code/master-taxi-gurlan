@@ -11199,13 +11199,19 @@ const TV_CLIP_VARIANT_SPECS = [
 ];
 
 // Клип давомийлигининг ягона авторитетли чегараси — вариантлар шу
-// қийматда кесилади. ВАҚТИНЧАЛИК 180с: бу функция 1-авлодда ишлайди,
-// `timeoutSeconds: 540` унинг абсолют максимуми, ва иккита rendition
-// кетма-кет transcode қилинади. Узунроқ клип шу бюджетга сиғмайди.
-// Функция 2-авлодга кўчирилиб, реал ўлчов қилингандан кейин бу қиймат
-// оширилади. Клиент томондаги жуфти: `tvClipMaxUploadSeconds`
-// (lib/features/tv_market/models/tv_clip.dart) — иккиси мос туриши шарт.
-const TV_CLIP_MAX_SECONDS = 180;
+// қийматда кесилади.
+//
+// 600с (10 дақиқа) — тахмин эмас, ўлчовдан чиққан рақам. 2-авлодда
+// (4GiB, 2 vCPU) 180 сониялик клип бутун занжирни 24.7 сонияда
+// тугатди: download 1.4s, ffmpeg 20.8s, upload 0.7s, hls 1.1s —
+// 540с бюджетнинг 4.6%и. 600с га чизиқли ўтказилса ~80с; оғир
+// манбада (ўлчанган энг оғири — секундига ~0.5MB) ҳам ~240с, яъни
+// бюджетнинг ярмидан кам.
+//
+// Клиент томондаги жуфти: `tvClipMaxUploadSeconds`
+// (lib/features/tv_market/models/tv_clip.dart) — иккиси мос туриши
+// шарт, буни тест текширади.
+const TV_CLIP_MAX_SECONDS = 600;
 
 // HLS сегментининг узунлиги. Лентада энг муҳими биринчи кадр тезлиги,
 // шунинг учун қисқа сегмент афзал — плеер камроқ маълумот юклаб
@@ -11548,43 +11554,19 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
   }
 }
 
-exports.onTvClipCreated = functions
-    .runWith({timeoutSeconds: 540, memory: '2GB'})
-    .firestore.document('tv_clips/{clipId}')
-    .onCreate(async (snap) => {
-      const data = snap.data() || {};
-      const videoUrl = data.videoUrl || '';
-      if (!videoUrl) return;
-      await transcodeTvClipVideo(snap.id, videoUrl);
-    });
-
-exports.onTvClipVideoReplaced = functions
-    .runWith({timeoutSeconds: 540, memory: '2GB'})
-    .firestore.document('tv_clips/{clipId}')
-    .onUpdate(async (change) => {
-      const before = change.before.data() || {};
-      const after = change.after.data() || {};
-      if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
-      await transcodeTvClipVideo(change.after.id, after.videoUrl);
-    });
-
 // ─────────────────────────────────────────────────────────────────────
-// Юқоридаги иккита триггернинг 2-авлод (Cloud Run) версияси.
+// TV клип transcode триггерлари — 2-авлод (Cloud Run).
 //
-// МИГРАЦИЯ ҲОЛАТИ: Firebase функция авлодини ЖОЙИДА ўзгартиришга
-// рухсат бермайди — ўша ном билан v2 deploy қилинса, deploy йиқилади.
-// Шунинг учун булар АЛОҲИДА ном билан, эскиларининг ЁНИДА туради.
-// Иккови ҳам ишга тушади, лекин `claimTvClipTranscode()` транзакцияси
-// фақат биттасини ўтказади. Янгилари ишлаётганига ишонч ҳосил
-// қилингандан кейин эскиларини ўчириш керак:
-//   firebase functions:delete onTvClipCreated onTvClipVideoReplaced
+// Илгари булар 1-авлодда эди (`onTvClipCreated` /
+// `onTvClipVideoReplaced`). Firebase функция авлодини жойида
+// ўзгартиришга рухсат бермагани учун миграция «янги ном ёнма-ён →
+// текшир → эскисини ўчир» тартибида қилинди; эскилари ўчирилган ва
+// уларнинг коди шу ердан олиб ташланган.
 //
-// НИМА ЮТАМИЗ: 540с чегараси 2-авлодда ҳам ўша-ўша (event-driven
-// функциялар учун бу максимум). Ютуқ — ресурсда: 1 vCPU ўрнига 2 ва
-// кўпроқ xotira. x264 кўп оқимли, шунинг учун ffmpeg сезиларли тез
-// тугайди, яъни ўша 540с ичига узунроқ видео сиғади. Аниқ рақам
-// `timing:` логларидан кўринади; шундан кейин `TV_CLIP_MAX_SECONDS`
-// оширилади ва керак бўлса `cpu` ҳам.
+// 540с чегараси 2-авлодда ҳам ўзгармайди (event-driven функциялар
+// учун максимум) — ютуқ ресурсда: 1 vCPU ўрнига 2 ва 4GiB xotira.
+// Ўлчов: 180 сониялик клип бутун занжирни 24.7с да тугатди, яъни
+// бюджетнинг 4.6%и (қаранг: `TV_CLIP_MAX_SECONDS`).
 // ─────────────────────────────────────────────────────────────────────
 const {
   onDocumentCreated,

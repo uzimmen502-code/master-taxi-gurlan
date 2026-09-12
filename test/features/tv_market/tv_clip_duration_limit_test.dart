@@ -124,24 +124,28 @@ void main() {
   });
 
   group('TvClipCompress.trimToSeconds — юклашдан олдинги кесиш', () {
+    // Чегарага НИСБИЙ: `tvClipMaxUploadSeconds` ўзгарса бу тестлар
+    // ўзгаришсиз ишлайверади.
+    const cap = tvClipMaxUploadSeconds;
+
     test('чегарадан калта — кесилмайди', () {
-      expect(TvClipCompress.trimToSeconds(60000), isNull);
-      expect(TvClipCompress.trimToSeconds(179000), isNull);
+      expect(TvClipCompress.trimToSeconds(1000), isNull);
+      expect(TvClipCompress.trimToSeconds((cap - 1) * 1000), isNull);
     });
 
     test('чегаранинг ўзи — кесилмайди', () {
-      expect(TvClipCompress.trimToSeconds(180000), isNull);
+      expect(TvClipCompress.trimToSeconds(cap * 1000), isNull);
     });
 
     test('чегарадан узун — чегарагача кесилади', () {
-      expect(TvClipCompress.trimToSeconds(181000), tvClipMaxUploadSeconds);
-      // 4 дақиқа — айнан 403 берган ҳолат.
-      expect(TvClipCompress.trimToSeconds(240000), tvClipMaxUploadSeconds);
+      expect(TvClipCompress.trimToSeconds((cap + 1) * 1000), cap);
+      expect(TvClipCompress.trimToSeconds((cap * 2) * 1000), cap);
     });
 
     test('сония берадиган қурилмалар ҳам тўғри тушунилади', () {
-      expect(TvClipCompress.trimToSeconds(240), tvClipMaxUploadSeconds);
-      expect(TvClipCompress.trimToSeconds(60), isNull);
+      // 1000 дан кичик қиймат сония деб қабул қилинади.
+      expect(TvClipCompress.trimToSeconds(999), 999 > cap ? cap : null);
+      expect(TvClipCompress.trimToSeconds(1), isNull);
     });
 
     test('номаълум давомийлик — кесилмайди', () {

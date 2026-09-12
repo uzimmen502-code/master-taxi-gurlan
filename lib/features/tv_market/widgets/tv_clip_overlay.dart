@@ -83,28 +83,41 @@ class TvClipOverlay extends StatelessWidget {
                   if (filters != null) Flexible(child: filters!),
                   if (!isOwner && clip.showPhone) ...[
                     if (filters != null) const SizedBox(width: 6),
-                    // Матн кенглигида — бутун қаторга чўзилмайди.
+                    // Ихчам: матни қанча бўлса шунча жой олади ва
+                    // қолганини фильтрларга бўшатади. `ElevatedButton`
+                    // ўзидан 64px минимал КЕНГЛИК мажбурлайди —
+                    // `minimumSize: Size.zero` уни олиб ташлайди
+                    // (`tapTargetSize` фақат баландликка таъсир қилади).
+                    // Иконка ва матн орасидаги оралиқни бошқариш учун
+                    // `.icon` конструктори эмас, ўз `Row`имиз.
                     SizedBox(
-                      height: 34,
-                      child: ElevatedButton.icon(
+                      height: 30,
+                      child: ElevatedButton(
                         onPressed: onContact,
-                        icon: const Icon(Icons.call_rounded, size: 15),
-                        label: Text(
-                          context.tr('tv_market_contact'),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.28),
                           foregroundColor: const Color(0xFF00E676),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 9),
+                          minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(9),
                           ),
                           elevation: 0,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.call_rounded, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              context.tr('tv_market_contact'),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

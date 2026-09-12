@@ -1036,7 +1036,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                   scrollDirection: Axis.vertical,
                   physics: const TvSwipePhysics(
                     parent: BouncingScrollPhysics(),
-                    commitFraction: 0.15,
+                    commitFraction: 0.10,
                   ),
                   itemCount: _clips.length,
                   onPageChanged: _onPageChanged,

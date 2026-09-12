@@ -55,26 +55,35 @@ class TvClipOverlay extends StatelessWidget {
       children: [
         Positioned(
           left: 12,
-          right: 72,
+          // Пастки қатор экраннинг ўнг чеккасигача чўзилади. Ўнгдаги
+          // тугмалар устуни ундан ЮҚОРИРОҚ (`bottom + 80`) тургани
+          // учун бу қаторга халақит бермайди.
+          right: 12,
           bottom: bottom + 16,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _InfoColumn(clip: clip),
+              // Матн устуни эса ўнгдаги тугмалар устунига кириб
+              // кетмаслиги керак — шунинг учун унга алоҳида чекинма
+              // (12 + 60 = аввалги 72).
+              Padding(
+                padding: const EdgeInsets.only(right: 60),
+                child: _InfoColumn(clip: clip),
+              ),
               const SizedBox(height: 10),
               if (isOwner && onEdit != null && onDelete != null)
                 TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!),
-              // Битта қатор: [туман] [вилоят] [Боғланиш]. Фильтрлар
-              // эгасининг ўз клипида ҳам кўринади — улар клипга эмас,
-              // лентага тегишли.
+              // Битта қатор: чапда [туман] [вилоят], ўнг чеккада
+              // «Боғланиш». Фильтрлар эгасининг ўз клипида ҳам
+              // кўринади — улар клипга эмас, лентага тегишли.
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (filters != null) Flexible(child: filters!),
                   if (!isOwner && clip.showPhone) ...[
                     if (filters != null) const SizedBox(width: 6),
-                    // `MainAxisSize.min` — тугма энди бутун кенгликка
-                    // чўзилмайди, матни қанча бўлса шунча жой олади.
+                    // Матн кенглигида — бутун қаторга чўзилмайди.
                     SizedBox(
                       height: 34,
                       child: ElevatedButton.icon(

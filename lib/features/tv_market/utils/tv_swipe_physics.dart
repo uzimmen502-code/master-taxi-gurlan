@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 /// Instagram Reels'дагидек — тезликсиз (секин) drag экран баландлигининг
-/// [commitFraction] (default 15%) қисмидан ошса, кейинги/олдинги видеога
+/// [commitFraction] (default 10%) қисмидан ошса, кейинги/олдинги видеога
 /// ўтади. Стандарт Flutter `PageScrollPhysics`да бу чегара ~50% (nearest
 /// page rounding). Тез flick — одатдагидек, масофадан қатъи назар
 /// тезлик йўналиши бўйича ишлайди (Flutter'нинг ўз ±0.5 pre-shift'и).
@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 /// учрайди), noto'g'ri tomonga snap qilishi mumkin — past ehtimol,
 /// past ta'sir (faqat qayta svayp talab qiladi, crash emas).
 class TvSwipePhysics extends ScrollPhysics {
-  const TvSwipePhysics({super.parent, this.commitFraction = 0.15});
+  const TvSwipePhysics({super.parent, this.commitFraction = 0.10});
 
   final double commitFraction;
 

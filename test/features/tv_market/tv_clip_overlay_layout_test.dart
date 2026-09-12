@@ -89,6 +89,22 @@ void main() {
     expect(tester.getCenter(filters).dx, lessThan(tester.getCenter(btn).dx));
   });
 
+  testWidgets('«Боғланиш» экраннинг ўнг чеккасида туради', (tester) async {
+    await _pump(
+      tester,
+      filters: const SizedBox(key: Key('filters'), width: 120, height: 30),
+    );
+
+    // Overlay `right: 12` — 400px экранда қатор 388 да тугайди.
+    final right = tester.getTopRight(find.byType(ElevatedButton)).dx;
+    expect(right, closeTo(388, 1.0),
+        reason: 'tugma $right px da tugadi, o\'ng chekka 388 bo\'lishi kerak');
+
+    // Фильтрлар эса чап чеккада (12) қолади.
+    final left = tester.getTopLeft(find.byKey(const Key('filters'))).dx;
+    expect(left, closeTo(12, 1.0));
+  });
+
   testWidgets('эга исми overlay\'да энди кўрсатилмайди (AppBar\'га кўчди)',
       (tester) async {
     await _pump(tester);

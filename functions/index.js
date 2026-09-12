@@ -11212,11 +11212,45 @@ function tvClipStoragePathFromUrl(url) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+// Битта клип икки марта transcode қилинмаслиги учун атомар «банд
+// қилиш». 1→2-авлод миграцияси даврида эски (v1) ва янги (V2)
+// триггерлар бир вақтда deploy қилинган бўлади ва иккаласи ҳам
+// ишга тушади — транзакция фақат биттасини ўтказади.
+//
+// Банд қилиш АЙНАН шу `videoUrl` учун: шунда видео алмаштирилганда
+// (`onTvClipVideoReplaced`) янги URL учун иш қайтадан бошланади,
+// хато билан тугаган клип эса қайта уриниб кўрилади.
+async function claimTvClipTranscode(clipRef, videoUrl) {
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(clipRef);
+      if (!snap.exists) return false;
+      const d = snap.data() || {};
+      const done = d.processingStatus === 'processing' ||
+          d.processingStatus === 'ready';
+      if (d.processedVideoUrl === videoUrl && done) return false;
+      tx.update(clipRef, {
+        processingStatus: 'processing',
+        processedVideoUrl: videoUrl,
+      });
+      return true;
+    });
+  } catch (e) {
+    console.error('claimTvClipTranscode failed:', clipRef.id, e.message || e);
+    return false;
+  }
+}
+
 async function transcodeTvClipVideo(clipId, videoUrl) {
   const clipRef = db.collection('tv_clips').doc(clipId);
   const srcPath = tvClipStoragePathFromUrl(videoUrl);
   if (!srcPath) {
     console.error('transcodeTvClipVideo: bad videoUrl for', clipId);
+    return;
+  }
+
+  if (!await claimTvClipTranscode(clipRef, videoUrl)) {
+    console.log(`tv clip ${clipId}: transcode allaqachon band, o'tkazib yuborildi`);
     return;
   }
 
@@ -11241,7 +11275,6 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
   const secsSince = (from) => ((Date.now() - from) / 1000).toFixed(1);
 
   try {
-    await clipRef.update({processingStatus: 'processing'});
     const tDownload = Date.now();
     await bucket.file(srcPath).download({destination: tmpIn});
     const srcMb = fs.existsSync(tmpIn)
@@ -11381,6 +11414,56 @@ exports.onTvClipVideoReplaced = functions
       const after = change.after.data() || {};
       if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
       await transcodeTvClipVideo(change.after.id, after.videoUrl);
+    });
+
+// ─────────────────────────────────────────────────────────────────────
+// Юқоридаги иккита триггернинг 2-авлод (Cloud Run) версияси.
+//
+// МИГРАЦИЯ ҲОЛАТИ: Firebase функция авлодини ЖОЙИДА ўзгартиришга
+// рухсат бермайди — ўша ном билан v2 deploy қилинса, deploy йиқилади.
+// Шунинг учун булар АЛОҲИДА ном билан, эскиларининг ЁНИДА туради.
+// Иккови ҳам ишга тушади, лекин `claimTvClipTranscode()` транзакцияси
+// фақат биттасини ўтказади. Янгилари ишлаётганига ишонч ҳосил
+// қилингандан кейин эскиларини ўчириш керак:
+//   firebase functions:delete onTvClipCreated onTvClipVideoReplaced
+//
+// НИМА ЮТАМИЗ: 540с чегараси 2-авлодда ҳам ўша-ўша (event-driven
+// функциялар учун бу максимум). Ютуқ — ресурсда: 1 vCPU ўрнига 2 ва
+// кўпроқ xotira. x264 кўп оқимли, шунинг учун ffmpeg сезиларли тез
+// тугайди, яъни ўша 540с ичига узунроқ видео сиғади. Аниқ рақам
+// `timing:` логларидан кўринади; шундан кейин `TV_CLIP_MAX_SECONDS`
+// оширилади ва керак бўлса `cpu` ҳам.
+// ─────────────────────────────────────────────────────────────────────
+const {
+  onDocumentCreated,
+  onDocumentUpdated,
+} = require('firebase-functions/v2/firestore');
+
+const TV_CLIP_TRANSCODE_V2_OPTS = {
+  document: 'tv_clips/{clipId}',
+  region: 'us-central1',
+  memory: '4GiB',
+  cpu: 2,
+  timeoutSeconds: 540,
+};
+
+exports.onTvClipCreatedV2 = onDocumentCreated(
+    TV_CLIP_TRANSCODE_V2_OPTS,
+    async (event) => {
+      const data = event.data ? event.data.data() || {} : {};
+      const videoUrl = data.videoUrl || '';
+      if (!videoUrl) return;
+      await transcodeTvClipVideo(event.params.clipId, videoUrl);
+    });
+
+exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
+    TV_CLIP_TRANSCODE_V2_OPTS,
+    async (event) => {
+      if (!event.data) return;
+      const before = event.data.before.data() || {};
+      const after = event.data.after.data() || {};
+      if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
+      await transcodeTvClipVideo(event.params.clipId, after.videoUrl);
     });
 
 // Модератор «Блоклаш» босганда (сабаб билан) — эгасига сабабини кўрсатиб

@@ -12,7 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/service_area_picker.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../utils/locale_utils.dart';
-import 'onboarding_screen.dart';
+import 'guest_intro_screen.dart';
 
 /// Тил + туман — рўйхатдан олдин хабар ихчам экран.
 /// Туман танланмаса кейинги экранга ўтилмайди (сариқ енгил огоҳлантириш).
@@ -106,7 +106,9 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        // Рўйхатдан ўтиш мажбурий эмас: меҳмон интро → аноним сессия → Бош
+        // экран. Телефон орқали рўйхатдан ўтиш профилдаги CTA орқали.
+        MaterialPageRoute(builder: (_) => const GuestIntroScreen()),
       );
     } catch (_) {
       if (!mounted) return;

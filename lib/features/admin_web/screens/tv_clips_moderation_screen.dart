@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -835,11 +836,35 @@ class _TvClipDetailDialog extends StatelessWidget {
                 ],
                 if (clip.videoUrl.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  const Text('Видео URL',
+                  const Text('Видео',
                       style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
+                  if (clip.posterUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        clip.posterUrl,
+                        width: double.infinity,
+                        height: 180,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  // Атайин `mp4Url` — `videoUrl` эмас: лента HLS'га
+                  // ўтганда ҳам модератор браузерда кўра оладиган
+                  // оддий MP4 керак (Chrome m3u8'ни нативда ўқимайди).
+                  FilledButton.icon(
+                    onPressed: () => launchUrl(
+                      Uri.parse(clip.mp4Url),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.play_circle_outline, size: 18),
+                    label: const Text('Видеони кўриш'),
+                  ),
+                  const SizedBox(height: 6),
                   SelectableText(
-                    clip.videoUrl,
+                    clip.mp4Url,
                     style: TextStyle(
                         fontSize: 12, color: Colors.blue.shade700),
                   ),

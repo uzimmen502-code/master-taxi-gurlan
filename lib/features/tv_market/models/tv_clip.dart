@@ -205,6 +205,18 @@ class TvClip {
   /// asl `videoUrl`ga qaytadi (eski klip yoki processing tugamagan).
   String urlForQuality(String quality) => videoVariants[quality] ?? videoUrl;
 
+  /// Ҳар доим оддий, прогрессив MP4 — ҳеч қачон HLS playlist эмас.
+  ///
+  /// HLS'ни ўзи қўллаб-қувватламайдиган контекстлар учун: Flutter web
+  /// админ панели (Chrome нативда m3u8 ўқимайди) ва ижтимоий тармоқларга
+  /// кросс-постинг (`tv_social_publish.js` — Instagram/TikTok/YouTube
+  /// playlist эмас, файл кутади). Лента HLS'га ўтганда ҳам бу контекстлар
+  /// шу ерда ишлашда давом этади.
+  ///
+  /// Кичикроқ вариант афзал: модерацияда сифат эмас, очилиш тезлиги муҳим.
+  String get mp4Url =>
+      videoVariants['480p'] ?? videoVariants['720p'] ?? videoUrl;
+
   String get socialPostStatus => '${socialPost['status'] ?? ''}'.trim();
 
   String socialPostSummary() {

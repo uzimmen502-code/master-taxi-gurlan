@@ -3,7 +3,11 @@ import 'dart:io';
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-TvClip _clip({String processingStatus = 'ready'}) => TvClip(
+TvClip _clip({
+  String processingStatus = 'ready',
+  Map<String, String> variants = const {},
+}) =>
+    TvClip(
       id: 'c1',
       videoUrl: 'https://example.test/a.mp4',
       posterUrl: '',
@@ -15,6 +19,7 @@ TvClip _clip({String processingStatus = 'ready'}) => TvClip(
       ownerName: 'Test',
       category: 'product',
       processingStatus: processingStatus,
+      videoVariants: variants,
     );
 
 void main() {
@@ -33,6 +38,25 @@ void main() {
 
     test('эски клип (майдон Firestore\'да йўқ) — default ready, чиқади', () {
       expect(_clip().isPlayable, isTrue);
+    });
+  });
+
+  group('TvClip.mp4Url — админ панели ва соцсет учун', () {
+    test('480p бор — ўша олинади (енгилроқ)', () {
+      final c = _clip(variants: {
+        '480p': 'https://example.test/480.mp4',
+        '720p': 'https://example.test/720.mp4',
+      });
+      expect(c.mp4Url, 'https://example.test/480.mp4');
+    });
+
+    test('фақат 720p бор — ўша', () {
+      final c = _clip(variants: {'720p': 'https://example.test/720.mp4'});
+      expect(c.mp4Url, 'https://example.test/720.mp4');
+    });
+
+    test('эски клип, варианти йўқ — асл видеога қайтади', () {
+      expect(_clip().mp4Url, 'https://example.test/a.mp4');
     });
   });
 

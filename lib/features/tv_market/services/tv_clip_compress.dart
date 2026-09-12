@@ -7,68 +7,26 @@ import 'package:video_compress/video_compress.dart';
 
 import '../../../core/utils/crash_report.dart';
 
-/// To'liq sig'im zinapoyasi sinab ko'rilgandan keyin ham natija
-/// [TvClipCompress.recompressIfOverBytes]dan katta bo'lsa (yoki barcha
-/// urinishlar muvaffaqiyatsiz tugasa) — `TvClipCompress.forUpload()` bu
-/// xatoni EMAS, `TvClipCompressResult.oversized == true`ni qaytaradi;
-/// bu tur faqat chaqiruvchi ekranda (`tv_publish_screen.dart`) yuklashni
-/// bloklash uchun `throw` qilinadi.
-class TvClipTooLargeException implements Exception {
-  const TvClipTooLargeException();
-
-  @override
-  String toString() => 'TvClipTooLargeException';
-}
-
-/// `TvClipCompress.checkPostCompressDuration()` siqilgan natijaning
-/// haqiqiy ijro davomiyligi [TvClipCompress.maxPostCompressSeconds]dan
-/// oshganini aniqlasa — chaqiruvchi ekranda (`tv_publish_screen.dart`)
-/// yuklashni bloklash uchun `throw` qilinadi. `forUpload()`ning o'zi
-/// buni bilmaydi/qaytarmaydi — bu mustaqil, post-compression tekshiruv.
-class TvClipTooLongException implements Exception {
-  const TvClipTooLongException();
-
-  @override
-  String toString() => 'TvClipTooLongException';
-}
-
 class TvClipCompressResult {
   const TvClipCompressResult({
     required this.path,
     this.bytesIn = 0,
     this.bytesOut = 0,
-    this.trimmed = false,
     this.skipped = false,
-    this.oversized = false,
   });
 
   final String path;
   final int bytesIn;
   final int bytesOut;
-  final bool trimmed;
   final bool skipped;
-
-  /// To'liq zinapoya sinalgandan keyin ham natija ≤15MB emas (yoki
-  /// barcha urinishlar muvaffaqiyatsiz) — [path] bu holatda siqilmagan
-  /// (yoki eng yaxshi urinishning) fayliga ishora qiladi va
-  /// YUKLANMASLIGI kerak.
-  final bool oversized;
 }
 
-/// ТВ ролик: 720p / 24fps, макс. 60 с, катта файл → 540p → 480p.
+/// ТВ ролик: 720p / 24fps, катта файл → 540p → 480p.
 class TvClipCompress {
   TvClipCompress._();
 
   static const maxHeight = 720;
-  static const maxSeconds = 60;
   static const skipIfAtMostBytes = 3500000;
-  static const recompressIfOverBytes = 15000000;
-
-  /// Post-compression xavfsizlik-tekshiruvi: `forUpload()` natijasining
-  /// haqiqiy ijro davomiyligi shundan oshsa — yuklash bloklanadi (native
-  /// `duration: trimTo` kesishiga to'liq ishonmay, natijani qayta
-  /// tekshirish uchun). Qarang: [checkPostCompressDuration].
-  static const maxPostCompressSeconds = 200;
 
   static const _qualityLadder = [
     VideoQuality.Res1280x720Quality,
@@ -91,14 +49,6 @@ class TvClipCompress {
     return b > 0 && b <= skipIfAtMostBytes && h > 0 && h <= maxHeight;
   }
 
-  /// [MediaInfo.duration] миллисекунд (баъзи қурилмалар сония беради).
-  static int? clipDurationSeconds(double? durationMs) {
-    if (durationMs == null || durationMs <= 0) return null;
-    final seconds = durationMs >= 1000 ? durationMs / 1000.0 : durationMs;
-    if (seconds <= maxSeconds) return null;
-    return maxSeconds;
-  }
-
   static Future<TvClipCompressResult> forUpload(
     String path, {
     void Function(double progress)? onProgress,
@@ -114,9 +64,8 @@ class TvClipCompress {
         final f = File(path);
         if (f.existsSync()) bytesIn = f.lengthSync();
       }
-      final trimTo = clipDurationSeconds(info.duration);
       final height = info.height;
-      if (trimTo == null && shouldSkip(height: height, bytes: bytesIn)) {
+      if (shouldSkip(height: height, bytes: bytesIn)) {
         return TvClipCompressResult(
           path: path,
           bytesIn: bytesIn,
@@ -134,8 +83,6 @@ class TvClipCompress {
         var startIndex = _qualityLadder.indexOf(startQuality);
         if (startIndex < 0) startIndex = 0;
 
-        final attemptBytes = <int?>[];
-        final attemptPaths = <String?>[];
         for (var i = startIndex; i < _qualityLadder.length; i++) {
           final quality = _qualityLadder[i];
           final result = await VideoCompress.compressVideo(
@@ -144,7 +91,6 @@ class TvClipCompress {
             frameRate: 24,
             includeAudio: true,
             deleteOrigin: false,
-            duration: trimTo,
           );
           final outPath = result?.file?.path;
           final outBytes = _fileBytes(outPath, result?.filesize);
@@ -159,38 +105,16 @@ class TvClipCompress {
               reason: 'tv_clip_compress_null_result',
               keys: {'quality': quality.toString(), 'bytesIn': bytesIn},
             ));
-            attemptBytes.add(null);
-            attemptPaths.add(null);
             continue;
           }
-          attemptBytes.add(outBytes);
-          attemptPaths.add(outPath);
-          if (outBytes <= recompressIfOverBytes) break;
-        }
-
-        final outcome = resolveLadderOutcome(
-          attemptBytes,
-          targetBytes: recompressIfOverBytes,
-        );
-        final chosen = outcome.chosenIndex;
-        if (chosen != null) {
           return TvClipCompressResult(
-            path: attemptPaths[chosen]!,
+            path: outPath,
             bytesIn: bytesIn,
-            bytesOut: attemptBytes[chosen]!,
-            trimmed: trimTo != null,
-            oversized: outcome.oversized,
+            bytesOut: outBytes,
           );
         }
         // Zinapoyaning barcha bosqichlari muvaffaqiyatsiz tugadi — xom,
-        // siqilmagan faylni qaytaramiz, lekin `oversized: true` bilan:
-        // chaqiruvchi ekran buni HECH QACHON yuklamaydi.
-        return TvClipCompressResult(
-          path: path,
-          bytesIn: bytesIn,
-          bytesOut: bytesIn,
-          oversized: true,
-        );
+        // siqilmagan faylni qaytaramiz.
       } finally {
         sub.unsubscribe();
       }
@@ -203,29 +127,6 @@ class TvClipCompress {
       bytesIn: bytesIn,
       bytesOut: bytesIn,
     );
-  }
-
-  /// `forUpload()`dan KEYIN, alohida qadam sifatida chaqiriladi
-  /// (`forUpload()`ning o'zi bunga tegmaydi/bilmaydi). Natija faylining
-  /// haqiqiy davomiyligini `getMediaInfo()` orqali QAYTA o'qiydi —
-  /// so'ralgan `trimTo` qiymatiga emas, native chiqishning o'ziga
-  /// ishonib (audit: native trim kadr-aniqligi tasdiqlanmagan).
-  static Future<bool> checkPostCompressDuration(String path) async {
-    if (kIsWeb || path.isEmpty) return false;
-    try {
-      final info = await VideoCompress.getMediaInfo(path);
-      final ms = info.duration;
-      final seconds = (ms != null && ms >= 1000) ? ms / 1000.0 : ms;
-      return exceedsMaxPostCompressDuration(seconds);
-    } catch (e, st) {
-      debugPrint('[TvClipCompress] post-compress duration check $e');
-      unawaited(CrashReport.nonFatal(
-        e,
-        st,
-        reason: 'tv_clip_compress_post_duration_check',
-      ));
-      return false;
-    }
   }
 
   static int _fileBytes(String? path, int? reported) {
@@ -258,51 +159,4 @@ class TvClipCompress {
       return null;
     }
   }
-}
-
-/// `TvClipCompress.forUpload()` zinapoyasidagi har bir urinish natijasini
-/// (muvaffaqiyatsiz bo'lsa `null`, aks holda hajmi baytlarda) ketma-ket
-/// oladi; qaysi urinish tanlanishini va yakuniy natija [targetBytes]dan
-/// oshiq-oshmasligini hisoblaydi. `VideoCompress`'siz — sof, testlanadigan.
-class LadderOutcome {
-  const LadderOutcome({required this.chosenIndex, required this.oversized});
-
-  /// Eng kichik muvaffaqiyatli urinishning indeksi — hammasi
-  /// muvaffaqiyatsiz bo'lsa `null`.
-  final int? chosenIndex;
-
-  /// Tanlangan (yoki hech biri muvaffaqiyatli bo'lmasa — fallback) natija
-  /// hali ham [targetBytes]dan katta.
-  final bool oversized;
-}
-
-LadderOutcome resolveLadderOutcome(
-  List<int?> attemptBytes, {
-  required int targetBytes,
-}) {
-  int? bestIndex;
-  for (var i = 0; i < attemptBytes.length; i++) {
-    final bytes = attemptBytes[i];
-    if (bytes == null || bytes <= 0) continue;
-    if (bestIndex == null || bytes < attemptBytes[bestIndex]!) {
-      bestIndex = i;
-    }
-    if (bytes <= targetBytes) {
-      return LadderOutcome(chosenIndex: i, oversized: false);
-    }
-  }
-  if (bestIndex == null) {
-    return const LadderOutcome(chosenIndex: null, oversized: true);
-  }
-  return LadderOutcome(chosenIndex: bestIndex, oversized: true);
-}
-
-/// Sof qaror: [seconds] [TvClipCompress.maxPostCompressSeconds]dan
-/// OSHGANMI (`>200` — `true`, rad etilishi kerak; `<=200` — `false`).
-/// Noma'lum/o'qib bo'lmagan qiymat (`null` yoki `<=0`) — xavfsiz tomonga:
-/// `false` (bloklanmaydi) — bu tekshiruv "native trim ishladimi" degan
-/// noaniqlikni yopish uchun, metadata o'qish xatosi uchun emas.
-bool exceedsMaxPostCompressDuration(num? seconds) {
-  if (seconds == null || seconds <= 0) return false;
-  return seconds > TvClipCompress.maxPostCompressSeconds;
 }

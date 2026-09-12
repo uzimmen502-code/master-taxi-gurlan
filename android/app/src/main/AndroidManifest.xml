@@ -75,5 +75,7 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- ChatGPT иловасини пакет бўйича очиш учун (Android 11+ кўринувчанлик). -->
+        <package android:name="com.openai.chatgpt"/>
     </queries>
 </manifest>

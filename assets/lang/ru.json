@@ -540,6 +540,8 @@
   "home_module_bread": "ЛЕПЁШКИ",
   "home_module_car_wash": "Автомойка",
   "home_module_carpet": "Стирка ковров",
+  "home_module_chatgpt": "ChatGPT",
+  "chatgpt_open_failed": "Не удалось открыть ChatGPT",
   "home_module_cheap_products": "РЫНОК НАСЕЛЕНИЯ",
   "home_module_cheap_products_online": "ОНЛАЙН",
   "home_module_cheap_products_subtitle": "Бесплатное размещение и поиск объявлений",

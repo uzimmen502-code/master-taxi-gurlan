@@ -540,6 +540,8 @@
   "home_module_bread": "NON YOPISH",
   "home_module_car_wash": "Avto yuvish",
   "home_module_carpet": "Gilam yuvish",
+  "home_module_chatgpt": "ChatGPT",
+  "chatgpt_open_failed": "ChatGPT ochilmadi",
   "home_module_cheap_products": "AHOLI BOZORI",
   "home_module_cheap_products_online": "ONLAYN",
   "home_module_cheap_products_subtitle": "Bepul e'lon joylashtirish va qidirish",

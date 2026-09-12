@@ -88,6 +88,8 @@ const moduleDefaults = {
     local_taxi: { status: 'enabled' },
     marshrut: { status: 'enabled' },
     oil_change: { status: 'enabled' },
+    // Tashqi ilova (ChatGPT) — hududga bog'liq emas.
+    chatgpt: { status: 'enabled' },
     // Gurlandan boshqa tumanlarda hali "tez orada":
     bread: { status: 'coming_soon' },
     food: { status: 'coming_soon' },

@@ -20,6 +20,7 @@ const List<String> kKnownModuleIds = [
   'oil_change',
   'platform_store',
   'tv_market',
+  'chatgpt',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

@@ -9,6 +9,7 @@ import '../../core/app_share.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/chatgpt_launcher.dart';
 import '../../core/utils/formatters.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/active_trip.dart';
@@ -396,6 +397,15 @@ class _HomeViewState extends State<_HomeView> {
     );
     // Home яна кўринганда spotlight авто / ҳамён 11 с қайта.
     if (mounted) _onHomeResurface();
+  }
+
+  Future<void> _openChatGpt() async {
+    final opened = await openChatGpt();
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('chatgpt_open_failed'))),
+      );
+    }
   }
 
   static const _datingTelegramBotUrl = 'https://t.me/bilish_tanish_bot';
@@ -977,6 +987,13 @@ class _HomeViewState extends State<_HomeView> {
                                   iconColor: const Color(0xFFE53935),
                                   iconScale: 1.05,
                                   onTap: () => _openDatingTelegramBot(),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'chatgpt',
+                                  label: context.tr('home_module_chatgpt'),
+                                  icon: Icons.auto_awesome_rounded,
+                                  iconColor: const Color(0xFF10A37F),
+                                  onTap: () => _openChatGpt(),
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'courier',

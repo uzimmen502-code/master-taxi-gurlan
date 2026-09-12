@@ -6,6 +6,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:video_compress/video_compress.dart';
 
 import '../../../core/utils/crash_report.dart';
+import '../models/tv_clip.dart' show tvClipMaxUploadSeconds;
 
 class TvClipCompressResult {
   const TvClipCompressResult({
@@ -49,6 +50,23 @@ class TvClipCompress {
     return b > 0 && b <= skipIfAtMostBytes && h > 0 && h <= maxHeight;
   }
 
+  /// Сиқишдан олдин кесиш керакми — керак бўлмаса `null`.
+  ///
+  /// Бу маҳаллий кесиш серверникини ТАКРОРЛАЙДИ, алмаштирмайди: ҳақиқий,
+  /// авторитетли чегара барибир серверда (`TV_CLIP_MAX_SECONDS`). Бу ерда
+  /// у фақат исрофни олдини олади — акс ҳолда телефон бутун видеони
+  /// сиқиб, бутунини юклайди, сервер эса ортиқчасини барибир ташлайди.
+  /// (Ўлчанган ҳолат: 4 дақиқалик ролик 720p да 121MB чиққан, ундан
+  /// ярмидан кўпи бекорга кетарди.)
+  ///
+  /// [durationMs] — `MediaInfo.duration`; баъзи қурилмалар сония беради.
+  static int? trimToSeconds(double? durationMs) {
+    if (durationMs == null || durationMs <= 0) return null;
+    final seconds = durationMs >= 1000 ? durationMs / 1000.0 : durationMs;
+    if (seconds <= tvClipMaxUploadSeconds) return null;
+    return tvClipMaxUploadSeconds;
+  }
+
   static Future<TvClipCompressResult> forUpload(
     String path, {
     void Function(double progress)? onProgress,
@@ -64,8 +82,11 @@ class TvClipCompress {
         final f = File(path);
         if (f.existsSync()) bytesIn = f.lengthSync();
       }
+      final trimTo = trimToSeconds(info.duration);
       final height = info.height;
-      if (shouldSkip(height: height, bytes: bytesIn)) {
+      // Кесиш керак бўлса сиқишни ўтказиб юбориб бўлмайди — кесиш
+      // айнан сиқиш давомида бажарилади.
+      if (trimTo == null && shouldSkip(height: height, bytes: bytesIn)) {
         return TvClipCompressResult(
           path: path,
           bytesIn: bytesIn,
@@ -91,6 +112,7 @@ class TvClipCompress {
             frameRate: 24,
             includeAudio: true,
             deleteOrigin: false,
+            duration: trimTo,
           );
           final outPath = result?.file?.path;
           final outBytes = _fileBytes(outPath, result?.filesize);

@@ -110,11 +110,17 @@ service firebase.storage {
       allow write: if true;
     }
 
-    // TV Market видеолари + постер — authed, ≤100MB видео ёки ≤8MB расм.
+    // TV Market видеолари + постер — authed, ≤400MB.
+    //
+    // Илгари 100MB эди. Клиентда 15MB чегараси турганда бу девор ҳеч
+    // қачон кўринмас эди; у олиб ташлангач, узун видео тўғри шунга
+    // урилиб 403 берди (масалан 4 дақиқалик ролик 720p да 121MB).
+    // Давомийлик чегараси серверда (`TV_CLIP_MAX_SECONDS`), бу эса
+    // фақат сўнгги тўсиқ — `entertainment/` даги 400MB билан бир хил.
     match /tv_clips/{ownerPhone}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null
-          && request.resource.size < 100 * 1024 * 1024;
+          && request.resource.size < 400 * 1024 * 1024;
       allow delete: if request.auth != null;
     }
 

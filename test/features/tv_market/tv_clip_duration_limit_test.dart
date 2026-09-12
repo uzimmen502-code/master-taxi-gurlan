@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:ava_gurlan/features/tv_market/models/tv_clip.dart';
 import 'package:ava_gurlan/features/tv_market/services/tv_clip_cache_service.dart';
+import 'package:ava_gurlan/features/tv_market/services/tv_clip_compress.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 TvClip _clip({
@@ -119,6 +120,33 @@ void main() {
         TvClipCacheService.isHlsUrl('https://example.test/720.mp4?token=a'),
         isFalse,
       );
+    });
+  });
+
+  group('TvClipCompress.trimToSeconds — юклашдан олдинги кесиш', () {
+    test('чегарадан калта — кесилмайди', () {
+      expect(TvClipCompress.trimToSeconds(60000), isNull);
+      expect(TvClipCompress.trimToSeconds(179000), isNull);
+    });
+
+    test('чегаранинг ўзи — кесилмайди', () {
+      expect(TvClipCompress.trimToSeconds(180000), isNull);
+    });
+
+    test('чегарадан узун — чегарагача кесилади', () {
+      expect(TvClipCompress.trimToSeconds(181000), tvClipMaxUploadSeconds);
+      // 4 дақиқа — айнан 403 берган ҳолат.
+      expect(TvClipCompress.trimToSeconds(240000), tvClipMaxUploadSeconds);
+    });
+
+    test('сония берадиган қурилмалар ҳам тўғри тушунилади', () {
+      expect(TvClipCompress.trimToSeconds(240), tvClipMaxUploadSeconds);
+      expect(TvClipCompress.trimToSeconds(60), isNull);
+    });
+
+    test('номаълум давомийлик — кесилмайди', () {
+      expect(TvClipCompress.trimToSeconds(null), isNull);
+      expect(TvClipCompress.trimToSeconds(0), isNull);
     });
   });
 

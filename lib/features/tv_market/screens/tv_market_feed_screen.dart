@@ -25,6 +25,7 @@ import '../services/tv_screen_playback.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
+import '../widgets/tv_owner_avatar.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_channel_screen.dart';
@@ -68,6 +69,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _publicNames = <String, String>{};
   String _filterDistrictId = '';
   List<GeoDistrict> _districts = const [];
+  String _filterRegionId = '';
+  List<GeoRegion> _regions = const [];
   final _likedIds = <String>{};
   final _savedIds = <String>{};
   final _likeBusy = <String>{};
@@ -101,6 +104,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     });
     unawaited(_loadMe());
     unawaited(_loadDistricts());
+    unawaited(_loadRegions());
     _loadClips();
   }
 
@@ -153,15 +157,31 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     await _refreshSocialState();
   }
 
+  /// Туманлар рўйхати танланган вилоятга эргашади; вилоят танланмаган
+  /// бўлса — фойдаланувчининг ўз вилояти.
   Future<void> _loadDistricts() async {
-    final regionId = ServiceConfigHolder.regionId;
-    if (regionId.isEmpty) return;
+    final regionId =
+        _filterRegionId.isNotEmpty ? _filterRegionId : ServiceConfigHolder.regionId;
+    if (regionId.isEmpty) {
+      if (mounted) setState(() => _districts = const []);
+      return;
+    }
     try {
       final list = await ServiceConfigRepository().fetchDistricts(regionId);
       if (!mounted) return;
       setState(() => _districts = list);
     } catch (e) {
       debugPrint('[TvMarketFeed] districts $e');
+    }
+  }
+
+  Future<void> _loadRegions() async {
+    try {
+      final list = await ServiceConfigRepository().fetchRegions();
+      if (!mounted) return;
+      setState(() => _regions = list);
+    } catch (e) {
+      debugPrint('[TvMarketFeed] regions $e');
     }
   }
 
@@ -215,16 +235,25 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   Future<void> _loadClips() async {
     try {
       final categories = _categoriesForTab(_tabController.index);
-      List<TvClip> nearby;
-      if (_filterDistrictId.isEmpty) {
-        nearby = await _repo.fetchAllActive(limit: 40, categories: categories);
-      } else {
+      // Туман аниқроқ — танланган бўлса вилоят фильтри ортиқча.
+      final List<TvClip> nearby;
+      if (_filterDistrictId.isNotEmpty) {
         nearby = await _repo.fetchNearby(
           districtId: _filterDistrictId,
           limit: 40,
           categories: categories,
-          regionId: ServiceConfigHolder.regionId,
+          regionId: _filterRegionId.isNotEmpty
+              ? _filterRegionId
+              : ServiceConfigHolder.regionId,
         );
+      } else if (_filterRegionId.isNotEmpty) {
+        nearby = await _repo.fetchByRegion(
+          regionId: _filterRegionId,
+          limit: 40,
+          categories: categories,
+        );
+      } else {
+        nearby = await _repo.fetchAllActive(limit: 40, categories: categories);
       }
       if (!mounted) return;
       final list = <TvClip>[];
@@ -784,6 +813,119 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     return context.tr('tv_market_all_districts');
   }
 
+  Future<void> _pickRegionFilter() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            children: [
+              ListTile(
+                title: Text(
+                  context.tr('tv_market_all_regions'),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                trailing: _filterRegionId.isEmpty
+                    ? const Icon(Icons.check_rounded, color: Colors.white)
+                    : null,
+                onTap: () => Navigator.pop(ctx, ''),
+              ),
+              for (final r in _regions)
+                ListTile(
+                  title: Text(
+                    r.displayName,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  trailing: _filterRegionId == r.id
+                      ? const Icon(Icons.check_rounded, color: Colors.white)
+                      : null,
+                  onTap: () => Navigator.pop(ctx, r.id),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _filterRegionId = picked;
+      // Туман вилоятга тегишли — вилоят ўзгарса эски туман фильтри
+      // бошқа вилоятники бўлиб қолиши мумкин, шунинг учун тозаланади.
+      _filterDistrictId = '';
+      _loading = true;
+    });
+    await _loadDistricts();
+    await _loadClips();
+  }
+
+  /// Пастки қатордаги ҳудуд фильтрлари: [туман] [вилоят]. Тор экранда
+  /// сиқилиб, матни қисқаради — қатор бузилмайди.
+  Widget _areaFilters() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: _AreaFilterChip(
+            label: _filterChipLabel(),
+            onTap: _pickDistrictFilter,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: _AreaFilterChip(
+            label: _regionChipLabel(),
+            onTap: _pickRegionFilter,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// AppBar сарлавҳаси — жорий клип эгасининг аватари ва исми.
+  Widget _ownerTitle() {
+    if (_clips.isEmpty || _currentIndex >= _clips.length) {
+      return const SizedBox.shrink();
+    }
+    final clip = _clips[_currentIndex];
+    // `_InfoColumn`даги эски мантиқ айнан сақланади: аввал overlay
+    // исми, у бўш бўлса клипдаги `ownerName`.
+    final labeled = tvOwnerDisplayName(_overlayName(clip));
+    final name =
+        labeled.isNotEmpty ? labeled : tvOwnerDisplayName(clip.ownerName);
+    if (name.isEmpty) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TvOwnerAvatar(name: name, photoUrl: clip.ownerPhotoUrl, radius: 14),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            name,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _regionChipLabel() {
+    if (_filterRegionId.isEmpty) {
+      return context.tr('tv_market_all_regions');
+    }
+    for (final r in _regions) {
+      if (r.id == _filterRegionId) return r.displayName;
+    }
+    return context.tr('tv_market_all_regions');
+  }
+
   @override
   void dispose() {
     tvUnbindPlayback();
@@ -811,13 +953,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         titleSpacing: 0,
-        title: Align(
-          alignment: Alignment.centerLeft,
-          child: _DistrictFilterChip(
-            label: _filterChipLabel(),
-            onTap: _pickDistrictFilter,
-          ),
-        ),
+        // Ҳудуд фильтрлари пастки қаторга кўчди; бу ерда энди жорий
+        // клип эгасининг профили турибди (свайпда алмашади).
+        title: _ownerTitle(),
         actions: [
           IconButton(
             tooltip: context.tr('tv_market_search'),
@@ -862,6 +1000,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
           child: TabBar(
             controller: _tabController,
             isScrollable: false,
+            // Material 3 таблар қатори остига тўлиқ кенгликдаги
+            // ажратувчи чизиқ чизади — у олиб ташланди. Яшил
+            // индикатор (қайси таб очиқлиги) жойида қолади.
+            dividerHeight: 0,
             indicatorColor: const Color(0xFF00E676),
             indicatorWeight: 2.5,
             labelColor: Colors.white,
@@ -925,7 +1067,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         TvClipOverlay(
                           clip: clip,
                           isOwner: _isOwner(clip),
-                          ownerLabel: _overlayName(clip),
+                          filters: _areaFilters(),
                           liked: _likedIds.contains(clip.id),
                           saved: _savedIds.contains(clip.id),
                           onContact: () => _onContact(clip),
@@ -966,8 +1108,9 @@ Tab _tvTabLabel(String text) => Tab(
       ),
     );
 
-class _DistrictFilterChip extends StatelessWidget {
-  const _DistrictFilterChip({required this.label, required this.onTap});
+/// Ҳудуд фильтри тугмаси — туман ва вилоят учун бир хил.
+class _AreaFilterChip extends StatelessWidget {
+  const _AreaFilterChip({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;

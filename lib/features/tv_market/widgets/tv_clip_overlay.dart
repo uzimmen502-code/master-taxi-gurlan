@@ -5,7 +5,6 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_owner_action_bar.dart';
-import 'tv_owner_avatar.dart';
 
 /// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
@@ -25,7 +24,7 @@ class TvClipOverlay extends StatelessWidget {
     this.onEdit,
     this.onOpenShop,
     this.openChannelAsShop = true,
-    this.ownerLabel,
+    this.filters,
   });
 
   final TvClip clip;
@@ -44,8 +43,10 @@ class TvClipOverlay extends StatelessWidget {
   /// `false` → lime tugma «Канал».
   final bool openChannelAsShop;
 
-  /// Берилса, клипдаги `ownerName` ўрнига шу матн кўринади.
-  final String? ownerLabel;
+  /// Пастки қаторнинг чап томонида, «Боғланиш» тугмасидан олдин
+  /// турадиган ҳудуд фильтрлари (туман, вилоят). Экран даражасидаги
+  /// ҳолатга боғлиқ бўлгани учун ташқаридан узатилади.
+  final Widget? filters;
 
   @override
   Widget build(BuildContext context) {
@@ -60,37 +61,47 @@ class TvClipOverlay extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _InfoColumn(
-                clip: clip,
-                ownerLabel: ownerLabel,
-              ),
+              _InfoColumn(clip: clip),
               const SizedBox(height: 10),
               if (isOwner && onEdit != null && onDelete != null)
-                TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!)
-              else if (clip.showPhone)
-                SizedBox(
-                  width: double.infinity,
-                  height: 34,
-                  child: ElevatedButton.icon(
-                    onPressed: onContact,
-                    icon: const Icon(Icons.call_rounded, size: 15),
-                    label: Text(
-                      context.tr('tv_market_contact'),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                TvOwnerActionBar(onEdit: onEdit!, onDelete: onDelete!),
+              // Битта қатор: [туман] [вилоят] [Боғланиш]. Фильтрлар
+              // эгасининг ўз клипида ҳам кўринади — улар клипга эмас,
+              // лентага тегишли.
+              Row(
+                children: [
+                  if (filters != null) Flexible(child: filters!),
+                  if (!isOwner && clip.showPhone) ...[
+                    if (filters != null) const SizedBox(width: 6),
+                    // `MainAxisSize.min` — тугма энди бутун кенгликка
+                    // чўзилмайди, матни қанча бўлса шунча жой олади.
+                    SizedBox(
+                      height: 34,
+                      child: ElevatedButton.icon(
+                        onPressed: onContact,
+                        icon: const Icon(Icons.call_rounded, size: 15),
+                        label: Text(
+                          context.tr('tv_market_contact'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.28),
+                          foregroundColor: const Color(0xFF00E676),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 0,
+                        ),
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.28),
-                      foregroundColor: const Color(0xFF00E676),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 0,
-                    ),
-                  ),
-                ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -115,46 +126,18 @@ class TvClipOverlay extends StatelessWidget {
   }
 }
 
+/// Эга аватари ва исми бу ерда ЙЎҚ — улар экран юқорисига, AppBar'га
+/// кўчирилди (`TvFeedOwnerTitle`).
 class _InfoColumn extends StatelessWidget {
-  const _InfoColumn({required this.clip, this.ownerLabel});
+  const _InfoColumn({required this.clip});
   final TvClip clip;
-  final String? ownerLabel;
-
-  String get _name {
-    final labeled = ownerLabel == null ? '' : tvOwnerDisplayName(ownerLabel!);
-    if (labeled.isNotEmpty) return labeled;
-    return tvOwnerDisplayName(clip.ownerName);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final name = _name;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (name.isNotEmpty) ...[
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TvOwnerAvatar(name: name, photoUrl: clip.ownerPhotoUrl, radius: 12),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-        ],
         Text(
           clip.title,
           maxLines: 2,

@@ -671,6 +671,7 @@
   "tv_publish_price_required": "Narx (majburiy)",
   "tv_market_user": "Foydalanuvchi",
   "tv_market_all_districts": "Barcha tumanlar",
+  "tv_market_all_regions": "Barcha viloyatlar",
   "tv_market_search": "Qidiruv",
   "tv_market_search_hint": "Nom, narx, tuman — kirill / lotin / rus",
   "tv_market_search_empty": "Kamida 2 harf kiriting (istalgan yozuv)",

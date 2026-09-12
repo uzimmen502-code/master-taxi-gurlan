@@ -117,6 +117,27 @@ class TvClipsRepository {
     }
   }
 
+  /// Вилоят бўйича лента — туман танланмаганда ишлатилади.
+  ///
+  /// `regionId` клипда денормал сақланади (`tv_clip_geo.dart` жойлаштириш
+  /// пайтида ёзади). Майдони йўқ эски клиплар бу сўровга тушмайди — бу
+  /// тўғри хулқ: вилояти номаълум клип «Хоразм» фильтрида кўринмаслиги
+  /// керак. Фильтрсиз («Барча вилоятлар») ҳолатда бу метод умуман
+  /// чақирилмайди, шунинг учун эски клиплар лентадан йўқолмайди.
+  Future<List<TvClip>> fetchByRegion({
+    required String regionId,
+    int limit = 40,
+    List<String>? categories,
+  }) async {
+    var q = _col
+        .where('status', isEqualTo: 'active')
+        .where('regionId', isEqualTo: regionId);
+    q = _withCategory(q, categories);
+    final snap =
+        await q.orderBy('createdAt', descending: true).limit(limit).get();
+    return tvApplyAdTierPriority(tvShuffleClips(_playable(snap.docs)));
+  }
+
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).
   Future<List<TvClip>> fetchRecommended({
     required String districtId,

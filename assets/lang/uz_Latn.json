@@ -663,6 +663,7 @@
   "tv_publish_pending": "Video yuborildi — tekshiruvdan keyin chiqadi",
   "tv_publish_marked_news": "\"Kun yangiliklari\"ga belgilandi — 48 soatdan keyin avto-o'chadi",
   "tv_publish_compressing": "Video siqilmoqda...",
+  "tv_publish_will_trim": "Video {minutes} daqiqadan uzun — yuklanayotganda {minutes} daqiqaga qisqartiriladi",
   "tv_publish_thumbnail": "Rasm tayyorlanmoqda...",
   "tv_publish_uploading": "Video yuklanmoqda...",
   "tv_publish_poster": "Poster yuklanmoqda...",

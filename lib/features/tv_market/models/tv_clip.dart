@@ -2,6 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/tv_social.dart';
 
+/// Юкланадиган клипнинг максимал давомийлиги. Бу — клиент томондаги
+/// нусха: ҳақиқий, авторитетли кесиш серверда (`TV_CLIP_MAX_SECONDS`,
+/// functions/index.js) ffmpeg `-t` орқали бажарилади. Бу ердагиси фақат
+/// фойдаланувчи узун видеони бекорга юклаб, кейин у кесилганини
+/// билмаслиги учун. Икки қиймат мос туриши шарт.
+const tvClipMaxUploadSeconds = 180;
+
 /// Жойлаштирувчининг профил исми (тўлиқ). @nick / телефон / UI fallback — бўш.
 String tvOwnerDisplayName(String raw) {
   final s = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -168,6 +175,12 @@ class TvClip {
   bool get hasVariants => videoVariants.isNotEmpty;
   bool get isNews => category == 'news';
   bool get isAd => category == 'ad';
+
+  /// Transcode йиқилган клип (`processingStatus == 'error'`) — варианти
+  /// йўқ, шунинг учун [urlForQuality] кесилмаган, сиқилмаган асл файлга
+  /// қайтади. Бундай клип томошабин лентасига чиқарилмайди; эгасининг ўз
+  /// рўйхатида ва админ модерациясида эса кўринади.
+  bool get isPlayable => processingStatus != 'error';
 
   static const _adTierWeight = {
     'basic': 0,

@@ -39,6 +39,18 @@ class TvClipsRepository {
   String? _searchPoolKey;
   DateTime? _searchPoolAt;
 
+  /// Томошабин лентаси учун ҳужжатларни клипга ўгиради ва transcode'и
+  /// йиқилганларини чиқариб ташлайди (қаранг: [TvClip.isPlayable]).
+  ///
+  /// Буни Firestore сўровининг ўзида қилиб бўлмайди: эски клипларда
+  /// `processingStatus` майдони умуман йўқ, `isNotEqualTo` эса майдони
+  /// йўқ ҳужжатларни ҳам натижадан ташлаб юборади — яъни бутун эски
+  /// архив лентадан йўқолган бўларди.
+  List<TvClip> _playable(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) =>
+      docs.map(TvClip.fromFirestore).where((c) => c.isPlayable).toList();
+
   /// `categories` берилса — AVAGram'нинг «Кун янгиликлари» / «Реклама ва
   /// Эълонлар» таблари учун `category whereIn` фильтри (max 30 қиймат).
   /// `null`/бўш = AVAGram (барча category).
@@ -64,7 +76,7 @@ class TvClipsRepository {
         .where('districtId', isEqualTo: districtId);
     q = _withCategory(q, categories);
     final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
-    final items = snap.docs.map(TvClip.fromFirestore).toList();
+    final items = _playable(snap.docs);
     // Таб 'ad'ни ичига олмаса (мас. фақат 'news') — қамровли эълонлар
     // ўша табга умуман тегишли эмас.
     final adOk = categories == null || categories.isEmpty || categories.contains('ad');
@@ -95,8 +107,7 @@ class TvClipsRepository {
           .orderBy('createdAt', descending: true)
           .limit(20)
           .get();
-      return snap.docs
-          .map(TvClip.fromFirestore)
+      return _playable(snap.docs)
           .where((c) =>
               c.districtId != excludeDistrictId &&
               (c.adScope == 'national' || c.regionId == regionId))
@@ -117,7 +128,7 @@ class TvClipsRepository {
         .orderBy('viewCount', descending: true)
         .limit(limit)
         .get();
-    return tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList());
+    return tvShuffleClips(_playable(snap.docs));
   }
 
   /// Уй лентаси — аввал шу туман, етишмаса барча фаол клиплар.
@@ -175,7 +186,7 @@ class TvClipsRepository {
         final c = TvClip.fromFirestore(d);
         // `seen` барибир белгиланади (тарихда бўлса), тариф жадвали
         // «Реклама жойлашуви»: basic/visibility Home'да кўринмайди.
-        if (seen.add(c.id) && c.showsOnHome) out.add(c);
+        if (seen.add(c.id) && c.showsOnHome && c.isPlayable) out.add(c);
       }
       nExh = snap.docs.length < limit;
     }
@@ -190,7 +201,7 @@ class TvClipsRepository {
       for (final d in snap.docs) {
         aCur = d;
         final c = TvClip.fromFirestore(d);
-        if (seen.add(c.id) && c.showsOnHome) {
+        if (seen.add(c.id) && c.showsOnHome && c.isPlayable) {
           out.add(c);
           if (out.length >= limit) break;
         }
@@ -207,15 +218,18 @@ class TvClipsRepository {
     );
   }
 
-  /// Уйдаги бир клип (витрина).
+  /// Уйдаги бир клип (витрина). Биттагина керак бўлса ҳам бир нечтаси
+  /// сўралади — энг янгиси transcode'да йиқилган бўлса, витрина бўш
+  /// қолмай, ундан кейингиси кўрсатилади.
   Future<TvClip?> fetchHomeClip({required String districtId}) async {
     final snap = await _col
         .where('status', isEqualTo: 'active')
         .where('districtId', isEqualTo: districtId)
         .orderBy('createdAt', descending: true)
-        .limit(1)
+        .limit(5)
         .get();
-    return snap.docs.isEmpty ? null : TvClip.fromFirestore(snap.docs.first);
+    final items = _playable(snap.docs);
+    return items.isEmpty ? null : items.first;
   }
 
   /// Фаол клиплардан охиргиси — индексга боғлиқ эмас (fallback).
@@ -223,9 +237,10 @@ class TvClipsRepository {
     final snap = await _col
         .where('status', isEqualTo: 'active')
         .orderBy('createdAt', descending: true)
-        .limit(1)
+        .limit(5)
         .get();
-    return snap.docs.isEmpty ? null : TvClip.fromFirestore(snap.docs.first);
+    final items = _playable(snap.docs);
+    return items.isEmpty ? null : items.first;
   }
 
   /// Барча фаол клиплар — ҳудудсиз (fallback).
@@ -236,9 +251,7 @@ class TvClipsRepository {
     var q = _col.where('status', isEqualTo: 'active');
     q = _withCategory(q, categories);
     final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
-    return tvApplyAdTierPriority(
-      tvShuffleClips(snap.docs.map(TvClip.fromFirestore).toList()),
-    );
+    return tvApplyAdTierPriority(tvShuffleClips(_playable(snap.docs)));
   }
 
   Future<List<TvClip>> _recentSearchPool(String districtId) async {
@@ -270,7 +283,7 @@ class TvClipsRepository {
           .where('searchTokens', arrayContains: token)
           .limit(TvClipSearch.tokenQueryLimit)
           .get();
-      return snap.docs.map(TvClip.fromFirestore).toList();
+      return _playable(snap.docs);
     } catch (_) {
       return const [];
     }
@@ -316,7 +329,9 @@ class TvClipsRepository {
     return hit;
   }
 
-  /// Эгаси клиплари.
+  /// Эгаси клиплари. Бу ерда [_playable] АТАЙИН қўлланмайди — эгаси ўз
+  /// клипи transcode'да йиқилганини кўриши керак, акс ҳолда видео
+  /// изсиз йўқолгандек туюлади.
   Future<List<TvClip>> fetchByOwner(String phone, {int limit = 50}) async {
     final snap = await _col
         .where('ownerPhone', isEqualTo: phone)

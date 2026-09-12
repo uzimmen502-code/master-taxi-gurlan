@@ -220,7 +220,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   Future<void> _pickVideo(ImageSource source) async {
     final file = await _picker.pickVideo(
       source: source,
-      maxDuration: const Duration(seconds: 60),
+      maxDuration: const Duration(seconds: tvClipMaxUploadSeconds),
     );
     if (file == null) return;
 
@@ -230,10 +230,33 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     ctrl.setLooping(true);
     ctrl.play();
 
+    if (!mounted) {
+      ctrl.dispose();
+      return;
+    }
     setState(() {
       _videoFile = file;
       _previewCtrl = ctrl;
     });
+
+    // `maxDuration` камерада ёзишни тўхтатади, лекин галереядан
+    // танлашда уни ҳар платформа ҳам ҳурмат қилмайди — узун видео шу
+    // ерга етиб келиши мумкин. Ҳақиқий кесиш серверда бўлади;
+    // фойдаланувчи буни юклашдан ОЛДИН билиши керак, акс ҳолда узун
+    // видеони мобил интернетда бекорга юклайди.
+    if (ctrl.value.duration.inSeconds > tvClipMaxUploadSeconds) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.tr('tv_publish_will_trim').replaceAll(
+                  '{minutes}',
+                  '${tvClipMaxUploadSeconds ~/ 60}',
+                ),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   void _showPickerSheet() {

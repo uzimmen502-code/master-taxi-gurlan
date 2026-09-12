@@ -11198,6 +11198,15 @@ const TV_CLIP_VARIANT_SPECS = [
   {key: '480p', maxHeight: 480},
 ];
 
+// Клип давомийлигининг ягона авторитетли чегараси — вариантлар шу
+// қийматда кесилади. ВАҚТИНЧАЛИК 180с: бу функция 1-авлодда ишлайди,
+// `timeoutSeconds: 540` унинг абсолют максимуми, ва иккита rendition
+// кетма-кет transcode қилинади. Узунроқ клип шу бюджетга сиғмайди.
+// Функция 2-авлодга кўчирилиб, реал ўлчов қилингандан кейин бу қиймат
+// оширилади. Клиент томондаги жуфти: `tvClipMaxUploadSeconds`
+// (lib/features/tv_market/models/tv_clip.dart) — иккиси мос туриши шарт.
+const TV_CLIP_MAX_SECONDS = 180;
+
 function tvClipStoragePathFromUrl(url) {
   const match = /\/o\/([^?]+)/.exec(url || '');
   return match ? decodeURIComponent(match[1]) : null;
@@ -11237,6 +11246,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       tmpOutputs.push(tmpOut);
       const res = spawnSync(ffmpegPath, [
         '-i', tmpIn,
+        '-t', String(TV_CLIP_MAX_SECONDS),
         '-vf', `scale=-2:'min(${spec.maxHeight},ih)'`,
         '-c:v', 'libx264',
         '-preset', 'veryfast',

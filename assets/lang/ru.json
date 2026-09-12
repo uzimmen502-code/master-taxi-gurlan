@@ -672,6 +672,8 @@
   "tv_market_user": "Пользователь",
   "tv_market_all_districts": "Все районы",
   "tv_market_all_regions": "Все области",
+  "tv_market_districts_short": "Районы",
+  "tv_market_regions_short": "Области",
   "tv_market_search": "Поиск",
   "tv_market_search_hint": "Название, цена, район — кириллица / латиница / русский",
   "tv_market_search_empty": "Введите минимум 2 буквы (любая письменность)",

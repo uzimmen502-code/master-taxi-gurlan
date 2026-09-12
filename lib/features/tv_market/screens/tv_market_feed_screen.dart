@@ -803,14 +803,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     await _loadClips();
   }
 
+  /// Пастки тугмадаги матн. Фильтр қўйилмаган ҳолатда қисқа шакл
+  /// («Туманлар») ишлатилади — тугма ихчам бўлиши керак. Танлаш
+  /// ойнасидаги «барчаси» банди эса тўлиқ шаклда («Барча туманлар»)
+  /// қолади, у ерда маъно аниқ бўлиши муҳимроқ.
   String _filterChipLabel() {
-    if (_filterDistrictId.isEmpty) {
-      return context.tr('tv_market_all_districts');
-    }
     for (final d in _districts) {
       if (d.id == _filterDistrictId) return d.displayName;
     }
-    return context.tr('tv_market_all_districts');
+    return context.tr('tv_market_districts_short');
   }
 
   Future<void> _pickRegionFilter() async {
@@ -916,14 +917,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 
+  /// Қаранг: [_filterChipLabel] — қисқа/тўлиқ шакл изоҳи.
   String _regionChipLabel() {
-    if (_filterRegionId.isEmpty) {
-      return context.tr('tv_market_all_regions');
-    }
     for (final r in _regions) {
       if (r.id == _filterRegionId) return r.displayName;
     }
-    return context.tr('tv_market_all_regions');
+    return context.tr('tv_market_regions_short');
   }
 
   @override

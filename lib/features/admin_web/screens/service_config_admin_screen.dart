@@ -49,6 +49,7 @@ const Map<String, String> _moduleLabels = {
   'oil_change': 'Moy almashtirish',
   'platform_store': 'AVA do\'koni',
   'tv_market': 'AVAGram',
+  'chatgpt': 'ChatGPT',
 };
 
 String _labelFor(String id) => _moduleLabels[id] ?? id;
@@ -91,7 +92,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   /// Oxirgi saqlangan baseline — cascade uchun (eski qiymat bilan solishtirish).
   final Map<String, ModuleStatus> _savedDefaults = {};
 
-  static const String _regionId = 'xorazm';
+  /// Geo seed bo'lmaganda (yoki region o'chirilganda) tayanch viloyat.
+  static const String _fallbackRegionId = 'xorazm';
+
+  String _regionId = _fallbackRegionId;
+  List<GeoRegion> _regions = const [];
   List<GeoDistrict> _districts = const [];
   List<ServiceArea> _allAreas = const [];
   final Set<String> _expandedDistricts = {};
@@ -122,10 +127,15 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     setState(() => _loading = true);
     try {
       final defaultsFuture = _repo.fetchModuleDefaults();
-      final districtsFuture = _repo.fetchDistricts(_regionId);
-      final areasFuture = _repo.fetchServiceAreasForRegion(_regionId);
+      final regionsFuture = _repo.fetchRegions();
 
       final defaultsRes = await defaultsFuture;
+      final regions = await regionsFuture;
+      final regionId = _resolveRegionId(regions);
+
+      final districtsFuture = _repo.fetchDistricts(regionId);
+      final areasFuture = _repo.fetchServiceAreasForRegion(regionId);
+
       final districts = await districtsFuture;
       final areas = await areasFuture;
 
@@ -203,6 +213,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         _savedDefaults
           ..clear()
           ..addAll(_defaults);
+        _regions = regions;
+        _regionId = regionId;
         _districts = districts;
         _allAreas = areas;
         _overrides
@@ -249,6 +261,46 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         SnackBar(content: Text('Yuklash xatosi: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  /// Joriy viloyat: tanlangani → `xorazm` → ro'yxatdagi birinchisi.
+  String _resolveRegionId(List<GeoRegion> regions) {
+    if (regions.any((r) => r.id == _regionId)) return _regionId;
+    if (regions.any((r) => r.id == _fallbackRegionId)) return _fallbackRegionId;
+    return regions.isEmpty ? _fallbackRegionId : regions.first.id;
+  }
+
+  Future<void> _onRegionChanged(String? id) async {
+    final next = (id ?? '').trim();
+    if (next.isEmpty || next == _regionId) return;
+    if (_hasDirtyAny) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Saqlanmagan oʻzgarish bor'),
+          content: const Text(
+            'Viloyat almashtirilsa saqlanmagan oʻzgarishlar yoʻqoladi.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bekor qilish'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Davom etish'),
+            ),
+          ],
+        ),
+      );
+      if (discard != true) return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _regionId = next;
+      _expandedDistricts.clear();
+    });
+    await _loadAll();
   }
 
   /// Eski seed override'larini fonda tozalash (UI ni bloklamaydi).
@@ -363,8 +415,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     ];
     for (final d in _districts) {
       final areas = _areasForDistrict(d.id);
-      if (areas.isEmpty) continue;
-
       final expanded = _expandedDistricts.contains(d.id);
       final showAll = expanded && areas.length > 1;
 
@@ -373,8 +423,13 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           cols.add(_MatrixColumn(area: a, district: d));
         }
       } else {
-        final primary = areas.first;
-        cols.add(_MatrixColumn(area: primary, district: d, isPrimary: true));
+        // MFY seed qilinmagan tuman ham ustun oladi — `geo_district_modules`
+        // override'i zonaga bog'liq emas.
+        cols.add(_MatrixColumn(
+          area: areas.isEmpty ? null : areas.first,
+          district: d,
+          isPrimary: true,
+        ));
       }
     }
     return cols;
@@ -718,6 +773,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                       ],
                     ),
                   ),
+                  if (_regions.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(width: 220, child: _regionPicker()),
+                  ],
                   const SizedBox(width: 8),
                   SizedBox(width: 320, child: _enforceBar()),
                 ],
@@ -1069,6 +1128,52 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     );
   }
 
+  Widget _regionPicker() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _regions.any((r) => r.id == _regionId) ? _regionId : null,
+          isExpanded: true,
+          isDense: true,
+          icon: const Icon(Icons.expand_more, size: 18),
+          hint: const Text('Вилоят', style: TextStyle(fontSize: 13)),
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+          selectedItemBuilder: (_) => [
+            for (final r in _regions)
+              Row(
+                children: [
+                  const Icon(Icons.public, size: 15, color: AppColors.primaryDark),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      r.displayName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+          items: [
+            for (final r in _regions)
+              DropdownMenuItem(
+                value: r.id,
+                child: Text(r.displayName, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (_savingMatrix || _savingGlobal) ? null : _onRegionChanged,
+        ),
+      ),
+    );
+  }
+
   Widget _enforceBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1322,7 +1427,9 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
     final label = col.isGlobal
         ? 'Baseline'
-        : _zoneDisplayName(col.area!.displayName, col.district!.displayName);
+        : col.area == null
+            ? _districtDisplayName(col.district!.displayName)
+            : _zoneDisplayName(col.area!.displayName, col.district!.displayName);
 
     final child = Container(
       alignment: Alignment.center,

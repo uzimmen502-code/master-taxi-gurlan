@@ -953,6 +953,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         titleSpacing: 0,
+        // Глобал темада `centerTitle: true` (app_theme.dart) — у бу
+        // ерда профилни ўртага суриб, ўнгдаги қидирув иконкасини
+        // босиб қоларди. Фақат шу экранда бекор қилинади: профил
+        // орқага қайтиш стрелкасининг ёнида, чап томонда туради.
+        centerTitle: false,
         // Ҳудуд фильтрлари пастки қаторга кўчди; бу ерда энди жорий
         // клип эгасининг профили турибди (свайпда алмашади).
         title: _ownerTitle(),

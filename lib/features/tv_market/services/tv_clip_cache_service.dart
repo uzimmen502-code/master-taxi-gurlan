@@ -12,10 +12,11 @@ import 'package:path_provider/path_provider.dart';
 /// T7). `entertainment_cache_service.dart` bilan bir xil bounded-LRU
 /// pattern.
 ///
-/// Hozircha butun-fayl MP4 — production hali HLS/segment-based
-/// streaming'ga o'tgani yo'q (audit, 2026-09: T1 spike faqat feasibility
-/// isbotladi, productionga qo'shilmadi). HLS qo'shilsa, bu klass
-/// segment-darajasiga qayta qurilishi kerak bo'ladi.
+/// Faqat butun-fayl MP4 uchun. HLS (`.m3u8`) manzillar bu kesh'dan
+/// ATAYIN chetlab o'tiladi — qarang: [isHlsUrl]. Ya'ni HLS kliplar
+/// qayta ko'rilganda lokal nusxadan emas, tarmoqdan oqadi; segment
+/// darajasidagi kesh `video_player` paketi orqali boshqarilmaydi
+/// (ExoPlayer'ning `SimpleCache`'iga yo'l yo'q).
 ///
 /// Playback'ni bloklamaydi: [ensureCached] fon'da yuklaydi, joriy
 /// controller network orqali streaming davom etadi — cache faqat
@@ -44,8 +45,22 @@ class TvClipCacheService {
     return '${md5.convert(utf8.encode(path))}.mp4';
   }
 
+  /// HLS манзилими? Бу кэш бутун-файл учун: `.m3u8` — бу видео эмас,
+  /// сегментларга ишора қилувчи бир неча юз байтлик матн. Уни юклаб
+  /// «кэшландим» деб ҳисоблаш ЗАРАРЛИ бўларди: кейинги кўришда
+  /// [localFile] ўша матн файлини қайтариб, плеер видео ўрнига
+  /// playlist'ни файлдан ўқишга уринарди.
+  ///
+  /// Шунинг учун HLS клиплар бу кэшдан фойдаланмайди — улар ҳар
+  /// кўришда тармоқдан оқади (ExoPlayer'нинг ўз буфери ишлайди).
+  /// MP4 клиплар (эскилари ва HLS йиқилганлари) аввалгидек кэшланади.
+  static bool isHlsUrl(String url) {
+    final path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
+    return path.endsWith('.m3u8');
+  }
+
   Future<File?> localFile(String url) async {
-    if (kIsWeb || url.isEmpty) return null;
+    if (kIsWeb || url.isEmpty || isHlsUrl(url)) return null;
     final dir = await _cacheDir();
     final file = File(p.join(dir.path, _keyFor(url)));
     return file.existsSync() ? file : null;
@@ -54,7 +69,7 @@ class TvClipCacheService {
   /// Bir url uchun bir vaqtda bitta yuklash (dedup) — natijani kutish
   /// shart emas, chaqiruvchi odatda `unawaited()` bilan ishlatadi.
   Future<void> ensureCached(String url) {
-    if (kIsWeb || url.isEmpty) return Future.value();
+    if (kIsWeb || url.isEmpty || isHlsUrl(url)) return Future.value();
     if (_inflight.containsKey(url)) return _inflight[url]!.then((_) {});
     return _inflight.putIfAbsent(url, () => _download(url)).then((_) {});
   }

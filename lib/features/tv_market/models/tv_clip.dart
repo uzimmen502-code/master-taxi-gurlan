@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../services/tv_social.dart';
 
@@ -78,6 +79,7 @@ class TvClip {
     this.socialPost = const {},
     this.searchTokens = const [],
     this.videoVariants = const {},
+    this.hlsUrl = '',
     this.duration = 0,
     this.processingStatus = 'ready',
     this.expiresAt,
@@ -153,6 +155,12 @@ class TvClip {
   /// Bo'sh = faqat `videoUrl` (eski klip yoki hali processing tugamagan).
   final Map<String, String> videoVariants;
 
+  /// HLS master playlist (`master.m3u8`) URL'и — сервер уни MP4
+  /// вариантларидан пакетлайди. Бўш бўлса клип HLS'сиз: эски клип,
+  /// ёки пакетлаш йиқилган. Бундай ҳолда [urlForQuality] MP4'га
+  /// қайтади, шунинг учун бўш қиймат ҳеч нарсани бузмайди.
+  final String hlsUrl;
+
   /// Video davomiyligi (soniya). 0 = noma'lum (eski klip).
   final int duration;
 
@@ -201,9 +209,18 @@ class TvClip {
   bool get showsOnHome =>
       !isAd || const {'home', 'premium', 'pro_max'}.contains(adTier);
 
-  /// [quality] masalan `'720p'`/`'480p'`/`'360p'`. Variant topilmasa
-  /// asl `videoUrl`ga qaytadi (eski klip yoki processing tugamagan).
-  String urlForQuality(String quality) => videoVariants[quality] ?? videoUrl;
+  /// Ижро учун URL. Тартиб: HLS → сўралган MP4 варианти → асл файл.
+  ///
+  /// HLS бор бўлса [quality] эътиборга олинмайди — сифатни плеернинг
+  /// ўзи, ҳақиқий тармоқ тезлигига қараб танлайди (ABR). Бу
+  /// [TvNetworkQualityService]нинг «Wi-Fi → 720p» тахминидан аниқроқ.
+  ///
+  /// Web'да HLS ишлатилмайди: Chrome m3u8'ни нативда ўқимайди
+  /// (қаранг: [mp4Url]).
+  String urlForQuality(String quality) {
+    if (!kIsWeb && hlsUrl.isNotEmpty) return hlsUrl;
+    return videoVariants[quality] ?? videoUrl;
+  }
 
   /// Ҳар доим оддий, прогрессив MP4 — ҳеч қачон HLS playlist эмас.
   ///
@@ -260,6 +277,7 @@ class TvClip {
     String? posterUrl,
     List<String>? searchTokens,
     Map<String, String>? videoVariants,
+    String? hlsUrl,
     int? duration,
     String? processingStatus,
     DateTime? expiresAt,
@@ -298,6 +316,7 @@ class TvClip {
       socialPost: socialPost ?? this.socialPost,
       searchTokens: searchTokens ?? this.searchTokens,
       videoVariants: videoVariants ?? this.videoVariants,
+      hlsUrl: hlsUrl ?? this.hlsUrl,
       duration: duration ?? this.duration,
       processingStatus: processingStatus ?? this.processingStatus,
       expiresAt: expiresAt ?? this.expiresAt,
@@ -353,6 +372,7 @@ class TvClip {
               ),
             )
           : const {},
+      hlsUrl: (d['hlsUrl'] ?? '') as String,
       duration: (d['duration'] ?? 0) as int,
       processingStatus: (d['processingStatus'] ?? 'ready') as String,
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
@@ -397,6 +417,7 @@ class TvClip {
         if (socialPost.isNotEmpty) 'socialPost': socialPost,
         if (searchTokens.isNotEmpty) 'searchTokens': searchTokens,
         if (videoVariants.isNotEmpty) 'videoVariants': videoVariants,
+        if (hlsUrl.isNotEmpty) 'hlsUrl': hlsUrl,
         if (duration > 0) 'duration': duration,
         'processingStatus': processingStatus,
         if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt!),

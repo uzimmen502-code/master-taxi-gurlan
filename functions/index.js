@@ -11207,6 +11207,12 @@ const TV_CLIP_VARIANT_SPECS = [
 // (lib/features/tv_market/models/tv_clip.dart) — иккиси мос туриши шарт.
 const TV_CLIP_MAX_SECONDS = 180;
 
+// HLS сегментининг узунлиги. Лентада энг муҳими биринчи кадр тезлиги,
+// шунинг учун қисқа сегмент афзал — плеер камроқ маълумот юклаб
+// бошлайди. Айнан шу қиймат кодлашда ҳам ишлатилади
+// (`-force_key_frames`): сегмент фақат keyframe'дан бошлана олади.
+const TV_CLIP_HLS_SEGMENT_SECONDS = 4;
+
 function tvClipStoragePathFromUrl(url) {
   const match = /\/o\/([^?]+)/.exec(url || '');
   return match ? decodeURIComponent(match[1]) : null;
@@ -11238,6 +11244,125 @@ async function claimTvClipTranscode(clipRef, videoUrl) {
   } catch (e) {
     console.error('claimTvClipTranscode failed:', clipRef.id, e.message || e);
     return false;
+  }
+}
+
+// Тайёр MP4 вариантларини HLS'га пакетлайди.
+//
+// Бу ҚАЙТА КОДЛАШ ЭМАС — `-c copy`, фақат контейнер MP4'дан MPEG-TS'га
+// алмашади, шунинг учун деярли текин ва 540с бюджетга сезиларли
+// таъсир қилмайди. Кодлаш босқичида keyframe'лар аллақачон
+// `TV_CLIP_HLS_SEGMENT_SECONDS` да мажбурланган, шунинг учун сегмент
+// чегаралари аниқ жойга тушади.
+//
+// `single_file` — калит нуқта: ҳар вариант учун юзлаб `.ts` эмас,
+// БИТТА файл чиқади, playlist эса унинг ичидаги диапазонларга
+// (`EXT-X-BYTERANGE`) ишора қилади. Сабаби — Firebase Storage'да ҳар
+// объектнинг ўз token'и бўлади ва playlist'даги нисбий йўллар
+// ишламайди: ҳар сегментни алоҳида юклаб, URL'ини playlist'га ёзиш
+// керак бўларди. 10 дақиқалик клипда бу 200 та кетма-кет юклаш —
+// бюджетнинг катта қисми. `single_file` билан 5 та объект: 2 `.ts`,
+// 2 вариант playlist ва 1 master.
+//
+// Хатолик бўлса '' қайтаради — HLS қўшимча, мажбурий эмас: клип
+// MP4 вариантлари билан барибир чоп этилаверади.
+async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const {spawnSync} = require('child_process');
+  const ffmpegPath = require('ffmpeg-static');
+
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hls_${clipId}_`));
+  const uploadWithToken = async (localPath, destPath, contentType) => {
+    const token = crypto.randomUUID();
+    await bucket.upload(localPath, {
+      destination: destPath,
+      metadata: {contentType, metadata: {firebaseStorageDownloadTokens: token}},
+    });
+    return `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
+        `/o/${encodeURIComponent(destPath)}?alt=media&token=${token}`;
+  };
+
+  try {
+    const streams = [];
+    for (const [quality, mp4Path] of Object.entries(mp4ByQuality)) {
+      const tsName = `${quality}.ts`;
+      const playlistPath = path.join(workDir, `${quality}.m3u8`);
+      const tsPath = path.join(workDir, tsName);
+
+      const res = spawnSync(ffmpegPath, [
+        '-y',
+        '-i', mp4Path,
+        '-c', 'copy',
+        '-f', 'hls',
+        '-hls_time', String(TV_CLIP_HLS_SEGMENT_SECONDS),
+        '-hls_playlist_type', 'vod',
+        '-hls_flags', 'single_file+independent_segments',
+        '-hls_segment_filename', tsPath,
+        playlistPath,
+      ], {stdio: 'pipe', maxBuffer: 32 * 1024 * 1024});
+
+      if (res.status !== 0 || !fs.existsSync(tsPath) ||
+          !fs.existsSync(playlistPath)) {
+        console.error(`tv clip ${clipId} hls ${quality} failed`, res.status);
+        continue;
+      }
+
+      let playlist = fs.readFileSync(playlistPath, 'utf8');
+      // Playlist'даги нисбий файл номи — абсолют, token'ли URL'га.
+      const tsUrl = await uploadWithToken(
+          tsPath, `tv_clip_hls/${clipId}/${tsName}`, 'video/mp2t');
+      playlist = playlist.split(tsName).join(tsUrl);
+      fs.writeFileSync(playlistPath, playlist, 'utf8');
+
+      const variantUrl = await uploadWithToken(
+          playlistPath, `tv_clip_hls/${clipId}/${quality}.m3u8`,
+          'application/vnd.apple.mpegurl');
+
+      // BANDWIDTH — master playlist учун мажбурий. Ҳақиқий ўлчамдан
+      // ҳисоблаймиз: умумий байт / умумий давомийлик.
+      const seconds = [...playlist.matchAll(/#EXTINF:([\d.]+)/g)]
+          .reduce((sum, m) => sum + parseFloat(m[1]), 0);
+      const bytes = fs.statSync(tsPath).size;
+      const bandwidth = seconds > 0
+          ? Math.round((bytes * 8) / seconds)
+          : 1000000;
+
+      const probe = spawnSync(ffmpegPath, ['-i', mp4Path], {stdio: 'pipe'});
+      const dim = /Video: .*?, (\d+)x(\d+)/.exec(probe.stderr.toString());
+
+      streams.push({
+        bandwidth,
+        resolution: dim ? `${dim[1]}x${dim[2]}` : '',
+        url: variantUrl,
+      });
+    }
+
+    if (streams.length === 0) return '';
+
+    // Паст сифат олдинда — плеер одатда биринчисидан бошлайди, бу
+    // лентада биринчи кадргача кутишни қисқартиради.
+    streams.sort((a, b) => a.bandwidth - b.bandwidth);
+    const master = ['#EXTM3U', '#EXT-X-VERSION:4'];
+    for (const s of streams) {
+      const attrs = [`BANDWIDTH=${s.bandwidth}`];
+      if (s.resolution) attrs.push(`RESOLUTION=${s.resolution}`);
+      master.push(`#EXT-X-STREAM-INF:${attrs.join(',')}`, s.url);
+    }
+    const masterPath = path.join(workDir, 'master.m3u8');
+    fs.writeFileSync(masterPath, master.join('\n') + '\n', 'utf8');
+
+    return await uploadWithToken(
+        masterPath, `tv_clip_hls/${clipId}/master.m3u8`,
+        'application/vnd.apple.mpegurl');
+  } catch (e) {
+    console.error('packageTvClipHls error:', clipId, e.message || e);
+    return '';
+  } finally {
+    try {
+      fs.rmSync(workDir, {recursive: true, force: true});
+    } catch (_) {}
   }
 }
 
@@ -11326,6 +11451,16 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
           '-c:v', 'libx264',
           '-preset', 'veryfast',
           '-crf', '26',
+          // Keyframe'ларни аниқ вақтларда мажбурлаш — HLS учун шарт.
+          // Вақт бўйича ифода (кадрлар сони эмас) манбанинг fps'идан
+          // қатъи назар ишлайди, ва иккала вариант бир хил ифода билан
+          // кодлангани учун keyframe'лари бир-бирига мос тушади —
+          // сифат алмашувида (ABR) сакраш бўлмайди.
+          '-force_key_frames',
+          `expr:gte(t,n_forced*${TV_CLIP_HLS_SEGMENT_SECONDS})`,
+          // Саҳна ўзгаришида қўшимча keyframe қўйилмасин — акс ҳолда
+          // сегмент чегаралари сурилиб, вариантлар мос келмай қолади.
+          '-sc_threshold', '0',
           '-c:a', 'aac',
           '-b:a', '128k',
           '-movflags', '+faststart',
@@ -11346,12 +11481,14 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
 
     const tUpload = Date.now();
     const variants = {};
+    const readyMp4 = {};
     for (let i = 0; i < TV_CLIP_VARIANT_SPECS.length; i++) {
       const spec = TV_CLIP_VARIANT_SPECS[i];
       const tmpOut = outPaths[i];
       // ffmpeg умуман йиқилган бўлса ҳам ҳар бир файл алоҳида
       // текширилади: қисман чиққан натижа бўлса, у ҳам ишга ярайди.
       if (!fs.existsSync(tmpOut) || fs.statSync(tmpOut).size <= 0) continue;
+      readyMp4[spec.key] = tmpOut;
 
       const destPath = `tv_clip_variants/${clipId}/${spec.key}.mp4`;
       const token = crypto.randomUUID();
@@ -11370,12 +11507,27 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
 
     console.log(
         `tv clip ${clipId} timing: upload ${secsSince(tUpload)}s, ` +
-        `JAMI ${secsSince(t0)}s / 540s budjet ` +
-        `(${Object.keys(variants).length} variant)`);
+        `${Object.keys(variants).length} variant`);
+
+    // HLS — қўшимча, мажбурий эмас. Йиқилса клип барибир MP4
+    // вариантлари билан чоп этилади (`hlsUrl` бўш қолади, клиент
+    // автоматик MP4'га қайтади).
+    let hlsUrl = '';
+    if (Object.keys(readyMp4).length > 0) {
+      const tHls = Date.now();
+      hlsUrl = await packageTvClipHls(clipId, bucket, bucketName, readyMp4);
+      console.log(
+          `tv clip ${clipId} timing: hls ${secsSince(tHls)}s ` +
+          `(${hlsUrl ? 'ok' : 'yoq'})`);
+    }
+
+    console.log(
+        `tv clip ${clipId} timing: JAMI ${secsSince(t0)}s / 540s budjet`);
 
     if (Object.keys(variants).length > 0) {
       await clipRef.update({
         videoVariants: variants,
+        hlsUrl,
         processingStatus: 'ready',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });

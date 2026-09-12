@@ -374,7 +374,16 @@ class _TvPublishScreenState extends State<TvPublishScreen>
   }
 
   Future<void> _saveEdit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      // Bug fix: ilgari bu yerda hech qanday ko'rinadigan reaksiya bo'lmasdi
+      // — foydalanuvchi tugmani bossa, forma validatsiyasi jim muvaffaqiyatsiz
+      // tugagach (mas. nom bo'sh), ekranda faqat kichik qizil matn chiqardi,
+      // uni ko'rmasa "hech narsa bo'lmadi" deb o'ylashi mumkin edi.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_fill_required'))),
+      );
+      return;
+    }
     final clip = widget.editClip!;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -502,7 +511,14 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       await _saveEdit();
       return;
     }
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      // Bug fix: xuddi shu sabab — jim validatsiya muvaffaqiyatsizligi
+      // "tugma bosilganda hech narsa bo'lmadi" deb ko'rinardi.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_publish_fill_required'))),
+      );
+      return;
+    }
     if (_videoFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('tv_publish_video_required'))),

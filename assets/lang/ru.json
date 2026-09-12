@@ -616,6 +616,7 @@
   "addr_err_phone_first": "Сначала подтвердите телефон",
   "addr_err_save": "Ошибка сохранения",
   "tv_publish_name_required": "Введите название",
+  "tv_publish_fill_required": "Заполните обязательное поле выше (напр. название)",
   "tv_publish_price_product": "Цена товара (необязательно)",
   "tv_ad_publishing": "Реклама публикуется...",
   "tv_publish_show_phone": "Показывать мой номер телефона",

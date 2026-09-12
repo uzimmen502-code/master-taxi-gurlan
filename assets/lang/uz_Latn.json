@@ -616,6 +616,7 @@
   "addr_err_phone_first": "Avval telefonni tasdiqlang",
   "addr_err_save": "Saqlashda xatolik",
   "tv_publish_name_required": "Nomni kiriting",
+  "tv_publish_fill_required": "Yuqoridagi majburiy maydonni (mas. nom) to'ldiring",
   "tv_publish_price_product": "Mahsulot narxi (ixtiyoriy)",
   "tv_ad_publishing": "Reklama joylanmoqda...",
   "tv_publish_show_phone": "Telefon raqamimni ko'rsatish",

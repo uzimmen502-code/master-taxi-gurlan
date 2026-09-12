@@ -530,6 +530,9 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                     )
                   else
                     ServiceAreaPicker(
+                      // Маҳалла юқорида «МФЙ» майдонида киритилади — бу ерда
+                      // такрор. Зона туманнинг асосийсидан автоматик олинади.
+                      showAreaDropdown: false,
                       initialRegionId: _regionId,
                       initialDistrictId: _districtId,
                       initialServiceAreaId: _serviceAreaId,

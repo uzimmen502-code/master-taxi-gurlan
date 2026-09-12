@@ -449,16 +449,22 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            item.label,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: labelSize,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF102418),
-                              height: 1.05,
+                          // Katak balandligi ekran kengligidan hisoblanadi; tizim
+                          // shrift kattalashtirilsa (font_scale 1.3) yozuv Column'ni
+                          // toshirib yuboradi va butun katak ichi chizilmay qoladi.
+                          MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: 1.0,
+                            child: Text(
+                              item.label,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: labelSize,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF102418),
+                                height: 1.05,
+                              ),
                             ),
                           ),
                         ],

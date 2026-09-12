@@ -11232,9 +11232,24 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       os.tmpdir(), `${clipId}_in${path.extname(srcPath) || '.mp4'}`);
   const tmpOutputs = [];
 
+  // Босқичма-босқич вақт ўлчови. Давомийлик чегарасини (ҳозир 180с)
+  // тахминдан эмас, ҳақиқий рақамдан белгилаш учун: логда ҳар бир
+  // босқич неча сония олгани ва манба ҳажми кўринади. 540с — бу
+  // 1-авлод функциянинг абсолют максимуми, шунга қанча яқинлашаётганимиз
+  // шу логдан билинади.
+  const t0 = Date.now();
+  const secsSince = (from) => ((Date.now() - from) / 1000).toFixed(1);
+
   try {
     await clipRef.update({processingStatus: 'processing'});
+    const tDownload = Date.now();
     await bucket.file(srcPath).download({destination: tmpIn});
+    const srcMb = fs.existsSync(tmpIn)
+        ? (fs.statSync(tmpIn).size / 1048576).toFixed(1)
+        : '?';
+    console.log(
+        `tv clip ${clipId} timing: download ${secsSince(tDownload)}s ` +
+        `(${srcMb} MB)`);
 
     try {
       fs.chmodSync(ffmpegPath, 0o755);
@@ -11285,13 +11300,18 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       );
     });
 
+    const tFfmpeg = Date.now();
     const res = spawnSync(ffmpegPath, args,
         {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+    console.log(
+        `tv clip ${clipId} timing: ffmpeg ${secsSince(tFfmpeg)}s ` +
+        `(exit ${res.status})`);
     if (res.status !== 0) {
       console.error(
           `tv clip ${clipId} ffmpeg failed`, res.status, res.error);
     }
 
+    const tUpload = Date.now();
     const variants = {};
     for (let i = 0; i < TV_CLIP_VARIANT_SPECS.length; i++) {
       const spec = TV_CLIP_VARIANT_SPECS[i];
@@ -11314,6 +11334,11 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
           `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
           `/o/${encoded}?alt=media&token=${token}`;
     }
+
+    console.log(
+        `tv clip ${clipId} timing: upload ${secsSince(tUpload)}s, ` +
+        `JAMI ${secsSince(t0)}s / 540s budjet ` +
+        `(${Object.keys(variants).length} variant)`);
 
     if (Object.keys(variants).length > 0) {
       await clipRef.update({

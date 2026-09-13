@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../repositories/service_config_repository.dart';
 import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../models/tv_comment.dart';
@@ -119,23 +120,42 @@ class TvClipsRepository {
 
   /// Вилоят бўйича лента — туман танланмаганда ишлатилади.
   ///
-  /// `regionId` клипда денормал сақланади (`tv_clip_geo.dart` жойлаштириш
-  /// пайтида ёзади). Майдони йўқ эски клиплар бу сўровга тушмайди — бу
-  /// тўғри хулқ: вилояти номаълум клип «Хоразм» фильтрида кўринмаслиги
-  /// керак. Фильтрсиз («Барча вилоятлар») ҳолатда бу метод умуман
-  /// чақирилмайди, шунинг учун эски клиплар лентадан йўқолмайди.
+  /// Клипдаги денормал `regionId` майдонига ЭМАС, шу вилоятга қарашли
+  /// туманлар рўйхатига (`districtId`, ҳар доим мавжуд, ҳеч қачон бўш
+  /// қолмайдиган майдон) таянади. Сабаб: жойлаштириш пайтида вилоят
+  /// аниқланмай қолса (масалан тармоқ хатоси), клипда `regionId` умуман
+  /// ёзилмай қолиши мумкин (`tv_clip.dart` — фақат бўш бўлмаса ёзади) —
+  /// бундай клип ҳеч қачон бирор вилоят фильтрида чиқмасди, ҳатто ўз
+  /// туманида тўғри кўринаётган бўлса ҳам.
   Future<List<TvClip>> fetchByRegion({
     required String regionId,
     int limit = 40,
     List<String>? categories,
   }) async {
-    var q = _col
-        .where('status', isEqualTo: 'active')
-        .where('regionId', isEqualTo: regionId);
-    q = _withCategory(q, categories);
-    final snap =
-        await q.orderBy('createdAt', descending: true).limit(limit).get();
-    return tvApplyAdTierPriority(tvShuffleClips(_playable(snap.docs)));
+    final districts = await ServiceConfigRepository().fetchDistricts(regionId);
+    if (districts.isEmpty) return const [];
+    // Firestore бир сўровда иккита `whereIn` (categories + districtId)ни
+    // қўллаб-қувватламагани учун ҳар туман учун алоҳида (параллел) сўров.
+    final perDistrict = await Future.wait(districts.map((d) async {
+      var q = _col
+          .where('status', isEqualTo: 'active')
+          .where('districtId', isEqualTo: d.id);
+      q = _withCategory(q, categories);
+      final snap =
+          await q.orderBy('createdAt', descending: true).limit(limit).get();
+      return _playable(snap.docs);
+    }));
+    final byId = <String, TvClip>{};
+    for (final list in perDistrict) {
+      for (final c in list) {
+        byId[c.id] = c;
+      }
+    }
+    final merged = byId.values.toList()
+      ..sort((a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+    final result = merged.length > limit ? merged.sublist(0, limit) : merged;
+    return tvApplyAdTierPriority(tvShuffleClips(result));
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).

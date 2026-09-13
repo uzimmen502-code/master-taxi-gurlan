@@ -78,7 +78,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _shopRepo = TvShopRepository();
   final _viewRecorder = TvClipViewRecorder();
   final _playbackAnalytics = TvPlaybackAnalyticsRecorder();
-  final _ownersWithShop = <String>{};
   bool _hasMyShop = false;
 
   /// Ulanish turiga qarab tanlangan variant ('720p'/'480p'/'360p').
@@ -274,7 +273,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       if (_clips.isNotEmpty) unawaited(_activate(0));
       unawaited(_refreshSocialState());
       unawaited(_hydratePublisherNames());
-      unawaited(_hydrateOwnerShops());
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
       if (mounted) setState(() => _loading = false);
@@ -405,27 +403,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _isOwner(TvClip clip) => phonesMatch(clip.ownerPhone, _mePhone);
 
   bool _showShopBtn(TvClip clip) => true;
-
-  bool _openChannelAsShop(TvClip clip) {
-    if (_isOwner(clip)) return _hasMyShop;
-    return _ownersWithShop.contains(canonicalPhoneId(clip.ownerPhone));
-  }
-
-  Future<void> _hydrateOwnerShops() async {
-    if (_clips.isEmpty) return;
-    try {
-      final phones = _clips.map((c) => c.ownerPhone).toSet();
-      final withShop = await _shopRepo.ownerIdsWithShop(phones);
-      if (!mounted) return;
-      setState(() {
-        _ownersWithShop
-          ..clear()
-          ..addAll(withShop);
-      });
-    } catch (e) {
-      debugPrint('[TvMarketFeed] owner shops $e');
-    }
-  }
 
   Future<void> _hydratePublisherNames() async {
     final hydrated = await hydrateTvPublisherNames(_clips);
@@ -984,12 +961,12 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                       onTap: _openPublish,
                       borderRadius: BorderRadius.circular(14),
                       child: const SizedBox(
-                        width: 48,
-                        height: 48,
+                        width: 43,
+                        height: 43,
                         child: Icon(
                           Icons.videocam_rounded,
                           color: Colors.white,
-                          size: 28,
+                          size: 25,
                         ),
                       ),
                     ),
@@ -1084,7 +1061,6 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onOpenShop: _showShopBtn(clip)
                               ? () => _onOpenShop(clip)
                               : null,
-                          openChannelAsShop: _openChannelAsShop(clip),
                         ),
                         if (isActive)
                           TvPlayPauseBadge(
@@ -1163,7 +1139,7 @@ class _PublishArrowHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(34, 22),
+      size: const Size(31, 20),
       painter: _ThickRightArrowPainter(),
     );
   }

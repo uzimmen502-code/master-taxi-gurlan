@@ -23,7 +23,6 @@ class TvClipOverlay extends StatelessWidget {
     this.onDelete,
     this.onEdit,
     this.onOpenShop,
-    this.openChannelAsShop = true,
     this.filters,
   });
 
@@ -39,9 +38,6 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onOpenShop;
-
-  /// `false` → lime tugma «Канал».
-  final bool openChannelAsShop;
 
   /// Пастки қаторнинг чап томонида, «Боғланиш» тугмасидан олдин
   /// турадиган ҳудуд фильтрлари (туман, вилоят). Экран даражасидаги
@@ -135,7 +131,6 @@ class TvClipOverlay extends StatelessWidget {
             liked: liked,
             saved: saved,
             showShop: onOpenShop != null,
-            openChannelAsShop: openChannelAsShop,
             onLike: onLike,
             onComment: onComment,
             onShare: onShare,
@@ -247,7 +242,6 @@ class _ActionButtons extends StatelessWidget {
     required this.onShare,
     required this.onSave,
     this.onOpenShop,
-    this.openChannelAsShop = true,
     this.showShop = false,
   });
 
@@ -259,7 +253,6 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
-  final bool openChannelAsShop;
   final bool showShop;
 
   @override
@@ -288,10 +281,7 @@ class _ActionButtons extends StatelessWidget {
         if (showShop && onOpenShop != null) ...[
           const SizedBox(height: 16),
           _ShopActionBtn(
-            label: context.tr(
-              openChannelAsShop ? 'tv_market_shop' : 'tv_market_channel',
-            ),
-            isShop: openChannelAsShop,
+            label: context.tr('tv_market_shop'),
             onTap: onOpenShop!,
           ),
         ],
@@ -359,12 +349,10 @@ class _ShopActionBtn extends StatelessWidget {
   const _ShopActionBtn({
     required this.label,
     required this.onTap,
-    this.isShop = true,
   });
 
   final String label;
   final VoidCallback onTap;
-  final bool isShop;
 
   @override
   Widget build(BuildContext context) {
@@ -384,8 +372,8 @@ class _ShopActionBtn extends StatelessWidget {
                 BoxShadow(color: Colors.black54, blurRadius: 6),
               ],
             ),
-            child: Icon(
-              isShop ? Icons.storefront_rounded : Icons.live_tv_rounded,
+            child: const Icon(
+              Icons.storefront_rounded,
               color: Colors.black,
               size: 22,
             ),

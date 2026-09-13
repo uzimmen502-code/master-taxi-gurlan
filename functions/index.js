@@ -11615,6 +11615,52 @@ exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
       await transcodeTvClipVideo(event.params.clipId, after.videoUrl);
     });
 
+// Мавжуд клипларни қайта transcode қилиш (backfill) — масалан янги
+// вариант поғонаси (360p) қўшилганда: эски клипларда у йўқ, ва
+// `videoVariants['360p']` топилмагани учун заиф тармоқдаги фойдаланувчи
+// хом файлга қайтади.
+//
+// Ишни АЙНАН шу ерда — булутда бажарамиз: манба ҳам, натижа ҳам
+// Storage'да, шунинг учун локал скрипт видеони ўзига тортиб, қайта
+// юклаши мутлақо исроф бўларди. Локал скрипт (`tools/
+// backfill_tv_clip_variants.js`) фақат белги қўяди, оғир иш шу трigger'да.
+//
+// Белги: `backfillVariantsAt` (serverTimestamp). Ҳар сафар ЯНГИ қиймат
+// ёзилганда ишга тушади — шунинг учун қайта уриниб кўриш учун шунчаки
+// белгини янгилаш кифоя. `transcodeTvClipVideo` ичидаги ёзувлар шу
+// ҳужжатни яна ўзгартиради, лекин белги ўзгармагани учун бу ерда
+// дарҳол қайтамиз — цикл ҳосил бўлмайди.
+exports.onTvClipBackfillRequested = onDocumentUpdated(
+    TV_CLIP_TRANSCODE_V2_OPTS,
+    async (event) => {
+      if (!event.data) return;
+      const before = event.data.before.data() || {};
+      const after = event.data.after.data() || {};
+      const marker = after.backfillVariantsAt;
+      if (!marker) return;
+      const prev = before.backfillVariantsAt;
+      if (prev && typeof prev.isEqual === 'function' && prev.isEqual(marker)) {
+        return;
+      }
+      const videoUrl = after.videoUrl || '';
+      if (!videoUrl) return;
+
+      // `claimTvClipTranscode` аллақачон ишланган клипни ўтказиб юборади
+      // (`processedVideoUrl === videoUrl` ва status ready) — backfill'да
+      // эса айнан ўшани қайта ишлашимиз керак, шунинг учун банд қилиш
+      // белгисини тозалаймиз.
+      try {
+        await event.data.after.ref.update({
+          processedVideoUrl: admin.firestore.FieldValue.delete(),
+        });
+      } catch (e) {
+        console.error('backfill claim reset failed:', event.params.clipId,
+            e.message || e);
+        return;
+      }
+      await transcodeTvClipVideo(event.params.clipId, videoUrl);
+    });
+
 // Модератор «Блоклаш» босганда (сабаб билан) — эгасига сабабини кўрсатиб
 // in-app хабар. Реклама (`category == 'ad'`) бу йўлдан ўтмайди — у ҳеч
 // қачон модерацияга тушмайди (🔴1/3 қарори), шунинг учун бу ерга кирмайди.

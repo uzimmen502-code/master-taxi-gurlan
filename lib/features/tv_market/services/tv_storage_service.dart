@@ -7,6 +7,13 @@ import 'package:uuid/uuid.dart';
 
 import '../models/tv_shop.dart';
 
+/// Storage'нинг стандарти `private, max-age=0` — ҳеч бир CDN/оралиқ кэш
+/// сақламайди, клиент ҳам ҳар сафар қайта сўрайди. Бу файллар эса
+/// ўзгармайди: ҳар юклашда янги ном (timestamp + uuid) берилади, шунинг
+/// учун `immutable` хавфсиз. Сервер томондаги жуфти:
+/// `TV_CLIP_CACHE_CONTROL` (functions/index.js).
+const _tvMediaCacheControl = 'public, max-age=31536000, immutable';
+
 /// TV Market видеолари учун Storage upload.
 class TvStorageService {
   TvStorageService({FirebaseStorage? storage})
@@ -30,7 +37,10 @@ class TvStorageService {
 
     final task = ref.putFile(
       File(filePath),
-      SettableMetadata(contentType: 'video/$ext'),
+      SettableMetadata(
+        contentType: 'video/$ext',
+        cacheControl: _tvMediaCacheControl,
+      ),
     );
 
     if (onProgress != null) {
@@ -54,7 +64,13 @@ class TvStorageService {
         'poster_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
     final ref =
         _storage.ref().child('tv_clips').child(ownerPhone).child(name);
-    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    await ref.putData(
+      bytes,
+      SettableMetadata(
+        contentType: 'image/jpeg',
+        cacheControl: _tvMediaCacheControl,
+      ),
+    );
     return ref.getDownloadURL();
   }
 

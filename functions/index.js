@@ -11203,6 +11203,19 @@ exports.transcodeEntertainmentVideo = onObjectFinalized(
 // edi), lekin bu yerda mavjud emas edi — natijada `videoVariants['360p']`
 // topilmay, eng zaif tarmoqdagi foydalanuvchi xom, siqilmagan asl faylga
 // (`videoUrl`) qaytardi. Shu qatorni qo'shish o'sha mos kelmaslikni tuzatadi.
+// Видео/HLS объектлари учун кэш сарлавҳаси.
+//
+// Firebase Storage'нинг стандарти — `private, max-age=0`: ҳеч бир CDN ёки
+// оралиқ кэш сақлай олмайди, клиент ҳам ҳар сафар қайтадан сўрайди. Яъни
+// ҳар бир сегмент ҳар кўришда us-central1'дан тортилади — Ўзбекистондаги
+// мобил тармоқ учун бу энг қиммат йўл.
+//
+// `immutable` бу ерда ХАВФСИЗ: файл қайта яратилганда (қайта transcode,
+// эга видеони алмаштирганда) ҳар сафар ЯНГИ download token берилади, яъни
+// URL бутунлай ўзгаради. Эски URL кэшда қолиши ҳеч нарсани бузмайди —
+// Firestore'да барибир янги URL туради.
+const TV_CLIP_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
 const TV_CLIP_VARIANT_SPECS = [
   {key: '720p', maxHeight: 720, maxrate: '2140k', bufsize: '3000k'},
   {key: '480p', maxHeight: 480, maxrate: '856k', bufsize: '1200k'},
@@ -11295,7 +11308,11 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     const token = crypto.randomUUID();
     await bucket.upload(localPath, {
       destination: destPath,
-      metadata: {contentType, metadata: {firebaseStorageDownloadTokens: token}},
+      metadata: {
+        contentType,
+        cacheControl: TV_CLIP_CACHE_CONTROL,
+        metadata: {firebaseStorageDownloadTokens: token},
+      },
     });
     return `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
         `/o/${encodeURIComponent(destPath)}?alt=media&token=${token}`;
@@ -11572,6 +11589,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
         destination: destPath,
         metadata: {
           contentType: 'video/mp4',
+          cacheControl: TV_CLIP_CACHE_CONTROL,
           metadata: {firebaseStorageDownloadTokens: token},
         },
       });

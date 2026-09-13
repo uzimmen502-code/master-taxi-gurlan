@@ -11452,13 +11452,13 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // ўқишнинг ўзи чегарада тўхтайди (ҳар бир чиқишга алоҳида ёзиш
     // шарт бўлмайди, ва ортиқча қисм умуман декодланмайди).
     //
-    // [colorFix] — фақат қайта уринишда қўшилади (пастга қаранг).
-    const buildArgs = (colorFix) => {
+    // [srcPath] — одатда `tmpIn`; ранг метадатаси тузатилган нусха
+    // ишлатилса, ўша (пастга қаранг).
+    const buildArgs = (srcPath) => {
       const args = [
         '-y',
         '-t', String(TV_CLIP_MAX_SECONDS),
-        ...colorFix,
-        '-i', tmpIn,
+        '-i', srcPath,
         '-filter_complex',
         `[0:v]split=${TV_CLIP_VARIANT_SPECS.length}${splitLabels}; ${scaleChain}`,
       ];
@@ -11495,28 +11495,56 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       return args;
     };
 
-    const runFfmpeg = (colorFix) => spawnSync(ffmpegPath, buildArgs(colorFix),
+    const runFfmpeg = (srcPath) => spawnSync(ffmpegPath, buildArgs(srcPath),
         {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
 
     const tFfmpeg = Date.now();
-    let res = runFfmpeg([]);
+    let res = runFfmpeg(tmpIn);
 
-    // Баъзи қурилма/муҳаррирлар видеони бузуқ ранг метадатаси билан
-    // ёзади (`color_range`/`colorspace` диапазондан ташқари қиймат).
-    // ffmpeg 7 буни filter graph киришида рад этади:
-    //   «Invalid color range» → «Error reinitializing filters» → exit 234.
-    // (ffmpeg 6 буни ютиб юборарди — шунинг учун локал синов бу хатони
-    // умуман кўрсатмайди, фақат булутдаги 7.0.2 да чиқади.)
+    // Баъзи қурилма/муҳаррирлар видеони яроқсиз ранг метадатаси билан
+    // ёзади. ffmpeg 7 бундай кадрни filter graph киришида рад этади:
+    //   «Invalid color range» → «Error reinitializing filters» → exit 234,
+    // `frame= 0` — яъни биринчи кадрдаёқ, ҳеч нарса чиқмайди.
+    // (ffmpeg 6 буни ютиб юборарди, шунинг учун локал синов бу хатони
+    // кўрсатмайди — фақат булутдаги 7.0.2 да чиқади.)
     //
-    // Тузатишни ҲАММА клипга эмас, фақат йиқилганда қўллаймиз: `tv`/`bt709`
-    // ни ҳамма манбага мажбурлаш ҳақиқатан full-range (`pc`) видеонинг
-    // рангини бузарди. Соғлом клиплар биринчи урнишдаёқ ўтади ва бу
-    // йўлга умуман кирмайди.
+    // Кириш опциялари (`-color_range`/`-colorspace`) бу ерда ЁРДАМ
+    // БЕРМАЙДИ — текширилди: декодер кадрга барибир файлдаги қийматни
+    // қўяди. Шунинг учун метадатани декодлашдан ОЛДИН, файлнинг ўзида
+    // тузатамиз: `-c copy` билан қайта пакетлаш (кодлаш эмас, шунинг
+    // учун деярли текин), H.264 VUI'ни `h264_metadata` орқали ва
+    // контейнердаги `colr` атомини чиқиш опциялари орқали ярарли
+    // қийматларга ёзиб.
+    //
+    // Бу фақат йиқилганда ишлайди: `tv`/`bt709` ни ҳамма манбага
+    // мажбурлаш ҳақиқатан full-range (`pc`) видеонинг рангини бузарди.
+    // Соғлом клиплар биринчи уринишдаёқ ўтади ва бу йўлга кирмайди.
     if (res.status !== 0) {
       console.log(
-          `tv clip ${clipId}: ffmpeg exit ${res.status} — ранг метадатасини ` +
-          `нормаллаштириб қайта уриниб кўрилмоқда`);
-      res = runFfmpeg(['-color_range', 'tv', '-colorspace', 'bt709']);
+          `tv clip ${clipId}: ffmpeg exit ${res.status} — ранг метадатаси ` +
+          `тузатилиб қайта уриниб кўрилмоқда`);
+      const fixedIn = path.join(os.tmpdir(), `${clipId}_colorfix.mp4`);
+      tmpOutputs.push(fixedIn);
+      const remux = spawnSync(ffmpegPath, [
+        '-y', '-i', tmpIn,
+        '-c', 'copy',
+        '-bsf:v', 'h264_metadata=video_full_range_flag=0:' +
+            'colour_primaries=1:transfer_characteristics=1:' +
+            'matrix_coefficients=1',
+        '-color_range', 'tv',
+        '-colorspace', 'bt709',
+        '-color_primaries', 'bt709',
+        '-color_trc', 'bt709',
+        fixedIn,
+      ], {stdio: 'inherit', maxBuffer: 32 * 1024 * 1024});
+      if (remux.status === 0 && fs.existsSync(fixedIn) &&
+          fs.statSync(fixedIn).size > 0) {
+        res = runFfmpeg(fixedIn);
+      } else {
+        console.error(
+            `tv clip ${clipId}: ранг тузатиш учун қайта пакетлаш йиқилди`,
+            remux.status);
+      }
     }
 
     console.log(

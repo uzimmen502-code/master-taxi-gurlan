@@ -46,6 +46,15 @@ void main() {
   });
 
   group('TvClip.mp4Url — админ панели ва соцсет учун', () {
+    test('360p бор — энг енгили олинади', () {
+      final c = _clip(variants: {
+        '360p': 'https://example.test/360.mp4',
+        '480p': 'https://example.test/480.mp4',
+        '720p': 'https://example.test/720.mp4',
+      });
+      expect(c.mp4Url, 'https://example.test/360.mp4');
+    });
+
     test('480p бор — ўша олинади (енгилроқ)', () {
       final c = _clip(variants: {
         '480p': 'https://example.test/480.mp4',
@@ -152,6 +161,25 @@ void main() {
       expect(TvClipCompress.trimToSeconds(null), isNull);
       expect(TvClipCompress.trimToSeconds(0), isNull);
     });
+  });
+
+  test('клиент сўрайдиган ҳар бир сифат учун серверда вариант бор', () {
+    // Мослик бузилса жимгина йиқилади: `videoVariants[quality]` топилмай,
+    // клиент хом, сиқилмаган асл файлга қайтади — айнан энг заиф
+    // тармоқдаги фойдаланувчи учун. (360p ўшандай йўқолиб турган эди.)
+    final js = File('functions/index.js').readAsStringSync();
+    final specs = RegExp(r"key: '(\d+p)'")
+        .allMatches(js)
+        .map((m) => m.group(1))
+        .toSet();
+    for (final quality in const ['720p', '480p', '360p']) {
+      expect(
+        specs,
+        contains(quality),
+        reason: 'functions/index.js: TV_CLIP_VARIANT_SPECS да $quality йўқ — '
+            'TvNetworkQualityService уни сўрайди',
+      );
+    }
   });
 
   test('клиент ва сервердаги давомийлик чегараси мос', () {

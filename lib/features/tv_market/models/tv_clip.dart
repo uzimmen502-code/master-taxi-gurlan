@@ -232,7 +232,10 @@ class TvClip {
   ///
   /// Кичикроқ вариант афзал: модерацияда сифат эмас, очилиш тезлиги муҳим.
   String get mp4Url =>
-      videoVariants['480p'] ?? videoVariants['720p'] ?? videoUrl;
+      videoVariants['360p'] ??
+      videoVariants['480p'] ??
+      videoVariants['720p'] ??
+      videoUrl;
 
   String get socialPostStatus => '${socialPost['status'] ?? ''}'.trim();
 

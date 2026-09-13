@@ -11193,9 +11193,20 @@ exports.transcodeEntertainmentVideo = onObjectFinalized(
 //   saqlanadi. Xato bo'lsa `processingStatus: 'error'` — klient
 //   `TvClip.urlForQuality()` avtomatik asl `videoUrl`ga qaytadi.
 // ─────────────────────────────────────────────────────────────────────
+// maxrate/bufsize — T1 SPIKE'da (`HLS_SPIKE_RENDITIONS`) sinalgan qiymatlar:
+// CRF o'rtacha bitrate'ni tanlaydi, bular esa faqat yuqori chegara qo'yadi —
+// murakkab sahnada bitrate cheksiz ko'tarilib, zaif tarmoqda burst-buffering
+// keltirib chiqarmasligi uchun.
+//
+// 360p — `TvNetworkQualityService.preferredQuality()` zaif/nomaʼlum
+// ulanishda aynan shu kalitni so'raydi (client kodi bunga ilgaridan tayyor
+// edi), lekin bu yerda mavjud emas edi — natijada `videoVariants['360p']`
+// topilmay, eng zaif tarmoqdagi foydalanuvchi xom, siqilmagan asl faylga
+// (`videoUrl`) qaytardi. Shu qatorni qo'shish o'sha mos kelmaslikni tuzatadi.
 const TV_CLIP_VARIANT_SPECS = [
-  {key: '720p', maxHeight: 720},
-  {key: '480p', maxHeight: 480},
+  {key: '720p', maxHeight: 720, maxrate: '2140k', bufsize: '3000k'},
+  {key: '480p', maxHeight: 480, maxrate: '856k', bufsize: '1200k'},
+  {key: '360p', maxHeight: 360, maxrate: '450k', bufsize: '650k'},
 ];
 
 // Клип давомийлигининг ягона авторитетли чегараси — вариантлар шу
@@ -11457,6 +11468,10 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
           '-c:v', 'libx264',
           '-preset', 'veryfast',
           '-crf', '26',
+          // CRF sifatni ushlab turadi, bular esa shiftni: murakkab sahnada
+          // bitrate variantning ABR'dagi o'rnidan oshib ketmasin.
+          '-maxrate', spec.maxrate,
+          '-bufsize', spec.bufsize,
           // Keyframe'ларни аниқ вақтларда мажбурлаш — HLS учун шарт.
           // Вақт бўйича ифода (кадрлар сони эмас) манбанинг fps'идан
           // қатъи назар ишлайди, ва иккала вариант бир хил ифода билан

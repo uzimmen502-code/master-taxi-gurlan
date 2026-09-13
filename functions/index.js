@@ -11451,47 +11451,74 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // `-t` айнан `-i`дан ОЛДИН — кириш опцияси сифатида. Шунда манба
     // ўқишнинг ўзи чегарада тўхтайди (ҳар бир чиқишга алоҳида ёзиш
     // шарт бўлмайди, ва ортиқча қисм умуман декодланмайди).
-    const args = [
-      '-y',
-      '-t', String(TV_CLIP_MAX_SECONDS),
-      '-i', tmpIn,
-      '-filter_complex',
-      `[0:v]split=${TV_CLIP_VARIANT_SPECS.length}${splitLabels}; ${scaleChain}`,
-    ];
-    TV_CLIP_VARIANT_SPECS.forEach((spec, i) => {
-      args.push(
-          '-map', `[v${i}]`,
-          // `?` — овозсиз видео бутун transcode'ни йиқитмаслиги учун.
-          // `filter_complex` ишлатилганда оқимлар автоматик танланмайди,
-          // шунинг учун овозни ошкора map қилиш ШАРТ.
-          '-map', '0:a?',
-          '-c:v', 'libx264',
-          '-preset', 'veryfast',
-          '-crf', '26',
-          // CRF sifatni ushlab turadi, bular esa shiftni: murakkab sahnada
-          // bitrate variantning ABR'dagi o'rnidan oshib ketmasin.
-          '-maxrate', spec.maxrate,
-          '-bufsize', spec.bufsize,
-          // Keyframe'ларни аниқ вақтларда мажбурлаш — HLS учун шарт.
-          // Вақт бўйича ифода (кадрлар сони эмас) манбанинг fps'идан
-          // қатъи назар ишлайди, ва иккала вариант бир хил ифода билан
-          // кодлангани учун keyframe'лари бир-бирига мос тушади —
-          // сифат алмашувида (ABR) сакраш бўлмайди.
-          '-force_key_frames',
-          `expr:gte(t,n_forced*${TV_CLIP_HLS_SEGMENT_SECONDS})`,
-          // Саҳна ўзгаришида қўшимча keyframe қўйилмасин — акс ҳолда
-          // сегмент чегаралари сурилиб, вариантлар мос келмай қолади.
-          '-sc_threshold', '0',
-          '-c:a', 'aac',
-          '-b:a', '128k',
-          '-movflags', '+faststart',
-          outPaths[i],
-      );
-    });
+    //
+    // [colorFix] — фақат қайта уринишда қўшилади (пастга қаранг).
+    const buildArgs = (colorFix) => {
+      const args = [
+        '-y',
+        '-t', String(TV_CLIP_MAX_SECONDS),
+        ...colorFix,
+        '-i', tmpIn,
+        '-filter_complex',
+        `[0:v]split=${TV_CLIP_VARIANT_SPECS.length}${splitLabels}; ${scaleChain}`,
+      ];
+      TV_CLIP_VARIANT_SPECS.forEach((spec, i) => {
+        args.push(
+            '-map', `[v${i}]`,
+            // `?` — овозсиз видео бутун transcode'ни йиқитмаслиги учун.
+            // `filter_complex` ишлатилганда оқимлар автоматик танланмайди,
+            // шунинг учун овозни ошкора map қилиш ШАРТ.
+            '-map', '0:a?',
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-crf', '26',
+            // CRF sifatni ushlab turadi, bular esa shiftni: murakkab sahnada
+            // bitrate variantning ABR'dagi o'rnidan oshib ketmasin.
+            '-maxrate', spec.maxrate,
+            '-bufsize', spec.bufsize,
+            // Keyframe'ларни аниқ вақтларда мажбурлаш — HLS учун шарт.
+            // Вақт бўйича ифода (кадрлар сони эмас) манбанинг fps'идан
+            // қатъи назар ишлайди, ва иккала вариант бир хил ифода билан
+            // кодлангани учун keyframe'лари бир-бирига мос тушади —
+            // сифат алмашувида (ABR) сакраш бўлмайди.
+            '-force_key_frames',
+            `expr:gte(t,n_forced*${TV_CLIP_HLS_SEGMENT_SECONDS})`,
+            // Саҳна ўзгаришида қўшимча keyframe қўйилмасин — акс ҳолда
+            // сегмент чегаралари сурилиб, вариантлар мос келмай қолади.
+            '-sc_threshold', '0',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            '-movflags', '+faststart',
+            outPaths[i],
+        );
+      });
+      return args;
+    };
+
+    const runFfmpeg = (colorFix) => spawnSync(ffmpegPath, buildArgs(colorFix),
+        {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
 
     const tFfmpeg = Date.now();
-    const res = spawnSync(ffmpegPath, args,
-        {stdio: 'inherit', maxBuffer: 64 * 1024 * 1024});
+    let res = runFfmpeg([]);
+
+    // Баъзи қурилма/муҳаррирлар видеони бузуқ ранг метадатаси билан
+    // ёзади (`color_range`/`colorspace` диапазондан ташқари қиймат).
+    // ffmpeg 7 буни filter graph киришида рад этади:
+    //   «Invalid color range» → «Error reinitializing filters» → exit 234.
+    // (ffmpeg 6 буни ютиб юборарди — шунинг учун локал синов бу хатони
+    // умуман кўрсатмайди, фақат булутдаги 7.0.2 да чиқади.)
+    //
+    // Тузатишни ҲАММА клипга эмас, фақат йиқилганда қўллаймиз: `tv`/`bt709`
+    // ни ҳамма манбага мажбурлаш ҳақиқатан full-range (`pc`) видеонинг
+    // рангини бузарди. Соғлом клиплар биринчи урнишдаёқ ўтади ва бу
+    // йўлга умуман кирмайди.
+    if (res.status !== 0) {
+      console.log(
+          `tv clip ${clipId}: ffmpeg exit ${res.status} — ранг метадатасини ` +
+          `нормаллаштириб қайта уриниб кўрилмоқда`);
+      res = runFfmpeg(['-color_range', 'tv', '-colorspace', 'bt709']);
+    }
+
     console.log(
         `tv clip ${clipId} timing: ffmpeg ${secsSince(tFfmpeg)}s ` +
         `(exit ${res.status})`);

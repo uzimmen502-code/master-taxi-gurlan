@@ -92,6 +92,7 @@ flutter:
     - assets/lang/uz_Latn.json
     - assets/lang/uz_Cyrl.json
     - assets/lang/ru.json
+    - assets/book/ava_imkoniyatlar_kitobi.json
     - assets/images/
     - assets/images/services/
     - assets/images/banners/

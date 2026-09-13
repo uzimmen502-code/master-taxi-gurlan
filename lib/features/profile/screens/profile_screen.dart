@@ -30,6 +30,7 @@ import '../../marshrut/driver/screens/driver_panel_marshrut_screen.dart';
 import '../../marshrut/driver/screens/driver_register_marshrut_screen.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../../../core/utils/driver_car_prefill.dart';
+import '../../book/screens/ava_book_screen.dart';
 import '../controllers/profile_controller.dart';
 import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
@@ -487,6 +488,19 @@ class _ProfileViewState extends State<_ProfileView> {
                   );
                   if (mounted) setState(() {});
                 },
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          _cardTile(
+            icon: Icons.menu_book_rounded,
+            color: _green,
+            title: context.tr('book_menu_title'),
+            subtitle: context.tr('book_menu_subtitle'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AvaBookScreen()),
               );
             },
           ),

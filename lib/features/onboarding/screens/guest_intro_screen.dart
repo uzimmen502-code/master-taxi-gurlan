@@ -11,11 +11,14 @@ import '../../../shared/navigation/app_home_route.dart';
 /// Birinchi ochilish: qisqa intro (registratsiya/ruxsat so'ralmaydi) →
 /// anonim Firebase Auth sessiya → to'g'ridan-to'g'ri feed.
 ///
-/// Telefon-orqali ro'yxatdan o'tish (`OnboardingScreen`) endi bu ekrandan
-/// chaqirilmaydi — u ilova ichidan (masalan, profildan) ixtiyoriy ravishda
-/// ochiladigan alohida oqim bo'lib qoladi.
+/// `isReminder: true` — ro'yxatdan yangi o'tgan foydalanuvchiga xuddi shu
+/// tur eslatma sifatida qayta ko'rsatiladi (`OnboardingBootstrapScreen`dan
+/// chaqiriladi); bu holda anonim sessiya ochilmaydi — foydalanuvchi
+/// allaqachon telefon orqali autentifikatsiyadan o'tgan.
 class GuestIntroScreen extends StatefulWidget {
-  const GuestIntroScreen({super.key});
+  const GuestIntroScreen({super.key, this.isReminder = false});
+
+  final bool isReminder;
 
   @override
   State<GuestIntroScreen> createState() => _GuestIntroScreenState();
@@ -25,27 +28,33 @@ class _IntroPageData {
   const _IntroPageData({
     required this.icon,
     required this.headKey,
-    required this.subKey,
+    required this.bodyKey,
     this.tagsKey,
     this.isFunnel = false,
   });
 
   final IconData icon;
   final String headKey;
-  final String subKey;
+  final String bodyKey;
   final String? tagsKey;
   final bool isFunnel;
 }
 
 const _pages = [
-  _IntroPageData(icon: Icons.people_alt_rounded, headKey: 'guest_intro2_p1_head', subKey: 'guest_intro2_p1_sub', tagsKey: 'guest_intro2_p1_tags'),
-  _IntroPageData(icon: Icons.storefront_rounded, headKey: 'guest_intro2_p2_head', subKey: 'guest_intro2_p2_sub', tagsKey: 'guest_intro2_p2_tags'),
-  _IntroPageData(icon: Icons.videocam_rounded, headKey: 'guest_intro2_p3_head', subKey: 'guest_intro2_p3_sub', tagsKey: 'guest_intro2_p3_tags'),
-  _IntroPageData(icon: Icons.live_tv_rounded, headKey: 'guest_intro2_p4_head', subKey: 'guest_intro2_p4_sub', tagsKey: 'guest_intro2_p4_tags'),
-  _IntroPageData(icon: Icons.local_shipping_rounded, headKey: 'guest_intro2_p5_head', subKey: 'guest_intro2_p5_sub', tagsKey: 'guest_intro2_p5_tags'),
-  _IntroPageData(icon: Icons.storefront_outlined, headKey: 'guest_intro2_p6_head', subKey: 'guest_intro2_p6_sub', tagsKey: 'guest_intro2_p6_tags'),
-  _IntroPageData(icon: Icons.park_rounded, headKey: 'guest_intro2_p7_head', subKey: 'guest_intro2_p7_sub', tagsKey: 'guest_intro2_p7_tags'),
-  _IntroPageData(icon: Icons.auto_awesome_rounded, headKey: 'guest_intro2_p8_head', subKey: 'guest_intro2_p8_sub', tagsKey: 'guest_intro2_p8_tags', isFunnel: true),
+  _IntroPageData(icon: Icons.people_alt_rounded, headKey: 'guest_intro2_p1_head', bodyKey: 'guest_intro2_p1_body'),
+  _IntroPageData(icon: Icons.storefront_rounded, headKey: 'guest_intro2_p2_head', bodyKey: 'guest_intro2_p2_body'),
+  _IntroPageData(icon: Icons.videocam_rounded, headKey: 'guest_intro2_p3_head', bodyKey: 'guest_intro2_p3_body'),
+  _IntroPageData(icon: Icons.live_tv_rounded, headKey: 'guest_intro2_p4_head', bodyKey: 'guest_intro2_p4_body'),
+  _IntroPageData(icon: Icons.local_shipping_rounded, headKey: 'guest_intro2_p5_head', bodyKey: 'guest_intro2_p5_body'),
+  _IntroPageData(icon: Icons.storefront_outlined, headKey: 'guest_intro2_p6_head', bodyKey: 'guest_intro2_p6_body'),
+  _IntroPageData(icon: Icons.park_rounded, headKey: 'guest_intro2_p7_head', bodyKey: 'guest_intro2_p7_body'),
+  _IntroPageData(
+    icon: Icons.auto_awesome_rounded,
+    headKey: 'guest_intro2_p8_head',
+    bodyKey: 'guest_intro2_p8_body',
+    tagsKey: 'guest_intro2_p8_tags',
+    isFunnel: true,
+  ),
 ];
 
 class _GuestIntroScreenState extends State<GuestIntroScreen> {
@@ -65,10 +74,12 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
   Future<void> _start() async {
     if (_starting) return;
     setState(() => _starting = true);
-    try {
-      await AnonSessionService().ensureAnonymousSession();
-    } catch (_) {
-      // Feed baribir ko'rsatiladi — offline/xato holatda ham davom etadi.
+    if (!widget.isReminder) {
+      try {
+        await AnonSessionService().ensureAnonymousSession();
+      } catch (_) {
+        // Feed baribir ko'rsatiladi — offline/xato holatda ham davom etadi.
+      }
     }
     if (!mounted) return;
     pushAppHome(context);
@@ -93,18 +104,19 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(28, 40, 28, 24),
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
             child: Column(
               children: [
                 Text(
                   BrandLabels.brand,
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: AppColors.primaryDark,
                     letterSpacing: 0.5,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Expanded(
                   child: _starting
                       ? const Center(
@@ -123,7 +135,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                 ),
                 if (!_starting) ...[
                   _Dots(count: _pages.length, index: _page),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -144,7 +156,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                     ),
                   ),
                   if (isLast) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     TextButton(
                       onPressed: _start,
                       child: Text(
@@ -189,6 +201,9 @@ class _Dots extends StatelessWidget {
   }
 }
 
+/// Саҳифа — "китоб варағи": иконка + сарлавҳа (марказда), сўнг эркин
+/// сурилувчи мазмун. Мазмун ичидаги мини-белги: `## ` — кичик сарлавҳа,
+/// `* ` — ажратилган хулоса (қалин/курсив), бўш қатор — абзац оралиғи.
 class _IntroPage extends StatelessWidget {
   const _IntroPage({
     required this.data,
@@ -202,55 +217,96 @@ class _IntroPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final body = context.tr(data.bodyKey);
     final tagsRaw = data.tagsKey == null ? '' : context.tr(data.tagsKey!);
     final tags = tagsRaw.isEmpty ? const <String>[] : tagsRaw.split('|');
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(data.icon, size: 72, color: AppColors.primary),
-        const SizedBox(height: 22),
-        Text(
-          context.tr(data.headKey),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 20,
-            height: 1.3,
-            fontWeight: FontWeight.w800,
-            color: ink,
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 6),
+          Icon(data.icon, size: 52, color: AppColors.primary),
+          const SizedBox(height: 14),
+          Text(
+            context.tr(data.headKey),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 19,
+              height: 1.28,
+              fontWeight: FontWeight.w800,
+              color: ink,
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          context.tr(data.subKey),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14.5,
-            height: 1.5,
-            fontWeight: FontWeight.w500,
-            color: muted,
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _RichBody(text: body, ink: ink, muted: muted),
           ),
-        ),
-        if (tags.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          data.isFunnel ? _FunnelChips(tags: tags) : _TagChips(tags: tags),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _FunnelChips(tags: tags),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
 
-class _TagChips extends StatelessWidget {
-  const _TagChips({required this.tags});
-  final List<String> tags;
+class _RichBody extends StatelessWidget {
+  const _RichBody({required this.text, required this.ink, required this.muted});
+  final String text;
+  final Color ink;
+  final Color muted;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: tags.map((t) => _Chip(t)).toList(),
-    );
+    final lines = text.split('\n');
+    final widgets = <Widget>[];
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.isEmpty) {
+        widgets.add(const SizedBox(height: 12));
+      } else if (line.startsWith('## ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
+          child: Text(
+            line.substring(3),
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5, color: ink),
+          ),
+        ));
+      } else if (line.startsWith('* ')) {
+        widgets.add(Container(
+          margin: const EdgeInsets.only(top: 2, bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.primaryDark.withValues(alpha: 0.18)),
+          ),
+          child: Text(
+            line.substring(2),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontStyle: FontStyle.italic,
+              fontSize: 13.5,
+              height: 1.45,
+              color: ink,
+            ),
+          ),
+        ));
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            line,
+            style: TextStyle(fontSize: 14, height: 1.55, fontWeight: FontWeight.w500, color: muted),
+          ),
+        ));
+      }
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
   }
 }
 

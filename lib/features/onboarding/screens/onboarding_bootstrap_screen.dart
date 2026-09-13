@@ -8,8 +8,8 @@ import '../../../core/brand_labels.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../shared/navigation/app_home_route.dart';
 import '../controllers/onboarding_controller.dart';
+import 'guest_intro_screen.dart';
 
 /// Device binding OK → шу экран дарҳол очилади.
 /// Фонда: Auth session → prefs → Home; profile ‖ zone ‖ FCM.
@@ -88,7 +88,12 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
         phone: widget.phone,
       ),
     );
-    pushAppHome(context);
+    // Ro'yxatdan yangi o'tgan foydalanuvchiga AVA imkoniyatlari
+    // 8-sahifali turi eslatma sifatida qayta ko'rsatiladi.
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const GuestIntroScreen(isReminder: true)),
+    );
   }
 
   @override

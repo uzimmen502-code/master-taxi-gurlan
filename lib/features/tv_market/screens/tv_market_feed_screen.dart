@@ -237,7 +237,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   @override
   void tvOnPlaybackAllowed() {
     if (!tvCanPlay || _clips.isEmpty) return;
-    unawaited(_activate(_currentIndex));
+    // _releasePlayers() pool'ni butunlay bo'shatgan — bu ham "sovuq"
+    // qayta faollashuv (preferFastOpen izohiga qarang, _loadClips()).
+    unawaited(_activate(_currentIndex, preferFastOpen: true));
   }
 
   /// Учала филтр режими (туман / вилоят / фильтрсиз) учун бир хил
@@ -301,7 +303,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         _cursor = batch.cursor;
         _hasMore = batch.hasMore;
       });
-      if (_clips.isNotEmpty) unawaited(_activate(0));
+      if (_clips.isNotEmpty) {
+        unawaited(_activate(0, preferFastOpen: true));
+      }
       unawaited(_refreshSocialState());
       unawaited(_hydratePublisherNames());
     } catch (e) {
@@ -351,11 +355,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     return _pool[_urlFor(_clips[_currentIndex])];
   }
 
-  List<String> _urlsAround(int index) {
+  /// [currentUrlOverride] — [index]ning o'zi uchun aniq shu URL ishlatiladi
+  /// (masalan T9: birinchi ochilishda `mp4Url`) — bo'lmasa, odatdagidek
+  /// [_urlFor]. Bo'lmasa pool clipning HLS variantini ham fonda bekorga
+  /// tortib olardi, garchi u aslida hech qachon ijro etilmasa ham.
+  List<String> _urlsAround(int index, {String? currentUrlOverride}) {
     final urls = <String>[];
-    void add(int i) {
+    void add(int i, {String? overrideUrl}) {
       if (i >= 0 && i < _clips.length) {
-        final url = _urlFor(_clips[i]);
+        final url = overrideUrl ?? _urlFor(_clips[i]);
         if (url.isNotEmpty) urls.add(url);
       }
     }
@@ -364,22 +372,31 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     // retain() maxReady (3) tagacha birinchilarni saqlaydi. PREVIOUS
     // ataylab preload qilinmaydi — orqaga svayp qilinsa oldingi klip
     // qayta bufer bo'ladi (audit'da ma'qullangan trade-off).
-    add(index);
+    add(index, overrideUrl: currentUrlOverride);
     add(index + 1);
     add(index + 2);
     return urls;
   }
 
-  Future<void> _activate(int index) async {
+  /// [preferFastOpen] — T9: ro'yxat yangi yuklangandan keyingi birinchi
+  /// activate() uchun `true`: bunda `retain()` orqali fon-prefetch hali
+  /// bo'lmagan, ya'ni sof "sovuq" `prepare()`. HLS bitta tayyor bo'lish
+  /// uchun 3 ta ketma-ket so'rov talab qiladi (master.m3u8 -> variant
+  /// .m3u8 -> segment byte-range) -- o'lchandi: real Storage'ga qarshi
+  /// ~3x TTFB, mobil tarmoqda 2-3s kechikish sifatida sezilarli.
+  /// Keyingi klip (retain() fonda oldindan tayyorlagan)da bu narx
+  /// yashirin bo'lgani uchun tegilmaydi -- faqat shu birinchi, hech kim
+  /// oldindan tayyorlamagan klip uchun bitta so'rovli `mp4Url`ga tushiladi.
+  Future<void> _activate(int index, {bool preferFastOpen = false}) async {
     if (index < 0 || index >= _clips.length || !tvCanPlay) return;
     final gen = ++_activateGen;
     final clip = _clips[index];
-    final url = _urlFor(clip);
+    final url = preferFastOpen ? clip.mp4Url : _urlFor(clip);
     // Yangi generatsiya boshlanishi bilanoq, prepare()dan OLDIN: tez
     // svayp paytida eskirib qolgan oldingi so'rovlarni pool'ga "endi
     // kerak emas" deb bildiradi — ular initialize() tugagan zahoti
     // (retain() kutilmasdan) o'z-o'zidan dispose bo'ladi.
-    _pool.markWanted(_urlsAround(index));
+    _pool.markWanted(_urlsAround(index, currentUrlOverride: url));
     _pool.pauseAllExcept(url);
 
     final ctrl = await _pool.prepare(url);
@@ -400,7 +417,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         return;
       }
     }
-    unawaited(_pool.retain(_urlsAround(index)));
+    unawaited(_pool.retain(_urlsAround(index, currentUrlOverride: url)));
     unawaited(_maybePatchOwnerName(clip));
     if (ctrl != null && ctrl.value.isInitialized) {
       _attachViewRecorder(ctrl, clip);
@@ -601,7 +618,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(0);
-      unawaited(_activate(0));
+      unawaited(_activate(0, preferFastOpen: true));
     });
   }
 

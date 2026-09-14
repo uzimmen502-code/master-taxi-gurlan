@@ -505,6 +505,52 @@ service cloud.firestore {
           && request.resource.data.viewCount == tvClipViewCountNow() + 1;
     }
 
+    function tvClipPlaybackStatNow(name) {
+      return ('playbackStats' in resource.data
+              && resource.data.playbackStats is map
+              && name in resource.data.playbackStats
+              && resource.data.playbackStats[name] is int)
+          ? resource.data.playbackStats[name]
+          : 0;
+    }
+
+    // Faqat `playbackStats` mapi va faqat OSHISHI (client tomonda hammasi
+    // `FieldValue.increment(>=0)`) — `tvClipViewCountOnly()`ning aynan
+    // o'sha naqshi, lekin bu yerda qadam qat'iy +1 emas: `watchedMs`/
+    // `bufferMs` har ko'rishda har xil qiymatga oshadi.
+    //
+    // Kerak, chunki `TvPlaybackAnalyticsRecorder` statistikani klip
+    // EGASI bo'lmagan tomoshabin nomidan yozadi (ko'rishlarning aksariyati
+    // shunday) — bu funksiyasiz Firestore yozuvni PERMISSION_DENIED bilan
+    // rad etardi va `recordPlaybackStats()`dagi best-effort `catch (_)`
+    // buni jimgina yutib yuborardi: metrika hech qachon yig'ilmagan.
+    function tvClipPlaybackStatIncreasing(name) {
+      return !(name in request.resource.data.playbackStats)
+          || (request.resource.data.playbackStats[name] is int
+              && request.resource.data.playbackStats[name]
+                  >= tvClipPlaybackStatNow(name));
+    }
+
+    function tvClipPlaybackStatsOnly() {
+      return isAuth()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['playbackStats'])
+          && request.resource.data.playbackStats is map
+          && request.resource.data.playbackStats.keys().hasOnly([
+               'views', 'watchedMs', 'bufferMs', 'bufferEvents',
+               'firstFrameMsSum', 'firstFrameSamples', 'completedViews',
+               'skippedViews', 'errors', 'updatedAt'])
+          && tvClipPlaybackStatIncreasing('views')
+          && tvClipPlaybackStatIncreasing('watchedMs')
+          && tvClipPlaybackStatIncreasing('bufferMs')
+          && tvClipPlaybackStatIncreasing('bufferEvents')
+          && tvClipPlaybackStatIncreasing('firstFrameMsSum')
+          && tvClipPlaybackStatIncreasing('firstFrameSamples')
+          && tvClipPlaybackStatIncreasing('completedViews')
+          && tvClipPlaybackStatIncreasing('skippedViews')
+          && tvClipPlaybackStatIncreasing('errors');
+    }
+
     function tvPublicProfileTotalViewCountNow() {
       return ('totalViewCount' in resource.data
               && resource.data.totalViewCount is int)
@@ -2356,7 +2402,8 @@ service cloud.firestore {
                            'regionId', 'status', 'rejectReason']))
           || tvClipLikeCountOnly()
           || tvClipViewCountOnly()
-          || tvClipCommentCountOnly();
+          || tvClipCommentCountOnly()
+          || tvClipPlaybackStatsOnly();
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));

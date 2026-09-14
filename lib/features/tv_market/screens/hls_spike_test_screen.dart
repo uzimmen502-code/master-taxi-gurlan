@@ -56,7 +56,7 @@ class _HlsSpikeTestScreenState extends State<HlsSpikeTestScreen> {
 
   Future<void> _loadClips() async {
     try {
-      final clips = await _repo.fetchAllActive(limit: 5);
+      final clips = (await _repo.fetchAllActive(limit: 5)).clips;
       if (!mounted) return;
       setState(() {
         _clips = clips;

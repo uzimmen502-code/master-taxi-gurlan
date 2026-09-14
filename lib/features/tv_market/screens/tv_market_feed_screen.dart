@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,8 +58,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   // Butun ilova bo'yicha bitta pool (T3: dual-pool OOM xavfi tuzatildi) —
   // `HomeVideoStage` ham shu instance'ni ishlatadi.
   TvPlayerPool get _pool => TvPlayerPool.shared;
+  static const _pageSize = 40;
   final _clips = <TvClip>[];
   bool _loading = true;
+  // T-5 fix: feedda ~40-41 tadan keyin pastga svayp qilinmay qolgan edi —
+  // `_loadClips()` faqat bitta qattiq `limit: 40`li so'rov yuborardi va
+  // oxiriga yetganda yangi sahifa yuklovchi hech qanday mexanizm yo'q edi.
+  DocumentSnapshot<Map<String, dynamic>>? _cursor;
+  int _regionPerDistrictLimit = _pageSize;
+  bool _hasMore = true;
+  bool _loadingMore = false;
   int _currentIndex = 0;
   late final PageController _pageCtrl;
   bool _showPlayPause = false;
@@ -231,36 +240,56 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     unawaited(_activate(_currentIndex));
   }
 
+  /// Учала филтр режими (туман / вилоят / фильтрсиз) учун бир хил
+  /// саҳифалаш чақируви — [_loadClips] ва [_loadMoreClips] шуни ишлатади.
+  Future<TvClipBatch> _fetchPage({
+    required List<String>? categories,
+    required DocumentSnapshot<Map<String, dynamic>>? cursor,
+  }) {
+    // Туман аниқроқ — танланган бўлса вилоят фильтри ортиқча.
+    if (_filterDistrictId.isNotEmpty) {
+      return _repo.fetchNearby(
+        districtId: _filterDistrictId,
+        limit: _pageSize,
+        categories: categories,
+        regionId: _filterRegionId.isNotEmpty
+            ? _filterRegionId
+            : ServiceConfigHolder.regionId,
+        cursor: cursor,
+      );
+    }
+    if (_filterRegionId.isNotEmpty) {
+      // Ҳақиқий cursor emas — [_regionPerDistrictLimit] ошиб боради,
+      // қаранг: `TvClipsRepository.fetchByRegion`.
+      return _repo.fetchByRegion(
+        regionId: _filterRegionId,
+        limit: _pageSize,
+        categories: categories,
+        excludeIds: _clips.map((c) => c.id).toSet(),
+        perDistrictLimit: _regionPerDistrictLimit,
+      );
+    }
+    return _repo.fetchAllActive(
+      limit: _pageSize,
+      categories: categories,
+      cursor: cursor,
+    );
+  }
+
   Future<void> _loadClips() async {
+    _cursor = null;
+    _regionPerDistrictLimit = _pageSize;
+    _hasMore = true;
     try {
       final categories = _categoriesForTab(_tabController.index);
-      // Туман аниқроқ — танланган бўлса вилоят фильтри ортиқча.
-      final List<TvClip> nearby;
-      if (_filterDistrictId.isNotEmpty) {
-        nearby = await _repo.fetchNearby(
-          districtId: _filterDistrictId,
-          limit: 40,
-          categories: categories,
-          regionId: _filterRegionId.isNotEmpty
-              ? _filterRegionId
-              : ServiceConfigHolder.regionId,
-        );
-      } else if (_filterRegionId.isNotEmpty) {
-        nearby = await _repo.fetchByRegion(
-          regionId: _filterRegionId,
-          limit: 40,
-          categories: categories,
-        );
-      } else {
-        nearby = await _repo.fetchAllActive(limit: 40, categories: categories);
-      }
+      final batch = await _fetchPage(categories: categories, cursor: null);
       if (!mounted) return;
       final list = <TvClip>[];
       if (!_firstLoadDone && widget.initialClip != null) {
         list.add(widget.initialClip!);
-        list.addAll(nearby.where((c) => c.id != widget.initialClip!.id));
+        list.addAll(batch.clips.where((c) => c.id != widget.initialClip!.id));
       } else {
-        list.addAll(nearby);
+        list.addAll(batch.clips);
       }
       _firstLoadDone = true;
       setState(() {
@@ -269,6 +298,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
           ..addAll(list);
         _loading = false;
         _currentIndex = 0;
+        _cursor = batch.cursor;
+        _hasMore = batch.hasMore;
       });
       if (_clips.isNotEmpty) unawaited(_activate(0));
       unawaited(_refreshSocialState());
@@ -276,6 +307,42 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     } catch (e) {
       debugPrint('[TvMarketFeed] load error: $e');
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Лента охирига яқинлашганда (қаранг: [_onPageChanged]) кейинги
+  /// саҳифани юклайди — бўлмаса ~40 тадан кейин пастга свайп қилиб
+  /// бўлмай қоларди (T-5).
+  Future<void> _loadMoreClips() async {
+    if (_loadingMore || !_hasMore || _clips.isEmpty) return;
+    _loadingMore = true;
+    try {
+      final categories = _categoriesForTab(_tabController.index);
+      var attempts = 0;
+      // Вилоят режимида бир уриниш бўш натижа бериши мумкин (ҳамма янги
+      // номзодлар аллақачон кўрсатилган бўлса) — шунга яна бир-икки марта
+      // катталаштириб кўрилади.
+      while (mounted && _hasMore && attempts < 3) {
+        attempts++;
+        if (_filterDistrictId.isEmpty && _filterRegionId.isNotEmpty) {
+          _regionPerDistrictLimit += _pageSize;
+        }
+        final batch = await _fetchPage(categories: categories, cursor: _cursor);
+        if (!mounted) return;
+        _cursor = batch.cursor;
+        _hasMore = batch.hasMore;
+        final fresh =
+            batch.clips.where((c) => _clips.every((e) => e.id != c.id)).toList();
+        if (fresh.isEmpty) continue;
+        setState(() => _clips.addAll(fresh));
+        unawaited(_hydratePublisherNames());
+        unawaited(_refreshSocialState());
+        break;
+      }
+    } catch (e) {
+      debugPrint('[TvMarketFeed] load more error: $e');
+    } finally {
+      _loadingMore = false;
     }
   }
 
@@ -366,6 +433,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     HapticFeedback.lightImpact();
     setState(() {});
     unawaited(_activate(index));
+    if (index >= _clips.length - 3) {
+      unawaited(_loadMoreClips());
+    }
   }
 
   void _togglePlayPause() {

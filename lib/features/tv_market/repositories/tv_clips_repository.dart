@@ -10,6 +10,22 @@ import '../utils/tv_clip_search.dart';
 import '../utils/tv_clip_shuffle.dart';
 import 'tv_shop_repository.dart';
 
+/// `fetchNearby`/`fetchByRegion`/`fetchAllActive` учун сахифаланган натижа —
+/// TvMarketFeedScreen шу орқали "пастга свайп" пайтида кейинги қисмни
+/// юклайди (илгари бу методлар доим биргина қатъий `limit`ли натижа
+/// қайтарар, шунинг учун лентада ~40 тадан кейин видео тугаб қоларди).
+class TvClipBatch {
+  const TvClipBatch({
+    required this.clips,
+    this.cursor,
+    this.hasMore = false,
+  });
+
+  final List<TvClip> clips;
+  final DocumentSnapshot<Map<String, dynamic>>? cursor;
+  final bool hasMore;
+}
+
 /// Home / TV Market клип саҳифаси — курсор билан давом эттириш учун.
 class TvClipPage {
   const TvClipPage({
@@ -66,22 +82,27 @@ class TvClipsRepository {
   /// Яқиндаги клиплар — шу туман, сўнг янги. `regionId` берилса — «вилоят»
   /// ва «республика» қамровли эълонлар ҳам туман фильтридан қатъи назар
   /// шу лентага қўшилади (🟡6 — эълон ҳудуд қамрови).
-  Future<List<TvClip>> fetchNearby({
+  Future<TvClipBatch> fetchNearby({
     required String districtId,
     int limit = 20,
     List<String>? categories,
     String regionId = '',
+    DocumentSnapshot<Map<String, dynamic>>? cursor,
   }) async {
     var q = _col
         .where('status', isEqualTo: 'active')
         .where('districtId', isEqualTo: districtId);
     q = _withCategory(q, categories);
-    final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
+    var ordered = q.orderBy('createdAt', descending: true);
+    if (cursor != null) ordered = ordered.startAfterDocument(cursor);
+    final snap = await ordered.limit(limit).get();
     final items = _playable(snap.docs);
     // Таб 'ad'ни ичига олмаса (мас. фақат 'news') — қамровли эълонлар
-    // ўша табга умуман тегишли эмас.
+    // ўша табга умуман тегишли эмас. Фақат биринчи саҳифада қўшилади —
+    // бу рўйхат ўзи саҳифаланмайди (кичик, қатъий чегарали), акс ҳолда
+    // ҳар кейинги саҳифада такрор чиқаверарди.
     final adOk = categories == null || categories.isEmpty || categories.contains('ad');
-    if (regionId.isNotEmpty && adOk) {
+    if (regionId.isNotEmpty && adOk && cursor == null) {
       final scoped = await _fetchScopedAds(
         excludeDistrictId: districtId,
         regionId: regionId,
@@ -90,7 +111,11 @@ class TvClipsRepository {
         if (items.every((e) => e.id != c.id)) items.add(c);
       }
     }
-    return tvApplyAdTierPriority(tvShuffleClips(items));
+    return TvClipBatch(
+      clips: tvApplyAdTierPriority(tvShuffleClips(items)),
+      cursor: snap.docs.isNotEmpty ? snap.docs.last : cursor,
+      hasMore: snap.docs.length >= limit,
+    );
   }
 
   /// «Вилоят»/«республика» қамровли пуллик реклама — бошқа туманнинг
@@ -127,13 +152,20 @@ class TvClipsRepository {
   /// ёзилмай қолиши мумкин (`tv_clip.dart` — фақат бўш бўлмаса ёзади) —
   /// бундай клип ҳеч қачон бирор вилоят фильтрида чиқмасди, ҳатто ўз
   /// туманида тўғри кўринаётган бўлса ҳам.
-  Future<List<TvClip>> fetchByRegion({
+  /// Ҳақиқий cursor emas — ҳар туман учун параллел сўров бор, шунинг учун
+  /// "кейинги саҳифа" [perDistrictLimit]ни оширио, аллақачон кўрсатилган
+  /// [excludeIds]ни chiqarib tashlab olinadi. Videolar soni bu ekranda
+  /// kichik (yuzlab) bo'lgani uchun bu усул арзон қолади.
+  Future<TvClipBatch> fetchByRegion({
     required String regionId,
     int limit = 40,
     List<String>? categories,
+    Set<String> excludeIds = const {},
+    int? perDistrictLimit,
   }) async {
+    final effectiveLimit = perDistrictLimit ?? limit;
     final districts = await ServiceConfigRepository().fetchDistricts(regionId);
-    if (districts.isEmpty) return const [];
+    if (districts.isEmpty) return const TvClipBatch(clips: []);
     // Firestore бир сўровда иккита `whereIn` (categories + districtId)ни
     // қўллаб-қувватламагани учун ҳар туман учун алоҳида (параллел) сўров.
     final perDistrict = await Future.wait(districts.map((d) async {
@@ -141,8 +173,10 @@ class TvClipsRepository {
           .where('status', isEqualTo: 'active')
           .where('districtId', isEqualTo: d.id);
       q = _withCategory(q, categories);
-      final snap =
-          await q.orderBy('createdAt', descending: true).limit(limit).get();
+      final snap = await q
+          .orderBy('createdAt', descending: true)
+          .limit(effectiveLimit)
+          .get();
       return _playable(snap.docs);
     }));
     final byId = <String, TvClip>{};
@@ -154,8 +188,17 @@ class TvClipsRepository {
     final merged = byId.values.toList()
       ..sort((a, b) =>
           (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
-    final result = merged.length > limit ? merged.sublist(0, limit) : merged;
-    return tvApplyAdTierPriority(tvShuffleClips(result));
+    final fresh = excludeIds.isEmpty
+        ? merged
+        : merged.where((c) => !excludeIds.contains(c.id)).toList();
+    final page = fresh.length > limit ? fresh.sublist(0, limit) : fresh;
+    // Ҳар туман ҳали ҳам сўралган чегарага тенг сон қайтараётган бўлса —
+    // ўша туманда яна ҳужжат бор бўлиши мумкин.
+    final anyDistrictFull = perDistrict.any((l) => l.length >= effectiveLimit);
+    return TvClipBatch(
+      clips: tvApplyAdTierPriority(tvShuffleClips(page)),
+      hasMore: fresh.length > page.length || anyDistrictFull,
+    );
   }
 
   /// Тавсиялар (шу ҳудуд, лайк/кўриш бўйича).
@@ -285,14 +328,21 @@ class TvClipsRepository {
   }
 
   /// Барча фаол клиплар — ҳудудсиз (fallback).
-  Future<List<TvClip>> fetchAllActive({
+  Future<TvClipBatch> fetchAllActive({
     int limit = 30,
     List<String>? categories,
+    DocumentSnapshot<Map<String, dynamic>>? cursor,
   }) async {
     var q = _col.where('status', isEqualTo: 'active');
     q = _withCategory(q, categories);
-    final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
-    return tvApplyAdTierPriority(tvShuffleClips(_playable(snap.docs)));
+    var ordered = q.orderBy('createdAt', descending: true);
+    if (cursor != null) ordered = ordered.startAfterDocument(cursor);
+    final snap = await ordered.limit(limit).get();
+    return TvClipBatch(
+      clips: tvApplyAdTierPriority(tvShuffleClips(_playable(snap.docs))),
+      cursor: snap.docs.isNotEmpty ? snap.docs.last : cursor,
+      hasMore: snap.docs.length >= limit,
+    );
   }
 
   Future<List<TvClip>> _recentSearchPool(String districtId) async {
@@ -305,11 +355,11 @@ class TvClipsRepository {
       return _searchPool!;
     }
     final list = districtId.isEmpty
-        ? await fetchAllActive(limit: TvClipSearch.poolLimit)
-        : await fetchNearby(
+        ? (await fetchAllActive(limit: TvClipSearch.poolLimit)).clips
+        : (await fetchNearby(
             districtId: districtId,
             limit: TvClipSearch.poolLimit,
-          );
+          )).clips;
     _searchPool = list;
     _searchPoolKey = key;
     _searchPoolAt = now;

@@ -60,6 +60,12 @@ class GlobalSearch {
 
   static List<String> _queryWords(String query) => queryTokens(query);
 
+  /// `yuk_birja` — eski indeks yozuvlari (rebuild'gacha) uchun.
+  static bool _isYukModule(String module) =>
+      module == 'yuk_local' ||
+      module == 'yuk_intercity' ||
+      module == 'yuk_birja';
+
   static bool _hasAny(Set<String> words, Set<String> intent) {
     for (final w in words) {
       if (intent.contains(w)) return true;
@@ -116,10 +122,10 @@ class GlobalSearch {
           module == 'marshrut') {
         s += 120;
       }
-      if (module == 'yuk_birja') s += 40;
+      if (_isYukModule(module)) s += 40;
     }
     if (_hasAny(words, _intentYuk)) {
-      if (type == SearchIndexEntry.typeYukListing || module == 'yuk_birja') {
+      if (type == SearchIndexEntry.typeYukListing || _isYukModule(module)) {
         s += 100;
       }
     }

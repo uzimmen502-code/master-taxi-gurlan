@@ -792,6 +792,8 @@
   "tv_vitrine_social": "В соцсетях",
   "tv_vitrine_empty": "Витрина по этому району пуста",
   "home_module_yuk_birja": "БИРЖА ГРУЗОВ",
+  "home_module_yuk_local": "ГРУЗ ПО РАЙОНУ",
+  "home_module_yuk_intercity": "МЕЖГОРОДНИЙ ГРУЗ",
   "home_promo_order_cta": "Оформить заказ →",
   "home_seller_cta": "Продавайте и вы",
   "home_seller_cta_badge": "Онлайн-рынок",

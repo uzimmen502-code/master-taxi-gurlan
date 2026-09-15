@@ -14154,12 +14154,21 @@ const SEARCH_SERVICE_SEEDS = [
     boost: 20,
   },
   {
-    id: 'yuk_birja',
-    moduleId: 'yuk_birja',
-    title: 'Юк биржа',
-    subtitle: 'Юк ташиш',
+    id: 'yuk_local',
+    moduleId: 'yuk_local',
+    title: 'Туман ичида юк',
+    subtitle: 'Яқин юк машиналари',
     iconKey: 'yuk',
-    keywords: ['юк', 'yuk', 'биржа', 'груз', 'такси'],
+    keywords: ['юк', 'yuk', 'груз', 'туман', 'яқин', 'машина', 'такси'],
+    boost: 18,
+  },
+  {
+    id: 'yuk_intercity',
+    moduleId: 'yuk_intercity',
+    title: 'Шаҳарлараро юк',
+    subtitle: 'Юк биржаси эълонлари',
+    iconKey: 'yuk',
+    keywords: ['юк', 'yuk', 'биржа', 'груз', 'шаҳарлараро', 'такси'],
     boost: 18,
   },
   {
@@ -14294,6 +14303,8 @@ exports.adminSeedSearchIndex = functions
       });
       services += 1;
     }
+    // Eski yagona "Yuk birja" xizmat kartasi — endi yuk_local + yuk_intercity.
+    await deleteSearchIndexEntry('service', 'yuk_birja');
 
     for (const from of SEARCH_ROUTE_HUBS) {
       for (const to of SEARCH_ROUTE_DESTS) {

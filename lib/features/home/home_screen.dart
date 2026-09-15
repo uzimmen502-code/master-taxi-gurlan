@@ -31,7 +31,8 @@ import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
-import '../yuk_birja/screens/yuk_birja_screen.dart';
+import '../yuk_intercity/screens/yuk_intercity_screen.dart';
+import '../yuk_local/screens/yuk_local_screen.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../jobs/jobs_tabs.dart';
@@ -500,6 +501,21 @@ class _HomeViewState extends State<_HomeView> {
     );
   }
 
+  /// Yuk modullari (`yuk_local` / `yuk_intercity`): region gate + telefon
+  /// majburiy (e'lon egaligi telefon bo'yicha).
+  Future<void> _openYukModule(String moduleId, Widget screen) async {
+    if (!ServiceConfigHolder.isOpenable(moduleId)) {
+      _showTezKundaSnack();
+      return;
+    }
+    final phone = phoneDigits(context.read<HomeController>().phone);
+    if (phone.length < 9) {
+      _HomeBottomNav.needPhone(context);
+      return;
+    }
+    await _push(screen);
+  }
+
   Future<void> _openSearchEntry(SearchIndexEntry e) async {
     final module = e.moduleId.trim();
     if (module.isEmpty) return;
@@ -552,23 +568,34 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
 
+    // Yuk e'loni (har qanday moduleId — eski `yuk_birja` indeks yozuvlari ham)
+    // doim shaharlararo doska.
+    if (e.type == SearchIndexEntry.typeYukListing ||
+        module == 'yuk_intercity') {
+      if (!ServiceConfigHolder.isOpenable('yuk_intercity')) {
+        _showTezKundaSnack();
+        return;
+      }
+      await _push(
+        YukIntercityScreen(
+          highlightListingId:
+              e.type == SearchIndexEntry.typeYukListing ? e.sourceId : null,
+          autoFrom: e.from.isNotEmpty ? e.from : null,
+          autoTo: e.to.isNotEmpty ? e.to : null,
+        ),
+      );
+      return;
+    }
+
     switch (module) {
+      case 'yuk_local':
+      // Eski indeksdagi `yuk_birja` xizmat kartasi — avvalgi default scope (local).
       case 'yuk_birja':
-        if (!ServiceConfigHolder.isOpenable('yuk_birja')) {
+        if (!ServiceConfigHolder.isOpenable('yuk_local')) {
           _showTezKundaSnack();
           return;
         }
-        await _push(
-          YukBirjaScreen(
-            initialScope: e.type == SearchIndexEntry.typeYukListing
-                ? 'intercity'
-                : null,
-            highlightListingId:
-                e.type == SearchIndexEntry.typeYukListing ? e.sourceId : null,
-            autoFrom: e.from.isNotEmpty ? e.from : null,
-            autoTo: e.to.isNotEmpty ? e.to : null,
-          ),
-        );
+        await _push(const YukLocalScreen());
         return;
       case 'milk':
         await _push(const MilkPickupScreen());
@@ -850,25 +877,25 @@ class _HomeViewState extends State<_HomeView> {
                                   ),
                                 ),
                                 ServiceSpotlightItem(
-                                  moduleId: 'yuk_birja',
-                                  label: context.tr('home_module_yuk_birja'),
+                                  moduleId: 'yuk_local',
+                                  label: context.tr('home_module_yuk_local'),
                                   imagePath:
                                       'assets/images/services/service_yuk_birja.png',
-                                  onTap: () async {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'yuk_birja')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    final phone = phoneDigits(
-                                      context.read<HomeController>().phone,
-                                    );
-                                    if (phone.length < 9) {
-                                      _HomeBottomNav.needPhone(context);
-                                      return;
-                                    }
-                                    await _push(const YukBirjaScreen());
-                                  },
+                                  onTap: () => _openYukModule(
+                                    'yuk_local',
+                                    const YukLocalScreen(),
+                                  ),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'yuk_intercity',
+                                  label:
+                                      context.tr('home_module_yuk_intercity'),
+                                  imagePath:
+                                      'assets/images/services/service_yuk_birja.png',
+                                  onTap: () => _openYukModule(
+                                    'yuk_intercity',
+                                    const YukIntercityScreen(),
+                                  ),
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'sell',

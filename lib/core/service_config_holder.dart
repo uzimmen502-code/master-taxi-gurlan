@@ -78,15 +78,22 @@ class ServiceConfigHolder {
   ///   ochadi; yangi X moduli baribir hidden.
   static ModuleStatus statusOf(String moduleId) {
     if (!kKnownModuleIds.contains(moduleId)) return ModuleStatus.hidden;
+    // Alias davri: yangi id hech bir qatlamda sozlanmagan bo'lsa — eski id.
+    if (!_isConfigured(moduleId)) {
+      final legacy = kModuleIdAliases[moduleId];
+      if (legacy != null && legacy != moduleId) return statusOf(legacy);
+    }
     if (!_enforce) {
-      final configured = _defaults.modules.containsKey(moduleId) ||
-          _districtOverride.modules.containsKey(moduleId) ||
-          _areaOverride.modules.containsKey(moduleId);
-      if (!configured) return ModuleStatus.hidden;
+      if (!_isConfigured(moduleId)) return ModuleStatus.hidden;
       return ModuleStatus.enabled;
     }
     return effective.statusOf(moduleId, fallback: ModuleStatus.hidden);
   }
+
+  static bool _isConfigured(String moduleId) =>
+      _defaults.modules.containsKey(moduleId) ||
+      _districtOverride.modules.containsKey(moduleId) ||
+      _areaOverride.modules.containsKey(moduleId);
 
   static bool isVisible(String moduleId) => statusOf(moduleId).isVisible;
   static bool isOpenable(String moduleId) => statusOf(moduleId).isOpenable;

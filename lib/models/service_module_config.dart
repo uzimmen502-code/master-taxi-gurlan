@@ -4,6 +4,11 @@ const List<String> kKnownModuleIds = [
   'local_taxi',
   'intercity',
   'marshrut',
+  // Yuk birjasi — 2026-09 dan ikki alohida modul. `yuk_birja` (eski, yagona id)
+  // config qatlamida alias sifatida qoladi: yangi id sozlanmagan bo'lsa uning
+  // holati meros olinadi (kModuleIdAliases).
+  'yuk_local',
+  'yuk_intercity',
   'yuk_birja',
   'courier',
   'sell',
@@ -22,6 +27,15 @@ const List<String> kKnownModuleIds = [
   'tv_market',
   'chatgpt',
 ];
+
+/// Yangi modul id → eski id. Firestore config'da yangi id uchun yozuv bo'lmasa
+/// (baseline/tuman/MFY qatlamlarining hech birida), eski id holati ishlatiladi —
+/// eski APK/admin yozuvlari bilan moslik (alias davri). Yangi id bir marta
+/// sozlangach alias e'tiborga olinmaydi.
+const Map<String, String> kModuleIdAliases = {
+  'yuk_local': 'yuk_birja',
+  'yuk_intercity': 'yuk_birja',
+};
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.
 enum ModuleStatus {

@@ -88,7 +88,7 @@ async function testIntercityExpiry() {
   const warnN = notifs.filter((n) => n.type === 'yuk_listing_expire_soon');
   check('notifications: 1 ta yuk_listing_closed (egasiz e\'lon uchun yo\'q)',
     closedN.length === 1 && closedN[0].listingId === 'expired'
-      && closedN[0].targetPhone === '998901112233' && closedN[0].screen === 'yuk_birja'
+      && closedN[0].targetPhone === '998901112233' && closedN[0].screen === 'yuk_intercity'
       && closedN[0].sent === false,
     `${closedN.length}`);
   check('notifications: 1 ta yuk_listing_expire_soon (warnWindow), notified takrorlanmadi',
@@ -111,7 +111,7 @@ function testSearchEntry() {
     expiresAt: Timestamp.fromMillis(Date.now() + 3600 * 1000),
   });
   check('listingToSearchEntry: asosiy maydonlar',
-    e.type === 'yuk_listing' && e.moduleId === 'yuk_birja'
+    e.type === 'yuk_listing' && e.moduleId === 'yuk_intercity'
       && e.sourceCollection === 'yuk_listings' && e.sourceId === 'abc'
       && e.title === 'Хива → Бухоро' && e.subtitle === 'ref' && e.price === 1500000
       && e.active === true && e.keywords.includes('Навоий') && e.geo.to === 'Бухоро',

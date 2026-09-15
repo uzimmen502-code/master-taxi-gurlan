@@ -98,7 +98,7 @@ class YukListingsRepository {
   }) async {
     await _db.collection('reports').add({
       'type': 'yuk_listing',
-      'module': 'yuk_birja',
+      'module': 'yuk_intercity',
       'listingId': listingId,
       'targetId': listingId,
       'reason': reason,

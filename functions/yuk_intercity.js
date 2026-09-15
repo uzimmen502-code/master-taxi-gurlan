@@ -48,7 +48,7 @@ function createYukIntercity(deps) {
     const stops = Array.isArray(d.stops) ? d.stops.map((s) => String(s || '')) : [];
     return {
       type: 'yuk_listing',
-      moduleId: 'yuk_birja',
+      moduleId: 'yuk_intercity',
       sourceCollection: 'yuk_listings',
       sourceId: id,
       title,
@@ -126,7 +126,7 @@ function createYukIntercity(deps) {
             : 'Юк биржаси эълони 48 соатдан кейин ёпилди',
           sent: false,
           type: 'yuk_listing_closed',
-          screen: 'yuk_birja',
+          screen: 'yuk_intercity',
           listingId: doc.id,
           createdAt: FieldValue.serverTimestamp(),
         });
@@ -156,7 +156,7 @@ function createYukIntercity(deps) {
           : 'Юк биржаси эълонига 6 соат қолди',
         sent: false,
         type: 'yuk_listing_expire_soon',
-        screen: 'yuk_birja',
+        screen: 'yuk_intercity',
         listingId: doc.id,
         createdAt: FieldValue.serverTimestamp(),
       });

@@ -25,7 +25,8 @@ import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/sell/screens/sell_hub_screen.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
-import '../features/yuk_birja/screens/yuk_birja_screen.dart';
+import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
+import '../features/yuk_local/screens/yuk_local_screen.dart';
 import '../features/onboarding/screens/device_transfer_approve_screen.dart';
 import '../main.dart';
 
@@ -262,13 +263,16 @@ class PushNavigation {
       return;
     }
 
-    if (type == 'yuk_listing_closed' || type == 'yuk_listing_expire_soon') {
-      // Бу push'лар ҳар доим шаҳарлараро эълон ҳақида — local табда очилмасин.
+    // Yuk push'lari hozircha faqat shaharlararo e'lon haqida. `yuk_birja` —
+    // eski CF/payload'lardan keladigan screen qiymati (alias davri).
+    if (type == 'yuk_listing_closed' ||
+        type == 'yuk_listing_expire_soon' ||
+        screen == 'yuk_intercity' ||
+        screen == 'yuk_birja') {
       final listingId = (data['listingId'] ?? '').trim();
       await nav.push(
         MaterialPageRoute(
-          builder: (_) => YukBirjaScreen(
-            initialScope: 'intercity',
+          builder: (_) => YukIntercityScreen(
             highlightListingId: listingId.isEmpty ? null : listingId,
           ),
         ),
@@ -276,9 +280,9 @@ class PushNavigation {
       return;
     }
 
-    if (screen == 'yuk_birja') {
+    if (screen == 'yuk_local') {
       await nav.push(
-        MaterialPageRoute(builder: (_) => const YukBirjaScreen()),
+        MaterialPageRoute(builder: (_) => const YukLocalScreen()),
       );
       return;
     }

@@ -145,7 +145,8 @@ const SERVICES = [
   { id: 'local_taxi', moduleId: 'local_taxi', title: 'Маҳаллий такси', subtitle: 'Туман ичида такси', iconKey: 'taxi', keywords: ['такси', 'taxi', 'маҳаллий', 'махаллий', 'йўловчи'], boost: 22 },
   { id: 'intercity', moduleId: 'intercity', title: 'Шаҳарлараро такси', subtitle: 'Шаҳарлараро йўналиш', iconKey: 'taxi', keywords: ['такси', 'taxi', 'шаҳарлараро', 'тошкент', 'йўловчи'], boost: 24 },
   { id: 'marshrut', moduleId: 'marshrut', title: 'Маршрут такси', subtitle: 'Маршрут бўйича', iconKey: 'taxi', keywords: ['такси', 'taxi', 'маршрут', 'marshrut'], boost: 20 },
-  { id: 'yuk_birja', moduleId: 'yuk_birja', title: 'Юк биржа', subtitle: 'Юк ташиш', iconKey: 'yuk', keywords: ['юк', 'yuk', 'биржа', 'груз', 'такси'], boost: 18 },
+  { id: 'yuk_local', moduleId: 'yuk_local', title: 'Туман ичида юк', subtitle: 'Яқин юк машиналари', iconKey: 'yuk', keywords: ['юк', 'yuk', 'груз', 'туман', 'яқин', 'машина', 'такси'], boost: 18 },
+  { id: 'yuk_intercity', moduleId: 'yuk_intercity', title: 'Шаҳарлараро юк', subtitle: 'Юк биржаси эълонлари', iconKey: 'yuk', keywords: ['юк', 'yuk', 'биржа', 'груз', 'шаҳарлараро', 'такси'], boost: 18 },
   { id: 'platform', moduleId: 'platform', title: 'AVA дўкони', subtitle: 'Платформа дўкони', iconKey: 'shop', keywords: ['ава', 'ava', 'дўкон', 'дукон', 'магазин', 'платформа'], boost: 20 },
   { id: 'food', moduleId: 'food', title: 'Овқат', subtitle: 'Таом буюртма', iconKey: 'food', keywords: ['овқат', 'ovqat', 'таом', 'кафе', 'емак'], boost: 20 },
   { id: 'bread', moduleId: 'bread', title: 'Нон', subtitle: 'Нон буюртма', iconKey: 'bread', keywords: ['нон', 'non', 'патир', 'чўрек'], boost: 20 },
@@ -229,7 +230,7 @@ function yukEntry(id, d) {
   const title = from && to ? `${from} → ${to}` : (cargo || vehicle || 'Юк эълони');
   return {
     type: 'yuk_listing',
-    moduleId: 'yuk_birja',
+    moduleId: 'yuk_intercity',
     sourceCollection: 'yuk_listings',
     sourceId: id,
     title,

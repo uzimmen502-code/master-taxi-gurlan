@@ -6,9 +6,11 @@ import '../../core/utils/formatters.dart';
 import 'models/yuk_listing.dart';
 import 'repositories/yuk_listings_repository.dart';
 import 'yuk_listing_filter.dart';
-import 'yuk_listing_notifier.dart';
 
 /// Юк биржаси — Firestore умумий рўйхат.
+///
+/// Муддат тугаши (48 с) ва унга боғлиқ хабарлар — фақат CF (expirePendingTrips`n/// → yuk_intercity.js): клиент ёпмайди ва локал эслатма қўймайди. UI'да
+/// муддати ўтган эълон ilterYukListings орқали яширилади.
 class YukBirjaStore extends ChangeNotifier {
   YukBirjaStore({YukListingsRepository? repository})
       : _repo = repository ?? YukListingsRepository();
@@ -61,31 +63,6 @@ class YukBirjaStore extends ChangeNotifier {
 
   Future<void> reload() => load();
 
-  /// Ўз эълонларидан муддати ўтганларни ёпиш (CF ҳам ёпади).
-  Future<List<YukListing>> closeExpired({
-    String? ownerId,
-    DateTime? now,
-  }) async {
-    final at = now ?? DateTime.now();
-    final me = canonicalPhoneId(ownerId ?? '');
-    if (me.length < 9) return const [];
-    final mineClosed = <YukListing>[];
-    for (final item in List<YukListing>.from(_listings)) {
-      if (!item.isActive || !item.isExpired(at)) continue;
-      if (!phonesMatch(item.ownerId, me)) continue;
-      try {
-        await _repo.close(item.id);
-        mineClosed.add(item.copyWith(status: YukListingStatus.closed));
-      } catch (e) {
-        debugPrint('YukBirjaStore.closeExpired ${item.id}: $e');
-      }
-    }
-    if (mineClosed.isNotEmpty) {
-      await YukListingNotifier.notifyJustClosed(mineClosed);
-    }
-    return mineClosed;
-  }
-
   Future<void> addListing(YukListing item) async {
     final id = await _repo.create(item);
     final withId = YukListing(
@@ -112,7 +89,6 @@ class YukBirjaStore extends ChangeNotifier {
     _listings.removeWhere((e) => e.id == id);
     _listings.insert(0, withId);
     notifyListeners();
-    await YukListingNotifier.scheduleFor(withId);
   }
 
   Future<bool> updateListing({
@@ -128,7 +104,6 @@ class YukBirjaStore extends ChangeNotifier {
         _listings[i] = updated;
         notifyListeners();
       }
-      await YukListingNotifier.scheduleFor(updated);
       return true;
     } catch (e) {
       debugPrint('YukBirjaStore.updateListing: $e');
@@ -148,7 +123,6 @@ class YukBirjaStore extends ChangeNotifier {
       await _repo.close(id);
       _listings.removeAt(i);
       notifyListeners();
-      await YukListingNotifier.cancelFor(id);
       return true;
     } catch (e) {
       debugPrint('YukBirjaStore.closeListing: $e');

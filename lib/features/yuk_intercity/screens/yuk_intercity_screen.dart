@@ -9,15 +9,13 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../utils/intercity_places.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
-import '../yuk_listing_notifier.dart';
 import '../../yuk_shared/yuk_vehicle_types.dart';
 
 /// Шаҳарлараро юк биржаси — cargo/truck эълонлар доскаси.
 ///
 /// Scaffold'сиз body widget: [YukBirjaScreen] қобиғи ичида кўрсатилади.
-/// Эга маълумотлари ([ownerId], [ownerName], [ownerPhone]) қобиқдан келади;
-/// [ownerId] кечроқ келса (`didUpdateWidget`) муддати ўтганлар ёпилади ва
-/// эслатмалар синхронланади.
+/// Эга маълумотлари ([ownerId], [ownerName], [ownerPhone]) қобиқдан келади
+/// ва ҳар build'да `widget.*` дан ўқилади. Муддат тугаши ва хабарлар — CF.
 class YukIntercityScreen extends StatefulWidget {
   const YukIntercityScreen({
     super.key,
@@ -57,7 +55,6 @@ class _YukIntercityScreenState extends State<YukIntercityScreen> {
   final _toFocus = FocusNode();
 
   String _tab = 'all';
-  bool _ownerSynced = false;
 
   /// Драфт (ёзилмоқда) — «Қидирув»гача рўйхатга таъсир қилмайди.
   String _draftVehicle = '';
@@ -73,7 +70,9 @@ class _YukIntercityScreenState extends State<YukIntercityScreen> {
   List<String> _fromSuggestions = [];
   List<String> _toSuggestions = [];
 
-  Timer? _expiryTimer;
+  /// Ҳар дақиқада UI янгиланади: карточкадаги қолган вақт ва муддати ўтган
+  /// эълонларнинг рўйхатдан йўқолиши (фильтр `isExpired`). Ёзув йўқ — CF ёпади.
+  Timer? _uiTick;
 
   String get _ownerId => widget.ownerId;
   String get _ownerName => widget.ownerName;
@@ -92,7 +91,10 @@ class _YukIntercityScreenState extends State<YukIntercityScreen> {
       _toCtrl.text = to;
       _appliedTo = to;
     }
-    unawaited(_load());
+    unawaited(_store.load());
+    _uiTick = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _fromFocus.addListener(() {
       if (!_fromFocus.hasFocus) setState(() => _fromSuggestions = []);
     });
@@ -102,39 +104,8 @@ class _YukIntercityScreenState extends State<YukIntercityScreen> {
   }
 
   @override
-  void didUpdateWidget(covariant YukIntercityScreen old) {
-    super.didUpdateWidget(old);
-    if (old.ownerId != widget.ownerId && _store.ready) {
-      unawaited(_syncOwner());
-    }
-  }
-
-  Future<void> _load() async {
-    _expiryTimer ??= Timer.periodic(const Duration(minutes: 1), (_) async {
-      await _store.closeExpired(ownerId: _ownerId);
-      if (mounted) setState(() {});
-    });
-    // Биринчи snapshot кейингина sync/close — race йўқ.
-    await _store.load();
-    if (!mounted) return;
-    setState(() {});
-    await _syncOwner();
-  }
-
-  /// Ўз эълонларидан муддати ўтганларни ёпиш + эслатмаларни синхронлаш.
-  Future<void> _syncOwner() async {
-    if (_ownerId.isEmpty || _ownerSynced) return;
-    _ownerSynced = true;
-    await _store.closeExpired(ownerId: _ownerId);
-    await YukListingNotifier.syncOwner(
-      ownerId: _ownerId,
-      listings: _store.listings,
-    );
-  }
-
-  @override
   void dispose() {
-    _expiryTimer?.cancel();
+    _uiTick?.cancel();
     _listCtrl.dispose();
     _fromCtrl.dispose();
     _toCtrl.dispose();

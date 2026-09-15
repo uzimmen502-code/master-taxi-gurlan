@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../../core/utils/formatters.dart';
 import 'models/yuk_listing.dart';
 import 'repositories/yuk_listings_repository.dart';
+import 'yuk_listing_filter.dart';
 import 'yuk_listing_notifier.dart';
-import 'yuk_vehicle_types.dart';
 
 /// Юк биржаси — Firestore умумий рўйхат.
 class YukBirjaStore extends ChangeNotifier {
@@ -182,39 +182,14 @@ class YukBirjaStore extends ChangeNotifier {
     String from = '',
     String to = '',
     String vehicleType = '',
-  }) {
-    final now = DateTime.now();
-    final f = from.trim().toLowerCase();
-    final t = to.trim().toLowerCase();
-    final vt = vehicleType.trim().toLowerCase();
-
-    var list = _listings.where((item) {
-      if (!item.isActive || item.isExpired(now)) return false;
-      // moto/traktor — фақат туман ичи; шаҳарлараро рўйхатда кўринмайди.
-      if (kYukLocalOnlyVehicleValues
-          .contains(normalizeYukVehicleType(item.vehicleType))) {
-        return false;
-      }
-      final cities = item.routeCities.map((c) => c.toLowerCase()).toList();
-      if (f.isNotEmpty && !cities.any((c) => c.contains(f))) return false;
-      if (t.isNotEmpty && !cities.any((c) => c.contains(t))) return false;
-      if (vt.isNotEmpty &&
-          normalizeYukVehicleType(item.vehicleType) !=
-              normalizeYukVehicleType(vt)) {
-        return false;
-      }
-      return true;
-    }).toList();
-
-    if (tab == 'cargo') {
-      list = list.where((e) => e.isCargo).toList();
-    } else if (tab == 'truck') {
-      list = list.where((e) => !e.isCargo).toList();
-    }
-
-    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return list;
-  }
+  }) =>
+      filterYukListings(
+        _listings,
+        tab: tab,
+        from: from,
+        to: to,
+        vehicleType: vehicleType,
+      );
 
   @override
   void dispose() {

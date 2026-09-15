@@ -7,7 +7,8 @@
     "test:settlement:e2e": "node tools/settlement_e2e_test.js",
     "test:settlement:all": "node tools/settlement_e2e_test.js",
     "test:anon-sessions": "node test/anon_session_fields.test.js",
-    "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js"
+    "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js",
+    "test:yuk-cf": "node test/yuk_cf.test.js"
   },
   "engines": {
     "node": "20"

@@ -8,6 +8,13 @@ const db = admin.firestore();
 
 const settlementLedger = require('./settlement_ledger');
 
+// Yuk birjasi — shaharlararo (yuk_listings) va tuman ichi (yuk_local_drivers).
+// `digits` — hoisted function declaration (pastda), shu yerda ishlatish xavfsiz.
+const { createYukIntercity } = require('./yuk_intercity');
+const yukIntercity = createYukIntercity({ db, admin, digits });
+const { attachYukLocal } = require('./yuk_local');
+attachYukLocal(exports, { functions, db, admin });
+
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */
 const DEVICE_BINDING_BLOCK_MS = 30 * 60 * 1000;
@@ -10250,27 +10257,15 @@ exports.expirePendingTrips = functions.pubsub
       get size() { return this.docs.length; },
     };
 
-    // 3b. yuk_listings — 48 soat muddati o'tgan active → closed
-    const expiredYukSnap = await db.collection('yuk_listings')
-      .where('status', '==', 'active')
-      .where('expiresAt', '<', now)
-      .get();
-
-    // 3c. yuk_listings — T−6 soat FCM (ойна ~±90с, cron har 1 daqiqa)
-    const sixHMs = 6 * 60 * 60 * 1000;
-    const warnWindowMs = 90 * 1000;
-    const nowMs = now.toMillis();
-    const warnStart = admin.firestore.Timestamp.fromMillis(
-      nowMs + sixHMs - warnWindowMs,
-    );
-    const warnEnd = admin.firestore.Timestamp.fromMillis(
-      nowMs + sixHMs + warnWindowMs,
-    );
-    const warnYukSnap = await db.collection('yuk_listings')
-      .where('status', '==', 'active')
-      .where('expiresAt', '>=', warnStart)
-      .where('expiresAt', '<=', warnEnd)
-      .get();
+    // 3b/3c. yuk_listings — 48 soat expiry + T−6h ogohlantirish (yuk_intercity.js,
+    // o'z batch'i). Boshqa modullardan mustaqil — xato bo'lsa trips/ads/bron
+    // qismi davom etsin.
+    let yukStats = { closed: 0, warn: 0 };
+    try {
+      yukStats = await yukIntercity.runExpiry(now);
+    } catch (e) {
+      console.error('expirePendingTrips yukIntercity.runExpiry', e.message || e);
+    }
 
     const allDocs = [
       ...pendingSnap.docs,
@@ -10323,78 +10318,6 @@ exports.expirePendingTrips = functions.pubsub
         });
       }
       writes++;
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
-      }
-    }
-
-    for (const doc of expiredYukSnap.docs) {
-      const yuk = doc.data() || {};
-      batch.update(doc.ref, {
-        status: 'closed',
-        closedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        autoExpired: true,
-      });
-      writes++;
-
-      const ownerKey = digits(yuk.ownerId || yuk.phone || '');
-      if (ownerKey.length >= 9) {
-        const route = `${yuk.from || ''} → ${yuk.to || ''}`.trim();
-        const notifRef = db.collection('notifications').doc();
-        batch.set(notifRef, {
-          targetPhone: ownerKey,
-          title: 'Эълонингиз ёпилди',
-          body: route
-            ? `${route} — 48 соат муддати тугади`
-            : 'Юк биржаси эълони 48 соатдан кейин ёпилди',
-          sent: false,
-          type: 'yuk_listing_closed',
-          screen: 'yuk_birja',
-          listingId: doc.id,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        writes++;
-      }
-
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
-      }
-    }
-
-    // yuk T−6h огоҳлантириш (бир марта, expireSoonNotified)
-    for (const doc of warnYukSnap.docs) {
-      const yuk = doc.data() || {};
-      if (yuk.expireSoonNotified === true) continue;
-      const ownerKey = digits(yuk.ownerId || yuk.phone || '');
-      if (ownerKey.length < 9) continue;
-
-      batch.update(doc.ref, {
-        expireSoonNotified: true,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      writes++;
-
-      const route = `${yuk.from || ''} → ${yuk.to || ''}`.trim();
-      const notifRef = db.collection('notifications').doc();
-      batch.set(notifRef, {
-        targetPhone: ownerKey,
-        title: 'Эълон муддати тугамоқда',
-        body: route
-          ? `${route} — 6 соат қолди`
-          : 'Юк биржаси эълонига 6 соат қолди',
-        sent: false,
-        type: 'yuk_listing_expire_soon',
-        screen: 'yuk_birja',
-        listingId: doc.id,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      writes++;
-
       if (writes >= 450) {
         await batch.commit();
         batch = db.batch();
@@ -10490,54 +10413,12 @@ exports.expirePendingTrips = functions.pubsub
 
     console.log(
       `expirePendingTrips: trips=${allDocs.length}, intercity=${intercitySnap.size}`
-        + `, yukClosed=${expiredYukSnap.size}, yukWarn=${warnYukSnap.size}`,
+        + `, yukClosed=${yukStats.closed}, yukWarn=${yukStats.warn}`,
     );
     return null;
   });
 
-// ─── Namoyish (demo) yuk — ish vaqti / TTL backfill (online model yo'q) ──────
-// Mijoz endi `lastOnlineAt` stale filtrini ishlatmaydi: ko'rinish = GPS +
-// work hours + expiresAt. Demo hech qachon expire qilinmaydi (client isDemo).
-// Bu job eski demo hujjatlarga work hours / uzoq expiresAt yozadi.
-exports.refreshYukDemoPresence = functions.pubsub
-  .schedule('every 10 minutes')
-  .timeZone('Asia/Tashkent')
-  .onRun(async () => {
-    const snap = await db.collection('yuk_local_drivers')
-      .where('isDemo', '==', true)
-      .get();
-    if (snap.empty) return null;
-
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    const far = admin.firestore.Timestamp.fromMillis(
-      Date.now() + 180 * 24 * 60 * 60 * 1000,
-    );
-    let batch = db.batch();
-    let writes = 0;
-    for (const doc of snap.docs) {
-      batch.set(
-        doc.ref,
-        {
-          workStartMinutes: 0,
-          workEndMinutes: 24 * 60,
-          expiresAt: far,
-          updatedAt: now,
-          online: admin.firestore.FieldValue.delete(),
-          lastOnlineAt: admin.firestore.FieldValue.delete(),
-        },
-        { merge: true },
-      );
-      writes += 1;
-      if (writes >= 450) {
-        await batch.commit();
-        batch = db.batch();
-        writes = 0;
-      }
-    }
-    if (writes > 0) await batch.commit();
-    console.log(`refreshYukDemoPresence: total=${snap.size}`);
-    return null;
-  });
+// refreshYukDemoPresence (tuman ichi demo backfill) → functions/yuk_local.js
 
 // ONE-TIME: `food_catalog` — seed. Bir marta HTTP GET qiling, keyin exportni o‘chirib qayta deploy.
 exports.seedFoodCatalog = functions
@@ -14156,49 +14037,7 @@ function foodProductToSearchEntry(id, d) {
   };
 }
 
-function yukExpiresMs(d) {
-  const e = d.expiresAt;
-  if (!e) return 0;
-  if (typeof e.toMillis === 'function') return e.toMillis();
-  if (e._seconds != null) return Number(e._seconds) * 1000;
-  const parsed = Date.parse(String(e));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function yukListingToSearchEntry(id, d) {
-  const from = String(d.from || '').trim();
-  const to = String(d.to || '').trim();
-  const status = String(d.status || '').trim();
-  const cargo = String(d.cargo || '').trim();
-  const vehicle = String(d.vehicleType || '').trim();
-  const listingType = String(d.type || '').trim();
-  const expiresMs = yukExpiresMs(d);
-  const notExpired = !expiresMs || expiresMs > Date.now();
-  const title = from && to
-    ? `${from} → ${to}`
-    : (cargo || vehicle || 'Юк эълони');
-  const subtitle = listingType === 'truck'
-    ? (vehicle || 'Юк машина')
-    : (cargo || 'Юк');
-  const stops = Array.isArray(d.stops) ? d.stops.map((s) => String(s || '')) : [];
-  return {
-    type: 'yuk_listing',
-    moduleId: 'yuk_birja',
-    sourceCollection: 'yuk_listings',
-    sourceId: id,
-    title,
-    subtitle,
-    price: Math.trunc(Number(d.price) || 0),
-    imageUrl: '',
-    iconKey: 'yuk',
-    keywords: [
-      'юк', 'yuk', 'биржа', listingType, vehicle, cargo, from, to, ...stops,
-    ],
-    geo: { from, to },
-    priorityBoost: 6,
-    active: status === 'active' && notExpired && title.length > 0,
-  };
-}
+// yukListingToSearchEntry → functions/yuk_intercity.js (yukIntercity.listingToSearchEntry)
 
 const {onDocumentWritten} = require('firebase-functions/v2/firestore');
 
@@ -14280,23 +14119,11 @@ exports.onSearchIndexFoodProductWrite = onDocumentWritten(
   },
 );
 
-exports.onSearchIndexYukListingWrite = onDocumentWritten(
-  {
-    document: 'yuk_listings/{id}',
-    region: 'europe-west1',
-  },
-  async (event) => {
-    const id = event.params.id;
-    const after = event.data && event.data.after;
-    if (!after || !after.exists) {
-      await deleteSearchIndexEntry('yuk_listing', id);
-      return;
-    }
-    await upsertSearchIndexEntry(
-      yukListingToSearchEntry(id, after.data() || {}),
-    );
-  },
-);
+// onSearchIndexYukListingWrite — yuk_listings/{id} → search_index (yuk_intercity.js)
+yukIntercity.attachSearchIndex(exports, {
+  upsertSearchIndexEntry,
+  deleteSearchIndexEntry,
+});
 
 const SEARCH_SERVICE_SEEDS = [
   {
@@ -14545,7 +14372,7 @@ exports.adminSeedSearchIndex = functions
     const yukSnap = await db.collection('yuk_listings').limit(500).get();
     for (const doc of yukSnap.docs) {
       await upsertSearchIndexEntry(
-        yukListingToSearchEntry(doc.id, doc.data() || {}),
+        yukIntercity.listingToSearchEntry(doc.id, doc.data() || {}),
       );
       yuk += 1;
     }

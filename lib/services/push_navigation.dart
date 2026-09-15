@@ -262,9 +262,21 @@ class PushNavigation {
       return;
     }
 
-    if (screen == 'yuk_birja' ||
-        type == 'yuk_listing_closed' ||
-        type == 'yuk_listing_expire_soon') {
+    if (type == 'yuk_listing_closed' || type == 'yuk_listing_expire_soon') {
+      // Бу push'лар ҳар доим шаҳарлараро эълон ҳақида — local табда очилмасин.
+      final listingId = (data['listingId'] ?? '').trim();
+      await nav.push(
+        MaterialPageRoute(
+          builder: (_) => YukBirjaScreen(
+            initialScope: 'intercity',
+            highlightListingId: listingId.isEmpty ? null : listingId,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (screen == 'yuk_birja') {
       await nav.push(
         MaterialPageRoute(builder: (_) => const YukBirjaScreen()),
       );

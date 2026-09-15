@@ -10040,6 +10040,8 @@ exports.onNotificationCreate = functions.firestore
       if (type === 'order' || type.startsWith('order_')) {
         fcmData.tab = 'orders';
       }
+      // yuk_listing_* — klient e'lonni ro'yxat tepasiga chiqaradi.
+      if (data.listingId) fcmData.listingId = String(data.listingId);
       const message = {
         token,
         notification: { title, body },

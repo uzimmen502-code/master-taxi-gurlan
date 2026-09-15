@@ -196,15 +196,3 @@ class YukListing {
     );
   }
 }
-
-class YukMatchPair {
-  const YukMatchPair({
-    required this.cargo,
-    required this.truck,
-    required this.score,
-  });
-
-  final YukListing cargo;
-  final YukListing truck;
-  final int score;
-}

@@ -28,11 +28,6 @@ class YukLocalDriversRepository {
         );
   }
 
-  /// Эски API — [watchCatalog] га йўналтиради.
-  @Deprecated('Use watchCatalog')
-  Stream<List<YukLocalDriver>> watchOnline({int limit = watchLimit}) =>
-      watchCatalog(limit: limit);
-
   /// Ўз эълонлари — `createdAt` бўйича (янги тепада).
   Stream<List<YukLocalDriver>> watchMine(String ownerId) {
     final id = canonicalPhoneId(ownerId);
@@ -147,48 +142,6 @@ class YukLocalDriversRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     return ref.id;
-  }
-
-  /// Эски ном — [publishListing].
-  @Deprecated('Use publishListing')
-  Future<String> publishPresence({
-    String? docId,
-    required String ownerId,
-    required String ownerName,
-    required String phone,
-    required String vehicleType,
-    required String plateNumber,
-    required double capacityKg,
-    required double bodyLengthM,
-    required double bodyWidthM,
-    required double bodyHeightM,
-    required int acceptRadiusKm,
-    required YukLocalLoadStatus loadStatus,
-    required double lat,
-    required double lng,
-    String locationLabel = '',
-    int workStartMinutes = YukLocalSchedule.defaultWorkStartMinutes,
-    int workEndMinutes = YukLocalSchedule.defaultWorkEndMinutes,
-  }) {
-    return publishListing(
-      docId: docId,
-      ownerId: ownerId,
-      ownerName: ownerName,
-      phone: phone,
-      vehicleType: vehicleType,
-      plateNumber: plateNumber,
-      capacityKg: capacityKg,
-      bodyLengthM: bodyLengthM,
-      bodyWidthM: bodyWidthM,
-      bodyHeightM: bodyHeightM,
-      acceptRadiusKm: acceptRadiusKm,
-      loadStatus: loadStatus,
-      lat: lat,
-      lng: lng,
-      locationLabel: locationLabel,
-      workStartMinutes: workStartMinutes,
-      workEndMinutes: workEndMinutes,
-    );
   }
 
   Future<void> deleteMine(String docId) async {

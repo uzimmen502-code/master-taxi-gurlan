@@ -181,9 +181,7 @@ class YukBirjaStore extends ChangeNotifier {
     required String tab,
     String from = '',
     String to = '',
-    double? maxWeightKg,
     String vehicleType = '',
-    Set<String> matchedIds = const {},
   }) {
     final now = DateTime.now();
     final f = from.trim().toLowerCase();
@@ -205,12 +203,6 @@ class YukBirjaStore extends ChangeNotifier {
               normalizeYukVehicleType(vt)) {
         return false;
       }
-      if (maxWeightKg != null && maxWeightKg > 0) {
-        if (item.isCargo && (item.weightKg ?? 0) > maxWeightKg) return false;
-        if (!item.isCargo && (item.freeSpaceKg ?? 0) < maxWeightKg) {
-          return false;
-        }
-      }
       return true;
     }).toList();
 
@@ -218,8 +210,6 @@ class YukBirjaStore extends ChangeNotifier {
       list = list.where((e) => e.isCargo).toList();
     } else if (tab == 'truck') {
       list = list.where((e) => !e.isCargo).toList();
-    } else if (tab == 'matched') {
-      list = list.where((e) => matchedIds.contains(e.id)).toList();
     }
 
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));

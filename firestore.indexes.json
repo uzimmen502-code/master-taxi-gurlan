@@ -1351,20 +1351,6 @@
       ]
     },
     {
-      "collectionGroup": "yuk_local_drivers",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "online",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastOnlineAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "complaints",
       "queryScope": "COLLECTION",
       "fields": [

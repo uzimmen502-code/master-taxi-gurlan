@@ -48,9 +48,6 @@ class YukLocalDriver {
     this.rating = 0,
     this.completedLoads = 0,
     this.isDemo = false,
-    // Эски майдонлар — ўқиш учун (UI ишлатмайди).
-    this.online = false,
-    this.lastOnlineAt,
   });
 
   final String id;
@@ -82,11 +79,6 @@ class YukLocalDriver {
   final double rating;
   final int completedLoads;
   final bool isDemo;
-
-  @Deprecated('Онлайн модель олиб ташланди — жой + иш вақти')
-  final bool online;
-  @Deprecated('Онлайн модель олиб ташланди')
-  final DateTime? lastOnlineAt;
 
   bool get hasGps =>
       lat != null &&
@@ -172,8 +164,6 @@ class YukLocalDriver {
       rating: asDouble(j['rating'], 0),
       completedLoads: asInt(j['completedLoads']),
       isDemo: j['isDemo'] == true,
-      online: j['online'] == true,
-      lastOnlineAt: asDate(j['lastOnlineAt']),
     );
   }
 
@@ -221,8 +211,6 @@ class YukLocalDriver {
       rating: rating,
       completedLoads: completedLoads,
       isDemo: isDemo,
-      online: online,
-      lastOnlineAt: lastOnlineAt,
     );
   }
 }

@@ -10,7 +10,7 @@ import '../../../utils/intercity_places.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
 import '../yuk_listing_notifier.dart';
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 
 /// Шаҳарлараро юк биржаси — cargo/truck эълонлар доскаси.
 ///

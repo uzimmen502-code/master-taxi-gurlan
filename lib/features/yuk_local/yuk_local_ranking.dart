@@ -1,6 +1,6 @@
 import '../../services/geo_math_service.dart';
 import 'models/yuk_local_driver.dart';
-import 'yuk_vehicle_types.dart';
+import '../yuk_shared/yuk_vehicle_types.dart';
 
 /// Туман ичида рўйхатни қидирувчи GPS ↔ эълон жойи бўйича саралаш.
 class YukLocalRanking {

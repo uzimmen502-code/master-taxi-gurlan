@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../yuk_owner.dart';
-import 'yuk_intercity_screen.dart';
-import 'yuk_local_nearby_panel.dart';
+import '../../yuk_intercity/screens/yuk_intercity_screen.dart';
+import '../../yuk_local/screens/yuk_local_nearby_panel.dart';
+import '../../yuk_shared/yuk_owner.dart';
 
 /// Юк биржаси қобиғи — `local` (туман ичида, GPS) ва `intercity`
 /// (шаҳарлараро эълонлар) scope'ларини алмаштиради. Мантиқ йўқ: эга

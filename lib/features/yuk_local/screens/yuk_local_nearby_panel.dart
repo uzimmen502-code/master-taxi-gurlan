@@ -14,7 +14,7 @@ import '../repositories/yuk_local_drivers_repository.dart';
 import '../yuk_accept_radius.dart';
 import '../yuk_local_ranking.dart';
 import '../yuk_local_schedule.dart';
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 import 'yuk_local_driver_sheet.dart';
 
 /// Туман ичида юк қатнови — жойлашув + иш вақти (онлайн йўқ).

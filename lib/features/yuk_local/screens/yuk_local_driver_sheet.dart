@@ -7,7 +7,7 @@ import '../models/yuk_local_driver.dart';
 import '../repositories/yuk_local_drivers_repository.dart';
 import '../yuk_accept_radius.dart';
 import '../yuk_local_schedule.dart';
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 
 /// Ҳайдовчи: туман ичида эълон (GPS + иш вақти). Онлайн/офлайн йўқ.
 Future<bool?> showYukLocalDriverSheet({

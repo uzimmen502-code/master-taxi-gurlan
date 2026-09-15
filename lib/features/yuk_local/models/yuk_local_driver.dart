@@ -1,6 +1,6 @@
 import '../yuk_accept_radius.dart';
 import '../yuk_local_schedule.dart';
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 
 /// Туман ичида юк эълони (`yuk_local_drivers/{autoId}`).
 /// Жойлашув + иш вақти; «онлайн» присутствие йўқ.

@@ -1,4 +1,4 @@
-import 'package:ava_gurlan/features/yuk_birja/yuk_vehicle_types.dart';
+import 'package:ava_gurlan/features/yuk_shared/yuk_vehicle_types.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

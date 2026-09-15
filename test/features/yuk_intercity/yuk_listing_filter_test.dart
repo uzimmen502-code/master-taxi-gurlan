@@ -1,5 +1,5 @@
-import 'package:ava_gurlan/features/yuk_birja/models/yuk_listing.dart';
-import 'package:ava_gurlan/features/yuk_birja/yuk_listing_filter.dart';
+import 'package:ava_gurlan/features/yuk_intercity/models/yuk_listing.dart';
+import 'package:ava_gurlan/features/yuk_intercity/yuk_listing_filter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _now = DateTime(2026, 9, 15, 12);

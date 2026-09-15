@@ -1,6 +1,6 @@
-import 'package:ava_gurlan/features/yuk_birja/models/yuk_local_driver.dart';
-import 'package:ava_gurlan/features/yuk_birja/yuk_accept_radius.dart';
-import 'package:ava_gurlan/features/yuk_birja/yuk_local_ranking.dart';
+import 'package:ava_gurlan/features/yuk_local/models/yuk_local_driver.dart';
+import 'package:ava_gurlan/features/yuk_local/yuk_accept_radius.dart';
+import 'package:ava_gurlan/features/yuk_local/yuk_local_ranking.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Гурлан маркази — қидирувчи нуқтаси.

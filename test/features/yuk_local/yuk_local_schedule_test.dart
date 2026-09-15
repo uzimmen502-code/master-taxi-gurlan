@@ -1,4 +1,4 @@
-import 'package:ava_gurlan/features/yuk_birja/yuk_local_schedule.dart';
+import 'package:ava_gurlan/features/yuk_local/yuk_local_schedule.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 DateTime _at(int hour, [int minute = 0]) => DateTime(2026, 9, 15, hour, minute);

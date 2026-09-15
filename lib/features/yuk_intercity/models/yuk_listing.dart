@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 
 enum YukListingType { cargo, truck }
 

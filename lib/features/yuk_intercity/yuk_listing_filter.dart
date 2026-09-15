@@ -1,5 +1,5 @@
 import 'models/yuk_listing.dart';
-import 'yuk_vehicle_types.dart';
+import '../yuk_shared/yuk_vehicle_types.dart';
 
 /// Шаҳарлараро эълонлар рўйхатини фильтрлаш — Firestore'сиз, pure.
 ///

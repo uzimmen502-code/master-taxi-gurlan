@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../models/yuk_listing.dart';
-import '../yuk_vehicle_types.dart';
+import '../../yuk_shared/yuk_vehicle_types.dart';
 
 /// Firestore `yuk_listings` — умумий юк биржаси.
 class YukListingsRepository {

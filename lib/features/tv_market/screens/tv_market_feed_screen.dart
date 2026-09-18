@@ -70,6 +70,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   bool _loadingMore = false;
   int _currentIndex = 0;
   late final PageController _pageCtrl;
+
+  // ── В-4 1-босқич: scroll тезлигига қараб prefetch'ни бошқариш ────────
+  // Тез свайп қилаётган фойдаланувчи учун кейинги клипни олдиндан
+  // тайёрлаш кўпинча бекорга трафик сарфлайди — у баribир яна свайп
+  // қилиб ўтиб кетиши мумкин. Шунинг учун саҳифалар орасидаги вақт
+  // жуда қисқа бўлса, шу цикл учун prefetch ўтказиб юборилади.
+  static const _fastSwipeThreshold = Duration(milliseconds: 700);
+  DateTime? _lastPageChangeAt;
+  bool _fastScrolling = false;
   bool _showPlayPause = false;
   Timer? _hideBadgeTimer;
   int _activateGen = 0;
@@ -387,41 +396,51 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   /// Keyingi klipni prefetch qilishdan OLDIN joriy klip "sog'lom"
-  /// bo'lishini kutadi: kamida bitta HLS segment (4s) oldinga buferlangan
-  /// va hozir buferlanmayapti — yoki [timeout] o'tdi (juda sekin tarmoqda
+  /// bo'lishini kutadi: kamida bitta HLS segment (~3s, qarang
+  /// `TV_CLIP_HLS_SEGMENT_SECONDS`) oldinga buferlangan va hozir
+  /// buferlanmayapti — yoki adaptiv timeout o'tdi (juda sekin tarmoqda
   /// keyingi klipni umuman tayyorlamay qolmaslik uchun). Shunda joriy
   /// video tarmoqni birinchi bo'lib oladi; prefetch faqat undan keyin
-  /// boshlanadi.
-  static const _prefetchHealthyAhead = Duration(seconds: 4);
-  static const _prefetchTimeout = Duration(milliseconds: 2500);
+  /// boshlanadi. Timeout endi fiksланган emas — В-4 1-босқич: qarang
+  /// [TvNetworkQualityService.adaptivePrefetchTimeout].
+  static const _prefetchHealthyAhead = Duration(seconds: 3);
 
   Future<void> _waitUntilHealthy(VideoPlayerController ctrl, int gen) async {
-    final done = Completer<void>();
+    // `true` — haqiqatan sog'lom tugadi, `false` — hech qachon `check()`
+    // sabab bilan yopilmadi (faqat timeout orqali chiqiladi), `null` —
+    // avlod eskirdi/xato/unmount — bular tarmoq sifatiga aloqasi yo'q,
+    // adaptiv tarixga yozilmaydi.
+    final done = Completer<bool?>();
     void check() {
       if (done.isCompleted) return;
       if (gen != _activateGen || !mounted) {
-        done.complete();
+        done.complete(null);
         return;
       }
       final v = ctrl.value;
       if (!v.isInitialized || v.hasError) {
-        done.complete();
+        done.complete(null);
         return;
       }
       final ended = v.duration > Duration.zero &&
           _bufferedAhead(v) + v.position >= v.duration;
       if (!v.isBuffering &&
           (ended || _bufferedAhead(v) >= _prefetchHealthyAhead)) {
-        done.complete();
+        done.complete(true);
       }
     }
 
     ctrl.addListener(check);
     check();
     try {
-      await done.future.timeout(_prefetchTimeout);
+      final result =
+          await done.future.timeout(TvNetworkQualityService.adaptivePrefetchTimeout());
+      if (result == true) TvNetworkQualityService.recordBufferHealth(true);
     } on TimeoutException {
-      // Sekin tarmoq — baribir prefetch boshlaymiz.
+      // Sekin tarmoq — baribir prefetch boshlaymiz, lekin bu holat
+      // adaptiv tarixga "sog'lom emas" sifatida yoziladi — keyingi
+      // klip(lar) uchun timeout avtomatik uzayadi.
+      TvNetworkQualityService.recordBufferHealth(false);
     } finally {
       ctrl.removeListener(check);
     }
@@ -478,6 +497,14 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     await _pool.evictUnwanted();
     if (ctrl != null) await _waitUntilHealthy(ctrl, gen);
     if (!mounted || gen != _activateGen || !tvCanPlay) return;
+    if (_fastScrolling) {
+      // Foydalanuvchi tez svayp qilmoqda — keyingi klipni oldindan
+      // tayyorlash ko'pincha bekorga trafik sarflaydi (u ustidan
+      // o'tib ketishi mumkin). Shu sikl uchun prefetch o'tkazib
+      // yuboriladi; svayp sekinlashgach, keyingi `_activate()`
+      // odatdagidek prefetch qiladi.
+      return;
+    }
     await _pool.retain(_urlsAround(index), isReady: _readinessMap());
   }
 
@@ -498,6 +525,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }
 
   void _onPageChanged(int index) {
+    final now = DateTime.now();
+    _fastScrolling = _lastPageChangeAt != null &&
+        now.difference(_lastPageChangeAt!) < _fastSwipeThreshold;
+    _lastPageChangeAt = now;
     _hideBadgeTimer?.cancel();
     _showPlayPause = false;
     _currentIndex = index;

@@ -11124,7 +11124,13 @@ const TV_CLIP_MAX_SECONDS = 600;
 // шунинг учун қисқа сегмент афзал — плеер камроқ маълумот юклаб
 // бошлайди. Айнан шу қиймат кодлашда ҳам ишлатилади
 // (`-force_key_frames`): сегмент фақат keyframe'дан бошлана олади.
-const TV_CLIP_HLS_SEGMENT_SECONDS = 4;
+//
+// В-4 1-босқич (2026-09-18, Instagram тадқиқоти асосида): 4 → 3 сония.
+// ЭСЛАТМА: фақат ШУ ЎЗГАРИШДАН КЕЙИН transcode қилинадиган (янги ёки
+// backfill'ланган) клипларга таъсир қилади — мавжудлари эски 4s'да
+// қолади (manifest қайта ясалмагунча). Клиент томонида мос қиймат:
+// `TvMarketFeedScreen._prefetchHealthyAhead`.
+const TV_CLIP_HLS_SEGMENT_SECONDS = 3;
 
 function tvClipStoragePathFromUrl(url) {
   const match = /\/o\/([^?]+)/.exec(url || '');

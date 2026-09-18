@@ -207,7 +207,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
     final clip = _clips[_activeIndex];
     final url = _urlFor(clip);
     _pool.pauseAllExcept(url);
-    final ctrl = await _pool.prepare(url);
+    final ctrl = await _pool.prepare(url, isReady: clip.canStartPlayback);
     if (!mounted || gen != _playGen || !tvCanPlay) {
       _pool.pauseAll();
       _pool.muteAll();
@@ -223,7 +223,7 @@ class _HomeVideoStageState extends State<HomeVideoStage>
       }
       if (mounted) setState(() {});
     }
-    unawaited(_pool.retain([url]));
+    unawaited(_pool.retain([url], isReady: {url: clip.canStartPlayback}));
   }
 
   Future<void> _maybeLoadMore(int visibleIndex) async {
@@ -473,6 +473,7 @@ class _HomeClipCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             TvClipPoster(url: clip.posterUrl),
+            if (!clip.canStartPlayback) const TvClipProcessingBadge(),
             if (ready)
               Center(
                 child: AspectRatio(

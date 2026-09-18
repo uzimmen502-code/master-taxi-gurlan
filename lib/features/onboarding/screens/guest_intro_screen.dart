@@ -29,15 +29,11 @@ class _IntroPageData {
     required this.icon,
     required this.headKey,
     required this.bodyKey,
-    this.tagsKey,
-    this.isFunnel = false,
   });
 
   final IconData icon;
   final String headKey;
   final String bodyKey;
-  final String? tagsKey;
-  final bool isFunnel;
 }
 
 const _pages = [
@@ -48,13 +44,6 @@ const _pages = [
   _IntroPageData(icon: Icons.local_shipping_rounded, headKey: 'guest_intro2_p5_head', bodyKey: 'guest_intro2_p5_body'),
   _IntroPageData(icon: Icons.storefront_outlined, headKey: 'guest_intro2_p6_head', bodyKey: 'guest_intro2_p6_body'),
   _IntroPageData(icon: Icons.park_rounded, headKey: 'guest_intro2_p7_head', bodyKey: 'guest_intro2_p7_body'),
-  _IntroPageData(
-    icon: Icons.auto_awesome_rounded,
-    headKey: 'guest_intro2_p8_head',
-    bodyKey: 'guest_intro2_p8_body',
-    tagsKey: 'guest_intro2_p8_tags',
-    isFunnel: true,
-  ),
 ];
 
 class _GuestIntroScreenState extends State<GuestIntroScreen> {
@@ -218,8 +207,6 @@ class _IntroPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final body = context.tr(data.bodyKey);
-    final tagsRaw = data.tagsKey == null ? '' : context.tr(data.tagsKey!);
-    final tags = tagsRaw.isEmpty ? const <String>[] : tagsRaw.split('|');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 8),
@@ -244,10 +231,6 @@ class _IntroPage extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: _RichBody(text: body, ink: ink, muted: muted),
           ),
-          if (tags.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _FunnelChips(tags: tags),
-          ],
         ],
       ),
     );
@@ -307,55 +290,5 @@ class _RichBody extends StatelessWidget {
       }
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: widgets);
-  }
-}
-
-class _FunnelChips extends StatelessWidget {
-  const _FunnelChips({required this.tags});
-  final List<String> tags;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < tags.length; i++) {
-      children.add(_Chip(tags[i]));
-      if (i < tags.length - 1) {
-        children.add(const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 2),
-          child: Text('→', style: TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w700)),
-        ));
-      }
-    }
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 4,
-      runSpacing: 8,
-      children: children,
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip(this.label);
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.primaryDark.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          color: AppColors.primaryDark,
-        ),
-      ),
-    );
   }
 }

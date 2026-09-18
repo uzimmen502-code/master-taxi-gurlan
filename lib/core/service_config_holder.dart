@@ -78,11 +78,6 @@ class ServiceConfigHolder {
   ///   ochadi; yangi X moduli baribir hidden.
   static ModuleStatus statusOf(String moduleId) {
     if (!kKnownModuleIds.contains(moduleId)) return ModuleStatus.hidden;
-    // Alias davri: yangi id hech bir qatlamda sozlanmagan bo'lsa — eski id.
-    if (!_isConfigured(moduleId)) {
-      final legacy = kModuleIdAliases[moduleId];
-      if (legacy != null && legacy != moduleId) return statusOf(legacy);
-    }
     if (!_enforce) {
       if (!_isConfigured(moduleId)) return ModuleStatus.hidden;
       return ModuleStatus.enabled;

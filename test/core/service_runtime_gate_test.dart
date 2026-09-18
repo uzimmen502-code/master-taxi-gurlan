@@ -43,65 +43,16 @@ void main() {
     expect(ServiceConfigHolder.statusOf('tv_market'), ModuleStatus.hidden);
   });
 
-  group('yuk alias davri (yuk_local/yuk_intercity → yuk_birja)', () {
-    test('yangi id sozlanmagan — eski yuk_birja holati meros olinadi (enforce)',
-        () {
-      ServiceConfigHolder.setForTest(
-        defaults: const ServiceModuleConfig({
-          'yuk_birja': ModuleStatus.enabled,
-        }),
-        enforce: true,
-      );
-      expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.enabled);
-      expect(
-          ServiceConfigHolder.statusOf('yuk_intercity'), ModuleStatus.enabled);
-    });
-
-    test('yangi id sozlanmagan — eski ham sozlanmagan → hidden', () {
-      ServiceConfigHolder.setForTest(
-        defaults: const ServiceModuleConfig({'bread': ModuleStatus.enabled}),
-        enforce: true,
-      );
-      expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.hidden);
-    });
-
-    test('yangi id sozlangan — alias e\'tiborga olinmaydi', () {
-      ServiceConfigHolder.setForTest(
-        defaults: const ServiceModuleConfig({
-          'yuk_birja': ModuleStatus.enabled,
-          'yuk_local': ModuleStatus.hidden,
-        }),
-        enforce: true,
-      );
-      expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.hidden);
-      // intercity hali sozlanmagan → alias orqali enabled
-      expect(
-          ServiceConfigHolder.statusOf('yuk_intercity'), ModuleStatus.enabled);
-    });
-
-    test('tuman override yangi id ni alohida boshqaradi', () {
-      ServiceConfigHolder.setForTest(
-        defaults: const ServiceModuleConfig({
-          'yuk_birja': ModuleStatus.hidden,
-        }),
-        districtOverride: const ServiceModuleConfig({
-          'yuk_intercity': ModuleStatus.enabled,
-        }),
-        enforce: true,
-      );
-      expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.hidden);
-      expect(
-          ServiceConfigHolder.statusOf('yuk_intercity'), ModuleStatus.enabled);
-    });
-
-    test('enforce=false: alias orqali configured hisoblanadi', () {
-      ServiceConfigHolder.setForTest(
-        defaults: const ServiceModuleConfig({
-          'yuk_birja': ModuleStatus.enabled,
-        }),
-        enforce: false,
-      );
-      expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.enabled);
-    });
+  test('yuk_local/yuk_intercity mustaqil boshqariladi (alias yo\'q, '
+      '2026-09 split yakunlangach)', () {
+    ServiceConfigHolder.setForTest(
+      defaults: const ServiceModuleConfig({
+        'yuk_local': ModuleStatus.enabled,
+        'yuk_intercity': ModuleStatus.hidden,
+      }),
+      enforce: true,
+    );
+    expect(ServiceConfigHolder.statusOf('yuk_local'), ModuleStatus.enabled);
+    expect(ServiceConfigHolder.statusOf('yuk_intercity'), ModuleStatus.hidden);
   });
 }

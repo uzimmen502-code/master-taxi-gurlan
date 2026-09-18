@@ -67,8 +67,24 @@ class TvPlayerPool {
     }
   }
 
-  Future<VideoPlayerController?> prepare(String url) {
+  /// [isReady] — мажбурий гуард: `false` бўлса, controller ҳеч қачон
+  /// яратилмайди (URL қандай манбадан келишидан қатъи назар). Бу — юкори
+  /// қатлам (UI) `canStartPlayback`ни текширишни унутган/ўтказиб юборган
+  /// тақдирда ҳам ХОМ видео тасодифан ўйнатилиб кетмаслигининг сўнгги
+  /// чегараси. Default `true` — эскирган чақирувлар (readiness узатмаган)
+  /// жорий хатти-ҳаракатни сақлаб қолади.
+  Future<VideoPlayerController?> prepare(String url, {bool isReady = true}) {
     if (url.isEmpty) return Future.value(null);
+    if (!isReady) {
+      debugPrint('[TvPlayerPool] prepare рад этилди — ҳали тайёр эмас: $url');
+      unawaited(CrashReport.nonFatal(
+        StateError('TvPlayerPool.prepare: not-ready clip uchun chaqirildi'),
+        StackTrace.current,
+        reason: 'tv_player_not_ready_guard',
+        keys: {'url': url},
+      ));
+      return Future.value(null);
+    }
     final existing = _ready[url];
     if (existing != null && existing.value.isInitialized) {
       return Future.value(existing);
@@ -200,7 +216,10 @@ class TvPlayerPool {
     }
   }
 
-  Future<void> retain(Iterable<String> urls) async {
+  /// [isReady] — ҳар бир url учун `canStartPlayback` (қаранг [prepare]).
+  /// Хариталанмаган url'лар учун default `true` — эскирган чақирувлар
+  /// (readiness узатмаган) жорий хатти-ҳаракатни сақлаб қолади.
+  Future<void> retain(Iterable<String> urls, {Map<String, bool> isReady = const {}}) async {
     final ordered = <String>[];
     final keep = <String>{};
     for (final url in urls) {
@@ -219,7 +238,9 @@ class TvPlayerPool {
     // eviction race'сиз хавфсиз (жой олдиндан кафолатланган). Кейинги
     // видео (swipe'дан кейинги) фонда бир вақтда юклана бошлайди —
     // навбат билан кутиш ўрнига.
-    await Future.wait(ordered.map(prepare));
+    await Future.wait(
+      ordered.map((u) => prepare(u, isReady: isReady[u] ?? true)),
+    );
   }
 
   void pauseAllExcept(String? url) {

@@ -351,6 +351,10 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     return _pool[_urlFor(_clips[_currentIndex])];
   }
 
+  /// `_urlsAround()` билан бир хил клипларга мос `canStartPlayback` харитаси.
+  Map<String, bool> _readinessMap() =>
+      {for (final c in _clips) _urlFor(c): c.canStartPlayback};
+
   List<String> _urlsAround(int index) {
     final urls = <String>[];
     void add(int i) {
@@ -435,7 +439,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     _pool.markWanted(_urlsAround(index));
     _pool.pauseAllExcept(url);
 
-    final ctrl = await _pool.prepare(url);
+    final ctrl = await _pool.prepare(url, isReady: clip.canStartPlayback);
     if (!mounted || gen != _activateGen || _currentIndex != index) return;
     if (!tvCanPlay) {
       _pool.pauseAll();
@@ -474,7 +478,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     await _pool.evictUnwanted();
     if (ctrl != null) await _waitUntilHealthy(ctrl, gen);
     if (!mounted || gen != _activateGen || !tvCanPlay) return;
-    await _pool.retain(_urlsAround(index));
+    await _pool.retain(_urlsAround(index), isReady: _readinessMap());
   }
 
   void _attachViewRecorder(VideoPlayerController ctrl, TvClip clip) {
@@ -1166,6 +1170,8 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                       fit: StackFit.expand,
                       children: [
                         TvClipPoster(url: clip.posterUrl),
+                        if (!clip.canStartPlayback)
+                          const TvClipProcessingBadge(),
                         if (isActive &&
                             ctrl != null &&
                             ctrl.value.isInitialized)

@@ -330,7 +330,7 @@ class _TvPublishScreenState extends State<TvPublishScreen>
     return _adSelectedPrice > 0 && _walletBalance < _adSelectedPrice;
   }
 
-  Future<({String videoUrl, String posterUrl})> _uploadPickedVideo(
+  Future<({String videoUrl, String posterUrl, String localPath})> _uploadPickedVideo(
     String phone,
   ) async {
     setState(() {
@@ -377,7 +377,61 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         bytes: thumbBytes,
       );
     }
-    return (videoUrl: videoUrl, posterUrl: posterUrl);
+    return (videoUrl: videoUrl, posterUrl: posterUrl, localPath: compressed.path);
+  }
+
+  /// Юкловчи ўз видеосини серверда трансkodlash тугамасдан туриб ҳам
+  /// (ЛОКАЛ файлдан, тармоққа қайтмасдан) дарҳол кўра олади — [В-4] 0-босқич,
+  /// 3-банд. Умумий лента/[TvPlayerPool]га умуман тегмайди — бошқаларга
+  /// клип ҳамон "processing" ҳолатида кўринади.
+  Future<void> _showLocalPreview(String localPath) async {
+    if (!mounted || localPath.isEmpty || !File(localPath).existsSync()) return;
+    final controller = VideoPlayerController.file(File(localPath));
+    try {
+      await controller.initialize();
+      if (!mounted) return;
+      await controller.setLooping(true);
+      await controller.play();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: Colors.black,
+        isScrollControlled: true,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AspectRatio(
+                aspectRatio: controller.value.aspectRatio,
+                child: VideoPlayer(controller),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                child: Text(
+                  sheetContext.tr('tv_publish_local_preview_hint'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: Text(sheetContext.tr('tv_publish_local_preview_close')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[TvPublish] local preview $e');
+    } finally {
+      await controller.dispose();
+    }
   }
 
   Future<void> _saveEdit() async {
@@ -625,6 +679,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
             ),
           ),
         );
+        await _showLocalPreview(uploaded.localPath);
+        if (!mounted) return;
         await VideoCompress.deleteAllCache();
         if (!mounted) return;
         Navigator.pop(context, true);
@@ -730,6 +786,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(lines.join('\n'))),
       );
+      await _showLocalPreview(uploaded.localPath);
+      if (!mounted) return;
       await VideoCompress.deleteAllCache();
       if (!mounted) return;
       Navigator.pop(context, true);

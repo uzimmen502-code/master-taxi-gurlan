@@ -35,7 +35,6 @@ const Map<String, String> _moduleLabels = {
   'marshrut': 'Marshrutka',
   'yuk_local': 'Yuk: tuman ichida',
   'yuk_intercity': 'Yuk: shaharlararo',
-  'yuk_birja': 'Yuk birjasi (eski — ikkalasi uchun alias)',
   'courier': 'Kuryer',
   'sell': 'Sotish',
   'food': 'Ovqat',

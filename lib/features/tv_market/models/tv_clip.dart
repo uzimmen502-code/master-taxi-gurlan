@@ -190,6 +190,13 @@ class TvClip {
   /// рўйхатида ва админ модерациясида эса кўринади.
   bool get isPlayable => processingStatus != 'error';
 
+  /// Player'нинг қатъий шарти — фақат transcode тўлиқ тугаган клип учун
+  /// `true`. [isPlayable]дан фарқли: `processing` ҳолати лентада кўринади
+  /// ([isPlayable] = true), лекин ҳали ХОМ файлга эга бўлгани учун реал
+  /// ижро бошланмаслиги керак ([canStartPlayback] = false). Иккиси ҳам
+  /// шу битта [processingStatus]дан ҳисобланади — мустақил байроқ эмас.
+  bool get canStartPlayback => processingStatus == 'ready';
+
   static const _adTierWeight = {
     'basic': 0,
     'visibility': 1,

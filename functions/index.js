@@ -11105,6 +11105,103 @@ const TV_CLIP_VARIANT_SPECS = [
   {key: '360p', maxHeight: 360, maxrate: '450k', bufsize: '650k'},
 ];
 
+// В-4 2-босқич (2026-09-18): пастдаги асосий pass БАРЧА вариантларни
+// (720p+480p+360p) БИТТА ffmpeg чақируви (`filter_complex split`) билан
+// ишлаб чиқаради — манба бир марта декодланиб, УЧАЛАСИ БИРГА тугайди.
+// Демак "360p'ни олдин тайёрлаш" ғояси `TV_CLIP_VARIANT_SPECS` тартибини
+// ўзгартириш билан ЕЧИЛМАЙДИ (encode вақти барибир бир пайтда тугайди,
+// фарқ фақат keyingi upload tsiklidagi bir necha soniyalik navbatda) —
+// шунинг учун [fastTrack360pIfPossible] орқали АЛОҲИДА, тезкор,
+// ФАҚАТ-360p pass қўшилди: асосий (синалган, юқорида, ўзгартирилмаган)
+// pass'дан олдин ишга тушади ва натижани Firestore'га дарҳол ёзади.
+const TV_CLIP_FAST_360P_SPEC = {maxHeight: 360, maxrate: '450k', bufsize: '650k'};
+
+/**
+ * В-4 2-босқич: асосий (720p+480p+360p) БИТТА-pass'дан ОЛДИН, фақат
+ * 360p'ни тезкор кодлаб, Firestore'га ДАРҲОЛ ёзади — фойдаланувчи тўлиқ
+ * pipeline (барча сифат) тугашини кутмасдан томоша қила олади
+ * (YouTube/TikTok'нинг progressive availability усули).
+ *
+ * ATAYLAB ALOHIDA, QO'SHIMCHA pass (manba yana bir marta dekodlanadi —
+ * arzon, chunki faqat bitta past sifatga kodlash kerak): asosiy, sinalgan
+ * pass'ga (pastda) HECH QANDAY o'zgartirish kiritilmaydi. Xato bo'lsa
+ * butunlay e'tiborsiz qoldiriladi (best-effort) — asosiy pipeline baribir
+ * 360p'ni qayta ishlab chiqaradi va yakuniy `clipRef.update` orqali
+ * to'liq almashtiradi (pastga qarang). Alohida Storage yo'li
+ * (`360p_fast.mp4`, asosiy pipeline'ning `360p.mp4`sidan farqli) —
+ * asosiy pass hali faol tomosha qilinayotgan fast-track faylni tasodifan
+ * ustidan yozib, uning download token'ini bekor qilib qo'ymasligi uchun.
+ * Klip o'chirilganda `tv_clip_variants/{clipId}/` prefiksi bilan birga
+ * bu ham tozalanadi (qarang: `onTvClipDeleted`).
+ */
+async function fastTrack360pIfPossible(
+    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince) {
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const {spawnSync} = require('child_process');
+  const tmpOut = path.join(os.tmpdir(), `${clipId}_fast360.mp4`);
+  try {
+    const t = Date.now();
+    const spec = TV_CLIP_FAST_360P_SPEC;
+    const res = spawnSync(ffmpegPath, [
+      '-y',
+      '-t', String(TV_CLIP_MAX_SECONDS),
+      '-i', tmpIn,
+      '-vf', `scale=-2:'min(${spec.maxHeight},ih)'`,
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '26',
+      '-maxrate', spec.maxrate,
+      '-bufsize', spec.bufsize,
+      '-force_key_frames',
+      `expr:gte(t,n_forced*${TV_CLIP_HLS_SEGMENT_SECONDS})`,
+      '-sc_threshold', '0',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-movflags', '+faststart',
+      tmpOut,
+    ], {stdio: 'inherit', maxBuffer: 32 * 1024 * 1024});
+    console.log(
+        `tv clip ${clipId} timing: fast360 ${secsSince(t)}s ` +
+        `(exit ${res.status})`);
+    if (res.status !== 0 || !fs.existsSync(tmpOut) ||
+        fs.statSync(tmpOut).size <= 0) {
+      return;
+    }
+
+    const destPath = `tv_clip_variants/${clipId}/360p_fast.mp4`;
+    const token = crypto.randomUUID();
+    await bucket.upload(tmpOut, {
+      destination: destPath,
+      metadata: {
+        contentType: 'video/mp4',
+        cacheControl: TV_CLIP_CACHE_CONTROL,
+        metadata: {firebaseStorageDownloadTokens: token},
+      },
+    });
+    const encoded = encodeURIComponent(destPath);
+    const url = `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
+        `/o/${encoded}?alt=media&token=${token}`;
+
+    await clipRef.update({
+      'videoVariants.360p': url,
+      processingStatus: 'ready',
+    });
+    console.log(
+        `tv clip ${clipId}: fast360 тайёр, processingStatus эрта ` +
+        `'ready' қилинди`);
+  } catch (e) {
+    console.error(
+        'fastTrack360pIfPossible хато (асосий pipeline учун аҳамиятсиз):',
+        clipId, e.message || e);
+  } finally {
+    try {
+      if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+    } catch (_) {}
+  }
+}
+
 // Клип давомийлигининг ягона авторитетли чегараси — вариантлар шу
 // қийматда кесилади.
 //
@@ -11335,6 +11432,12 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     try {
       fs.chmodSync(ffmpegPath, 0o755);
     } catch (_) {}
+
+    // В-4 2-босқич: асосий pass'дан олдин тезкор 360p-only preliminary
+    // pass — хато бўлса ҳам асосий pipeline'га таъсир қилмайди (қаранг:
+    // [fastTrack360pIfPossible] ҳужжати).
+    await fastTrack360pIfPossible(
+        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince);
 
     // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
     // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб

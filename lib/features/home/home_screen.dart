@@ -880,7 +880,7 @@ class _HomeViewState extends State<_HomeView> {
                                   moduleId: 'yuk_local',
                                   label: context.tr('home_module_yuk_local'),
                                   imagePath:
-                                      'assets/images/services/service_yuk_birja.png',
+                                      'assets/images/services/service_yuk_local.png',
                                   onTap: () => _openYukModule(
                                     'yuk_local',
                                     const YukLocalScreen(),

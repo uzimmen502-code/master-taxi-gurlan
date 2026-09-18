@@ -92,15 +92,17 @@
 **Икки қатламли ҳимоя (defense-in-depth), UI'да эмас, шарт сифатида:**
 1. UI қатлами: `canStartPlayback == false` бўлса, плеер ишга туширилмайди, poster кўрсатилади.
 2. Плеер қатлами (мажбурий, асосий тўсиқ): [TvPlayerPool.prepare(String url)](lib/features/tv_market/services/tv_player_pool.dart:70) имзоси ўзгаради — энди `canStartPlayback` (ёки status enum) билан бирга чақирилади; `false` бўлса, `_create()` ҳеч қандай controller яратмасдан `null` қайтаради (+ огоҳлантирувчи log/analytics — бу ҳолат юқори қатламда хато борлигини англатади). Шунда келажакда янги экран (масалан profile preview) ёки эскириб қолган fallback URL ноаниq рухсат билан ХОМ MP4'ни тасодифан ўйнатиб юбормайди — гуард URL манбасидан қатъи назар ишлайди.
-3. Юкловчининг ўзи учун махсус ҳолат: у ўз видеосини серверда тайёр бўлмасдан туриб ҳам ЛОКАЛ файлдан (тармоққа қайтмасдан) дарҳол кўра олади — фақат бошқаларга "processing" кўринади. **(ҳали амалга оширилмаган — алоҳида, кейинги қадам.)**
+3. Юкловчининг ўзи учун махсус ҳолат: у ўз видеосини серверда тайёр бўлмасдан туриб ҳам ЛОКАЛ файлдан (тармоққа қайтмасдан) дарҳол кўра олади — фақат бошқаларга "processing" кўринади.
 
-**Амалга оширилди (1 ва 2-банд):**
+**0-босқич ТЎЛИҚ БАЖАРИЛДИ (2026-09-18, commit [9ebd34c](../../commit/9ebd34c)):**
 - [tv_clip.dart](lib/features/tv_market/models/tv_clip.dart) — `canStartPlayback` getter қўшилди, `isPlayable` ўзгармади.
 - [tv_player_pool.dart](lib/features/tv_market/services/tv_player_pool.dart) — `prepare(url, {isReady})` ва `retain(urls, {isReady})` гуард билан (рад этилса — `debugPrint` + `CrashReport.nonFatal('tv_player_not_ready_guard')`).
 - [tv_market_feed_screen.dart](lib/features/tv_market/screens/tv_market_feed_screen.dart), [home_video_stage.dart](lib/features/tv_market/widgets/home_video_stage.dart) — барча чақирув жойлари `clip.canStartPlayback`ни узатади; `TvClipProcessingBadge` ([tv_clip_poster.dart](lib/features/tv_market/widgets/tv_clip_poster.dart)) postер устида кўрсатилади.
-- `tv_clip_processing` калити уч тилга ҳам қўшилди.
-- `flutter analyze` — хатосиз ("No issues found!").
-- **Очиқ қолган:** unit test (қабул мезонидаги), ва 3-банд (юкловчи учун локал preview).
+- **3-банд бажарилди:** [tv_publish_screen.dart](lib/features/tv_market/screens/tv_publish_screen.dart) — `_showLocalPreview()`: юкловчи публиш тугагандан кейин (Storage кэши ўчирилишидан ОЛДИН) ўз видеосини локал файлдан модал preview'да дарҳол кўради; лентага/pool'га умуман тегмайди.
+- `tv_clip_processing`, `tv_publish_local_preview_hint/close` калитлари уч тилга ҳам қўшилди.
+- **Unit test бажарилди:** [tv_player_pool_guard_test.dart](test/features/tv_market/tv_player_pool_guard_test.dart) — `isReady: false` → controller ҳеч қачон яратилмаслигини тасдиқлайди.
+- `flutter analyze` — хатосиз. `flutter test` — 192та тестдан 190таси ўтди; **2та xato** (`home_grid_layout_test.dart`) — текширилди, бу ишга **алоқаси йўқ**, аввалдан мавжуд (HEAD'да ҳам, файллар бу сессияда тегилмаган) — алоҳида масала сифатида қолдирилди.
+- Йўл-йўлакай тузатилди: `service_runtime_gate_test.dart`даги эскирган "yuk alias даври" тести (kModuleIdAliases ўчирилгандан кейин янгиланмай қолган эди) янги архитектурага мослаб қайта ёзилди.
 
 **Рад этилган альтернатива:** клиентда тўлиқ кўп-сифатли HLS'ни (юклашдан олдин, фонда) тайёрлаб, серверга тайёр ҳолда юбориш — рад қилинди, чунки бу қурилма ресурси (батарея/вақт, айниқса бюджет телефонларда), кўпроқ мобил трафик ва Android'нинг узоқ фон жараёнини ишончсиз тўхтатиши хавфини (Doze/battery optimization) юкловчининг ўзига юклайди — айнан заиф қурилма/тармоқдаги фойдаланувчи учун ёмонроқ савдо.
 

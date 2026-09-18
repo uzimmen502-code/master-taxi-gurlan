@@ -20,7 +20,11 @@ class TvPlayerPool {
   /// bo'lganda jami 4 tagacha ExoPlayer). Screen almashganda `retain()`
   /// yangi `wanted` to'plamiga mos kelmagan eski controller'larni
   /// avtomatik evict qiladi — shared bo'lgani uchun ham xavfsiz.
-  static final TvPlayerPool shared = TvPlayerPool._(maxReady: 3);
+  /// 2 = joriy + keyingi. Avval 3 (NEXT+1 ham) edi — uchinchi ExoPlayer
+  /// butun klipni fonda yuklab (DefaultLoadControl 50s), 4G'da joriy
+  /// klipdan tarmoqni tortib olardi va ~230MB EGL/graphics xotira
+  /// ushlab turardi (TECNO LH7n o'lchovi: app PSS 617MB).
+  static final TvPlayerPool shared = TvPlayerPool._(maxReady: 2);
 
   /// Бир вақтда тирик (ready) ExoPlayer сони — бутун илова учун умумий чегара.
   final int maxReady;
@@ -181,6 +185,18 @@ class TvPlayerPool {
       try {
         await ctrl.dispose();
       } catch (_) {}
+    }
+  }
+
+  /// `markWanted()`dan keyin: tayyor, lekin endi kerak bo'lmagan
+  /// controller'larni darhol bo'shatish (`_wanted`ga tegmaydi — inflight
+  /// prefetch bekor qilinmaydi). Feed svaypdan keyin oldingi klipni shu
+  /// zahoti tashlab, keyingi klip prefetch'ini esa kechiktiradi.
+  Future<void> evictUnwanted() async {
+    final drop = _ready.keys.where((k) => !_wanted.contains(k)).toList();
+    for (final url in drop) {
+      final ctrl = _ready.remove(url);
+      await ctrl?.dispose();
     }
   }
 

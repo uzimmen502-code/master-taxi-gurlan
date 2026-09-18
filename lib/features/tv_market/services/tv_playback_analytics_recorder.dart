@@ -96,6 +96,13 @@ class TvPlaybackAnalyticsRecorder {
           watched.inMilliseconds >=
               (dur.inMilliseconds * _completionFraction).round();
       final skipped = !completed && watched < _skipThreshold;
+      // Logcat'da ko'rinadi (release'da ham) — qurilmada buferlanishni
+      // Firestore'siz o'lchash uchun; klipga bitta qator.
+      debugPrint(
+        '[TvPlayback] $clipId watched=${watched.inMilliseconds}ms '
+        'buffered=${_bufferedTotal.inMilliseconds}ms events=$_bufferEvents '
+        'firstFrame=${_firstFrameAt?.difference(attachedAt).inMilliseconds}ms',
+      );
       unawaited(_repo.recordPlaybackStats(
         clipId: clipId,
         watched: watched,

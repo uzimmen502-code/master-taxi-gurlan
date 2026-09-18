@@ -360,14 +360,67 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
       }
     }
 
-    // T8: CURRENT/NEXT/NEXT+1 (video-core audit target). Tartib muhim:
-    // retain() maxReady (3) tagacha birinchilarni saqlaydi. PREVIOUS
-    // ataylab preload qilinmaydi — orqaga svayp qilinsa oldingi klip
-    // qayta bufer bo'ladi (audit'da ma'qullangan trade-off).
+    // CURRENT/NEXT (avval T8: +NEXT+1 ham bor edi). Uchinchi ExoPlayer
+    // shunchaki "tayyor turmaydi" — DefaultLoadControl bilan u BUTUN keyingi
+    // klipni (50s gacha) fonda yuklab oladi, ya'ni 4G'da joriy klip tarmoqni
+    // 3 ga bo'lib olardi (production playbackStats: o'rtacha 6.4% buffer,
+    // ba'zi kliplarda 60–100%). Bitta HLS klip 360p'da ~350 kbps — stall
+    // faqat tarmoq boshqa yuklarga ketganda bo'ladi. PREVIOUS ataylab
+    // preload qilinmaydi.
     add(index);
     add(index + 1);
-    add(index + 2);
     return urls;
+  }
+
+  /// Joriy controller [position]dan oldinga necha soniya buferlagan.
+  static Duration _bufferedAhead(VideoPlayerValue v) {
+    var end = Duration.zero;
+    for (final r in v.buffered) {
+      if (r.end > end) end = r.end;
+    }
+    final ahead = end - v.position;
+    return ahead.isNegative ? Duration.zero : ahead;
+  }
+
+  /// Keyingi klipni prefetch qilishdan OLDIN joriy klip "sog'lom"
+  /// bo'lishini kutadi: kamida bitta HLS segment (4s) oldinga buferlangan
+  /// va hozir buferlanmayapti — yoki [timeout] o'tdi (juda sekin tarmoqda
+  /// keyingi klipni umuman tayyorlamay qolmaslik uchun). Shunda joriy
+  /// video tarmoqni birinchi bo'lib oladi; prefetch faqat undan keyin
+  /// boshlanadi.
+  static const _prefetchHealthyAhead = Duration(seconds: 4);
+  static const _prefetchTimeout = Duration(milliseconds: 2500);
+
+  Future<void> _waitUntilHealthy(VideoPlayerController ctrl, int gen) async {
+    final done = Completer<void>();
+    void check() {
+      if (done.isCompleted) return;
+      if (gen != _activateGen || !mounted) {
+        done.complete();
+        return;
+      }
+      final v = ctrl.value;
+      if (!v.isInitialized || v.hasError) {
+        done.complete();
+        return;
+      }
+      final ended = v.duration > Duration.zero &&
+          _bufferedAhead(v) + v.position >= v.duration;
+      if (!v.isBuffering &&
+          (ended || _bufferedAhead(v) >= _prefetchHealthyAhead)) {
+        done.complete();
+      }
+    }
+
+    ctrl.addListener(check);
+    check();
+    try {
+      await done.future.timeout(_prefetchTimeout);
+    } on TimeoutException {
+      // Sekin tarmoq — baribir prefetch boshlaymiz.
+    } finally {
+      ctrl.removeListener(check);
+    }
   }
 
   Future<void> _activate(int index) async {
@@ -400,7 +453,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         return;
       }
     }
-    unawaited(_pool.retain(_urlsAround(index)));
+    unawaited(_prefetchAfterHealthy(ctrl, index, gen));
     unawaited(_maybePatchOwnerName(clip));
     if (ctrl != null && ctrl.value.isInitialized) {
       _attachViewRecorder(ctrl, clip);
@@ -408,6 +461,20 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     } else {
       _playbackAnalytics.detach();
     }
+  }
+
+  /// 1) Darhol: kerak bo'lmay qolgan (masalan, oldingi) controller'larni
+  ///    bo'shatish — xotira + tarmoq. 2) Joriy klip sog'lom bo'lgach (yoki
+  ///    timeout) — keyingi klipni fonda tayyorlash.
+  Future<void> _prefetchAfterHealthy(
+    VideoPlayerController? ctrl,
+    int index,
+    int gen,
+  ) async {
+    await _pool.evictUnwanted();
+    if (ctrl != null) await _waitUntilHealthy(ctrl, gen);
+    if (!mounted || gen != _activateGen || !tvCanPlay) return;
+    await _pool.retain(_urlsAround(index));
   }
 
   void _attachViewRecorder(VideoPlayerController ctrl, TvClip clip) {

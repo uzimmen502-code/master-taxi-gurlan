@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Такси — Маҳаллий, Маршрут, Шаҳарлараро | AVA</title>
+  <meta name="description" content="AVA’да уч турдаги такси: маҳаллий такси чақиринг, маршрут такси орқали ўрин банд қилинг ёки шаҳарлараро рейслардан жой топинг." />
+  <meta property="og:title" content="Такси хизматлари — AVA" />
+  <meta property="og:description" content="Маҳаллий такси, маршрут такси ва шаҳарлараро такси — битта иловада." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #102418; --muted: #4a6741; --bg: #f3f7f2; --bg-deep: #e4efe3;
+      --card: #ffffff; --line: #c9dbc6; --green: #1f7a3a; --green-deep: #145c2b;
+      --accent: #facc15; --radius: 18px; --max: 1080px;
+      --shadow: 0 18px 50px rgba(16, 36, 24, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; font-family: "IBM Plex Sans", sans-serif; color: var(--ink);
+      background: radial-gradient(1200px 600px at 10% -10%, #d9ecd8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #fff7cc 0%, transparent 45%), var(--bg);
+      line-height: 1.55;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, .brand { font-family: Manrope, sans-serif; letter-spacing: -0.02em; line-height: 1.15; }
+    .wrap { width: min(100% - 2rem, var(--max)); margin-inline: auto; }
+    .site-header {
+      position: sticky; top: 0; z-index: 40; backdrop-filter: blur(12px);
+      background: rgba(243, 247, 242, 0.88); border-bottom: 1px solid rgba(201, 219, 198, 0.7);
+    }
+    .site-header .inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 0; }
+    .brand { font-weight: 800; font-size: 1.35rem; color: var(--green-deep); }
+    .brand span { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-top: 0.1rem; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+      border: 0; border-radius: 999px; padding: 0.85rem 1.35rem; font-family: Manrope, sans-serif;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--green); color: #fff; box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28); }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+
+    .hero {
+      position: relative; min-height: min(80vh, 680px); display: grid; align-items: end; overflow: hidden;
+      background: linear-gradient(180deg, rgba(16, 36, 24, 0.15) 0%, rgba(16, 36, 24, 0.78) 100%),
+        linear-gradient(120deg, #1f7a3a 0%, #0f3d22 48%, #1a2a18 100%);
+      color: #fff;
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(circle at 78% 28%, rgba(250, 204, 21, 0.35), transparent 32%),
+        radial-gradient(circle at 20% 70%, rgba(34, 197, 94, 0.25), transparent 40%);
+      pointer-events: none;
+    }
+    .hero-content { position: relative; z-index: 1; padding: 6.5rem 0 3.2rem; max-width: 38rem; }
+    .hero-kicker { display: inline-block; font-size: 0.85rem; font-weight: 600; color: var(--accent); margin-bottom: 0.85rem; }
+    .hero h1 { margin: 0 0 0.85rem; font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; }
+    .hero p { margin: 0 0 1.6rem; font-size: 1.08rem; color: rgba(255, 255, 255, 0.88); max-width: 32rem; }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+    section { padding: 4.2rem 0; }
+    .section-head { max-width: 40rem; margin-bottom: 2rem; }
+    .section-head h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.02rem; }
+
+    .taxi-block { border-top: 1px solid var(--line); padding: 2.4rem 0; }
+    .taxi-block:first-of-type { border-top: 0; }
+    .taxi-block .kicker { color: var(--green-deep); font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+    .taxi-block h3 { margin: 0 0 0.6rem; font-size: 1.4rem; }
+    .taxi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; align-items: start; }
+    .taxi-grid p { margin: 0 0 0.8rem; color: var(--muted); }
+    .taxi-facts { display: grid; gap: 0.6rem; }
+    .taxi-facts li {
+      list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 0.75rem 0.95rem; font-size: 0.92rem;
+    }
+    .taxi-facts strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.15rem; }
+    .taxi-facts span { color: var(--muted); }
+
+    .benefits { display: grid; gap: 0.9rem; grid-template-columns: repeat(2, 1fr); }
+    .benefits li { list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; }
+    .benefits strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.2rem; }
+    .benefits span { color: var(--muted); }
+
+    .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 0.7rem; }
+    .faq summary { cursor: pointer; font-family: Manrope, sans-serif; font-weight: 700; }
+    .faq p { margin: 0.7rem 0 0; color: var(--muted); }
+
+    .final {
+      background: linear-gradient(135deg, #145c2b, #1f7a3a 55%, #3d6b1f); color: #fff;
+      border-radius: 28px; padding: 2.4rem 1.6rem; text-align: center; box-shadow: var(--shadow);
+    }
+    .final h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .final p { margin: 0 auto 1.3rem; max-width: 34rem; color: rgba(255, 255, 255, 0.88); }
+
+    footer { padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+    footer .brand { color: var(--green-deep); margin-bottom: 0.35rem; }
+
+    @media (max-width: 860px) {
+      .taxi-grid, .benefits { grid-template-columns: 1fr; }
+      .hero-content { padding-top: 5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap inner">
+      <a class="brand" href="index.html">
+        AVA
+        <span>платформа сиз учун</span>
+      </a>
+      <a class="btn btn-primary" href="index.html#download">Иловани очиш</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-label="Такси">
+      <div class="wrap hero-content">
+        <div class="hero-kicker">AVA · Транспорт</div>
+        <h1>Уч турдаги такси — битта иловада</h1>
+        <p>
+          Шаҳар ичида тезда такси чақиринг, маршрут такси орқали ўринга ёзилинг
+          ёки шаҳарлараро рейсдан жой топинг.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#local">Маҳаллий такси</a>
+          <a class="btn btn-ghost" href="#marshrut" style="color:#fff;border-color:rgba(255,255,255,.35)">Маршрут такси</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Хизматлар</h2>
+          <p>Ҳар бирининг ўз мантиғи бор — эҳтиёжингизга қараб танланг.</p>
+        </div>
+
+        <div class="taxi-block" id="local">
+          <div class="kicker">Маҳаллий такси</div>
+          <h3>Шаҳар ичида чақирув</h3>
+          <div class="taxi-grid">
+            <p>
+              Манзилни киритиб такси чақиринг, ҳайдовчи қабул қилгач машина
+              ва ҳайдовчи маълумотларини кўрасиз.
+            </p>
+            <ul class="taxi-facts">
+              <li>
+                <strong>Бекор қилиш қоидаси</strong>
+                <span>Қабулдан кейин кетма-кет бир нечта марта бекор қилинса, чақирув вақтинчалик (бир неча дақиқага) чекланади — тизимни суистеъмол қилишдан ҳимоя.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="taxi-block" id="marshrut">
+          <div class="kicker">Маршрут такси</div>
+          <h3>МФЙ бўйича йўналиш, навбат тизими</h3>
+          <div class="taxi-grid">
+            <p>
+              Қайердан ва қайерга — МФЙ (маҳалла) танлайсиз, қидирув автоматик бошланади.
+              Тизим ҳайдовчиларни навбат бўйича чақиради, керак бўлса оралиқ тўхташ
+              нуқталари қўшилади. Нарх — ўрин бўйича.
+            </p>
+            <ul class="taxi-facts">
+              <li>
+                <strong>Жонли ЕТА</strong>
+                <span>Ҳайдовчи қабул қилгач, тахминий йетиб келиш вақти реал вақтда кўринади.</span>
+              </li>
+              <li>
+                <strong>Машҳур йўналишлар</strong>
+                <span>Кўп қидириладиган йўналишлар алоҳида кўрсатилади.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="taxi-block" id="intercity">
+          <div class="kicker">Шаҳарлараро такси</div>
+          <h3>Рейс қидириш ва ўрин банд қилиш</h3>
+          <div class="taxi-grid">
+            <p>
+              Шаҳарлараро рейслардан бўш ўринни топинг, олиб кетиш манзилингизни
+              киритинг — тизим йўналишни ҳисоблаб, навигацияни бошлашга ёрдам беради.
+            </p>
+            <ul class="taxi-facts">
+              <li>
+                <strong>Ҳайдовчи учун панел</strong>
+                <span>Ҳайдовчи панелни очиб брон сўровларини қабул қилади, рейс тугагач ёпади.</span>
+              </li>
+              <li>
+                <strong>Нарх / ўрин</strong>
+                <span>Ҳар бир ўрин учун белгиланган нарх кўрсатилади.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нега қулай</h2>
+        </div>
+        <ul class="benefits">
+          <li>
+            <strong>Учала тури бир жойда</strong>
+            <span>Эҳтиёжга қараб маҳаллий, маршрут ёки шаҳарлараро таксини танлайсиз.</span>
+          </li>
+          <li>
+            <strong>Навбат ва шаффофлик</strong>
+            <span>Маршрут таксида ҳайдовчилар навбат бўйича чақирилади — танлов навбатга таъсир қилмайди.</span>
+          </li>
+          <li>
+            <strong>Аниқ нарх</strong>
+            <span>Сафар/ўрин нархи олдиндан кўринади.</span>
+          </li>
+          <li>
+            <strong>Ҳайдовчилар учун ҳам</strong>
+            <span>Маршрут ва шаҳарлараро ҳайдовчилиги учун ариза бериш иловада мавжуд.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Тез-тез сўралади</h2>
+        </div>
+        <details open>
+          <summary>Маршрут такси нима билан фарқ қилади?</summary>
+          <p>Белгиланган йўналиш (МФЙ дан МФЙ гача) бўйича, ўрин асосида ишлайди — қабул қилувчи ҳайдовчи навбат бўйича танланади.</p>
+        </details>
+        <details>
+          <summary>Такси чақиришни неча марта бекор қила оламан?</summary>
+          <p>Қабул қилингандан кейин кетма-кет бекор қилиш чекланган — тизим огоҳлантириш кўрсатади ва чегарадан ошса вақтинча блоклайди.</p>
+        </details>
+        <details>
+          <summary>Шаҳарлараро рейсда ўрин йўқ бўлса нима қиламан?</summary>
+          <p>Бошқа рейс ёки вақтни танлашингиз мумкин — рўйхат бўш ўринлар бўйича кўрсатилади.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <div class="final">
+          <h2>Такси хизматини ҳозир синаб кўринг</h2>
+          <p>Иловани очинг → керакли такси турини танланг.</p>
+          <a class="btn btn-primary" href="index.html#download">AVA ни очиш</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="brand">AVA</div>
+      <div>© AVA · платформа сиз учун</div>
+      <div style="margin-top:0.35rem">
+        <a href="index.html">Бош саҳифа</a> · <a href="kitob.html">Китоб</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

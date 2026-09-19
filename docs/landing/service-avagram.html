@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AVAGram — қисқа видео орқали топинг, кўринг, сотинг</title>
+  <meta name="description" content="AVAGram — AVA’даги қисқа видео лентаси: маҳсулот ва хизматингизни видео орқали кўрсатинг, яқин атрофдагиларга биринчи бўлиб чиқинг, дўкон очинг ёки реклама беринг." />
+  <meta property="og:title" content="AVAGram — AVA" />
+  <meta property="og:description" content="Қисқа видео лентаси: томоша қилинг, изоҳ қолдиринг, дўконга ўтинг ёки ўзингиз видео жойлаштиринг." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #102418;
+      --muted: #4a6741;
+      --bg: #f3f7f2;
+      --bg-deep: #e4efe3;
+      --card: #ffffff;
+      --line: #c9dbc6;
+      --green: #1f7a3a;
+      --green-deep: #145c2b;
+      --accent: #facc15;
+      --danger: #b91c1c;
+      --radius: 18px;
+      --max: 1080px;
+      --shadow: 0 18px 50px rgba(16, 36, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #d9ecd8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #fff7cc 0%, transparent 45%),
+        var(--bg);
+      line-height: 1.55;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, .brand, .display {
+      font-family: Manrope, sans-serif;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .wrap {
+      width: min(100% - 2rem, var(--max));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      background: rgba(243, 247, 242, 0.88);
+      border-bottom: 1px solid rgba(201, 219, 198, 0.7);
+    }
+    .site-header .inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 1.35rem;
+      color: var(--green-deep);
+    }
+    .brand span {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0;
+      margin-top: 0.1rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.85rem 1.35rem;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--green);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28);
+    }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    .hero {
+      position: relative;
+      min-height: min(92vh, 820px);
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(16, 36, 24, 0.15) 0%, rgba(16, 36, 24, 0.78) 100%),
+        linear-gradient(120deg, #1f7a3a 0%, #0f3d22 48%, #1a2a18 100%);
+      color: #fff;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 78% 28%, rgba(250, 204, 21, 0.35), transparent 32%),
+        radial-gradient(circle at 20% 70%, rgba(34, 197, 94, 0.25), transparent 40%);
+      pointer-events: none;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      padding: 7rem 0 3.5rem;
+      max-width: 38rem;
+    }
+    .hero-kicker {
+      display: inline-block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    .hero h1 {
+      margin: 0 0 0.85rem;
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 800;
+    }
+    .hero p {
+      margin: 0 0 1.6rem;
+      font-size: 1.08rem;
+      color: rgba(255, 255, 255, 0.88);
+      max-width: 32rem;
+    }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+    section { padding: 4.5rem 0; }
+    .section-head { max-width: 38rem; margin-bottom: 2rem; }
+    .section-head h2 { margin: 0 0 0.6rem; font-size: clamp(1.7rem, 3vw, 2.3rem); }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.05rem; }
+
+    .audience {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .audience article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    .audience h3 { margin: 0 0 0.45rem; font-size: 1.1rem; }
+    .audience p { margin: 0; color: var(--muted); font-size: 0.98rem; }
+
+    .flow { display: grid; gap: 0; }
+    .flow-step {
+      display: grid;
+      grid-template-columns: 3.2rem 1fr;
+      gap: 1rem;
+      padding: 1.15rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .flow-num {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-family: Manrope, sans-serif;
+      font-weight: 800;
+      background: var(--bg-deep);
+      color: var(--green-deep);
+      border: 1px solid var(--line);
+    }
+    .flow-step h3 { margin: 0.15rem 0 0.35rem; font-size: 1.12rem; }
+    .flow-step p { margin: 0; color: var(--muted); }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    .phone {
+      background: #0b0e14;
+      color: #e2e8f0;
+      border-radius: 28px;
+      padding: 1.1rem;
+      box-shadow: 0 30px 60px rgba(11, 14, 20, 0.35);
+      border: 1px solid #223043;
+    }
+    .phone-top { display: flex; gap: 0.4rem; margin-bottom: 0.9rem; }
+    .chip {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem 0.3rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border: 1px solid #334155;
+      color: #94a3b8;
+    }
+    .chip.on {
+      color: var(--accent);
+      background: rgba(250, 204, 21, 0.12);
+      border-color: rgba(250, 204, 21, 0.55);
+    }
+    .phone-clip {
+      position: relative;
+      background: #131a22;
+      border-radius: 16px;
+      padding: 1rem;
+      border: 1px solid #252b36;
+      overflow: hidden;
+    }
+    .phone-clip .badge {
+      display: inline-block;
+      background: rgba(250, 204, 21, 0.16);
+      color: var(--accent);
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-bottom: 0.6rem;
+    }
+    .phone-clip strong {
+      display: block;
+      font-family: Manrope, sans-serif;
+      color: #fff;
+      margin-bottom: 0.2rem;
+    }
+    .phone-clip .price { color: var(--accent); font-weight: 700; font-size: 0.92rem; }
+    .phone-clip .meta { color: #94a3b8; font-size: 0.82rem; margin-top: 0.2rem; }
+    .phone-actions { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
+    .phone-actions .a {
+      flex: 1;
+      text-align: center;
+      padding: 0.6rem 0.4rem;
+      border-radius: 12px;
+      background: #1e2a1e;
+      border: 1px solid rgba(34, 197, 94, 0.85);
+      color: #fff;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 0.76rem;
+    }
+    .note { margin-top: 0.85rem; font-size: 0.86rem; color: #94a3b8; }
+
+    .benefits { display: grid; gap: 0.9rem; }
+    .benefits li {
+      list-style: none;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .benefits strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.2rem; }
+    .benefits span { color: var(--muted); }
+
+    .tiers {
+      display: grid;
+      gap: 0.9rem;
+      grid-template-columns: repeat(5, 1fr);
+    }
+    .tiers article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 0.9rem;
+      text-align: center;
+    }
+    .tiers strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.3rem; font-size: 0.98rem; }
+    .tiers span { color: var(--muted); font-size: 0.84rem; }
+
+    .faq details {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.7rem;
+    }
+    .faq summary { cursor: pointer; font-family: Manrope, sans-serif; font-weight: 700; }
+    .faq p { margin: 0.7rem 0 0; color: var(--muted); }
+
+    .final {
+      background: linear-gradient(135deg, #145c2b, #1f7a3a 55%, #3d6b1f);
+      color: #fff;
+      border-radius: 28px;
+      padding: 2.4rem 1.6rem;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .final h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .final p { margin: 0 auto 1.3rem; max-width: 34rem; color: rgba(255, 255, 255, 0.88); }
+
+    footer { padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+    footer .brand { color: var(--green-deep); margin-bottom: 0.35rem; }
+
+    @media (max-width: 860px) {
+      .audience, .split { grid-template-columns: 1fr; }
+      .tiers { grid-template-columns: repeat(2, 1fr); }
+      .hero-content { padding-top: 5.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap inner">
+      <a class="brand" href="index.html">
+        AVA
+        <span>платформа сиз учун</span>
+      </a>
+      <a class="btn btn-primary" href="index.html#download">Иловани очиш</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-label="AVAGram">
+      <div class="wrap hero-content">
+        <div class="hero-kicker">AVA · AVAGram</div>
+        <h1>Қисқа видео орқали топинг, кўринг, сотинг</h1>
+        <p>
+          AVAGram — AVA’даги видео лентаси: маҳсулот ёки хизматингизни қисқа видео
+          орқали кўрсатинг. Жойлашув қўйилган видео аввало яқин атрофдагиларга чиқади.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#how">Қандай ишлайди</a>
+          <a class="btn btn-ghost" href="#who" style="color:#fff;border-color:rgba(255,255,255,.35)">Ким учун</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="who">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Ким учун</h2>
+          <p>AVAGram лентаси уч томон учун фойдали.</p>
+        </div>
+        <div class="audience">
+          <article>
+            <h3>Томошабин</h3>
+            <p>Видеоларни свайп қилиб кўради, лайк босади, изоҳ қолдиради ва «Дўконга» тугмаси орқали сотувчига ўтади.</p>
+          </article>
+          <article>
+            <h3>Сотувчи / дўкон эгаси</h3>
+            <p>Видео орқали дўкон очади, товар ёки хизматини (номи, нархи, тавсифи, расмлари билан) жойлаштиради.</p>
+          </article>
+          <article>
+            <h3>Реклама берувчи</h3>
+            <p>Видеосини ҳудуд бўйича (туман / вилоят / республика) ва тариф танлаб кўпроқ кўринишга эга қилади.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap split">
+        <div>
+          <div class="section-head">
+            <h2>Қандай ишлайди</h2>
+            <p>Иловадаги ҳақиқий қадамлар — қисқача.</p>
+          </div>
+          <div class="flow">
+            <div class="flow-step">
+              <div class="flow-num">1</div>
+              <div>
+                <h3>Лентани очинг</h3>
+                <p>Бош саҳифада «AVAGRAM» тугмаси. Уч тасма: <strong>AVAGram</strong> · <strong>Кун янгиликлари</strong> · <strong>Реклама ва эълонлар</strong>.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">2</div>
+              <div>
+                <h3>Кўринг ва боғланинг</h3>
+                <p>Видеони свайп қилиб кетма-кет томоша қилинг. Изоҳ қолдиринг — «Нархи қанча?», «Манзили қаерда?», «Етказиб бериш борми?» тайёр саволлари ҳам бор.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">3</div>
+              <div>
+                <h3>Дўконга ўтинг</h3>
+                <p>«Дўконга» тугмаси орқали сотувчининг бошқа роликлари ва товарлари билан танишинг.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">4</div>
+              <div>
+                <h3>Ўзингиз жойлаштиринг</h3>
+                <p>«Видео жойлаш»: камерадан олинг ёки галереядан танланг. Ном, нарх (ихтиёрий), тавсиф ва жойлашувни қўшинг — видео аввало яқин атрофга чиқади.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">5</div>
+              <div>
+                <h3>Кўпроқ кўриниш хоҳласангиз</h3>
+                <p>Реклама бўлимида ҳудуд қамрови ва тарифни танланг — ҳамёндан тўланади ёки муддати тугагач узайтирилади.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="phone" aria-label="Иловадаги кўриниш намунаси">
+          <div class="phone-top">
+            <div class="chip on">AVAGram</div>
+            <div class="chip">Кун янгиликлари</div>
+            <div class="chip">Реклама</div>
+          </div>
+          <div class="phone-clip">
+            <span class="badge">Маҳсулот</span>
+            <strong>Кўзгу шкаф · 1.6 м</strong>
+            <div class="price">1 250 000 сўм</div>
+            <div class="meta">Чиноз тумани · 1.2 км</div>
+            <div class="phone-actions">
+              <div class="a">❤ Лайк</div>
+              <div class="a">💬 Изоҳ</div>
+              <div class="a">Дўконга →</div>
+            </div>
+          </div>
+          <p class="note">Видео ишлов берилаётганда лентада постер ва «Видео тайёрланмоқда...» белгиси кўрсатилади, тайёр бўлгач автоматик ишга тушади.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нега қулай</h2>
+          <p>Видео орқали кўриш, сотиш ва топиш — бир лентада.</p>
+        </div>
+        <ul class="benefits">
+          <li>
+            <strong>Уч тасма бир жойда</strong>
+            <span>AVAGram, Кун янгиликлари (48 соатдан кейин автоматик ўчади) ва Реклама ва Эълонлар.</span>
+          </li>
+          <li>
+            <strong>Яқин атрофдан бошланади</strong>
+            <span>Жойлашув қўйилган видео аввало яқиндаги фойдаланувчиларга чиқади.</span>
+          </li>
+          <li>
+            <strong>Қидирув</strong>
+            <span>Ном, нарх ёки туман бўйича — кирилл, лотин ва рус ёзувида ҳам ишлайди.</span>
+          </li>
+          <li>
+            <strong>Ўз дўконингиз</strong>
+            <span>Видео орқали товар ёки хизмат қўшиб, дўконингизни очасиз — алоҳида илова керак эмас.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="ads" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Реклама тарифлари</h2>
+          <p>Ҳудуд қамрови (туман / вилоят / республика) ва муддатни ўзингиз танлайсиз.</p>
+        </div>
+        <div class="tiers">
+          <article>
+            <strong>Оддий видео</strong>
+            <span>Оддий лентада кўринади</span>
+          </article>
+          <article>
+            <strong>Кўпроқ кўриниш</strong>
+            <span>Лентада юқори устуворлик</span>
+          </article>
+          <article>
+            <strong>Home</strong>
+            <span>Home экранида юқори позиция</span>
+          </article>
+          <article>
+            <strong>Premium</strong>
+            <span>Home’да энг кўринадиган позиция</span>
+          </article>
+          <article>
+            <strong>Pro Max</strong>
+            <span>Home + AVAGram’да устувор</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Тез-тез сўралади</h2>
+          <p>AVAGram’даги қоидалар бўйича.</p>
+        </div>
+        <details open>
+          <summary>«Кун янгиликлари» нима?</summary>
+          <p>Қисқа муддатли видео формати — жойлаштирилгандан 48 соат ўтгач автоматик ўчади.</p>
+        </details>
+        <details>
+          <summary>Видео узун бўлса нима бўлади?</summary>
+          <p>Белгиланган давомийликдан узун видео юкланаётганда автоматик қисқартирилади.</p>
+        </details>
+        <details>
+          <summary>Телефон рақамим кўринадими?</summary>
+          <p>Йўқ, фақат ўзингиз ёқсангиз — видео остида «Боғланиш» тугмаси чиқади.</p>
+        </details>
+        <details>
+          <summary>Реклама қандай тўланади?</summary>
+          <p>Ҳамёнингиздан — танланган ҳудуд қамрови, тариф ва муддатга қараб. Баланс етарли бўлмаса, тўлдиришингиз сўралади.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="cta">
+      <div class="wrap">
+        <div class="final">
+          <h2>AVAGram’ни ҳозир кўринг</h2>
+          <p>Иловани очинг → AVAGram. Видео томоша қилинг, изоҳ қолдиринг ёки ўзингиз жойлаштиринг.</p>
+          <a class="btn btn-primary" href="index.html#download">AVA ни очиш</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="brand">AVA</div>
+      <div>© AVA · платформа сиз учун</div>
+      <div style="margin-top:0.35rem">
+        <a href="index.html">Бош саҳифа</a> ·
+        <a href="kitob.html">Китоб</a> ·
+        <a href="service-tuman-ichida.html">Юк биржаси · Туман ичида</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

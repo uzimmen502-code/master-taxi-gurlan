@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AVA — платформа сиз учун</title>
+  <meta name="description" content="AVA — такси, юк ташиш, савдо, AVAGram ва бошқа маҳаллий хизматлар бир иловада. Ўзбекистон учун платформа." />
+  <meta property="og:title" content="AVA — платформа сиз учун" />
+  <meta property="og:description" content="Такси, юк биржаси, бозор, AVAGram ва бошқа хизматлар — битта иловада." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #102418;
+      --muted: #4a6741;
+      --bg: #f3f7f2;
+      --bg-deep: #e4efe3;
+      --card: #ffffff;
+      --line: #c9dbc6;
+      --green: #1f7a3a;
+      --green-deep: #145c2b;
+      --accent: #facc15;
+      --radius: 18px;
+      --max: 1080px;
+      --shadow: 0 18px 50px rgba(16, 36, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #d9ecd8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #fff7cc 0%, transparent 45%),
+        var(--bg);
+      line-height: 1.55;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, .brand {
+      font-family: Manrope, sans-serif;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .wrap {
+      width: min(100% - 2rem, var(--max));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      background: rgba(243, 247, 242, 0.88);
+      border-bottom: 1px solid rgba(201, 219, 198, 0.7);
+    }
+    .site-header .inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-weight: 800;
+      font-size: 1.35rem;
+      color: var(--green-deep);
+    }
+    .brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .brand span {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0;
+      margin-top: 0.1rem;
+    }
+    nav.main-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.4rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    nav.main-nav a.link:hover { color: var(--green-deep); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.85rem 1.35rem;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--green);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28);
+    }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    .hero {
+      position: relative;
+      min-height: min(78vh, 640px);
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(16, 36, 24, 0.12) 0%, rgba(16, 36, 24, 0.78) 100%),
+        linear-gradient(120deg, #1f7a3a 0%, #0f3d22 48%, #1a2a18 100%);
+      color: #fff;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 78% 28%, rgba(250, 204, 21, 0.32), transparent 32%),
+        radial-gradient(circle at 20% 70%, rgba(34, 197, 94, 0.24), transparent 40%);
+      pointer-events: none;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      padding: 6rem 0 3.2rem;
+      max-width: 40rem;
+    }
+    .hero-kicker {
+      display: inline-block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    .hero h1 {
+      margin: 0 0 0.85rem;
+      font-size: clamp(2.1rem, 5vw, 3.4rem);
+      font-weight: 800;
+    }
+    .hero p {
+      margin: 0 0 1.6rem;
+      font-size: 1.08rem;
+      color: rgba(255, 255, 255, 0.88);
+      max-width: 34rem;
+    }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+    section { padding: 4.2rem 0; }
+    .section-head { max-width: 40rem; margin-bottom: 2rem; }
+    .section-head h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.02rem; }
+
+    .modules {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .modules article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.4rem 1.3rem;
+      box-shadow: var(--shadow);
+    }
+    .modules .icon {
+      font-size: 1.6rem;
+      margin-bottom: 0.7rem;
+      display: block;
+    }
+    .modules h3 { margin: 0 0 0.5rem; font-size: 1.08rem; }
+    .modules p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .modules ul {
+      margin: 0.6rem 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+    .modules li { padding: 0.15rem 0; }
+    .modules li::before { content: "· "; color: var(--green); font-weight: 700; }
+
+    .spotlight {
+      background: linear-gradient(135deg, #eefaf0, #f8f9ef);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 2.2rem;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1.8rem;
+      align-items: center;
+      box-shadow: var(--shadow);
+    }
+    .spotlight .badge {
+      display: inline-block;
+      background: rgba(250, 204, 21, 0.22);
+      color: #7a5b00;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 0.8rem;
+    }
+    .spotlight h2 { margin: 0 0 0.7rem; font-size: clamp(1.5rem, 3vw, 2rem); }
+    .spotlight p { margin: 0 0 1.3rem; color: var(--muted); }
+    .spotlight-visual {
+      background: #0b0e14;
+      color: #e2e8f0;
+      border-radius: 20px;
+      padding: 1rem;
+      border: 1px solid #223043;
+    }
+    .spotlight-visual .tabs { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    .spotlight-visual .tab {
+      flex: 1;
+      text-align: center;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 0.5rem 0.4rem;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      color: #94a3b8;
+    }
+    .spotlight-visual .tab.on {
+      color: var(--accent);
+      background: rgba(250, 204, 21, 0.12);
+      border-color: rgba(250, 204, 21, 0.55);
+    }
+    .spotlight-visual .card {
+      background: #131a22;
+      border-radius: 12px;
+      padding: 0.85rem;
+      margin-bottom: 0.6rem;
+      border: 1px solid #252b36;
+      border-left: 3px solid #22c55e;
+    }
+    .spotlight-visual .card strong { display: block; color: #fff; font-family: Manrope, sans-serif; margin-bottom: 0.2rem; }
+    .spotlight-visual .card small { color: #94a3b8; font-size: 0.8rem; }
+
+    .benefits {
+      display: grid;
+      gap: 0.9rem;
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .benefits li {
+      list-style: none;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .benefits strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.2rem; }
+    .benefits span { color: var(--muted); }
+
+    .final {
+      background: linear-gradient(135deg, #145c2b, #1f7a3a 55%, #3d6b1f);
+      color: #fff;
+      border-radius: 28px;
+      padding: 2.6rem 1.6rem;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .final h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .final p { margin: 0 auto 1.3rem; max-width: 34rem; color: rgba(255, 255, 255, 0.88); }
+    .final .hero-cta { justify-content: center; }
+    .final .btn-ghost { color: #fff; border-color: rgba(255,255,255,.35); }
+
+    footer { padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+    footer .brand { color: var(--green-deep); margin-bottom: 0.35rem; }
+    footer .foot-links { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
+    footer .foot-links a:hover { color: var(--green-deep); }
+
+    @media (max-width: 860px) {
+      .modules { grid-template-columns: 1fr; }
+      .spotlight { grid-template-columns: 1fr; }
+      .benefits { grid-template-columns: 1fr; }
+      nav.main-nav .link { display: none; }
+      .hero-content { padding-top: 5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap inner">
+      <a class="brand" href="#top">
+        <img src="assets/icon.png" alt="" />
+        <span style="display:block">
+          AVA
+          <span>платформа сиз учун</span>
+        </span>
+      </a>
+      <nav class="main-nav">
+        <a class="link" href="#modules">Хизматлар</a>
+        <a class="link" href="kitob.html">Китоб</a>
+        <a class="btn btn-primary" href="#download">Юклаб олиш</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-label="AVA">
+      <div class="wrap hero-content">
+        <div class="hero-kicker">Ўзбекистон учун битта илова</div>
+        <h1>Такси, юк, савдо ва AVAGram — ҳаммаси AVA’да</h1>
+        <p>
+          AVA — кундалик эҳтиёжлар учун платформа: такси чақиринг, юк ташинг,
+          нон ва бозордан харид қилинг, AVAGram’да видео кўринг ёки ўз хизматингизни
+          эълон қилинг. Барчаси битта иловада.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#download">Иловани юклаб олиш</a>
+          <a class="btn btn-ghost" href="#modules" style="color:#fff;border-color:rgba(255,255,255,.35)">Хизматларни кўриш</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="modules">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Хизматлар</h2>
+          <p>AVA бир нечта йўналишни бирлаштиради — ҳар бирига алоҳида илова ўрнатиш шарт эмас.</p>
+        </div>
+        <div class="modules">
+          <article>
+            <span class="icon">🚕</span>
+            <h3>Транспорт</h3>
+            <p>Шаҳар ва шаҳарлараро сафарлар учун такси хизматлари.</p>
+            <ul>
+              <li>Маҳаллий такси</li>
+              <li>Шаҳарлараро такси</li>
+              <li>Маршрут такси</li>
+            </ul>
+            <a class="btn btn-ghost" style="margin-top:0.9rem; padding:0.5rem 1rem; font-size:0.85rem;" href="service-transport.html">Батафсил →</a>
+          </article>
+          <article>
+            <span class="icon">📦</span>
+            <h3>Юк ва етказиб бериш</h3>
+            <p>Юк машинасини топинг ёки бўш машинангизни эълон қилинг.</p>
+            <ul>
+              <li>Юк биржаси — Туман ичида</li>
+              <li>Юк биржаси — Шаҳарлараро</li>
+              <li>Курьер хизмати</li>
+            </ul>
+            <a class="btn btn-ghost" style="margin-top:0.9rem; padding:0.5rem 1rem; font-size:0.85rem;" href="service-tuman-ichida.html">Батафсил →</a>
+          </article>
+          <article>
+            <span class="icon">🛒</span>
+            <h3>Савдо ва хизмат</h3>
+            <p>Харид қилинг, сотинг ёки хизматингизни эълон қилинг.</p>
+            <ul>
+              <li>Аҳоли бозори</li>
+              <li>Нон ёпиш</li>
+              <li>Таом буюртма</li>
+              <li>Эълон ва хизмат</li>
+            </ul>
+            <a class="btn btn-ghost" style="margin-top:0.9rem; padding:0.5rem 1rem; font-size:0.85rem;" href="service-savdo.html">Батафсил →</a>
+          </article>
+          <article>
+            <span class="icon">🎬</span>
+            <h3>AVAGram ва ижтимоий</h3>
+            <p>Видео контент, танишув ва яқинларингиз билан алоқа.</p>
+            <ul>
+              <li>AVAGram</li>
+              <li>Танишув</li>
+              <li>Менинг яқинларим</li>
+            </ul>
+            <a class="btn btn-ghost" style="margin-top:0.9rem; padding:0.5rem 1rem; font-size:0.85rem;" href="service-avagram.html">Батафсил →</a>
+          </article>
+          <article>
+            <span class="icon">🔧</span>
+            <h3>Авто хизматлар</h3>
+            <p>Машинангизга қараш учун керакли хизматлар яқин атрофда.</p>
+            <ul>
+              <li>Авто ювиш</li>
+              <li>Гилам ювиш</li>
+              <li>Мой алмаштириш</li>
+              <li>Авто шина</li>
+            </ul>
+            <a class="btn btn-ghost" style="margin-top:0.9rem; padding:0.5rem 1rem; font-size:0.85rem;" href="service-avto.html">Батафсил →</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="tuman-ichida" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap spotlight">
+        <div>
+          <span class="badge">Янги</span>
+          <h2>Юк биржаси → Туман ичида</h2>
+          <p>
+            Онлайн/оффлайн тугмасиз оқим: эълон жойлашув (GPS), иш вақти ва муддат
+            билан кўринади. Юк борми — яқин машинани топинг. Машина борми — эълон қўйинг.
+          </p>
+          <a class="btn btn-primary" href="service-tuman-ichida.html">Батафсил →</a>
+        </div>
+        <div class="spotlight-visual" aria-label="Иловадаги кўриниш намунаси">
+          <div class="tabs">
+            <div class="tab on">Туман ичида</div>
+            <div class="tab">Шаҳарлараро</div>
+          </div>
+          <div class="card">
+            <strong>Лабо · 01 A 123 BC</strong>
+            <small>2.4 км · иш вақти 08:00–20:00 · бўш</small>
+          </div>
+          <div class="card" style="border-left-color:#facc15">
+            <strong>Газель · 90 B 456 CD</strong>
+            <small>5.1 км · қамров 20 км · бўш</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="kitob" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap spotlight">
+        <div>
+          <span class="badge">Бепул</span>
+          <h2>AVA Имкониятлар китоби</h2>
+          <p>
+            Ҳар кимда — ҳайдовчида, устада, уй бекасида, талабада — ишлатилмаган
+            имконият бор. Ҳикоялар асосида: касбни хизматга, хизматни мижозга
+            айлантириш йўли — ва бунда AVA қандай ёрдам бериши.
+          </p>
+          <a class="btn btn-primary" href="kitob.html">Китобни ўқиш →</a>
+        </div>
+        <div class="spotlight-visual" aria-label="Китоб мундарижасидан намуна" style="background:#145c2b; border-color:#1f7a3a;">
+          <div style="font-family:Manrope,sans-serif; font-weight:800; color:#fff; font-size:0.95rem; letter-spacing:0.08em; margin-bottom:0.8rem;">МУНДАРИЖАДАН</div>
+          <div class="card" style="border-left-color:#facc15;">
+            <strong>I. Имкониятни кўриш санъати</strong>
+            <small>«Менда ҳеч нарса йўқ» деган фикр ҳақида</small>
+          </div>
+          <div class="card">
+            <strong>V. Блогер ва контент яратувчи</strong>
+            <small>Касбни контентга айлантириш</small>
+          </div>
+          <div class="card">
+            <strong>XIV. AVAGram ва иқтисодий ҳаёт</strong>
+            <small>Контентдан бозорга</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нега AVA</h2>
+          <p>Бир нечта алоҳида илова ўрнида — битта платформа.</p>
+        </div>
+        <ul class="benefits">
+          <li>
+            <strong>Барча хизмат бир жойда</strong>
+            <span>Такси, юк, савдо ва AVAGram — иловалар орасида алмашиш шарт эмас.</span>
+          </li>
+          <li>
+            <strong>Жойлашув асосида</strong>
+            <span>Яқин атрофдаги машина, сотувчи ёки хизматни тезда топасиз.</span>
+          </li>
+          <li>
+            <strong>Ўзингиз ҳам таклиф қилинг</strong>
+            <span>Юк, товар ёки хизматингизни эълон сифатида жойлаштиринг.</span>
+          </li>
+          <li>
+            <strong>Ўзбек тилида, маҳаллий эҳтиёж учун</strong>
+            <span>Интерфейс ва хизматлар маҳаллий шароитга мослаштирилган.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <div class="final">
+          <h2>AVA’ни ҳозир ўрнатинг</h2>
+          <p>Такси чақириш, юк ташиш, савдо ва AVAGram — барчаси битта иловада.</p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://master-taxi-gurlan.web.app/downloads/">Иловани юклаб олиш</a>
+            <a class="btn btn-ghost" href="service-tuman-ichida.html">Туман ичида юк</a>
+            <a class="btn btn-ghost" href="service-avagram.html">AVAGram</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="brand">AVA</div>
+      <div>© AVA · платформа сиз учун</div>
+      <div class="foot-links">
+        <a href="kitob.html">Имкониятлар китоби</a>
+        <a href="privacy.html">Махфийлик сиёсати</a>
+        <a href="delete-account.html">Ҳисобни ўчириш</a>
+        <a href="mailto:yourmastertaxi@gmail.com">yourmastertaxi@gmail.com</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

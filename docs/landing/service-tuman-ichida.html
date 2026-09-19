@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Туман ичида юк — AVA Юк биржаси</title>
+  <meta name="description" content="AVA «Туман ичида»: яқиндаги юк машиналарини GPS бўйича топинг ёки ўз эълонингизни жойлаштиринг. Жойлашув + иш вақти + муддат." />
+  <meta property="og:title" content="Туман ичида юк — AVA" />
+  <meta property="og:description" content="Туман ичида юк ташиш: яқин машиналар, иш вақти, телефон орқали боғланиш. AVA платформасида." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #102418;
+      --muted: #4a6741;
+      --bg: #f3f7f2;
+      --bg-deep: #e4efe3;
+      --card: #ffffff;
+      --line: #c9dbc6;
+      --green: #1f7a3a;
+      --green-deep: #145c2b;
+      --accent: #facc15;
+      --danger: #b91c1c;
+      --radius: 18px;
+      --max: 1080px;
+      --shadow: 0 18px 50px rgba(16, 36, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #d9ecd8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #fff7cc 0%, transparent 45%),
+        var(--bg);
+      line-height: 1.55;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, .brand, .display {
+      font-family: Manrope, sans-serif;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .wrap {
+      width: min(100% - 2rem, var(--max));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      background: rgba(243, 247, 242, 0.88);
+      border-bottom: 1px solid rgba(201, 219, 198, 0.7);
+    }
+    .site-header .inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 1.35rem;
+      color: var(--green-deep);
+    }
+    .brand span {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0;
+      margin-top: 0.1rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.85rem 1.35rem;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--green);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28);
+    }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+
+    /* Hero — one composition, full-bleed plane */
+    .hero {
+      position: relative;
+      min-height: min(92vh, 820px);
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(16, 36, 24, 0.15) 0%, rgba(16, 36, 24, 0.78) 100%),
+        linear-gradient(120deg, #1f7a3a 0%, #0f3d22 48%, #1a2a18 100%);
+      color: #fff;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 78% 28%, rgba(250, 204, 21, 0.35), transparent 32%),
+        radial-gradient(circle at 20% 70%, rgba(34, 197, 94, 0.25), transparent 40%);
+      pointer-events: none;
+    }
+    .hero-road {
+      position: absolute;
+      inset: auto 0 0 0;
+      height: 42%;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.08) 0 40px,
+          rgba(255, 255, 255, 0.02) 40px 80px
+        );
+      mask-image: linear-gradient(180deg, transparent, #000 40%);
+      opacity: 0.55;
+      animation: road-move 18s linear infinite;
+    }
+    @keyframes road-move {
+      from { background-position: 0 0; }
+      to { background-position: 320px 0; }
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      padding: 7rem 0 3.5rem;
+      max-width: 38rem;
+    }
+    .hero-kicker {
+      display: inline-block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.85rem;
+    }
+    .hero h1 {
+      margin: 0 0 0.85rem;
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 800;
+    }
+    .hero p {
+      margin: 0 0 1.6rem;
+      font-size: 1.08rem;
+      color: rgba(255, 255, 255, 0.88);
+      max-width: 32rem;
+    }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .btn-accent {
+      background: var(--green);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28);
+    }
+    .btn-accent:hover { background: var(--green-deep); }
+
+    section {
+      padding: 4.5rem 0;
+    }
+    .section-head {
+      max-width: 38rem;
+      margin-bottom: 2rem;
+    }
+    .section-head h2 {
+      margin: 0 0 0.6rem;
+      font-size: clamp(1.7rem, 3vw, 2.3rem);
+    }
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .audience {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .audience article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    .audience h3 {
+      margin: 0 0 0.45rem;
+      font-size: 1.1rem;
+    }
+    .audience p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+
+    .flow {
+      display: grid;
+      gap: 0;
+    }
+    .flow-step {
+      display: grid;
+      grid-template-columns: 3.2rem 1fr;
+      gap: 1rem;
+      padding: 1.15rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .flow-num {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-family: Manrope, sans-serif;
+      font-weight: 800;
+      background: var(--bg-deep);
+      color: var(--green-deep);
+      border: 1px solid var(--line);
+    }
+    .flow-step h3 {
+      margin: 0.15rem 0 0.35rem;
+      font-size: 1.12rem;
+    }
+    .flow-step p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    .phone {
+      background: #0b0e14;
+      color: #e2e8f0;
+      border-radius: 28px;
+      padding: 1.1rem;
+      box-shadow: 0 30px 60px rgba(11, 14, 20, 0.35);
+      border: 1px solid #223043;
+    }
+    .phone-top {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.9rem;
+    }
+    .chip {
+      flex: 1;
+      text-align: center;
+      padding: 0.55rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      border: 1px solid #334155;
+      color: #94a3b8;
+    }
+    .chip.on {
+      color: var(--accent);
+      background: rgba(250, 204, 21, 0.12);
+      border-color: rgba(250, 204, 21, 0.55);
+    }
+    .phone-card {
+      background: #131a22;
+      border-radius: 12px;
+      padding: 0.95rem;
+      margin-bottom: 0.7rem;
+      border: 1px solid #252b36;
+      border-left: 3px solid #22c55e;
+    }
+    .phone-card.mine {
+      border-left-color: #facc15;
+    }
+    .phone-card strong {
+      display: block;
+      font-family: Manrope, sans-serif;
+      margin-bottom: 0.25rem;
+      color: #fff;
+    }
+    .phone-meta {
+      color: #94a3b8;
+      font-size: 0.82rem;
+    }
+    /* Код: _publishHeader → _ActionBtn(color:#1E2A1E, border:_green #22C55E, text white) */
+    .phone-btn {
+      margin-top: 0.85rem;
+      width: 100%;
+      border-radius: 14px;
+      padding: 0.9rem 0.5rem;
+      background: #1e2a1e;
+      border: 1px solid rgba(34, 197, 94, 0.85);
+      color: #fff;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 0.82rem;
+      cursor: default;
+    }
+    .note {
+      margin-top: 0.85rem;
+      font-size: 0.86rem;
+      color: #94a3b8;
+    }
+
+    .benefits {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .benefits li {
+      list-style: none;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+    }
+    .benefits strong {
+      display: block;
+      font-family: Manrope, sans-serif;
+      margin-bottom: 0.2rem;
+    }
+    .benefits span { color: var(--muted); }
+
+    .faq details {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.7rem;
+    }
+    .faq summary {
+      cursor: pointer;
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+    }
+    .faq p {
+      margin: 0.7rem 0 0;
+      color: var(--muted);
+    }
+
+    .final {
+      background:
+        linear-gradient(135deg, #145c2b, #1f7a3a 55%, #3d6b1f);
+      color: #fff;
+      border-radius: 28px;
+      padding: 2.4rem 1.6rem;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .final h2 {
+      margin: 0 0 0.6rem;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+    }
+    .final p {
+      margin: 0 auto 1.3rem;
+      max-width: 34rem;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    footer {
+      padding: 2.5rem 0 3rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    footer .brand {
+      color: var(--green-deep);
+      margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 860px) {
+      .audience,
+      .split {
+        grid-template-columns: 1fr;
+      }
+      .hero-content { padding-top: 5.5rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero-road { animation: none; }
+      .btn { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap inner">
+      <a class="brand" href="index.html">
+        AVA
+        <span>платформа сиз учун</span>
+      </a>
+      <a class="btn btn-primary" href="index.html#download">Иловани очиш</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-label="Туман ичида">
+      <div class="hero-road" aria-hidden="true"></div>
+      <div class="wrap hero-content">
+        <div class="hero-kicker">Юк биржаси · Туман ичида</div>
+        <h1>Яқиндаги юк машинаси — жойлашув бўйича</h1>
+        <p>
+          AVA да «Туман ичида» оқими онлайн тугмасиз ишлайди: GPS, иш вақти ва эълон муддати.
+          Юк борми — яқин машинани топинг. Машина борми — эълон қўйинг.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#how">Қандай ишлайди</a>
+          <a class="btn btn-ghost" href="#who" style="color:#fff;border-color:rgba(255,255,255,.35)">Ким учун</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="who">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Ким учун</h2>
+          <p>Иловадаги «Юк биржаси → Туман ичида» бўлими икки томон учун.</p>
+        </div>
+        <div class="audience">
+          <article>
+            <h3>Юк эгаси</h3>
+            <p>Туман ичида юк ташиш керак. GPS ёқиб, яқиндаги машиналарни масофа бўйича кўради ва қўнғироқ қилади.</p>
+          </article>
+          <article>
+            <h3>Машина эгаси</h3>
+            <p>Бўш машинасини эълон қилади: тури, рақам, юк кўтариши, кузов ўлчами, қамров радиуси ва иш вақти.</p>
+          </article>
+          <article>
+            <h3>Иккаласи бир жойда</h3>
+            <p>«Шаҳарлараро» алоҳида. «Туман ичида» фақат яқин қатнов ва жойлашувга таянади.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap split">
+        <div>
+          <div class="section-head">
+            <h2>Қандай ишлайди</h2>
+            <p>Иловадаги ҳақиқий қадамлар — қисқача.</p>
+          </div>
+          <div class="flow">
+            <div class="flow-step">
+              <div class="flow-num">1</div>
+              <div>
+                <h3>Юк биржасини очинг</h3>
+                <p>Бош саҳифада «ЮК БИРЖАСИ» → юқоридаги <strong>Туман ичида</strong> тасмасини танланг (ёнма-ён «Шаҳарлараро» бор).</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">2</div>
+              <div>
+                <h3>Қидирувчи: GPS мажбурий</h3>
+                <p>Яқиндаги машиналарни кўриш учун жойлашув рухсати керак. GPS бўлмаса каталог ёпиқ; ўз эълонларингиз қолади.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">3</div>
+              <div>
+                <h3>Машина эгаси: эълон беради</h3>
+                <p>«Юк ташиш учун эълон» → GPS + иш вақти (дан / гача) + машина маълумотлари. Биринчи эълон 60 кун, кейингилари 10 кун сақланади.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">4</div>
+              <div>
+                <h3>Кўриниш қоидаси</h3>
+                <p>Эълон қидирувчига фақат шунда кўринади: жойлашув бор, муддат ўтмаган, ҳозир иш вақти ичида. Алоҳида «онлайн» тугмаси йўқ.</p>
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">5</div>
+              <div>
+                <h3>Боғланиш</h3>
+                <p>Рўйхат масофа бўйича сараланади. Картани очиб тафсилотни кўринг ёки тўғридан-тўғри қўнғироқ қилинг.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="phone" aria-label="Иловадаги кўриниш намунаси">
+          <div class="phone-top">
+            <div class="chip on">Туман ичида</div>
+            <div class="chip">Шаҳарлараро</div>
+          </div>
+          <div class="phone-card">
+            <strong>Лабо · 01 A 123 BC</strong>
+            <div class="phone-meta">2.4 км · иш вақти 08:00–20:00 · бўш</div>
+          </div>
+          <div class="phone-card mine">
+            <strong>Газель · 90 B 456 CD</strong>
+            <div class="phone-meta">5.1 км · қамров 20 км · бўш</div>
+          </div>
+          <button class="phone-btn" type="button">📢 Юк ташиш учун эълон</button>
+          <p class="note">Намуна UI: коддаги ранглар — фон #1E2A1E, чегара #22C55E, матн оқ. Сариқ чизиқ — «меники» эълон.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нега қулай</h2>
+          <p>Бугунги модел — жой + вақт, эски онлайн/оффлайн эмас.</p>
+        </div>
+        <ul class="benefits">
+          <li>
+            <strong>Яқинлик бўйича</strong>
+            <span>Қидирувчи GPS сига нисбатан машиналар масофа ва ETA тартибида чиқади.</span>
+          </li>
+          <li>
+            <strong>Иш вақти</strong>
+            <span>Эълон фақат белгиланган соатларда кўринади — кечаси бўш рўйхат эмас, аниқ режим.</span>
+          </li>
+          <li>
+            <strong>Муддат (TTL)</strong>
+            <span>Биринчи эълон 60 кун, кейингилари 10 кун. Эски эълонлар ўз-ўзидан йўқолади.</span>
+          </li>
+          <li>
+            <strong>Қамров радиуси</strong>
+            <span>5–50 км ёки «шаҳар бўйлаб» — машина қаергача чиқишини олдиндан белгилайди.</span>
+          </li>
+          <li>
+            <strong>Рейтинг юлдузчасиз</strong>
+            <span>Рўйхатда юлдузчалар йўқ — асос: жой, вақт, машина параметрлари ва қўнғироқ.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Тез-тез сўралади</h2>
+          <p>Иловадаги «Туман ичида» қоидалари бўйича.</p>
+        </div>
+
+        <details open>
+          <summary>GPS нима учун керак?</summary>
+          <p>Яқиндаги машиналарни кўрсатиш учун қидирувчининг жойлашуви мажбурий. Машина эълони ҳам GPS билан жойлаштирилади.</p>
+        </details>
+        <details>
+          <summary>«Онлайн» тугмаси қаерда?</summary>
+          <p>Йўқ. Эълон кўриниши жойлашув + иш вақти + муддатга боғлиқ. Алоҳида онлайн/оффлайн режим олиб ташланган.</p>
+        </details>
+        <details>
+          <summary>Эълон қанча туради?</summary>
+          <p>Биринчи эълонингиз — 60 кун. Кейинги эълонларингиз — 10 кун. Муддат тугаса рўйхатдан чиқади.</p>
+        </details>
+        <details>
+          <summary>«Шаҳарлараро» билан фарқи нима?</summary>
+          <p>«Туман ичида» — яқин жойлашув ва иш вақти. «Шаҳарлараро» — узоқ йўналиш эълонлари учун алоҳида тасма.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="cta">
+      <div class="wrap">
+        <div class="final">
+          <h2>Туман ичида юкни AVA да бошланг</h2>
+          <p>
+            Иловани очинг → Юк биржаси → <strong>Туман ичида</strong>.
+            GPS ни ёқинг — яқин машиналар ёки ўз эълонингиз шу ерда.
+          </p>
+          <a class="btn btn-primary" href="index.html#download">AVA ни очиш</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="brand">AVA</div>
+      <div>© AVA · платформа сиз учун</div>
+      <div style="margin-top:0.35rem">
+        <a href="index.html">Бош саҳифа</a> ·
+        <a href="kitob.html">Китоб</a> ·
+        <a href="onepager-tuman-ichida.html">One-pager</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

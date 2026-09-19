@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Савдо ва хизмат — Бозор, Нон, Таом, AVA дўкони | AVA</title>
+  <meta name="description" content="AVA’да савдо ва хизмат: аҳоли бозорида бепул эълон, нон ва таом буюртма, AVA дўкони ва эълон-хизмат бўлими." />
+  <meta property="og:title" content="Савдо ва хизмат — AVA" />
+  <meta property="og:description" content="Аҳоли бозори, нон ёпиш, таом буюртма, AVA дўкони ва эълон-хизмат — битта иловада." />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #102418; --muted: #4a6741; --bg: #f3f7f2; --bg-deep: #e4efe3;
+      --card: #ffffff; --line: #c9dbc6; --green: #1f7a3a; --green-deep: #145c2b;
+      --accent: #facc15; --radius: 18px; --max: 1080px;
+      --shadow: 0 18px 50px rgba(16, 36, 24, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; font-family: "IBM Plex Sans", sans-serif; color: var(--ink);
+      background: radial-gradient(1200px 600px at 10% -10%, #d9ecd8 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #fff7cc 0%, transparent 45%), var(--bg);
+      line-height: 1.55;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    h1, h2, h3, .brand { font-family: Manrope, sans-serif; letter-spacing: -0.02em; line-height: 1.15; }
+    .wrap { width: min(100% - 2rem, var(--max)); margin-inline: auto; }
+    .site-header {
+      position: sticky; top: 0; z-index: 40; backdrop-filter: blur(12px);
+      background: rgba(243, 247, 242, 0.88); border-bottom: 1px solid rgba(201, 219, 198, 0.7);
+    }
+    .site-header .inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 0; }
+    .brand { font-weight: 800; font-size: 1.35rem; color: var(--green-deep); }
+    .brand span { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-top: 0.1rem; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+      border: 0; border-radius: 999px; padding: 0.85rem 1.35rem; font-family: Manrope, sans-serif;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer;
+      transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--green); color: #fff; box-shadow: 0 10px 24px rgba(31, 122, 58, 0.28); }
+    .btn-primary:hover { background: var(--green-deep); }
+    .btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+
+    .hero {
+      position: relative; min-height: min(80vh, 680px); display: grid; align-items: end; overflow: hidden;
+      background: linear-gradient(180deg, rgba(16, 36, 24, 0.15) 0%, rgba(16, 36, 24, 0.78) 100%),
+        linear-gradient(120deg, #1f7a3a 0%, #0f3d22 48%, #1a2a18 100%);
+      color: #fff;
+    }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(circle at 78% 28%, rgba(250, 204, 21, 0.35), transparent 32%),
+        radial-gradient(circle at 20% 70%, rgba(34, 197, 94, 0.25), transparent 40%);
+      pointer-events: none;
+    }
+    .hero-content { position: relative; z-index: 1; padding: 6.5rem 0 3.2rem; max-width: 38rem; }
+    .hero-kicker { display: inline-block; font-size: 0.85rem; font-weight: 600; color: var(--accent); margin-bottom: 0.85rem; }
+    .hero h1 { margin: 0 0 0.85rem; font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; }
+    .hero p { margin: 0 0 1.6rem; font-size: 1.08rem; color: rgba(255, 255, 255, 0.88); max-width: 32rem; }
+    .hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+    section { padding: 4.2rem 0; }
+    .section-head { max-width: 40rem; margin-bottom: 2rem; }
+    .section-head h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .section-head p { margin: 0; color: var(--muted); font-size: 1.02rem; }
+
+    .svc-grid { display: grid; gap: 1.1rem; grid-template-columns: repeat(3, 1fr); }
+    .svc-grid article { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.4rem 1.3rem; box-shadow: var(--shadow); }
+    .svc-grid .icon { font-size: 1.5rem; margin-bottom: 0.6rem; display: block; }
+    .svc-grid h3 { margin: 0 0 0.5rem; font-size: 1.08rem; }
+    .svc-grid p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+    .flow { display: grid; gap: 0; }
+    .flow-step {
+      display: grid; grid-template-columns: 3.2rem 1fr; gap: 1rem;
+      padding: 1.15rem 0; border-bottom: 1px solid var(--line);
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .flow-num {
+      width: 3rem; height: 3rem; border-radius: 999px; display: grid; place-items: center;
+      font-family: Manrope, sans-serif; font-weight: 800; background: var(--bg-deep);
+      color: var(--green-deep); border: 1px solid var(--line);
+    }
+    .flow-step h3 { margin: 0.15rem 0 0.35rem; font-size: 1.12rem; }
+    .flow-step p { margin: 0; color: var(--muted); }
+
+    .benefits { display: grid; gap: 0.9rem; grid-template-columns: repeat(2, 1fr); }
+    .benefits li { list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; }
+    .benefits strong { display: block; font-family: Manrope, sans-serif; margin-bottom: 0.2rem; }
+    .benefits span { color: var(--muted); }
+
+    .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 0.7rem; }
+    .faq summary { cursor: pointer; font-family: Manrope, sans-serif; font-weight: 700; }
+    .faq p { margin: 0.7rem 0 0; color: var(--muted); }
+
+    .final {
+      background: linear-gradient(135deg, #145c2b, #1f7a3a 55%, #3d6b1f); color: #fff;
+      border-radius: 28px; padding: 2.4rem 1.6rem; text-align: center; box-shadow: var(--shadow);
+    }
+    .final h2 { margin: 0 0 0.6rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+    .final p { margin: 0 auto 1.3rem; max-width: 34rem; color: rgba(255, 255, 255, 0.88); }
+
+    footer { padding: 2.5rem 0 3rem; color: var(--muted); font-size: 0.92rem; }
+    footer .brand { color: var(--green-deep); margin-bottom: 0.35rem; }
+
+    @media (max-width: 860px) {
+      .svc-grid, .benefits { grid-template-columns: 1fr; }
+      .hero-content { padding-top: 5rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap inner">
+      <a class="brand" href="index.html">
+        AVA
+        <span>платформа сиз учун</span>
+      </a>
+      <a class="btn btn-primary" href="index.html#download">Иловани очиш</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-label="Савдо ва хизмат">
+      <div class="wrap hero-content">
+        <div class="hero-kicker">AVA · Савдо ва хизмат</div>
+        <h1>Харид қилинг, сотинг, буюртма беринг</h1>
+        <p>
+          Аҳоли бозоридан харид, нон ва таом буюртмаси, AVA дўкони ва
+          эълон-хизмат бўлими — барчаси битта жойда.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#bread">Нон буюртма</a>
+          <a class="btn btn-ghost" href="#market" style="color:#fff;border-color:rgba(255,255,255,.35)">Аҳоли бозори</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="market">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Хизматлар</h2>
+        </div>
+        <div class="svc-grid">
+          <article>
+            <span class="icon">🛍️</span>
+            <h3>Аҳоли бозори</h3>
+            <p>Бепул эълон жойлаштиринг ва қидиринг — сотувчи ва харидорни бевосита боғлайди.</p>
+          </article>
+          <article>
+            <span class="icon">🫓</span>
+            <h3>Нон ёпиш</h3>
+            <p>Тайёр нон, тўй нони ёки ёпиш хизмати — сават орқали буюртма беринг.</p>
+          </article>
+          <article>
+            <span class="icon">🍲</span>
+            <h3>Таом буюртма</h3>
+            <p>Овқат буюртма қилиб етказиб беришни сўранг.</p>
+          </article>
+          <article>
+            <span class="icon">🏪</span>
+            <h3>AVA дўкони</h3>
+            <p>Маҳсулотларни кўринг, қидиринг ва саватга қўшинг.</p>
+          </article>
+          <article>
+            <span class="icon">📢</span>
+            <h3>Эълон ва хизмат</h3>
+            <p>Ишчи ёки хизмат қидиринг — шошилинч эълонлар алоҳида белгиланади.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="bread" style="background: linear-gradient(180deg, transparent, var(--bg-deep) 12%, transparent 88%);">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нон буюртма — қандай ишлайди</h2>
+          <p>Иловадаги «Нон ёпиш» бўлими бўйича қадамлар.</p>
+        </div>
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div>
+              <h3>Танланг</h3>
+              <p>Тайёр нонлар, тўй нони ёки ёпиш хизмати — категориядан танлаб саватга қўшинг.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div>
+              <h3>Маълумотларни киритинг</h3>
+              <p>Исм, телефон ва манзил (профилда GPS + қўлда манзил сақланган бўлиши керак).</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div>
+              <h3>Тўлов</h3>
+              <p>Ҳамёндаги маблағ автоматик ҳисобга олинади, қолгани курьерга берилади.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div>
+              <h3>Кузатинг</h3>
+              <p>Буюртма ҳолати: Янги → Қабул → Тайёр → Курьерда → Йетказилди.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Нега қулай</h2>
+        </div>
+        <ul class="benefits">
+          <li>
+            <strong>Бепул эълон</strong>
+            <span>Аҳоли бозорида эълон жойлаштириш ва қидириш — бепул.</span>
+          </li>
+          <li>
+            <strong>Офлайн ҳимоя</strong>
+            <span>Интернет бўлмаса нон буюртмаси сақланиб, алоқа тикланганда автоматик юборилади.</span>
+          </li>
+          <li>
+            <strong>Кўп миқдорда бонус</strong>
+            <span>Белгиланган миқдордан бошлаб нон буюртмасига чегирма қўлланилади.</span>
+          </li>
+          <li>
+            <strong>Шошилинч эълонлар</strong>
+            <span>Эълон-хизмат бўлимида шошилинч сўровлар алоҳида белги билан ажралиб туради.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="faq">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Тез-тез сўралади</h2>
+        </div>
+        <details open>
+          <summary>Аҳоли бозорида эълон жойлаштириш пуллими?</summary>
+          <p>Йўқ, эълон жойлаштириш ва қидириш бепул.</p>
+        </details>
+        <details>
+          <summary>Нон буюртмасини қандай тўлайман?</summary>
+          <p>Ҳамёнингиздаги маблағ автоматик ечилади, қолган қисми курьерга нақд тўланади.</p>
+        </details>
+        <details>
+          <summary>AVA дўконида қандай маҳсулот бор?</summary>
+          <p>Дўкон бўлимида маҳсулотларни кўриб, қидириб, саватга қўшишингиз мумкин.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <div class="final">
+          <h2>Ҳозир харид ёки буюртма беринг</h2>
+          <p>Иловани очинг → керакли бўлимни танланг.</p>
+          <a class="btn btn-primary" href="index.html#download">AVA ни очиш</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="brand">AVA</div>
+      <div>© AVA · платформа сиз учун</div>
+      <div style="margin-top:0.35rem">
+        <a href="index.html">Бош саҳифа</a> · <a href="kitob.html">Китоб</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

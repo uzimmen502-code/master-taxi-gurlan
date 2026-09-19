@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "master-taxi-gurlan"
-  }
+  },
+  "targets": {
+    "master-taxi-gurlan": {
+      "hosting": {
+        "landing": [
+          "ava-zona"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AVA · Туман ичида — One-pager</title>
+  <meta name="description" content="AVA Юк биржаси — Туман ичида оқимининг бир варақли таништируви (код асосида)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Manrope:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    /* Палитра — lib/features/yuk_birja/screens/yuk_local_nearby_panel.dart */
+    :root {
+      --bg: #0b0e14;
+      --card: #131a22;
+      --border: #252b36;
+      --muted: #94a3b8;
+      --text: #e2e8f0;
+      --white: #ffffff;
+      --green: #22c55e;
+      --publish-bg: #1e2a1e;
+      --accent: #facc15;
+      --amber: #fbbf24;
+      --page: #f4f6f8;
+      --ink: #0f172a;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #cbd5e1;
+      color: var(--ink);
+      font-family: "IBM Plex Sans", sans-serif;
+      line-height: 1.4;
+    }
+    h1, h2, h3, .brand {
+      font-family: Manrope, sans-serif;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin: 0;
+    }
+
+    /* Бир варақ (A4) */
+    .sheet {
+      width: min(210mm, 100% - 1.5rem);
+      min-height: 297mm;
+      margin: 1rem auto;
+      background: var(--page);
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+      padding: 12mm 12mm 10mm;
+      display: flex;
+      flex-direction: column;
+      gap: 8mm;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 5mm;
+    }
+    .brand {
+      font-size: 28px;
+      font-weight: 800;
+      color: #145c2b;
+    }
+    .brand small {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #4a6741;
+      letter-spacing: 0;
+    }
+    .module {
+      text-align: right;
+    }
+    .module strong {
+      display: block;
+      font-family: Manrope, sans-serif;
+      font-size: 18px;
+    }
+    .module span {
+      color: #64748b;
+      font-size: 12px;
+    }
+
+    .hero h1 {
+      font-size: 26px;
+      margin-bottom: 3mm;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 42rem;
+      color: #334155;
+      font-size: 14px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 6mm;
+      flex: 1;
+    }
+
+    .block h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 3mm;
+      color: #145c2b;
+    }
+
+    .steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 2.5mm;
+    }
+    .steps li {
+      display: grid;
+      grid-template-columns: 7mm 1fr;
+      gap: 3mm;
+      background: #fff;
+      border: 1px solid #dbe3ea;
+      border-radius: 8px;
+      padding: 3mm;
+      font-size: 12.5px;
+    }
+    .steps b {
+      width: 7mm;
+      height: 7mm;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #e8f5ec;
+      color: #145c2b;
+      font-size: 11px;
+    }
+    .steps strong { display: block; margin-bottom: 1px; }
+    .steps span { color: #64748b; }
+
+    .facts {
+      display: grid;
+      gap: 2.5mm;
+    }
+    .facts article {
+      background: #fff;
+      border: 1px solid #dbe3ea;
+      border-radius: 8px;
+      padding: 3mm 3.5mm;
+      font-size: 12.5px;
+    }
+    .facts strong { display: block; margin-bottom: 1px; }
+    .facts span { color: #64748b; }
+
+    /* Илова UI намунаси — ҳақиқий ранглар */
+    .ui {
+      background: var(--bg);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 4mm;
+      border: 1px solid #1f2937;
+    }
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5mm;
+      margin-bottom: 3.5mm;
+    }
+    .tab {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2.8mm 1mm;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      color: var(--muted);
+      background: var(--card);
+    }
+    .tab.on {
+      color: var(--accent);
+      border-color: rgba(250, 204, 21, 0.55);
+      background: rgba(250, 204, 21, 0.12);
+    }
+    .truck {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3mm 3mm 3mm 0;
+      margin-bottom: 2.5mm;
+      display: grid;
+      grid-template-columns: 3px 1fr;
+      gap: 3mm;
+      overflow: hidden;
+    }
+    .truck .stripe { background: var(--green); }
+    .truck.mine .stripe { background: var(--accent); }
+    .truck strong {
+      display: block;
+      color: var(--white);
+      font-size: 12.5px;
+      margin-bottom: 1px;
+    }
+    .truck small {
+      color: var(--muted);
+      font-size: 10.5px;
+    }
+    /* _publishHeader: color #1E2A1E, border #22C55E, text white */
+    .publish {
+      width: 100%;
+      margin-top: 1mm;
+      border-radius: 12px;
+      padding: 3.2mm 2mm;
+      background: var(--publish-bg);
+      border: 1px solid rgba(34, 197, 94, 0.85);
+      color: var(--white);
+      font-family: Manrope, sans-serif;
+      font-weight: 700;
+      font-size: 11.5px;
+      text-align: center;
+    }
+    .ui-note {
+      margin: 2.5mm 0 0;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .bottom {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 5mm;
+      border-top: 1px solid #cbd5e1;
+      padding-top: 4mm;
+      font-size: 11.5px;
+      color: #475569;
+    }
+    .bottom code {
+      font-size: 10px;
+      background: #e2e8f0;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .cta-box {
+      background: #145c2b;
+      color: #fff;
+      border-radius: 10px;
+      padding: 4mm;
+      text-align: center;
+    }
+    .cta-box strong {
+      display: block;
+      font-family: Manrope, sans-serif;
+      font-size: 14px;
+      margin-bottom: 1.5mm;
+    }
+    .cta-box span { opacity: 0.9; font-size: 11px; }
+
+    @media print {
+      body { background: #fff; }
+      .sheet {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0;
+        box-shadow: none;
+        page-break-after: avoid;
+      }
+      @page { size: A4; margin: 0; }
+    }
+
+    @media (max-width: 720px) {
+      .sheet { min-height: auto; padding: 1rem; }
+      .grid-2, .bottom, .top { grid-template-columns: 1fr; display: grid; }
+      .module { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <article class="sheet" aria-label="AVA Туман ичида one-pager">
+    <header class="top">
+      <div class="brand">
+        AVA
+        <small>платформа сиз учун</small>
+      </div>
+      <div class="module">
+        <strong>ЮК БИРЖАСИ</strong>
+        <span>Тасма: Туман ичида · One-pager</span>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Туман ичида — жойлашув + иш вақти бўйича юк</h1>
+      <p>
+        AVA → Юк биржаси → <strong>Туман ичида</strong>.
+        Онлайн/оффлайн тугмаси йўқ: эълон GPS, иш вақти ва муддат (TTL) билан кўринади.
+        Қидирувчига яқин машиналар учун GPS мажбурий.
+      </p>
+    </section>
+
+    <div class="grid-2">
+      <section class="block">
+        <h2>Қандай ишлайди</h2>
+        <ol class="steps">
+          <li>
+            <b>1</b>
+            <div>
+              <strong>Юк биржасини очинг</strong>
+              <span>Юқоридаги тасма: «Туман ичида» | «Шаҳарлараро».</span>
+            </div>
+          </li>
+          <li>
+            <b>2</b>
+            <div>
+              <strong>Қидирувчи: GPS</strong>
+              <span>«Яқиндаги машиналарни кўриш учун жойлашув (GPS) керак.»</span>
+            </div>
+          </li>
+          <li>
+            <b>3</b>
+            <div>
+              <strong>Эълон бериш</strong>
+              <span>«Юк ташиш учун эълон» → машина, рақам, кг, кузов, қамров, иш вақти, GPS.</span>
+            </div>
+          </li>
+          <li>
+            <b>4</b>
+            <div>
+              <strong>Кўриниш қоидаси</strong>
+              <span>GPS бор · муддат ўтмаган · ҳозир иш вақти ичида.</span>
+            </div>
+          </li>
+          <li>
+            <b>5</b>
+            <div>
+              <strong>Боғланиш</strong>
+              <span>Рўйхат масофа бўйича · тафсилот · қўнғироқ. Рейтинг юлдузи йўқ.</span>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <aside class="block">
+        <h2>Иловадаги кўриниш</h2>
+        <div class="ui">
+          <div class="tabs">
+            <div class="tab on">Туман ичида</div>
+            <div class="tab">Шаҳарлараро</div>
+          </div>
+          <div class="truck">
+            <div class="stripe"></div>
+            <div>
+              <strong>Лабо · 01 A 123 BC</strong>
+              <small>2.4 км · иш вақти 08:00–20:00 · бўш</small>
+            </div>
+          </div>
+          <div class="truck mine">
+            <div class="stripe"></div>
+            <div>
+              <strong>Газель · 90 B 456 CD</strong>
+              <small>5.1 км · қамров 20 км · бўш</small>
+            </div>
+          </div>
+          <div class="publish">📢 Юк ташиш учун эълон</div>
+          <p class="ui-note">
+            Тугма: фон #1E2A1E · чегара #22C55E · матн оқ.
+            Сариқ чизиқ = меники (#FACC15).
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="block">
+      <h2>Коддаги қоидалар</h2>
+      <div class="facts" style="grid-template-columns: repeat(4, 1fr); display:grid;">
+        <article>
+          <strong>TTL</strong>
+          <span>1-эълон 60 кун, кейингилари 10 кун</span>
+        </article>
+        <article>
+          <strong>Қамров</strong>
+          <span>5 / 10 / 15 / 20 / 50 км ёки шаҳар бўйлаб</span>
+        </article>
+        <article>
+          <strong>Ҳолат</strong>
+          <span>Бўш · Банд · Офлайн (майдон)</span>
+        </article>
+        <article>
+          <strong>Фарқ</strong>
+          <span>«Шаҳарлараро» — алоҳида тасма</span>
+        </article>
+      </div>
+    </section>
+
+    <footer class="bottom">
+      <div>
+        Манба: <code>yuk_birja_screen.dart</code>,
+        <code>yuk_local_nearby_panel.dart</code>,
+        <code>yuk_local_schedule.dart</code>,
+        <code>uz_Cyrl.json</code>
+        <br />
+        © AVA · платформа сиз учун · Юк биржаси / Туман ичида
+      </div>
+      <div class="cta-box">
+        <strong>AVA ни очинг</strong>
+        <span>Юк биржаси → Туман ичида</span>
+      </div>
+    </footer>
+  </article>
+</body>
+</html>

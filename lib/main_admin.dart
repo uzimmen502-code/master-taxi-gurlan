@@ -26,6 +26,7 @@ import 'package:provider/provider.dart';
 import 'features/admin_web/screens/admin_login_screen.dart';
 import 'features/admin_web/screens/admin_shell.dart';
 import 'features/admin_web/services/admin_auth_service.dart';
+import 'features/admin_web/services/admin_ev_charging_service.dart';
 import 'features/admin_web/services/admin_jobs_service.dart';
 import 'features/admin_web/services/admin_market_service.dart';
 import 'features/admin_web/services/admin_news_read_service.dart';
@@ -35,6 +36,7 @@ import 'repositories/bread_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
+import 'repositories/ev_station_repository.dart';
 import 'repositories/inventory_repository.dart';
 import 'repositories/jobs_repository.dart';
 import 'features/ads/repositories/ads_repository.dart';
@@ -119,6 +121,9 @@ class AdminWebApp extends StatelessWidget {
         Provider<AdsRepository>(create: (_) => AdsRepository()),
         Provider<AdminJobsService>(create: (_) => AdminJobsService()),
         Provider<AdminMarketService>(create: (_) => AdminMarketService()),
+        Provider<EvStationRepository>(create: (_) => EvStationRepository()),
+        Provider<AdminEvChargingService>(
+            create: (_) => AdminEvChargingService()),
         Provider<DriverRepository>(create: (_) => DriverRepository()),
         Provider<OrdersRepository>(create: (_) => OrdersRepository()),
         Provider<QueueRepository>(create: (_) => QueueRepository()),

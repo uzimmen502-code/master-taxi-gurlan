@@ -25,6 +25,7 @@ import 'repositories/collection_tasks_repository.dart';
 import 'repositories/couriers_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
+import 'repositories/ev_station_repository.dart';
 import 'repositories/entertainment_repository.dart';
 import 'repositories/intercity_bookings_repository.dart';
 import 'repositories/intercity_rides_repository.dart';
@@ -316,6 +317,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         Provider<DailyReportService>.value(value: widget.reportService),
         Provider<LocationService>(create: (_) => const LocationService()),
         Provider<AdminService>(create: (_) => AdminService()),
+        Provider<EvStationRepository>(create: (_) => EvStationRepository()),
       ],
       child: Consumer<LocaleNotifier>(
         builder: (context, localeNotifier, _) {

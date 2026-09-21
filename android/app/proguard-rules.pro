@@ -1,11 +1,9 @@
-# Flutter engine — kod avtomatik kiritiladi, lekin ba'zi eski R8
-# versiyalari uchun aniqlik kiritish zarar qilmaydi.
--keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.**  { *; }
--keep class io.flutter.util.**  { *; }
--keep class io.flutter.view.**  { *; }
--keep class io.flutter.**  { *; }
--keep class io.flutter.plugins.**  { *; }
+# Flutter engine klasslarini butunlay saqlash SHART EMAS — flutter-gradle
+# plugin o'zining consumer-rules.pro fayli orqali JNI ko'prigi uchun
+# kerakli narsani avtomatik qo'shadi, pastdagi native-metod qoidasi esa
+# buni yana mustahkamlaydi. `io.flutter.**`ni to'liq saqlash R8'ning
+# shrink/obfuscate foizini sun'iy pasaytirar edi (Play Console shuni
+# "optimizatsiya past" deb belgilagan edi) — shu sabab olib tashlandi.
 
 # Play Core (Flutter deferred-components uchun ishlatadi) — loyihada
 # ishlatilmasa ham, sinf topilmasa build to'xtab qolmasin.

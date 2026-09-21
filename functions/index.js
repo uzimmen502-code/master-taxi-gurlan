@@ -14,6 +14,8 @@ const { createYukIntercity } = require('./yuk_intercity');
 const yukIntercity = createYukIntercity({ db, admin, digits });
 const { attachYukLocal } = require('./yuk_local');
 attachYukLocal(exports, { functions, db, admin });
+const { attachEvCharging } = require('./ev_charging');
+attachEvCharging(exports, { db, admin, functions, assertAdmin });
 
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */

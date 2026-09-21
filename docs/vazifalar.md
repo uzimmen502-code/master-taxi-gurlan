@@ -4,7 +4,25 @@
 
 ---
 
-## В-1. «AVA ёрдамчиси» — ChatGPT Custom GPT (пилот)
+## В-1. «AVA ёрдамчиси» — илова ичидаги AI чат (CF + OpenAI API)
+
+**Ҳолат (2026-09-21):** код тайёр, деплой қилинмаган — эгадан OpenAI API калити кутилмоқда (`functions/.env` → `OPENAI_API_KEY`). Тўлиқ йўриқнома: [ava-yordamchisi-yorqnoma.md](ava-yordamchisi-yorqnoma.md).
+
+**Нега режа ўзгарди:** Custom GPT пилоти бекор — OpenAI 2026-09 да шахсий аккаунтларда (Free/Go/Plus/Pro) GPT яратишни ўчирди, 2026-12-11 дан мавжуд GPT'лар ҳам ишламайди (эга Plus'га уланиб «Create» тугмасини топа олмагани шу сабабдан). Пастдаги «Custom GPT» қадамлари тарих учун қолдирилди — бажарилмайди.
+
+**Қилинди:**
+- `functions/assistant_chat.js` — `assistantGetStatus`, `assistantChat` (OpenAI Responses API, `gpt-4.1-mini`, Pro'да `web_search` кунига 10), `assistantBuyPackage` (ҳамёндан, идемпотент, settlement ledger), `assistantClearHistory`. Кунлик лимит транзакцияда (параллел сўровлар ошиб кетмайди), OpenAI хатосида хабар ҳисоби қайтарилади.
+- `functions/assistant_prompt.js` — Instructions + AVA билими + FAQ (аввалги GPT йўриқномасидан кўчирилди); `settings/assistant.systemPrompt`/`extraKnowledge` билан релизсиз алмаштирилади.
+- `firestore.rules` — `assistant_messages/usage/packages` фақат ўқиш; `assistantPaidUntil` клиентдан ёзилмайди (`walletFieldsUntouched`).
+- `lib/features/assistant/` — чат экрани (тарих stream, starter саволлар, тариф чизиғи), Pro варақаси (7/15/30 кун, баланс, «Тўлдириш» → Ҳамён). Home тугмаси «AVA ёрдамчиси» (3 тил). `chatgpt_launcher.dart` ва `settings/app.assistantUrl` олиб ташланди.
+
+**Қолди (эга):** API калити → `.env` → `firebase deploy --only functions,firestore:rules` → релиз → OpenAI Billing'да ойлик лимит.
+
+**Тарифлар (эга қарори):** бепул 10 хабар/кун; Pro 7 кун — 15 000, 15 кун — 25 000, 30 кун — 30 000 сўм (акция); тўлов AVA ҳамёнидан; web search фақат Pro, 10/кун.
+
+---
+
+### (Тарих) Custom GPT пилот режаси — бекор қилинган
 
 **Ҳолат:** аниқлаштирилди, ҳали бошланмаган (2026-09-18, эга билан суҳбат асосида тузатилди).
 **Мақсад:** бу **чекланган/тор мавзули бот эмас** — фойдаланувчи учун **ҳақиқий, тўлиқ ишлайдиган ChatGPT** (Web browsing ёқиқ, исталган мавзудаги саволга жавоб бера олади), фақат унинг устига AVA хизматлари ва имкониятлари ҳақида ҳужжатга асосланган қўшимча билим қатлами қўшилган. Яъни: **оддий ChatGPT + AVA бўйича мутахассислик**, "фақат AVA ҳақида" деб чекланган алоҳида чат эмас. Илова ичидаги «ChatGPT» тугмаси оддий chatgpt.com ўрнига шу GPT'ни очади.

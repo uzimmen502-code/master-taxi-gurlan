@@ -16,6 +16,10 @@ const { attachYukLocal } = require('./yuk_local');
 attachYukLocal(exports, { functions, db, admin });
 const { attachEvCharging } = require('./ev_charging');
 attachEvCharging(exports, { db, admin, functions, assertAdmin });
+const { attachAssistant } = require('./assistant_chat');
+attachAssistant(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger,
+});
 
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */

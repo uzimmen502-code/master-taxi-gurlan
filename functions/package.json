@@ -9,7 +9,8 @@
     "test:anon-sessions": "node test/anon_session_fields.test.js",
     "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js",
     "test:yuk-cf": "node test/yuk_cf.test.js",
-    "test:ev-charging": "node test/ev_charging_rules.test.js"
+    "test:ev-charging": "node test/ev_charging_rules.test.js",
+    "test:assistant": "node test/assistant_chat.test.js"
   },
   "engines": {
     "node": "20"

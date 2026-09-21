@@ -9,7 +9,6 @@ import '../../core/app_share.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/chatgpt_launcher.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/payment_provider_launcher.dart';
 import '../../l10n/app_localizations.dart';
@@ -19,7 +18,6 @@ import '../../models/user_model.dart';
 import '../../models/home_ticker_ad.dart';
 import '../../repositories/intercity_bookings_repository.dart';
 import '../../repositories/rides_repository.dart';
-import '../../repositories/settings_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
@@ -30,6 +28,7 @@ import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
+import '../assistant/screens/assistant_chat_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
@@ -402,16 +401,6 @@ class _HomeViewState extends State<_HomeView> {
     );
     // Home яна кўринганда spotlight авто / ҳамён 11 с қайта.
     if (mounted) _onHomeResurface();
-  }
-
-  Future<void> _openChatGpt() async {
-    final assistantUrl = await SettingsRepository().getAssistantUrl();
-    final opened = await openChatGpt(assistantUrl: assistantUrl);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('chatgpt_open_failed'))),
-      );
-    }
   }
 
   static const _paymentOpenFailedKeys = {
@@ -1042,7 +1031,8 @@ class _HomeViewState extends State<_HomeView> {
                                   label: context.tr('home_module_chatgpt'),
                                   icon: Icons.auto_awesome_rounded,
                                   iconColor: const Color(0xFF10A37F),
-                                  onTap: () => _openChatGpt(),
+                                  onTap: () => _push(
+                                      AssistantChatScreen(phone: home.phone)),
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'courier',

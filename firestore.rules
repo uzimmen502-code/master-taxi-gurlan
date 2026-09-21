@@ -19,9 +19,10 @@ service cloud.firestore {
     }
 
     // Клиент баланс майдонларини ўзгартира олмасин (фақат Cloud Functions)
+    // assistantPaidUntil — пуллик Pro муддати, фақат assistantBuyPackage (сервер).
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['bonusBalance', 'balanceUpdatedAt']);
+          .hasAny(['bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil']);
     }
 
     // Firebase Phone Auth
@@ -665,7 +666,7 @@ service cloud.firestore {
       // update — Phone Auth (`isOwner`) yoki mehmon profil patch (`usersGuestProfilePatchOnly`).
       allow create: if isAuth()
           && request.resource.data.keys().hasAll(['phone'])
-          && !request.resource.data.keys().hasAny(['bonusBalance', 'balanceUpdatedAt'])
+          && !request.resource.data.keys().hasAny(['bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil'])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
       allow update: if (
@@ -713,6 +714,20 @@ service cloud.firestore {
       }
 
       match /car_profile_bonus_claims/{claimId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+      }
+
+      // AVA ёрдамчиси (assistant_chat.js) — фақат сервер ёзади, эга ўқийди.
+      match /assistant_messages/{msgId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+      }
+      match /assistant_usage/{dayKey} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+      }
+      match /assistant_packages/{pkgId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create, update, delete: if false;
       }

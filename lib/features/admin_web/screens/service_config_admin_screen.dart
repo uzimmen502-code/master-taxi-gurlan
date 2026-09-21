@@ -50,7 +50,7 @@ const Map<String, String> _moduleLabels = {
   'oil_change': 'Moy almashtirish',
   'platform_store': 'AVA do\'koni',
   'tv_market': 'AVAGram',
-  'chatgpt': 'ChatGPT',
+  'chatgpt': 'AVA ёрдамчиси',
   'ev_charging': 'EV zaryadlash',
   'pay_click': 'Click',
   'pay_payme': 'Payme',

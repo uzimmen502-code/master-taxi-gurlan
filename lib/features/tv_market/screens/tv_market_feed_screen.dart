@@ -12,6 +12,8 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/geo_area.dart';
 import '../../../repositories/service_config_repository.dart';
+import '../../wholesale/repositories/wholesale_products_repository.dart';
+import '../../wholesale/screens/wholesale_product_detail_screen.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../repositories/tv_shop_repository.dart';
@@ -23,6 +25,7 @@ import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_playback_analytics_recorder.dart';
 import '../services/tv_screen_playback.dart';
+import '../services/tv_segment_prefetcher.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
@@ -457,6 +460,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     // (retain() kutilmasdan) o'z-o'zidan dispose bo'ladi.
     _pool.markWanted(_urlsAround(index));
     _pool.pauseAllExcept(url);
+    _prefetchSegments(index);
 
     final ctrl = await _pool.prepare(url, isReady: clip.canStartPlayback);
     if (!mounted || gen != _activateGen || _currentIndex != index) return;
@@ -468,11 +472,21 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (ctrl != null && ctrl.value.isInitialized) {
       if (!mounted || gen != _activateGen) return;
       setState(() => _showPlayPause = false);
-      await _pool.applyOutputVolume(ctrl, muted: false);
-      await ctrl.play();
-      if (!tvCanPlay) {
-        ctrl.pause();
-        ctrl.setVolume(0);
+      // `play()` await'i davomida app background'ga ketsa,
+      // `tvOnPlaybackBlocked` → `releaseAll()` shu controller'ni allaqachon
+      // dispose qilgan bo'lishi mumkin — `pause()`/`setVolume()` disposed
+      // controller'da exception tashlaydi. Race'ni yutamiz: controller yo'q
+      // bo'lsa, to'xtatadigan narsa ham yo'q.
+      try {
+        await _pool.applyOutputVolume(ctrl, muted: false);
+        await ctrl.play();
+        if (!tvCanPlay) {
+          await ctrl.pause();
+          await ctrl.setVolume(0);
+          return;
+        }
+      } catch (e) {
+        debugPrint('[TvFeed] activate race (disposed?): $e');
         return;
       }
     }
@@ -486,6 +500,45 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     }
   }
 
+  /// HLS segment prefetch (disk, ExoPlayer'siz) — `_prefetchAfterHealthy`dan
+  /// farqli, current sog'lom bo'lishini KUTMAYDI: arzon (RAM ≈ 0) va
+  /// TECNO/4G o'lchovida NEXT player hech qachon tayyor bo'lmayotgan edi.
+  /// NEXT — to'liq, NEXT+1 — faqat playlist/1 segment; tez svaypda NEXT+1 yo'q.
+  void _prefetchSegments(int index) {
+    String urlAt(int i) =>
+        (i >= 0 && i < _clips.length) ? _urlFor(_clips[i]) : '';
+    // CURRENT ham ro'yxatda: uning prefetch'i (oldingi NEXT) hozir player
+    // bilan birga davom etsin — bekor qilinsa qisman segment qoladi.
+    unawaited(TvSegmentPrefetcher.markWanted([
+      urlAt(index),
+      urlAt(index + 1),
+      if (!_fastScrolling) urlAt(index + 2),
+    ]));
+    final slow = TvSegmentPrefetcher.slowHistory;
+    Future<void>? go(int i, {required bool nextPlusOne}) {
+      if (i < 0 || i >= _clips.length) return null;
+      final clip = _clips[i];
+      if (!clip.canStartPlayback) return null;
+      final secs = TvSegmentPrefetcher.secondsFor(
+        _quality,
+        nextPlusOne: nextPlusOne,
+        slowHistory: slow,
+      );
+      if (secs == null) return null;
+      return TvSegmentPrefetcher.prefetch(_urlFor(clip), seconds: secs);
+    }
+
+    _nextPrefetch = go(index + 1, nextPlusOne: false);
+    if (!_fastScrolling) unawaited(go(index + 2, nextPlusOne: true) ?? Future.value());
+  }
+
+  /// NEXT segment prefetch'i (native javob — tugaganda). `_prefetchAfterHealthy`
+  /// NEXT ExoPlayer instance'ini ochishdan oldin QISQA (≤1 s) kutadi: prefetch
+  /// ulgursa init keshdan ~0.3 s; ulgurmasa kutmasdan davom (uzoq kutish sekin
+  /// tarmoqda NEXT'ni umuman tayyorlamay qo'ygan edi — o'lchandi).
+  Future<void>? _nextPrefetch;
+  static const _nextPrefetchGrace = Duration(milliseconds: 1000);
+
   /// 1) Darhol: kerak bo'lmay qolgan (masalan, oldingi) controller'larni
   ///    bo'shatish — xotira + tarmoq. 2) Joriy klip sog'lom bo'lgach (yoki
   ///    timeout) — keyingi klipni fonda tayyorlash.
@@ -497,6 +550,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     await _pool.evictUnwanted();
     if (ctrl != null) await _waitUntilHealthy(ctrl, gen);
     if (!mounted || gen != _activateGen || !tvCanPlay) return;
+    final pending = _nextPrefetch;
+    if (pending != null) {
+      await pending.timeout(_nextPrefetchGrace, onTimeout: () {}).catchError((_) {});
+      if (!mounted || gen != _activateGen || !tvCanPlay) return;
+    }
     if (_fastScrolling) {
       // Foydalanuvchi tez svayp qilmoqda — keyingi klipni oldindan
       // tayyorlash ko'pincha bekorga trafik sarflaydi (u ustidan
@@ -909,6 +967,29 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     if (mounted && tvCanPlay) tvOnPlaybackAllowed();
   }
 
+  /// Клип улгуржи маҳсулотга боғланган — тафсилотга ўтиш (фаол бўлмаса
+  /// ёки ўчирилган бўлса — огоҳлантириш).
+  Future<void> _onOpenWholesale(TvClip clip) async {
+    tvOnPlaybackBlocked();
+    final product =
+        await WholesaleProductsRepository().fetchById(clip.wholesaleProductId);
+    if (!mounted) return;
+    if (product == null || !product.isActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('tv_market_wholesale_unavailable'))),
+      );
+      if (tvCanPlay) tvOnPlaybackAllowed();
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WholesaleProductDetailScreen(product: product),
+      ),
+    );
+    if (mounted && tvCanPlay) tvOnPlaybackAllowed();
+  }
+
   Future<void> _pickDistrictFilter() async {
     final picked = await showModalBottomSheet<String>(
       context: context,
@@ -1234,6 +1315,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           onSave: () => _onSave(clip),
                           onOpenShop: _showShopBtn(clip)
                               ? () => _onOpenShop(clip)
+                              : null,
+                          onOpenWholesale: clip.wholesaleProductId.isNotEmpty
+                              ? () => _onOpenWholesale(clip)
                               : null,
                         ),
                         if (isActive)

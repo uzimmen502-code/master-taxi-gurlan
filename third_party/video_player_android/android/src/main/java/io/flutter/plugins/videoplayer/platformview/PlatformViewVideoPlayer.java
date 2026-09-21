@@ -63,6 +63,9 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
                   .setTrackSelector(trackSelector)
                   // AVA: qisqa-format lenta uchun chegaralangan bufer.
                   .setLoadControl(io.flutter.plugins.videoplayer.AvaLoadControl.create())
+                  // AVA: birinchi variant doim eng pasti (prefetch kesh'iga mos).
+                  .setBandwidthMeter(
+                      io.flutter.plugins.videoplayer.AvaBandwidthMeter.create(context))
                   .setMediaSourceFactory(asset.getMediaSourceFactory(context));
           return builder.build();
         });

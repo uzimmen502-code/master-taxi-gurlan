@@ -66,7 +66,15 @@
 ## В-3. AVAGram видео — кузатув (2026-09-18, commit b40bb65)
 - [ ] Релиздан 1–2 ҳафта кейин `tv_clips.playbackStats` (bufferMs/view, bufferEvents/view) ни аввалги 436 мс / 0.08 билан солиштириш.
 - [ ] Қарор: мобил тармоқда 720p'ни чеклаш (трафик яна ~40% камаяди, сифат пасаяди).
-- [ ] `third_party/video_player_android` — плагин янгиланганда `AvaLoadControl` патчини қайта қўллаш.
+- [ ] `third_party/video_player_android` — плагин янгиланганда иккала патчни қайта қўллаш: `AvaLoadControl` (LoadControl 20с) ва `AvaMediaCache` (Media3 SimpleCache 150MB + HLS сегмент prefetch; `HttpVideoAsset.unstableWrapWithCache`, илова томонида `MainActivity.kt` `tv_media_cache` канали). Ўлчов (TECNO LH7n, 2026-09-21): свайп→play 2.9 с → ~20 мс (prefetch улгурганда), PSS ўзгармади (508 MB).
+
+## В-5. AVAGram — сегмент кеши кетма-кетлиги (2026-09-21, эга қарори)
+
+Асос: `AvaMediaCache` (Media3 SimpleCache + HLS prefetch) қурилмада ўлчанди — свайп→play 2.9 с → ~20 мс (prefetch улгурганда); cold-path (кеш бўлса ҳам instance яратиш) ~1.7 с.
+
+1. **Б — БАЖАРИЛДИ (2026-09-21):** ўлчов "deferred dispose" гипотезасини рад этди (`_evictIfNeeded` = 0 мс — dispose critical path'да эмас). Ҳақиқий сабаблар ва тузатишлар: (а) player prefetch'дан бошқа variant'ни (480/720p) танлаётган эди → `AvaBandwidthMeter` (патч #3, бошланғич баҳо 100 kbps → биринчи сегмент доим master'даги энг паст variant, кейин ўлчовга қараб кўтарилади); (б) writer + player бир сегментни параллел тортарди → `FLAG_BLOCK_ON_CACHE`; (в) `cancelAll` ўйналаётган клипнинг prefetch'ини бекор қиларди → `markWanted` (pool андозаси); (г) NEXT — 1 сегмент (4 с production), NEXT+1 фақат playlist; retain prefetch'га ≤1 с кутади. Натижа (TECNO, совуқ кеш, 2.2 с темп): свайп→play медиана ~35 мс (10 тадан 6 таси 20–40 мс), ёмони 2.4 с (тармоқ); олдин ҳар свайп 2.9 с. PSS 467 MB (олдин 516). Релиздан кейин `playbackStats` p50 firstFrame кузатилади.
+2. **А — БАЖАРИЛДИ (2026-09-21, эга қарори билан муддатидан олдин):** `firebase deploy --only functions` — 144 функция янгиланди, хатосиз (`onTvClipCreatedV2` жумладан: HLS сегмент 3 с + fastTrack360p энди production'да). Эслатма: биринчи уриниш commit'ли ҳолатдан (stash) қилинди ва CLI **тўхтатди** — production'да 5 та `ev_charging` функцияси мавжуд экан (working tree'дан аввал деплой қилинган); шунинг учун тўлиқ working tree'дан деплой қилинди, ҳеч нарса ўчирилмади. Rollback: `d473113`/`f63e8e8` функциялари. **Кузатув:** фақат ЯНГИ transcode қилинган клиплар 3 с; 1–2 ҳафтада `playbackStats` rebuffer/firstFrame солиштирилади.
+3. **В — А барқарор бўлгач:** Home'да 3-клип prefetch (NEXT+1 фақат playlist) — `HomeVideoStage._load()`.
 
 ## В-4. Видео қотиши, айниқса биринчи юкланган видео — Instagram/TikTok/Facebook тадқиқоти асосида тўлиқ таклиф
 

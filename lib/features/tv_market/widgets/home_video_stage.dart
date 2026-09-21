@@ -20,6 +20,7 @@ import '../services/tv_network_quality_service.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
 import '../services/tv_screen_playback.dart';
+import '../services/tv_segment_prefetcher.dart';
 import 'tv_clip_poster.dart';
 import 'tv_owner_action_bar.dart';
 import 'tv_owner_avatar.dart';
@@ -119,6 +120,13 @@ class _HomeVideoStageState extends State<HomeVideoStage>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _pickActive();
         });
+      }
+      // Ilova ochilishi bilan 2-klipning HLS segmentlari diskka (ExoPlayer'siz)
+      // — foydalanuvchi AVAGram'ga o'tib svayp qilsa NEXT keshdan.
+      if (page.clips.length > 1 && page.clips[1].canStartPlayback) {
+        unawaited(
+          TvSegmentPrefetcher.prefetch(_urlFor(page.clips[1]), seconds: 3),
+        );
       }
       unawaited(_hydratePublisherNames());
     } catch (e) {

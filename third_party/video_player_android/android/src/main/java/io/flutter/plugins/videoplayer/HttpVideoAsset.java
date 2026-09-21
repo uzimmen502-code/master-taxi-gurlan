@@ -77,7 +77,18 @@ final class HttpVideoAsset extends VideoAsset {
       Context context, DefaultHttpDataSource.Factory initialFactory) {
     unstableUpdateDataSourceFactory(initialFactory, httpHeaders, userAgent);
     DataSource.Factory dataSourceFactory = new DefaultDataSource.Factory(context, initialFactory);
+    // AVA patch #2: http(s) — Media3 SimpleCache (AvaMediaCache). `file://`/
+    // `content://` ham shu asset orqali o'tadi — ular o'ralmaydi.
+    if (assetUrl != null && assetUrl.startsWith("http")) {
+      dataSourceFactory = unstableWrapWithCache(context, dataSourceFactory);
+    }
     return new DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory);
+  }
+
+  @OptIn(markerClass = UnstableApi.class)
+  private static DataSource.Factory unstableWrapWithCache(
+      @NonNull Context context, @NonNull DataSource.Factory upstream) {
+    return AvaMediaCache.wrap(context, upstream);
   }
 
   // TODO: Migrate to stable API, see https://github.com/flutter/flutter/issues/147039.

@@ -1,4 +1,4 @@
-# «AVA ёрдамчиси» — илова ичидаги AI чат (В-1) — эга учун йўриқнома
+﻿# «AVA ёрдамчиси» — илова ичидаги AI чат (В-1) — эга учун йўриқнома
 
 **2026-09-21 ўзгариш:** Custom GPT йўли ёпилди — OpenAI шахсий аккаунтларда (Free/Go/Plus/Pro) янги GPT яратишни ўчирган, 2026-12-11 дан мавжуд GPT'лар ҳам ишламайди. Шунинг учун ёрдамчи **илова ичида**, Cloud Function + OpenAI API орқали қурилди. ChatGPT Plus обунаси бу мақсадда керак эмас.
 
@@ -47,10 +47,11 @@ Firebase Console → Firestore → `settings` → `assistant` ҳужжати (й
 | Майдон | Default | Изоҳ |
 |---|---|---|
 | `enabled` | `true` | `false` — ёрдамчи вақтинча ўчирилади |
-| `model` | `gpt-4.1-mini` | OpenAI модель номи |
+| `model` | `gpt-5-mini` | OpenAI модель номи (4.1-mini web search натижасини хом кўчиради) |
 | `freeDailyLimit` | `10` | бепул кунлик хабар |
 | `proDailyLimit` | `300` | Pro юмшоқ чегара |
 | `proWebSearchDailyLimit` | `10` | Pro web search/кун |
+| `reasoningEffort` | `low` | gpt-5*/o* учун; `minimal`/`low`/`medium` |
 | `perMinuteLimit` | `8` | тезлик чегараси |
 | `maxHistoryMessages` | `12` | суҳбат контексти (охирги N хабар) |
 | `packages` | 7/15/30 кун | `[{id, days, price, promo}]` массив |

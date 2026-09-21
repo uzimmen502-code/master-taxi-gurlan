@@ -6,7 +6,7 @@
 
 ## В-1. «AVA ёрдамчиси» — илова ичидаги AI чат (CF + OpenAI API)
 
-**Ҳолат (2026-09-21):** код тайёр, деплой қилинмаган — эгадан OpenAI API калити кутилмоқда (`functions/.env` → `OPENAI_API_KEY`). Тўлиқ йўриқнома: [ava-yordamchisi-yorqnoma.md](ava-yordamchisi-yorqnoma.md).
+**Ҳолат (2026-09-21):** сервер production'да — `assistantChat/GetStatus/BuyPackage/ClearHistory` (us-central1) + firestore.rules деплой қилинди, `OPENAI_API_KEY` функцияда бор (эга калит яратди; `.env`да префикс иккиланиб қолган эди — тузатилди). Реал синов: AVA саволи, баланс (ўйлаб топмайди), об-ҳаво/доллар курси (web search) — ўтди. Default модель `gpt-5-mini` (reasoning low). **Қолди:** илова релизи (Home тугмаси янги чатни очади) ва OpenAI Billing → Limits'да ойлик чегара. Йўриқнома: [ava-yordamchisi-yorqnoma.md](ava-yordamchisi-yorqnoma.md).
 
 **Нега режа ўзгарди:** Custom GPT пилоти бекор — OpenAI 2026-09 да шахсий аккаунтларда (Free/Go/Plus/Pro) GPT яратишни ўчирди, 2026-12-11 дан мавжуд GPT'лар ҳам ишламайди (эга Plus'га уланиб «Create» тугмасини топа олмагани шу сабабдан). Пастдаги «Custom GPT» қадамлари тарих учун қолдирилди — бажарилмайди.
 

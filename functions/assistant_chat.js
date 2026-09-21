@@ -36,14 +36,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const ASSISTANT_DEFAULTS = {
   enabled: true,
-  model: 'gpt-4.1-mini',
+  // gpt-5-mini: web search натижасини хом кўчирмайди (4.1-mini кўчиради,
+  // 4.1 — `citeturn0…` қолдиқ чиқаради) — 2026-09-21 синови.
+  model: 'gpt-5-mini',
+  reasoningEffort: 'low',
   freeDailyLimit: 10,
   proDailyLimit: 300,
   proWebSearchDailyLimit: 10,
   perMinuteLimit: 8,
   maxHistoryMessages: 12,
   maxInputChars: 2000,
-  maxOutputTokens: 1200,
+  maxOutputTokens: 1600,
   requestTimeoutMs: 60 * 1000,
   packages: [
     { id: 'd7', days: 7, price: 15000, promo: false },
@@ -144,6 +147,7 @@ function attachAssistant(exportsObj, deps) {
     const cfg = {
       enabled: raw.enabled === undefined ? ASSISTANT_DEFAULTS.enabled : !!raw.enabled,
       model: String(raw.model || ASSISTANT_DEFAULTS.model).trim() || ASSISTANT_DEFAULTS.model,
+      reasoningEffort: String(raw.reasoningEffort || ASSISTANT_DEFAULTS.reasoningEffort).trim(),
       freeDailyLimit: intOr(raw.freeDailyLimit, ASSISTANT_DEFAULTS.freeDailyLimit),
       proDailyLimit: intOr(raw.proDailyLimit, ASSISTANT_DEFAULTS.proDailyLimit),
       proWebSearchDailyLimit: intOr(
@@ -214,6 +218,11 @@ function attachAssistant(exportsObj, deps) {
       max_output_tokens: cfg.maxOutputTokens,
       store: false,
     };
+    // Reasoning моделлар (gpt-5*, o*) — effort паст бўлса тез ва арзон;
+    // max_output_tokens reasoning токенларини ҳам қамрайди.
+    if (/^(gpt-5|o\d)/.test(cfg.model) && cfg.reasoningEffort) {
+      body.reasoning = { effort: cfg.reasoningEffort };
+    }
     if (allowWebSearch) {
       body.tools = [{ type: 'web_search' }];
       body.tool_choice = 'auto';

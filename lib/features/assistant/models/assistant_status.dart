@@ -1,4 +1,4 @@
-﻿/// `assistantGetStatus` / `assistantChat.status` жавоби.
+/// `assistantGetStatus` / `assistantChat.status` жавоби.
 class AssistantStatus {
   const AssistantStatus({
     required this.enabled,

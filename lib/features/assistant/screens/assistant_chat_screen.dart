@@ -1,18 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../profile/screens/wallet_screen.dart';
+import '../models/assistant_conversation.dart';
 import '../models/assistant_message.dart';
 import '../models/assistant_status.dart';
 import '../services/assistant_service.dart';
+import '../widgets/assistant_drawer.dart';
+import '../widgets/assistant_gpt_colors.dart';
 import '../widgets/assistant_pro_sheet.dart';
+import 'assistant_memory_screen.dart';
 
 /// «AVA ёрдамчиси» — илова ичидаги AI чат (В-1).
 ///
-/// Тарих `users/{uid}/assistant_messages` stream'идан; юбориш —
-/// `assistantChat` callable. Лимит/Pro ҳолати серверда ([AssistantStatus]).
+/// Кўриниш — расмий ChatGPT мобил иловаси услубида (эга талаби,
+/// 2026-09-22): оқ/қора фон, фойдаланувчи хабари — кулранг думалоқ
+/// пуфакча ўнгда, ёрдамчи жавоби — пуфакчасиз Markdown матн, pill input +
+/// доира "юқорига стрелка" тугмаси, жавоб "ёзилаётгандек" очилади.
+/// ChatGPT'нинг Söhne шрифти проприетар — энг яқин очиқ шрифт Inter.
+///
+/// Суҳбатлар ChatGPT каби алоҳида (`assistant_conversations`), чап панел
+/// ([AssistantDrawer]); «Янги суҳбат» эскисини ўчирмайди. Охирги очиқ суҳбат
+/// SharedPreferences'да. Юбориш — `assistantChat` callable. Лимит/Pro ҳолати серверда ([AssistantStatus]).
 class AssistantChatScreen extends StatefulWidget {
   const AssistantChatScreen({super.key, required this.phone});
 
@@ -26,23 +44,77 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   final _service = AssistantService();
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _focus = FocusNode();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  static const _prefLastConv = 'assistant_last_conversation';
+
+  /// Фаол суҳбат; `null` — янги (бўш) суҳбат, биринчи хабарда сервер яратади.
+  String? _convId;
+  String _convTitle = '';
+  bool _convLoaded = false;
+  String? _titleSubId;
+  StreamSubscription<List<AssistantConversation>>? _titleSub;
 
   AssistantStatus? _status;
   bool _sending = false;
   AssistantMessage? _pendingUser;
+
+  /// Typewriter: серверда сақланган жавоб id → экранда очилаётган матн.
+  String? _revealId;
+  String _revealText = '';
+  Timer? _revealTimer;
 
   String get _uid => phoneDigits(widget.phone);
 
   @override
   void initState() {
     super.initState();
+    _inputCtrl.addListener(() => setState(() {}));
     _refreshStatus();
+    _restoreLastConversation();
+  }
+
+  Future<void> _restoreLastConversation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final id = prefs.getString('${_prefLastConv}_$_uid');
+      if (id != null && id.isNotEmpty && mounted) {
+        setState(() => _convId = id);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _convLoaded = true);
+  }
+
+  Future<void> _rememberConversation(String? id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (id == null || id.isEmpty) {
+        await prefs.remove('${_prefLastConv}_$_uid');
+      } else {
+        await prefs.setString('${_prefLastConv}_$_uid', id);
+      }
+    } catch (_) {}
+  }
+
+  void _openConversation(AssistantConversation conv) {
+    _revealTimer?.cancel();
+    setState(() {
+      _convId = conv.id;
+      _convTitle = conv.title;
+      _revealId = null;
+    });
+    _rememberConversation(conv.id);
+    _scrollToEnd(animate: false);
   }
 
   @override
   void dispose() {
+    _revealTimer?.cancel();
+    _titleSub?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -55,14 +127,19 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     }
   }
 
-  void _scrollToEnd() {
+  void _scrollToEnd({bool animate = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollCtrl.hasClients) return;
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      final target = _scrollCtrl.position.maxScrollExtent;
+      if (animate) {
+        _scrollCtrl.animateTo(
+          target,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollCtrl.jumpTo(target);
+      }
     });
   }
 
@@ -73,8 +150,31 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _send() async {
-    final text = _inputCtrl.text.trim();
+  /// ChatGPT каби жавобни бўлак-бўлак очиш (сервер бутун матнни қайтаради).
+  void _startReveal(String id, String full) {
+    _revealTimer?.cancel();
+    _revealId = id;
+    _revealText = '';
+    // Узун жавоб ~4–5 сонияда тўлиқ очилсин.
+    final step = (full.length / 160).ceil().clamp(2, 24);
+    var i = 0;
+    _revealTimer = Timer.periodic(const Duration(milliseconds: 28), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      i = (i + step).clamp(0, full.length);
+      setState(() => _revealText = full.substring(0, i));
+      _scrollToEnd(animate: false);
+      if (i >= full.length) {
+        t.cancel();
+        setState(() => _revealId = null);
+      }
+    });
+  }
+
+  Future<void> _send([String? preset]) async {
+    final text = (preset ?? _inputCtrl.text).trim();
     if (text.isEmpty || _sending) return;
 
     final s = _status;
@@ -91,10 +191,17 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     _scrollToEnd();
 
     try {
-      final reply = await _service.send(text);
+      final reply = await _service.send(text, conversationId: _convId);
       if (!mounted) return;
-      setState(() => _status = reply.status);
-      _scrollToEnd();
+      setState(() {
+        _status = reply.status;
+        if (_convId != reply.conversationId) {
+          _convId = reply.conversationId;
+          _convTitle = '';
+        }
+      });
+      _rememberConversation(reply.conversationId);
+      _startReveal(reply.messageId, reply.reply);
     } on AssistantException catch (e) {
       if (!mounted) return;
       _inputCtrl.text = text;
@@ -165,209 +272,583 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     }
   }
 
-  Future<void> _newChat() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('assistant_new_chat')),
-        content: Text(ctx.tr('assistant_new_chat_confirm')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(ctx.tr('cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(ctx.tr('yes')),
-          ),
-        ],
+  /// ChatGPT каби: эски суҳбат сақланади, янги бўш суҳбат очилади.
+  void _newChat() {
+    _revealTimer?.cancel();
+    setState(() {
+      _convId = null;
+      _convTitle = '';
+      _revealId = null;
+      _pendingUser = null;
+    });
+    _rememberConversation(null);
+  }
+
+  /// Сарлавҳа — суҳбат ҳужжатидан (trigger 1–3 с кейин ёзади).
+  void _syncTitle(AsyncSnapshot<List<AssistantMessage>> snap) {
+    if (_convId == null || _titleSubId == _convId) return;
+    _titleSubId = _convId;
+    _titleSub?.cancel();
+    _titleSub = _service.watchConversations(_uid).listen((list) {
+      final conv = list.where((c) => c.id == _convId).firstOrNull;
+      if (conv != null && mounted && conv.title != _convTitle) {
+        setState(() => _convTitle = conv.title);
+      }
+    });
+  }
+
+  void _openMemory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AssistantMemoryScreen(uid: _uid, service: _service),
       ),
     );
-    if (ok != true) return;
-    try {
-      await _service.clearHistory();
-    } catch (_) {
-      if (!mounted) return;
-      _snack(context.tr('assistant_err_unavailable'));
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F2),
-      appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(Icons.auto_awesome_rounded, size: 20),
-            const SizedBox(width: 8),
-            Text(context.tr('assistant_title')),
-          ],
-        ),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: context.tr('assistant_new_chat'),
-            icon: const Icon(Icons.add_comment_outlined),
-            onPressed: _newChat,
-          ),
-        ],
+    final c = GptColors.of(context);
+    final s = _status;
+    final String? subtitle;
+    if (s == null) {
+      subtitle = null;
+    } else if (s.unlimited || (s.pro && s.paidUntil == null)) {
+      subtitle = context.tr('assistant_pro_unlimited');
+    } else if (s.pro) {
+      subtitle = context.trMsg('assistant_pro_until',
+          params: {'date': formatDateShort(s.paidUntil)});
+    } else {
+      subtitle = context.trMsg('assistant_free_left',
+          params: {'count': '${s.remainingToday}'});
+    }
+
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
       ),
-      body: Column(
-        children: [
-          _StatusBar(status: _status, onPro: () => _openProSheet()),
-          Expanded(
-            child: StreamBuilder<List<AssistantMessage>>(
-              stream: _service.watchMessages(_uid),
-              builder: (context, snap) {
-                final list = <AssistantMessage>[...?snap.data];
-                if (_pendingUser != null) list.add(_pendingUser!);
-                if (snap.connectionState == ConnectionState.waiting &&
-                    list.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (list.isEmpty && !_sending) {
-                  return _EmptyState(
-                    onTap: (q) {
-                      _inputCtrl.text = q;
-                      _send();
-                    },
-                  );
-                }
-                if (snap.hasData) _scrollToEnd();
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  itemCount: list.length + (_sending ? 1 : 0),
-                  itemBuilder: (_, i) {
-                    if (i >= list.length) return const _TypingBubble();
-                    return _Bubble(message: list[i]);
-                  },
-                );
-              },
-            ),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: c.bg,
+        drawer: AssistantDrawer(
+          uid: _uid,
+          service: _service,
+          activeId: _convId,
+          onNewChat: () {
+            Navigator.pop(context);
+            _newChat();
+          },
+          onOpen: (conv) {
+            Navigator.pop(context);
+            _openConversation(conv);
+          },
+          onOpenMemory: () {
+            Navigator.pop(context);
+            _openMemory();
+          },
+        ),
+        appBar: AppBar(
+          backgroundColor: c.bg,
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: c.text,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          titleSpacing: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          SafeArea(
-            top: false,
+          title: InkWell(
+            onTap: () => _openProSheet(),
+            borderRadius: BorderRadius.circular(10),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inputCtrl,
-                      minLines: 1,
-                      maxLines: 5,
-                      textInputAction: TextInputAction.newline,
-                      enabled: !_sending,
-                      decoration: InputDecoration(
-                        hintText: context.tr('assistant_hint'),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
+                  Text(
+                    _convTitle.isNotEmpty
+                        ? _convTitle
+                        : context.tr('assistant_title'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: c.text,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: 46,
-                    width: 46,
-                    child: ElevatedButton(
-                      onPressed: _sending ? null : _send,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryDark,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: c.subtle,
+                        fontWeight: FontWeight.w400,
                       ),
-                      child: _sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded, size: 20),
                     ),
-                  ),
                 ],
               ),
             ),
           ),
+          actions: [
+            if (s != null && !s.pro)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: TextButton(
+                  onPressed: () => _openProSheet(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: c.text,
+                    backgroundColor: c.bubble,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    minimumSize: const Size(0, 34),
+                  ),
+                  child: Text(
+                    context.tr('assistant_pro_button'),
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            IconButton(
+              tooltip: context.tr('assistant_new_chat'),
+              icon: const Icon(Icons.edit_square, size: 22),
+              onPressed: _newChat,
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: !_convLoaded
+                  ? const SizedBox.shrink()
+                  : _convId == null
+                  ? (_sending
+                      ? ListView(
+                          controller: _scrollCtrl,
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          children: [
+                            if (_pendingUser != null)
+                              _UserBubble(text: _pendingUser!.text),
+                            const _ThinkingDot(),
+                          ],
+                        )
+                      : _EmptyState(onTap: (q) => _send(q)))
+                  : StreamBuilder<List<AssistantMessage>>(
+                key: ValueKey(_convId),
+                stream: _service.watchMessages(_uid, _convId!),
+                builder: (context, snap) {
+                  final list = <AssistantMessage>[...?snap.data];
+                  if (_pendingUser != null) list.add(_pendingUser!);
+                  if (snap.connectionState == ConnectionState.waiting &&
+                      list.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  if (list.isEmpty && !_sending) {
+                    return _EmptyState(onTap: (q) => _send(q));
+                  }
+                  if (snap.hasData && _revealId == null) _scrollToEnd();
+                  // Сарлавҳа сервер (trigger) томонидан кейинроқ келади.
+                  _syncTitle(snap);
+                  return ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    itemCount: list.length + (_sending ? 1 : 0),
+                    itemBuilder: (_, i) {
+                      if (i >= list.length) return const _ThinkingDot();
+                      final m = list[i];
+                      if (m.isUser) return _UserBubble(text: m.text);
+                      final text = m.id == _revealId ? _revealText : m.text;
+                      return _AssistantMessageView(
+                        text: text,
+                        webSearches: m.webSearches,
+                        revealing: m.id == _revealId,
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            _Composer(
+              controller: _inputCtrl,
+              focusNode: _focus,
+              sending: _sending,
+              onSend: _send,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Фойдаланувчи хабари — ChatGPT'дек кулранг думалоқ пуфакча ўнгда.
+class _UserBubble extends StatelessWidget {
+  const _UserBubble({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GptColors.of(context);
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: c.bubble,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: SelectableText(
+          text,
+          style: GoogleFonts.inter(fontSize: 16, height: 1.5, color: c.text),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ёрдамчи жавоби — пуфакчасиз, Markdown, тўлиқ кенглик (ChatGPT каби).
+class _AssistantMessageView extends StatelessWidget {
+  const _AssistantMessageView({
+    required this.text,
+    required this.webSearches,
+    required this.revealing,
+  });
+
+  final String text;
+  final int webSearches;
+  final bool revealing;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GptColors.of(context);
+    final base = GoogleFonts.inter(fontSize: 16, height: 1.55, color: c.text);
+    final mono = GoogleFonts.jetBrainsMono(
+      fontSize: 13.5,
+      height: 1.5,
+      color: const Color(0xFFECECEC),
+    );
+    final sheet = MarkdownStyleSheet(
+      p: base,
+      pPadding: const EdgeInsets.only(bottom: 10),
+      h1: base.copyWith(fontSize: 22, fontWeight: FontWeight.w700),
+      h2: base.copyWith(fontSize: 19, fontWeight: FontWeight.w700),
+      h3: base.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+      h1Padding: const EdgeInsets.only(top: 10, bottom: 4),
+      h2Padding: const EdgeInsets.only(top: 10, bottom: 4),
+      h3Padding: const EdgeInsets.only(top: 8, bottom: 2),
+      strong: base.copyWith(fontWeight: FontWeight.w600),
+      em: base.copyWith(fontStyle: FontStyle.italic),
+      a: base.copyWith(
+        color: const Color(0xFF2D6CDF),
+        decoration: TextDecoration.underline,
+      ),
+      listBullet: base,
+      listIndent: 22,
+      blockSpacing: 10,
+      blockquote: base.copyWith(color: c.subtle),
+      blockquoteDecoration: BoxDecoration(
+        border: Border(left: BorderSide(color: c.border, width: 3)),
+      ),
+      blockquotePadding: const EdgeInsets.only(left: 12),
+      code: GoogleFonts.jetBrainsMono(
+        fontSize: 14,
+        color: c.text,
+        backgroundColor: c.bubble,
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: c.codeBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      codeblockPadding: const EdgeInsets.all(14),
+      tableHead: base.copyWith(fontWeight: FontWeight.w600),
+      tableBody: base.copyWith(fontSize: 15),
+      tableBorder: TableBorder.all(color: c.border, width: 1),
+      tableCellsPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      tableColumnWidth: const IntrinsicColumnWidth(),
+      horizontalRuleDecoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.border)),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MarkdownBody(
+            data: text,
+            selectable: !revealing,
+            styleSheet: sheet,
+            // Код блоклари: ChatGPT каби қора фон, оқ моно шрифт.
+            styleSheetTheme: MarkdownStyleSheetBaseTheme.material,
+            onTapLink: (_, href, __) {
+              if (href == null) return;
+              launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+            },
+            builders: {'pre': _CodeBlockBuilder(mono, c)},
+          ),
+          if (!revealing)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  _IconAction(
+                    icon: Icons.copy_rounded,
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: text));
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(SnackBar(
+                          content: Text(context.tr('assistant_copied')),
+                          duration: const Duration(seconds: 1),
+                        ));
+                    },
+                  ),
+                  if (webSearches > 0) ...[
+                    const SizedBox(width: 10),
+                    Icon(Icons.public, size: 14, color: c.subtle),
+                    const SizedBox(width: 4),
+                    Text(
+                      context.tr('assistant_web_search_used'),
+                      style: GoogleFonts.inter(fontSize: 12, color: c.subtle),
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Юқоридаги тариф чизиғи: бепул қолдиқ ёки Pro муддати + «Pro» тугмаси.
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.status, required this.onPro});
+/// Код блоки — ChatGPT'дек: устида тил ёрлиғи + «Нусхалаш», қора фон.
+class _CodeBlockBuilder extends MarkdownElementBuilder {
+  _CodeBlockBuilder(this.mono, this.c);
 
-  final AssistantStatus? status;
-  final VoidCallback onPro;
+  final TextStyle mono;
+  final GptColors c;
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    var lang = '';
+    final children = element.children;
+    var code = element.textContent;
+    if (children != null && children.isNotEmpty) {
+      final first = children.first;
+      if (first is md.Element) {
+        final cls = first.attributes['class'] ?? '';
+        if (cls.startsWith('language-')) lang = cls.substring(9);
+        code = first.textContent;
+      }
+    }
+    if (code.endsWith('\n')) code = code.substring(0, code.length - 1);
+    return Builder(
+      builder: (context) => Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: c.codeBg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 6, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      lang,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: const Color(0xFFB4B4B4)),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: code));
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(SnackBar(
+                          content: Text(context.tr('assistant_copied')),
+                          duration: const Duration(seconds: 1),
+                        ));
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFB4B4B4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 30),
+                    ),
+                    icon: const Icon(Icons.copy_rounded, size: 14),
+                    label: Text(
+                      context.tr('assistant_copy'),
+                      style: GoogleFonts.inter(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+              child: SelectableText(code, style: mono),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IconAction extends StatelessWidget {
+  const _IconAction({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final s = status;
-    if (s == null) return const SizedBox(height: 4);
-    final String text;
-    if (s.unlimited || (s.pro && s.paidUntil == null)) {
-      text = context.tr('assistant_pro_unlimited');
-    } else if (s.pro) {
-      text = context.trMsg('assistant_pro_until',
-          params: {'date': formatDateShort(s.paidUntil)});
-    } else {
-      text = context.trMsg('assistant_free_left',
-          params: {'count': '${s.remainingToday}'});
-    }
-    return Material(
-      color: s.pro ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1),
-      child: InkWell(
-        onTap: onPro,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    final c = GptColors.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Icon(icon, size: 16, color: c.subtle),
+      ),
+    );
+  }
+}
+
+/// ChatGPT'нинг "ўйлаяпти" белгиси — пульсланувчи доира.
+class _ThinkingDot extends StatefulWidget {
+  const _ThinkingDot();
+
+  @override
+  State<_ThinkingDot> createState() => _ThinkingDotState();
+}
+
+class _ThinkingDotState extends State<_ThinkingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GptColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ScaleTransition(
+          scale: Tween(begin: 0.7, end: 1.0).animate(
+            CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+          ),
+          child: Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(color: c.text, shape: BoxShape.circle),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill input + доира "юқорига стрелка" тугмаси (ChatGPT композитори).
+class _Composer extends StatelessWidget {
+  const _Composer({
+    required this.controller,
+    required this.focusNode,
+    required this.sending,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool sending;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = GptColors.of(context);
+    final canSend = controller.text.trim().isNotEmpty && !sending;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.inputBg,
+            borderRadius: BorderRadius.circular(26),
+          ),
+          padding: const EdgeInsets.fromLTRB(18, 6, 6, 6),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Icon(
-                s.pro ? Icons.verified_rounded : Icons.info_outline_rounded,
-                size: 18,
-                color: s.pro ? const Color(0xFF2E7D32) : const Color(0xFF8D6E00),
-              ),
-              const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  text,
-                  style: const TextStyle(fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  minLines: 1,
+                  maxLines: 6,
+                  enabled: !sending,
+                  textInputAction: TextInputAction.newline,
+                  style: GoogleFonts.inter(
+                      fontSize: 16, height: 1.4, color: c.text),
+                  decoration: InputDecoration(
+                    hintText: context.tr('assistant_hint'),
+                    hintStyle: GoogleFonts.inter(
+                        fontSize: 16, color: c.subtle),
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
                 ),
               ),
-              if (!s.pro)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryDark,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    context.tr('assistant_pro_button'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+              const SizedBox(width: 8),
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 150),
+                opacity: canSend ? 1 : 0.35,
+                child: Material(
+                  color: c.sendBg,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: canSend ? onSend : null,
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: sending
+                          ? Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: c.sendFg,
+                              ),
+                            )
+                          : Icon(Icons.arrow_upward_rounded,
+                              color: c.sendFg, size: 22),
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ),
@@ -376,6 +857,7 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
+/// Бўш ҳолат — ChatGPT'дек марказда сарлавҳа + таклиф чиплари.
 class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.onTap});
 
@@ -383,142 +865,50 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = GptColors.of(context);
     final starters = [
       context.tr('assistant_starter_1'),
       context.tr('assistant_starter_2'),
       context.tr('assistant_starter_3'),
       context.tr('assistant_starter_4'),
     ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 32, 20, 16),
-      children: [
-        const Icon(Icons.auto_awesome_rounded,
-            size: 48, color: Color(0xFF10A37F)),
-        const SizedBox(height: 12),
-        Text(
-          context.tr('assistant_empty_title'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          context.tr('assistant_empty_body'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: Colors.black54),
-        ),
-        const SizedBox(height: 20),
-        for (final q in starters)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: OutlinedButton(
-              onPressed: () => onTap(q),
-              style: OutlinedButton.styleFrom(
-                alignment: Alignment.centerLeft,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(q, style: const TextStyle(color: Colors.black87)),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
-
-  final AssistantMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final mine = message.isUser;
-    final bg = mine ? AppColors.primaryDark : Colors.white;
-    final fg = mine ? Colors.white : Colors.black87;
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.82,
-        ),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(mine ? 16 : 4),
-            bottomRight: Radius.circular(mine ? 4 : 16),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 4,
-              offset: Offset(0, 1),
-            ),
-          ],
-        ),
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            SelectableText(
-              message.text,
-              style: TextStyle(color: fg, fontSize: 15, height: 1.35),
-            ),
-            if (!mine && message.webSearches > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.public, size: 13, color: Colors.black45),
-                    const SizedBox(width: 4),
-                    Text(
-                      context.tr('assistant_web_search_used'),
-                      style: const TextStyle(
-                          fontSize: 11, color: Colors.black45),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TypingBubble extends StatelessWidget {
-  const _TypingBubble();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 10),
             Text(
-              context.tr('assistant_thinking'),
-              style: const TextStyle(color: Colors.black54, fontSize: 13),
+              context.tr('assistant_empty_title'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: c.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              context.tr('assistant_empty_body'),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 14, color: c.subtle),
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final q in starters)
+                  ActionChip(
+                    label: Text(q,
+                        style: GoogleFonts.inter(fontSize: 13, color: c.text)),
+                    onPressed: () => onTap(q),
+                    backgroundColor: c.bg,
+                    side: BorderSide(color: c.border),
+                    shape: const StadiumBorder(),
+                  ),
+              ],
             ),
           ],
         ),

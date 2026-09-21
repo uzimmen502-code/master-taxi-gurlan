@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/assistant_conversation.dart';
 import '../models/assistant_message.dart';
 import '../models/assistant_status.dart';
 
@@ -19,11 +20,28 @@ class AssistantService {
   final FirebaseFirestore _db;
   static const _uuid = Uuid();
 
-  /// Суҳбат тарихи — фақат сервер ёзади (`firestore.rules`).
-  Stream<List<AssistantMessage>> watchMessages(String uid, {int limit = 200}) {
-    return _db
-        .collection('users')
-        .doc(uid)
+  DocumentReference<Map<String, dynamic>> _user(String uid) =>
+      _db.collection('users').doc(uid);
+
+  /// Суҳбатлар рўйхати (ChatGPT чап панели) — охирги янгиланган биринчи.
+  Stream<List<AssistantConversation>> watchConversations(String uid) {
+    return _user(uid)
+        .collection('assistant_conversations')
+        .orderBy('updatedAt', descending: true)
+        .limit(300)
+        .snapshots()
+        .map((s) => s.docs.map(AssistantConversation.fromDoc).toList());
+  }
+
+  /// Битта суҳбат хабарлари — фақат сервер ёзади (`firestore.rules`).
+  Stream<List<AssistantMessage>> watchMessages(
+    String uid,
+    String conversationId, {
+    int limit = 400,
+  }) {
+    return _user(uid)
+        .collection('assistant_conversations')
+        .doc(conversationId)
         .collection('assistant_messages')
         .orderBy('createdAt', descending: true)
         .limit(limit)
@@ -31,16 +49,32 @@ class AssistantService {
         .map((s) => s.docs.map(AssistantMessage.fromDoc).toList().reversed.toList());
   }
 
+  /// Хотира — аввалги суҳбатлардан сақланган фактлар.
+  Stream<List<AssistantMemoryItem>> watchMemory(String uid) {
+    return _user(uid)
+        .collection('assistant_memory')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(AssistantMemoryItem.fromDoc).toList());
+  }
+
   Future<AssistantStatus> getStatus() async {
     final res = await _call('assistantGetStatus', const {});
     return AssistantStatus.fromMap(res);
   }
 
-  /// Хабар юбориш → жавоб матни + янгиланган ҳолат.
-  Future<AssistantReply> send(String text) async {
-    final res = await _call('assistantChat', {'text': text.trim()});
+  /// Хабар юбориш → жавоб матни + янгиланган ҳолат. [conversationId] бўш
+  /// бўлса сервер янги суҳбат очади (id жавобда).
+  Future<AssistantReply> send(String text, {String? conversationId}) async {
+    final res = await _call('assistantChat', {
+      'text': text.trim(),
+      if (conversationId != null && conversationId.isNotEmpty)
+        'conversationId': conversationId,
+    });
     return AssistantReply(
       reply: (res['reply'] ?? '') as String,
+      messageId: (res['messageId'] ?? '') as String,
+      conversationId: (res['conversationId'] ?? '') as String,
       status: AssistantStatus.fromMap(
           Map<String, dynamic>.from(res['status'] as Map? ?? const {})),
     );
@@ -60,8 +94,20 @@ class AssistantService {
     );
   }
 
-  Future<void> clearHistory() async {
-    await _call('assistantClearHistory', const {});
+  Future<void> deleteConversation(String conversationId) async {
+    await _call('assistantDeleteConversation', {'conversationId': conversationId});
+  }
+
+  Future<void> renameConversation(String conversationId, String title) async {
+    await _call('assistantRenameConversation', {
+      'conversationId': conversationId,
+      'title': title.trim(),
+    });
+  }
+
+  /// [memoryId] = `*` — ҳаммасини ўчириш.
+  Future<void> deleteMemory(String memoryId) async {
+    await _call('assistantDeleteMemory', {'memoryId': memoryId});
   }
 
   Future<Map<String, dynamic>> _call(
@@ -87,8 +133,17 @@ class AssistantService {
 }
 
 class AssistantReply {
-  const AssistantReply({required this.reply, required this.status});
+  const AssistantReply({
+    required this.reply,
+    required this.messageId,
+    required this.conversationId,
+    required this.status,
+  });
   final String reply;
+  final String conversationId;
+
+  /// `users/{uid}/assistant_messages/{messageId}` — typewriter учун.
+  final String messageId;
   final AssistantStatus status;
 }
 

@@ -719,7 +719,17 @@ service cloud.firestore {
       }
 
       // AVA ёрдамчиси (assistant_chat.js) — фақат сервер ёзади, эга ўқийди.
-      match /assistant_messages/{msgId} {
+      // Суҳбатлар (ChatGPT каби), ичида хабарлар; 365 кун TTL (expiresAt).
+      match /assistant_conversations/{convId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update, delete: if false;
+        match /assistant_messages/{msgId} {
+          allow read: if isOwner(userId) || isAdmin();
+          allow create, update, delete: if false;
+        }
+      }
+      // Хотира — аввалги суҳбатлардан фактлар (ўчириш — assistantDeleteMemory).
+      match /assistant_memory/{memId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create, update, delete: if false;
       }

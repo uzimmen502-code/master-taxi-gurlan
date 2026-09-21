@@ -71,6 +71,9 @@ dependencies:
   timezone: ^0.9.4
   crypto: ^3.0.7
   video_compress: ^3.1.4
+  flutter_markdown_plus: ^1.0.12
+  google_fonts: ^8.2.1
+  markdown: ^7.3.1
 
 # video_player_android 2.9.5 — vendored nusxa, ikkita patch:
 #  1) ExoPlayer LoadControl buferi 50s → 20s (AvaLoadControl.java) —

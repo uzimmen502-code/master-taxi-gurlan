@@ -83,12 +83,16 @@ class _EntrySheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = GptColors.of(context);
     final bottom = MediaQuery.paddingOf(context).bottom;
-    return Container(
+    // Катта тизим шрифтида ҳам ихчам қолсин (ChatGPT варақалари каби).
+    final mq = MediaQuery.of(context);
+    return MediaQuery(
+      data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.1)),
+      child: Container(
       decoration: BoxDecoration(
         color: c.bg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.fromLTRB(20, 10, 20, 16 + bottom),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 12 + bottom),
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height -
             MediaQuery.paddingOf(context).top -
@@ -109,18 +113,18 @@ class _EntrySheet extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             // Сарлавҳа
             Row(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: c.sendBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.auto_awesome_rounded, color: c.sendFg, size: 24),
+                  child: Icon(Icons.auto_awesome_rounded, color: c.sendFg, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -128,9 +132,9 @@ class _EntrySheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        context.tr('assistant_title'),
+                        context.tr('home_module_chatgpt'),
                         style: GoogleFonts.inter(
-                          fontSize: 19,
+                          fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: c.text,
                         ),
@@ -140,30 +144,47 @@ class _EntrySheet extends StatelessWidget {
                         registered
                             ? context.tr('assistant_choose_title')
                             : context.tr('assistant_guest_title'),
-                        style: GoogleFonts.inter(fontSize: 13.5, color: c.subtle),
+                        style: GoogleFonts.inter(fontSize: 12.5, color: c.subtle),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
 
-            // AVA AI картаси + тарифлар
-            Container(
-              decoration: BoxDecoration(
-                color: c.bubble,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            // AVA AI картаси + тарифлар — картанинг ўзи босилади (тугмасиз).
+            Material(
+              color: c.bubble,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: registered
+                  ? () => Navigator.pop(context, _EntryChoice.ava)
+                  : null,
+              child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    context.tr('assistant_choose_ava_desc'),
-                    style: GoogleFonts.inter(fontSize: 14, color: c.text, height: 1.4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          context.tr('assistant_choose_ava_desc'),
+                          style: GoogleFonts.inter(
+                              fontSize: 13, color: c.text, height: 1.35),
+                        ),
+                      ),
+                      if (registered) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.chevron_right_rounded, color: c.subtle),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: c.border),
+                  const SizedBox(height: 4),
                   _TariffRow(
                     label: context.tr('assistant_tariff_free_label'),
                     value: context.tr('assistant_tariff_free_value'),
@@ -180,34 +201,34 @@ class _EntrySheet extends StatelessWidget {
                     Text(
                       context.tr('assistant_guest_note'),
                       style: GoogleFonts.inter(
-                          fontSize: 13, color: c.subtle, height: 1.4),
+                          fontSize: 12.5, color: c.subtle, height: 1.35),
                     ),
                   ],
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(
-                        context,
-                        registered ? _EntryChoice.ava : _EntryChoice.register,
-                      ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: c.sendBg,
-                        foregroundColor: c.sendFg,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                  if (!registered) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 44,
+                      child: FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(context, _EntryChoice.register),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: c.sendBg,
+                          foregroundColor: c.sendFg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Text(
+                          context.tr('assistant_guest_register'),
+                          style: GoogleFonts.inter(
+                              fontSize: 14.5, fontWeight: FontWeight.w600),
                         ),
                       ),
-                      child: Text(
-                        registered
-                            ? context.tr('assistant_open')
-                            : context.tr('assistant_guest_register'),
-                        style: GoogleFonts.inter(
-                            fontSize: 15, fontWeight: FontWeight.w600),
-                      ),
                     ),
-                  ),
+                  ],
                 ],
+              ),
+              ),
               ),
             ),
 
@@ -224,7 +245,7 @@ class _EntrySheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: c.border),
                     ),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                    padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
                     child: Row(
                       children: [
                         Icon(Icons.open_in_new_rounded, color: c.text, size: 22),
@@ -236,7 +257,7 @@ class _EntrySheet extends StatelessWidget {
                               Text(
                                 context.tr('assistant_choose_gpt_title'),
                                 style: GoogleFonts.inter(
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: c.text,
                                 ),
@@ -245,7 +266,7 @@ class _EntrySheet extends StatelessWidget {
                               Text(
                                 context.tr('assistant_choose_gpt_sub'),
                                 style: GoogleFonts.inter(
-                                    fontSize: 13, color: c.subtle, height: 1.35),
+                                    fontSize: 12, color: c.subtle, height: 1.3),
                               ),
                             ],
                           ),
@@ -259,6 +280,7 @@ class _EntrySheet extends StatelessWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }
@@ -279,7 +301,7 @@ class _TariffRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = GptColors.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Expanded(
@@ -290,7 +312,7 @@ class _TariffRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: GoogleFonts.inter(fontSize: 14, color: c.text),
+                  style: GoogleFonts.inter(fontSize: 13, color: c.text),
                 ),
                 if (promo)
                   Container(
@@ -312,15 +334,13 @@ class _TariffRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: c.text,
-              ),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: c.text,
             ),
           ),
         ],

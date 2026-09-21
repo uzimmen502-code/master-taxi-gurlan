@@ -6,7 +6,6 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:share_plus/share_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -30,8 +29,9 @@ import 'assistant_memory_screen.dart';
 /// ChatGPT'нинг Söhne шрифти проприетар — энг яқин очиқ шрифт Inter.
 ///
 /// Суҳбатлар ChatGPT каби алоҳида (`assistant_conversations`), чап панел
-/// ([AssistantDrawer]); «Янги суҳбат» эскисини ўчирмайди. Охирги очиқ суҳбат
-/// SharedPreferences'да. Юбориш — `assistantChat` callable. Лимит/Pro ҳолати серверда ([AssistantStatus]).
+/// ([AssistantDrawer]); «Янги суҳбат» эскисини ўчирмайди; экран ҳар сафар
+/// янги суҳбатдан бошланади. Юбориш — `assistantChat` callable. Лимит/Plus
+/// ҳолати серверда ([AssistantStatus]).
 class AssistantChatScreen extends StatefulWidget {
   const AssistantChatScreen({super.key, required this.phone});
 
@@ -47,8 +47,6 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   final _scrollCtrl = ScrollController();
   final _focus = FocusNode();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  static const _prefLastConv = 'assistant_last_conversation';
 
   /// Фаол суҳбат; `null` — янги (бўш) суҳбат, биринчи хабарда сервер яратади.
   String? _convId;
@@ -82,29 +80,9 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     super.initState();
     _inputCtrl.addListener(() => setState(() {}));
     _refreshStatus();
-    _restoreLastConversation();
-  }
-
-  Future<void> _restoreLastConversation() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final id = prefs.getString('${_prefLastConv}_$_uid');
-      if (id != null && id.isNotEmpty && mounted) {
-        setState(() => _convId = id);
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _convLoaded = true);
-  }
-
-  Future<void> _rememberConversation(String? id) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (id == null || id.isEmpty) {
-        await prefs.remove('${_prefLastConv}_$_uid');
-      } else {
-        await prefs.setString('${_prefLastConv}_$_uid', id);
-      }
-    } catch (_) {}
+    // ChatGPT каби: экран ҳар сафар янги (бўш) суҳбатдан бошланади;
+    // эскилари чап панелда.
+    _convLoaded = true;
   }
 
   void _openConversation(AssistantConversation conv) {
@@ -114,7 +92,6 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       _convTitle = conv.title;
       _revealId = null;
     });
-    _rememberConversation(conv.id);
     _scrollToEnd(animate: false);
   }
 
@@ -165,10 +142,11 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     _revealTimer?.cancel();
     _revealId = id;
     _revealText = '';
-    // Машина босма эффекти: ~3–6 сонияда тўлиқ очилади (узунликка қараб).
-    final step = (full.length / 220).ceil().clamp(1, 16);
+    // Машина босма эффекти — шошилмасдан: қисқа жавоб ~35 белги/с, узуни
+    // тезроқ (1500 белги ≈ 15 с), лекин бир зумда очилмайди.
+    final step = (full.length / 600).ceil().clamp(1, 4);
     var i = 0;
-    _revealTimer = Timer.periodic(const Duration(milliseconds: 22), (t) {
+    _revealTimer = Timer.periodic(const Duration(milliseconds: 30), (t) {
       if (!mounted) {
         t.cancel();
         return;
@@ -212,7 +190,6 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
           _convTitle = '';
         }
       });
-      _rememberConversation(reply.conversationId);
       _startReveal(reply.messageId, reply.reply);
       setState(() => _awaitReveal = false);
     } on AssistantException catch (e) {
@@ -295,7 +272,6 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       _revealId = null;
       _pendingUser = null;
     });
-    _rememberConversation(null);
   }
 
   /// Сарлавҳа — суҳбат ҳужжатидан (trigger 1–3 с кейин ёзади).

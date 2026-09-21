@@ -619,6 +619,8 @@
   "assistant_memory_hint": "Помощник запоминает полезные факты о вас из переписки и использует их в следующих чатах. Ненужное можно удалить.",
   "assistant_memory_empty": "Пока ничего не запомнено",
   "assistant_memory_clear_confirm": "Все запомненные факты будут удалены. Продолжить?",
+  "assistant_share": "Поделиться",
+  "assistant_copy_chat": "Копировать чат",
   "assistant_web_search_used": "Найдено в интернете",
   "assistant_copied": "Скопировано",
   "assistant_copy": "Копировать",

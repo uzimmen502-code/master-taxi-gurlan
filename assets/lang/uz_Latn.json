@@ -619,6 +619,8 @@
   "assistant_memory_hint": "Yordamchi suhbatlaringizdan siz haqingizda foydali faktlarni eslab qoladi va keyingi suhbatlarda ulardan foydalanadi. Kerak bo'lmaganini o'chirishingiz mumkin.",
   "assistant_memory_empty": "Hali eslab qolingan narsa yo'q",
   "assistant_memory_clear_confirm": "Barcha eslab qolingan faktlar o'chiriladi. Davom etasizmi?",
+  "assistant_share": "Ulashish",
+  "assistant_copy_chat": "Suhbatni nusxalash",
   "assistant_web_search_used": "Internetdan qidirildi",
   "assistant_copied": "Nusxalandi",
   "assistant_copy": "Nusxalash",

@@ -43,6 +43,7 @@ const {
   DEFAULT_SYSTEM_PROMPT,
   TITLE_PROMPT,
   MEMORY_PROMPT,
+  CYRILLIC_FIX_PROMPT,
 } = require('./assistant_prompt');
 
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
@@ -142,6 +143,40 @@ function parseResponsesOutput(json) {
     inputTokens: intOr(usage.input_tokens, 0),
     outputTokens: intOr(usage.output_tokens, 0),
   };
+}
+
+/**
+ * Ёзув аниқлаш: код блоклари, inline код ва URL'ларсиз матнда кирилл ва
+ * лотин ҳарфлар улуши. `{ cyr, lat }` — 0..1 (ҳарфлар ичида).
+ */
+function scriptRatio(text) {
+  const stripped = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ');
+  const cyr = (stripped.match(/[Ѐ-ӿ]/g) || []).length;
+  const lat = (stripped.match(/[A-Za-z]/g) || []).length;
+  const total = cyr + lat;
+  if (!total) return { cyr: 0, lat: 0 };
+  return { cyr: cyr / total, lat: lat / total };
+}
+
+/**
+ * Фойдаланувчи кириллда ёзган, жавоб эса асосан лотинда (модель баъзан
+ * ўзбек лотинига "сирғалиб" кетади) — транслитерация керакми?
+ */
+function needsCyrillicFix(userText, replyText) {
+  const u = scriptRatio(userText);
+  if (u.cyr < 0.3) return false; // фойдаланувчи кирилл ёзмаган
+  // Жавобда кичик ҳарф билан бошланган лотин сўзлар (бренд номлари одатда
+  // катта ҳарф: Python, JavaScript) кирилл сўзлардан кўп бўлса — сирғалган.
+  const stripped = String(replyText || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ');
+  const latWords = (stripped.match(/(^|[^A-Za-zЀ-ӿ])[a-z][a-z'‘’ʻ]+/g) || []).length;
+  const cyrWords = (stripped.match(/[Ѐ-ӿ]+/g) || []).length;
+  return latWords >= 5 && latWords > cyrWords;
 }
 
 /** Сарлавҳа фолбэки — биринчи хабардан 6 сўз. */
@@ -335,6 +370,23 @@ function attachAssistant(exportsObj, deps) {
     if (!parsed.text) {
       console.error('assistant: empty output');
       throw new HttpsError('unavailable', 'empty_reply');
+    }
+    // Ёзув назорати: кирилл саволга лотин жавоб — арзон модель кириллга
+    // ўгиради (Markdown/код/URL/бренд ўзгармайди). Хато бўлса — асл жавоб.
+    if (needsCyrillicFix(userText, parsed.text)) {
+      const fixed = await openAiResponses({
+        model: cfg.utilityModel,
+        instructions: CYRILLIC_FIX_PROMPT,
+        input: parsed.text,
+        max_output_tokens: Math.max(cfg.maxOutputTokens, 2000),
+        store: false,
+      }, 45000, true);
+      if (fixed && fixed.text && scriptRatio(fixed.text).cyr >= 0.5) {
+        console.log('assistant: reply transliterated to Cyrillic');
+        parsed.text = fixed.text;
+        parsed.inputTokens += fixed.inputTokens;
+        parsed.outputTokens += fixed.outputTokens;
+      }
     }
     return parsed;
   }
@@ -827,4 +879,6 @@ module.exports = {
   normalizePackages,
   parseMemoryFacts,
   fallbackTitle,
+  scriptRatio,
+  needsCyrillicFix,
 };

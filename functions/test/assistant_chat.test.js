@@ -316,6 +316,11 @@ async function main() {
   assert.deepStrictEqual(parseMemoryFacts('text {"facts":["a b c", ""]} tail'), ['a b c']);
   assert.deepStrictEqual(parseMemoryFacts('garbage'), []);
   assert.strictEqual(fallbackTitle('  bir  ikki uch to\'rt besh olti yetti '), 'bir ikki uch to\'rt besh olti');
+  const { needsCyrillicFix } = require('../assistant_chat');
+  assert.strictEqual(needsCyrillicFix('Python ва JavaScript фарқи?',
+    'Quyida Python va JavaScript asosiy farqlari — qisqa jadval ko‘rinishida:\n| Xususiyat | Python | JavaScript |\n| Turlanish | dinamik, o‘qish oson | dinamik, brauzerda ishlaydi |'), true);
+  assert.strictEqual(needsCyrillicFix('Python ва JavaScript фарқи?', 'Python ва JavaScript фарқлари:\n```js\nconst a = 1;\n```\n- Python динамик'), false, 'kod bloki hisobga olinmaydi');
+  assert.strictEqual(needsCyrillicFix('Salom, qanday?', 'Salom! Yaxshi.'), false, 'lotin savol — tegilmaydi');
 
   console.log('assistant_chat.test.js: OK (13 bo\'lim)');
 }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -64,6 +65,15 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
   String? _revealId;
   String _revealText = '';
   Timer? _revealTimer;
+
+  /// Юбориш пайтида экранда бўлган хабар id'лари: сервердан келган ЯНГИ
+  /// жавоб typewriter бошлангунча яширилади (акс ҳолда бутун матн бир зумда
+  /// кўриниб, кейин қайта «ёзила» бошлайди).
+  Set<String> _idsBeforeSend = const {};
+  bool _awaitReveal = false;
+
+  /// Охирги snapshot (улашиш/нусхалаш учун).
+  List<AssistantMessage> _lastMessages = const [];
 
   String get _uid => phoneDigits(widget.phone);
 
@@ -155,10 +165,10 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     _revealTimer?.cancel();
     _revealId = id;
     _revealText = '';
-    // Узун жавоб ~4–5 сонияда тўлиқ очилсин.
-    final step = (full.length / 160).ceil().clamp(2, 24);
+    // Машина босма эффекти: ~3–6 сонияда тўлиқ очилади (узунликка қараб).
+    final step = (full.length / 220).ceil().clamp(1, 16);
     var i = 0;
-    _revealTimer = Timer.periodic(const Duration(milliseconds: 28), (t) {
+    _revealTimer = Timer.periodic(const Duration(milliseconds: 22), (t) {
       if (!mounted) {
         t.cancel();
         return;
@@ -186,6 +196,8 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     _inputCtrl.clear();
     setState(() {
       _sending = true;
+      _awaitReveal = true;
+      _idsBeforeSend = _lastMessages.map((m) => m.id).toSet();
       _pendingUser = AssistantMessage.localUser(text);
     });
     _scrollToEnd();
@@ -202,6 +214,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       });
       _rememberConversation(reply.conversationId);
       _startReveal(reply.messageId, reply.reply);
+      setState(() => _awaitReveal = false);
     } on AssistantException catch (e) {
       if (!mounted) return;
       _inputCtrl.text = text;
@@ -219,6 +232,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
       if (mounted) {
         setState(() {
           _sending = false;
+          _awaitReveal = false;
           _pendingUser = null;
         });
       }
@@ -297,6 +311,123 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     });
   }
 
+  PopupMenuItem<String> _menuItem(
+    BuildContext ctx,
+    String value,
+    IconData icon,
+    String label, {
+    Color? color,
+  }) {
+    final c = GptColors.of(ctx);
+    return PopupMenuItem<String>(
+      value: value,
+      height: 44,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color ?? c.text),
+          const SizedBox(width: 12),
+          Text(label, style: GoogleFonts.inter(fontSize: 15, color: color ?? c.text)),
+        ],
+      ),
+    );
+  }
+
+  /// Суҳбат матни (улашиш/нусхалаш учун) — ChatGPT экспорти услубида.
+  String _transcript() {
+    final b = StringBuffer();
+    if (_convTitle.isNotEmpty) b.writeln('# $_convTitle\n');
+    for (final m in _lastMessages) {
+      b.writeln(m.isUser ? '**Сиз:**' : '**AVA ёрдамчиси:**');
+      b.writeln(m.text.trim());
+      b.writeln();
+    }
+    return b.toString().trim();
+  }
+
+  Future<void> _onMenu(String action) async {
+    switch (action) {
+      case 'share':
+        final text = _transcript();
+        if (text.isNotEmpty) await Share.share(text);
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: _transcript()));
+        if (mounted) _snack(context.tr('assistant_copied'));
+      case 'rename':
+        await _renameCurrent();
+      case 'delete':
+        await _deleteCurrent();
+      case 'memory':
+        _openMemory();
+      case 'pro':
+        await _openProSheet();
+    }
+  }
+
+  Future<void> _renameCurrent() async {
+    final id = _convId;
+    if (id == null) return;
+    final ctrl = TextEditingController(text: _convTitle);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('assistant_rename')),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(ctx.tr('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(ctx.tr('save')),
+          ),
+        ],
+      ),
+    );
+    if (title == null || title.isEmpty || title == _convTitle) return;
+    try {
+      await _service.renameConversation(id, title);
+      if (mounted) setState(() => _convTitle = title);
+    } catch (_) {
+      if (mounted) _snack(context.tr('assistant_err_unavailable'));
+    }
+  }
+
+  Future<void> _deleteCurrent() async {
+    final id = _convId;
+    if (id == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('assistant_delete')),
+        content: Text(ctx.tr('assistant_delete_confirm')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(ctx.tr('cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(ctx.tr('assistant_delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _service.deleteConversation(id);
+      if (mounted) _newChat();
+    } catch (_) {
+      if (mounted) _snack(context.tr('assistant_err_unavailable'));
+    }
+  }
+
   void _openMemory() {
     Navigator.push(
       context,
@@ -351,12 +482,16 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
           backgroundColor: c.bg,
           surfaceTintColor: Colors.transparent,
           foregroundColor: c.text,
+          // Илова темаси AppBar иконкаларини оқ қилади (яшил AppBar учун) —
+          // ChatGPT'нинг оқ фонида кўринмай қолади, шунинг учун аниқ берамиз.
+          iconTheme: IconThemeData(color: c.text),
+          actionsIconTheme: IconThemeData(color: c.text),
           elevation: 0,
           scrolledUnderElevation: 0,
           centerTitle: false,
           titleSpacing: 0,
           leading: IconButton(
-            icon: const Icon(Icons.menu_rounded),
+            icon: Icon(Icons.menu_rounded, color: c.text),
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
           title: InkWell(
@@ -414,8 +549,40 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
               ),
             IconButton(
               tooltip: context.tr('assistant_new_chat'),
-              icon: const Icon(Icons.edit_square, size: 22),
+              icon: Icon(Icons.edit_square, size: 22, color: c.text),
               onPressed: _newChat,
+            ),
+            PopupMenuButton<String>(
+              tooltip: '',
+              icon: Icon(Icons.more_horiz_rounded, color: c.text),
+              color: c.bg,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: c.border),
+              ),
+              onSelected: _onMenu,
+              itemBuilder: (ctx) => [
+                if (_convId != null) ...[
+                  _menuItem(ctx, 'share', Icons.ios_share_rounded,
+                      ctx.tr('assistant_share')),
+                  _menuItem(ctx, 'copy', Icons.copy_rounded,
+                      ctx.tr('assistant_copy_chat')),
+                  _menuItem(ctx, 'rename', Icons.drive_file_rename_outline,
+                      ctx.tr('assistant_rename')),
+                  const PopupMenuDivider(),
+                ],
+                _menuItem(ctx, 'memory', Icons.psychology_outlined,
+                    ctx.tr('assistant_memory')),
+                _menuItem(ctx, 'pro', Icons.workspace_premium_rounded,
+                    ctx.tr('assistant_pro_sheet_title')),
+                if (_convId != null) ...[
+                  const PopupMenuDivider(),
+                  _menuItem(ctx, 'delete', Icons.delete_outline,
+                      ctx.tr('assistant_delete'),
+                      color: const Color(0xFFE53935)),
+                ],
+              ],
             ),
           ],
         ),
@@ -440,8 +607,19 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
                 key: ValueKey(_convId),
                 stream: _service.watchMessages(_uid, _convId!),
                 builder: (context, snap) {
-                  final list = <AssistantMessage>[...?snap.data];
-                  if (_pendingUser != null) list.add(_pendingUser!);
+                  final server = snap.data ?? const <AssistantMessage>[];
+                  if (snap.hasData) _lastMessages = server;
+                  final list = <AssistantMessage>[];
+                  var serverHasNewUser = false;
+                  for (final m in server) {
+                    final isNew = _awaitReveal && !_idsBeforeSend.contains(m.id);
+                    if (isNew && !m.isUser) continue; // typewriter кутади
+                    if (isNew && m.isUser) serverHasNewUser = true;
+                    list.add(m);
+                  }
+                  if (_pendingUser != null && !serverHasNewUser) {
+                    list.add(_pendingUser!);
+                  }
                   if (snap.connectionState == ConnectionState.waiting &&
                       list.isEmpty) {
                     return const SizedBox.shrink();

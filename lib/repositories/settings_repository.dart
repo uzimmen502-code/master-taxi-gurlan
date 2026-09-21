@@ -50,6 +50,19 @@ class SettingsRepository {
     return defaultDispatcherPhone;
   }
 
+  /// "AVA ёрдамчиси" Custom GPT ссылкаси — `settings/app.assistantUrl`.
+  /// Бўш/сет қилинмаган ёки хато бўлса — бўш қатор (чақирувчи томон
+  /// `kChatGptUrl` фолбэкка ўтади) — релизсиз алмаштириш учун.
+  Future<String> getAssistantUrl() async {
+    try {
+      final snap = await _appSettings.get();
+      final raw = (snap.data()?['assistantUrl'] ?? '') as String;
+      final url = raw.trim();
+      if (url.startsWith('https://')) return url;
+    } catch (_) {}
+    return '';
+  }
+
   DocumentReference<Map<String, dynamic>> get _splashSettings =>
       _db.collection('settings').doc('splash');
 

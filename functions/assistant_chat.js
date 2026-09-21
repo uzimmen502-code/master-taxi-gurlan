@@ -765,7 +765,7 @@ function attachAssistant(exportsObj, deps) {
         module: 'assistant',
         refType: 'assistant_package',
         refId: pkg.id,
-        meta: { days: pkg.days, packageId: pkg.id, note: 'AVA ёрдамчиси Pro' },
+        meta: { days: pkg.days, packageId: pkg.id, note: 'AVA ёрдамчиси Plus' },
         createdAt: FieldValue.serverTimestamp(),
         createdBy: uid,
       });

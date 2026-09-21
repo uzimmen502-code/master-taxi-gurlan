@@ -321,11 +321,16 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = status;
     if (s == null) return const SizedBox(height: 4);
-    final text = s.pro
-        ? context.trMsg('assistant_pro_until',
-            params: {'date': formatDateShort(s.paidUntil)})
-        : context.trMsg('assistant_free_left',
-            params: {'count': '${s.remainingToday}'});
+    final String text;
+    if (s.unlimited || (s.pro && s.paidUntil == null)) {
+      text = context.tr('assistant_pro_unlimited');
+    } else if (s.pro) {
+      text = context.trMsg('assistant_pro_until',
+          params: {'date': formatDateShort(s.paidUntil)});
+    } else {
+      text = context.trMsg('assistant_free_left',
+          params: {'count': '${s.remainingToday}'});
+    }
     return Material(
       color: s.pro ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1),
       child: InkWell(

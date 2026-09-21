@@ -1,4 +1,4 @@
-{
+﻿{
   "accept": "ПРИНЯТЬ",
   "accept_booking": "Принять",
   "accept_reject_call": "Принять / отклонить / звонок",
@@ -576,6 +576,7 @@
   "assistant_free_left": "Бесплатно: сегодня ещё {count} сообщений",
   "assistant_pro_until": "Pro активен — до {date}",
   "assistant_pro_button": "Pro",
+  "assistant_pro_unlimited": "Pro активен — без ограничений",
   "assistant_new_chat": "Новый чат",
   "assistant_new_chat_confirm": "История переписки будет удалена. Продолжить?",
   "assistant_limit_title": "Бесплатный лимит на сегодня исчерпан",

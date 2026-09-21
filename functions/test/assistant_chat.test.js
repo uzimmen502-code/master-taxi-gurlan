@@ -245,6 +245,22 @@ async function main() {
   const after = await db.collection('users').doc(UID).collection('assistant_messages').get();
   assert.strictEqual(after.size, 0);
 
+  // 13) freeProPhones — paketsiz doimiy Pro (default: 998912778777)
+  const OWNER = '998912778777';
+  db._store.set(`users/${OWNER}`, { phone: OWNER, bonusBalance: 0 });
+  global.fetch = async (url, opts) => ({ ok: true, status: 200, json: async () => ({
+    output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }], usage: {} }) });
+  process.env.OPENAI_API_KEY = 'sk-test';
+  const ost = await handlers.assistantGetStatus({}, ctx(OWNER));
+  assert.strictEqual(ost.pro, true);
+  assert.strictEqual(ost.unlimited, true);
+  assert.strictEqual(ost.paidUntil, null);
+  assert.strictEqual(ost.dailyLimit, 300);
+  for (let i = 0; i < 3; i += 1) await handlers.assistantChat({ text: `q${i}` }, ctx(OWNER));
+  const ost2 = await handlers.assistantGetStatus({}, ctx(OWNER));
+  assert.strictEqual(ost2.usedToday, 3);
+  assert.strictEqual(ost2.pro, true);
+
   // 12) Tashkent kun kaliti (UTC 20:30 → ertangi kun)
   assert.strictEqual(tashkentDayKey(Date.UTC(2026, 8, 21, 20, 30)), '2026-09-22');
   assert.strictEqual(tashkentDayKey(Date.UTC(2026, 8, 21, 18, 30)), '2026-09-21');

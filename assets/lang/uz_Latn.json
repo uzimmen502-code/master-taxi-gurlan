@@ -1,4 +1,4 @@
-{
+﻿{
   "accept": "QABUL QILISH",
   "accept_booking": "Qabul qilish",
   "accept_reject_call": "Qabul / rad / qo'ng'iroq",
@@ -576,6 +576,7 @@
   "assistant_free_left": "Bepul: bugun yana {count} ta xabar",
   "assistant_pro_until": "Pro faol — {date} gacha",
   "assistant_pro_button": "Pro",
+  "assistant_pro_unlimited": "Pro faol — cheklovsiz",
   "assistant_new_chat": "Yangi suhbat",
   "assistant_new_chat_confirm": "Suhbat tarixi o'chiriladi. Davom etasizmi?",
   "assistant_limit_title": "Bugungi bepul limit tugadi",

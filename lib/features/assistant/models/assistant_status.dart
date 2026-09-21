@@ -1,8 +1,9 @@
-/// `assistantGetStatus` / `assistantChat.status` жавоби.
+﻿/// `assistantGetStatus` / `assistantChat.status` жавоби.
 class AssistantStatus {
   const AssistantStatus({
     required this.enabled,
     required this.pro,
+    this.unlimited = false,
     required this.paidUntil,
     required this.usedToday,
     required this.dailyLimit,
@@ -15,6 +16,9 @@ class AssistantStatus {
 
   final bool enabled;
   final bool pro;
+
+  /// Доимий Pro (`settings/assistant.freeProPhones`) — муддат кўрсатилмайди.
+  final bool unlimited;
   final DateTime? paidUntil;
   final int usedToday;
   final int dailyLimit;
@@ -35,6 +39,7 @@ class AssistantStatus {
     return AssistantStatus(
       enabled: m['enabled'] != false,
       pro: m['pro'] == true,
+      unlimited: m['unlimited'] == true,
       paidUntil: paidUntilMs == null || paidUntilMs <= 0
           ? null
           : DateTime.fromMillisecondsSinceEpoch(paidUntilMs),
@@ -61,6 +66,7 @@ class AssistantStatus {
       AssistantStatus(
         enabled: enabled,
         pro: pro ?? this.pro,
+        unlimited: unlimited,
         paidUntil: paidUntil ?? this.paidUntil,
         usedToday: usedToday,
         dailyLimit: dailyLimit,

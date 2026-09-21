@@ -48,6 +48,9 @@ const ASSISTANT_DEFAULTS = {
   maxInputChars: 2000,
   maxOutputTokens: 1600,
   requestTimeoutMs: 60 * 1000,
+  // Пакетсиз доимий Pro (эга/синов рақамлари). `settings/assistant.freeProPhones`
+  // массиви билан кенгайтирилади (998… рақамли формат).
+  freeProPhones: ['998912778777'],
   packages: [
     { id: 'd7', days: 7, price: 15000, promo: false },
     { id: 'd15', days: 15, price: 25000, promo: false },
@@ -158,6 +161,12 @@ function attachAssistant(exportsObj, deps) {
       maxOutputTokens: intOr(raw.maxOutputTokens, ASSISTANT_DEFAULTS.maxOutputTokens),
       requestTimeoutMs: ASSISTANT_DEFAULTS.requestTimeoutMs,
       packages: normalizePackages(raw.packages),
+      freeProPhones: new Set([
+        ...ASSISTANT_DEFAULTS.freeProPhones,
+        ...(Array.isArray(raw.freeProPhones)
+          ? raw.freeProPhones.map((p) => String(p || '').replace(/\D/g, '')).filter(Boolean)
+          : []),
+      ]),
       systemPrompt: String(raw.systemPrompt || '').trim() || DEFAULT_SYSTEM_PROMPT,
       extraKnowledge: String(raw.extraKnowledge || '').trim(),
     };
@@ -175,15 +184,23 @@ function attachAssistant(exportsObj, deps) {
     return db.collection('users').doc(uid).collection('assistant_messages');
   }
 
+  /** Pro: пакет муддати ўтмаган ёки рақам `freeProPhones` рўйхатида. */
+  function isPro(cfg, uid, userData, nowMs) {
+    if (cfg.freeProPhones.has(uid)) return true;
+    return tsToMs((userData || {}).assistantPaidUntil) > nowMs;
+  }
+
   /** Клиентга қайтариладиган ҳолат (лимит/Pro/пакетлар/баланс). */
-  function buildStatus(cfg, userData, usageData, nowMs) {
+  function buildStatus(cfg, uid, userData, usageData, nowMs) {
     const paidUntilMs = tsToMs((userData || {}).assistantPaidUntil);
-    const pro = paidUntilMs > nowMs;
+    const pro = isPro(cfg, uid, userData, nowMs);
     const u = usageData || {};
     return {
       enabled: cfg.enabled,
       pro,
-      paidUntil: pro ? paidUntilMs : null,
+      // Доимий Pro (freeProPhones) — муддат йўқ, клиент "Pro фаол" деб кўрсатади.
+      paidUntil: paidUntilMs > nowMs ? paidUntilMs : null,
+      unlimited: cfg.freeProPhones.has(uid),
       usedToday: intOr(u.messages, 0),
       dailyLimit: pro ? cfg.proDailyLimit : cfg.freeDailyLimit,
       freeDailyLimit: cfg.freeDailyLimit,
@@ -280,7 +297,7 @@ function attachAssistant(exportsObj, deps) {
       db.collection('users').doc(uid).get(),
       usageRef(uid, tashkentDayKey(nowMs)).get(),
     ]);
-    return buildStatus(cfg, userSnap.data(), usageSnap.data(), nowMs);
+    return buildStatus(cfg, uid, userSnap.data(), usageSnap.data(), nowMs);
   });
 
   // ---------------------------------------------------------------------
@@ -318,7 +335,7 @@ function attachAssistant(exportsObj, deps) {
         }
         const userData = userSnap.data() || {};
         const usage = usageSnap.exists ? (usageSnap.data() || {}) : {};
-        const pro = tsToMs(userData.assistantPaidUntil) > nowMs;
+        const pro = isPro(cfg, uid, userData, nowMs);
         const used = intOr(usage.messages, 0);
         const dailyLimit = pro ? cfg.proDailyLimit : cfg.freeDailyLimit;
         if (used >= dailyLimit) {
@@ -403,7 +420,7 @@ function attachAssistant(exportsObj, deps) {
         reply: reply.text,
         messageId: botMsgRef.id,
         webSearches: reply.webSearches,
-        status: buildStatus(cfg, gate.userData, usageAfter, nowMs),
+        status: buildStatus(cfg, uid, gate.userData, usageAfter, nowMs),
       };
     });
 

@@ -1,4 +1,4 @@
-{
+﻿{
   "accept": "ҚАБУЛ ҚИЛИШ",
   "accept_booking": "Қабул қилиш",
   "accept_reject_call": "Қабул / рад / қўнғироқ",
@@ -577,6 +577,7 @@
   "assistant_free_left": "Бепул: бугун яна {count} та хабар",
   "assistant_pro_until": "Pro фаол — {date} гача",
   "assistant_pro_button": "Pro",
+  "assistant_pro_unlimited": "Pro фаол — чекловсиз",
   "assistant_new_chat": "Янги суҳбат",
   "assistant_new_chat_confirm": "Суҳбат тарихи ўчирилади. Давом этасизми?",
   "assistant_limit_title": "Бугунги бепул лимит тугади",

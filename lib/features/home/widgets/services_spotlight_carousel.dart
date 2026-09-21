@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
@@ -13,6 +14,7 @@ class ServiceSpotlightItem {
     required this.label,
     required this.onTap,
     this.imagePath,
+    this.svgPath,
     this.emoji,
     this.icon,
     this.iconColor,
@@ -23,6 +25,8 @@ class ServiceSpotlightItem {
   final String label;
   final VoidCallback onTap;
   final String? imagePath;
+  /// Расмий бренд логотипи (vektor) — масалан тўлов провайдерлари учун.
+  final String? svgPath;
   final String? emoji;
   final IconData? icon;
   final Color? iconColor;
@@ -402,7 +406,18 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                             height: iconSize,
                             child: ClipRect(
                               child: Center(
-                                child: item.icon != null
+                                child: item.svgPath != null
+                                    ? Transform.scale(
+                                        scale: imageZoom,
+                                        child: SvgPicture.asset(
+                                          item.svgPath!,
+                                          width: iconSize,
+                                          height: iconSize,
+                                          fit: BoxFit.contain,
+                                          alignment: Alignment.center,
+                                        ),
+                                      )
+                                    : item.icon != null
                                     ? Icon(
                                         item.icon,
                                         color: item.iconColor ??

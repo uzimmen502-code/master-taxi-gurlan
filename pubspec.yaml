@@ -14,6 +14,7 @@ dependencies:
 
   # UI
   cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.10+1
 
   # Firebase
   firebase_core: ^3.6.0
@@ -71,11 +72,16 @@ dependencies:
   crypto: ^3.0.7
   video_compress: ^3.1.4
 
-# video_player_android 2.9.5 — vendored nusxa, bitta patch: ExoPlayer
-# LoadControl buferi 50s → 20s (third_party/video_player_android/.../
-# AvaLoadControl.java). Plugin yangilanganda: pub nusxasini qayta ko'chirib,
-# TextureVideoPlayer/PlatformViewVideoPlayer'dagi `.setLoadControl(...)`
-# qatorini qaytadan qo'shish kerak.
+# video_player_android 2.9.5 — vendored nusxa, ikkita patch:
+#  1) ExoPlayer LoadControl buferi 50s → 20s (AvaLoadControl.java) —
+#     TextureVideoPlayer/PlatformViewVideoPlayer'dagi `.setLoadControl(...)`.
+#  2) Media3 SimpleCache + HLS segment prefetch (AvaMediaCache.java) —
+#     HttpVideoAsset.getMediaSourceFactory'dagi `unstableWrapWithCache(...)`
+#     (faqat http(s)); ilova tomonida MainActivity.kt `tv_media_cache` kanali.
+#  3) Birinchi variant doim eng pasti (AvaBandwidthMeter.java) —
+#     TextureVideoPlayer/PlatformViewVideoPlayer'dagi `.setBandwidthMeter(...)`.
+# Plugin yangilanganda: pub nusxasini qayta ko'chirib, uchala patch fayl va
+# ularning chaqiruv qatorlarini qaytadan qo'shish kerak.
 dependency_overrides:
   video_player_android:
     path: third_party/video_player_android
@@ -84,6 +90,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # TvPlayerPool testlari — VideoPlayerPlatform fake (ExoPlayer'siz).
+  video_player_platform_interface: ^6.7.0
   flutter_native_splash: ^2.4.0
   flutter_launcher_icons: ^0.14.1
 

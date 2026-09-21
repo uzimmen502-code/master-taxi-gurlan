@@ -46,6 +46,28 @@ service firebase.storage {
       allow delete: if request.auth != null && adsOwnerPathOk();
     }
 
+    // Ulgurji bozor mahsulot rasmlari — `ads/` bilan bir xil qoida:
+    // faqat o'z telefon papkasiga (9 / 998-prefiks alias), ≤8MB, faqat rasm.
+    match /wholesale_products/{sellerId}/{fileName} {
+      function wsPhone() {
+        return request.auth.token.phone_number.replace('\\+', '');
+      }
+      function wsOwnerPathOk() {
+        let p = wsPhone();
+        return p == sellerId
+            || (sellerId.size() == 12 && sellerId.matches('998[0-9]{9}')
+                && p == sellerId[3:12])
+            || (p.size() == 12 && p.matches('998[0-9]{9}')
+                && sellerId == p[3:12]);
+      }
+      allow read: if true;
+      allow write: if request.auth != null
+          && wsOwnerPathOk()
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && wsOwnerPathOk();
+    }
+
     // Davra (Mening yaqinlarim) fotoalbomi. O'qish — download URL bilan hammaga;
     // yozish — authed, faqat .jpg, ≤8MB. A'zolik Firestore qatlamida tekshiriladi.
     match /circles/{circleId}/album/{fileName} {

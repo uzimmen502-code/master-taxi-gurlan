@@ -28,7 +28,7 @@ import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
-import '../assistant/screens/assistant_chat_screen.dart';
+import '../assistant/assistant_entry.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
@@ -1031,8 +1031,11 @@ class _HomeViewState extends State<_HomeView> {
                                   label: context.tr('home_module_chatgpt'),
                                   icon: Icons.auto_awesome_rounded,
                                   iconColor: const Color(0xFF10A37F),
-                                  onTap: () => _push(
-                                      AssistantChatScreen(phone: home.phone)),
+                                  onTap: () => openAssistantEntry(
+                                    context,
+                                    phone: home.phone,
+                                    push: _push,
+                                  ),
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'courier',

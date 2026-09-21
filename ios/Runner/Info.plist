@@ -70,5 +70,10 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
+		<!-- AVA yordamchisi: ChatGPT ilovasi o'rnatilganini tekshirish (canLaunchUrl) -->
+		<key>LSApplicationQueriesSchemes</key>
+		<array>
+			<string>chatgpt</string>
+		</array>
 	</dict>
 </plist>

@@ -12,11 +12,20 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
-                if (call.method == "openApp") {
-                    val pkg = call.argument<String>("package")
-                    result.success(pkg != null && launchPackage(pkg))
-                } else {
-                    result.notImplemented()
+                when (call.method) {
+                    "openApp" -> {
+                        val pkg = call.argument<String>("package")
+                        result.success(pkg != null && launchPackage(pkg))
+                    }
+                    // Ochmasdan faqat o'rnatilganini tekshirish (AVA yordamchisi:
+                    // ChatGPT ilovasi bo'lsa — o'z obunasidan foydalanish taklifi).
+                    "isAppInstalled" -> {
+                        val pkg = call.argument<String>("package")
+                        result.success(
+                            pkg != null && packageManager.getLaunchIntentForPackage(pkg) != null
+                        )
+                    }
+                    else -> result.notImplemented()
                 }
             }
 

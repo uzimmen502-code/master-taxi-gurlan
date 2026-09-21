@@ -21,8 +21,10 @@ import 'birthday_bonus_screen.dart';
 import 'identity_approvals_screen.dart';
 import 'pending_codes_screen.dart';
 import 'intercity_admin_screen.dart';
+import 'ev_station_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'market_moderation_screen.dart';
+import 'wholesale_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
 import 'marshrut_dispatch_history_screen.dart';
 import 'chat_support_screen.dart';
@@ -131,9 +133,19 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Арзон маҳсулот эълонлари',
     ),
     _AdminSection(
+      label: 'EV зарядлаш',
+      icon: Icons.ev_station_outlined,
+      description: 'Report qilingan zaryadlash nuqtalari moderatsiyasi',
+    ),
+    _AdminSection(
       label: 'AVA дўкони',
       icon: Icons.store_mall_directory_outlined,
       description: 'Тавсия / платформа каталоги',
+    ),
+    _AdminSection(
+      label: 'Улгуржи бозор',
+      icon: Icons.warehouse_outlined,
+      description: 'Сотувчилар ва улгуржи маҳсулот модерацияси',
     ),
     _AdminSection(
       label: 'AVAGram',
@@ -402,6 +414,12 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Онлайн бозор') {
       return const MarketModerationScreen();
+    }
+    if (section.label == 'Улгуржи бозор') {
+      return const WholesaleModerationScreen();
+    }
+    if (section.label == 'EV зарядлаш') {
+      return const EvStationModerationScreen();
     }
     if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();
@@ -868,6 +886,18 @@ class _Sidebar extends StatelessWidget {
             .where('type', isEqualTo: 'cheap_product')
             .where('status', isEqualTo: 'pending')
             .limit(200)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'EV зарядлаш':
+        return db
+            .collection('ev_charging_stations')
+            .where('reportCount', isGreaterThan: 0)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Улгуржи бозор':
+        return db
+            .collection('wholesale_sellers')
+            .where('approvalStatus', isEqualTo: 'pending')
             .snapshots()
             .map((s) => s.docs.length);
       case '❤️ Танишув':

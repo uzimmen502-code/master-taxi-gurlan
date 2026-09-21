@@ -23,6 +23,7 @@ class TvClipOverlay extends StatelessWidget {
     this.onDelete,
     this.onEdit,
     this.onOpenShop,
+    this.onOpenWholesale,
     this.filters,
   });
 
@@ -38,6 +39,10 @@ class TvClipOverlay extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onOpenShop;
+
+  /// Клип улгуржи маҳсулотга боғланган бўлса (`clip.wholesaleProductId`) —
+  /// маҳсулот тафсилотига ўтиш.
+  final VoidCallback? onOpenWholesale;
 
   /// Пастки қаторнинг чап томонида, «Боғланиш» тугмасидан олдин
   /// турадиган ҳудуд фильтрлари (туман, вилоят). Экран даражасидаги
@@ -136,6 +141,7 @@ class TvClipOverlay extends StatelessWidget {
             onShare: onShare,
             onSave: onSave,
             onOpenShop: onOpenShop,
+            onOpenWholesale: onOpenWholesale,
           ),
         ),
       ],
@@ -242,6 +248,7 @@ class _ActionButtons extends StatelessWidget {
     required this.onShare,
     required this.onSave,
     this.onOpenShop,
+    this.onOpenWholesale,
     this.showShop = false,
   });
 
@@ -253,6 +260,7 @@ class _ActionButtons extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onSave;
   final VoidCallback? onOpenShop;
+  final VoidCallback? onOpenWholesale;
   final bool showShop;
 
   @override
@@ -283,6 +291,14 @@ class _ActionButtons extends StatelessWidget {
           _ShopActionBtn(
             label: context.tr('tv_market_shop'),
             onTap: onOpenShop!,
+          ),
+        ],
+        if (onOpenWholesale != null) ...[
+          const SizedBox(height: 16),
+          _ShopActionBtn(
+            label: context.tr('tv_market_wholesale'),
+            icon: Icons.warehouse_rounded,
+            onTap: onOpenWholesale!,
           ),
         ],
         const SizedBox(height: 16),
@@ -349,10 +365,12 @@ class _ShopActionBtn extends StatelessWidget {
   const _ShopActionBtn({
     required this.label,
     required this.onTap,
+    this.icon = Icons.storefront_rounded,
   });
 
   final String label;
   final VoidCallback onTap;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -372,8 +390,8 @@ class _ShopActionBtn extends StatelessWidget {
                 BoxShadow(color: Colors.black54, blurRadius: 6),
               ],
             ),
-            child: const Icon(
-              Icons.storefront_rounded,
+            child: Icon(
+              icon,
               color: Colors.black,
               size: 22,
             ),

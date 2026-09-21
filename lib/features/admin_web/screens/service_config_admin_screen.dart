@@ -51,6 +51,11 @@ const Map<String, String> _moduleLabels = {
   'platform_store': 'AVA do\'koni',
   'tv_market': 'AVAGram',
   'chatgpt': 'ChatGPT',
+  'ev_charging': 'EV zaryadlash',
+  'pay_click': 'Click',
+  'pay_payme': 'Payme',
+  'pay_paynet': 'Paynet',
+  'wholesale_market': 'Улгуржи бозор',
 };
 
 String _labelFor(String id) => _moduleLabels[id] ?? id;

@@ -24,6 +24,11 @@ const List<String> kKnownModuleIds = [
   'platform_store',
   'tv_market',
   'chatgpt',
+  'ev_charging',
+  'pay_click',
+  'pay_payme',
+  'pay_paynet',
+  'wholesale_market',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

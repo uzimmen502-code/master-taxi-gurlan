@@ -35,6 +35,7 @@ class TvPublishScreen extends StatefulWidget {
     super.key,
     this.attachItemId = '',
     this.editClip,
+    this.hideShopOption = false,
   });
 
   /// Мавжуд товар/хизматга яна ролик қўшиш.
@@ -42,6 +43,11 @@ class TvPublishScreen extends StatefulWidget {
 
   /// Берилса — жойлаш эмас, шу роликни таҳрирлаш.
   final TvClip? editClip;
+
+  /// `true` — «Дўкон очиш» блоки кўрсатилмайди (масалан улгуржи бозор
+  /// оқимидан очилганда — у ерда маҳсулот аллақачон `wholesale_products`да,
+  /// `tv_shop_items`да дубликат яратилмасин).
+  final bool hideShopOption;
 
   @override
   State<TvPublishScreen> createState() => _TvPublishScreenState();
@@ -884,7 +890,8 @@ class _TvPublishScreenState extends State<TvPublishScreen>
               if (!_isEdit && _category != 'ad') ...[
                 // Дўкон/маҳсулот — «Янгилик»га тегишли эмас (48 соатда
                 // ўзи ўчади, витринага боғланмайди).
-                if (_category != 'news') ..._shopSection(context),
+                if (_category != 'news' && !widget.hideShopOption)
+                  ..._shopSection(context),
                 _SocialPicker(
                   selected: _socialNetworks,
                   onToggle: (id, on) => setState(

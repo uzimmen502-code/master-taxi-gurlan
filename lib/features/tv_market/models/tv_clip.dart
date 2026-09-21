@@ -73,6 +73,7 @@ class TvClip {
     this.status = 'active',
     this.createdAt,
     this.shopItemId = '',
+    this.wholesaleProductId = '',
     this.socialConsent = false,
     this.socialNetworks = const [],
     this.socialPostedAt,
@@ -143,6 +144,10 @@ class TvClip {
 
   /// Боғланган витрина товар/хизмати. Бўш = фақат ролик.
   final String shopItemId;
+
+  /// Боғланган улгуржи маҳсулот (`wholesale_products/{id}`) — видеообзор
+  /// ёки пуллик реклама. Бўш = улгуржига алоқасиз.
+  final String wholesaleProductId;
   final bool socialConsent;
   /// `instagram` | `facebook` | `tiktok`
   final List<String> socialNetworks;
@@ -271,6 +276,7 @@ class TvClip {
     int? commentCount,
     int? viewCount,
     String? shopItemId,
+    String? wholesaleProductId,
     bool? socialConsent,
     List<String>? socialNetworks,
     DateTime? socialPostedAt,
@@ -320,6 +326,7 @@ class TvClip {
       status: status,
       createdAt: createdAt,
       shopItemId: shopItemId ?? this.shopItemId,
+      wholesaleProductId: wholesaleProductId ?? this.wholesaleProductId,
       socialConsent: socialConsent ?? this.socialConsent,
       socialNetworks: socialNetworks ?? this.socialNetworks,
       socialPostedAt: socialPostedAt ?? this.socialPostedAt,
@@ -363,6 +370,7 @@ class TvClip {
       status: (d['status'] ?? 'active') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       shopItemId: (d['shopItemId'] ?? '') as String,
+      wholesaleProductId: (d['wholesaleProductId'] ?? '') as String,
       socialConsent: d['socialConsent'] == true,
       socialNetworks: _parseSocialNetworks(d['socialNetworks']),
       socialPostedAt: (d['socialPostedAt'] as Timestamp?)?.toDate(),
@@ -420,6 +428,8 @@ class TvClip {
             ? Timestamp.fromDate(createdAt!)
             : FieldValue.serverTimestamp(),
         if (shopItemId.isNotEmpty) 'shopItemId': shopItemId,
+        if (wholesaleProductId.isNotEmpty)
+          'wholesaleProductId': wholesaleProductId,
         'socialConsent': socialConsent,
         if (socialNetworks.isNotEmpty) 'socialNetworks': socialNetworks,
         if (socialPostedAt != null)

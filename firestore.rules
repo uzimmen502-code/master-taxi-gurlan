@@ -2057,6 +2057,193 @@ service cloud.firestore {
                    phoneDigits(resource.data.get('ownerId', ''))));
     }
 
+    // ─── Улгуржи/кичик улгуржи бозор (Cloud Function йўқ — ҳаммаси шу
+    // ерда Rules орқали чекланади). Сотувчи ҳужжат ID = каноник телефон.
+    //
+    // АВТО/ҚЎЛДА тасдиқ — admin панелдаги `settings/app.wholesaleSellerAutoApprove`
+    // / `wholesaleProductAutoApprove` (`ads`/`jobs`даги auto-approve
+    // андозасига мос, лекин CF ўрнига шу ерда, Rules'нинг ўзида текширилади).
+    function wholesaleSellerAutoApproveOn() {
+      return exists(/databases/$(database)/documents/settings/app)
+          && get(/databases/$(database)/documents/settings/app)
+               .data.get('wholesaleSellerAutoApprove', false) == true;
+    }
+
+    function wholesaleProductAutoApproveOn() {
+      return exists(/databases/$(database)/documents/settings/app)
+          && get(/databases/$(database)/documents/settings/app)
+               .data.get('wholesaleProductAutoApprove', false) == true;
+    }
+
+    function wholesaleSellerCreateOk(phone) {
+      return isAuth()
+          && isOwner(phone)
+          && request.resource.data.keys().hasAll(['phone', 'companyName'])
+          && request.resource.data.phone == phone
+          && request.resource.data.companyName is string
+          && request.resource.data.companyName.size() >= 2
+          && request.resource.data.companyName.size() <= 200
+          && (
+            request.resource.data.approvalStatus == 'pending'
+            || (request.resource.data.approvalStatus == 'approved'
+                && wholesaleSellerAutoApproveOn())
+          )
+          && request.resource.data.get('sellerType', '')
+              in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && request.resource.data.keys().hasOnly([
+                'phone', 'companyName', 'ownerName', 'sellerType',
+                'approvalStatus', 'createdAt', 'approvedAt', 'approvedBy'
+              ]);
+    }
+
+    // Эга — фақат компания/эга исмини ўзгартиради, ҳеч қачон ўзини
+    // тасдиқлай олмайди (`approvalStatus` шу функцияда йўқ).
+    function wholesaleSellerOwnerUpdateOk(phone) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isOwner(phone)
+          && request.resource.data.phone == resource.data.phone
+          && changed.hasOnly(['companyName', 'ownerName', 'sellerType', 'updatedAt'])
+          && request.resource.data.get('sellerType', '')
+              in ['', 'manufacturer', 'wholesaler', 'yatt']
+          && request.resource.data.companyName is string
+          && request.resource.data.companyName.size() >= 2
+          && request.resource.data.companyName.size() <= 200;
+    }
+
+    // Фақат admin (isAdmin() шу ердаги мажбурий шарт — эга/бошқа ҳеч ким
+    // ушбу whitelist билан ёза олмайди).
+    function wholesaleSellerApprovalPatchOnly() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAdmin()
+          && changed.hasOnly(['approvalStatus', 'approvedAt', 'approvedBy', 'adminNote'])
+          && request.resource.data.approvalStatus in ['pending', 'approved', 'rejected'];
+    }
+
+    match /wholesale_sellers/{phone} {
+      allow read: if true;
+      allow create: if wholesaleSellerCreateOk(phone);
+      allow update: if wholesaleSellerOwnerUpdateOk(phone) || wholesaleSellerApprovalPatchOnly();
+      allow delete: if false;
+    }
+
+    function wholesaleProductSellerApproved(sellerId) {
+      return exists(/databases/$(database)/documents/wholesale_sellers/$(sellerId))
+          && get(/databases/$(database)/documents/wholesale_sellers/$(sellerId))
+               .data.approvalStatus == 'approved';
+    }
+
+    function wholesaleProductOwnerIsCaller() {
+      return isAuth() && isOwner(resource.data.get('sellerId', ''));
+    }
+
+    // Яратиш — фақат тасдиқланган сотувчи; ҳолат `pending`, ёки
+    // `wholesaleProductAutoApprove` ёқиқ бўлса — тўғридан-тўғри `active`.
+    function wholesaleProductCreateOk() {
+      return isAuth()
+          && isOwner(request.resource.data.get('sellerId', ''))
+          && wholesaleProductSellerApproved(request.resource.data.sellerId)
+          && (
+            request.resource.data.status == 'pending'
+            || (request.resource.data.status == 'active'
+                && wholesaleProductAutoApproveOn())
+          )
+          && request.resource.data.title is string
+          && request.resource.data.title.size() >= 3
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.description is string
+          && request.resource.data.description.size() >= 3
+          && request.resource.data.description.size() <= 2000
+          && request.resource.data.priceTiers is list
+          && request.resource.data.priceTiers.size() >= 1
+          && request.resource.data.priceTiers.size() <= 5
+          && request.resource.data.imageUrls is list
+          && request.resource.data.imageUrls.size() >= 1
+          && request.resource.data.imageUrls.size() <= 5
+          && request.resource.data.get('views', 0) == 0
+          && request.resource.data.get('videoClipIds', []).size() == 0
+          && request.resource.data.keys().hasOnly([
+                'sellerId', 'sellerCompanyName', 'title', 'titleLower',
+                'searchTokens', 'description', 'priceTiers', 'unit',
+                'imageUrls', 'status', 'views', 'videoClipIds',
+                'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
+                'moderatedBy'
+              ]);
+    }
+
+    // Эга — контент таҳрири (қайта `pending`га тушади) ёки фақат
+    // яшириш (`inactive`) — ҳеч қачон ўзини `active` қилолмайди.
+    // Нарх поғоналари (`priceTiers`) — ҳар бир элемент таркиби клиентда
+    // (Dart модел) шаклланади; `imageUrls`даги каби бу ерда фақат
+    // рўйхат ҳажми текширилади (per-item schema Rules'да текширилмайди).
+    function wholesaleProductOwnerUpdateOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return wholesaleProductOwnerIsCaller()
+          && request.resource.data.sellerId == resource.data.sellerId
+          && changed.hasOnly([
+                'title', 'titleLower', 'searchTokens', 'description',
+                'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt'
+              ])
+          && request.resource.data.priceTiers is list
+          && request.resource.data.priceTiers.size() >= 1
+          && request.resource.data.priceTiers.size() <= 5
+          && request.resource.data.title.size() >= 3
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.description.size() >= 3
+          && request.resource.data.description.size() <= 2000
+          && request.resource.data.imageUrls.size() >= 1
+          && request.resource.data.imageUrls.size() <= 5
+          && (!changed.hasAny(['status'])
+              || (
+                (request.resource.data.status == 'inactive'
+                    && resource.data.status in ['active', 'pending'])
+                || (request.resource.data.status == 'pending'
+                    && resource.data.status in ['inactive', 'active'])
+              ));
+    }
+
+    function wholesaleProductAdminPatchOnly() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return isAdmin()
+          && request.resource.data.sellerId == resource.data.sellerId
+          && changed.hasOnly([
+                'status', 'adminNote', 'moderatedAt', 'moderatedBy',
+                'publishedAt', 'updatedAt'
+              ])
+          && (!changed.hasAny(['status'])
+              || request.resource.data.status in ['active', 'inactive']);
+    }
+
+    function wholesaleProductViewIncrementOk() {
+      return isAuth()
+          && resource.data.status == 'active'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+          && request.resource.data.views is int
+          && request.resource.data.views == resource.data.views + 1;
+    }
+
+    // Эга — видеообзор/пуллик реклама клипини (AVAGram'да алоҳида
+    // нашр қилинган) маҳсулотга боғлаш/олиб ташлаш.
+    function wholesaleProductVideoLinkOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return wholesaleProductOwnerIsCaller()
+          && request.resource.data.sellerId == resource.data.sellerId
+          && changed.hasOnly(['videoClipIds', 'updatedAt'])
+          && request.resource.data.videoClipIds is list
+          && request.resource.data.videoClipIds.size() <= 5;
+    }
+
+    match /wholesale_products/{id} {
+      allow read: if isAdmin()
+          || resource.data.status == 'active'
+          || (isAuth() && isOwner(resource.data.get('sellerId', '')));
+      allow create: if wholesaleProductCreateOk();
+      allow update: if wholesaleProductOwnerUpdateOk()
+          || wholesaleProductAdminPatchOnly()
+          || wholesaleProductViewIncrementOk()
+          || wholesaleProductVideoLinkOk();
+      allow delete: if isAdmin() || wholesaleProductOwnerIsCaller();
+    }
+
     // Шикоят — фақат CF `submitJobComplaint` (client create: false).
     function complaintCreateOk() {
       return false;
@@ -2502,6 +2689,93 @@ service cloud.firestore {
       allow delete: if isAdmin()
           || (isAuth()
               && phoneDocIdsMatch(userDocIdFromPhoneToken(), resource.data.ownerPhone));
+    }
+
+    // ══════════════════════════════════════
+    // EV CHARGING — ⚡ Электромобил зарядлаш нуқталари (жамоа харитаси)
+    //   ev_charging_stations — асосий коллекция (координата мажбурий).
+    //   confirmations/{userId} — "Ҳа, шу ерда" (idempotent, docId = userId).
+    //   reports/{reportId} — "Йўқ, нуқта йўқ" / хато хабар (лимит — config'дан).
+    //   reportLimits/{userId} — counter-document, фақат Cloud Function (Admin
+    //   SDK) ёзади, клиент фақат ўзиникини ўқийди.
+    //   Фақат рўйхатдан ўтган (телефон claim бор) фойдаланувчилар — anon session
+    //   'phone_number' claim'сиз бўлади, шу сабабли phoneFromToken() != ''
+    //   аниlanadigan "registered" tekshiruvi.
+    //   verificationStatus/confirmationCount/reportCount/status — клиент
+    //   яратишда фақат default қиймат билан, кейин фақат isAdmin() ёки Admin
+    //   SDK (Cloud Function) орқали ўзгартирилади.
+    // ══════════════════════════════════════
+    function evStationHasCoords() {
+      return request.resource.data.location is map
+          && request.resource.data.location.latitude is number
+          && request.resource.data.location.longitude is number;
+    }
+
+    function evStationCreateFieldsOk() {
+      return request.resource.data.get('verificationStatus', 'community') == 'community'
+          && request.resource.data.get('confirmationCount', 0) == 0
+          && request.resource.data.get('reportCount', 0) == 0
+          && request.resource.data.get('status', 'unknown') == 'unknown'
+          && request.resource.data.get('isActive', true) == true;
+    }
+
+    function evStationCommunityPatch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'chargingTypes', 'connectors', 'powerKw', 'price',
+            'operatorName', 'note', 'updatedAt'
+          ]);
+    }
+
+    // Лимит қиймати `config/ev_charging.maxReportsPerUserPerStation`дан —
+    // hardcode emas (7-band); hujjat/maydon bo'lmasa 3 — kod fallback.
+    function evMaxReportsPerStation() {
+      let cfgPath = /databases/$(database)/documents/config/ev_charging;
+      return exists(cfgPath) && ('maxReportsPerUserPerStation' in get(cfgPath).data)
+          ? get(cfgPath).data.maxReportsPerUserPerStation
+          : 3;
+    }
+
+    function evReportLimitOk(stationId, userId) {
+      let limitPath = /databases/$(database)/documents/ev_charging_stations/$(stationId)/reportLimits/$(userId);
+      return !exists(limitPath) || get(limitPath).data.count < evMaxReportsPerStation();
+    }
+
+    match /ev_charging_stations/{stationId} {
+      allow read: if isAuth() && phoneFromToken() != '';
+      allow create: if isOwner(request.resource.data.createdBy)
+          && evStationHasCoords()
+          && evStationCreateFieldsOk();
+      allow update: if isAdmin()
+          || (
+            isAuth() && phoneFromToken() != ''
+            && evStationCommunityPatch()
+          );
+      allow delete: if isAdmin();
+
+      match /confirmations/{userId} {
+        allow read: if isAuth() && phoneFromToken() != '';
+        allow create, update: if isOwner(userId)
+            && request.resource.data.userId == userId;
+        allow delete: if false;
+      }
+
+      match /reports/{reportId} {
+        allow read: if isAdmin();
+        allow create: if isOwner(request.resource.data.reporterId)
+            && request.resource.data.reason in [
+                 'wrong_location', 'station_not_found', 'not_working',
+                 'wrong_connector', 'wrong_power', 'wrong_price', 'other'
+               ]
+            && evReportLimitOk(stationId, request.resource.data.reporterId);
+        allow update: if isAdmin();
+        allow delete: if false;
+      }
+
+      match /reportLimits/{userId} {
+        allow read: if isAdmin() || isOwner(userId);
+        allow write: if false; // фақат Cloud Function (Admin SDK)
+      }
     }
 
   }

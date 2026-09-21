@@ -11,6 +11,7 @@ import '../../core/service_config_holder.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/chatgpt_launcher.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/payment_provider_launcher.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/active_trip.dart';
 import '../../models/home_module.dart';
@@ -18,6 +19,7 @@ import '../../models/user_model.dart';
 import '../../models/home_ticker_ad.dart';
 import '../../repositories/intercity_bookings_repository.dart';
 import '../../repositories/rides_repository.dart';
+import '../../repositories/settings_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
@@ -26,10 +28,12 @@ import '../orders/screens/orders_screen.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
+import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
+import '../wholesale/screens/wholesale_market_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
@@ -401,10 +405,28 @@ class _HomeViewState extends State<_HomeView> {
   }
 
   Future<void> _openChatGpt() async {
-    final opened = await openChatGpt();
+    final assistantUrl = await SettingsRepository().getAssistantUrl();
+    final opened = await openChatGpt(assistantUrl: assistantUrl);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('chatgpt_open_failed'))),
+      );
+    }
+  }
+
+  static const _paymentOpenFailedKeys = {
+    'pay_click': 'click_open_failed',
+    'pay_payme': 'payme_open_failed',
+    'pay_paynet': 'paynet_open_failed',
+  };
+
+  Future<void> _openPaymentProvider(PaymentProviderApp app) async {
+    final opened = await openPaymentProviderApp(app);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr(_paymentOpenFailedKeys[app.id]!)),
+        ),
       );
     }
   }
@@ -1074,6 +1096,54 @@ class _HomeViewState extends State<_HomeView> {
                                       'assets/images/services/service_carpet_wash.png',
                                   onTap: () =>
                                       _push(const CarpetWashScreen()),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'ev_charging',
+                                  label: context.tr('home_module_ev_charging'),
+                                  imagePath:
+                                      'assets/images/services/service_ev_charging.png',
+                                  onTap: () =>
+                                      _push(const EvChargingMapScreen()),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'pay_click',
+                                  label: context.tr('home_module_click'),
+                                  svgPath:
+                                      'assets/images/services/service_pay_click.svg',
+                                  onTap: () => _openPaymentProvider(kClickApp),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'pay_payme',
+                                  label: context.tr('home_module_payme'),
+                                  svgPath:
+                                      'assets/images/services/service_pay_payme.svg',
+                                  onTap: () => _openPaymentProvider(kPaymeApp),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'pay_paynet',
+                                  label: context.tr('home_module_paynet'),
+                                  imagePath:
+                                      'assets/images/services/service_pay_paynet.png',
+                                  onTap: () =>
+                                      _openPaymentProvider(kPaynetApp),
+                                ),
+                                ServiceSpotlightItem(
+                                  moduleId: 'wholesale_market',
+                                  label: context.tr('home_module_wholesale'),
+                                  icon: Icons.warehouse_outlined,
+                                  iconColor: const Color(0xFF6D4C41),
+                                  onTap: () {
+                                    if (!ServiceConfigHolder.isOpenable(
+                                        'wholesale_market')) {
+                                      _showTezKundaSnack();
+                                      return;
+                                    }
+                                    _push(WholesaleMarketScreen(
+                                      userPhone: canonicalPhoneId(
+                                        context.read<HomeController>().phone,
+                                      ),
+                                    ));
+                                  },
                                 ),
                                 ];
                                 return ServicesSpotlightCarousel(

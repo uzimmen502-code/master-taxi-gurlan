@@ -30,6 +30,11 @@ class AssistantStatus {
   final int balance;
   final List<AssistantPackage> packages;
 
+  /// Бир марталик тўлов (10 йил) — муддат кўрсатилмайди, «чекловсиз».
+  bool get lifetime =>
+      paidUntil != null &&
+      paidUntil!.difference(DateTime.now()).inDays > 5 * 365;
+
   int get remainingToday =>
       (dailyLimit - usedToday) < 0 ? 0 : dailyLimit - usedToday;
 
@@ -85,6 +90,7 @@ class AssistantPackage {
     required this.days,
     required this.price,
     required this.promo,
+    this.oneTime = false,
   });
 
   final String id;
@@ -92,10 +98,14 @@ class AssistantPackage {
   final int price;
   final bool promo;
 
+  /// Бир марталик тўлов — доимий Plus (муддат кўрсатилмайди).
+  final bool oneTime;
+
   factory AssistantPackage.fromMap(Map<String, dynamic> m) => AssistantPackage(
         id: (m['id'] ?? '') as String,
         days: (m['days'] as num?)?.toInt() ?? 0,
         price: (m['price'] as num?)?.toInt() ?? 0,
         promo: m['promo'] == true,
+        oneTime: m['oneTime'] == true,
       );
 }

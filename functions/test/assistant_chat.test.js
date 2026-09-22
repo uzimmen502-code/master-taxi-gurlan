@@ -162,7 +162,8 @@ async function main() {
   const UID = '998901234567';
   const db = makeDb();
   db._store.set(`users/${UID}`, { phone: UID, bonusBalance: 20000 });
-  db._store.set('settings/assistant', { freeDailyLimit: 2, proWebSearchDailyLimit: 1, memoryEveryNMessages: 1 });
+  const PKGS = [{ id: 'd7', days: 7, price: 15000 }, { id: 'd15', days: 15, price: 25000 }, { id: 'd30', days: 30, price: 30000, promo: true }];
+  db._store.set('settings/assistant', { freeDailyLimit: 2, proWebSearchDailyLimit: 1, memoryEveryNMessages: 1, packages: PKGS });
 
   let fetchCalls = [];
   global.fetch = async (url, opts) => {
@@ -245,7 +246,7 @@ async function main() {
   assert.strictEqual((await db.collection('users').doc(UID).collection('assistant_memory').get()).size, 2);
 
   // 5) yangi suhbatda xotira prompt'ga kiradi
-  db._store.set('settings/assistant', { freeDailyLimit: 10, proWebSearchDailyLimit: 1, memoryEveryNMessages: 1 });
+  db._store.set('settings/assistant', { freeDailyLimit: 10, proWebSearchDailyLimit: 1, memoryEveryNMessages: 1, packages: PKGS });
   r = await handlers.assistantChat({ text: 'men kimman?' }, ctx(UID));
   assert.notStrictEqual(r.conversationId, convId, 'yangi suhbat');
   const lastBody = fetchCalls.at(-1);
@@ -302,6 +303,11 @@ async function main() {
   // 11) API kaliti yo'q
   delete process.env.OPENAI_API_KEY;
   await expectError(handlers.assistantChat({ text: 'x' }, ctx(UID)), 'failed-precondition', 'api_key_missing');
+
+  // 12a) default paket — bir martalik 12 500 (once, 3650 kun)
+  db._store.set('settings/assistant', {});
+  const dst = await handlers.assistantGetStatus({}, ctx(UID));
+  assert.deepStrictEqual(dst.packages, [{ id: 'once', days: 3650, price: 12500, promo: false, oneTime: true }]);
 
   // 12) freeProPhones — paketsiz doimiy Pro
   const OWNER = '998912778777';

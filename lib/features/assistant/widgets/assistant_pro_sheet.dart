@@ -41,10 +41,13 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('assistant_pro_sheet_title')),
-        content: Text(ctx.trMsg('assistant_buy_confirm', params: {
-          'price': formatPrice(pkg.price),
-          'days': '${pkg.days}',
-        })),
+        content: Text(pkg.oneTime
+            ? ctx.trMsg('assistant_buy_confirm_once',
+                params: {'price': formatPrice(pkg.price)})
+            : ctx.trMsg('assistant_buy_confirm', params: {
+                'price': formatPrice(pkg.price),
+                'days': '${pkg.days}',
+              })),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -174,8 +177,10 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
             if (s.pro && s.paidUntil != null) ...[
               const SizedBox(height: 8),
               Text(
-                context.trMsg('assistant_pro_until',
-                    params: {'date': formatDateShort(s.paidUntil)}),
+                s.lifetime
+                    ? context.tr('assistant_pro_unlimited')
+                    : context.trMsg('assistant_pro_until',
+                        params: {'date': formatDateShort(s.paidUntil)}),
                 style: const TextStyle(
                     fontSize: 13, color: Color(0xFF2E7D32)),
               ),
@@ -260,8 +265,10 @@ class _PackageTile extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          context.trMsg('assistant_days',
-                              params: {'count': '${pkg.days}'}),
+                          pkg.oneTime
+                              ? context.tr('assistant_onetime_label')
+                              : context.trMsg('assistant_days',
+                                  params: {'count': '${pkg.days}'}),
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w700),
                         ),
@@ -288,8 +295,10 @@ class _PackageTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      context.trMsg('assistant_per_day',
-                          params: {'amount': formatPrice(perDay)}),
+                      pkg.oneTime
+                          ? context.tr('assistant_onetime_sub')
+                          : context.trMsg('assistant_per_day',
+                              params: {'amount': formatPrice(perDay)}),
                       style: const TextStyle(
                           fontSize: 12, color: Colors.black54),
                     ),

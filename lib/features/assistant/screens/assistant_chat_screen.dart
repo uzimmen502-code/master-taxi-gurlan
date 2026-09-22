@@ -420,7 +420,7 @@ class _AssistantChatScreenState extends State<AssistantChatScreen> {
     final String? subtitle;
     if (s == null) {
       subtitle = null;
-    } else if (s.unlimited || (s.pro && s.paidUntil == null)) {
+    } else if (s.unlimited || s.lifetime || (s.pro && s.paidUntil == null)) {
       subtitle = context.tr('assistant_pro_unlimited');
     } else if (s.pro) {
       subtitle = context.trMsg('assistant_pro_until',

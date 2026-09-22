@@ -98,7 +98,6 @@ class _EvChargingMapView extends StatefulWidget {
 
 class _EvChargingMapViewState extends State<_EvChargingMapView> {
   late final EvNavigationSessionController _nav;
-  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -117,7 +116,6 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
   @override
   void dispose() {
     _nav.dispose();
-    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -163,7 +161,7 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
               ? Center(child: Text(controller.error!))
               : Column(
                   children: [
-                    _buildSearchAndFilters(controller),
+                    _buildAddStationAndFilters(controller),
                     Expanded(
                       child: EvMapView(
                         centerLat: controller.lat!,
@@ -174,11 +172,6 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
                     ),
                   ],
                 ),
-      floatingActionButton: controller.hasLocation
-          ? _PaidAddStationFab(
-              onTap: () => _openPaidAddFlow(context, controller),
-            )
-          : null,
     );
   }
 
@@ -212,24 +205,13 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
     );
   }
 
-  Widget _buildSearchAndFilters(EvChargingMapController controller) {
+  Widget _buildAddStationAndFilters(EvChargingMapController controller) {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          TextField(
-            controller: _searchCtrl,
-            decoration: InputDecoration(
-              hintText: 'Манзил бўйича қидириш',
-              filled: true,
-              fillColor: Colors.white,
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.search),
-                onPressed: () => controller.centerOnAddress(_searchCtrl.text),
-              ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onSubmitted: controller.centerOnAddress,
+          _PaidAddStationBar(
+            onTap: () => _openPaidAddFlow(context, controller),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -262,37 +244,34 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
   }
 }
 
-/// «Станция қўшиш (пуллик)» — ихчам pill-тугма (2026-09-22, дизайн
-/// тузатиш: стандарт `FloatingActionButton.extended` узун матн билан
-/// иккиланиб, экран энига чўзилиб кетган эди — контент ўлчамига мос
-/// қўлда ясалган тугма ишлатилди). Яшил эмас — харита фонидаги яшил ва
-/// оранж белгилардан ажралиб турадиган "пуллик/premium" ранги (олтин).
-class _PaidAddStationFab extends StatelessWidget {
-  const _PaidAddStationFab({required this.onTap});
+/// «Станция қўшиш (пуллик)» — қидирув майдони ўрнига жойлашган тўлиқ энли
+/// панель (2026-09-22, дизайн тузатиш #2: қидирув майдони олиб ташланди,
+/// тугма унинг ўрнига кўчирилди ва ранги харита панели/AppBar рангига
+/// (яшил, [AppColors.primaryDark]) уйғунлаштирилди — энди алоҳида сузиб
+/// юрган элемент эмас, юқори панелнинг табиий давоми). "Пуллик" сигнали
+/// йўқолиб кетмаслиги учун кичик олтин белги сақлаб қолинди.
+class _PaidAddStationBar extends StatelessWidget {
+  const _PaidAddStationBar({required this.onTap});
 
   final VoidCallback onTap;
 
-  static const _accent = Color(0xFFB8860B); // тўқ олтин — "пуллик" белгиси
-  static const _accentDark = Color(0xFF8C6400);
+  static const _badgeGold = Color(0xFFF9A825);
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _accent,
-      elevation: 4,
-      shadowColor: Colors.black45,
-      borderRadius: BorderRadius.circular(28),
+      color: AppColors.primaryDark,
+      elevation: 1,
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: _accentDark, width: 1),
-          ),
+          width: double.infinity,
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.add_rounded, color: Colors.white, size: 20),
               const SizedBox(width: 6),
@@ -300,7 +279,7 @@ class _PaidAddStationFab extends StatelessWidget {
                 'Станция қўшиш',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   height: 1,
                 ),
@@ -309,7 +288,7 @@ class _PaidAddStationFab extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(46),
+                  color: _badgeGold,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
@@ -317,7 +296,7 @@ class _PaidAddStationFab extends StatelessWidget {
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     height: 1,
                   ),
                 ),

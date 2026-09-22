@@ -304,10 +304,10 @@ async function main() {
   delete process.env.OPENAI_API_KEY;
   await expectError(handlers.assistantChat({ text: 'x' }, ctx(UID)), 'failed-precondition', 'api_key_missing');
 
-  // 12a) default paket — bir martalik 12 500 (once, 3650 kun)
+  // 12a) default paket — bir martalik 25 000 (once, 3650 kun)
   db._store.set('settings/assistant', {});
   const dst = await handlers.assistantGetStatus({}, ctx(UID));
-  assert.deepStrictEqual(dst.packages, [{ id: 'once', days: 3650, price: 12500, promo: false, oneTime: true }]);
+  assert.deepStrictEqual(dst.packages, [{ id: 'once', days: 3650, price: 25000, promo: false, oneTime: true }]);
 
   // 12) freeProPhones — paketsiz doimiy Pro
   const OWNER = '998912778777';

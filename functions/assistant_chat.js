@@ -73,11 +73,11 @@ const ASSISTANT_DEFAULTS = {
   // Пакетсиз доимий Pro (эга/синов рақамлари). `settings/assistant.freeProPhones`
   // массиви билан кенгайтирилади (998… рақамли формат).
   freeProPhones: ['998912778777'],
-  // Эга қарори (2026-09-22): бир марталик тўлов 12 500 сўм → доимий Plus
+  // Эга қарори (2026-09-22): бир марталик тўлов 25 000 сўм → доимий Plus
   // (10 йил). Кунлик пакетлар керак бўлса — settings/assistant.packages:
   // [{id:'d7',days:7,price:15000},{id:'d15',days:15,price:25000},{id:'d30',days:30,price:30000,promo:true}]
   packages: [
-    { id: 'once', days: 3650, price: 12500, promo: false, oneTime: true },
+    { id: 'once', days: 3650, price: 25000, promo: false, oneTime: true },
   ],
 };
 

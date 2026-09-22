@@ -23,7 +23,7 @@ import 'widgets/assistant_gpt_colors.dart';
 /// 3. Рўйхатдан ўтган, ChatGPT иловаси йўқ — тўғридан AVA чат.
 ///
 /// Тариф (эга қарори, 2026-09-22): оддий — бепул 10 хабар/кун; тўлиқ
-/// фойдаланиш — БИР МАРТАЛИК 12 500 сўм (ҳамёндан, `assistantBuyPackage`
+/// фойдаланиш — БИР МАРТАЛИК 25 000 сўм (ҳамёндан, `assistantBuyPackage`
 /// `once` пакети) → доимий Plus. Варақада қисқа жумла + кичик «Тўлаш» тугмаси.
 /// Дизайн — ChatGPT услуби ([GptColors], Inter).
 Future<void> openAssistantEntry(
@@ -77,7 +77,7 @@ enum _EntryChoice { ava, register, chatGpt, topUp }
 
 /// Бир марталик тўлов нархи — сервер default'и билан бир хил (ҳақиқий нарх
 /// статусдан келади; бу фақат статус юкланмагунча кўрсатиш учун).
-const _kOneTimePriceFallback = 12500;
+const _kOneTimePriceFallback = 25000;
 
 class _EntrySheet extends StatefulWidget {
   const _EntrySheet({required this.registered, required this.chatGptInstalled});

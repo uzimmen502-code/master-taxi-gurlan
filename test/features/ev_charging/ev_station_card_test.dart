@@ -10,6 +10,9 @@ EvChargingStation _station({
   num? price,
   String? operatorName,
   String? note,
+  String? name,
+  String? sourceType,
+  String? sourceProvider,
 }) =>
     EvChargingStation(
       id: 's1',
@@ -28,6 +31,9 @@ EvChargingStation _station({
       reportCount: 0,
       createdBy: 'u1',
       isActive: true,
+      name: name,
+      sourceType: sourceType,
+      sourceProvider: sourceProvider,
     );
 
 Future<void> _pump(WidgetTester tester, EvChargingStation station) {
@@ -80,5 +86,25 @@ void main() {
       find.textContaining('(foydalanuvchilar) tomonidan kiritilgan'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('импорт станцияси — ном ва "Очиқ манбадан" белгиси', (tester) async {
+    await _pump(
+      tester,
+      _station(
+        name: 'Tok Bor',
+        sourceType: 'import',
+        sourceProvider: 'OpenStreetMap',
+      ),
+    );
+    expect(find.text('Tok Bor'), findsOneWidget);
+    expect(find.textContaining('Очиқ манбадан'), findsOneWidget);
+    expect(find.textContaining('OpenStreetMap'), findsOneWidget);
+  });
+
+  testWidgets('жамоа станцияси — "Очиқ манбадан" белгиси йўқ', (tester) async {
+    await _pump(tester, _station());
+    expect(find.textContaining('Очиқ манбадан'), findsNothing);
+    expect(find.text('Зарядлаш нуқтаси'), findsOneWidget);
   });
 }

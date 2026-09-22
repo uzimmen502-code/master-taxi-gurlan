@@ -50,6 +50,10 @@ class EvChargingStation {
     this.reviewRequired = false,
     this.reviewFlags = const [],
     this.possibleDuplicateIds = const [],
+    this.listingType,
+    this.paidTariff,
+    this.paidAmount,
+    this.paidUntil,
   });
 
   final String id;
@@ -130,6 +134,19 @@ class EvChargingStation {
   /// такрор бўлиши мумкин, автоматик бирлаштирилмаган.
   final List<String> possibleDuplicateIds;
 
+  // ---- Пуллик рўйхат (эга қарори, 2026-09-22: янги станция қўшиш пуллик,
+  // `payAndCreateEvStation`) — жамоа/импорт станцияларида бўш. ----
+
+  /// `paid` — пуллик қўшилган (оператор); `null`/бошқа — жамоа/импорт.
+  final String? listingType;
+  final String? paidTariff;
+  final num? paidAmount;
+
+  /// Ҳозирча муддат назорати йўқ (эга қарори) — фақат маълумот сифатида.
+  final DateTime? paidUntil;
+
+  bool get isPaidListing => listingType == 'paid';
+
   bool get hasChargingType => chargingTypes.isNotEmpty;
   bool get hasConnectors => connectors.isNotEmpty;
   bool get hasPowerKw => powerKw != null;
@@ -188,6 +205,10 @@ class EvChargingStation {
       reviewFlags: List<String>.from(d['reviewFlags'] as List? ?? const []),
       possibleDuplicateIds:
           List<String>.from(d['possibleDuplicateIds'] as List? ?? const []),
+      listingType: d['listingType'] as String?,
+      paidTariff: d['paidTariff'] as String?,
+      paidAmount: d['paidAmount'] as num?,
+      paidUntil: (d['paidUntil'] as Timestamp?)?.toDate(),
     );
   }
 }

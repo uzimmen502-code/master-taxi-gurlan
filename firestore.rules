@@ -2729,21 +2729,12 @@ service cloud.firestore {
     //   verificationStatus/confirmationCount/reportCount/status — клиент
     //   яратишда фақат default қиймат билан, кейин фақат isAdmin() ёки Admin
     //   SDK (Cloud Function) орқали ўзгартирилади.
+    //   ЯНГИ станция қўшиш — ПУЛЛИК (эга қарори, 2026-09-22): клиент энди
+    //   тўғридан-тўғри `create` қила олмайди — фақат
+    //   `payAndCreateEvStation` callable (Admin SDK, ҳамёндан тўлов билан
+    //   бирга) орқали. Мавжуд ҳужжатни таҳрирлаш (`evStationCommunityPatch`)
+    //   ҳамон бепул ва ўзгармади.
     // ══════════════════════════════════════
-    function evStationHasCoords() {
-      return request.resource.data.location is map
-          && request.resource.data.location.latitude is number
-          && request.resource.data.location.longitude is number;
-    }
-
-    function evStationCreateFieldsOk() {
-      return request.resource.data.get('verificationStatus', 'community') == 'community'
-          && request.resource.data.get('confirmationCount', 0) == 0
-          && request.resource.data.get('reportCount', 0) == 0
-          && request.resource.data.get('status', 'unknown') == 'unknown'
-          && request.resource.data.get('isActive', true) == true;
-    }
-
     function evStationCommunityPatch() {
       return request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
@@ -2768,9 +2759,9 @@ service cloud.firestore {
 
     match /ev_charging_stations/{stationId} {
       allow read: if isAuth() && phoneFromToken() != '';
-      allow create: if isOwner(request.resource.data.createdBy)
-          && evStationHasCoords()
-          && evStationCreateFieldsOk();
+      // Клиент тўғридан-тўғри яратолмайди — пуллик (payAndCreateEvStation,
+      // Admin SDK) ёки очиқ манба импорти (Admin SDK) орқали.
+      allow create: if isAdmin();
       allow update: if isAdmin()
           || (
             isAuth() && phoneFromToken() != ''

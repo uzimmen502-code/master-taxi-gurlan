@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/ev_charging_rules_holder.dart';
 import '../core/utils/formatters.dart';
@@ -12,9 +14,13 @@ import '../utils/geo_hash.dart';
 /// nuqtalari xaritasi. Geohash so'rov naqshi `rides_repository.dart`dan
 /// qayta ishlatilgan (`GeoHash.neighborsForRadius` + `whereIn`).
 class EvStationRepository {
-  EvStationRepository({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
+  EvStationRepository({FirebaseFirestore? db, FirebaseFunctions? functions})
+      : _db = db ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
+  static const _uuid = Uuid();
 
   CollectionReference<Map<String, dynamic>> get _stations =>
       _db.collection('ev_charging_stations');
@@ -78,8 +84,28 @@ class EvStationRepository {
         .toList();
   }
 
-  /// Yangi nuqta — koordinata majburiy, qolgan hammasi ixtiyoriy (9-band).
-  Future<String> createStation({
+  /// Тариф рўйхати (id → {months, price}) — `settings`га боғлиқ бўлиши
+  /// мумкин, шунинг учун серверда сақланади (эга қарори, 2026-09-22).
+  Future<Map<String, EvStationTariff>> fetchStationTariffs() async {
+    final res = await _functions.httpsCallable('getEvStationTariffs').call();
+    final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
+    final tariffs = Map<String, dynamic>.from(raw['tariffs'] as Map? ?? const {});
+    return tariffs.map((id, v) {
+      final m = Map<String, dynamic>.from(v as Map);
+      return MapEntry(id, EvStationTariff(
+        id: id,
+        months: (m['months'] as num).toInt(),
+        price: (m['price'] as num).toInt(),
+      ));
+    });
+  }
+
+  /// Янги нуқта — ПУЛЛИК (эга қарори, 2026-09-22): координата мажбурий,
+  /// қолгани ихтиёрий, лекин энди тўғридан-тўғри Firestore'га эмас —
+  /// `payAndCreateEvStation` callable орқали (AVA ҳамёнидан, идемпотент;
+  /// `firestore.rules`'да client `create` энди рухсат этилмайди).
+  Future<EvStationPaymentResult> payAndCreateStation({
+    required String tariffId,
     required double lat,
     required double lng,
     List<String> chargingTypes = const [],
@@ -89,26 +115,39 @@ class EvStationRepository {
     String? operatorName,
     String? note,
   }) async {
-    final userId = _currentUserId;
-    final ref = await _stations.add({
-      'location': {'latitude': lat, 'longitude': lng},
-      'geohash4': GeoHash.encode(lat, lng, precision: 4),
-      'chargingTypes': chargingTypes,
-      'connectors': connectors,
-      if (powerKw != null) 'powerKw': powerKw,
-      if (price != null) 'price': price,
-      if ((operatorName ?? '').trim().isNotEmpty) 'operatorName': operatorName!.trim(),
-      if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
-      'status': 'unknown',
-      'verificationStatus': 'community',
-      'confirmationCount': 0,
-      'reportCount': 0,
-      'createdBy': userId,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'isActive': true,
-    });
-    return ref.id;
+    try {
+      final res = await _functions
+          .httpsCallable(
+            'payAndCreateEvStation',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          )
+          .call({
+        'tariff': tariffId,
+        'lat': lat,
+        'lng': lng,
+        'chargingTypes': chargingTypes,
+        'connectors': connectors,
+        if (powerKw != null) 'powerKw': powerKw,
+        if (price != null) 'price': price,
+        if ((operatorName ?? '').trim().isNotEmpty) 'operatorName': operatorName!.trim(),
+        if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
+        'idempotencyKey': _uuid.v4(),
+      });
+      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      return EvStationPaymentResult(
+        stationId: (data['stationId'] ?? '') as String,
+        debited: (data['debited'] as num?)?.toInt() ?? 0,
+        balance: (data['balance'] as num?)?.toInt() ?? 0,
+        paidUntil: DateTime.fromMillisecondsSinceEpoch(
+            (data['paidUntil'] as num?)?.toInt() ?? 0),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      final reason = (details['reason'] ?? e.message ?? e.code).toString();
+      throw EvStationPaymentException(reason, details: details);
+    }
   }
 
   /// Admin: `reportCount > 0` stansiyalar navbati (moderatsiya, 6-band).
@@ -176,4 +215,43 @@ class EvStationRepository {
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
+}
+
+/// Станция қўшиш тарифи (`getEvStationTariffs` callable'идан).
+class EvStationTariff {
+  const EvStationTariff({required this.id, required this.months, required this.price});
+
+  final String id;
+  final int months;
+  final int price;
+}
+
+/// `payAndCreateEvStation` муваффақиятли натижаси.
+class EvStationPaymentResult {
+  const EvStationPaymentResult({
+    required this.stationId,
+    required this.debited,
+    required this.balance,
+    required this.paidUntil,
+  });
+
+  final String stationId;
+  final int debited;
+  final int balance;
+  final DateTime paidUntil;
+}
+
+/// Тўлов хатоси. [code] қийматлари: `insufficient_balance`, `unknown_tariff`,
+/// `upstream_unavailable` ва ҳ.к. (`assistant_service.dart`даги
+/// `AssistantException` билан бир хил нақш).
+class EvStationPaymentException implements Exception {
+  const EvStationPaymentException(this.code, {this.details = const {}});
+
+  final String code;
+  final Map<String, dynamic> details;
+
+  bool get isInsufficientBalance => code == 'insufficient_balance';
+
+  @override
+  String toString() => 'EvStationPaymentException($code)';
 }

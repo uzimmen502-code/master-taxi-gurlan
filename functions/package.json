@@ -10,6 +10,7 @@
     "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js",
     "test:yuk-cf": "node test/yuk_cf.test.js",
     "test:ev-charging": "node test/ev_charging_rules.test.js",
+    "test:ev-charging-paid": "node test/ev_charging_paid.test.js",
     "test:assistant": "node test/assistant_chat.test.js"
   },
   "engines": {

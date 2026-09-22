@@ -13,6 +13,7 @@ EvChargingStation _station({
   String? name,
   String? sourceType,
   String? sourceProvider,
+  String? listingType,
 }) =>
     EvChargingStation(
       id: 's1',
@@ -34,6 +35,7 @@ EvChargingStation _station({
       name: name,
       sourceType: sourceType,
       sourceProvider: sourceProvider,
+      listingType: listingType,
     );
 
 Future<void> _pump(WidgetTester tester, EvChargingStation station) {
@@ -106,5 +108,15 @@ void main() {
     await _pump(tester, _station());
     expect(find.textContaining('Очиқ манбадан'), findsNothing);
     expect(find.text('Зарядлаш нуқтаси'), findsOneWidget);
+  });
+
+  testWidgets('пуллик станция — "Расмий рўйхат" белгиси', (tester) async {
+    await _pump(tester, _station(listingType: 'paid'));
+    expect(find.textContaining('Расмий рўйхат'), findsOneWidget);
+  });
+
+  testWidgets('жамоа станцияси — "Расмий рўйхат" белгиси йўқ', (tester) async {
+    await _pump(tester, _station());
+    expect(find.textContaining('Расмий рўйхат'), findsNothing);
   });
 }

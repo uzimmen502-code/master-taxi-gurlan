@@ -15,7 +15,9 @@ const yukIntercity = createYukIntercity({ db, admin, digits });
 const { attachYukLocal } = require('./yuk_local');
 attachYukLocal(exports, { functions, db, admin });
 const { attachEvCharging } = require('./ev_charging');
-attachEvCharging(exports, { db, admin, functions, assertAdmin });
+attachEvCharging(exports, {
+  db, admin, functions, assertAdmin, callerPhone, canonicalUid, settlementLedger,
+});
 const { attachAssistant } = require('./assistant_chat');
 attachAssistant(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger,

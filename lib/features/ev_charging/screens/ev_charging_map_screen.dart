@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/ev_charging_rules_holder.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/map_launcher.dart';
 import '../../../models/ev_charging_station.dart';
 import '../../../repositories/ev_station_repository.dart';
@@ -15,6 +16,7 @@ import '../controllers/ev_navigation_session_controller.dart';
 import '../widgets/ev_arrival_flow.dart';
 import '../widgets/ev_map_view.dart';
 import '../widgets/ev_station_card.dart';
+import '../widgets/ev_station_tariff_sheet.dart';
 import 'add_ev_station_screen.dart';
 
 /// ⚡ Электромобил зарядлаш нуқталари — асосий xarita ekrani (11-band).
@@ -174,21 +176,41 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
                 ),
       floatingActionButton: controller.hasLocation
           ? FloatingActionButton.extended(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AddEvStationScreen(
-                      initialLat: controller.lat,
-                      initialLng: controller.lng,
-                    ),
-                  ),
-                );
-              },
+              onPressed: () => _openPaidAddFlow(context, controller),
               icon: const Icon(Icons.add),
-              label: const Text('Зарядлаш нуқтасини қўшиш'),
+              label: const Text('Зарядлаш станциясини қўшиш (пуллик)'),
             )
           : null,
+    );
+  }
+
+  /// ⚡ Станция қўшиш — ПУЛЛИК (эга қарори, 2026-09-22): аввал тариф+қадамлар
+  /// варақаси, тариф танлангандан кейин форма экранига ўтилади.
+  Future<void> _openPaidAddFlow(
+    BuildContext context,
+    EvChargingMapController controller,
+  ) async {
+    final phone = canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
+    if (phone.length < 9) return; // Гейт allaqachon юқорида — назарий ҳимоя.
+
+    final tariff = await showModalBottomSheet<EvStationTariff>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => EvStationTariffSheet(uid: phone),
+    );
+    if (tariff == null || !context.mounted) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddEvStationScreen(
+          initialLat: controller.lat,
+          initialLng: controller.lng,
+          tariff: tariff,
+          phone: phone,
+        ),
+      ),
     );
   }
 

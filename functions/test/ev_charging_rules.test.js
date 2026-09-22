@@ -1,10 +1,14 @@
 /**
  * ev_charging_stations Firestore rules — texnik topshiriq 8-bandidagi
  * Security Rules unit testlari: avtorizatsiyasiz foydalanuvchi yoza
- * olmasligi, boshqa foydalanuvchi nomidan yozib bo'lmasligi, report
- * limitidan (config'dan) oshib yozib bo'lmasligi, confirmation idempotent
- * ekanligi, verificationStatus/confirmationCount/reportCount/status'ni
- * client to'g'ridan-to'g'ri o'zgartira olmasligi.
+ * olmasligi, report limitidan (config'dan) oshib yozib bo'lmasligi,
+ * confirmation idempotent ekanligi, verificationStatus/confirmationCount/
+ * reportCount/status'ni client to'g'ridan-to'g'ri o'zgartira olmasligi.
+ *
+ * 2026-09-22: yangi stansiya qo'shish PULLIK bo'ldi
+ * (`payAndCreateEvStation`, Admin SDK) — client endi `create` qila
+ * OLMAYDI (faqat admin/Admin SDK); mavjud hujjatni ixtiyoriy maydonlar
+ * bo'yicha tahrirlash (`evStationCommunityPatch`) hamon bepul.
  *
  * `anon_session_fields.test.js` shabloniga mos — to'liq izolyatsiyalangan
  * Firestore Emulator ustida ishlaydi, hech qanday real ma'lumotga tegmaydi.
@@ -28,6 +32,7 @@ const [HOST, PORT] = EMULATOR_HOST.split(':');
 const STATION_ID = 'station1';
 const USER_A = '998901112233';
 const USER_B = '998904445566';
+const ADMIN_PHONE = '998909998877';
 
 function baseStation(overrides = {}) {
   return {
@@ -74,41 +79,39 @@ async function main() {
   const anon = testEnv.authenticatedContext('guestUid', {firebase: {sign_in_provider: 'anonymous'}});
   const userA = testEnv.authenticatedContext('uidA', {phone_number: '+' + USER_A});
   const userB = testEnv.authenticatedContext('uidB', {phone_number: '+' + USER_B});
+  const admin = testEnv.authenticatedContext('uidAdmin', {phone_number: '+' + ADMIN_PHONE});
   const dbAnon = anon.firestore();
   const dbA = userA.firestore();
   const dbB = userB.firestore();
+  const dbAdmin = admin.firestore();
+
+  // isAdmin() `users/{uid}.role` ni get() bilan o'qiydi — rules bypass
+  // (Admin SDK simulyatsiyasi) orqali seed qilamiz, xuddi haqiqiy loyihada
+  // admin roli qanday berilgani kabi.
+  await testEnv.withSecurityRulesDisabled((ctx) =>
+    ctx.firestore().collection('users').doc(ADMIN_PHONE).set({role: 'admin'}));
 
   await check('anon (guest) cannot read stations', () =>
     assertFails(dbAnon.collection('ev_charging_stations').doc(STATION_ID).get()));
 
-  await check('registered user can create station with valid coords + own createdBy', () =>
-    assertSucceeds(
+  // Станция қўшиш ПУЛЛИК (2026-09-22): endi faqat `payAndCreateEvStation`
+  // callable (Admin SDK) orqali — oddiy client (admin bo'lmagan, garchi
+  // ro'yxatdan o'tgan bo'lsa ham) to'g'ridan-to'g'ri `create` qila olmaydi.
+  await check('non-admin registered user CANNOT create station directly', () =>
+    assertFails(
       dbA.collection('ev_charging_stations').doc(STATION_ID).set(baseStation()),
+    ));
+  await check('non-admin (userB) CANNOT create station directly', () =>
+    assertFails(
+      dbB.collection('ev_charging_stations').doc('byB').set(baseStation({createdBy: USER_B})),
+    ));
+  await check('admin CAN create station directly', () =>
+    assertSucceeds(
+      dbAdmin.collection('ev_charging_stations').doc(STATION_ID).set(baseStation()),
     ));
 
   await check('registered user can read stations', () =>
     assertSucceeds(dbB.collection('ev_charging_stations').doc(STATION_ID).get()));
-
-  await check('create without coordinates fails', () =>
-    assertFails(
-      dbA.collection('ev_charging_stations').doc('noCoords').set(
-        baseStation({location: null}),
-      ),
-    ));
-
-  await check('create with spoofed createdBy fails', () =>
-    assertFails(
-      dbB.collection('ev_charging_stations').doc('spoof').set(
-        baseStation({createdBy: USER_A}),
-      ),
-    ));
-
-  await check('create with verificationStatus escalated at creation fails', () =>
-    assertFails(
-      dbB.collection('ev_charging_stations').doc('escalate').set(
-        baseStation({createdBy: USER_B, verificationStatus: 'verified'}),
-      ),
-    ));
 
   await check('registered user can patch optional fields', () =>
     assertSucceeds(

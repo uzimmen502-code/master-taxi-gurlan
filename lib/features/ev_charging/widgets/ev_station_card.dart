@@ -59,6 +59,17 @@ class EvStationCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (station.isPaidListing) ...[
+              const SizedBox(height: 4),
+              const Text(
+                '💳 Расмий рўйхат (пуллик қўшилган)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             if (distanceKm != null) _line('📍', '${distanceKm!.toStringAsFixed(1)} км'),
             if (station.region?.isNotEmpty == true) _line('🗺️', station.region!),

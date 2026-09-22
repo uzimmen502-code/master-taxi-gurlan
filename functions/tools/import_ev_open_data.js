@@ -50,6 +50,7 @@
 const fs = require('fs');
 const path = require('path');
 const admin = require('firebase-admin');
+const geoHash = require('../geo_hash');
 
 const keyPath = path.join(__dirname, '..', 'service-account.json');
 if (!fs.existsSync(keyPath)) {
@@ -83,33 +84,9 @@ const CONNECTOR_MAP = {
 };
 const CHARGING_TYPES = new Set(['AC', 'DC', 'AC+DC']);
 
-// ---- geohash — lib/utils/geo_hash.dart bilan bit-baбит bir xil (standart
-// geohash algoritmi; Wikipedia namunasi bilan tasdiqlangan: 57.64911,10.40744
-// precision 6 -> "u4pruy"). ----
-const GEOHASH_BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
-function geohashEncode(lat, lng, precision = 4) {
-  let minLat = -90;
-  let maxLat = 90;
-  let minLng = -180;
-  let maxLng = 180;
-  let buf = '';
-  let bit = 0;
-  let ch = 0;
-  let even = true;
-  while (buf.length < precision) {
-    if (even) {
-      const mid = (minLng + maxLng) / 2;
-      if (lng >= mid) { ch |= 1 << (4 - bit); minLng = mid; } else { maxLng = mid; }
-    } else {
-      const mid = (minLat + maxLat) / 2;
-      if (lat >= mid) { ch |= 1 << (4 - bit); minLat = mid; } else { maxLat = mid; }
-    }
-    even = !even;
-    bit += 1;
-    if (bit === 5) { buf += GEOHASH_BASE32[ch]; bit = 0; ch = 0; }
-  }
-  return buf;
-}
+// geohash — endi `functions/geo_hash.js`da (payAndCreateEvStation callable
+// bilan bir xil kod, ikki joyda dublika bo'lmasin deb chiqarilgan).
+const geohashEncode = geoHash.encode;
 
 // Ўзбекистон bounding box — координата saqonligini tekshirish uchun.
 const UZ_BBOX = { minLat: 37, maxLat: 46, minLng: 55, maxLng: 74 };

@@ -56,7 +56,7 @@ class _EvMapViewState extends State<EvMapView> {
       ));
     }
     if (!_didFitAll && widget.stations.isNotEmpty) {
-      _fitAllStations();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitAllStations());
     }
   }
 
@@ -75,15 +75,28 @@ class _EvMapViewState extends State<EvMapView> {
     );
   }
 
+  int _fitAttempts = 0;
+
+  /// `newLatLngBounds` GoogleMap ҳали лейаут қилинмаган пайтда (масалан
+  /// `onMapCreated`дан дарҳол кейин) `PlatformException`/`FlutterError`
+  /// ташлаши мумкин — шунинг учун муваффақиятли бўлмагунча бир неча марта,
+  /// қисқа кутиш билан қайта уринамиз (эски кодда бу хато жимгина
+  /// ютилиб, камера ҳеч қачон мослашмас эди).
   Future<void> _fitAllStations() async {
+    if (_didFitAll || !mounted) return;
     final bounds = _boundsForStations();
     final map = _map;
     if (bounds == null || map == null) return;
-    _didFitAll = true;
     try {
       await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 40));
-    } catch (_) {
-      // Barcha nuqta bir joyda (bounds nol o'lchamli) — kamerani tegmaymiz.
+      _didFitAll = true;
+    } catch (e) {
+      _fitAttempts += 1;
+      debugPrint('EvMapView._fitAllStations: urinish $_fitAttempts muvaffaqiyatsiz — $e');
+      if (_fitAttempts < 6) {
+        await Future.delayed(const Duration(milliseconds: 350));
+        if (mounted) await _fitAllStations();
+      }
     }
   }
 
@@ -131,7 +144,7 @@ class _EvMapViewState extends State<EvMapView> {
       onMapCreated: (c) {
         _map = c;
         if (!_didFitAll && widget.stations.isNotEmpty) {
-          _fitAllStations();
+          WidgetsBinding.instance.addPostFrameCallback((_) => _fitAllStations());
         }
       },
       onCameraMove: (pos) => _zoom = pos.zoom,

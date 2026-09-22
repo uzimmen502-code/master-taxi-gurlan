@@ -56,11 +56,11 @@ class EvChargingMapController extends ChangeNotifier {
   }
 
   void _watchStations() {
-    final lat = _lat;
-    final lng = _lng;
-    if (lat == null || lng == null) return;
+    // Барча актив нуқталар — 20 км радиус билан чекланмайди (эга қарори,
+    // 2026-09-22), фойдаланувчи харитани суриб/кичиклаштириб 456 та импорт
+    // қилинган нуқтани ҳам кўра олади. Клубер [EvMapView]да.
     _stationsSub?.cancel();
-    _stationsSub = _repository.watchNearby(lat: lat, lng: lng).listen((list) {
+    _stationsSub = _repository.watchAllActive().listen((list) {
       _stations = list;
       notifyListeners();
     });

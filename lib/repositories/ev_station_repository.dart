@@ -47,6 +47,17 @@ class EvStationRepository {
     });
   }
 
+  /// Барча аktiv nuqtalar — masofaga qaramasdan (ega qarori, 2026-09-22:
+  /// harita 20 km radius bilan cheklanmasin, 456 ta import qilingan nuqta
+  /// ham ko'rinsin). `EvMapView` klasterlash orqali zich hududlarni
+  /// birlashtiradi, shuning uchun bu so'rov hajmi muammo emas.
+  Stream<List<EvChargingStation>> watchAllActive() {
+    return _stations
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(EvChargingStation.fromDoc).toList());
+  }
+
   /// Yangi koordinata atrofida allaqachon mavjud nuqtalar —
   /// `evChargingConfig.duplicateRadiusMeters` ichida (22-band).
   Future<List<EvChargingStation>> findDuplicatesNear(

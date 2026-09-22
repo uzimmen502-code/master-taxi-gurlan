@@ -35,6 +35,12 @@ class _EvMapViewState extends State<EvMapView> {
   GoogleMapController? _map;
   double _zoom = 14;
 
+  /// Бир марта: биринчи нуқталар келганда бутун Ўзбекистон бўйлаб барча
+  /// станциялар кўринадиган қилиб камерани мослаш (эга қарори, 2026-09-22
+  /// — 456 та импорт нуқтаси фақат яқин атрофда эмас, ҳаммаси кўринсин).
+  /// Кейин фойдаланувчи эркин суриши/яқинлаштириши мумкин.
+  bool _didFitAll = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +54,36 @@ class _EvMapViewState extends State<EvMapView> {
       _map?.animateCamera(CameraUpdate.newLatLng(
         LatLng(widget.centerLat, widget.centerLng),
       ));
+    }
+    if (!_didFitAll && widget.stations.isNotEmpty) {
+      _fitAllStations();
+    }
+  }
+
+  LatLngBounds? _boundsForStations() {
+    if (widget.stations.isEmpty) return null;
+    double? minLat, maxLat, minLng, maxLng;
+    for (final s in widget.stations) {
+      minLat = (minLat == null || s.latitude < minLat) ? s.latitude : minLat;
+      maxLat = (maxLat == null || s.latitude > maxLat) ? s.latitude : maxLat;
+      minLng = (minLng == null || s.longitude < minLng) ? s.longitude : minLng;
+      maxLng = (maxLng == null || s.longitude > maxLng) ? s.longitude : maxLng;
+    }
+    return LatLngBounds(
+      southwest: LatLng(minLat!, minLng!),
+      northeast: LatLng(maxLat!, maxLng!),
+    );
+  }
+
+  Future<void> _fitAllStations() async {
+    final bounds = _boundsForStations();
+    final map = _map;
+    if (bounds == null || map == null) return;
+    _didFitAll = true;
+    try {
+      await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 40));
+    } catch (_) {
+      // Barcha nuqta bir joyda (bounds nol o'lchamli) — kamerani tegmaymiz.
     }
   }
 
@@ -92,7 +128,12 @@ class _EvMapViewState extends State<EvMapView> {
       markers: _buildMarkers(),
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
-      onMapCreated: (c) => _map = c,
+      onMapCreated: (c) {
+        _map = c;
+        if (!_didFitAll && widget.stations.isNotEmpty) {
+          _fitAllStations();
+        }
+      },
       onCameraMove: (pos) => _zoom = pos.zoom,
       onCameraIdle: () => setState(() {}),
     );

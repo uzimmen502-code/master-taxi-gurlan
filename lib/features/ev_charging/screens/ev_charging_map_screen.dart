@@ -175,10 +175,8 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
                   ],
                 ),
       floatingActionButton: controller.hasLocation
-          ? FloatingActionButton.extended(
-              onPressed: () => _openPaidAddFlow(context, controller),
-              icon: const Icon(Icons.add),
-              label: const Text('Зарядлаш станциясини қўшиш (пуллик)'),
+          ? _PaidAddStationFab(
+              onTap: () => _openPaidAddFlow(context, controller),
             )
           : null,
     );
@@ -259,6 +257,74 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
         label: Text(label),
         selected: isSelected,
         onSelected: (_) => controller.setChargingTypeFilter(value),
+      ),
+    );
+  }
+}
+
+/// «Станция қўшиш (пуллик)» — ихчам pill-тугма (2026-09-22, дизайн
+/// тузатиш: стандарт `FloatingActionButton.extended` узун матн билан
+/// иккиланиб, экран энига чўзилиб кетган эди — контент ўлчамига мос
+/// қўлда ясалган тугма ишлатилди). Яшил эмас — харита фонидаги яшил ва
+/// оранж белгилардан ажралиб турадиган "пуллик/premium" ранги (олтин).
+class _PaidAddStationFab extends StatelessWidget {
+  const _PaidAddStationFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  static const _accent = Color(0xFFB8860B); // тўқ олтин — "пуллик" белгиси
+  static const _accentDark = Color(0xFF8C6400);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _accent,
+      elevation: 4,
+      shadowColor: Colors.black45,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: _accentDark, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 6),
+              const Text(
+                'Станция қўшиш',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(46),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'пуллик',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

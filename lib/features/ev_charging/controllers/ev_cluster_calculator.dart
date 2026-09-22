@@ -36,12 +36,20 @@ abstract final class EvClusterCalculator {
 
   /// Kichik zoom (uzoqdan) — kichik precision (katta katak, ko'proq birlashish);
   /// katta zoom (yaqindan) — katta precision (kichik katak, kamroq birlashish).
+  ///
+  /// 2026-09-22: эски чегаралар (zoom>=9→precision4) шаҳар даражасидаги
+  /// зумда (масалан бутун Тошкентни экранга сиғдирганда, ~zoom 11) ҳали
+  /// precision4'да қолиб кетар эди — production маълумотида precision4
+  /// катаги ~29×19 км, яъни бутун Тошкент (204 та станция) БОР-ЙЎҒИ 4 та
+  /// катакка сиғиб кетади (production'да ўлчанди). Чегаралар шаҳар
+  /// зумида precision5/6'га эртароқ ўтадиган қилиб сурилди (Тошкент учун
+  /// precision5 → 30 та, precision6 → 135 та алоҳида катак).
   static int _precisionForZoom(double zoom) {
-    if (zoom >= 16) return 7;
-    if (zoom >= 14) return 6;
-    if (zoom >= 12) return 5;
-    if (zoom >= 9) return 4;
-    if (zoom >= 6) return 3;
+    if (zoom >= 15) return 7;
+    if (zoom >= 13) return 6;
+    if (zoom >= 10) return 5;
+    if (zoom >= 7) return 4;
+    if (zoom >= 4) return 3;
     return 2;
   }
 }

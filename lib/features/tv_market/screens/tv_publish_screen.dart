@@ -404,32 +404,46 @@ class _TvPublishScreenState extends State<TvPublishScreen>
         backgroundColor: Colors.black,
         isScrollControlled: true,
         builder: (sheetContext) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                child: Text(
-                  sheetContext.tr('tv_publish_local_preview_hint'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12.5),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: Text(sheetContext.tr('tv_publish_local_preview_close')),
+          // Тик (9:16) видеонинг AspectRatio баландлиги матн+тугма билан
+          // бирга экрандан ошиб кетиб, "BOTTOM OVERFLOWED" сариқ-қора чизиқ
+          // берарди. Видеони Flexible + варақа баландлигини 88% билан
+          // чегаралаб қўямиз — видео бўш жойга сиғадиган даражада кичраяди,
+          // матн ва тугма доим кўринади.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.88,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: AspectRatio(
+                    aspectRatio: controller.value.aspectRatio,
+                    child: VideoPlayer(controller),
                   ),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  child: Text(
+                    sheetContext.tr('tv_publish_local_preview_hint'),
+                    textAlign: TextAlign.center,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      child:
+                          Text(sheetContext.tr('tv_publish_local_preview_close')),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

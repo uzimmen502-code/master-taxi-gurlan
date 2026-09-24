@@ -27,14 +27,17 @@ const String kAvaShareMessage = '$kAvaShareCta\n$kAvaPlayStoreUrl';
 /// Клипни **видео файл** сифатида улашади (Telegram'да видеонинг ўзи
 /// кўринади). Матн — [kAvaShareMessage].
 ///
-/// HLS эмас, [TvClip.mp4Url] (360p афзал — кичик, тез юкланади). Файл
-/// [DefaultCacheManager] орқали кешга юкланади — кейинги улашишда қайта
-/// юкланмайди.
+/// HLS эмас, [TvClip.shareMp4Url] — устида AVA сув белгиси бор нусха.
+/// Instagram/Facebook улашиш ойнасидаги МАТННИ ташлаб юборади (IG'да
+/// caption майдонининг ўзи йўқ), шунинг учун ягона ўтадиган CTA —
+/// видеонинг ўзига босилган белги. Эски клипларда `share` бўлмаса,
+/// одатдаги mp4'га қайтади. Файл [DefaultCacheManager] орқали кешга
+/// юкланади — кейинги улашишда қайта юкланмайди.
 ///
 /// Видео файли топилмаса — улашмасдан [StateError] отилади, чақирувчи
 /// «Улашиб бўлмади» хабарини кўрсатади (матнни ёлғиз юбормаймиз).
 Future<void> shareTvClipVideo(TvClip clip) async {
-  final url = clip.mp4Url;
+  final url = clip.shareMp4Url;
   if (url.isEmpty) {
     throw StateError('tv_clip_share: mp4 yo\'q (clip ${clip.id})');
   }

@@ -95,6 +95,18 @@ check('socialVideoUrl — 720p afzal, xom fayl emas', () => {
   assert.strictEqual(socialVideoUrl(clip()), 'https://cdn.example.com/v720.mp4');
 });
 
+check('socialVideoUrl — suv belgili `share` nusxasi hammasidan ustun', () => {
+  const c = clip();
+  c.videoVariants.share = 'https://cdn.example.com/share.mp4';
+  assert.strictEqual(socialVideoUrl(c), 'https://cdn.example.com/share.mp4');
+});
+
+check('socialVideoUrl — eski klipda `share` yo\'q -> 720p', () => {
+  const c = clip();
+  delete c.videoVariants.share;
+  assert.strictEqual(socialVideoUrl(c), 'https://cdn.example.com/v720.mp4');
+});
+
 check('socialVideoUrl — 720p yo\'q bo\'lsa 480p, keyin 360p', () => {
   assert.strictEqual(
     socialVideoUrl(clip({ videoVariants: { '480p': 'b', '360p': 'c' } })), 'b');

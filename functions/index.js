@@ -11204,6 +11204,93 @@ const TV_CLIP_FAST_360P_SPEC = {maxHeight: 360, maxrate: '450k', bufsize: '650k'
  * Klip o'chirilganda `tv_clip_variants/{clipId}/` prefiksi bilan birga
  * bu ham tozalanadi (qarang: `onTvClipDeleted`).
  */
+/**
+ * УЛАШИШ нусхаси — устига AVA сув белгиси босилган алоҳида файл
+ * (`tv_clip_variants/{clipId}/share.mp4`, `videoVariants.share`).
+ *
+ * НЕГА АЛОҲИДА: сув белгиси ИЛОВА ИЧИДА кўринмаслиги керак (эга қарори,
+ * 2026-09-24) — лента ва Home карта одатдаги 720/480/360 вариантларини
+ * ижро этади, белги эса фақат ташқарига чиқадиган нусхада бўлади:
+ * ижтимоий тармоқ кросс-постинги ва фойдаланувчининг улашиши.
+ *
+ * Асосий pass'га ТЕГИЛМАЙДИ: манба сифатида тайёр 720p олинади (хом файл
+ * қайта декодланмайди) ва хато бўлса бутунлай эътиборсиз қолдирилади —
+ * `share` бўлмаса, улашиш 720p'га қайтади.
+ *
+ * Жойлашуви — ЮҚОРИ-ЎНГ: Instagram Reels ўзининг подпись/тугмаларини
+ * пастга ва ўнг-пастга жойлайди, у ерда белги бекитилиб қоларди.
+ */
+const TV_CLIP_WATERMARK_WIDTH = 0.20; // кадр кенглигининг улуши
+const TV_CLIP_WATERMARK_PAD = 0.035; // четдан чекинма (кенгликка нисбатан)
+const TV_CLIP_WATERMARK_ALPHA = 0.88;
+
+async function renderShareCopyIfPossible(
+    clipId, srcMp4, bucketName, bucket, ffmpegPath, secsSince) {
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const {spawnSync} = require('child_process');
+
+  const logo = path.join(__dirname, 'assets', 'ava_logo_mark.png');
+  if (!srcMp4 || !fs.existsSync(srcMp4) || !fs.existsSync(logo)) return '';
+
+  const tmpOut = path.join(os.tmpdir(), `${clipId}_share.mp4`);
+  try {
+    const t = Date.now();
+    // scale2ref — белги ЎЛЧАМИ кадр кенглигига боғланади, шунда тик ва
+    // горизонтал видеода ҳам нисбати бир хил кўринади.
+    const fc =
+        `[1:v][0:v]scale2ref=w=main_w*${TV_CLIP_WATERMARK_WIDTH}:h=-1[wm][base];` +
+        `[wm]format=rgba,colorchannelmixer=aa=${TV_CLIP_WATERMARK_ALPHA}[wmx];` +
+        `[base][wmx]overlay=W-w-(W*${TV_CLIP_WATERMARK_PAD}):` +
+        `(W*${TV_CLIP_WATERMARK_PAD})[vout]`;
+    const res = spawnSync(ffmpegPath, [
+      '-y',
+      '-i', srcMp4,
+      '-i', logo,
+      '-filter_complex', fc,
+      '-map', '[vout]',
+      // `?` — овозсиз клип бутун қадамни йиқитмаслиги учун.
+      '-map', '0:a?',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '26',
+      // Овоз аллақачон биз кодлаган AAC — қайта кодлаш шарт эмас.
+      '-c:a', 'copy',
+      '-movflags', '+faststart',
+      tmpOut,
+    ], {stdio: 'pipe', maxBuffer: 32 * 1024 * 1024});
+
+    console.log(
+        `tv clip ${clipId} timing: share ${secsSince(t)}s (exit ${res.status})`);
+    if (res.status !== 0 || !fs.existsSync(tmpOut) ||
+        fs.statSync(tmpOut).size <= 0) {
+      return '';
+    }
+
+    const destPath = `tv_clip_variants/${clipId}/share.mp4`;
+    const token = crypto.randomUUID();
+    await bucket.upload(tmpOut, {
+      destination: destPath,
+      metadata: {
+        contentType: 'video/mp4',
+        cacheControl: TV_CLIP_CACHE_CONTROL,
+        metadata: {firebaseStorageDownloadTokens: token},
+      },
+    });
+    const encoded = encodeURIComponent(destPath);
+    return `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
+        `/o/${encoded}?alt=media&token=${token}`;
+  } catch (e) {
+    console.error(`tv clip ${clipId} share copy:`, e.message || e);
+    return '';
+  } finally {
+    try {
+      if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+    } catch (_) {}
+  }
+}
+
 async function fastTrack360pIfPossible(
     clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince) {
   const os = require('os');
@@ -11664,6 +11751,17 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     console.log(
         `tv clip ${clipId} timing: upload ${secsSince(tUpload)}s, ` +
         `${Object.keys(variants).length} variant`);
+
+    // Улашиш нусхаси (сув белгили) — best-effort, йиқилса `share` шунчаки
+    // бўлмайди. Манба: тайёр 720p (йўқ бўлса 480p/360p) — HLS'га ҚЎШИЛМАЙДИ,
+    // шунинг учун `readyMp4`га эмас, фақат `variants`га ёзилади.
+    const shareSrc =
+        readyMp4['720p'] || readyMp4['480p'] || readyMp4['360p'] || '';
+    if (shareSrc) {
+      const shareUrl = await renderShareCopyIfPossible(
+          clipId, shareSrc, bucketName, bucket, ffmpegPath, secsSince);
+      if (shareUrl) variants.share = shareUrl;
+    }
 
     // HLS — қўшимча, мажбурий эмас. Йиқилса клип барибир MP4
     // вариантлари билан чоп этилади (`hlsUrl` бўш қолади, клиент

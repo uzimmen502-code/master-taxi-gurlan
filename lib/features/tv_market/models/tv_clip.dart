@@ -249,6 +249,14 @@ class TvClip {
       videoVariants['720p'] ??
       videoUrl;
 
+  /// УЛАШИШ учун файл — устида AVA сув белгиси бор нусха
+  /// (`tv_clip_variants/{id}/share.mp4`, transcode'да ясалади).
+  ///
+  /// Илова ичидаги ижрода ҲЕЧ ҚАЧОН ишлатилмайди — белги фақат
+  /// ташқарига чиқадиган видеода бўлиши керак (эга қарори, 2026-09-24).
+  /// Эски клипларда `share` йўқ — ўшанда одатдаги [mp4Url]га қайтамиз.
+  String get shareMp4Url => videoVariants['share'] ?? mp4Url;
+
   String get socialPostStatus => '${socialPost['status'] ?? ''}'.trim();
 
   String socialPostSummary() {

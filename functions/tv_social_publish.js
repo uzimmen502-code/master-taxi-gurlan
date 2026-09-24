@@ -82,7 +82,11 @@ function networkState(clip, net) {
 function socialVideoUrl(clip) {
   const v = clip.videoVariants && typeof clip.videoVariants === 'object'
       ? clip.videoVariants : {};
-  return str(v['720p'], 2000)
+  // `share` — AVA сув белгиси босилган нусха (transcode'да ясалади).
+  // У ИЛОВА ИЧИДА ишлатилмайди, айнан ташқарига чиқадиган постлар учун.
+  // Бўлмаса (эски клип ёки share pass йиқилган) — оддий 720p.
+  return str(v.share, 2000)
+      || str(v['720p'], 2000)
       || str(v['480p'], 2000)
       || str(v['360p'], 2000)
       || str(clip.videoUrl, 2000);

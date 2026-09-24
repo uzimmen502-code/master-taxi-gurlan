@@ -1561,16 +1561,27 @@ service cloud.firestore {
     match /intercity_drivers/{id} {
       allow read: if true;
       // Haydovchi profili — admin / Phone Auth owner; anonim: schedule sync yoki seat patch
-      allow create: if isAdmin() || isOwner(id) || intercityDriverScheduleCreate()
+      // 2026-09-24 QA (ega qarori): e'lonni faqat EGASI (`isOwner(id)`,
+      // id = haydovchi telefoni), admin yoki Admin SDK (CF) yozadi.
+      //
+      // Avval bu yerda auth/egalik talab qilmaydigan bir nechta yo'l bor edi
+      // (`intercityDriverScheduleCreate/ScheduleSync/PanelPatch/
+      // AutoAcceptPatch/ListingEnd`). `allow` — ILI-zanjir bo'lgani uchun
+      // ulardan bittasi o'tsa yetardi: emulator testida begona (hatto anonim)
+      // klient boshqa haydovchining `seats`, `price`, `from/to`, `stops`,
+      // `routeLabel` ini qayta yozdi va `isActive: false` bilan reysini
+      // o'chirdi. `isOwner(id)` haydovchining o'z "ishga chiqish" oqimini
+      // to'liq qoplaydi (uchala chaqiruv ham o'z telefonini beradi), shuning
+      // uchun o'sha yo'llar keraksiz — olib tashlandi.
+      //
+      // Faqat kino (entertainment) yo'llari qoldi: ular admin-web PIN
+      // sirtidan keladi va `entertainmentAllowed`/`entertainmentIds` dan
+      // boshqasiga tegmaydi.
+      allow create: if isAdmin() || isOwner(id)
           || intercityDriverEntertainmentAllowedCreate();
       allow update: if isAdmin() || isOwner(id)
-          || intercityDriverScheduleSync()
-          || intercityDriverPanelPatch()
-          || intercityDriverAutoAcceptPatch()
           || intercityDriverEntertainmentAllowedPatch()
-          || intercityDriverEntertainmentPatch()
-          || intercityDriverListingEnd()
-          || intercityTripStartPatch(id);
+          || intercityDriverEntertainmentPatch();
       allow delete: if false;
 
       // Doimiy mijоз aggregation — bron transaction'ida

@@ -77,6 +77,14 @@ class IntercityBookingsRepository {
         return const IntercityBookingException(
             IntercityBookingErrorKind.unknown,
             'Телефон рақамингиз профилда сақланган эмас');
+      case 'ride_not_accepting':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.unknown, 'ride_not_accepting');
+      // Нарх серверда бошқача — жим равишда бошқа суммага ёзиб қўймаймиз.
+      case 'price_changed':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.unknown,
+            'Нарх янгиланди. Рейсни қайта юклаб, нархни текширинг.');
     }
     if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
       return const IntercityBookingException(

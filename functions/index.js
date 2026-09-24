@@ -9764,17 +9764,15 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
 
   const driverId = String(data.driverId || '').trim();
   const passengers = parseInt(String(data.passengers ?? 0), 10);
-  const pricePerSeat = parseInt(String(data.pricePerSeat ?? 0), 10);
+  // Client yuborgan narx — faqat "men shu narxni ko'rgandim" deyish uchun.
+  // HAQIQIY narx haydovchi hujjatidan (`price`) tranzaksiya ichida o'qiladi.
+  const shownPricePerSeat = parseInt(String(data.pricePerSeat ?? 0), 10);
   if (!driverId) {
     throw new functions.https.HttpsError('invalid-argument', 'driverId');
   }
   if (!Number.isFinite(passengers) || passengers < 1 || passengers > 8) {
     throw new functions.https.HttpsError('invalid-argument', 'passengers');
   }
-  if (!Number.isFinite(pricePerSeat) || pricePerSeat <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'price');
-  }
-  const totalAmount = passengers * pricePerSeat;
 
   const userName = String(data.userName || '').trim();
   const userGender = String(data.userGender || '').trim();
@@ -9841,6 +9839,20 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
       throw new functions.https.HttpsError(
           'failed-precondition', 'not_enough_seats');
     }
+
+    // Narx — haqiqat manbai haydovchi hujjati, client emas.
+    const pricePerSeat = Number(driver.price) || 0;
+    if (!Number.isFinite(pricePerSeat) || pricePerSeat <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'ride_not_accepting');
+    }
+    // Client boshqa narx ko'rsatgan bo'lsa — jim ravishda boshqa summaga
+    // yozib qo'ymaymiz: UI yangilanib, foydalanuvchi qayta tasdiqlasin.
+    if (shownPricePerSeat > 0 && shownPricePerSeat !== pricePerSeat) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'price_changed');
+    }
+    const totalAmount = passengers * pricePerSeat;
 
     // Status SERVER tomonda hal qilinadi — client `confirmed` deb yubora olmaydi.
     const status = driver.autoAcceptBookings === true ? 'confirmed' : 'pending';

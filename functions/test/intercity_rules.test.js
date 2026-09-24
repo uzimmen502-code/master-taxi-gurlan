@@ -133,37 +133,84 @@ async function main() {
         .set(bookingData({userPhone: USER_B})),
     ));
 
-  // ─── seats: bron yo'li yopildi, lekin scheduleSync hali ochiq ────────
-  // `intercityDriverSeatBookingPatch()` olib tashlandi (bron yo'li), ammo
-  // `intercityDriverScheduleSync()` hamon `seats`ni ruxsat etilgan kalitlar
-  // ro'yxatida saqlaydi va auth/egalik talab qilmaydi — u driver_schedule
-  // sync uchun ataylab ochiq qoldirilgan. QOLGAN XAVF: uni yopish
-  // driver_schedule auditiga bog'liq (haydovchi "ishga chiqish" oqimi
-  // doim Phone Auth bilanmi — shuni tasdiqlash kerak).
-  // Quyidagi 3 tekshiruv SHU HOLATNI hujjatlashtiradi (hali ochiq).
-  await check('STILL OPEN (scheduleSync): stranger can set driver.seats to 0', () =>
-    assertSucceeds(
+  // ─── E'lon (intercity_drivers) — faqat EGASI yozadi ──────────────────
+  // Avval `intercityDriverScheduleSync/ScheduleCreate/PanelPatch/
+  // AutoAcceptPatch/ListingEnd` auth/egalik talab qilmasdi va `allow`
+  // ILI-zanjir bo'lgani uchun begona klient butun e'lonni qayta yoza
+  // olardi. Endi faqat isOwner/isAdmin/Admin SDK.
+  await check('FIX: stranger CANNOT set driver.seats to 0 (sabotage)', () =>
+    assertFails(
       dbB.collection('intercity_drivers').doc(DRIVER).update({
         seats: 0, updatedAt: new Date(),
       }),
     ));
-  await check('STILL OPEN (scheduleSync): stranger can inflate driver.seats', () =>
-    assertSucceeds(
+  await check('FIX: stranger CANNOT inflate driver.seats (overbooking)', () =>
+    assertFails(
       dbB.collection('intercity_drivers').doc(DRIVER).update({
         seats: 999, updatedAt: new Date(),
       }),
     ));
-  await check('STILL OPEN (scheduleSync): anonymous session can patch seats', () =>
-    assertSucceeds(
+  await check('FIX: anonymous session CANNOT patch seats', () =>
+    assertFails(
       dbAnon.collection('intercity_drivers').doc(DRIVER).update({
         seats: 1, updatedAt: new Date(),
       }),
     ));
-  // Haydovchining o'zi (isOwner) — bu KUTILGAN, o'z e'lonini tahrirlaydi.
-  await check('driver (owner) can still edit own listing seats', () =>
+  await check('FIX: stranger CANNOT rewrite price', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        price: 1, updatedAt: new Date(),
+      }),
+    ));
+  await check('FIX: stranger CANNOT rewrite route from/to', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        from: 'Andijon', to: 'Namangan', updatedAt: new Date(),
+      }),
+    ));
+  await check('FIX: stranger CANNOT rewrite routeLabel/stops', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        routeLabel: 'HACKED', stops: ['X', 'Y'], updatedAt: new Date(),
+      }),
+    ));
+  await check('FIX: stranger CANNOT deactivate listing', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        isActive: false, updatedAt: new Date(),
+      }),
+    ));
+  await check('FIX: stranger CANNOT toggle autoAcceptBookings', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        autoAcceptBookings: true, updatedAt: new Date(),
+      }),
+    ));
+  await check('FIX: stranger CANNOT create a fake driver listing', () =>
+    assertFails(
+      dbB.collection('intercity_drivers').doc(USER_B + '0')
+        .set(driverDoc({phone: USER_B})),
+    ));
+
+  // ─── Регрессия: ҳайдовчининг ўз «ишга чиқиш» оқими бузилмаслиги ──────
+  await check('REGRESSION: driver (owner) can create own listing', () =>
+    assertSucceeds(
+      dbD.collection('intercity_drivers').doc(DRIVER)
+        .set(driverDoc(), {merge: true}),
+    ));
+  await check('REGRESSION: driver can set own seats/price/route (go online)', () =>
     assertSucceeds(
       dbD.collection('intercity_drivers').doc(DRIVER).update({
-        seats: 2, lastBookedAt: new Date(), updatedAt: new Date(),
+        seats: 4, seatCapacity: 4, price: 70000,
+        from: 'Xorazm', to: 'Toshkent', stops: ['Xorazm', 'Toshkent'],
+        routeLabel: 'Xorazm → Toshkent', hour: 7, scheduleDate: '2026-09-24',
+        isActive: true, isOnPanel: true, updatedAt: new Date(),
+      }),
+    ));
+  await check('REGRESSION: driver can toggle own autoAccept', () =>
+    assertSucceeds(
+      dbD.collection('intercity_drivers').doc(DRIVER).update({
+        autoAcceptBookings: true, updatedAt: new Date(),
       }),
     ));
 

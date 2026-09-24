@@ -1,7 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
-/// AVA расмий IG / Facebook / TikTok / YouTube токенлари
+/// AVA расмий IG / Facebook / YouTube / Telegram токенлари
 /// (CF `settings/tv_social`).
 class TvSocialSettingsBar extends StatefulWidget {
   const TvSocialSettingsBar({super.key});
@@ -16,7 +16,6 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   bool _saving = false;
   String? _error;
   bool _pageTokenSet = false;
-  bool _tiktokTokenSet = false;
   bool _ytRefreshSet = false;
   bool _ytSecretSet = false;
   bool _tgBotTokenSet = false;
@@ -24,10 +23,6 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
   final _igId = TextEditingController();
   final _caption = TextEditingController();
   final _pageToken = TextEditingController();
-  final _tiktokToken = TextEditingController();
-  final _tiktokRefresh = TextEditingController();
-  final _tiktokKey = TextEditingController();
-  final _tiktokSecret = TextEditingController();
   final _ytClientId = TextEditingController();
   final _ytSecret = TextEditingController();
   final _ytRefresh = TextEditingController();
@@ -46,10 +41,6 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
     _igId.dispose();
     _caption.dispose();
     _pageToken.dispose();
-    _tiktokToken.dispose();
-    _tiktokRefresh.dispose();
-    _tiktokKey.dispose();
-    _tiktokSecret.dispose();
     _ytClientId.dispose();
     _ytSecret.dispose();
     _ytRefresh.dispose();
@@ -74,7 +65,6 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
       _igId.text = '${s['instagramUserId'] ?? ''}';
       _caption.text = '${s['captionPrefix'] ?? ''}';
       _pageTokenSet = s['pageTokenSet'] == true;
-      _tiktokTokenSet = s['tiktokTokenSet'] == true;
       _ytClientId.text = '${s['youtubeClientId'] ?? ''}';
       _ytRefreshSet = s['youtubeRefreshSet'] == true;
       _ytSecretSet = s['youtubeSecretSet'] == true;
@@ -97,21 +87,11 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
         'facebookPageId': _pageId.text.trim(),
         'instagramUserId': _igId.text.trim(),
         'captionPrefix': _caption.text.trim(),
-        'tiktokClientKey': _tiktokKey.text.trim(),
         'youtubeClientId': _ytClientId.text.trim(),
         'telegramChannelId': _tgChannelId.text.trim(),
       };
       if (_pageToken.text.trim().isNotEmpty) {
         payload['facebookPageAccessToken'] = _pageToken.text.trim();
-      }
-      if (_tiktokToken.text.trim().isNotEmpty) {
-        payload['tiktokAccessToken'] = _tiktokToken.text.trim();
-      }
-      if (_tiktokRefresh.text.trim().isNotEmpty) {
-        payload['tiktokRefreshToken'] = _tiktokRefresh.text.trim();
-      }
-      if (_tiktokSecret.text.trim().isNotEmpty) {
-        payload['tiktokClientSecret'] = _tiktokSecret.text.trim();
       }
       if (_ytSecret.text.trim().isNotEmpty) {
         payload['youtubeClientSecret'] = _ytSecret.text.trim();
@@ -126,9 +106,6 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
           .httpsCallable('adminSetTvSocialSettings')
           .call(payload);
       _pageToken.clear();
-      _tiktokToken.clear();
-      _tiktokRefresh.clear();
-      _tiktokSecret.clear();
       _ytSecret.clear();
       _ytRefresh.clear();
       _tgBotToken.clear();
@@ -169,7 +146,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
               color: ready ? Colors.green.shade700 : Colors.blueGrey,
             ),
             title: const Text(
-              'AVA расмий Instagram / Facebook / TikTok / YouTube / Telegram',
+              'AVA расмий Instagram / Facebook / YouTube / Telegram',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
             ),
             subtitle: Text(
@@ -205,19 +182,10 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
                               : 'Page Access Token',
                           obscure: true,
                         ),
-                        _field(_caption, 'Подпись префикси (ихтиёрий)'),
                         _field(
-                          _tiktokToken,
-                          _tiktokTokenSet
-                              ? 'TikTok access token (янги — бўш қолдиринг)'
-                              : 'TikTok access token',
-                          obscure: true,
+                          _caption,
+                          'Подпись префикси — CTA (макс. 200 белги!)',
                         ),
-                        _field(_tiktokRefresh, 'TikTok refresh token',
-                            obscure: true),
-                        _field(_tiktokKey, 'TikTok client key'),
-                        _field(_tiktokSecret, 'TikTok client secret',
-                            obscure: true),
                         _field(_ytClientId, 'YouTube OAuth client ID'),
                         _field(
                           _ytSecret,

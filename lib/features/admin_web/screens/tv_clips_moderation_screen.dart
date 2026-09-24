@@ -1028,7 +1028,7 @@ class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
               child: Text(
                 auto
                     ? 'АВТО — янги видеолар дарҳол фийдда; соцсет чипи бўлса AVA расмий саҳифасига тизим ўзи жойлайди'
-                    : 'ҚЎЛДА — тасдиқдан кейин фийдда чиқади; танланган Instagram / Facebook / TikTok’га ҳам тизим жойлайди',
+                    : 'ҚЎЛДА — тасдиқдан кейин фийдда чиқади; танланган Instagram / Facebook’га ҳам тизим жойлайди',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

@@ -1,24 +1,26 @@
 'use strict';
 
 /**
- * AVA расмий Instagram / Facebook / TikTok / YouTube / Telegram — клип
- * active бўлганда жойлаш. Токенлар: settings/tv_social (CF-only) + env
- * fallback.
+ * AVA расмий Instagram / Facebook / YouTube / Telegram — клип active
+ * бўлганда жойлаш. Токенлар: settings/tv_social (CF-only) + env fallback.
+ *
+ * TikTok олиб ташланди (эга қарори, 2026-09-24): токен ҳеч қачон
+ * созланмаган эди, ҳар клипда бекорга уриниб «access token йўқ»
+ * хатосини ёзиб турарди.
  *
  * `category === 'ad'` (пуллик реклама) — АЛОҲИДА йўл: модерациядан ўтмайди
  * (тўлов қилинган заҳоти `active`), ва фойдаланувчи чекбоксларидан қатъи
- * назар МАЖБУРИЙ фақат Instagram + Facebook + Telegram'га чиқади (TikTok/
- * YouTube йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
+ * назар МАЖБУРИЙ фақат Instagram + Facebook + Telegram'га чиқади (YouTube
+ * йўқ — алгоритм спам сифатида белгилаш хавфи туфайли).
  */
 const axios = require('axios');
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
-const TIKTOK = 'https://open.tiktokapis.com/v2';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const YT_UPLOAD = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const TELEGRAM_API = 'https://api.telegram.org';
 const SETTINGS_PATH = ['settings', 'tv_social'];
-const ORDERED = ['instagram', 'facebook', 'tiktok', 'youtube', 'telegram'];
+const ORDERED = ['instagram', 'facebook', 'youtube', 'telegram'];
 const AD_FORCED_NETWORKS = ['instagram', 'facebook', 'telegram'];
 const STALE_MS = 12 * 60 * 1000;
 const IG_POLL_MS = 5000;
@@ -85,9 +87,6 @@ function publicSettings(s) {
     instagramUserId: str(s.instagramUserId, 40),
     captionPrefix: str(s.captionPrefix, 200),
     pageTokenSet: Boolean(str(s.facebookPageAccessToken, 800)),
-    tiktokTokenSet: Boolean(str(s.tiktokAccessToken, 800)),
-    tiktokRefreshSet: Boolean(str(s.tiktokRefreshToken, 800)),
-    tiktokClientKeySet: Boolean(str(s.tiktokClientKey, 80)),
     youtubeClientId: str(s.youtubeClientId, 200),
     youtubeRefreshSet: Boolean(str(s.youtubeRefreshToken, 800)),
     youtubeSecretSet: Boolean(str(s.youtubeClientSecret, 200)),
@@ -110,14 +109,6 @@ function attachTvSocialPublish(exports, deps) {
       instagramUserId: str(s.instagramUserId, 40)
           || str(process.env.INSTAGRAM_USER_ID, 40),
       captionPrefix: str(s.captionPrefix, 200),
-      tiktokAccessToken: str(s.tiktokAccessToken, 800)
-          || str(process.env.TIKTOK_ACCESS_TOKEN, 800),
-      tiktokRefreshToken: str(s.tiktokRefreshToken, 800)
-          || str(process.env.TIKTOK_REFRESH_TOKEN, 800),
-      tiktokClientKey: str(s.tiktokClientKey, 80)
-          || str(process.env.TIKTOK_CLIENT_KEY, 80),
-      tiktokClientSecret: str(s.tiktokClientSecret, 200)
-          || str(process.env.TIKTOK_CLIENT_SECRET, 200),
       youtubeClientId: str(s.youtubeClientId, 200)
           || str(process.env.YOUTUBE_CLIENT_ID, 200),
       youtubeClientSecret: str(s.youtubeClientSecret, 200)
@@ -136,30 +127,6 @@ function attachTvSocialPublish(exports, deps) {
         Object.assign({ updatedAt: admin.firestore.FieldValue.serverTimestamp() }, patch),
         { merge: true },
     );
-  }
-
-  async function refreshTikTok(s) {
-    if (!s.tiktokRefreshToken || !s.tiktokClientKey || !s.tiktokClientSecret) {
-      return s;
-    }
-    const body = new URLSearchParams({
-      client_key: s.tiktokClientKey,
-      client_secret: s.tiktokClientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: s.tiktokRefreshToken,
-    });
-    const res = await axios.post(`${TIKTOK}/oauth/token/`, body.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 30000,
-    });
-    const data = (res.data && res.data.data) || res.data || {};
-    const access = str(data.access_token, 800);
-    if (!access) throw new Error('TikTok token refresh empty');
-    const patch = { tiktokAccessToken: access };
-    const refresh = str(data.refresh_token, 800);
-    if (refresh) patch.tiktokRefreshToken = refresh;
-    await saveSettingsPatch(patch);
-    return Object.assign({}, s, patch);
   }
 
   async function postInstagram(videoUrl, caption, s) {
@@ -238,65 +205,6 @@ function attachTvSocialPublish(exports, deps) {
     return { id, url: `https://www.facebook.com/${s.facebookPageId}/videos/${id}` };
   }
 
-  async function postTikTok(videoUrl, caption, sIn) {
-    let s = sIn;
-    if (!s.tiktokAccessToken) throw new Error('TikTok access token йўқ');
-
-    const tryInit = async (token, privacy) => axios.post(
-        `${TIKTOK}/post/publish/video/init/`,
-        {
-          post_info: {
-            title: caption.slice(0, 2200),
-            privacy_level: privacy,
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false,
-          },
-          source_info: {
-            source: 'PULL_FROM_URL',
-            video_url: videoUrl,
-          },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json; charset=UTF-8',
-          },
-          timeout: 60000,
-        },
-    );
-
-    let res;
-    try {
-      res = await tryInit(s.tiktokAccessToken, 'PUBLIC_TO_EVERYONE');
-    } catch (e) {
-      const msg = axiosMsg(e);
-      const code = e && e.response && e.response.status;
-      if (code === 401 && s.tiktokRefreshToken) {
-        s = await refreshTikTok(s);
-        try {
-          res = await tryInit(s.tiktokAccessToken, 'PUBLIC_TO_EVERYONE');
-        } catch (_) {
-          res = await tryInit(s.tiktokAccessToken, 'SELF_ONLY');
-        }
-      } else if (/privacy_level|unaudited|SELF_ONLY/i.test(msg)) {
-        res = await tryInit(s.tiktokAccessToken, 'SELF_ONLY');
-      } else {
-        throw e;
-      }
-    }
-    const err = res.data && res.data.error;
-    if (err && err.code && String(err.code) !== 'ok') {
-      throw new Error(err.message || err.code);
-    }
-    const publishId = str(
-        (res.data && res.data.data && res.data.data.publish_id) || '',
-        80,
-    );
-    if (!publishId) throw new Error('TikTok publish_id йўқ');
-    return { id: publishId, url: '' };
-  }
-
   /**
    * YouTube — refresh token'дан қисқа муддатли access token. Google
    * refresh token'ни алмаштирмайди, шунинг учун сақлаб ўтирилмайди.
@@ -322,7 +230,7 @@ function attachTvSocialPublish(exports, deps) {
 
   /**
    * YouTube Shorts — resumable upload: сессия очилади, кейин байтлар PUT.
-   * IG/FB/TikTok'дан фарқли, YouTube URL'дан ўзи тортмайди — файлни
+   * IG/FB'дан фарқли, YouTube URL'дан ўзи тортмайди — файлни
    * Storage'дан юклаб, ўзимиз юборамиз.
    */
   async function postYouTube(videoUrl, caption, s) {
@@ -422,7 +330,6 @@ function attachTvSocialPublish(exports, deps) {
   async function publishOne(net, videoUrl, caption, s) {
     if (net === 'instagram') return postInstagram(videoUrl, caption, s);
     if (net === 'facebook') return postFacebook(videoUrl, caption, s);
-    if (net === 'tiktok') return postTikTok(videoUrl, caption, s);
     if (net === 'youtube') return postYouTube(videoUrl, caption, s);
     if (net === 'telegram') return postTelegram(videoUrl, caption, s);
     throw new Error(`unknown network ${net}`);
@@ -585,18 +492,6 @@ function attachTvSocialPublish(exports, deps) {
     if (data && data.facebookPageAccessToken != null
         && str(data.facebookPageAccessToken, 800)) {
       patch.facebookPageAccessToken = str(data.facebookPageAccessToken, 800);
-    }
-    if (data && data.tiktokAccessToken != null && str(data.tiktokAccessToken, 800)) {
-      patch.tiktokAccessToken = str(data.tiktokAccessToken, 800);
-    }
-    if (data && data.tiktokRefreshToken != null && str(data.tiktokRefreshToken, 800)) {
-      patch.tiktokRefreshToken = str(data.tiktokRefreshToken, 800);
-    }
-    if (data && data.tiktokClientKey != null) {
-      patch.tiktokClientKey = str(data.tiktokClientKey, 80);
-    }
-    if (data && data.tiktokClientSecret != null && str(data.tiktokClientSecret, 200)) {
-      patch.tiktokClientSecret = str(data.tiktokClientSecret, 200);
     }
     if (data && data.youtubeClientId != null) {
       patch.youtubeClientId = str(data.youtubeClientId, 200);

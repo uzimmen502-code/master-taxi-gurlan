@@ -149,7 +149,7 @@ class TvClip {
   /// ёки пуллик реклама. Бўш = улгуржига алоқасиз.
   final String wholesaleProductId;
   final bool socialConsent;
-  /// `instagram` | `facebook` | `tiktok`
+  /// `instagram` | `facebook` | `youtube` | `telegram`
   final List<String> socialNetworks;
   final DateTime? socialPostedAt;
   /// CF жойлаш ҳолати: status posting|posted|partial|error + networks.{ig,fb,tt}.
@@ -238,7 +238,7 @@ class TvClip {
   ///
   /// HLS'ни ўзи қўллаб-қувватламайдиган контекстлар учун: Flutter web
   /// админ панели (Chrome нативда m3u8 ўқимайди) ва ижтимоий тармоқларга
-  /// кросс-постинг (`tv_social_publish.js` — Instagram/TikTok/YouTube
+  /// кросс-постинг (`tv_social_publish.js` — Instagram/YouTube
   /// playlist эмас, файл кутади). Лента HLS'га ўтганда ҳам бу контекстлар
   /// шу ерда ишлашда давом этади.
   ///

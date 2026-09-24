@@ -16950,7 +16950,7 @@ attachAnonSessionMerge(exports, {
   requireCallerRoles,
 });
 
-// --- AVA official IG / Facebook / TikTok clip publish ---
+// --- AVA official IG / Facebook / YouTube / Telegram clip publish ---
 const { attachTvSocialPublish } = require('./tv_social_publish');
 attachTvSocialPublish(exports, {
   functions,

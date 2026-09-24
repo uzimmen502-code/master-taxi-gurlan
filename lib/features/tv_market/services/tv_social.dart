@@ -1,18 +1,21 @@
-/// AVA расмий Instagram / Facebook / TikTok / YouTube / Telegram —
+/// AVA расмий Instagram / Facebook / YouTube / Telegram —
 /// фойдаланувчи чипи = қайси саҳифа.
+///
+/// TikTok олиб ташланди (эга қарори, 2026-09-24). Эски клипларда
+/// `socialNetworks: ['tiktok']` учраши мумкин — [parse] уни энди
+/// эътиборга олмайди, шунчаки ташлаб кетади.
 class TvSocial {
   TvSocial._();
 
   static const instagram = 'instagram';
   static const facebook = 'facebook';
-  static const tiktok = 'tiktok';
   static const youtube = 'youtube';
   static const telegram = 'telegram';
-  static const ordered = [instagram, facebook, tiktok, youtube, telegram];
+  static const ordered = [instagram, facebook, youtube, telegram];
 
   /// Пуллик реклама (`category == 'ad'`) учун МАЖБУРИЙ тармоқлар — эга
-  /// чекбокс танламайди, тўлов қилинган заҳоти шуларга чиқади. TikTok/
-  /// YouTube ад ичига кирмайди (алгоритм спам сифатида белгилаши хавфи).
+  /// чекбокс танламайди, тўлов қилинган заҳоти шуларга чиқади. YouTube
+  /// ад ичига кирмайди (алгоритм спам сифатида белгилаши хавфи).
   static const adForced = [instagram, facebook, telegram];
 
   static String labelKey(String id) => 'tv_social_$id';

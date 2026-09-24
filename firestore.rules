@@ -1361,7 +1361,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Page/IG/TikTok токенлари — фақат Cloud Functions (Admin SDK).
+    // Page/IG токенлари — фақат Cloud Functions (Admin SDK).
     match /settings/tv_social {
       allow read, write: if false;
     }

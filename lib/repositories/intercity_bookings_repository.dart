@@ -724,10 +724,17 @@ class IntercityBookingsRepository {
 
         // 2. WRITES
         if (driverSnap.exists) {
-          final seats =
-              (driverSnap.data()?['seats'] as num?)?.toInt() ?? 0;
+          final driverData = driverSnap.data() ?? const <String, dynamic>{};
+          final seats = (driverData['seats'] as num?)?.toInt() ?? 0;
+          // seatCapacity билан чегаралаймиз — completeBooking'даги каби.
+          // Акс ҳолда (мас. ҳайдовчи орада seats'ни қўлда ўзгартирса) seat
+          // рестори сиғимдан ошиб кетиши мумкин эди.
+          final capacity = (driverData['seatCapacity'] as num?)?.toInt();
+          final restored = seats + fresh.passengers;
           tx.update(driverRef, {
-            'seats': seats + fresh.passengers,
+            'seats': capacity != null
+                ? (restored > capacity ? capacity : restored)
+                : restored,
             'updatedAt': FieldValue.serverTimestamp(),
           });
         }
@@ -777,6 +784,21 @@ class IntercityBookingsRepository {
           type: 'intercity_booking_cancelled',
           bookingId: bookingId,
         );
+
+        // Йўловчи ўзи бекор қилган бўлса — ҳайдовчига ҳам хабар (ўрин
+        // бўшади). Аввал фақат йўловчига хабар кетар эди, ҳайдовчи эса
+        // бекор қилинганини live рўйхатдан билиши керак эди. Ҳайдовчи ёки
+        // рейс тугаши сабабли бекорда ҳайдовчига қайта хабар керак эмас.
+        if (!byDriver && !tripEnded && cb.driverPhone.isNotEmpty) {
+          await _writePassengerNotification(
+            userPhone: cb.driverPhone,
+            title: '❌ Йўловчи бронни бекор қилди',
+            body: '${cb.userName} · ${_bookingRouteNotice(cb)}. '
+                'Ўрин(лар) қайта бўшатилди.',
+            type: 'intercity_booking_cancelled',
+            bookingId: bookingId,
+          );
+        }
       }
     } on IntercityBookingException {
       rethrow;

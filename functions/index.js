@@ -10438,6 +10438,10 @@ const tvClipPage = require('./tv_clip_page');
 
 const AVA_PUBLIC_BASE = 'https://master-taxi-gurlan.web.app';
 const AVA_APP_DOWNLOAD_PAGE = `${AVA_PUBLIC_BASE}/downloads/`;
+// Google Play — «AVA Zona» (uz.ava.gurlan). Ilova o'rnatilgan bo'lsa Play
+// «Ochish», bo'lmasa «O'rnatish» ko'rsatadi — asosiy yo'l shu.
+const AVA_PLAY_URL =
+    'https://play.google.com/store/apps/details?id=uz.ava.gurlan';
 
 exports.clipPage = functions
   .runWith({memory: '256MB', timeoutSeconds: 30})
@@ -10451,7 +10455,10 @@ exports.clipPage = functions
       // aks holda Telegram preview o'rniga xato ko'rsatadi.
       res.set('Cache-Control', 'public, max-age=60');
       res.status(200).send(
-          tvClipPage.buildClipNotFoundHtml({appUrl: AVA_APP_DOWNLOAD_PAGE}));
+          tvClipPage.buildClipNotFoundHtml({
+            appUrl: AVA_PLAY_URL,
+            altUrl: AVA_APP_DOWNLOAD_PAGE,
+          }));
     };
 
     if (!tvClipPage.isSafeClipId(clipId) || clipId === 'clip') {
@@ -10474,7 +10481,8 @@ exports.clipPage = functions
       res.status(200).send(tvClipPage.buildClipPageHtml({
         clip,
         pageUrl: `${AVA_PUBLIC_BASE}/clip/${clipId}`,
-        appUrl: AVA_APP_DOWNLOAD_PAGE,
+        appUrl: AVA_PLAY_URL,
+        altUrl: AVA_APP_DOWNLOAD_PAGE,
       }));
     } catch (e) {
       console.error('clipPage error:', clipId, e);

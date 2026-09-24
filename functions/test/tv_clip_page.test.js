@@ -23,6 +23,7 @@ function check(name, fn) {
 }
 
 const APP = 'https://master-taxi-gurlan.web.app/downloads/';
+const PLAY = 'https://play.google.com/store/apps/details?id=uz.ava.gurlan';
 const URL = 'https://master-taxi-gurlan.web.app/clip/abc123';
 
 function clip(over = {}) {
@@ -111,6 +112,18 @@ check('CTA and brand tagline present', () => {
   const html = p.buildClipPageHtml({clip: clip(), pageUrl: URL, appUrl: APP});
   assert.ok(html.includes(APP), 'yuklab olish havolasi yo\'q');
   assert.ok(html.includes('олиб келувчи'), 'CTA taglayn yo\'q');
+});
+check('Play is primary CTA, APK page is secondary', () => {
+  const html = p.buildClipPageHtml({
+    clip: clip(), pageUrl: URL, appUrl: PLAY, altUrl: APP,
+  });
+  assert.ok(html.includes(`class="cta" href="${PLAY}"`), 'Play asosiy tugma emas');
+  assert.ok(html.includes(`class="alt" href="${APP}"`), 'APK zaxira havolasi yo\'q');
+});
+check('altUrl omitted — only the primary CTA renders', () => {
+  const html = p.buildClipPageHtml({clip: clip(), pageUrl: URL, appUrl: PLAY});
+  assert.ok(html.includes('class="cta"'));
+  assert.ok(!html.includes('class="alt"'), 'alt bo\'lmasligi kerak');
 });
 
 // ─── fallback ───────────────────────────────────────────────────────

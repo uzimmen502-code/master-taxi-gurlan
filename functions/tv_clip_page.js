@@ -84,6 +84,10 @@ ${head}
     background: #00e676; color: #06210f; font-weight: 800; font-size: 16px;
     padding: 15px 18px; border-radius: 14px; margin-bottom: 10px;
   }
+  .alt {
+    display: block; text-align: center; text-decoration: none;
+    color: #9e9e9e; font-size: 13px; padding: 8px;
+  }
   .tagline { text-align: center; color: #8d8d8d; font-size: 13px; margin-top: 18px; }
   .empty { text-align: center; padding: 48px 0; color: #bdbdbd; }
 </style>
@@ -98,7 +102,7 @@ ${head}
  * Klip sahifasi. `clip` — Firestore `tv_clips/{id}` ma'lumoti.
  * `pageUrl` — kanonik havola (og:url), `appUrl` — ilovani yuklab olish.
  */
-function buildClipPageHtml({clip, pageUrl, appUrl}) {
+function buildClipPageHtml({clip, pageUrl, appUrl, altUrl}) {
   const rawTitle = String((clip && clip.title) || '').trim();
   const rawDesc = String((clip && clip.description) || '').trim();
   const title = escapeHtml(rawTitle || 'AVA видео');
@@ -146,15 +150,29 @@ function buildClipPageHtml({clip, pageUrl, appUrl}) {
       ? `<div class="meta">${price ? `<span class="price">${price}</span>` : ''}` +
         `${district ? `<span class="chip">📍 ${district}</span>` : ''}</div>`
       : '',
-    app ? `<a class="cta" href="${app}">📲 AVA иловасини юклаб олиш</a>` : '',
+    ctaBlock(appUrl, altUrl),
   ].filter(Boolean).join('\n');
 
   return pageShell({title, description: ogDesc, head, body});
 }
 
-/** Klip topilmadi / faol emas — havola o'lik bo'lmasin, ilovaga yo'naltiramiz. */
-function buildClipNotFoundHtml({appUrl}) {
+/**
+ * Asosiy tugma — Google Play («AVA Zona», uz.ava.gurlan). Play ilova
+ * o'rnatilgan bo'lsa «Ochish», bo'lmasa «O'rnatish» ko'rsatadi, ya'ni
+ * ikkala holat ham shu bitta havola bilan qoplanadi. Ikkinchi darajali
+ * havola — Play'ga kira olmaydigan qurilmalar uchun APK sahifasi.
+ */
+function ctaBlock(appUrl, altUrl) {
   const app = safeUrl(appUrl);
+  const alt = safeUrl(altUrl);
+  const out = [];
+  if (app) out.push(`<a class="cta" href="${app}">📲 AVA иловасини очиш</a>`);
+  if (alt) out.push(`<a class="alt" href="${alt}">APK орқали юклаб олиш</a>`);
+  return out.join('\n');
+}
+
+/** Klip topilmadi / faol emas — havola o'lik bo'lmasin, ilovaga yo'naltiramiz. */
+function buildClipNotFoundHtml({appUrl, altUrl}) {
   const title = 'Видео топилмади';
   const desc = 'Бу видео ўчирилган ёки мавжуд эмас.';
   const head = [
@@ -165,7 +183,7 @@ function buildClipNotFoundHtml({appUrl}) {
     '<meta name="robots" content="noindex">',
   ].join('\n');
   const body = `<div class="empty"><h1>${title}</h1><p class="desc">${desc}</p></div>` +
-    (app ? `<a class="cta" href="${app}">📲 AVA иловасини юклаб олиш</a>` : '');
+    ctaBlock(appUrl, altUrl);
   return pageShell({title, description: desc, head, body});
 }
 

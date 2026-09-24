@@ -9,12 +9,17 @@ import '../models/tv_clip.dart';
 /// (эга талаби, 2026-09-24). Ижтимоий тармоқ/Telegram'га улашилганда
 /// қабул қилган одам AVA'га ўтиши учун ҳавола ҳам қўшилади.
 String _shareCaption(TvClip clip) {
+  // Айнан шу клипга очиладиган ҳавола (Telegram/IG/FB'да превью карточкаси
+  // билан кўринади). Клип id бўш бўлса — умумий юклаш саҳифасига қайтамиз.
+  final link = clip.id.trim().isEmpty
+      ? kAvaAppDownloadPage
+      : avaClipShareUrl(clip.id.trim());
   final lines = <String>[
     if (clip.title.trim().isNotEmpty) clip.title.trim(),
     if (clip.hasPrice) formatMoney(clip.price),
     if (clip.districtLabel.trim().isNotEmpty) '📍 ${clip.districtLabel.trim()}',
     '',
-    '📲 AVA иловасида кўринг: $kAvaAppDownloadPage',
+    '📲 Видеони AVA’да кўринг: $link',
     '🚚 AVA — сизга олиб келувчи',
   ];
   return lines.join('\n');

@@ -10428,6 +10428,60 @@ exports.expirePendingTrips = functions.pubsub
 
 // refreshYukDemoPresence (tuman ichi demo backfill) → functions/yuk_local.js
 
+// ═══════════════════════════════════════════════════════════════════
+// AVAGram klip ulashish sahifasi — `/clip/{id}` (hosting rewrite).
+// Telegram/Facebook/Instagram preview kartochkasi uchun OG meta teglari
+// SERVER tomonda tayyor bo'lishi shart (crawler JS ishlatmaydi), shuning
+// uchun Flutter web SPA emas, shu funksiya HTML qaytaradi.
+// ═══════════════════════════════════════════════════════════════════
+const tvClipPage = require('./tv_clip_page');
+
+const AVA_PUBLIC_BASE = 'https://master-taxi-gurlan.web.app';
+const AVA_APP_DOWNLOAD_PAGE = `${AVA_PUBLIC_BASE}/downloads/`;
+
+exports.clipPage = functions
+  .runWith({memory: '256MB', timeoutSeconds: 30})
+  .https.onRequest(async (req, res) => {
+    // `/clip/abc123` yoki `/clip/abc123/` → 'abc123'
+    const raw = String(req.path || '').replace(/^\/+|\/+$/g, '');
+    const clipId = raw.split('/').filter(Boolean).pop() || '';
+
+    const notFound = () => {
+      // Havola o'lik bo'lmasin — 200 bilan "topilmadi" sahifasi qaytadi,
+      // aks holda Telegram preview o'rniga xato ko'rsatadi.
+      res.set('Cache-Control', 'public, max-age=60');
+      res.status(200).send(
+          tvClipPage.buildClipNotFoundHtml({appUrl: AVA_APP_DOWNLOAD_PAGE}));
+    };
+
+    if (!tvClipPage.isSafeClipId(clipId) || clipId === 'clip') {
+      notFound();
+      return;
+    }
+
+    try {
+      const snap = await db.collection('tv_clips').doc(clipId).get();
+      const clip = snap.exists ? snap.data() : null;
+      // Faqat ommaga ochiq, tayyor klip — pending/blocked sizib chiqmasin.
+      const isPublic = clip &&
+          String(clip.status || 'active') === 'active' &&
+          String(clip.processingStatus || 'ready') === 'ready';
+      if (!isPublic) {
+        notFound();
+        return;
+      }
+      res.set('Cache-Control', 'public, max-age=300');
+      res.status(200).send(tvClipPage.buildClipPageHtml({
+        clip,
+        pageUrl: `${AVA_PUBLIC_BASE}/clip/${clipId}`,
+        appUrl: AVA_APP_DOWNLOAD_PAGE,
+      }));
+    } catch (e) {
+      console.error('clipPage error:', clipId, e);
+      notFound();
+    }
+  });
+
 // ONE-TIME: `food_catalog` — seed. Bir marta HTTP GET qiling, keyin exportni o‘chirib qayta deploy.
 exports.seedFoodCatalog = functions
   .runWith({ timeoutSeconds: 120, memory: '256MB', secrets: ['SEED_SECRET'] })

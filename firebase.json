@@ -25,6 +25,10 @@
           "destination": "/admin/index.html"
         },
         {
+          "source": "/clip/**",
+          "function": "clipPage"
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }

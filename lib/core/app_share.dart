@@ -11,6 +11,15 @@ const kAvaAppDownloadPage = 'https://master-taxi-gurlan.web.app/downloads/';
 const kAvaAppDownloadApk =
     'https://master-taxi-gurlan.web.app/downloads/master-taxi-gurlan.apk';
 
+/// Айнан битта AVAGram клипига очиладиган ҳавола.
+///
+/// Бу манзилни Firebase Hosting `clipPage` функциясига узатади
+/// (қаранг: `firebase.json` → rewrites `/clip/**`). Саҳифа серверда
+/// тайёр HTML қайтаради — шунинг учун Telegram/Facebook/Instagram
+/// ҳаволани превью карточкаси (расм + сарлавҳа) билан кўрсатади.
+String avaClipShareUrl(String clipId) =>
+    'https://master-taxi-gurlan.web.app/clip/$clipId';
+
 /// Телефоннинг улашиш ойнаси — downloads саҳифаси (ишончли йўл).
 Future<bool> shareAvaApp(BuildContext context) async {
   final body = context

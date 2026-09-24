@@ -13,17 +13,19 @@ const String kAvaShareCta =
     '👉 АВАга ўтинг! Фойдали видеолар, керакли хизматлар ва эълонлар — '
     'барчаси бир жойда. Сизга кераклиси ҳам шу ерда!';
 
-/// CTA + босиладиган манзил. Ҳавола `/clip/{id}` саҳифасига боради:
-/// илова ўрнатилган бўлса — иловада очилади (App Links), акс ҳолда
-/// браузерда видео кўринади ва иловани юклаб олиш тугмаси чиқади.
-String shareCaptionFor(TvClip clip) {
-  final id = clip.id.trim();
-  final link = id.isEmpty ? kAvaAppDownloadPage : avaClipShareUrl(id);
-  return '$kAvaShareCta\n$link';
-}
+/// Улашиш матни — CTA + **тўғридан Google Play** ҳаволаси.
+///
+/// Оралиқ `/clip/{id}` саҳифаси улашиш оқимидан чиқарилди (эга қарори,
+/// 2026-09-24): видео постнинг ўзида файл сифатида кетади ва одам уни
+/// аллақачон кўриб бўлади — уни яна браузерда кўрсатиш ортиқча қадам эди.
+/// Play ҳаволаси иккала ҳолатни қоплайди: илова бор бўлса «Очиш»,
+/// йўқ бўлса «Ўрнатиш».
+///
+/// Матн клипга боғлиқ эмас, шунинг учун константа.
+const String kAvaShareMessage = '$kAvaShareCta\n$kAvaPlayStoreUrl';
 
 /// Клипни **видео файл** сифатида улашади (Telegram'да видеонинг ўзи
-/// кўринади). Матн — [shareCaptionFor]: CTA + клип ҳаволаси.
+/// кўринади). Матн — [kAvaShareMessage].
 ///
 /// HLS эмас, [TvClip.mp4Url] (360p афзал — кичик, тез юкланади). Файл
 /// [DefaultCacheManager] орқали кешга юкланади — кейинги улашишда қайта
@@ -39,7 +41,7 @@ Future<void> shareTvClipVideo(TvClip clip) async {
   final file = await DefaultCacheManager().getSingleFile(url);
   await Share.shareXFiles(
     [XFile(file.path, mimeType: 'video/mp4', name: 'ava_${clip.id}.mp4')],
-    text: shareCaptionFor(clip),
+    text: kAvaShareMessage,
     subject: 'AVA',
   );
 }

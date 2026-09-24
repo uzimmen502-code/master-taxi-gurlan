@@ -480,7 +480,10 @@ class _HomeClipCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            TvClipPoster(url: clip.posterUrl),
+            // Видео `AspectRatio` билан марказда — постер ҳам `contain`,
+            // акс ҳолда тепа-пастдаги қора йўлакда қирқилган постер
+            // кўриниб қоларди.
+            TvClipPoster(url: clip.posterUrl, fit: BoxFit.contain),
             if (!clip.canStartPlayback) const TvClipProcessingBadge(),
             if (ready)
               Center(

@@ -29,7 +29,6 @@ import '../services/tv_segment_prefetcher.dart';
 import '../utils/tv_swipe_physics.dart';
 import '../widgets/tv_clip_overlay.dart';
 import '../widgets/tv_comment_sheet.dart';
-import '../widgets/tv_owner_avatar.dart';
 import '../widgets/tv_clip_poster.dart';
 import '../widgets/tv_play_pause_badge.dart';
 import 'tv_channel_screen.dart';
@@ -1121,37 +1120,15 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 
-  /// AppBar сарлавҳаси — жорий клип эгасининг аватари ва исми.
-  Widget _ownerTitle() {
-    if (_clips.isEmpty || _currentIndex >= _clips.length) {
-      return const SizedBox.shrink();
-    }
-    final clip = _clips[_currentIndex];
-    // `_InfoColumn`даги эски мантиқ айнан сақланади: аввал overlay
-    // исми, у бўш бўлса клипдаги `ownerName`.
+  /// Клип эгасининг кўрсатиладиган исми. Аввал overlay исми, у бўш
+  /// бўлса клипдаги `ownerName` — эски мантиқ айнан сақланади.
+  ///
+  /// Профил блоки AppBar'дан ўнг тугмалар устунига кўчди: у ерда ҳар
+  /// бир саҳифа ўз эгасини чизади, шунинг учун свайп пайтида исм
+  /// кечикмайди (аввал `_currentIndex` фақат свайп тугагач янгиланарди).
+  String _ownerDisplayName(TvClip clip) {
     final labeled = tvOwnerDisplayName(_overlayName(clip));
-    final name =
-        labeled.isNotEmpty ? labeled : tvOwnerDisplayName(clip.ownerName);
-    if (name.isEmpty) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TvOwnerAvatar(name: name, photoUrl: clip.ownerPhotoUrl, radius: 14),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            name,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-            ),
-          ),
-        ),
-      ],
-    );
+    return labeled.isNotEmpty ? labeled : tvOwnerDisplayName(clip.ownerName);
   }
 
   /// Қаранг: [_filterChipLabel] — қисқа/тўлиқ шакл изоҳи.
@@ -1189,19 +1166,13 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         titleSpacing: 0,
-        // Глобал темада `centerTitle: true` (app_theme.dart) — у бу
-        // ерда профилни ўртага суриб, ўнгдаги қидирув иконкасини
-        // босиб қоларди. Фақат шу экранда бекор қилинади: профил
-        // орқага қайтиш стрелкасининг ёнида, чап томонда туради.
-        centerTitle: false,
-        // Ҳудуд фильтрлари пастки қаторга кўчди; бу ерда энди жорий
-        // клип эгасининг профили турибди (свайпда алмашади).
-        title: _ownerTitle(),
+        // Сарлавҳа бўш: ҳудуд фильтрлари пастки қаторга, эга профили
+        // эса ўнг тугмалар устунига (хатчўп остига) кўчирилган.
         actions: [
           IconButton(
             tooltip: context.tr('tv_market_search'),
             onPressed: _openSearch,
-            icon: const Icon(Icons.search_rounded, color: Colors.white, size: 26),
+            icon: const _BoldIcon(Icons.search_rounded, size: 26),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 10),
@@ -1212,21 +1183,38 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                 const SizedBox(width: 4),
                 Tooltip(
                   message: context.tr('tv_publish_fab'),
+                  // Кўриниши 30% кичик (43→30), лекин БОСИШ МАЙДОНИ 44×44
+                  // бўлиб қолади — акс ҳолда тугма Material'нинг минимал
+                  // ўлчамидан (48dp) анча кичик бўлиб, тегиш қийинлашарди.
                   child: Material(
-                    color: const Color(0xFFFF1744),
-                    borderRadius: BorderRadius.circular(14),
-                    elevation: 6,
-                    shadowColor: const Color(0xFFFF1744),
+                    color: Colors.transparent,
                     child: InkWell(
                       onTap: _openPublish,
-                      borderRadius: BorderRadius.circular(14),
-                      child: const SizedBox(
-                        width: 43,
-                        height: 43,
-                        child: Icon(
-                          Icons.videocam_rounded,
-                          color: Colors.white,
-                          size: 25,
+                      borderRadius: BorderRadius.circular(22),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Center(
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF1744),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x80FF1744),
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.videocam_rounded,
+                              color: Colors.white,
+                              size: 17.5,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1288,25 +1276,23 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                     return Stack(
                       fit: StackFit.expand,
                       children: [
-                        TvClipPoster(url: clip.posterUrl),
+                        TvClipPoster(
+                          url: clip.posterUrl,
+                          fit: BoxFit.contain,
+                        ),
                         if (!clip.canStartPlayback)
                           const TvClipProcessingBadge(),
                         if (isActive &&
                             ctrl != null &&
                             ctrl.value.isInitialized)
-                          // Тўлиқ экранга мослаб тўлдириш (cover) — четлари
-                          // қирқилади (TikTok/Reels усули). Тик (9:16) видео
-                          // умуман қирқилмайди; горизонтал видеонинг ён
-                          // томонлари кесилади.
-                          Positioned.fill(
-                            child: FittedBox(
-                              fit: BoxFit.cover,
-                              clipBehavior: Clip.hardEdge,
-                              child: SizedBox(
-                                width: ctrl.value.size.width,
-                                height: ctrl.value.size.height,
-                                child: VideoPlayer(ctrl),
-                              ),
+                          // Видео ҲЕЧ ҚАЧОН қирқилмайди: ўз нисбати билан
+                          // марказда туради, тепа-пастда (ёки ён томонда)
+                          // тим қора фон қолади. Постер ҳам `contain` —
+                          // қора йўлакда қирқилган расм кўринмайди.
+                          Center(
+                            child: AspectRatio(
+                              aspectRatio: ctrl.value.aspectRatio,
+                              child: VideoPlayer(ctrl),
                             ),
                           ),
                         if (isActive)
@@ -1318,6 +1304,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                           ),
                         TvClipOverlay(
                           clip: clip,
+                          ownerName: _ownerDisplayName(clip),
                           isOwner: _isOwner(clip),
                           filters: _areaFilters(),
                           liked: _likedIds.contains(clip.id),
@@ -1407,14 +1394,52 @@ class _AreaFilterChip extends StatelessWidget {
 }
 
 /// Камерага қараган қалин қизил стрелка — «шу ердан қўшинг».
+/// Ўлчами 30% кичрайтирилди (31×20 → 21.7×14).
 class _PublishArrowHint extends StatelessWidget {
   const _PublishArrowHint();
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(31, 20),
+      size: const Size(21.7, 14),
       painter: _ThickRightArrowPainter(),
+    );
+  }
+}
+
+/// «Қалин» иконка. `MaterialIcons` — static шрифт, шунинг учун
+/// `Icon(weight: ...)` унга таъсир қилмайди. Бир глифни атрофга
+/// [spread] пиксел силжитиб бир неча марта чизамиз — натижада ҳарф
+/// йўғонлашади (шрифт алмаштирмасдан).
+class _BoldIcon extends StatelessWidget {
+  const _BoldIcon(this.icon, {this.size = 26});
+
+  final IconData icon;
+  final double size;
+
+  /// Глиф неча пиксел силжитиб такрорланади.
+  static const _spread = 0.7;
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = Icon(icon, color: Colors.white, size: size);
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        for (final o in const [
+          Offset(-_spread, 0),
+          Offset(_spread, 0),
+          Offset(0, -_spread),
+          Offset(0, _spread),
+        ])
+          Transform.translate(offset: o, child: glyph),
+        Icon(
+          icon,
+          color: Colors.white,
+          size: size,
+          shadows: const [Shadow(blurRadius: 4, color: Colors.black54)],
+        ),
+      ],
     );
   }
 }

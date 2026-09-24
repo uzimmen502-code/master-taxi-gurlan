@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_owner_action_bar.dart';
+import 'tv_owner_avatar.dart';
 
 /// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
@@ -25,9 +26,15 @@ class TvClipOverlay extends StatelessWidget {
     this.onOpenShop,
     this.onOpenWholesale,
     this.filters,
+    this.ownerName = '',
   });
 
   final TvClip clip;
+
+  /// Клип эгасининг кўрсатиладиган исми — аватардаги бош ҳарф учун.
+  /// Экран даражасида ҳисобланади (`tv_public_profiles` кэши), шунинг
+  /// учун ташқаридан узатилади.
+  final String ownerName;
   final VoidCallback onContact;
   final VoidCallback onLike;
   final VoidCallback onComment;
@@ -133,6 +140,7 @@ class TvClipOverlay extends StatelessWidget {
           bottom: bottom + 80,
           child: _ActionButtons(
             clip: clip,
+            ownerName: ownerName,
             liked: liked,
             saved: saved,
             showShop: onOpenShop != null,
@@ -238,6 +246,10 @@ class _InfoColumn extends StatelessWidget {
   }
 }
 
+/// Ўнг тугмалар устуни. Энг пастида — клип эгасининг аватари
+/// («Сақлаш» хатчўпидан кейин). Устун жуда узайиб кетмаслиги учун
+/// барча иконка, ёзув ва оралиқлар 20% кичрайтирилган; аватар эса
+/// талаб бўйича 16 радиусда қолади.
 class _ActionButtons extends StatelessWidget {
   const _ActionButtons({
     required this.clip,
@@ -247,12 +259,14 @@ class _ActionButtons extends StatelessWidget {
     required this.onComment,
     required this.onShare,
     required this.onSave,
+    this.ownerName = '',
     this.onOpenShop,
     this.onOpenWholesale,
     this.showShop = false,
   });
 
   final TvClip clip;
+  final String ownerName;
   final bool liked;
   final bool saved;
   final VoidCallback onLike;
@@ -274,34 +288,34 @@ class _ActionButtons extends StatelessWidget {
           label: clip.likeCount > 0 ? '${clip.likeCount}' : '',
           onTap: onLike,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12.8),
         _ActionBtn(
           icon: Icons.mode_comment_outlined,
           label: clip.commentCount > 0 ? '${clip.commentCount}' : '',
           onTap: onComment,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12.8),
         _ActionBtn(
           icon: Icons.send_rounded,
           label: '',
           onTap: onShare,
         ),
         if (showShop && onOpenShop != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 12.8),
           _ShopActionBtn(
             label: context.tr('tv_market_shop'),
             onTap: onOpenShop!,
           ),
         ],
         if (onOpenWholesale != null) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 12.8),
           _ShopActionBtn(
             label: context.tr('tv_market_wholesale'),
             icon: Icons.warehouse_rounded,
             onTap: onOpenWholesale!,
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 12.8),
         _ActionBtn(
           icon: saved
               ? Icons.bookmark_rounded
@@ -310,6 +324,18 @@ class _ActionButtons extends StatelessWidget {
           label: '',
           onTap: onSave,
         ),
+        // Клип эгасининг профили — хатчўпнинг ПАСТИДА. Исм ёзилмайди
+        // (тор устунда сиғмайди): фақат аватар — расм, у бўлмаса
+        // исмнинг оқ қалин бош ҳарфи.
+        if (ownerName.isNotEmpty) ...[
+          const SizedBox(height: 12.8),
+          TvOwnerAvatar(
+            name: ownerName,
+            photoUrl: clip.ownerPhotoUrl,
+            radius: 16,
+            initialColor: Colors.white,
+          ),
+        ],
       ],
     );
   }
@@ -339,17 +365,17 @@ class _ActionBtn extends StatelessWidget {
           Icon(
             icon,
             color: color,
-            size: 28,
+            size: 22.4,
             shadows: const [Shadow(blurRadius: 6, color: Colors.black54)],
           ),
           if (label.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 1.6),
               child: Text(
                 label,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 11,
+                  fontSize: 8.8,
                   fontWeight: FontWeight.w600,
                   shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
                 ),
@@ -381,8 +407,8 @@ class _ShopActionBtn extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: const Color(0xFF00E676),
               shape: BoxShape.circle,
@@ -393,16 +419,16 @@ class _ShopActionBtn extends StatelessWidget {
             child: Icon(
               icon,
               color: Colors.black,
-              size: 22,
+              size: 17.6,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: 1.6),
             child: Text(
               label,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 11,
+                fontSize: 8.8,
                 fontWeight: FontWeight.w700,
                 shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
               ),

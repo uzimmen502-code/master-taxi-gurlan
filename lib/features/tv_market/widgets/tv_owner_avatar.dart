@@ -4,6 +4,10 @@ import '../../../core/l10n/l10n_extension.dart';
 
 /// Жойлаштирувчи аватари: расм бор бўлса network image, бўлмаса исм бош ҳарфи.
 /// [onEdit] берилса, тагида таҳрирлаш белгиси кўринади (эгаси экрани учун).
+///
+/// [initialColor] — бош ҳарф ранги. Одатда тим яшил (оқ фондаги
+/// карталар: шарҳлар варағи, канал сарлавҳаси). Видео УСТИДА
+/// кўрсатилганда оқ берилади — акс ҳолда қоронғи кадрда ўқилмайди.
 class TvOwnerAvatar extends StatelessWidget {
   const TvOwnerAvatar({
     super.key,
@@ -11,12 +15,14 @@ class TvOwnerAvatar extends StatelessWidget {
     this.photoUrl = '',
     this.radius = 16,
     this.onEdit,
+    this.initialColor = const Color(0xFF007A3D),
   });
 
   final String name;
   final String photoUrl;
   final double radius;
   final VoidCallback? onEdit;
+  final Color initialColor;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +39,7 @@ class TvOwnerAvatar extends StatelessWidget {
           ? Text(
               initial,
               style: TextStyle(
-                color: const Color(0xFF007A3D),
+                color: initialColor,
                 fontWeight: FontWeight.w900,
                 fontSize: radius * 0.8,
               ),

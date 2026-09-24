@@ -3,23 +3,37 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 
 /// Постер дарҳол кўринади — видео келгунча бўш экран бўлмайди.
+///
+/// [fit] — постернинг кадрга мосланиши. Видео `AspectRatio` билан
+/// марказда кўрсатиладиган жойларда (лента, Home карта) `contain`
+/// берилади: акс ҳолда тепа-пастдаги қора йўлакда қирқилган постер
+/// кўриниб қоларди. Қолган жойларда эски хатти-ҳаракат — `cover`.
 class TvClipPoster extends StatelessWidget {
-  const TvClipPoster({super.key, required this.url});
+  const TvClipPoster({
+    super.key,
+    required this.url,
+    this.fit = BoxFit.cover,
+  });
 
   final String url;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
     if (url.isEmpty) return const ColoredBox(color: Colors.black);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final w = (MediaQuery.sizeOf(context).width * dpr).round().clamp(360, 720);
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      filterQuality: FilterQuality.low,
-      cacheWidth: w,
-      errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.black),
+    // Тагида тим қора — `contain`да четдаги бўш жой қора бўлиб қолади.
+    return ColoredBox(
+      color: Colors.black,
+      child: Image.network(
+        url,
+        fit: fit,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.low,
+        cacheWidth: w,
+        errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.black),
+      ),
     );
   }
 }

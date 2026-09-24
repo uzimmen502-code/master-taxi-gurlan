@@ -859,9 +859,59 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 
+  /// «Улашиш» — иккита вариантли варақа: «Ҳаволани юбориш» (енгил, матн +
+  /// AVA ҳаволаси) ёки «Видеони юбориш» (видео файлни юклаб, Telegram ичида
+  /// кўринадиган қилиб). Иккиси ҳам «AVA — олиб келувчи» CTA билан кетади.
   Future<void> _onShare(TvClip clip) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.link_rounded, color: Colors.white),
+              title: Text(
+                context.tr('tv_share_link'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                context.tr('tv_share_link_hint'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(ctx, 'link'),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.movie_outlined, color: Colors.white),
+              title: Text(
+                context.tr('tv_share_video'),
+                style: const TextStyle(color: Colors.white),
+              ),
+              subtitle: Text(
+                context.tr('tv_share_video_hint'),
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(ctx, 'video'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
     try {
-      await shareTvClip(clip);
+      if (choice == 'link') {
+        await shareTvClipLink(clip);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.tr('tv_share_preparing'))),
+          );
+        }
+        await shareTvClipVideo(clip);
+      }
     } catch (e) {
       debugPrint('[TvMarketFeed] share $e');
       if (mounted) {
@@ -1270,7 +1320,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                   scrollDirection: Axis.vertical,
                   physics: const TvSwipePhysics(
                     parent: BouncingScrollPhysics(),
-                    commitFraction: 0.10,
+                    commitFraction: 0.075,
                   ),
                   itemCount: _clips.length,
                   onPageChanged: _onPageChanged,
@@ -1287,10 +1337,19 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
                         if (isActive &&
                             ctrl != null &&
                             ctrl.value.isInitialized)
-                          Center(
-                            child: AspectRatio(
-                              aspectRatio: ctrl.value.aspectRatio,
-                              child: VideoPlayer(ctrl),
+                          // Тўлиқ экранга мослаб тўлдириш (cover) — четлари
+                          // қирқилади (TikTok/Reels усули). Тик (9:16) видео
+                          // умуман қирқилмайди; горизонтал видеонинг ён
+                          // томонлари кесилади.
+                          Positioned.fill(
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              clipBehavior: Clip.hardEdge,
+                              child: SizedBox(
+                                width: ctrl.value.size.width,
+                                height: ctrl.value.size.height,
+                                child: VideoPlayer(ctrl),
+                              ),
                             ),
                           ),
                         if (isActive)

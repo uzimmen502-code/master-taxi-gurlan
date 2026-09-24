@@ -859,59 +859,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 
-  /// «Улашиш» — иккита вариантли варақа: «Ҳаволани юбориш» (енгил, матн +
-  /// AVA ҳаволаси) ёки «Видеони юбориш» (видео файлни юклаб, Telegram ичида
-  /// кўринадиган қилиб). Иккиси ҳам «AVA — олиб келувчи» CTA билан кетади.
+  /// «Улашиш» — фақат **видео файл** юборилади (эга қарори, 2026-09-24).
+  /// Аввалги «ҳавола / видео» танлов варақаси олиб ташланди: босилиши билан
+  /// видео тайёрланади ва тизим улашиш ойнаси очилади (Telegram каналига
+  /// видеонинг ўзи + [kAvaShareCta] матни кетади).
   Future<void> _onShare(TvClip clip) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.link_rounded, color: Colors.white),
-              title: Text(
-                context.tr('tv_share_link'),
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                context.tr('tv_share_link_hint'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              onTap: () => Navigator.pop(ctx, 'link'),
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.movie_outlined, color: Colors.white),
-              title: Text(
-                context.tr('tv_share_video'),
-                style: const TextStyle(color: Colors.white),
-              ),
-              subtitle: Text(
-                context.tr('tv_share_video_hint'),
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              onTap: () => Navigator.pop(ctx, 'video'),
-            ),
-          ],
-        ),
-      ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.tr('tv_share_preparing'))),
     );
-    if (choice == null || !mounted) return;
     try {
-      if (choice == 'link') {
-        await shareTvClipLink(clip);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.tr('tv_share_preparing'))),
-          );
-        }
-        await shareTvClipVideo(clip);
-      }
+      await shareTvClipVideo(clip);
     } catch (e) {
       debugPrint('[TvMarketFeed] share $e');
       if (mounted) {

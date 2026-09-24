@@ -539,6 +539,7 @@
   "history_count": "История ({n})",
   "home_amount_with_currency": "{amount} {currency}",
   "home_coming_soon": "Приглашаем к сотрудничеству в этом направлении.",
+  "home_soon": "Скоро откроется — готовим.",
   "home_not_available": "Пока недоступно.",
   "home_date_today": "{day}.{month}.{year} г.",
   "home_display_name_aka": "{name} aka",

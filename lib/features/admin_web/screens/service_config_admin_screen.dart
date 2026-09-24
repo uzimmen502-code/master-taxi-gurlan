@@ -1630,6 +1630,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   List<Widget> _legendChips() => [
         _legend('Очиқ', Colors.green),
         _legend('Ҳамкорлик', Colors.orange),
+        _legend('Тез кунда', Colors.blue),
         _legend('Ёпиқ', Colors.grey),
         Text(
           'kursiv = inherit · GLOBAL = baseline · tuman katak = region override',
@@ -1674,12 +1675,14 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
   static String _statusLabel(ModuleStatus s) => switch (s) {
         ModuleStatus.enabled => 'Очиқ',
         ModuleStatus.comingSoon => 'Ҳамкорлик',
+        ModuleStatus.soon => 'Тез кунда',
         ModuleStatus.hidden => 'Ёпиқ',
       };
 
   static Color _statusColor(ModuleStatus s) => switch (s) {
         ModuleStatus.enabled => Colors.green.shade700,
         ModuleStatus.comingSoon => Colors.orange.shade800,
+        ModuleStatus.soon => Colors.blue.shade600,
         ModuleStatus.hidden => Colors.grey.shade600,
       };
 }

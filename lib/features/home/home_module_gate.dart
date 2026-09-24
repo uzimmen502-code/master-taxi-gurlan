@@ -23,9 +23,13 @@ class HomeModuleGate {
     final status = placeholderModuleIds.contains(moduleId)
         ? ModuleStatus.comingSoon
         : ServiceConfigHolder.statusOf(moduleId);
-    final msg = status == ModuleStatus.comingSoon
-        ? context.tr('home_coming_soon')
-        : context.tr('home_not_available');
+    // «Ҳамкорлик» — ҳамкор излаймиз; «Тез кунда» — ўзимиз тайёрламоқдамиз.
+    // Иккаласи ҳам очилмайди, фақат хабари бошқа.
+    final msg = switch (status) {
+      ModuleStatus.comingSoon => context.tr('home_coming_soon'),
+      ModuleStatus.soon => context.tr('home_soon'),
+      _ => context.tr('home_not_available'),
+    };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
     );

@@ -539,6 +539,7 @@
   "history_count": "Tarix ({n})",
   "home_amount_with_currency": "{amount} {currency}",
   "home_coming_soon": "Bu yo'nalishda hamkorlikka taklif qilamiz.",
+  "home_soon": "Tez kunda ochiladi — tayyorlamoqdamiz.",
   "home_not_available": "Hozircha mavjud emas.",
   "home_date_today": "{day}.{month}.{year} yil",
   "home_display_name_aka": "{name} aka",

@@ -32,21 +32,32 @@ const List<String> kKnownModuleIds = [
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.
 enum ModuleStatus {
-  /// Ko'rinadi va ochiladi.
+  /// Ko'rinadi va ochiladi. Admin panelda — «Очиқ».
   enabled,
 
-  /// Ko'rinadi, lekin "Tez orada" — bosilmaydi/ogohlantiradi.
+  /// Ko'rinadi, bosilmaydi. Admin panelda — «Ҳамкорлик»: bu yo'nalishda
+  /// hamkor qidiryapmiz (xabar: `home_coming_soon`).
   comingSoon,
 
-  /// Umuman ko'rsatilmaydi.
+  /// Ko'rinadi, bosilmaydi. Admin panelda — «Тез кунда»: xizmat
+  /// tayyorlanmoqda, tez orada ochiladi (xabar: `home_soon`).
+  ///
+  /// [comingSoon] dan MAQSADI bilan farq qiladi: u hamkor izlaydi, bu esa
+  /// "ishlayapmiz, kuting" deydi. Ikkalasi ham grid'da ko'rinadi va
+  /// ochilmaydi — farq faqat foydalanuvchiga chiqadigan xabarda.
+  soon,
+
+  /// Umuman ko'rsatilmaydi. Admin panelda — «Ёпиқ».
   hidden;
 
-  bool get isVisible => this == enabled || this == comingSoon;
+  bool get isVisible =>
+      this == enabled || this == comingSoon || this == soon;
   bool get isOpenable => this == enabled;
 
   String get wire => switch (this) {
         ModuleStatus.enabled => 'enabled',
         ModuleStatus.comingSoon => 'coming_soon',
+        ModuleStatus.soon => 'soon',
         ModuleStatus.hidden => 'hidden',
       };
 
@@ -57,8 +68,9 @@ enum ModuleStatus {
         return ModuleStatus.enabled;
       case 'coming_soon':
       case 'comingsoon':
-      case 'soon':
         return ModuleStatus.comingSoon;
+      case 'soon':
+        return ModuleStatus.soon;
       case 'hidden':
       case 'false':
       case 'disabled':

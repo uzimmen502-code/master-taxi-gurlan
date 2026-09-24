@@ -3,18 +3,19 @@
  * ТАКСИ» QA (2026-09-24). Тўлиқ изоляцияланган Firestore Emulator устида
  * ишлайди, реал маълумотга тегмайди.
  *
- * Талаб: `firebase emulators:exec --only firestore "node test/intercity_rules.test.js"`.
+ * Талаб: `firebase emulators:exec --only firestore "node test/intercity_rules.test.js"`
+ * ёки `npm run test:intercity` (эмулятор ишлаб турганда).
  *
- * Текширилади:
- *   - Бронь яратиш рухсатлари (ўз телефони, totalAmount>0, status чекланган).
- *   - Бошқа телефон номидан бронь яратиб бўлмаслиги (spoofing).
- *   - Йўловчи ўз бронини бекор қила олиши; бегона — йўқ.
- *   - Иштирокчи ўқий олиши; бегона — йўқ.
- *   - [ХАВФ] intercity_drivers.seats'ни исталган авторизацияланган клиент
- *     исталган қийматга ёза олиши (seat-patch тешиги) — ҳозирги ҳолатни
- *     ҳужжатлаштиради (assertSucceeds). Ҳисоботда «блокловчи» деб белгиланган.
- *   - [ХАВФ] Йўловчи бронни бирдан `confirmed` қилиб яратиши (autoAccept
- *     клиентда) — ҳозир рухсат этилган (assertSucceeds), ҳисоботда қайд.
+ * QA топилмалари #1 (seat-patch тешиги) ва #2 (йўловчи ўзини `confirmed`
+ * қилиши) callable CF'ларга кўчириш билан ёпилди — бу тест ўшани
+ * исботлайди: клиент энди бронь яратолмайди, бекор қилолмайди ва
+ * `intercity_drivers.seats` га ёзолмайди. Seat/бронь мутацияси faqat
+ * `intercityCreateBooking` / `intercityCancelBooking` /
+ * `intercityCompleteBooking` (Admin SDK) орқали.
+ *
+ * Шу билан бирга seat'га тегмайдиган клиент патчлари ишлашда давом
+ * этишини ҳам текширади (регрессия гарди): ҳайдовчи тасдиғи, pickup
+ * манзили, архив, "олиб кетилди".
  */
 'use strict';
 const path = require('path');
@@ -105,43 +106,88 @@ async function main() {
   const dbD = driver.firestore();
   const dbAnon = anon.firestore();
 
-  // Ҳайдовчи ҳужжатини seed қиламиз (rules bypass — Admin SDK каби).
-  await testEnv.withSecurityRulesDisabled((ctx) =>
-    ctx.firestore().collection('intercity_drivers').doc(DRIVER).set(driverDoc()));
+  // Admin SDK simulyatsiyasi — CF shu tarzda yozadi (rules bypass).
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const fdb = ctx.firestore();
+    await fdb.collection('intercity_drivers').doc(DRIVER).set(driverDoc());
+    await fdb.collection('intercity_bookings').doc('bkA').set(bookingData());
+    await fdb.collection('intercity_bookings').doc('bkB').set(bookingData());
+    await fdb.collection('intercity_bookings').doc('bkC').set(bookingData());
+  });
 
-  // ─── Бронь яратиш ────────────────────────────────────────────────────
-  await check('passenger creates OWN pending booking', () =>
-    assertSucceeds(
-      dbA.collection('intercity_bookings').doc('bkA').set(bookingData()),
+  // ─── Бронь яратиш: клиент учун ЁПИҚ (топилма #1/#2 тузатилди) ────────
+  await check('client CANNOT create booking directly (moved to CF)', () =>
+    assertFails(
+      dbA.collection('intercity_bookings').doc('new1').set(bookingData()),
     ));
 
-  await check('passenger CANNOT create booking for another phone (spoof)', () =>
+  await check('client CANNOT self-create CONFIRMED booking (fix #2)', () =>
     assertFails(
-      dbA.collection('intercity_bookings').doc('bkSpoof')
+      dbA.collection('intercity_bookings').doc('new2')
+        .set(bookingData({status: 'confirmed'})),
+    ));
+
+  await check('client CANNOT create booking for another phone', () =>
+    assertFails(
+      dbA.collection('intercity_bookings').doc('new3')
         .set(bookingData({userPhone: USER_B})),
     ));
 
-  await check('booking with totalAmount<=0 is denied', () =>
-    assertFails(
-      dbA.collection('intercity_bookings').doc('bkZero')
-        .set(bookingData({totalAmount: 0})),
-    ));
-
-  await check('booking with status=completed is denied (create)', () =>
-    assertFails(
-      dbA.collection('intercity_bookings').doc('bkDone')
-        .set(bookingData({status: 'completed'})),
-    ));
-
-  // [ХАВФ #2] autoAccept клиентда ўқилгани учун йўловчи ўзини confirmed
-  // қилиб яратиши мумкин — драйвер тасдиғини айланиб ўтади. Ҳозир РУХСАТ.
-  await check('VULN: passenger can self-create CONFIRMED booking (autoAccept bypass)', () =>
+  // ─── seats: bron yo'li yopildi, lekin scheduleSync hali ochiq ────────
+  // `intercityDriverSeatBookingPatch()` olib tashlandi (bron yo'li), ammo
+  // `intercityDriverScheduleSync()` hamon `seats`ni ruxsat etilgan kalitlar
+  // ro'yxatida saqlaydi va auth/egalik talab qilmaydi — u driver_schedule
+  // sync uchun ataylab ochiq qoldirilgan. QOLGAN XAVF: uni yopish
+  // driver_schedule auditiga bog'liq (haydovchi "ishga chiqish" oqimi
+  // doim Phone Auth bilanmi — shuni tasdiqlash kerak).
+  // Quyidagi 3 tekshiruv SHU HOLATNI hujjatlashtiradi (hali ochiq).
+  await check('STILL OPEN (scheduleSync): stranger can set driver.seats to 0', () =>
     assertSucceeds(
-      dbA.collection('intercity_bookings').doc('bkConf')
-        .set(bookingData({status: 'confirmed', id: 'bkConf'})),
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        seats: 0, updatedAt: new Date(),
+      }),
+    ));
+  await check('STILL OPEN (scheduleSync): stranger can inflate driver.seats', () =>
+    assertSucceeds(
+      dbB.collection('intercity_drivers').doc(DRIVER).update({
+        seats: 999, updatedAt: new Date(),
+      }),
+    ));
+  await check('STILL OPEN (scheduleSync): anonymous session can patch seats', () =>
+    assertSucceeds(
+      dbAnon.collection('intercity_drivers').doc(DRIVER).update({
+        seats: 1, updatedAt: new Date(),
+      }),
+    ));
+  // Haydovchining o'zi (isOwner) — bu KUTILGAN, o'z e'lonini tahrirlaydi.
+  await check('driver (owner) can still edit own listing seats', () =>
+    assertSucceeds(
+      dbD.collection('intercity_drivers').doc(DRIVER).update({
+        seats: 2, lastBookedAt: new Date(), updatedAt: new Date(),
+      }),
     ));
 
-  // ─── Ўқиш ────────────────────────────────────────────────────────────
+  // ─── Бекор қилиш / якунлаш: клиент учун ЁПИҚ (серверга кўчди) ────────
+  await check('client CANNOT cancel booking directly (moved to CF)', () =>
+    assertFails(
+      dbA.collection('intercity_bookings').doc('bkA').update({
+        status: 'cancelled', cancelReason: 'x', cancelledAt: new Date(),
+      }),
+    ));
+  await check('driver CANNOT complete booking directly (moved to CF)', () =>
+    assertFails(
+      dbD.collection('intercity_bookings').doc('bkA').update({
+        status: 'completed', completedAt: new Date(),
+      }),
+    ));
+  await check('non-participant CANNOT touch someone else booking', () =>
+    assertFails(
+      dbB.collection('intercity_bookings').doc('bkA').update({
+        status: 'cancelled', cancelReason: 'x', cancelledAt: new Date(),
+      }),
+    ));
+
+  // ─── Ўқиш (ўзгармади) ────────────────────────────────────────────────
   await check('participant (passenger) can read own booking', () =>
     assertSucceeds(dbA.collection('intercity_bookings').doc('bkA').get()));
   await check('participant (driver) can read booking', () =>
@@ -149,69 +195,36 @@ async function main() {
   await check('non-participant CANNOT read booking', () =>
     assertFails(dbB.collection('intercity_bookings').doc('bkA').get()));
 
-  // ─── Бекор қилиш ─────────────────────────────────────────────────────
-  await check('passenger cancels OWN booking (pending -> cancelled)', () =>
+  // ─── Регрессия: seat'га тегмайдиган клиент патчлари ишлашда давом ────
+  await check('REGRESSION: driver can still confirm (pending -> confirmed)', () =>
     assertSucceeds(
-      dbA.collection('intercity_bookings').doc('bkA').update({
-        status: 'cancelled',
-        cancelReason: 'test',
-        cancelledAt: new Date(),
+      dbD.collection('intercity_bookings').doc('bkB').update({
+        status: 'confirmed', confirmedAt: new Date(),
       }),
     ));
-
-  await testEnv.withSecurityRulesDisabled((ctx) =>
-    ctx.firestore().collection('intercity_bookings').doc('bkA2').set(bookingData()));
-  await check('non-participant CANNOT cancel someone else booking', () =>
+  await check('REGRESSION: passenger can still set pickup address', () =>
+    assertSucceeds(
+      dbA.collection('intercity_bookings').doc('bkC').update({
+        pickupAddress: 'Uy 12', pickupLat: 41.5, pickupLng: 60.6,
+        updatedAt: new Date(),
+      }),
+    ));
+  await check('REGRESSION: driver can still mark pickedUp', () =>
+    assertSucceeds(
+      dbD.collection('intercity_bookings').doc('bkC').update({
+        pickedUp: true, pickedUpAt: new Date(), updatedAt: new Date(),
+      }),
+    ));
+  await check('REGRESSION: passenger CANNOT confirm own booking', () =>
     assertFails(
-      dbB.collection('intercity_bookings').doc('bkA2').update({
-        status: 'cancelled',
-        cancelReason: 'x',
-        cancelledAt: new Date(),
+      dbA.collection('intercity_bookings').doc('bkC').update({
+        status: 'confirmed', confirmedAt: new Date(),
       }),
     ));
-
-  // ─── Тасдиқлаш ───────────────────────────────────────────────────────
-  await check('driver confirms pending booking (pending -> confirmed)', () =>
+  await check('REGRESSION: driver can still end listing (isActive=false)', () =>
     assertSucceeds(
-      dbD.collection('intercity_bookings').doc('bkA2').update({
-        status: 'confirmed',
-        confirmedAt: new Date(),
-      }),
-    ));
-
-  await testEnv.withSecurityRulesDisabled((ctx) =>
-    ctx.firestore().collection('intercity_bookings').doc('bkA3').set(bookingData()));
-  await check('passenger CANNOT confirm own booking via update', () =>
-    assertFails(
-      dbA.collection('intercity_bookings').doc('bkA3').update({
-        status: 'confirmed',
-        confirmedAt: new Date(),
-      }),
-    ));
-
-  // ─── [ХАВФ #1] seat-patch тешиги ─────────────────────────────────────
-  // intercityDriverSeatBookingPatch() фақат ўзгарган майдонларни текширади,
-  // қийматни ёки эгаликни эмас. Шунинг учун бегона авторизацияланган клиент
-  // ҳайдовчининг seats'ини исталган қийматга ёзиши мумкин.
-  await check('VULN: stranger can set driver.seats to 0 (sabotage)', () =>
-    assertSucceeds(
-      dbB.collection('intercity_drivers').doc(DRIVER).update({
-        seats: 0,
-        updatedAt: new Date(),
-      }),
-    ));
-  await check('VULN: stranger can set driver.seats to negative / inflated', () =>
-    assertSucceeds(
-      dbB.collection('intercity_drivers').doc(DRIVER).update({
-        seats: 999,
-        updatedAt: new Date(),
-      }),
-    ));
-  await check('VULN: even anonymous session can patch driver.seats', () =>
-    assertSucceeds(
-      dbAnon.collection('intercity_drivers').doc(DRIVER).update({
-        seats: 1,
-        updatedAt: new Date(),
+      dbD.collection('intercity_drivers').doc(DRIVER).update({
+        isActive: false, isOnPanel: false, updatedAt: new Date(),
       }),
     ));
 

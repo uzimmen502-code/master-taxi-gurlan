@@ -199,6 +199,29 @@ Cache-Control сарлавҳаси аллақачон тўғри ('public, max-a
 
 ---
 
+## В-7. «СОТИНГ» модулини ўчириш — 2-босқич (эга қарори кутилмоқда)
+
+**Ҳолат:** 1-босқич бажарилди (2026-09-24), 2-босқич очиқ.
+
+**1-босқичда нима қилинди (код, хавфсиз):**
+- Home'даги «СОТИНГ» плиткаси, `HomeModulesCatalog`даги `sell` ёзуви, `kKnownModuleIds`/admin ёрлиғи, `home_module_sell` + `online_market_sell_*` + `home_seller_cta(_subtitle)` l10n калитлари (3 тил), ишлатилмаган `seller_cta_banner.dart` виджети — ўчирилди. Плитка мазмуни («Янги эълон», «Менинг эълонларим», лента) Бозор модулида тўлиқ бор эди, шунинг учун фойдаланувчи ҳеч нима йўқотмайди.
+- «Сотув маркази»га (`features/sell/*`) кириш йўллари ёпилди: push `screen: 'sell'` / `type: 'sell_offer'` энди Янгиликлар → «Хабарлар» табига боради; admin панелдаги «Сотиш аризалари» ёрлиғи яширилди. **Код, CF, rules, индекс ва мавжуд `sell_submissions` маълумоти тегилмаган** — ёрлиқ қаторини қайтариш билан панел яна очилади.
+
+**Прод'да қиладиган ишлар (1-босқич учун, ҳали бажарилмаган):**
+- [ ] `search_index/sell` ёзувини ўчириш — стандарт `seed_search_index.js` эски ёзувни ўчирмайди, `yuk_birja`дагидек бир марталик Admin SDK скрипти керак. Ўчирилгунча иккита вақтинчалик fallback қасддан қолдирилди: `home_screen._openSearchResult` (`case 'sell'` → Бозор) ва `home_global_search` иконка ёзуви.
+- [ ] `config/module_defaults`даги орфан `modules.sell` майдонини ўчириш.
+- [ ] `scripts/build_combined_web.ps1` + `firebase deploy --only hosting` — admin панелда «Сотиш аризалари» ёрлиғи ва «Sotish» модул қатори йўқолиши учун.
+
+**2-босқич — қарор керак:** «Платформага сотаман → курьер йиғиб олади → омбор» бизнеси керакми?
+- **Керак эмас** → `features/sell/*`, `sell_submissions` CF'лари (`submitSellSubmission`, `adminUpdateSellSubmission`, `onSellSubmissionUpdate`), firestore rules (2294–2330) ва 4 та индекс ўчирилади. **Лекин** биргаликда курьернинг «йиғиб олиш» модули ва омбор кириши ҳам кетади: `adminCreateCollectionTask` `submissionId` талаб қилади, яъни `sell_submissions`сиз `collection_tasks` манбасиз қолади.
+- **Керак** → код ҳозирги ҳолида қолади, фақат кириш йўллари ёпиқ туради.
+
+**Олдиндан бажарилиши шарт:** `SellSubmission.pickupFieldsFromAddress()` статик методини нейтрал жойга кўчириш — уни шаҳарлараро такси ишлатади ([intercity_pickup_sheet.dart:212](../lib/features/intercity_taxi/passenger/widgets/intercity_pickup_sheet.dart)), модель ўчса компиляция синади.
+
+**Эслатма:** CF ва hosting ўчириш `firebase deploy` талаб қилади — git revert билан қайтмайди.
+
+---
+
 ## Бажарилди
 
 ### В-2. Юк биржаси split — қолган ишлар (2026-09-18, production ops)

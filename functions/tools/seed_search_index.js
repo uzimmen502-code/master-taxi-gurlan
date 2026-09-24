@@ -154,7 +154,6 @@ const SERVICES = [
   { id: 'cheap_products_home', moduleId: 'cheap_products_home', title: 'Онлайн бозор', subtitle: 'Арзон маҳсулотлар', iconKey: 'shop', keywords: ['бозор', 'bozor', 'сотиш', 'магазин'], boost: 18 },
   { id: 'milk', moduleId: 'milk', title: 'Сут қабул', subtitle: 'Сут ва қишлоқ маҳсулотлари', iconKey: 'milk', keywords: ['сут', 'sut', 'қатиқ', 'тухум'], boost: 16 },
   { id: 'oil_change', moduleId: 'oil_change', title: 'Мой алмаштириш', subtitle: 'Авто сервис', iconKey: 'oil', keywords: ['мой', 'oil', 'авто', 'машина'], boost: 14 },
-  { id: 'sell', moduleId: 'sell', title: 'Сотиш', subtitle: 'Сотиш маркази', iconKey: 'sell', keywords: ['сотиш', 'sotish', 'продаж'], boost: 14 },
   { id: 'carpet_wash', moduleId: 'carpet_wash', title: 'Гилам ювиш', subtitle: 'Гилам хизмати', iconKey: 'carpet', keywords: ['гилам', 'gilam', 'ювиш'], boost: 12 },
 ];
 

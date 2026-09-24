@@ -9,7 +9,6 @@ const List<String> kKnownModuleIds = [
   'yuk_local',
   'yuk_intercity',
   'courier',
-  'sell',
   'food',
   'jobs',
   'cheap_products_home',

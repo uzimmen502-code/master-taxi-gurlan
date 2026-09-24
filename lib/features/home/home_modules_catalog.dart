@@ -32,10 +32,6 @@ class HomeModulesCatalog {
       label: 'home_module_food',
     ),
     HomeModule(
-      id: 'sell',
-      label: 'home_module_sell',
-    ),
-    HomeModule(
       id: 'cheap_products_home',
       label: 'home_module_cheap_products',
     ),

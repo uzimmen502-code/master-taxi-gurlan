@@ -111,6 +111,9 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
         return Icons.oil_barrel_outlined;
       case 'carpet':
         return Icons.cleaning_services_outlined;
+      // Эски `search_index/sell` ёзуви прод'дан ўчирилгунча — модул
+      // олиб ташланган, лекин натижа иконкасиз қолмасин (босилса
+      // Бозорга олиб боради, қаранг: `home_screen._openSearchResult`).
       case 'sell':
         return Icons.sell_outlined;
       default:

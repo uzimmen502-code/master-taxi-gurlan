@@ -56,7 +56,6 @@ import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
 import 'widgets/promo_carousel.dart';
-import 'widgets/seller_cta_banner.dart';
 import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
@@ -444,11 +443,6 @@ class _HomeViewState extends State<_HomeView> {
       HomeModuleGate.onTapBlocked(context, m.id);
       return;
     }
-    if (m.id == 'sell') {
-      SellerCtaBanner.openOnlineMarketSellFlow(context);
-      return;
-    }
-
     final Widget screen;
     switch (m.id) {
       case 'bread':
@@ -639,8 +633,12 @@ class _HomeViewState extends State<_HomeView> {
           ),
         );
         return;
+      // «СОТИНГ» модули олиб ташланди — унинг мазмуни («Янги эълон»,
+      // «Менинг эълонларим», лента) Бозор модулида тўлиқ бор. Эски
+      // `search_index/sell` ёзуви прод'дан ўчирилгунча Бозорга олиб
+      // борамиз — қидирув натижаси «ўлик» бўлиб қолмасин.
       case 'sell':
-        await _openModule(HomeModulesCatalog.byId('sell'));
+        await _openModule(HomeModulesCatalog.byId('cheap_products_home'));
         return;
       default:
         try {
@@ -907,21 +905,6 @@ class _HomeViewState extends State<_HomeView> {
                                     'yuk_intercity',
                                     const YukIntercityScreen(),
                                   ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'sell',
-                                  label: context.tr('home_module_sell'),
-                                  imagePath:
-                                      'assets/images/services/service_sell.png',
-                                  onTap: () {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'cheap_products_home')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    SellerCtaBanner.openOnlineMarketSellFlow(
-                                        context);
-                                  },
                                 ),
                                 ServiceSpotlightItem(
                                   moduleId: 'food',

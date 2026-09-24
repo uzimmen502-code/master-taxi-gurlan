@@ -23,7 +23,6 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
-import '../features/sell/screens/sell_hub_screen.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
@@ -240,21 +239,11 @@ class PushNavigation {
       return;
     }
 
-    if (screen == 'sell' || type == 'sell_offer') {
-      final prefs = await SharedPreferences.getInstance();
-      final phone = phoneDigits(prefs.getString('user_phone') ?? '');
-      if (phone.length < 9) return;
-      final tab = data['tab'] == 'forwarded' ? 1 : 0;
-      await nav.push(
-        MaterialPageRoute(
-          builder: (_) => SellHubScreen(
-            phone: phone,
-            initialTab: tab,
-          ),
-        ),
-      );
-      return;
-    }
+    // `screen == 'sell'` (эски CF payload'лари) энди алоҳида экранга
+    // олиб бормайди — «Сотув маркази»га кириш йўли ёпилди. Пастдаги
+    // умумий fallback уни Янгиликлар → «Хабарлар» табига олиб боради
+    // (`_newsHubTabIndex`да `sell_offer` шу табга бириктирилган):
+    // таклиф ҳақидаги хабарнинг ўзи ўша ерда сақланади.
 
     if (screen == 'seller_pos' || type == 'seller_pickup') {
       await nav.push(
@@ -441,7 +430,10 @@ class PushNavigation {
     } else if (type == 'ad_published' || type == 'ad_moderation') {
       out['screen'] = 'jobs';
     } else if (type == 'sell_offer') {
-      out['screen'] = 'sell';
+      // «Сотув маркази» экрани ёпилди — таклиф ҳақидаги хабар
+      // Янгиликлар ҳубининг «Хабарлар» табида кўринади.
+      out['screen'] = 'news';
+      out['tab'] = 'messages';
     } else if (type == 'seller_pickup') {
       out['screen'] = 'seller_pos';
     } else if (type == 'support_chat') {
@@ -477,7 +469,10 @@ class PushNavigation {
     if (tab == 'messages' ||
         tab == 'dialog' ||
         type == 'identity' ||
-        type == 'support_chat') {
+        type == 'support_chat' ||
+        // Эски `screen: 'sell'` payload'лари ҳам шу ерга тушади
+        // (`tab: 'forwarded'` бўлиши мумкин — у энди ишлатилмайди).
+        type == 'sell_offer') {
       return 1;
     }
     if (tab == 'broadcast' || tab == 'general') return 0;

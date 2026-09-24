@@ -187,11 +187,11 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.sms_outlined,
       description: 'Mijozga ketgan status xabarlari',
     ),
-    _AdminSection(
-      label: 'Сотиш аризалари',
-      icon: Icons.sell_outlined,
-      description: 'Фойдаланувчи формасидан таклифлар',
-    ),
+    // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
+    // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза
+    // келмайди. Экраннинг ўзи ва CF/rules тегилмаган — эски
+    // `sell_submissions` ёзувлари жойида; керак бўлса шу қатор
+    // қайтарилса, панел яна очилади.
     _AdminSection(
       label: 'Маҳсулoтлaр',
       icon: Icons.inventory_2,

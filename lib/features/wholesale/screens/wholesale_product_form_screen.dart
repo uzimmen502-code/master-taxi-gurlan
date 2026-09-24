@@ -9,20 +9,20 @@ import '../repositories/wholesale_products_repository.dart';
 import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 
-/// Бир нарх поғонаси қатори — МОҚ (дан) + нарх контроллерлари.
-class _TierRow {
-  _TierRow({String minQty = '', String price = ''})
-      : minQtyCtrl = TextEditingController(text: minQty),
-        priceCtrl = TextEditingController(text: price);
-
-  final TextEditingController minQtyCtrl;
-  final TextEditingController priceCtrl;
-
-  void dispose() {
-    minQtyCtrl.dispose();
-    priceCtrl.dispose();
-  }
+/// Тайёр нарх поғонаси — қатъий МОҚ чегараси (1 / 10 / 50) ва кўринадиган
+/// диапазон ёрлиғи. Нарх тўлдириш ихтиёрий (эга қарори, 2026-09-24):
+/// фақат тўлдирилган поғоналар сақланади.
+class _FixedTier {
+  const _FixedTier(this.minQty, this.rangeLabel);
+  final int minQty;
+  final String rangeLabel;
 }
+
+const _kFixedTiers = <_FixedTier>[
+  _FixedTier(1, '1–9'),
+  _FixedTier(10, '10–50'),
+  _FixedTier(50, '50+'),
+];
 
 /// Маҳсулот қўшиш/таҳрирлаш — ном, тавсиф, нарх поғоналари, бирлик, расм(1-5).
 class WholesaleProductFormScreen extends StatefulWidget {
@@ -45,7 +45,6 @@ class WholesaleProductFormScreen extends StatefulWidget {
 class _WholesaleProductFormScreenState
     extends State<WholesaleProductFormScreen> {
   static const _maxImages = WholesaleProduct.maxImages;
-  static const _maxTiers = WholesaleProduct.maxPriceTiers;
 
   final _formKey = GlobalKey<FormState>();
   final _repo = WholesaleProductsRepository();
@@ -54,7 +53,9 @@ class _WholesaleProductFormScreenState
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _unitCtrl;
-  final List<_TierRow> _tiers = [];
+
+  /// Ҳар бир тайёр поғона учун нарх контроллери (тартиби [_kFixedTiers]га мос).
+  late final List<TextEditingController> _priceCtrls;
 
   final List<String> _existingImageUrls = [];
   final List<XFile> _newImages = [];
@@ -69,14 +70,18 @@ class _WholesaleProductFormScreenState
     _titleCtrl = TextEditingController(text: e?.title ?? '');
     _descCtrl = TextEditingController(text: e?.description ?? '');
     _unitCtrl = TextEditingController(text: e?.unit ?? 'дона');
-    if (e != null && e.priceTiers.isNotEmpty) {
+    _priceCtrls =
+        List.generate(_kFixedTiers.length, (_) => TextEditingController());
+    if (e != null) {
+      // Мавжуд поғоналарни уч тайёр майдонга жойлаш: МОҚ чегарасига қараб
+      // энг мос майдонга (1..9 → 0, 10..49 → 1, 50+ → 2). Эски ностандарт
+      // маълумот бўлса ҳам йиқилмайди — энг яқин майдонга тушади.
       for (final t in e.priceTiers) {
-        _tiers.add(_TierRow(minQty: '${t.minQty}', price: '${t.price}'));
+        final idx = t.minQty >= 50 ? 2 : (t.minQty >= 10 ? 1 : 0);
+        _priceCtrls[idx].text = '${t.price}';
       }
-    } else {
-      _tiers.add(_TierRow(minQty: '1'));
+      _existingImageUrls.addAll(e.imageUrls);
     }
-    if (e != null) _existingImageUrls.addAll(e.imageUrls);
   }
 
   @override
@@ -84,31 +89,22 @@ class _WholesaleProductFormScreenState
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _unitCtrl.dispose();
-    for (final t in _tiers) {
-      t.dispose();
+    for (final c in _priceCtrls) {
+      c.dispose();
     }
     super.dispose();
   }
 
-  void _addTier() {
-    if (_tiers.length >= _maxTiers) return;
-    setState(() => _tiers.add(_TierRow()));
-  }
-
-  void _removeTier(int index) {
-    if (_tiers.length <= 1) return;
-    setState(() => _tiers.removeAt(index).dispose());
-  }
-
-  List<WholesalePriceTier>? _collectTiers() {
+  /// Тўлдирилган поғоналарни йиғади (тўлдириш ихтиёрий). Бўш майдон ўтказиб
+  /// юборилади; ҳеч бири тўлдирилмаса — бўш рўйхат (сақлаш блокланади).
+  List<WholesalePriceTier> _collectTiers() {
     final tiers = <WholesalePriceTier>[];
-    for (final row in _tiers) {
-      final minQty = int.tryParse(row.minQtyCtrl.text.trim());
-      final price = int.tryParse(row.priceCtrl.text.trim());
-      if (minQty == null || minQty < 1 || price == null || price <= 0) {
-        return null;
-      }
-      tiers.add(WholesalePriceTier(minQty: minQty, price: price));
+    for (var i = 0; i < _kFixedTiers.length; i++) {
+      final raw = _priceCtrls[i].text.trim();
+      if (raw.isEmpty) continue;
+      final price = int.tryParse(raw);
+      if (price == null || price <= 0) continue;
+      tiers.add(WholesalePriceTier(minQty: _kFixedTiers[i].minQty, price: price));
     }
     return sortWholesalePriceTiers(tiers);
   }
@@ -136,10 +132,10 @@ class _WholesaleProductFormScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final tiers = _collectTiers();
-    if (tiers == null || tiers.isEmpty) {
+    if (tiers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Ҳар бир поғонада МОҚ ва нархни тўғри киритинг'),
+          content: Text('Камида битта поғона нархини киритинг'),
         ),
       );
       return;
@@ -284,6 +280,8 @@ class _WholesaleProductFormScreenState
             const SizedBox(height: 12),
             TextFormField(
               controller: _unitCtrl,
+              // Поғона ёрлиқлари («1–9 дона» ва ҳ.к.) шу бирликка эргашади.
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
                 labelText: 'Бирлик (дона, қути, палет...)',
                 border: OutlineInputBorder(),
@@ -307,6 +305,7 @@ class _WholesaleProductFormScreenState
   }
 
   Widget _tiersSection() {
+    final unit = _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -315,65 +314,42 @@ class _WholesaleProductFormScreenState
                 fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Text(
-          'Масалан: 1 донадан — 10000 сўм, 10 донадан — 9000 сўм. '
-          'Биринчи поғонанинг МОҚи — минимал буюртма сони.',
+          'Сон оралиғига қараб нарх. Тўлдириш ихтиёрий — камида биттасини '
+          'киритинг (бўш поғоналар сақланмайди).',
           style: TextStyle(fontSize: AppText.labelTiny, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 10),
-        for (var i = 0; i < _tiers.length; i++) _tierRow(i),
-        if (_tiers.length < _maxTiers)
-          TextButton.icon(
-            onPressed: _addTier,
-            icon: const Icon(Icons.add),
-            label: const Text('Поғона қўшиш'),
-          ),
+        for (var i = 0; i < _kFixedTiers.length; i++) _tierRow(i, unit),
       ],
     );
   }
 
-  Widget _tierRow(int index) {
-    final row = _tiers[index];
+  Widget _tierRow(int index, String unit) {
+    final tier = _kFixedTiers[index];
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(children: [
-        Expanded(
-          child: TextFormField(
-            controller: row.minQtyCtrl,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              labelText: 'МОҚ (дан)',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            validator: (v) {
-              final n = int.tryParse(v?.trim() ?? '');
-              return (n == null || n < 1) ? 'Камида 1' : null;
-            },
+        SizedBox(
+          width: 96,
+          child: Text(
+            '${tier.rangeLabel} $unit',
+            style: const TextStyle(
+                fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: TextFormField(
-            controller: row.priceCtrl,
+            controller: _priceCtrls[index],
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: const InputDecoration(
-              labelText: 'Нарх (сўм)',
+              labelText: 'Нарх (сўм) — ихтиёрий',
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            validator: (v) {
-              final n = int.tryParse(v?.trim() ?? '');
-              return (n == null || n <= 0) ? 'Нархни киритинг' : null;
-            },
           ),
         ),
-        if (_tiers.length > 1)
-          IconButton(
-            onPressed: () => _removeTier(index),
-            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-          ),
       ]),
     );
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
@@ -336,8 +338,16 @@ class _MyProductsView extends StatelessWidget {
             return const Center(
                 child: Text('Ҳали маҳсулот қўшмагансиз — «Янги маҳсулот»'));
           }
-          return ListView.builder(
+          // Расмлар AVA Дўкон (Сотувчи POS) каби — катта, cover, грид карта
+          // (эга қарори, 2026-09-24). Аввал кичик CircleAvatarли ListTile эди.
+          return GridView.builder(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.78,
+            ),
             itemCount: items.length,
             itemBuilder: (_, i) => _myProductTile(context, repo, items[i]),
           );
@@ -351,51 +361,140 @@ class _MyProductsView extends StatelessWidget {
     WholesaleProductsRepository repo,
     WholesaleProduct p,
   ) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: p.imageUrls.isEmpty
-            ? const CircleAvatar(child: Icon(Icons.inventory_2_outlined))
-            : CircleAvatar(backgroundImage: NetworkImage(p.imageUrls.first)),
-        title: Text(p.title),
-        subtitle: Text(
-            '${p.priceTiers.length > 1 ? "дан " : ""}${p.basePrice} сўм · '
-            'МОҚ ${p.moq} ${p.unit} · ${_statusLabel(p.status)}'
-            '${p.videoClipIds.isNotEmpty ? ' · 🎥 ${p.videoClipIds.length}' : ''}'),
-        trailing: PopupMenuButton<String>(
-          onSelected: (action) async {
-            if (action == 'edit') {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      WholesaleProductFormScreen(seller: seller, existing: p),
-                ),
-              );
-            } else if (action == 'hide') {
-              await repo.deactivate(p.id);
-            } else if (action == 'delete') {
-              await repo.delete(p.id);
-            } else if (action == 'add_video') {
-              await _addVideo(context, repo, p);
-            } else if (action == 'view_video') {
-              await _viewVideo(context, p);
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
-            const PopupMenuItem(
-              value: 'add_video',
-              child: Text('🎥 Видеообзор / реклама қўшиш'),
-            ),
-            if (p.videoClipIds.isNotEmpty)
-              const PopupMenuItem(
-                value: 'view_video',
-                child: Text('Видеони кўриш'),
+    void onMenu(String action) async {
+      if (action == 'edit') {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                WholesaleProductFormScreen(seller: seller, existing: p),
+          ),
+        );
+      } else if (action == 'hide') {
+        await repo.deactivate(p.id);
+      } else if (action == 'delete') {
+        await repo.delete(p.id);
+      } else if (action == 'add_video') {
+        await _addVideo(context, repo, p);
+      } else if (action == 'view_video') {
+        await _viewVideo(context, p);
+      }
+    }
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorderMuted),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: ColoredBox(
+                      color: Colors.grey.shade100,
+                      child: p.imageUrls.isEmpty
+                          ? const Icon(Icons.inventory_2_outlined, size: 40)
+                          : Image.network(
+                              p.imageUrls.first,
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.image_not_supported_outlined),
+                            ),
+                    ),
+                  ),
+                  if (p.videoClipIds.isNotEmpty)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(Icons.play_circle_fill,
+                            color: Colors.white, size: 16),
+                      ),
+                    ),
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Material(
+                      color: Colors.black45,
+                      shape: const CircleBorder(),
+                      child: PopupMenuButton<String>(
+                        onSelected: onMenu,
+                        icon: const Icon(Icons.more_vert,
+                            color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        iconSize: 20,
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                              value: 'edit', child: Text('Таҳрирлаш')),
+                          const PopupMenuItem(
+                            value: 'add_video',
+                            child: Text('🎥 Видеообзор / реклама қўшиш'),
+                          ),
+                          if (p.videoClipIds.isNotEmpty)
+                            const PopupMenuItem(
+                              value: 'view_video',
+                              child: Text('Видеони кўриш'),
+                            ),
+                          if (p.isActive)
+                            const PopupMenuItem(
+                                value: 'hide', child: Text('Яшириш')),
+                          const PopupMenuItem(
+                              value: 'delete', child: Text('Ўчириш')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            if (p.isActive)
-              const PopupMenuItem(value: 'hide', child: Text('Яшириш')),
-            const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Text(
+                p.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: AppText.bodyMedium,
+                ),
+              ),
+            ),
+            Text(
+              '${p.priceTiers.length > 1 ? "дан " : ""}${formatMoney(p.basePrice)}'
+              ' / ${p.unit}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primaryDark,
+                fontSize: AppText.titleSmall,
+              ),
+            ),
+            Text(
+              'МОҚ ${p.moq} ${p.unit} · ${_statusLabel(p.status)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
           ],
         ),
       ),

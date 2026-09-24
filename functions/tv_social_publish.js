@@ -68,17 +68,77 @@ function networkState(clip, net) {
   return String(row.status || '');
 }
 
-function buildCaption(clip, prefix) {
-  const lines = [];
-  const head = str(prefix, 200);
-  if (head) lines.push(head);
-  if (str(clip.title, 180)) lines.push(str(clip.title, 180));
-  if (str(clip.description, 600)) lines.push(str(clip.description, 600));
+/**
+ * Ижтимоий тармоққа юбориладиган файл — transcode қилинган 720p варианти,
+ * ХОМ юкланган файл эмас.
+ *
+ * Хом файл (`videoUrl`) телефондан келгани учун ўнлаб МБ бўлиши мумкин:
+ *   • Telegram URL орқали юборишда 20MB лимити бор — катта файлда 400;
+ *   • IG/FB/YouTube'га ҳам ортиқча секин ва узилишга мойил.
+ * 720p — сифат ва ҳажм бўйича ижтимоий тармоқ учун энг мос вариант.
+ * Вариантлар ҳали тайёр бўлмаса (transcode тугамаган), хом файлга
+ * қайтамиз — эски хатти-ҳаракат.
+ */
+function socialVideoUrl(clip) {
+  const v = clip.videoVariants && typeof clip.videoVariants === 'object'
+      ? clip.videoVariants : {};
+  return str(v['720p'], 2000)
+      || str(v['480p'], 2000)
+      || str(v['360p'], 2000)
+      || str(clip.videoUrl, 2000);
+}
+
+/// Подпись узунлиги — тармоқ лимитидан салгина паст (заҳира билан).
+const CAPTION_MAX = {
+  instagram: 2100,
+  facebook: 2100,
+  youtube: 4800,
+  telegram: 1000,
+};
+
+/// Подписдаги ҳавола БОСИЛАДИГАН тармоқлар — уларга URL'нинг ўзи
+/// қўйилади.
+const LINKABLE = ['facebook', 'youtube', 'telegram'];
+
+/// Instagram'да caption ичидаги URL босилмайди (оддий матн бўлиб
+/// қолади) — шунинг учун ҳавола ўрнига био'га кўрсаткич қўйилади.
+/// Шу сабабли `captionPrefix` НЕЙТРАЛ бўлиши керак: ҳавола ҳақидаги
+/// гапни тармоққа қараб мана шу ер қўшади.
+const IG_LINK_HINT = '🔗 Юклаб олиш ҳаволаси — профилда';
+
+/**
+ * Тармоққа мосланган подпись.
+ *
+ * Тузилиши: [CTA префикси] · [сарлавҳа] · [тавсиф] · [ҳудуд · эга] ·
+ * [Play ҳаволаси — фақат LINKABLE] · #AVA
+ *
+ * Лимитга сиғмаса ФАҚАТ ТАВСИФ қисқаради — CTA ва ҳавола ҳар доим
+ * сақланади. Аввал бутун матн охиридан кесиларди, шунда Telegram'нинг
+ * 1024 белгисида айнан ҳавола тушиб қоларди.
+ */
+function buildCaption(clip, prefix, net, playUrl) {
+  const max = CAPTION_MAX[net] || 2100;
+
+  const head = [];
+  if (str(prefix, 200)) head.push(str(prefix, 200));
+  if (str(clip.title, 180)) head.push(str(clip.title, 180));
+
+  const tail = [];
   const loc = [str(clip.districtLabel, 80), str(clip.ownerName, 80)]
       .filter(Boolean).join(' · ');
-  if (loc) lines.push(loc);
-  lines.push('#AVA');
-  return lines.join('\n').slice(0, 2100);
+  if (loc) tail.push(loc);
+  if (LINKABLE.includes(net) && str(playUrl, 300)) {
+    tail.push(str(playUrl, 300));
+  } else if (net === 'instagram') {
+    tail.push(IG_LINK_HINT);
+  }
+  tail.push('#AVA');
+
+  const fixed = head.concat(tail).join('\n');
+  const room = max - fixed.length - 1;
+  const desc = room > 40 ? str(clip.description, Math.min(room, 600)) : '';
+  const lines = desc ? head.concat([desc], tail) : head.concat(tail);
+  return lines.join('\n').slice(0, max);
 }
 
 function publicSettings(s) {
@@ -97,6 +157,7 @@ function publicSettings(s) {
 
 function attachTvSocialPublish(exports, deps) {
   const { functions, db, admin, requireCallerRoles } = deps;
+  const playUrl = str(deps.playUrl, 300);
   const heavy = functions.runWith({ timeoutSeconds: 540, memory: '512MB' });
 
   async function loadSettings() {
@@ -376,7 +437,7 @@ function attachTvSocialPublish(exports, deps) {
       return { skipped: claimed.skip, clipId };
     }
     const clip = claimed.clip;
-    const videoUrl = str(clip.videoUrl, 2000);
+    const videoUrl = socialVideoUrl(clip);
     const ref = db.collection('tv_clips').doc(clipId);
     if (!videoUrl) {
       await ref.update({
@@ -388,7 +449,6 @@ function attachTvSocialPublish(exports, deps) {
     }
 
     const s = await loadSettings();
-    const caption = buildCaption(clip, s.captionPrefix);
     const networks = Object.assign(
         {},
         (clip.socialPost && clip.socialPost.networks) || {},
@@ -397,6 +457,7 @@ function attachTvSocialPublish(exports, deps) {
 
     for (const net of claimed.nets) {
       try {
+        const caption = buildCaption(clip, s.captionPrefix, net, playUrl);
         const posted = await publishOne(net, videoUrl, caption, s);
         networks[net] = {
           status: 'posted',
@@ -535,4 +596,6 @@ function attachTvSocialPublish(exports, deps) {
   });
 }
 
-module.exports = { attachTvSocialPublish };
+// `buildCaption` / `socialVideoUrl` — тоза функциялар, тест учун
+// очиқ (қаранг: test/tv_social_caption.test.js).
+module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl };

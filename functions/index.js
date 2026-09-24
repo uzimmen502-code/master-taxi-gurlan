@@ -16957,4 +16957,6 @@ attachTvSocialPublish(exports, {
   db,
   admin,
   requireCallerRoles,
+  // Play havolasi bitta manbadan — podpisga ham shu qo'shiladi.
+  playUrl: AVA_PLAY_URL,
 });

@@ -12,6 +12,7 @@
     "test:ev-charging": "node test/ev_charging_rules.test.js",
     "test:ev-charging-paid": "node test/ev_charging_paid.test.js",
     "test:clip-page": "node test/tv_clip_page.test.js",
+    "test:tv-social": "node test/tv_social_caption.test.js",
     "test:assistant": "node test/assistant_chat.test.js"
   },
   "engines": {

@@ -1,53 +1,58 @@
 import 'package:flutter/material.dart';
 
-/// Маҳаллий такси (йўловчи) — teal палитра.
+import '../../../core/theme/ava_tokens.dart';
+
+/// Маҳаллий такси (йўловчи) палитраси.
 ///
-/// Шаҳарлараро (`IntercityColors` neon lime) дан атайлаб фарқли.
+/// Илгари бу модул атайлаб teal палитрада эди — шаҳарларародан ажралиб
+/// туриши учун. Янги дизайн тизимида битта бренд ранги бор, шунинг учун
+/// teal олиб ташланди ва номлар [AvaColors] токенларига боғланди.
+/// Модуллар энди ранг билан эмас, сарлавҳа ва иконка билан ажралади.
 abstract final class LocalTaxiColors {
   /// AppBar / CTA / асосий бренд.
-  static const Color primary = Color(0xFF0F766E);
+  static const Color primary = AvaLight.brand;
 
   /// Градиент ўрта / иккинчи бренд.
-  static const Color primaryMid = Color(0xFF0D9488);
+  static const Color primaryMid = AvaLight.brand;
 
   /// Ёруғ акцент.
-  static const Color accent = Color(0xFF14B8A6);
+  static const Color accent = AvaLight.brand;
 
-  /// Экран фони (lime эмас).
-  static const Color bg = Color(0xFFE6F5F3);
+  /// Экран фони.
+  static const Color bg = AvaLight.bg;
 
   /// Карта / sheet.
-  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surface = AvaLight.surface;
 
-  /// Юмшоқ teal фон.
-  static const Color surfaceSoft = Color(0xFFD5F0EC);
+  /// Юмшоқ фон.
+  static const Color surfaceSoft = AvaLight.surface2;
 
   /// Чегара.
-  static const Color border = Color(0xFF9AD4CC);
+  static const Color border = AvaLight.line;
 
   /// Асосий матн.
-  static const Color text = Color(0xFF0A2F2C);
+  static const Color text = AvaLight.ink;
 
   /// Иккинчи матн.
-  static const Color textMuted = Color(0xFF3D6B66);
+  static const Color textMuted = AvaLight.ink2;
 
   /// Учинчи / иконка.
-  static const Color textFaint = Color(0xFF6A9A94);
+  static const Color textFaint = AvaLight.ink3;
 
-  static const Color success = Color(0xFF0F766E);
-  static const Color successSoft = Color(0xFFD5F0EC);
+  static const Color success = AvaLight.ok;
+  static const Color successSoft = AvaLight.okSoft;
 
-  static const Color danger = Color(0xFFB71C1C);
-  static const Color dangerSoft = Color(0xFFFFEBEE);
+  static const Color danger = AvaLight.danger;
+  static const Color dangerSoft = AvaLight.dangerSoft;
 
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color warningSoft = Color(0xFFFFF7E6);
+  static const Color warning = AvaLight.warn;
+  static const Color warningSoft = AvaLight.warnSoft;
 
-  static const Color onPrimary = Color(0xFFFFFFFF);
+  static const Color onPrimary = AvaLight.brandInk;
 
   /// Қаердан нуқта.
-  static const Color fromDot = Color(0xFF14B8A6);
+  static const Color fromDot = AvaLight.ok;
 
   /// Қаерга нуқта.
-  static const Color toDot = Color(0xFFEF4444);
+  static const Color toDot = AvaLight.danger;
 }

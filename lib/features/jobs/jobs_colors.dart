@@ -1,57 +1,62 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/ava_tokens.dart';
 import '../../models/job_ad.dart';
 
-/// ИШ ЭЪЛОН палитраси (бошқа модулларга таъсир қилмайди).
+/// ИШ ЭЪЛОН палитраси — [AvaColors] токенларининг шу модулдаги номлари.
+///
+/// Илгари бу ерда алоҳида кўк (#0277BD) ва юмшоқ яшил фон бор эди;
+/// янги дизайн тизимида битта бренд ранги бўлгани учун улар токенларга
+/// боғланди.
 abstract final class JobsColors {
-  /// Лента / экран фони — юмшоқ яшил (ёруғ lime эмас).
-  static const scaffold = Color(0xFFF7FFEF);
+  /// Лента / экран фони.
+  static const scaffold = AvaLight.bg;
 
-  /// Иш бор / Хизмат таклифи — битта кўк акцент.
-  static const accentBlue = Color(0xFF0277BD);
+  /// Битта бренд акценти.
+  static const accentBlue = AvaLight.brand;
 
   /// AppBar, таблар, «+ Эълон қўшиш», «Таҳрирлаш» фон.
   static const bar = accentBlue;
 
-  /// Оқ матн бар/CTA устида.
-  static const onBar = Colors.white;
+  /// Матн бар/CTA устида.
+  static const onBar = AvaLight.brandInk;
 
-  /// Таб танланмаган.
+  /// Таб танланмаган — бренд усти матнининг хира кўриниши.
   static const tabUnselected = Color(0xCCFFFFFF);
 
   /// Асосий матн.
-  static const ink = Color(0xFF1A1A1A);
+  static const ink = AvaLight.ink;
 
   /// Иккинчи даража матн.
-  static const muted = Color(0xFF5A6B4A);
+  static const muted = AvaLight.ink2;
 
   /// Hint / бўш мета.
-  static const hint = Color(0xFF6B7B5A);
+  static const hint = AvaLight.ink3;
 
   /// Карточка.
-  static const surface = Colors.white;
+  static const surface = AvaLight.surface;
 
   /// Чегара.
-  static const border = Color(0xFFE0E0E0);
+  static const border = AvaLight.line;
 
   /// Қидирув fill.
-  static const fieldFill = Color(0xFFF5F8F0);
+  static const fieldFill = AvaLight.surface2;
 
-  /// «Иш бор» (ad) акцент — кўк.
+  /// «Эълон» акценти.
   static const kindAd = accentBlue;
 
-  /// «Хизмат таклифи» акцент — кўк.
+  /// «Хизмат таклифи» акценти.
   static const kindService = accentBlue;
 
-  /// Legacy «Иш» (work).
-  static const kindWork = Color(0xFFD84315);
+  /// Legacy «Иш» (work) — бренддан ажралиб турсин, огоҳлантириш туси.
+  static const kindWork = AvaLight.warn;
 
   /// Шошилинч.
-  static const urgent = Color(0xFFC62828);
-  static const urgentSoft = Color(0xFFFFEBEE);
+  static const urgent = AvaLight.danger;
+  static const urgentSoft = AvaLight.dangerSoft;
 
   /// Нарх chip.
-  static const priceBg = Color(0xFFE3F2FD);
+  static const priceBg = AvaLight.brandSoft;
   static const priceText = accentBlue;
 
   static Color accentFor(AdKind kind) {

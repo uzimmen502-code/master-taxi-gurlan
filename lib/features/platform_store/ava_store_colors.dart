@@ -1,34 +1,37 @@
-import 'package:flutter/material.dart';
+import '../../core/theme/ava_tokens.dart';
 
-/// Фақат AVA дўкони бренд палитраси (бошқа модулларга таъсир қилмайди).
+/// AVA дўкони палитраси — [AvaColors] токенларининг шу модулдаги номлари.
+///
+/// Илгари бу ерда неон-бирюза (#00FFFF) алоҳида бренд ранги эди; янги
+/// дизайн тизимида битта бренд ранги бўлгани учун у олиб ташланди.
 abstract final class AvaStoreColors {
-  /// Neon turquoise.
-  static const brand = Color(0xFF00FFFF);
+  /// Бренд.
+  static const brand = AvaLight.brand;
 
-  /// Қора матн бренд фони устида.
-  static const onBrand = Color(0xFF002B2B);
+  /// Бренд фони устидаги матн.
+  static const onBrand = AvaLight.brandInk;
 
   /// Юмшоқ фон / карточка.
-  static const soft = Color(0xFFE6FFFF);
+  static const soft = AvaLight.brandSoft;
 
   /// Бир оз тўйинган fill.
-  static const softFill = Color(0xFFB3FFFF);
+  static const softFill = AvaLight.brandSoft;
 
   /// Акцент / нарх / иконка.
-  static const deep = Color(0xFF008C8C);
+  static const deep = AvaLight.brand;
 
   /// Экран фони.
-  static const scaffold = Color(0xFFF0FFFF);
+  static const scaffold = AvaLight.bg;
 
   /// Асосий матн.
-  static const ink = Color(0xFF0A2A2A);
+  static const ink = AvaLight.ink;
 
   /// Иккинчи даража матн.
-  static const muted = Color(0xFF5A7A7A);
+  static const muted = AvaLight.ink2;
 
   /// Карточка юзаси.
-  static const surface = Color(0xFFFFFFFF);
+  static const surface = AvaLight.surface;
 
   /// Чизиқ / чегара.
-  static const border = Color(0xFF9AEEEE);
+  static const border = AvaLight.line;
 }

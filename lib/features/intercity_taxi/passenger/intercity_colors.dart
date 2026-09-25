@@ -1,66 +1,68 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/ava_tokens.dart';
 
-/// Шаҳарлараро такси (йўловчи) — AVA neon lime билан мутаносиб палитра.
+/// Шаҳарлараро такси (йўловчи) палитраси.
 ///
-/// Material `Colors.green/blue/orange` ишлатилмасин; шу класс орқали.
+/// Эндиликда бу — [AvaColors] токенларининг шу модулдаги семантик номлари,
+/// алоҳида палитра эмас: дизайн тизимида битта бренд ранги бор.
+/// Янги код тўғридан-тўғри `context.ava` ишлатса ҳам бўлади.
 abstract final class IntercityColors {
   /// Асосий бренд (AppBar, CTA).
-  static const Color primary = AppColors.limeDeep;
+  static const Color primary = AvaLight.brand;
 
   /// Градиент / иккинчи бренд.
-  static const Color primaryMid = AppColors.limeEdge;
+  static const Color primaryMid = AvaLight.brand;
 
   /// Ёруғ акцент (chip, highlight).
-  static const Color accent = AppColors.limeMid;
+  static const Color accent = AvaLight.brand;
 
   /// Экран фони.
-  static const Color bg = AppColors.scaffold;
+  static const Color bg = AvaLight.bg;
 
   /// Карта / sheet юзаси.
-  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surface = AvaLight.surface;
 
-  /// Юмшоқ яшил-оқ фон.
-  static const Color surfaceSoft = Color(0xFFF4FBE6);
+  /// Юмшоқ фон.
+  static const Color surfaceSoft = AvaLight.surface2;
 
   /// Карта чегараси.
-  static const Color border = AppColors.cardBorderMuted;
+  static const Color border = AvaLight.line;
 
   /// Асосий матн.
-  static const Color text = Color(0xFF102418);
+  static const Color text = AvaLight.ink;
 
   /// Иккинчи даража матн.
-  static const Color textMuted = AppColors.sectionMuted;
+  static const Color textMuted = AvaLight.ink2;
 
   /// Учинчи даража / иконка.
-  static const Color textFaint = Color(0xFF7A9460);
+  static const Color textFaint = AvaLight.ink3;
 
   /// Муваффақият / «бор жой» / нарх.
-  static const Color success = AppColors.limeDeep;
-  static const Color successSoft = Color(0xFFE8F5D0);
+  static const Color success = AvaLight.ok;
+  static const Color successSoft = AvaLight.okSoft;
 
   /// Хато / бекор.
-  static const Color danger = AppColors.error;
-  static const Color dangerSoft = Color(0xFFFFEBEE);
+  static const Color danger = AvaLight.danger;
+  static const Color dangerSoft = AvaLight.dangerSoft;
 
   /// Огоҳлантириш / кутилмоқда.
-  static const Color warning = AppColors.accentGold;
-  static const Color warningSoft = Color(0xFFFFF8E1);
+  static const Color warning = AvaLight.warn;
+  static const Color warningSoft = AvaLight.warnSoft;
 
   /// Маълумот / янги ҳайдовчи.
-  static const Color info = AppColors.limeEdge;
-  static const Color infoSoft = Color(0xFFEEF8D8);
+  static const Color info = AvaLight.brand;
+  static const Color infoSoft = AvaLight.brandSoft;
 
   /// Рейтинг юлдузи.
-  static const Color gold = AppColors.accentGold;
+  static const Color gold = AvaLight.warn;
 
-  /// Тўқ бренд устидаги матн.
-  static const Color onPrimary = Color(0xFFFFFFFF);
+  /// Бренд устидаги матн.
+  static const Color onPrimary = AvaLight.brandInk;
 
   /// Қидирув «Қаердан» нуқтаси.
-  static const Color fromDot = AppColors.limeMid;
+  static const Color fromDot = AvaLight.ok;
 
   /// Қидирув «Қаерга» нуқтаси.
-  static const Color toDot = AppColors.error;
+  static const Color toDot = AvaLight.danger;
 }

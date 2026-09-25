@@ -2201,12 +2201,17 @@ service cloud.firestore {
           && request.resource.data.imageUrls.size() <= 5
           && request.resource.data.get('views', 0) == 0
           && request.resource.data.get('videoClipIds', []).size() == 0
+          // `market` — қайси бозор: 'wholesale' (улгуржи) ёки 'china'
+          // (Хитой). Хитой бозорида валюта ва етказиш муддати ҳам бор.
+          && request.resource.data.get('market', 'wholesale')
+               in ['wholesale', 'china']
           && request.resource.data.keys().hasOnly([
                 'sellerId', 'sellerCompanyName', 'title', 'titleLower',
                 'searchTokens', 'description', 'priceTiers', 'unit',
                 'imageUrls', 'status', 'views', 'videoClipIds',
                 'createdAt', 'updatedAt', 'publishedAt', 'moderatedAt',
-                'moderatedBy'
+                'moderatedBy',
+                'market', 'currency', 'deliveryDays'
               ]);
     }
 
@@ -2219,9 +2224,12 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return wholesaleProductOwnerIsCaller()
           && request.resource.data.sellerId == resource.data.sellerId
+          // `market` бу ерда ЙЎҚ — эга маҳсулотни бир бозордан
+          // бошқасига кўчира олмайди (у фақат яратишда белгиланади).
           && changed.hasOnly([
                 'title', 'titleLower', 'searchTokens', 'description',
-                'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt'
+                'priceTiers', 'unit', 'imageUrls', 'status', 'updatedAt',
+                'currency', 'deliveryDays'
               ])
           && request.resource.data.priceTiers is list
           && request.resource.data.priceTiers.size() >= 1

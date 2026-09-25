@@ -36,6 +36,7 @@ import '../assistant/assistant_entry.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
+import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
@@ -902,6 +903,18 @@ class _HomeViewState extends State<_HomeView> {
                                 'wholesale_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeWholesaleSection(
+                                market: WholesaleProduct.marketWholesale,
+                                titleKey: 'home_module_wholesale',
+                                onOpenAll: () => _openWholesale(),
+                                onOpenProduct: (_) => _openWholesale(),
+                              ),
+                              SizedBox(height: AvaSpace.sectionMin),
+                              // 8-бўлим: Хитой бозори. Архитектураси
+                              // улгуржи билан бир хил (эга қарори) —
+                              // ўша коллекция, `market` билан ажралади.
+                              HomeWholesaleSection(
+                                market: WholesaleProduct.marketChina,
+                                titleKey: 'home_module_china',
                                 onOpenAll: () => _openWholesale(),
                                 onOpenProduct: (_) => _openWholesale(),
                               ),

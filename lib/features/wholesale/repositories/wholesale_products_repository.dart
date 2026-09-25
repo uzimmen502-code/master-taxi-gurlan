@@ -91,13 +91,44 @@ class WholesaleProductsRepository {
   }
 
   /// Умумий бозор — фаол маҳсулотлар.
-  Stream<List<WholesaleProduct>> getActiveProducts({int limit = feedLimit}) {
-    return _col
+  ///
+  /// [market] берилса фақат ўша бозор (`wholesale` ёки `china`).
+  /// Эски ёзувларда `market` майдони йўқ — улар улгуржи бозорга
+  /// тегишли, шунинг учун улгуржи сўровида клиентда қўшилади
+  /// (Firestore'да «майдон йўқ» бўйича сўров қилиб бўлмайди).
+  Stream<List<WholesaleProduct>> getActiveProducts({
+    int limit = feedLimit,
+    String? market,
+  }) {
+    final base = _col
         .where('status', isEqualTo: WholesaleProduct.statusActive)
-        .orderBy('publishedAt', descending: true)
-        .limit(limit)
+        .orderBy('publishedAt', descending: true);
+
+    if (market == null) {
+      return base
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(WholesaleProduct.fromFirestore).toList());
+    }
+
+    if (market == WholesaleProduct.marketChina) {
+      return base
+          .where('market', isEqualTo: WholesaleProduct.marketChina)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(WholesaleProduct.fromFirestore).toList());
+    }
+
+    // Улгуржи: `market == 'wholesale'` ва майдони умуман йўқ эскилар.
+    // Иккови ҳам керак, шунинг учун филтр клиентда.
+    return base
+        .limit(limit * 4)
         .snapshots()
-        .map((snap) => snap.docs.map(WholesaleProduct.fromFirestore).toList());
+        .map((s) => s.docs
+            .map(WholesaleProduct.fromFirestore)
+            .where((p) => !p.isChina)
+            .take(limit)
+            .toList());
   }
 
   /// Фаол маҳсулотлар — қидирув (кирилл↔лотин, `CatalogSearch`).

@@ -10,24 +10,48 @@ import '../../wholesale/repositories/wholesale_products_repository.dart';
 import 'ava_list_row.dart';
 import 'ava_section.dart';
 
-/// Нарх поғонасининг қисқа кўриниши: «10+ дона: 9 000 сўм».
+/// Нарх поғонасининг қисқа кўриниши: «10+ дона».
 ///
-/// Тавсиф талаби — «нарх поғонаси кўрсатилсин». Карточкада жой тор
-/// бўлгани учун ЭНГ ПАСТ поғона (минимал буюртма) кўрсатилади; тўлиқ
-/// поғоналар маҳсулот саҳифасида.
+/// Тавсиф талаби — «нарх поғонаси кўрсатилсин» ва Хитой бозорида
+/// «минимал буюртма». Карточкада жой тор бўлгани учун ЭНГ ПАСТ поғона
+/// (у айни пайтда минимал буюртма) кўрсатилади; тўлиқ поғоналар
+/// маҳсулот саҳифасида.
 String formatTierNote(BuildContext context, WholesaleProduct p) {
   if (p.priceTiers.isEmpty) return '';
   final t = p.priceTiers.first;
   return '${t.minQty}+ ${p.unit}';
 }
 
-/// 7-бўлим: улгуржи бозори.
+/// Нарх валютаси: Хитой бозорида ўз валютаси, қолганда сўм.
+String priceCurrency(BuildContext context, WholesaleProduct p) {
+  final c = p.currency.trim();
+  return c.isNotEmpty ? c : kCurrencySum;
+}
+
+/// Хитой бозори учун етказиш муддати: «14 кун». Маълум бўлмаса бўш.
+String formatDelivery(BuildContext context, WholesaleProduct p) {
+  final d = p.deliveryDays;
+  if (d == null || d <= 0) return '';
+  return '$d ${context.tr('home_delivery_days')}';
+}
+
+/// 7 ва 8-бўлимлар: улгуржи бозори ва Хитой бозори.
+///
+/// Иккаласи ҳам БИР ХИЛ архитектурада (эга қарори): ўша коллекция, ўша
+/// қоидалар, фақат `market` майдони билан ажралади — шунинг учун битта
+/// виджет.
 class HomeWholesaleSection extends StatefulWidget {
   const HomeWholesaleSection({
     super.key,
+    required this.market,
+    required this.titleKey,
     required this.onOpenAll,
     required this.onOpenProduct,
   });
+
+  /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
+  final String market;
+  final String titleKey;
 
   final VoidCallback onOpenAll;
   final void Function(WholesaleProduct product) onOpenProduct;
@@ -57,7 +81,10 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
     // Улгуржи бозор ҳудудга боғланмаган — сотувчилар вилоятлараро
     // ишлайди, шунинг учун бу бўлимда туман филтри йўқ.
     _sub = _repo
-        .getActiveProducts(limit: HomeWholesaleSection.limit)
+        .getActiveProducts(
+          limit: HomeWholesaleSection.limit,
+          market: widget.market,
+        )
         .listen(
       (list) {
         if (!mounted) return;
@@ -83,7 +110,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
   @override
   Widget build(BuildContext context) {
     return AvaSection(
-      title: context.tr('home_module_wholesale'),
+      title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
@@ -102,10 +129,16 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
               title: p.title,
               price: p.basePrice > 0
                   ? '${context.tr('home_price_from')} '
-                      '${formatPrice(p.basePrice)} $kCurrencySum'
+                      '${formatPrice(p.basePrice)} '
+                      '${priceCurrency(context, p)}'
                   : null,
               priceNote: formatTierNote(context, p),
-              footnote: p.sellerCompanyName,
+              // Хитой бозорида етказиш муддати, улгуржида сотувчи номи.
+              footnote: p.isChina
+                  ? (formatDelivery(context, p).isNotEmpty
+                      ? formatDelivery(context, p)
+                      : p.sellerCompanyName)
+                  : p.sellerCompanyName,
               onTap: () => widget.onOpenProduct(p),
               image: cover.startsWith('http')
                   ? CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover)

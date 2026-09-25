@@ -57,7 +57,18 @@ class WholesaleProduct implements AdSearchable {
     this.adminNote = '',
     this.moderatedAt,
     this.moderatedBy = '',
+    this.market = marketWholesale,
+    this.currency = '',
+    this.deliveryDays,
   });
+
+  /// Улгуржи бозор (ички сотувчилар) — нархи сўмда.
+  static const marketWholesale = 'wholesale';
+
+  /// Хитой бозори — валютали нарх ва етказиш муддати бор.
+  /// Архитектураси улгуржи билан БИР ХИЛ (эга қарори): ўша коллекция,
+  /// ўша қоидалар, фақат `market` майдони билан ажралади.
+  static const marketChina = 'china';
 
   static const maxImages = 5;
   static const maxVideoClips = 5;
@@ -97,6 +108,17 @@ class WholesaleProduct implements AdSearchable {
   final String adminNote;
   final DateTime? moderatedAt;
   final String moderatedBy;
+
+  /// `wholesale` | `china`. Эски ёзувларда бўш — улар улгуржи бозор.
+  final String market;
+
+  /// Хитой бозори учун валюта белгиси («$», «¥»); бўш бўлса сўм.
+  final String currency;
+
+  /// Хитой бозори учун етказиш муддати (кун); маълум бўлмаса `null`.
+  final int? deliveryDays;
+
+  bool get isChina => market == marketChina;
 
   bool get isPending => status == statusPending;
   bool get isActive => status == statusActive;
@@ -155,6 +177,11 @@ class WholesaleProduct implements AdSearchable {
       adminNote: (d['adminNote'] as String?) ?? '',
       moderatedAt: _parseDate(d['moderatedAt']),
       moderatedBy: (d['moderatedBy'] as String?) ?? '',
+      market: (d['market'] as String?)?.trim().isNotEmpty == true
+          ? (d['market'] as String).trim()
+          : marketWholesale,
+      currency: (d['currency'] as String?)?.trim() ?? '',
+      deliveryDays: (d['deliveryDays'] as num?)?.toInt(),
     );
   }
 
@@ -176,6 +203,9 @@ class WholesaleProduct implements AdSearchable {
       'views': 0,
       'videoClipIds': <String>[],
       'searchTokens': AdSearchText.buildTokens(title, description),
+      'market': market,
+      if (currency.trim().isNotEmpty) 'currency': currency.trim(),
+      if (deliveryDays != null) 'deliveryDays': deliveryDays,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       if (autoApproved) 'publishedAt': FieldValue.serverTimestamp(),

@@ -201,7 +201,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
                 icon: _isWalletTab
                     ? Icons.account_balance_wallet_outlined
                     : Icons.campaign_outlined,
-                color: _isWalletTab ? const Color(0xFF00897B) : Colors.blue,
+                color: _isWalletTab ? AvaLight.ok : Colors.blue,
                 title: _isWalletTab
                     ? 'Ҳали wallet хабар ёқ'
                     : 'Ҳали хабар ёқ',
@@ -621,7 +621,7 @@ class _WalletNewsListState extends State<_WalletNewsList> {
               _kvRow(
                 'Тўлов қилинган',
                 '${formatMoney(sums.paid)}',
-                valueColor: const Color(0xFF00897B),
+                valueColor: AvaLight.ok,
               ),
               _kvRow(
                 'Жами',
@@ -644,7 +644,7 @@ class _WalletNewsListState extends State<_WalletNewsList> {
   Widget _eventRow({required NewsItem item, required int number}) {
     final credit = isCredit(item);
     final accent =
-        credit ? const Color(0xFF00897B) : const Color(0xFFD32F2F);
+        credit ? AvaLight.ok : const Color(0xFFD32F2F);
     final title = item.title.trim().isEmpty ? 'Wallet' : item.title.trim();
     final when = _dtFmt.format(item.createdAt);
     final line = '$number. $title · ${amountOf(item)} · $when';
@@ -722,7 +722,7 @@ class _NewsCard extends StatelessWidget {
     'promo': AppColors.primary,
     'warning': Color(0xFFFFA000),
     'emergency': Color(0xFFD32F2F),
-    'wallet': Color(0xFF00897B),
+    'wallet': AvaLight.ok,
   };
 
   static const _categoryIcons = <String, IconData>{

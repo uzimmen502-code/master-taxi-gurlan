@@ -620,7 +620,7 @@ class _PassengerBlocksTabState extends State<_PassengerBlocksTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Blok bekor qilindi'),
-            backgroundColor: Colors.green,
+            backgroundColor: AvaLight.ok,
           ),
         );
         _phoneCtrl.clear();
@@ -1040,7 +1040,7 @@ class _TodayTripsTab extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _Stat('${docs.length}', 'Жами', Colors.blue),
-                  _Stat('$accepted', 'Қабул', Colors.green),
+                  _Stat('$accepted', 'Қабул', AvaLight.ok),
                   _Stat('$pending', 'Кутиш', Colors.orange),
                   _Stat('$rejected', 'Рад', Colors.red),
                 ],

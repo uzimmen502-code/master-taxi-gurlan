@@ -402,7 +402,7 @@ class _PendingCodeCardState extends State<_PendingCodeCard> {
                         'Автомат режим — код тезда яратилади',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.green.shade700,
+                          color: AvaLight.ok,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

@@ -1680,7 +1680,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       };
 
   static Color _statusColor(ModuleStatus s) => switch (s) {
-        ModuleStatus.enabled => Colors.green.shade700,
+        ModuleStatus.enabled => AvaLight.ok,
         ModuleStatus.comingSoon => Colors.orange.shade800,
         ModuleStatus.soon => Colors.blue.shade600,
         ModuleStatus.hidden => Colors.grey.shade600,

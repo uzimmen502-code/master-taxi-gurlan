@@ -112,7 +112,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: status == 'active' ? Colors.green : Colors.orange,
+          backgroundColor: status == 'active' ? AvaLight.ok : Colors.orange,
           content: Text(
             status == 'active' ? 'Faollashtirildi: ${ad.title}' : 'O\'chirildi (nofaol): ${ad.title}',
           ),
@@ -280,7 +280,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
         children: [
           _summaryCard('Jami', ads.length, Colors.blueGrey),
           _summaryCard('Kutilmoqda', count('pending'), Colors.deepOrange),
-          _summaryCard('Faol', count('active'), Colors.green),
+          _summaryCard('Faol', count('active'), AvaLight.ok),
           _summaryCard('Nofaol', count('inactive'), Colors.orange),
         ],
       ),
@@ -428,7 +428,7 @@ Color _marketStatusColor(String status) {
     case 'pending':
       return Colors.deepOrange;
     case 'active':
-      return Colors.green;
+      return AvaLight.ok;
     case 'inactive':
       return Colors.orange;
     default:
@@ -693,7 +693,7 @@ class _AdsTable extends StatelessWidget {
                   iconSize: 20,
                   visualDensity: VisualDensity.compact,
                   onPressed: () => onActivate(ad),
-                  icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                  icon: const Icon(Icons.check_circle_outline, color: AvaLight.ok),
                 ),
               if (ad.status == 'active')
                 IconButton(
@@ -1186,17 +1186,17 @@ class _MarketAutoApproveBarState extends State<_MarketAutoApproveBar> {
           margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+              color: auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(
             children: [
               Icon(
                 auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+                color: auto ? AvaLight.ok : Colors.orange.shade800,
                 size: 22,
               ),
               const SizedBox(width: 10),
@@ -1209,7 +1209,7 @@ class _MarketAutoApproveBarState extends State<_MarketAutoApproveBar> {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color:
-                        auto ? Colors.green.shade900 : Colors.orange.shade900,
+                        auto ? AvaLight.ok : Colors.orange.shade900,
                   ),
                 ),
               ),

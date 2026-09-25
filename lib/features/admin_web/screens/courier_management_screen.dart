@@ -57,7 +57,7 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Курьер қўшилди: +$id'),
-            backgroundColor: Colors.green,
+            backgroundColor: AvaLight.ok,
           ),
         );
       }
@@ -283,11 +283,11 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: isOnline
-                              ? Colors.green.shade100
+                              ? AvaLight.okSoft
                               : Colors.grey.shade100,
                           child: Icon(
                             Icons.delivery_dining,
-                            color: isOnline ? Colors.green : Colors.grey,
+                            color: isOnline ? AvaLight.ok : Colors.grey,
                           ),
                         ),
                         title: Text(

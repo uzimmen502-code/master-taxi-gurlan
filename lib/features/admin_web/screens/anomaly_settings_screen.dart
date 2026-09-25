@@ -206,7 +206,7 @@ class _AnomalySettingsScreenState extends State<AnomalySettingsScreen> {
                             ? Icons.notifications_active
                             : Icons.notifications_off,
                         color: _notificationsEnabled
-                            ? Colors.green
+                            ? AvaLight.ok
                             : Colors.grey,
                       ),
                     ),

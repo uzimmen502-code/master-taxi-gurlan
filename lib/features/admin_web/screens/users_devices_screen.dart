@@ -377,7 +377,7 @@ class _DeviceBindingAutoApproveToggleState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: enabled ? Colors.green.shade800 : Colors.black54,
+                  color: enabled ? AvaLight.ok : Colors.black54,
                 ),
               ),
             ),
@@ -1065,7 +1065,7 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         children: [
           if (canPriv) ...[
             _roleBtn('admin', Icons.admin_panel_settings, AppColors.primary, role),
-            _roleBtn('finance', Icons.account_balance, Colors.teal, role),
+            _roleBtn('finance', Icons.account_balance, AvaLight.ok, role),
             _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
           ],
           _roleBtn('seller', Icons.point_of_sale, Colors.orange.shade800, role),
@@ -1263,7 +1263,7 @@ class _DeviceBindingCardState extends State<_DeviceBindingCard> {
         if (isBlocked)
           const _ChipData('BLOKLANGAN', Colors.red)
         else
-          const _ChipData('active', Colors.green),
+          const _ChipData('active', AvaLight.ok),
         if (verifiedMethod.isNotEmpty)
           _ChipData(verifiedMethod, Colors.deepPurple),
         if (failedAttempts > 0)
@@ -1528,7 +1528,7 @@ Color _roleColor(String role) {
     case 'driver':
       return Colors.deepPurple;
     case 'courier':
-      return Colors.teal;
+      return AvaLight.ok;
     default:
       return Colors.blueGrey;
   }

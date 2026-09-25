@@ -385,7 +385,7 @@ class _BreadCard extends StatelessWidget {
         ? Colors.red
         : ratio > 0.6
             ? Colors.orange
-            : Colors.green;
+            : AvaLight.ok;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Text('${item.soldToday} / ${item.totalStock}',
@@ -1535,13 +1535,13 @@ class _ExtraCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: AvaLight.okSoft,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text('ёпиш',
                       style: TextStyle(
                           fontSize: 10,
-                          color: Colors.teal.shade800,
+                          color: AvaLight.ok,
                           fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -1613,7 +1613,7 @@ class _ExtraCard extends StatelessWidget {
         ? Colors.red
         : ratio > 0.6
             ? Colors.orange
-            : Colors.green;
+            : AvaLight.ok;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Text('${item.soldToday} / ${item.totalStock} ${item.unitRu}',

@@ -588,7 +588,7 @@ class _StatsTab extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _Stat('Jami bronlar', '$total ta', Colors.blue),
-              _Stat('Tasdiqlangan', '$confirmed ta', Colors.green),
+              _Stat('Tasdiqlangan', '$confirmed ta', AvaLight.ok),
               _Stat('Bekor qilingan', '$cancelled ta', Colors.red),
               _Stat('Daromad', "${formatMoney(revenue)}", Colors.orange),
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -599,7 +599,7 @@ class _StatsTab extends StatelessWidget {
                 builder: (_, dSnap) => _Stat(
                   'Faol haydovchilar',
                   '${dSnap.data?.docs.length ?? 0} ta',
-                  Colors.teal,
+                  AvaLight.ok,
                 ),
               ),
             ],

@@ -309,7 +309,7 @@ class _PlatformProductsAdminScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F5),
+      backgroundColor: AvaLight.surface2,
       floatingActionButton: null,
       body: Column(
         children: [
@@ -344,7 +344,7 @@ class _PlatformProductsAdminScreenState
                     onPressed: () =>
                         _classifySelected(PlatformProduct.kindFood),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
+                      backgroundColor: AvaLight.ok,
                       foregroundColor: Colors.white,
                     ),
                     child: const Text('Озиқ'),
@@ -395,7 +395,7 @@ class _PlatformProductsAdminScreenState
                   FilledButton.icon(
                     onPressed: () => _openBulkAdd(),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
+                      backgroundColor: AvaLight.ok,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -650,17 +650,17 @@ class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
           margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+              color: auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(
             children: [
               Icon(
                 auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+                color: auto ? AvaLight.ok : Colors.orange.shade800,
                 size: 22,
               ),
               const SizedBox(width: 10),
@@ -673,7 +673,7 @@ class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color:
-                        auto ? Colors.green.shade900 : Colors.orange.shade900,
+                        auto ? AvaLight.ok : Colors.orange.shade900,
                   ),
                 ),
               ),
@@ -1036,7 +1036,7 @@ class _Thumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = url.trim();
     Widget child = const ColoredBox(
-      color: Color(0xFFE8F5E9),
+      color: AvaLight.okSoft,
       child: Icon(Icons.storefront, color: AppColors.button),
     );
     if (u.isNotEmpty && isHttpImageUrl(u)) {

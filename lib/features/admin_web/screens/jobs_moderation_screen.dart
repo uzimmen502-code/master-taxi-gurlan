@@ -253,7 +253,7 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
         children: [
           _summaryCard('Жами', ads.length, Colors.blueGrey),
           _summaryCard('Кутяпти', count('pending'), Colors.orange),
-          _summaryCard('Фаол', count('active'), Colors.green),
+          _summaryCard('Фаол', count('active'), AvaLight.ok),
           _summaryCard('Ёпилган', count('completed'), Colors.blue),
           _summaryCard('Блок', count('blocked'), Colors.red),
         ],
@@ -632,17 +632,17 @@ class _JobsAutoApproveBarState extends State<_JobsAutoApproveBar> {
           margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+              color: auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(
             children: [
               Icon(
                 auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+                color: auto ? AvaLight.ok : Colors.orange.shade800,
                 size: 22,
               ),
               const SizedBox(width: 10),
@@ -655,7 +655,7 @@ class _JobsAutoApproveBarState extends State<_JobsAutoApproveBar> {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color:
-                        auto ? Colors.green.shade900 : Colors.orange.shade900,
+                        auto ? AvaLight.ok : Colors.orange.shade900,
                   ),
                 ),
               ),

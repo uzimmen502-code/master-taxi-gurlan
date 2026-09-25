@@ -597,7 +597,7 @@ class _SubmissionsTable extends StatelessWidget {
   Widget _holatCell(SellSubmission s) {
     final status = s.status;
     final (Color bg, Color fg) = switch (status) {
-      'reviewed' => (Colors.green, Colors.green.shade800),
+      'reviewed' => (AvaLight.ok, AvaLight.ok),
       'archived' => (Colors.grey, Colors.grey.shade800),
       _ => (Colors.orange, Colors.orange.shade800),
     };
@@ -640,7 +640,7 @@ class _SubmissionsTable extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.teal.withValues(alpha: 0.12),
+                color: AvaLight.ok.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -649,7 +649,7 @@ class _SubmissionsTable extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: Colors.teal.shade800,
+                  color: AvaLight.ok,
                 ),
               ),
             ),
@@ -676,7 +676,7 @@ class _SubmissionsTable extends StatelessWidget {
         if (s.status != 'archived' && !s.inCollection)
           IconButton(
             tooltip: 'Йиғиб олиш вазифаси',
-            icon: Icon(Icons.shopping_basket_outlined, color: Colors.teal.shade700),
+            icon: Icon(Icons.shopping_basket_outlined, color: AvaLight.ok),
             iconSize: 20,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),

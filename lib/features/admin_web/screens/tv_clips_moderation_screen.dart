@@ -78,7 +78,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: status == 'active' ? Colors.green : Colors.orange,
+          backgroundColor: status == 'active' ? AvaLight.ok : Colors.orange,
           content: Text(
             status == 'active'
                 ? 'Фаоллаштирилди: ${clip.title}'
@@ -322,7 +322,7 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         children: [
           _card('Жами', _clips.length, Colors.blueGrey),
           _card('Кутилмоқда', count('pending'), Colors.deepOrange),
-          _card('Фаол', count('active'), Colors.green),
+          _card('Фаол', count('active'), AvaLight.ok),
           _card('Блокланган', count('blocked'), Colors.red),
         ],
       ),
@@ -518,7 +518,7 @@ Color _statusColor(String s) {
     case 'pending':
       return Colors.deepOrange;
     case 'active':
-      return Colors.green;
+      return AvaLight.ok;
     case 'blocked':
       return Colors.red;
     default:
@@ -736,7 +736,7 @@ class _ClipsTable extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 onPressed: () => onActivate(c),
                 icon: const Icon(Icons.check_circle_outline,
-                    color: Colors.green),
+                    color: AvaLight.ok),
               ),
             if (c.status == 'active')
               IconButton(
@@ -1009,18 +1009,18 @@ class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
           padding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color:
-                  auto ? Colors.green.shade200 : Colors.orange.shade200,
+                  auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(children: [
             Icon(
               auto ? Icons.flash_on : Icons.admin_panel_settings,
               color:
-                  auto ? Colors.green.shade700 : Colors.orange.shade800,
+                  auto ? AvaLight.ok : Colors.orange.shade800,
               size: 22,
             ),
             const SizedBox(width: 10),
@@ -1033,7 +1033,7 @@ class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: auto
-                      ? Colors.green.shade900
+                      ? AvaLight.ok
                       : Colors.orange.shade900,
                 ),
               ),

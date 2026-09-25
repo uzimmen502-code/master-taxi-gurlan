@@ -84,7 +84,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
+      backgroundColor: isError ? Colors.red : AvaLight.ok,
     ));
   }
 
@@ -166,7 +166,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
             _reconcileHint(recon),
             style: TextStyle(
               fontSize: 12,
-              color: _reconcileOk(recon) ? Colors.green.shade700 : Colors.red,
+              color: _reconcileOk(recon) ? AvaLight.ok : Colors.red,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -182,7 +182,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
               _KpiCard(
                 label: 'Касса',
                 value: formatPrice(_n(pos['adminCash'])),
-                color: Colors.teal,
+                color: AvaLight.ok,
                 icon: Icons.account_balance_wallet,
               ),
               _KpiCard(
@@ -354,7 +354,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
             children: [
               IconButton(
                 tooltip: 'Тасдиқ',
-                icon: const Icon(Icons.check_circle, color: Colors.green),
+                icon: const Icon(Icons.check_circle, color: AvaLight.ok),
                 onPressed: id.isEmpty ? null : () => _confirmPayout(id),
               ),
               IconButton(

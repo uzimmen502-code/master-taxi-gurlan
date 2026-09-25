@@ -149,7 +149,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               _summaryCard('Кутяпти', count(WholesaleSeller.statusPending),
                   Colors.orange),
               _summaryCard('Тасдиқланган',
-                  count(WholesaleSeller.statusApproved), Colors.green),
+                  count(WholesaleSeller.statusApproved), AvaLight.ok),
               _summaryCard(
                   'Рад этилган', count(WholesaleSeller.statusRejected), Colors.red),
             ]),
@@ -297,7 +297,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               _summaryCard('Кутяпти', count(WholesaleProduct.statusPending),
                   Colors.orange),
               _summaryCard(
-                  'Фаол', count(WholesaleProduct.statusActive), Colors.green),
+                  'Фаол', count(WholesaleProduct.statusActive), AvaLight.ok),
               _summaryCard('Ёпилган', count(WholesaleProduct.statusInactive),
                   Colors.blueGrey),
             ]),
@@ -647,16 +647,16 @@ class _AutoApproveBarState extends State<_AutoApproveBar> {
           margin: const EdgeInsets.fromLTRB(18, 10, 18, 0),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+              color: auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(children: [
             Icon(
               auto ? Icons.flash_on : Icons.admin_panel_settings,
-              color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+              color: auto ? AvaLight.ok : Colors.orange.shade800,
               size: 22,
             ),
             const SizedBox(width: 10),
@@ -666,7 +666,7 @@ class _AutoApproveBarState extends State<_AutoApproveBar> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: auto ? Colors.green.shade900 : Colors.orange.shade900,
+                  color: auto ? AvaLight.ok : Colors.orange.shade900,
                 ),
               ),
             ),

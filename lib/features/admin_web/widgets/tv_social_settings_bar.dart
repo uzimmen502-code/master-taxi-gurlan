@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// AVA расмий IG / Facebook / YouTube / Telegram токенлари
 /// (CF `settings/tv_social`).
@@ -143,7 +144,7 @@ class _TvSocialSettingsBarState extends State<TvSocialSettingsBar> {
             dense: true,
             leading: Icon(
               ready ? Icons.public : Icons.public_off,
-              color: ready ? Colors.green.shade700 : Colors.blueGrey,
+              color: ready ? AvaLight.ok : Colors.blueGrey,
             ),
             title: const Text(
               'AVA расмий Instagram / Facebook / YouTube / Telegram',

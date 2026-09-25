@@ -7,6 +7,7 @@ import '../../../repositories/jobs_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_jobs_service.dart';
 import '../widgets/jobs_ad_edit_dialog.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Admin — ИШ ТОП shikoyatlari.
 class JobsComplaintsTab extends StatefulWidget {
@@ -159,7 +160,7 @@ class _ComplaintCard extends StatelessWidget {
             Row(children: [
               Icon(
                 resolved ? Icons.check_circle : Icons.report,
-                color: resolved ? Colors.green : Colors.orange,
+                color: resolved ? AvaLight.ok : Colors.orange,
                 size: 22,
               ),
               const SizedBox(width: 8),
@@ -184,7 +185,7 @@ class _ComplaintCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Hal qilindi: ${complaint.resolvedBy.isNotEmpty ? complaint.resolvedBy : "admin"}',
-                style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+                style: TextStyle(fontSize: 12, color: AvaLight.ok),
               ),
             ],
             if (complaint.reporterPhone.isNotEmpty) ...[

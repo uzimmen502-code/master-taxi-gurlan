@@ -35,8 +35,8 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   bool _checkedLimit = false;
 
   static const _ink = AvaLight.ink;
-  static const _muted = Color(0xFF4A6740);
-  static const _fieldFill = Color(0xFFFFFFFF);
+  static const _muted = AvaLight.ink2;
+  static const _fieldFill = AvaLight.surface;
   static const _chipBg = AvaLight.brand;
   static const _chipFg = AvaLight.brandInk;
   static const _pageBg = AvaLight.bg;

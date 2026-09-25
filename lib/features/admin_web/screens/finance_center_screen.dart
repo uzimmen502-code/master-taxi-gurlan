@@ -189,7 +189,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
         builder: (ctx) => AlertDialog(
           title: Row(children: [
             Icon(ok ? Icons.check_circle : Icons.warning,
-                color: ok ? Colors.green : Colors.red),
+                color: ok ? AvaLight.ok : Colors.red),
             const SizedBox(width: 8),
             Text(ok ? 'Sverka: muvozanat ✓' : 'Sverka: muammo!'),
           ]),
@@ -244,7 +244,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
+      backgroundColor: isError ? Colors.red : AvaLight.ok,
     ));
   }
 }
@@ -465,7 +465,7 @@ Future<void> _cashExchangeDialog(
                         ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
                           content: Text(
                               'Ҳамён: ${formatPrice((m['bonusBalance'] as num?) ?? 0)} сўм'),
-                          backgroundColor: Colors.green,
+                          backgroundColor: AvaLight.ok,
                         ));
                       } on FirebaseFunctionsException catch (e) {
                         setLocal(() => busy = false);
@@ -525,7 +525,7 @@ Future<void> _migrateFloatDialog(BuildContext context) async {
     final neg = (m['skippedNegative'] as List?)?.length ?? 0;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Миграция: $n та · манфий қолди: $neg'),
-      backgroundColor: Colors.green,
+      backgroundColor: AvaLight.ok,
     ));
   } on FirebaseFunctionsException catch (e) {
     if (!context.mounted) return;
@@ -690,7 +690,7 @@ class _SettlementsTabState extends State<_SettlementsTab> {
 (String, Color) _stateOf(String s) {
   switch (s) {
     case 'completed':
-      return ('Якунланди', Colors.green);
+      return ('Якунланди', AvaLight.ok);
     case 'pending':
       return ('Кутилмоқда', Colors.orange);
     case 'cancelled':
@@ -972,7 +972,7 @@ class _ClosingTabState extends State<_ClosingTab> {
           Row(
             children: [
               Icon(ok ? Icons.verified : Icons.warning,
-                  color: ok ? Colors.green : Colors.red, size: 20),
+                  color: ok ? AvaLight.ok : Colors.red, size: 20),
               const SizedBox(width: 8),
               Text(periodId,
                   style: const TextStyle(
@@ -1065,7 +1065,7 @@ class _ClosingTabState extends State<_ClosingTab> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
+      backgroundColor: isError ? Colors.red : AvaLight.ok,
     ));
   }
 }
@@ -1118,10 +1118,10 @@ class _ExceptionsTab extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     backgroundColor:
-                        (resolved ? Colors.green : Colors.red).withValues(alpha: 0.15),
+                        (resolved ? AvaLight.ok : Colors.red).withValues(alpha: 0.15),
                     child: Icon(
                         resolved ? Icons.check : Icons.report_problem_outlined,
-                        color: resolved ? Colors.green : Colors.red),
+                        color: resolved ? AvaLight.ok : Colors.red),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1146,12 +1146,12 @@ class _ExceptionsTab extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                        color: (resolved ? Colors.green : Colors.orange)
+                        color: (resolved ? AvaLight.ok : Colors.orange)
                             .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8)),
                     child: Text(resolved ? 'Ҳал қилинган' : 'Очиқ',
                         style: TextStyle(
-                            color: resolved ? Colors.green : Colors.orange,
+                            color: resolved ? AvaLight.ok : Colors.orange,
                             fontSize: 12,
                             fontWeight: FontWeight.w600)),
                   ),

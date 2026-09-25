@@ -340,16 +340,16 @@ class _DriverApprovalModeTile extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: manual ? Colors.orange.shade50 : Colors.green.shade50,
+            color: manual ? Colors.orange.shade50 : AvaLight.okSoft,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: manual ? Colors.orange.shade200 : Colors.green.shade200,
+              color: manual ? Colors.orange.shade200 : AvaLight.ok,
             ),
           ),
           child: Row(children: [
             Icon(
               manual ? Icons.admin_panel_settings : Icons.flash_on,
-              color: manual ? Colors.orange.shade800 : Colors.green.shade700,
+              color: manual ? Colors.orange.shade800 : AvaLight.ok,
               size: 20,
             ),
             const SizedBox(width: 8),
@@ -362,7 +362,7 @@ class _DriverApprovalModeTile extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color:
-                      manual ? Colors.orange.shade900 : Colors.green.shade800,
+                      manual ? Colors.orange.shade900 : AvaLight.ok,
                 ),
               ),
             ),

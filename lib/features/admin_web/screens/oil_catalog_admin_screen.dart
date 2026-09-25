@@ -153,7 +153,7 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7F5),
+      backgroundColor: AvaLight.surface2,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -293,7 +293,7 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: Color(0xFFD5E5D6)),
+            side: const BorderSide(color: AvaLight.line),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.all(12),
@@ -367,7 +367,7 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
             ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
             : ColoredBox(
                 color: p.isOil
-                    ? const Color(0xFFE8F5E9)
+                    ? AvaLight.okSoft
                     : const Color(0xFFEEF2F7),
                 child: Icon(
                   p.isOil ? Icons.opacity : Icons.filter_alt_outlined,

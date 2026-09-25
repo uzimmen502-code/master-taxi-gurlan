@@ -332,9 +332,9 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
+        color: AvaLight.okSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.shade200),
+        border: Border.all(color: AvaLight.ok),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -348,7 +348,7 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.green.shade900,
+              color: AvaLight.ok,
             ),
           ),
         ],

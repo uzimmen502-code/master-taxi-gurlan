@@ -259,7 +259,7 @@ class _OrderCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 if (onAccept != null)
-                  _btn('Qabul', onAccept!, Colors.green),
+                  _btn('Qabul', onAccept!, AvaLight.ok),
                 if (onPickupReady != null)
                   _btn('Olib ketishga tayyor', onPickupReady!, Colors.orange),
                 if (order.status == CarpetWashOrder.statusPickedUp ||
@@ -268,7 +268,7 @@ class _OrderCard extends StatelessWidget {
                 if (order.status == CarpetWashOrder.statusWashing)
                   _btn('Quritish', onDrying, Colors.indigo),
                 if (order.status == CarpetWashOrder.statusDrying)
-                  _btn('Tayyor', onReady, Colors.teal),
+                  _btn('Tayyor', onReady, AvaLight.ok),
                 if (onReturnReady != null)
                   _btn('Qaytarishga tayyor', onReturnReady!, Colors.deepOrange),
                 if (onCancel != null)

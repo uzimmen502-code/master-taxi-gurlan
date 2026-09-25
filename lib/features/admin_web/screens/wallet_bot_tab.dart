@@ -143,7 +143,7 @@ class _WalletBotTabState extends State<WalletBotTab>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(accept ? 'Тасдиқланди → ҳамён' : 'Рад этилди'),
-        backgroundColor: accept ? Colors.green : Colors.orange,
+        backgroundColor: accept ? AvaLight.ok : Colors.orange,
       ));
     } catch (e) {
       if (!mounted) return;
@@ -167,7 +167,7 @@ class _WalletBotTabState extends State<WalletBotTab>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(accept ? 'Тасдиқланди' : 'Рад этилди'),
-        backgroundColor: accept ? Colors.green : Colors.orange,
+        backgroundColor: accept ? AvaLight.ok : Colors.orange,
       ));
     } catch (e) {
       if (!mounted) return;
@@ -282,7 +282,7 @@ class _WalletBotTabState extends State<WalletBotTab>
                     ),
                     IconButton(
                       tooltip: 'Тасдиқ',
-                      icon: const Icon(Icons.check_circle, color: Colors.green),
+                      icon: const Icon(Icons.check_circle, color: AvaLight.ok),
                       onPressed: () => _reviewTopUp(d.id, true),
                     ),
                     IconButton(
@@ -358,7 +358,7 @@ class _WalletBotTabState extends State<WalletBotTab>
                       child: const Text('Тасдиқ+тўлов'),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.check, color: Colors.green),
+                      icon: const Icon(Icons.check, color: AvaLight.ok),
                       onPressed: () => _reviewWithdraw(d.id, true),
                     ),
                     IconButton(

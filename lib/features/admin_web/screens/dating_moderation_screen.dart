@@ -113,17 +113,17 @@ class _DatingAutoApproveBarState extends State<_DatingAutoApproveBar> {
           margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: auto ? Colors.green.shade50 : Colors.orange.shade50,
+            color: auto ? AvaLight.okSoft : Colors.orange.shade50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: auto ? Colors.green.shade200 : Colors.orange.shade200,
+              color: auto ? AvaLight.ok : Colors.orange.shade200,
             ),
           ),
           child: Row(
             children: [
               Icon(
                 auto ? Icons.flash_on : Icons.admin_panel_settings,
-                color: auto ? Colors.green.shade700 : Colors.orange.shade800,
+                color: auto ? AvaLight.ok : Colors.orange.shade800,
                 size: 22,
               ),
               const SizedBox(width: 10),
@@ -135,7 +135,7 @@ class _DatingAutoApproveBarState extends State<_DatingAutoApproveBar> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: auto ? Colors.green.shade900 : Colors.orange.shade900,
+                    color: auto ? AvaLight.ok : Colors.orange.shade900,
                   ),
                 ),
               ),
@@ -315,7 +315,7 @@ class _ProfileModerationCardState extends State<_ProfileModerationCard> {
                     child: ElevatedButton.icon(
                       onPressed: () => _moderate('approve'),
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: AvaLight.ok,
                           foregroundColor: Colors.white),
                       icon: const Icon(Icons.check),
                       label: const Text('Тасдиқлаш'),
@@ -420,7 +420,7 @@ class _ReportsTab extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: 'Ҳал қилинди',
-                    icon: const Icon(Icons.done, color: Colors.green),
+                    icon: const Icon(Icons.done, color: AvaLight.ok),
                     onPressed: () =>
                         _resolveReport(context, docs[i].id),
                   ),

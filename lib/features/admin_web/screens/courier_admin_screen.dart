@@ -215,7 +215,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                             _BoardColumn(
                               title: 'Етказилган',
                               icon: Icons.check_circle_outline,
-                              color: Colors.teal,
+                              color: AvaLight.ok,
                               count: deliveredOrders.length,
                               child: _OrderList(
                                 orders: deliveredOrders,
@@ -858,7 +858,7 @@ class _InDeliveryPanel extends StatelessWidget {
                 ListTile(
                   dense: true,
                   leading: const CircleAvatar(
-                    backgroundColor: Color(0xFFE8F5E9),
+                    backgroundColor: AvaLight.okSoft,
                     child: Icon(Icons.delivery_dining, color: AppColors.primary),
                   ),
                   title: Text(

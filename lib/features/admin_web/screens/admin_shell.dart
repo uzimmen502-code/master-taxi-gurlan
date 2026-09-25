@@ -358,7 +358,7 @@ class _AdminShellState extends State<AdminShell> {
       appBar: isMedium
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF1F4A00),
+              backgroundColor: AvaLight.brand,
               foregroundColor: Colors.white,
               title: Text(
                 visible[safeIndex].label,
@@ -569,8 +569,8 @@ class _Sidebar extends StatelessWidget {
   final bool compact;
 
   /// Қоронғи яшил — оқ матн контрасти (ёруғ limeEdge устида ўқиш қийин эди).
-  static const _sidebarBg = Color(0xFF1F4A00);
-  static const _sidebarBgTop = Color(0xFF2A6200);
+  static const _sidebarBg = AvaLight.brand;
+  static const _sidebarBgTop = AvaLight.brand;
   static const _labelIdle = Color(0xF0FFFFFF); // ~94% white
   static const _labelSelected = Colors.white;
   static const _iconIdle = Color(0xD9FFFFFF); // ~85% white

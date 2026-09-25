@@ -65,8 +65,10 @@ import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
+import 'widgets/home_dating_section.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
+import 'widgets/home_wholesale_section.dart';
 import 'widgets/home_yuk_local_section.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -649,6 +651,20 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
+  /// Улгуржи бозор — телефон Home subtree'дан узатилади (`WholesaleMarketScreen`
+  /// `HomeController` ни ўзи ўқий олмайди).
+  Future<void> _openWholesale() async {
+    if (!ServiceConfigHolder.isOpenable('wholesale_market')) {
+      _showTezKundaSnack();
+      return;
+    }
+    await _push(
+      WholesaleMarketScreen(
+        userPhone: canonicalPhoneId(context.read<HomeController>().phone),
+      ),
+    );
+  }
+
   /// Юқори қатордаги ҳудуд тугмаси.
   Future<void> _openRegionPicker() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
@@ -877,6 +893,24 @@ class _HomeViewState extends State<_HomeView> {
                                   'yuk_local',
                                   const YukLocalScreen(),
                                 ),
+                              ),
+                            ],
+                            if (HomeModuleGate.showInGrid(
+                                'wholesale_market')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeWholesaleSection(
+                                onOpenAll: () => _openWholesale(),
+                                onOpenProduct: (_) => _openWholesale(),
+                              ),
+                            ],
+                            if (HomeModuleGate.showInGrid('dating')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeDatingSection(
+                                viewerUid: uid,
+                                viewerBirthDate: user?.birthDate ?? '',
+                                viewerGender:
+                                    user?.gender ?? home.gender,
+                                onOpenAll: _openDatingTelegramBot,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[

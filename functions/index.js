@@ -13990,6 +13990,44 @@ exports.setDatingAgePreference = functions.https.onCall(async (data, context) =>
   return { ok: true, prefMinAge: lo, prefMaxAge: hi };
 });
 
+/**
+ * `dating_profiles_public/{uid}` — bosh sahifadagi 9-bo'lim uchun OCHIQ
+ * ko'chirma. Faqat ism, jins va tug'ilgan yil. Foto, shahar, "haqida",
+ * ish, ma'lumot va oilaviy holat BU YERGA TUSHMAYDI.
+ *
+ * Sabab: Firestore hujjatning bir qismini qaytara olmaydi — bo'lim faqat
+ * ism va yoshni chizsa ham, to'liq hujjat baribir qurilmaga yetib borardi.
+ * Endi bo'lim shu ko'chirmani o'qiydi, to'liq `dating_profiles` esa faqat
+ * o'z profili tasdiqlangan foydalanuvchilarga ochiq (firestore.rules).
+ *
+ * Yozuv faqat `status == 'approved' && active != false` bo'lganda turadi;
+ * pauza, rad etish, blok yoki profil o'chirilganda — o'chiriladi.
+ */
+exports.onDatingProfileWriteSyncPublic = functions.firestore
+  .document('dating_profiles/{uid}')
+  .onWrite(async (change, context) => {
+    const uid = context.params.uid;
+    const ref = db.collection('dating_profiles_public').doc(uid);
+    const after = change.after.exists ? (change.after.data() || {}) : null;
+    const visible = !!after
+      && after.status === 'approved'
+      && after.active !== false;
+
+    if (!visible) {
+      await ref.delete();
+      return null;
+    }
+
+    await ref.set({
+      displayName: String(after.displayName || '').slice(0, 60),
+      gender: String(after.gender || ''),
+      birthYear: Number(after.birthYear) || 0,
+      lastActive: after.lastActive
+        || admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return null;
+  });
+
 async function deleteDatingSubcollection(parentRef, subName) {
   // eslint-disable-next-line no-constant-condition
   while (true) {

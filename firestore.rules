@@ -1815,12 +1815,31 @@ service cloud.firestore {
 
     // ── Tanishuv (Dating) ──────────────────────────────────────────
     // Profil yozuvlari faqat Cloud Functions orqali (saveDatingProfile /
-    // adminModerateDatingProfile). O'qish: tasdiqlangan profil, egasi yoki admin.
+    // adminModerateDatingProfile).
+
+    // To'liq profilni (foto, shahar, "haqida", ish...) faqat O'ZINING
+    // profili tasdiqlangan foydalanuvchi ko'ra oladi. Ilgari istalgan
+    // ro'yxatdan o'tgan foydalanuvchi butun kolleksiyani o'qiy olardi.
+    function datingViewerApproved() {
+      let me = userDocIdFromPhoneToken();
+      return isAuth()
+          && exists(/databases/$(database)/documents/dating_profiles/$(me))
+          && get(/databases/$(database)/documents/dating_profiles/$(me))
+               .data.status == 'approved';
+    }
+
     match /dating_profiles/{uid} {
-      allow read: if isAuth()
-          && (resource.data.status == 'approved'
-              || isOwner(uid)
-              || isAdmin());
+      allow read: if isOwner(uid)
+          || isAdmin()
+          || (resource.data.status == 'approved' && datingViewerApproved());
+      allow write: if false;
+    }
+
+    // Bosh sahifadagi 9-bo'lim uchun ochiq ko'chirma — FAQAT ism, jins va
+    // tug'ilgan yil. Uni CF `onDatingProfileWriteSyncPublic` yuritadi;
+    // shuning uchun bu yerda foto yoki manzil bo'lishi mumkin emas.
+    match /dating_profiles_public/{uid} {
+      allow read: if isAuth();
       allow write: if false;
     }
 

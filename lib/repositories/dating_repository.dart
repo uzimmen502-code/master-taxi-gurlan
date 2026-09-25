@@ -6,6 +6,7 @@ import '../features/dating/services/dating_service.dart';
 import '../models/dating_interest.dart';
 import '../models/dating_match.dart';
 import '../models/dating_profile.dart';
+import '../models/dating_public_profile.dart';
 
 /// Tanishuv (dating) — Firestore o'qish + chat + blok + shikoyat.
 /// Profil/qiziqish/match yozuvlari Cloud Functions orqali (DatingService).
@@ -17,6 +18,10 @@ class DatingRepository {
 
   CollectionReference<Map<String, dynamic>> get _profiles =>
       _db.collection('dating_profiles');
+
+  /// Очиқ кўчирма — фақат исм, жинс ва туғилган йил (CF юритади).
+  CollectionReference<Map<String, dynamic>> get _publicProfiles =>
+      _db.collection('dating_profiles_public');
 
   Stream<DatingProfile?> watchMyProfile(String uid) {
     return _profiles.doc(uid).snapshots().map(
@@ -59,6 +64,29 @@ class DatingRepository {
               if (age == null) return false;
               return age >= lo && age <= hi;
             })
+            .toList(growable: false));
+  }
+
+  /// Бош саҳифадаги 9-бўлим учун — ОЧИҚ кўчирмадан.
+  ///
+  /// [watchDiscovery] дан фарқи: бу ерда тўлиқ профил умуман юкланмайди,
+  /// шунинг учун расм ва шаҳар қурилмага етиб бормайди. Кўчирмада фақат
+  /// тасдиқланган ва фаол профиллар турганлиги учун `status`/`active`
+  /// филтрлари ҳам керак эмас.
+  Stream<List<DatingPublicProfile>> watchPublicDiscovery({
+    required String myUid,
+    required String myGender,
+    int limit = 20,
+  }) {
+    final oppositeGender = myGender == 'male' ? 'female' : 'male';
+    return _publicProfiles
+        .where('gender', isEqualTo: oppositeGender)
+        .orderBy('lastActive', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs
+            .map(DatingPublicProfile.fromDoc)
+            .where((p) => p.userId != myUid && p.age != null)
             .toList(growable: false));
   }
 

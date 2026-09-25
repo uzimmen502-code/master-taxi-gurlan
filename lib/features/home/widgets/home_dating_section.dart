@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../models/dating_profile.dart';
+import '../../../models/dating_public_profile.dart';
 import '../../../repositories/dating_repository.dart';
 import 'ava_card.dart';
 import 'ava_section.dart';
@@ -35,7 +35,9 @@ String datingInitial(String displayName) {
 /// 9-бўлим: танишув.
 ///
 /// ФАҚАТ исм ва ёш кўрсатилади. Расм, шаҳар, «ҳақида» ва бошқа
-/// майдонлар КЎРСАТИЛМАЙДИ (тавсиф талаби).
+/// майдонлар КЎРСАТИЛМАЙДИ (тавсиф талаби) — устига улар умуман
+/// ЮКЛАНМАЙДИ ҳам: бўлим `dating_profiles_public` очиқ кўчирмасини
+/// ўқийди, унда бу майдонларнинг ўзи йўқ.
 class HomeDatingSection extends StatefulWidget {
   const HomeDatingSection({
     super.key,
@@ -64,10 +66,10 @@ class HomeDatingSection extends StatefulWidget {
 
 class _HomeDatingSectionState extends State<HomeDatingSection> {
   final _repo = DatingRepository();
-  StreamSubscription<List<DatingProfile>>? _sub;
+  StreamSubscription<List<DatingPublicProfile>>? _sub;
 
   AvaSectionStatus _status = AvaSectionStatus.loading;
-  List<DatingProfile> _items = const [];
+  List<DatingPublicProfile> _items = const [];
 
   @override
   void initState() {
@@ -85,10 +87,9 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
     _sub = _repo
-        .watchDiscovery(
+        .watchPublicDiscovery(
           myUid: widget.viewerUid,
           myGender: widget.viewerGender,
-          excludeIds: const {},
         )
         .listen(
       (list) {
@@ -150,7 +151,7 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
 class _ProfileTile extends StatelessWidget {
   const _ProfileTile({required this.profile, required this.onTap});
 
-  final DatingProfile profile;
+  final DatingPublicProfile profile;
   final VoidCallback onTap;
 
   @override

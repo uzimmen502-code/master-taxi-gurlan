@@ -54,7 +54,13 @@ class EvChargingStation {
     this.paidTariff,
     this.paidAmount,
     this.paidUntil,
+    this.occupancy,
+    this.occupancyAt,
   });
+
+  /// «Банд» белгиси қанча вақт амал қилади (эга қарори).
+  /// Ундан кейин ҳолат яна «маълумот йўқ» бўлади.
+  static const occupancyTtl = Duration(minutes: 30);
 
   final String id;
   final double latitude;
@@ -145,6 +151,29 @@ class EvChargingStation {
   /// Ҳозирча муддат назорати йўқ (эга қарори) — фақат маълумот сифатида.
   final DateTime? paidUntil;
 
+  // ---- Бандлик (жамоа хабари) ----
+  //
+  // ДИҚҚАТ: бу `status` ДАН БОШҚА нарса. `status` — станция умуман
+  // ишлайдими (`working` / `not_working`), бу эса ҲОЗИР банд ёки бўш
+  // эканлиги. Иккаласи бир-бирини алмаштирмайди.
+  //
+  // Фойдаланувчи иловадан белгилайди; белги [occupancyTtl] давомида
+  // амал қилади, кейин «маълумот йўқ» га қайтади.
+
+  /// `free` | `busy`; белгиланмаган бўлса `null`.
+  final String? occupancy;
+  final DateTime? occupancyAt;
+
+  /// Белги ҳали амал қиладими.
+  bool get occupancyFresh {
+    final at = occupancyAt;
+    if (at == null || occupancy == null) return false;
+    return DateTime.now().difference(at) < occupancyTtl;
+  }
+
+  /// UI учун: `free` | `busy` | `unknown`.
+  String get occupancyState => occupancyFresh ? occupancy! : 'unknown';
+
   bool get isPaidListing => listingType == 'paid';
 
   bool get hasChargingType => chargingTypes.isNotEmpty;
@@ -209,6 +238,10 @@ class EvChargingStation {
       paidTariff: d['paidTariff'] as String?,
       paidAmount: d['paidAmount'] as num?,
       paidUntil: (d['paidUntil'] as Timestamp?)?.toDate(),
+      occupancy: (d['occupancy'] as String?)?.trim().isNotEmpty == true
+          ? (d['occupancy'] as String).trim()
+          : null,
+      occupancyAt: (d['occupancyAt'] as Timestamp?)?.toDate(),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/ev_charging_station.dart';
 
@@ -18,11 +19,15 @@ class EvStationCard extends StatelessWidget {
     required this.station,
     required this.distanceKm,
     required this.onNavigate,
+    this.onSetOccupancy,
   });
 
   final EvChargingStation station;
   final double? distanceKm;
   final VoidCallback onNavigate;
+
+  /// «Ҳозир банд / бўш» — жамоа хабари. `null` бўлса тугмалар йўқ.
+  final Future<void> Function({required bool busy})? onSetOccupancy;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +39,13 @@ class EvStationCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (onSetOccupancy != null) ...[
+              _OccupancyRow(
+                state: station.occupancyState,
+                onSet: onSetOccupancy!,
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 const Text('⚡', style: TextStyle(fontSize: 22)),
@@ -168,4 +180,83 @@ class EvStationCard extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// «Ҳозир қандай?» — жамоа белгиси.
+///
+/// Бу `status` (станция умуман ишлайдими) ДАН БОШҚА нарса: у ҳозирги
+/// бандликни билдиради ва `EvChargingStation.occupancyTtl` (30 дақиқа)
+/// давомида амал қилади.
+class _OccupancyRow extends StatelessWidget {
+  const _OccupancyRow({required this.state, required this.onSet});
+
+  final String state;
+  final Future<void> Function({required bool busy}) onSet;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final (label, tone) = switch (state) {
+      'free' => (context.tr('home_ev_free'), c.ok),
+      'busy' => (context.tr('home_ev_busy'), c.warn),
+      _ => (context.tr('home_ev_unknown'), c.ink3),
+    };
+
+    Future<void> mark(BuildContext ctx, {required bool busy}) async {
+      await onSet(busy: busy);
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text(ctx.tr('ev_occupancy_saved'))),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.circle, size: 10, color: tone),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AvaText.productName.copyWith(color: tone),
+            ),
+            const Spacer(),
+            Text(
+              context.tr('ev_occupancy_question'),
+              style: AvaText.caption.copyWith(color: c.ink3),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => mark(context, busy: false),
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: Text(context.tr('ev_mark_free')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: c.ok,
+                  side: BorderSide(color: c.ok),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => mark(context, busy: true),
+                icon: const Icon(Icons.hourglass_bottom_rounded, size: 18),
+                label: Text(context.tr('ev_mark_busy')),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: c.warn,
+                  side: BorderSide(color: c.warn),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }

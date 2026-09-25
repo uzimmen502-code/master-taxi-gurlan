@@ -138,6 +138,12 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
       builder: (_) => EvStationCard(
         station: station,
         distanceKm: distanceKm,
+        // «Бўш / Банд» — жамоа хабари; 30 дақиқа амал қилади.
+        onSetOccupancy: ({required bool busy}) =>
+            context.read<EvStationRepository>().setOccupancy(
+                  station.id,
+                  busy: busy,
+                ),
         onNavigate: () {
           Navigator.pop(context);
           openMapsNavigation(lat: station.latitude, lng: station.longitude);

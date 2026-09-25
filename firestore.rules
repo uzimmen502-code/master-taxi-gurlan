@@ -2758,6 +2758,18 @@ service cloud.firestore {
           ]);
     }
 
+    // «Банд / Бўш» — жамоа хабари. Фақат шу иккита майдон, фақат икки
+    // қиймат. `status` (ишлайди/ишламайди) га тегмайди — у бошқа нарса.
+    function evStationOccupancyPatch() {
+      let d = request.resource.data;
+      return isAuth()
+          && phoneFromToken() != ''
+          && d.diff(resource.data).affectedKeys()
+               .hasOnly(['occupancy', 'occupancyAt'])
+          && d.occupancy in ['free', 'busy']
+          && d.occupancyAt is timestamp;
+    }
+
     // Лимит қиймати `config/ev_charging.maxReportsPerUserPerStation`дан —
     // hardcode emas (7-band); hujjat/maydon bo'lmasa 3 — kod fallback.
     function evMaxReportsPerStation() {
@@ -2781,7 +2793,8 @@ service cloud.firestore {
           || (
             isAuth() && phoneFromToken() != ''
             && evStationCommunityPatch()
-          );
+          )
+          || evStationOccupancyPatch();
       allow delete: if isAdmin();
 
       match /confirmations/{userId} {

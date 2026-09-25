@@ -192,6 +192,19 @@ class EvStationRepository {
     });
   }
 
+  /// «Ҳозир банд» / «Бўш» — жамоа хабари.
+  ///
+  /// `status` (станция умуман ишлайдими) га ТЕГМАЙДИ — бу бошқа нарса.
+  /// Белги `EvChargingStation.occupancyTtl` давомида амал қилади, кейин
+  /// UI уни «маълумот йўқ» деб кўрсатади (эскирган қиймат ўчирилмайди —
+  /// ортиқча ёзув қилмаслик учун, фақат ҳисобга олинмайди).
+  Future<void> setOccupancy(String stationId, {required bool busy}) {
+    return _stations.doc(stationId).update({
+      'occupancy': busy ? 'busy' : 'free',
+      'occupancyAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   /// "Ҳа, шу ерда" — idempotent, docId = joriy foydalanuvchi (26-band).
   Future<void> confirmStation(String stationId) {
     final userId = _currentUserId;

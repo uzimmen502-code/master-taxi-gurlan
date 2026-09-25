@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../config.dart';
 import '../../core/app_share.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
@@ -29,6 +30,7 @@ import 'widgets/ava_bottom_nav.dart';
 import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
+import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../assistant/assistant_entry.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
@@ -66,6 +68,7 @@ import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
 import 'widgets/home_dating_section.dart';
+import 'widgets/home_ev_section.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
 import 'widgets/home_wholesale_section.dart';
@@ -901,6 +904,14 @@ class _HomeViewState extends State<_HomeView> {
                               HomeWholesaleSection(
                                 onOpenAll: () => _openWholesale(),
                                 onOpenProduct: (_) => _openWholesale(),
+                              ),
+                            ],
+                            if (HomeModuleGate.showInGrid('ev_charging')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeEvSection(
+                                apiKey: AppConfig.mapsApiKey,
+                                onOpenMap: () =>
+                                    _push(const EvChargingMapScreen()),
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('dating')) ...[

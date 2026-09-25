@@ -64,7 +64,6 @@ import '../../models/search_index_entry.dart';
 import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
-import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
@@ -103,18 +102,12 @@ double _sectionGap(BuildContext context, {required double base}) {
   return (base * scale * heightFactor).clamp(6.0, base);
 }
 
-String _todayText(BuildContext context) {
-  final now = DateTime.now();
-  final d = now.day.toString().padLeft(2, '0');
-  final m = now.month.toString().padLeft(2, '0');
-  return context
-      .tr('home_date_today')
-      .replaceAll('{day}', d)
-      .replaceAll('{month}', m)
-      .replaceAll('{year}', '${now.year}');
-}
-
-/// Bosh ekran — yangi layout (hamyon, taksi, xizmatlar).
+/// Бош саҳифа — янги дизайн тизими.
+///
+/// Тартиби: юқори қатор (AVA + ҳудуд) · фаол буюртма карточкаси ·
+/// сариқ банер · асосий ўтишлар · универсал қидирув · 2–11-бўлимлар ·
+/// пастки меню. Ҳар бўлим `AvaSection` устига қурилган, шунинг учун
+/// юкланиш / бўш / хатолик ҳолатлари бир хил.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -144,10 +137,6 @@ class _HomeViewState extends State<_HomeView> {
   StreamSubscription<void>? _promoSub;
   VoidCallback? _configListener;
   String? _lastAppliedServiceAreaId;
-  /// Home қайта очилганда ҳамён 11 с яна кўринсин.
-  int _walletRevealEpoch = 0;
-  bool _walletVisible = true;
-  Timer? _walletHideTimer;
   Timer? _deferredBootstrapTimer;
   DateTime? _lastDeferredBootstrapAt;
 
@@ -158,7 +147,6 @@ class _HomeViewState extends State<_HomeView> {
       if (mounted) setState(() {});
     };
     ServiceConfigHolder.revision.addListener(_configListener!);
-    _armWalletHideTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
@@ -174,17 +162,8 @@ class _HomeViewState extends State<_HomeView> {
   }
 
   /// Home яна кўринганда.
-  /// [revealWallet]: фақат профил/буюртма/ҳамён дан қайтганда — хизматдан
-  /// қайтганда ҳамён мажбурий очилмайди (сатҳ силжиши йўқ).
-  void _onHomeResurface({bool revealWallet = false}) {
+  void _onHomeResurface() {
     if (!mounted) return;
-    if (revealWallet) {
-      setState(() {
-        _walletRevealEpoch++;
-        _walletVisible = true;
-      });
-      _armWalletHideTimer();
-    }
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
   }
@@ -205,16 +184,9 @@ class _HomeViewState extends State<_HomeView> {
     });
   }
 
-  void _armWalletHideTimer() {
-    _walletHideTimer?.cancel();
-    _walletHideTimer = Timer(const Duration(seconds: 11), () {
-      if (!mounted) return;
-      setState(() => _walletVisible = false);
-    });
-  }
-
-  /// Single `users/{uid}` stream (WalletCard) also drives geo config — no
-  /// second Firestore watch.
+  /// Битта `users/{uid}` стрими geo конфигни ҳам боқади — иккинчи
+  /// Firestore кузатувчиси йўқ. (Илгари бу стрим ҳамён карточкаси учун
+  /// ҳам ишлатиларди; карточка олиб ташланди, стрим қолди.)
   void _maybeApplyUserGeo(UserModel? user) {
     if (user == null) return;
     final areaId = user.serviceAreaId.trim();
@@ -242,7 +214,6 @@ class _HomeViewState extends State<_HomeView> {
 
   @override
   void dispose() {
-    _walletHideTimer?.cancel();
     _deferredBootstrapTimer?.cancel();
     _promoSub?.cancel();
     if (_configListener != null) {
@@ -364,25 +335,6 @@ class _HomeViewState extends State<_HomeView> {
         return;
     }
     await _push(screen);
-  }
-
-  String _displayName(
-      BuildContext context, UserModel? user, HomeController home) {
-    final name = (user?.name ?? home.name).trim();
-    final phone =
-        user?.phone.trim().isNotEmpty == true ? user!.phone : home.phone;
-    if (name.isEmpty) {
-      return phone.isNotEmpty ? phone : context.tr('user_default_name');
-    }
-    final gender = (user?.gender.trim().isNotEmpty == true
-            ? user!.gender
-            : home.gender)
-        .trim()
-        .toLowerCase();
-    final key = gender == 'female'
-        ? 'home_display_name_opa'
-        : 'home_display_name_aka';
-    return context.tr(key).replaceAll('{name}', name);
   }
 
   void _showTezKundaSnack() {
@@ -559,7 +511,7 @@ class _HomeViewState extends State<_HomeView> {
     await openProfileScreen(context);
     if (!mounted) return;
     await context.read<HomeController>().refreshUser();
-    if (mounted) _onHomeResurface(revealWallet: true);
+    if (mounted) _onHomeResurface();
   }
 
   /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи.
@@ -735,55 +687,12 @@ class _HomeViewState extends State<_HomeView> {
                             AvaTopBar(onPickRegion: _openRegionPicker),
                             _ActiveOrderSlot(onOpen: _openActiveOrder),
                             SizedBox(height: _sectionGap(context, base: 10)),
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 280),
-                              curve: Curves.easeInOut,
-                              alignment: Alignment.topCenter,
-                              child: _walletVisible
-                                  ? Column(
-                                      key: ValueKey(_walletRevealEpoch),
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        WalletCard(
-                                          balanceAmount: formatPrice(
-                                              user?.bonusBalance ?? 0),
-                                          balanceCurrency: kCurrencySum,
-                                          lastTxAmount: '—',
-                                          displayName: _displayName(
-                                              context, user, home),
-                                          dateText: _todayText(context),
-                                          locationText: ServiceConfigHolder
-                                              .districtLabel,
-                                          lastTxIsCredit: null,
-                                          onHistoryTap: () async {
-                                            if (uid.length < 9) {
-                                              needPhoneForAction(
-                                                  context);
-                                              return;
-                                            }
-                                            await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => WalletScreen(
-                                                    phone: home.phone),
-                                              ),
-                                            );
-                                            if (mounted) {
-                                              _onHomeResurface(
-                                                  revealWallet: true);
-                                            }
-                                          },
-                                        ),
-                                        SizedBox(
-                                          height: _sectionGap(context,
-                                              base: 10),
-                                        ),
-                                      ],
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
+                            // Ҳамён карточкаси интерфейсдан олиб
+                            // ташланди (тавсиф: «Ҳамён коддан
+                            // ўчирилмайди, фақат интерфейсда
+                            // яширилади»). `WalletScreen` ва
+                            // `openWalletScreen()` жойида — AVA AI ва
+                            // EV ичидаги «тўлдириш» уларни чақиради.
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin-web",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "chrome", "-t", "lib/main_admin.dart", "--web-port", "5050"],
+      "port": 5050
+    }
+  ]
+}

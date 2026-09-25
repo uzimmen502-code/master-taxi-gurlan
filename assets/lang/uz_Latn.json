@@ -1877,7 +1877,7 @@
   "reverify_welcome": "Salom, {name}",
   "reverify_wizard_intro": "Ma'lumotlaringiz saqlangan. Har qadamni tekshirib, davom eting.",
   "ride_accepted": "✅ Qabul qilindi",
-  "ride_gender_counts": "ayol: {female} ta, er: {male} ta",
+  "ride_gender_counts": "ayol: {female} ta, Er: {male} ta",
   "ride_not_accepting": "Bu reys endi qabul qilmaydi. Boshqa haydovchini tanlang.",
   "rides_found": "ta reys topildi",
   "role": "Rol",

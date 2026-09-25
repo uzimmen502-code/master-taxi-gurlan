@@ -92,3 +92,7 @@ functions/.env
 functions/.env.*
 !functions/.env.example
 
+# Claude Code: launch.json jamoага керак, қолгани шахсий/вақтинчалик
+.claude/settings.local.json
+.claude/*.lock
+

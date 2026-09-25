@@ -14,6 +14,7 @@ import '../services/dating_service.dart';
 import 'dating_chat_screen.dart';
 import 'dating_profile_form_screen.dart';
 import 'dating_profile_view_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Tab matnlari — AppBar (datingAccent) ustida bir xil oq rang.
 abstract final class _DatingTabStyle {
@@ -496,7 +497,7 @@ class _InterestsTab extends StatelessWidget {
                 children: [
                   IconButton(
                     icon:
-                        const Icon(Icons.check_circle, color: Colors.green),
+                        const Icon(Icons.check_circle, color: AvaLight.ok),
                     onPressed: () => _respond(context, it, true),
                   ),
                   IconButton(
@@ -725,7 +726,7 @@ class _MyProfileTabState extends State<_MyProfileTab> {
         ),
         Center(
           child: Text('✓ ${p.statusLabel}',
-              style: const TextStyle(color: Colors.green)),
+              style: const TextStyle(color: AvaLight.ok)),
         ),
         const SizedBox(height: 16),
         SwitchListTile(

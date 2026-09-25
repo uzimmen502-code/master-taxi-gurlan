@@ -19,6 +19,7 @@ import '../services/tree_service.dart';
 import '../widgets/tree_link_invites_sheet.dart';
 import 'family_tree_view.dart';
 import 'tree_node_edit_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// 🌳 Nasab daraxti — global komponentdan o'qiydi (ulangan oila tarmog'i).
 class FamilyTreeScreen extends StatefulWidget {
@@ -358,7 +359,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                               if (n.isClaimed)
                                 Text(ctx.tr('rel_tree_dup_linked'),
                                     style: const TextStyle(
-                                        color: Colors.green, fontSize: 12)),
+                                        color: AvaLight.ok, fontSize: 12)),
                             ],
                           ),
                         ),

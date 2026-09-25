@@ -214,7 +214,7 @@ class _TariffTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFF1F8E9) : const Color(0xFFF6F6F6),
+      color: selected ? AvaLight.surface2 : const Color(0xFFF6F6F6),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),

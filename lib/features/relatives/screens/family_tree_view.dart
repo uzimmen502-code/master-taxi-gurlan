@@ -9,6 +9,7 @@ import '../../../models/relative_person.dart';
 import '../utils/family_tree_corridor_validation.dart';
 import '../utils/family_tree_line_router.dart';
 import '../utils/family_tree_routing_report.dart';
+import '../../../core/theme/ava_tokens.dart';
 part 'family_tree_view_parts.dart';
 
 /// 🌳 Nasab daraxti — koridor qatlami + slot layout.
@@ -49,14 +50,14 @@ class _FamilyTreeViewState extends State<FamilyTreeView>
   static const _familyPalette = <Color>[
     Color(0xFF1565C0),
     Color(0xFFC62828),
-    Color(0xFF2E7D32),
+    AvaLight.ok,
     Color(0xFFEF6C00),
     Color(0xFF6A1B9A),
     Color(0xFF00838F),
     Color(0xFFAD1457),
-    Color(0xFF558B2F),
+    AvaLight.ok,
     Color(0xFF4527A0),
-    Color(0xFF00695C),
+    AvaLight.ok,
   ];
 
   static const _lineWidth = 3.2;

@@ -1591,7 +1591,7 @@ class AnalyticsRepository {
       case 'ready':
         return AppColors.primary;
       case 'delivered':
-        return const Color(0xFF388E3C);
+        return AvaLight.ok;
       case 'rejected':
       case 'cancelled':
         return const Color(0xFFB71C1C);

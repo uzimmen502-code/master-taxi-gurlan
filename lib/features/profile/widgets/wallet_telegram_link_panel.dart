@@ -133,7 +133,7 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
         const SizedBox(height: 8),
         Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
+            Icon(Icons.check_circle, color: AvaLight.ok, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -143,7 +143,7 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.green.shade800,
+                  color: AvaLight.ok,
                 ),
               ),
             ),

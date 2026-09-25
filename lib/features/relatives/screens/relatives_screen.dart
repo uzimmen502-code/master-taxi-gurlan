@@ -27,6 +27,7 @@ import 'relative_album_screen.dart';
 import 'tree_history_screen.dart';
 import 'relative_event_form_screen.dart';
 import 'relative_form_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// 👨‍👩‍👧 Qarindoshlarim — shaxsiy ro'yxat + tug'ilgan kunlar.
 class RelativesScreen extends StatefulWidget {
@@ -499,7 +500,7 @@ class _RelativesScreenState extends State<RelativesScreen>
         children: [
           if (p.phone.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.call, color: Colors.green),
+              icon: const Icon(Icons.call, color: AvaLight.ok),
               onPressed: () => callPhone(p.phone),
             ),
           PopupMenuButton<String>(

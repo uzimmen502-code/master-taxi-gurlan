@@ -42,7 +42,7 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
   static const _maxCtaUrl = 500;
 
   static const _categories = [
-    ('info', 'Маълумот', Icons.info, Colors.green),
+    ('info', 'Маълумот', Icons.info, AvaLight.ok),
     ('update', 'Янгиланиш', Icons.system_update_alt, Colors.blue),
     ('promo', 'Акция', Icons.local_offer, Colors.purple),
     ('warning', 'Огоҳлантириш', Icons.warning_amber, Colors.orange),

@@ -756,7 +756,7 @@ class _ProfileViewState extends State<_ProfileView> {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(context.tr('leave_driver_force_success')),
-        backgroundColor: Colors.green,
+        backgroundColor: AvaLight.ok,
       ));
       await context.read<ProfileController>().load();
     } catch (e) {
@@ -914,7 +914,7 @@ class _ProfileViewState extends State<_ProfileView> {
   void _snack(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
+      backgroundColor: isError ? Colors.red : AvaLight.ok,
       behavior: SnackBarBehavior.floating,
     ));
   }
@@ -988,7 +988,7 @@ class _ShiftButton extends StatelessWidget {
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green.shade700,
+            backgroundColor: AvaLight.ok,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
@@ -1257,7 +1257,7 @@ class _CarInfoSection extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(context.tr('car_deleted_success')),
-      backgroundColor: Colors.green,
+      backgroundColor: AvaLight.ok,
     ));
   }
 }

@@ -182,7 +182,7 @@ class _AssistantProSheetState extends State<AssistantProSheet> {
                     : context.trMsg('assistant_pro_until',
                         params: {'date': formatDateShort(s.paidUntil)}),
                 style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF2E7D32)),
+                    fontSize: 13, color: AvaLight.ok),
               ),
             ],
             const SizedBox(height: 14),
@@ -242,7 +242,7 @@ class _PackageTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final perDay = pkg.days > 0 ? (pkg.price / pkg.days).round() : 0;
     return Material(
-      color: pkg.promo ? const Color(0xFFF1F8E9) : const Color(0xFFF6F6F6),
+      color: pkg.promo ? AvaLight.surface2 : const Color(0xFFF6F6F6),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),

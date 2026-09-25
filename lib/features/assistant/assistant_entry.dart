@@ -10,6 +10,7 @@ import 'models/assistant_status.dart';
 import 'screens/assistant_chat_screen.dart';
 import 'services/assistant_service.dart';
 import 'widgets/assistant_gpt_colors.dart';
+import '../../core/theme/ava_tokens.dart';
 
 /// Home'даги «ChatGPT + AVA AI» тугмаси — кириш нуқтаси (эга қарори,
 /// 2026-09-21/22):
@@ -308,21 +309,21 @@ class _EntrySheetState extends State<_EntrySheet> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE8F5E9),
+                            color: AvaLight.okSoft,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(Icons.check_rounded,
-                                  size: 14, color: Color(0xFF2E7D32)),
+                                  size: 14, color: AvaLight.ok),
                               const SizedBox(width: 4),
                               Text(
                                 context.tr('assistant_paid'),
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF2E7D32),
+                                  color: AvaLight.ok,
                                 ),
                               ),
                             ],

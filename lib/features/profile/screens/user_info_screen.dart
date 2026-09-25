@@ -350,7 +350,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
+            color: AvaLight.okSoft,
             borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, color: _green, size: 18),
       ),

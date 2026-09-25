@@ -20,11 +20,11 @@ class SellSubmissionTile extends StatelessWidget {
 
   Color get _statusColor {
     final s = submission;
-    if (s.collectionCompleted) return Colors.green.shade800;
+    if (s.collectionCompleted) return AvaLight.ok;
     if (s.inCollection) return Colors.blue.shade800;
     if (s.status == 'pending') return Colors.orange.shade800;
     if (s.status == 'archived') return Colors.grey.shade700;
-    return Colors.green.shade800;
+    return AvaLight.ok;
   }
 
   @override
@@ -71,13 +71,13 @@ class SellSubmissionTile extends StatelessWidget {
               if (submission.isForwarded) ...[
                 const SizedBox(width: 6),
                 Icon(Icons.campaign_outlined,
-                    size: 16, color: Colors.teal.shade700),
+                    size: 16, color: AvaLight.ok),
                 const SizedBox(width: 2),
                 Text(
                   submission.forwardAudienceLabel,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.teal.shade700,
+                    color: AvaLight.ok,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

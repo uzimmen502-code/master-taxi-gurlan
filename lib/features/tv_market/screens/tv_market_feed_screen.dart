@@ -58,8 +58,9 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   final _repo = TvClipsRepository();
   late final TabController _tabController;
   bool _firstLoadDone = false;
-  // Butun ilova bo'yicha bitta pool (T3: dual-pool OOM xavfi tuzatildi) —
-  // `HomeVideoStage` ham shu instance'ni ishlatadi.
+  // Butun ilova bo'yicha bitta pool (T3: dual-pool OOM xavfi tuzatildi).
+  // B-6 dan keyin video faqat shu ekranda ochiladi — bosh sahifada
+  // muqovaning o'zi turadi.
   TvPlayerPool get _pool => TvPlayerPool.shared;
   static const _pageSize = 40;
   final _clips = <TvClip>[];

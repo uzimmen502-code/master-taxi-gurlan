@@ -16,8 +16,11 @@ class TvPlayerPool {
 
   /// Butun ilova bo'yicha YAGONA pool — screen'lar o'z pool'ini
   /// yaratmaydi (avvalgi dual-pool OOM xavfi: `TvMarketFeedScreen`
-  /// (maxReady 3) + `HomeVideoStage` (maxReady 1) bir vaqtda tirik
-  /// bo'lganda jami 4 tagacha ExoPlayer). Screen almashganda `retain()`
+  /// (maxReady 3) + bosh sahifadagi video lentasi (maxReady 1) bir
+  /// vaqtda tirik bo'lganda jami 4 tagacha ExoPlayer). Bosh sahifadagi
+  /// lenta bosqich B-6 da olib tashlandi — u yerda endi faqat muqova
+  /// ko'rinadi va video umuman ochilmaydi, lekin pool baribir yagona
+  /// qoladi. Screen almashganda `retain()`
   /// yangi `wanted` to'plamiga mos kelmagan eski controller'larni
   /// avtomatik evict qiladi — shared bo'lgani uchun ham xavfsiz.
   /// 2 = joriy + keyingi. Avval 3 (NEXT+1 ham) edi — uchinchi ExoPlayer

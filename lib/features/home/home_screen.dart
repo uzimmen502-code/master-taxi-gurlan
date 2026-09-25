@@ -63,7 +63,7 @@ import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
-import '../tv_market/widgets/home_video_stage.dart';
+import 'widgets/home_avagram_section.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 // Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
@@ -799,14 +799,22 @@ class _HomeViewState extends State<_HomeView> {
                             HomeGlobalSearchBar(
                               onOpenEntry: _openSearchEntry,
                             ),
+                            if (HomeModuleGate.showInGrid('tv_market')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeAvagramSection(
+                                onOpenAll: () =>
+                                    _push(const TvMarketFeedScreen()),
+                                onOpenClip: (clip) => _push(
+                                  TvMarketFeedScreen(initialClip: clip),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                             ],
                           ),
                         ),
                       ),
-                      if (HomeModuleGate.showInGrid('tv_market'))
-                        const HomeVideoStage(),
                       const SliverToBoxAdapter(child: SizedBox(height: 16)),
                     ],
                   );

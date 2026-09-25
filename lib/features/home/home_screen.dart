@@ -64,6 +64,7 @@ import 'widgets/home_global_search.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_avagram_section.dart';
+import 'widgets/home_yuk_local_section.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 // Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
@@ -802,6 +803,19 @@ class _HomeViewState extends State<_HomeView> {
                                 TvMarketFeedScreen(initialClip: clip),
                               ),
                             ),
+                            if (HomeModuleGate.showInGrid('yuk_local')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeYukLocalSection(
+                                onOpenAll: () => _openYukModule(
+                                  'yuk_local',
+                                  const YukLocalScreen(),
+                                ),
+                                onOpenDriver: (_) => _openYukModule(
+                                  'yuk_local',
+                                  const YukLocalScreen(),
+                                ),
+                              ),
+                            ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAvagramSection(

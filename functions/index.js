@@ -10971,6 +10971,88 @@ exports.clipPage = functions
     }
   });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EV XARITASI — Maps Static API proksisi
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Nega proksi: bosh sahifadagi EV bo'limi statik xarita RASMINI ko'rsatadi,
+// u esa Maps Static API — veb-xizmat. Android'ga cheklangan kalit veb-xizmat
+// so'rovida ISHLAMAYDI (Google hujjati: "kalitga Android cheklovini qo'ysangiz
+// uni boshqa platformalarda ishlata olmaysiz"). Cheklovsiz kalitni esa APK
+// ichiga solib bo'lmaydi — uni ochib o'qish mumkin va hisob bizniki.
+//
+// Shuning uchun kalit FAQAT shu yerda: `MAPS_STATIC_KEY` (functions/.env,
+// git'ga tushmaydi). Ilova rasmni shu funksiyadan so'raydi.
+//
+// Suiiste'moldan himoya:
+//   1. Firebase ID token shart (ilova foydalanuvchisi bo'lishi kerak);
+//   2. barcha parametrlar qat'iy chegarada — o'lcham, zoom, marker soni;
+//   3. koordinata 3 kasrgacha yaxlitlanadi va O'zbekiston chegarasiga
+//      qisiladi — shunda kesh yaxshi ishlaydi va so'rov soni oz bo'ladi;
+//   4. javob 1 kunga keshlanadi (qurilmada CachedNetworkImage ham keshlaydi).
+
+const evStaticMapQuery = require('./ev_static_map');
+
+exports.evStaticMap = functions
+  .runWith({ memory: '256MB', timeoutSeconds: 20 })
+  .https.onRequest(async (req, res) => {
+    // Rasm `<img>` kabi olinadi — CORS ochiq bo'lsin (web admin uchun ham).
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Authorization');
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+
+    const key = process.env.MAPS_STATIC_KEY;
+    if (!key) {
+      console.error('evStaticMap: MAPS_STATIC_KEY yo`q');
+      res.status(503).send('map unavailable');
+      return;
+    }
+
+    // Faqat ilova foydalanuvchisi — token ilovadan `Authorization` sarlavhasida
+    // keladi (telefon yoki anonim sessiya, ikkalasi ham bo'ladi).
+    const authHeader = String(req.get('Authorization') || '');
+    const idToken = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : '';
+    if (!idToken) {
+      res.status(401).send('auth required');
+      return;
+    }
+    try {
+      await admin.auth().verifyIdToken(idToken);
+    } catch (e) {
+      res.status(401).send('auth required');
+      return;
+    }
+
+    const url = 'https://maps.googleapis.com/maps/api/staticmap?' +
+      `${evStaticMapQuery.buildStaticMapQuery(req.query || {})}&key=${key}`;
+
+    try {
+      const resp = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        validateStatus: () => true,
+      });
+      if (resp.status !== 200) {
+        console.error('evStaticMap: Google', resp.status,
+          Buffer.from(resp.data || '').toString('utf8').slice(0, 200));
+        res.status(502).send('map unavailable');
+        return;
+      }
+      res.set('Content-Type', resp.headers['content-type'] || 'image/png');
+      // Xarita kuniga bir marta yangilansa yetarli — so'rov soni va hisob oz.
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.status(200).send(Buffer.from(resp.data));
+    } catch (e) {
+      console.error('evStaticMap error:', e.message || e);
+      res.status(502).send('map unavailable');
+    }
+  });
+
 // ONE-TIME: `food_catalog` — seed. Bir marta HTTP GET qiling, keyin exportni o‘chirib qayta deploy.
 exports.seedFoodCatalog = functions
   .runWith({ timeoutSeconds: 120, memory: '256MB', secrets: ['SEED_SECRET'] })

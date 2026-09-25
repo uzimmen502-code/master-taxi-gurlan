@@ -61,24 +61,32 @@ void main() {
   });
 
   group('staticMapUrl', () {
-    test('asosiy parametrlar bor', () {
+    test('CF ga boradi, Google ga TO‘G‘RIDAN-TO‘G‘RI emas', () {
+      final url = staticMapUrl(lat: 41.55, lng: 60.38, width: 400, height: 140);
+      expect(url, startsWith(kEvStaticMapEndpoint));
+      expect(url, isNot(contains('maps.googleapis.com')));
+      expect(url, contains('lat=41.55'));
+      expect(url, contains('lng=60.38'));
+      expect(url, contains('w=400'));
+      expect(url, contains('h=140'));
+    });
+
+    test('kalit havolada BO‘LMAYDI', () {
+      // Kalit faqat serverda (functions/.env) — ilovada umuman yo'q.
       final url = staticMapUrl(
-        apiKey: 'KEY',
         lat: 41.55,
         lng: 60.38,
         width: 400,
         height: 140,
+        markers: [_station()],
       );
-      expect(url, startsWith('https://maps.googleapis.com/maps/api/staticmap?'));
-      expect(url, contains('center=41.55,60.38'));
-      expect(url, contains('size=400x140'));
-      expect(url, contains('key=KEY'));
+      expect(url.contains('key='), isFalse);
+      expect(url.contains('AIza'), isFalse);
     });
 
     test('markerlar qo‘shiladi va 10 tadan oshmaydi', () {
       final many = List.generate(15, (i) => _station(lat: 41.0 + i, lng: 60.0));
       final url = staticMapUrl(
-        apiKey: 'KEY',
         lat: 41.0,
         lng: 60.0,
         width: 400,
@@ -92,13 +100,7 @@ void main() {
     });
 
     test('marker yo‘q bo‘lsa markers parametri ham yo‘q', () {
-      final url = staticMapUrl(
-        apiKey: 'KEY',
-        lat: 41.0,
-        lng: 60.0,
-        width: 400,
-        height: 140,
-      );
+      final url = staticMapUrl(lat: 41.0, lng: 60.0, width: 400, height: 140);
       expect(url.contains('markers='), isFalse);
     });
   });

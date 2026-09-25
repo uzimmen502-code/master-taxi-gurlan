@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -10,13 +11,18 @@ import '../../../repositories/ev_station_repository.dart';
 import 'ava_chip.dart';
 import 'ava_section.dart';
 
-/// Google Static Maps — бош саҳифадаги ЖОНСИЗ харита расми.
+/// Бош саҳифадаги ЖОНСИЗ харита расмининг манзили.
 ///
 /// Тавсиф талаби: «Асосий экранда хаританинг статик расми туради. Жонли
 /// харита фақат босилганда очилади». Жонли `GoogleMap` виджети оғир —
 /// у бош саҳифада доим турса, хотира ва батареяни беҳуда ейди.
+///
+/// Расм Google'дан ТЎҒРИДАН-ТЎҒРИ олинмайди, балки `evStaticMap` Cloud
+/// Function орқали келади. Сабаби: Maps Static API — веб-хизмат, унга
+/// Android'га чекланган калит ярамайди, чекловсиз калитни эса APK ичига
+/// солиб бўлмайди (уни ажратиб олиб, ҳисобимизга сўров юбориш мумкин).
+/// Шунинг учун калит фақат серверда — `functions/.env`да.
 String staticMapUrl({
-  required String apiKey,
   required double lat,
   required double lng,
   required int width,
@@ -25,31 +31,39 @@ String staticMapUrl({
   List<EvChargingStation> markers = const [],
 }) {
   final params = <String>[
-    'center=$lat,$lng',
+    'lat=$lat',
+    'lng=$lng',
     'zoom=$zoom',
-    'size=${width}x$height',
-    'scale=2',
-    'maptype=roadmap',
-    'key=$apiKey',
+    'w=$width',
+    'h=$height',
   ];
-  // Маркерлар — кўпи билан 10 та, акс ҳолда URL узайиб кетади.
+  // Маркерлар — кўпи билан 10 та (сервер ҳам шунча қабул қилади).
   final pts = markers.take(10).map((s) => '${s.latitude},${s.longitude}');
   if (pts.isNotEmpty) {
-    params.add('markers=size:small%7Ccolor:0x1E4FD8%7C${pts.join('%7C')}');
+    params.add('markers=${Uri.encodeQueryComponent(pts.join('|'))}');
   }
-  return 'https://maps.googleapis.com/maps/api/staticmap?${params.join('&')}';
+  return '$kEvStaticMapEndpoint?${params.join('&')}';
+}
+
+/// `evStaticMap` Cloud Function (us-central1).
+const kEvStaticMapEndpoint =
+    'https://us-central1-master-taxi-gurlan.cloudfunctions.net/evStaticMap';
+
+/// Расм сўровига қўшиладиган сарлавҳа — функция Firebase ID токенини
+/// талаб қилади (фақат илова фойдаланувчилари).
+Future<Map<String, String>> evStaticMapHeaders() async {
+  try {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null || token.isEmpty) return const {};
+    return {'Authorization': 'Bearer $token'};
+  } catch (_) {
+    return const {};
+  }
 }
 
 /// 10-бўлим: EV зарядлаш станциялари.
 class HomeEvSection extends StatefulWidget {
-  const HomeEvSection({
-    super.key,
-    required this.apiKey,
-    required this.onOpenMap,
-  });
-
-  /// Google Maps калити (`AndroidManifest` даги билан бир хил).
-  final String apiKey;
+  const HomeEvSection({super.key, required this.onOpenMap});
 
   /// Босилганда ЖОНЛИ харита экрани очилади.
   final VoidCallback onOpenMap;
@@ -65,10 +79,19 @@ class _HomeEvSectionState extends State<HomeEvSection> {
   AvaSectionStatus _status = AvaSectionStatus.loading;
   List<EvChargingStation> _items = const [];
 
+  /// `null` — токен ҳали олинмаган; расм фақат шундан кейин сўралади.
+  Map<String, String>? _mapHeaders;
+
   @override
   void initState() {
     super.initState();
     _listen();
+    _loadMapHeaders();
+  }
+
+  Future<void> _loadMapHeaders() async {
+    final h = await evStaticMapHeaders();
+    if (mounted) setState(() => _mapHeaders = h);
   }
 
   void _listen() {
@@ -141,16 +164,16 @@ class _HomeEvSectionState extends State<HomeEvSection> {
                   fit: StackFit.expand,
                   children: [
                     ColoredBox(color: c.surface2),
-                    if (center != null && widget.apiKey.isNotEmpty)
+                    if (center != null && _mapHeaders != null)
                       CachedNetworkImage(
                         imageUrl: staticMapUrl(
-                          apiKey: widget.apiKey,
                           lat: center.latitude,
                           lng: center.longitude,
                           width: 400,
                           height: 140,
                           markers: _items,
                         ),
+                        httpHeaders: _mapHeaders,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => Center(
                           child: Icon(Icons.map_outlined,

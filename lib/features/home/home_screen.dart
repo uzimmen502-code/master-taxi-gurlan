@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../config.dart';
 import '../../core/app_share.dart';
 import '../../core/l10n/l10n_extension.dart';
 import '../../core/service_config_holder.dart';
@@ -839,7 +838,6 @@ class _HomeViewState extends State<_HomeView> {
                             if (HomeModuleGate.showInGrid('ev_charging')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeEvSection(
-                                apiKey: AppConfig.mapsApiKey,
                                 onOpenMap: () =>
                                     _push(const EvChargingMapScreen()),
                               ),

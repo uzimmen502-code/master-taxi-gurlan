@@ -29,7 +29,6 @@ import 'widgets/ava_bottom_nav.dart';
 import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
-import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../assistant/assistant_entry.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
@@ -53,6 +52,8 @@ import '../profile/screens/wallet_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import 'controllers/active_orders_controller.dart';
 import 'controllers/home_controller.dart';
+import 'home_services_catalog.dart';
+import 'widgets/ava_quick_actions.dart';
 import 'widgets/active_order_card.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
@@ -60,8 +61,6 @@ import '../../models/search_index_entry.dart';
 import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
-import 'widgets/promo_carousel.dart';
-import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../tv_market/widgets/home_video_stage.dart';
@@ -588,6 +587,33 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
+  /// Хизмат каталоги учун амаллар — каталог экранга боғланиб қолмасин.
+  HomeServiceActions get _serviceActions => HomeServiceActions(
+        push: _push,
+        openModule: _openModule,
+        openYukModule: _openYukModule,
+        openPayment: _openPaymentProvider,
+        openDatingBot: _openDatingTelegramBot,
+        showComingSoon: _showTezKundaSnack,
+      );
+
+  /// «Барча хизматлар» — кўринадиган модуллар рўйхати.
+  Future<void> _openAllServices() async {
+    await _push(
+      AllServicesScreen(
+        items: buildHomeServices(context, a: _serviceActions),
+      ),
+    );
+  }
+
+  Future<void> _openAssistant() async {
+    await openAssistantEntry(
+      context,
+      phone: context.read<HomeController>().phone,
+      push: _push,
+    );
+  }
+
   /// Фаол буюртма карточкаси босилганда — тегишли кузатиш экрани.
   Future<void> _openActiveOrder(HomeActiveOrder order) async {
     final trip = order.trip;
@@ -749,336 +775,25 @@ class _HomeViewState extends State<_HomeView> {
                               },
                             ),
                             SizedBox(height: _sectionGap(context, base: 12)),
-                            PromoCarousel(
-                              onNonTap: HomeModuleGate.gatedTap(
+                            SizedBox(height: _sectionGap(context, base: 12)),
+                            AvaQuickActions(
+                              actions: defaultQuickActions(
                                 context,
-                                'bread',
-                                () => _openModule(
-                                  HomeModulesCatalog.byId('bread'),
+                                onOpenAll: _openAllServices,
+                                onTaxi: () => _openModule(
+                                  HomeModulesCatalog.byId('local_taxi'),
                                 ),
-                              ),
-                              onCarpetWashTap: HomeModuleGate.gatedTap(
-                                context,
-                                'carpet_wash',
-                                () => _push(const CarpetWashScreen()),
-                              ),
-                              onMilkTap: HomeModuleGate.gatedTap(
-                                context,
-                                'milk',
-                                () => _push(const MilkPickupScreen()),
-                              ),
-                              onTaomTap: HomeModuleGate.gatedTap(
-                                context,
-                                'food',
-                                () => _openModule(
-                                  HomeModulesCatalog.byId('food'),
+                                onIntercity: () => _openModule(
+                                  HomeModulesCatalog.byId('intercity'),
                                 ),
-                              ),
-                              onBozorTap: HomeModuleGate.gatedTap(
-                                context,
-                                'cheap_products_home',
-                                () => _openModule(
+                                onMarket: () => _openModule(
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
                                 ),
+                                onAssistant: _openAssistant,
+                                onAvagram: () =>
+                                    _push(const TvMarketFeedScreen()),
                               ),
-                              onLocalTaxiTap: HomeModuleGate.gatedTap(
-                                context,
-                                'local_taxi',
-                                () => _openModule(
-                                  HomeModulesCatalog.byId('local_taxi'),
-                                ),
-                              ),
-                              onIntercityTap: HomeModuleGate.gatedTap(
-                                context,
-                                'intercity',
-                                () => _openModule(
-                                  HomeModulesCatalog.byId('intercity'),
-                                ),
-                              ),
-                              onMarshrutTap: HomeModuleGate.gatedTap(
-                                context,
-                                'marshrut',
-                                () => _openModule(
-                                  HomeModulesCatalog.byId('marshrut'),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: _sectionGap(context, base: 12)),
-                            Builder(
-                              builder: (context) {
-                                final spotlightItems = <ServiceSpotlightItem>[
-                                ServiceSpotlightItem(
-                                  moduleId: 'local_taxi',
-                                  label: context.tr('home_module_local'),
-                                  imagePath:
-                                      'assets/images/services/service_taxi_local.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('local_taxi'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'intercity',
-                                  label: context.tr('home_module_intercity'),
-                                  imagePath:
-                                      'assets/images/services/service_taxi_intercity.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('intercity'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'marshrut',
-                                  label: context.tr('home_module_marshrut'),
-                                  imagePath:
-                                      'assets/images/services/service_marshrut.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('marshrut'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'yuk_local',
-                                  label: context.tr('home_module_yuk_local'),
-                                  imagePath:
-                                      'assets/images/services/service_yuk_local.png',
-                                  onTap: () => _openYukModule(
-                                    'yuk_local',
-                                    const YukLocalScreen(),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'yuk_intercity',
-                                  label:
-                                      context.tr('home_module_yuk_intercity'),
-                                  imagePath:
-                                      'assets/images/services/service_yuk_birja.png',
-                                  onTap: () => _openYukModule(
-                                    'yuk_intercity',
-                                    const YukIntercityScreen(),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'food',
-                                  label: context.tr('home_module_food'),
-                                  imagePath:
-                                      'assets/images/services/service_food.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('food'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'jobs',
-                                  label: context.tr('home_module_jobs'),
-                                  imagePath:
-                                      'assets/images/services/service_jobs.png',
-                                  onTap: () {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'jobs')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    _push(
-                                      const JobsScreen(
-                                        initialTabIndex: JobsTabs.ad,
-                                      ),
-                                    );
-                                  },
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'cheap_products_home',
-                                  label:
-                                      context.tr('home_module_cheap_products'),
-                                  imagePath:
-                                      'assets/images/services/service_market.png',
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId(
-                                        'cheap_products_home'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'platform_store',
-                                  label: context
-                                      .tr('home_module_platform_store'),
-                                  icon: Icons.storefront_rounded,
-                                  iconColor: const Color(0xFF00BCD4),
-                                  onTap: () {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'platform_store')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    _push(const PlatformStoreScreen());
-                                  },
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'tv_market',
-                                  label:
-                                      context.tr('home_module_tv_market'),
-                                  icon: Icons.play_circle_filled_rounded,
-                                  iconColor: const Color(0xFFFF1744),
-                                  onTap: () {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'tv_market')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    _push(const TvMarketFeedScreen());
-                                  },
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'bread',
-                                  label: context.tr('home_module_bread'),
-                                  imagePath:
-                                      'assets/images/services/service_bread.png',
-                                  iconScale: 1.15,
-                                  onTap: () => _openModule(
-                                    HomeModulesCatalog.byId('bread'),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'oil_change',
-                                  label: context.tr('home_module_oil_change'),
-                                  imagePath:
-                                      'assets/images/services/service_oil_change.png',
-                                  onTap: () => _push(
-                                    const OilChangeHomeScreen(),
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'circles',
-                                  label: context.tr('home_module_relatives'),
-                                  imagePath:
-                                      'assets/images/services/service_relatives.png',
-                                  onTap: () =>
-                                      _push(const RelativesScreen()),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'dating',
-                                  label: context.tr('dating_short_label'),
-                                  icon: Icons.favorite_rounded,
-                                  iconColor: const Color(0xFFE53935),
-                                  iconScale: 1.05,
-                                  onTap: () => _openDatingTelegramBot(),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'chatgpt',
-                                  label: context.tr('home_module_chatgpt'),
-                                  icon: Icons.auto_awesome_rounded,
-                                  iconColor: const Color(0xFF10A37F),
-                                  onTap: () => openAssistantEntry(
-                                    context,
-                                    phone: home.phone,
-                                    push: _push,
-                                  ),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'courier',
-                                  label: context.tr('home_module_courier'),
-                                  imagePath:
-                                      'assets/images/services/service_courier.png',
-                                  onTap: () async {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'courier')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    final phone = phoneDigits(
-                                      context.read<HomeController>().phone,
-                                    );
-                                    if (phone.length < 9) {
-                                      needPhoneForAction(context);
-                                      return;
-                                    }
-                                    await _push(
-                                        const CourierServicesHubScreen());
-                                  },
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'milk',
-                                  label: context.tr('milk_short_label'),
-                                  imagePath:
-                                      'assets/images/services/service_milk.png',
-                                  iconScale: 1.15,
-                                  onTap: () =>
-                                      _push(const MilkPickupScreen()),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'tire',
-                                  label: context.tr('home_module_tire'),
-                                  imagePath:
-                                      'assets/images/services/service_tire.png',
-                                  onTap: () {},
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'car_wash',
-                                  label: context.tr('home_module_car_wash'),
-                                  imagePath:
-                                      'assets/images/services/service_car_wash.png',
-                                  onTap: () {},
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'carpet_wash',
-                                  label: context.tr('home_module_carpet'),
-                                  imagePath:
-                                      'assets/images/services/service_carpet_wash.png',
-                                  onTap: () =>
-                                      _push(const CarpetWashScreen()),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'ev_charging',
-                                  label: context.tr('home_module_ev_charging'),
-                                  imagePath:
-                                      'assets/images/services/service_ev_charging.png',
-                                  onTap: () =>
-                                      _push(const EvChargingMapScreen()),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'pay_click',
-                                  label: context.tr('home_module_click'),
-                                  svgPath:
-                                      'assets/images/services/service_pay_click.svg',
-                                  onTap: () => _openPaymentProvider(kClickApp),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'pay_payme',
-                                  label: context.tr('home_module_payme'),
-                                  svgPath:
-                                      'assets/images/services/service_pay_payme.svg',
-                                  onTap: () => _openPaymentProvider(kPaymeApp),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'pay_paynet',
-                                  label: context.tr('home_module_paynet'),
-                                  imagePath:
-                                      'assets/images/services/service_pay_paynet.png',
-                                  onTap: () =>
-                                      _openPaymentProvider(kPaynetApp),
-                                ),
-                                ServiceSpotlightItem(
-                                  moduleId: 'wholesale_market',
-                                  label: context.tr('home_module_wholesale'),
-                                  icon: Icons.warehouse_outlined,
-                                  iconColor: const Color(0xFF6D4C41),
-                                  onTap: () {
-                                    if (!ServiceConfigHolder.isOpenable(
-                                        'wholesale_market')) {
-                                      _showTezKundaSnack();
-                                      return;
-                                    }
-                                    _push(WholesaleMarketScreen(
-                                      userPhone: canonicalPhoneId(
-                                        context.read<HomeController>().phone,
-                                      ),
-                                    ));
-                                  },
-                                ),
-                                ];
-                                return ServicesSpotlightCarousel(
-                                  items: spotlightItems,
-                                  onTitleTap: () => _push(
-                                    AllServicesScreen(items: spotlightItems),
-                                  ),
-                                );
-                              },
                             ),
                             const SizedBox(height: 16),
                             HomeGlobalSearchBar(

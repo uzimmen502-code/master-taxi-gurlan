@@ -547,7 +547,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
-          backgroundColor: Colors.green,
+          backgroundColor: AvaLight.ok,
         ));
       } else {
         await SettlementService.cancelSettlement(

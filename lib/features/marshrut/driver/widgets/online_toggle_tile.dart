@@ -25,7 +25,7 @@ class OnlineToggleTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isOnline ? const Color(0xFFE8F5E9) : Colors.grey.shade100,
+          color: isOnline ? AvaLight.okSoft : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color:

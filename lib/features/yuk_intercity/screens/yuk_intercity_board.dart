@@ -10,6 +10,7 @@ import '../../../utils/intercity_places.dart';
 import '../models/yuk_listing.dart';
 import '../yuk_birja_store.dart';
 import '../../yuk_shared/yuk_vehicle_types.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Шаҳарлараро юк биржаси — cargo/truck эълонлар доскаси.
 ///
@@ -45,7 +46,7 @@ class _YukIntercityBoardState extends State<YukIntercityBoard> {
   static const _muted = Color(0xFF94A3B8);
   static const _accent = Color(0xFFFACC15);
   static const _blue = Color(0xFF3B82F6);
-  static const _green = Color(0xFF22C55E);
+  static const _green = AvaLight.ok;
 
   final _store = YukBirjaStore();
   final _listCtrl = ScrollController();
@@ -858,7 +859,7 @@ class _ListingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent =
-        item.isCargo ? const Color(0xFF3B82F6) : const Color(0xFF22C55E);
+        item.isCargo ? const Color(0xFF3B82F6) : AvaLight.ok;
     final left = item.remaining();
     final urgent = left.inHours < 6;
     final route = '${item.from} → ${item.to}';
@@ -1539,7 +1540,7 @@ class _CreateListingSheetState extends State<_CreateListingSheet> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
+                        backgroundColor: AvaLight.ok,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: _submit,

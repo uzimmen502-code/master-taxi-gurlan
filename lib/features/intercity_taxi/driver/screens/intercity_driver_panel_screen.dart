@@ -252,7 +252,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                       height: 52,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green.shade700,
+                          backgroundColor: AvaLight.ok,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
@@ -568,20 +568,20 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              border: Border.all(color: Colors.green.shade300),
+              color: AvaLight.okSoft,
+              border: Border.all(color: AvaLight.ok),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.location_on,
-                    color: Colors.green.shade600, size: 14),
+                    color: AvaLight.ok, size: 14),
                 const SizedBox(width: 4),
                 Text(
                   context.tr('gps_received'),
                   style: TextStyle(
-                    color: Colors.green.shade700,
+                    color: AvaLight.ok,
                     fontSize: 12,
                   ),
                 ),
@@ -623,7 +623,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
             width: double.infinity,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
+                backgroundColor: AvaLight.ok,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
@@ -641,13 +641,13 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 18),
+              const Icon(Icons.check_circle, color: AvaLight.ok, size: 18),
               const SizedBox(width: 6),
               Text(
                 b.userGender == 'female'
                     ? context.tr('picked_up_female')
                     : context.tr('picked_up_male'),
-                style: const TextStyle(color: Colors.green),
+                style: const TextStyle(color: AvaLight.ok),
               ),
             ],
           ),
@@ -670,7 +670,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700),
+                backgroundColor: AvaLight.ok),
             onPressed: () => Navigator.pop(context, true),
             child: Text(context.tr('confirm')),
           ),
@@ -682,7 +682,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(context.tr('trip_started_success')),
-      backgroundColor: Colors.green,
+      backgroundColor: AvaLight.ok,
     ));
   }
 

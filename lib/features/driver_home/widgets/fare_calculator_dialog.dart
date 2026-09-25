@@ -199,7 +199,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
+                color: AvaLight.okSoft,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _green.withValues(alpha: 0.3))),
             child: Column(children: [

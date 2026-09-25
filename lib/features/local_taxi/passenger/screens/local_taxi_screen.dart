@@ -986,7 +986,7 @@ class _SavedPlacesSection extends StatelessWidget {
     if (l.contains('иш')) return Colors.orange;
     if (l.contains('дўкон') || l.contains('бозор')) return Colors.purple;
     if (l.contains('мактаб')) return Colors.red;
-    if (l.contains('касалхона')) return Colors.teal;
+    if (l.contains('касалхона')) return AvaLight.ok;
     return Colors.grey.shade600;
   }
 

@@ -16,6 +16,7 @@ import '../yuk_local_ranking.dart';
 import '../yuk_local_schedule.dart';
 import '../../yuk_shared/yuk_vehicle_types.dart';
 import 'yuk_local_driver_sheet.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Туман ичида юк қатнови — жойлашув + иш вақти (онлайн йўқ).
 class YukLocalNearbyPanel extends StatefulWidget {
@@ -38,7 +39,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
     with WidgetsBindingObserver {
   static const _muted = Color(0xFF94A3B8);
   static const _accent = Color(0xFFFACC15);
-  static const _green = Color(0xFF22C55E);
+  static const _green = AvaLight.ok;
 
   final _repo = YukLocalDriversRepository();
   final _ranker = YukLocalRanking();
@@ -482,7 +483,7 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
                           label: context.tr('yuk_edit'),
                           fg: Colors.white,
                           border: _accent,
-                          fill: const Color(0xFF3F3F1D),
+                          fill: AvaLight.ink2,
                           onTap: () => run(() => _editAd(d)),
                         ),
                       ),
@@ -912,7 +913,7 @@ class _LocalTruckCard extends StatelessWidget {
   static const _border = Color(0xFF252B36);
   static const _muted = Color(0xFF94A3B8);
   static const _accent = Color(0xFFFACC15);
-  static const _green = Color(0xFF22C55E);
+  static const _green = AvaLight.ok;
   static const _amber = Color(0xFFFBBF24);
   static const _demo = Color(0xFF93C5FD);
 
@@ -937,7 +938,7 @@ class _LocalTruckCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: row.inRadius ? _border : const Color(0xFF3F3F1D),
+              color: row.inRadius ? _border : AvaLight.ink2,
             ),
           ),
           child: IntrinsicHeight(
@@ -1071,7 +1072,7 @@ class _LocalTruckCard extends StatelessWidget {
                             child: Center(
                               child: Icon(
                                 Icons.phone,
-                                color: Color(0xFF052E16),
+                                color: AvaLight.ink,
                                 size: 21,
                               ),
                             ),

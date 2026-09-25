@@ -200,7 +200,7 @@ class _RouteHeadlineBannerState extends State<_RouteHeadlineBanner>
 
     final bg = online
         ? Color.lerp(
-            const Color(0xFFE8F5E9),
+            AvaLight.okSoft,
             AppColors.primary.withValues(alpha: 0.35),
             wave,
           )!

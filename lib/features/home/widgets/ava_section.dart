@@ -99,10 +99,15 @@ class _Header extends StatelessWidget {
     // қилиши мумкин эди. Тугмага қатъий юқори чегара қўямиз — ундан
     // ошса ичидаги матн ellipsis'га тушади, сарлавҳа эса қолган жойни
     // олади.
+    // Тизим шрифти катталашганда «Барчаси» ёрлиғи сарлавҳани сиқиб қўяди:
+    // қурилмада 130% да «Яқинингиздаги эъ…» бўлиб қирқилган эди. Шундай
+    // ҳолатда тугма фақат стрелкага айланади — босиш майдони ва
+    // Semantics ёрлиғи ўша-ўша қолади.
+    final compact = MediaQuery.textScalerOf(context).scale(12) > 14;
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxSeeAll = constraints.maxWidth.isFinite
-            ? constraints.maxWidth * 0.45
+            ? constraints.maxWidth * (compact ? 0.22 : 0.45)
             : double.infinity;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -119,7 +124,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: AvaSpace.gap),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxSeeAll),
-                child: _SeeAllButton(onTap: onSeeAll!),
+                child: _SeeAllButton(onTap: onSeeAll!, iconOnly: compact),
               ),
             ],
           ],
@@ -131,9 +136,12 @@ class _Header extends StatelessWidget {
 
 /// «Барчаси →» — босиш майдони камида 44.
 class _SeeAllButton extends StatelessWidget {
-  const _SeeAllButton({required this.onTap});
+  const _SeeAllButton({required this.onTap, this.iconOnly = false});
 
   final VoidCallback onTap;
+
+  /// Катта шрифтда — фақат стрелка (сарлавҳага жой қолсин).
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -154,15 +162,17 @@ class _SeeAllButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AvaText.caption.copyWith(color: c.brand),
+                if (!iconOnly) ...[
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AvaText.caption.copyWith(color: c.brand),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 2),
+                  const SizedBox(width: 2),
+                ],
                 Icon(Icons.arrow_forward_rounded, size: 16, color: c.brand),
               ],
             ),

@@ -110,7 +110,9 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       onRetry: _listen,
       skeletonRows: 1,
       child: SizedBox(
-        height: 214,
+        // Қатъий 214 эмас — шрифт 130% бўлганда матн карточкадан тошиб
+        // кетарди (`avaTileListHeight` изоҳига қаранг).
+        height: avaTileListHeight(context),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),

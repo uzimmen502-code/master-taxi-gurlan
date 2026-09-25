@@ -109,6 +109,34 @@ class AvaListRow extends StatelessWidget {
   }
 }
 
+/// [AvaTileCard] лар турадиган ён рўйхатнинг баландлиги.
+///
+/// Карточканинг ичи `mainAxisSize.min`, лекин рўйхат унга ҚАТЪИЙ баландлик
+/// беради. Шунинг учун баландлик тизим шрифти миқёсига эргашиши шарт: акс
+/// ҳолда 130% да ёзув карточкадан тошиб, кейинги бўлимнинг сарлавҳаси
+/// устига чизилади (2026-09-25 да қурилмада айнан шундай бўлган).
+double avaTileListHeight(
+  BuildContext context, {
+  double width = 148,
+  bool hasPrice = true,
+  bool hasPriceNote = true,
+  bool hasFootnote = true,
+}) {
+  // Матн қатори учун захира: шрифт баландлиги × қатор оралиғи.
+  const lineFactor = 1.5;
+  final ts = MediaQuery.textScalerOf(context);
+  double line(double size) => ts.scale(size) * lineFactor;
+
+  // Квадрат расм (кенглик − ички чет) + ўша ички четнинг ўзи = кенглик,
+  // устига карточка чегараси ва яхлитлаш учун кичик захира.
+  var h = width + 8;
+  h += 8 + line(AvaText.productName.fontSize ?? 13) * 2; // ном — 2 қатор
+  if (hasPrice) h += 4 + line(AvaText.price.fontSize ?? 14);
+  if (hasPriceNote) h += line(AvaText.caption.fontSize ?? 12);
+  if (hasFootnote) h += 2 + line(AvaText.caption.fontSize ?? 12);
+  return h;
+}
+
 /// Расмли ён томонга айланадиган карточка (6–8-бўлимлар: бозорлар).
 class AvaTileCard extends StatelessWidget {
   const AvaTileCard({

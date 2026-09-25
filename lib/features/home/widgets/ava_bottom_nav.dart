@@ -212,7 +212,13 @@ class _CreateItem extends StatelessWidget {
           onTap: onTap,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
+            // `heightFactor` ШАРТ: усиз `Center` бўш (loose) чегараларда
+            // МАКСИМАЛ баландликни олади. `Scaffold.bottomNavigationBar`га
+            // эса бутун экран баландлиги loose қилиб берилади — натижада
+            // меню бутун саҳифани эгаллаб, бош саҳифани ёпиб қўйган эди
+            // (2026-09-25, қурилмада: «Қўшиш» тугмаси 0..2340 px).
             child: Center(
+              heightFactor: 1,
               child: Container(
                 width: 40,
                 height: 40,

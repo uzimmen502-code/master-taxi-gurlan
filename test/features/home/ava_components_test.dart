@@ -237,4 +237,62 @@ void main() {
       }
     });
   });
+
+  group('AvaTileCard — 130% шрифтда тошмайди', () {
+    // 2026-09-25, қурилмада: ён рўйхатнинг баландлиги қатъий 214 эди,
+    // тизим шрифти 130% бўлганда нарх ва изоҳ карточкадан чиқиб,
+    // кейинги бўлимнинг сарлавҳаси устига чизилган.
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('карточка ажратилган баландликка сиғади (×$scale)',
+          (tester) async {
+        late double listHeight;
+        await _pump(
+          tester,
+          Builder(
+            builder: (context) {
+              listHeight = avaTileListHeight(context);
+              return SizedBox(
+                height: listHeight,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: const [
+                    AvaTileCard(
+                      title: 'Жуда узун маҳсулот номи — икки қаторга сиғади',
+                      price: 'дан 3 800 сўм',
+                      priceNote: '1+ дона',
+                      footnote: 'Sunlight',
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          scale: scale,
+        );
+
+        expect(tester.takeException(), isNull);
+        final cardHeight = tester.getSize(find.byType(AvaTileCard)).height;
+        expect(
+          cardHeight,
+          lessThanOrEqualTo(listHeight),
+          reason: 'карточка ($cardHeight) рўйхатдан ($listHeight) баланд',
+        );
+      });
+    }
+
+    testWidgets('баландлик шрифт билан ўсади', (tester) async {
+      double at(BuildContext c) => avaTileListHeight(c);
+      late double small;
+      late double big;
+      await _pump(tester, Builder(builder: (c) {
+        small = at(c);
+        return const SizedBox.shrink();
+      }));
+      await _pump(tester, Builder(builder: (c) {
+        big = at(c);
+        return const SizedBox.shrink();
+      }), scale: 1.3);
+      expect(big, greaterThan(small));
+    });
+  });
 }

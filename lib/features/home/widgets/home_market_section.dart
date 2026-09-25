@@ -84,7 +84,8 @@ class _HomeMarketSectionState extends State<HomeMarketSection> {
       onRetry: _listen,
       skeletonRows: 1,
       child: SizedBox(
-        height: 214,
+        // Бу бўлимда нарх изоҳи йўқ — қолгани `avaTileListHeight` изоҳида.
+        height: avaTileListHeight(context, hasPriceNote: false),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),

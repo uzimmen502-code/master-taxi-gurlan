@@ -78,7 +78,12 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
       onRetry: _load,
       skeletonRows: 1,
       child: SizedBox(
-        height: 168,
+        // Муқова 140 + оралиқ 4 + сарлавҳанинг бир қатори. Қатъий 168
+        // бўлса, шрифт катталашганда ёзув муқовадан тошиб кетади.
+        height: 144 +
+            MediaQuery.textScalerOf(context)
+                .scale(AvaText.caption.fontSize ?? 12) *
+                1.5,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),

@@ -167,6 +167,35 @@ void main() {
       expect(find.text('99+'), findsOneWidget);
     });
 
+    testWidgets('Scaffold ичида пастда қолади — бутун экранни эгалламайди',
+        (tester) async {
+      // 2026-09-25 қурилмада: «＋» тугмасидаги `Center` бўш чегараларда
+      // максимал баландликни олиб, мену бутун саҳифани ёпиб қўйган эди.
+      // Шунинг учун меню АЙНАН иловадагидек — `bottomNavigationBar`
+      // сифатида — жойлаштирилиб, баландлиги ўлчанади.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
+            body: const Center(child: Text('CONTENT')),
+            bottomNavigationBar:
+                AvaBottomNav(current: AvaNavTab.home, onTap: (_) {}),
+          ),
+        ),
+      );
+
+      final navHeight = tester.getSize(find.byType(AvaBottomNav)).height;
+      final screenHeight = tester.getSize(find.byType(Scaffold)).height;
+      expect(navHeight, lessThan(120));
+      expect(navHeight, lessThan(screenHeight / 3));
+      // Мену контентни ёпиб қўймаган.
+      expect(find.text('CONTENT'), findsOneWidget);
+      expect(
+        tester.getCenter(find.text('CONTENT')).dy,
+        lessThan(tester.getTopLeft(find.byType(AvaBottomNav)).dy),
+      );
+    });
+
     testWidgets('320px + 130% шрифтда тошмайди', (tester) async {
       await _pump(
         tester,

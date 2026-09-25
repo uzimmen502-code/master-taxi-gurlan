@@ -128,7 +128,15 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
       onRetry: _listen,
       skeletonRows: 1,
       child: SizedBox(
-        height: 116,
+        // Ички чет (10×2) + бош ҳарф доираси (44) + оралиқ (6) + исм ва
+        // ёш қаторлари. Қатъий баландлик шрифт 130% бўлганда тошарди.
+        height: 70 +
+            MediaQuery.textScalerOf(context)
+                    .scale(AvaText.productName.fontSize ?? 13) *
+                1.5 +
+            MediaQuery.textScalerOf(context)
+                    .scale(AvaText.caption.fontSize ?? 12) *
+                1.5,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),

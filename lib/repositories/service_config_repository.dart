@@ -372,6 +372,18 @@ class ServiceConfigRepository {
     }
   }
 
+  Future<GeoRegion?> fetchRegion(String regionId) async {
+    if (regionId.trim().isEmpty) return null;
+    try {
+      final snap =
+          await _db.collection(GeoRegion.collection).doc(regionId).get();
+      return snap.exists ? GeoRegion.fromDoc(snap) : null;
+    } catch (e, st) {
+      debugPrint('ServiceConfigRepository.fetchRegion: $e\n$st');
+      return null;
+    }
+  }
+
   Future<GeoDistrict?> fetchDistrict(String districtId) async {
     if (districtId.trim().isEmpty) return null;
     try {

@@ -22,8 +22,13 @@ import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import 'widgets/home_info_ticker.dart';
-import '../orders/screens/orders_screen.dart';
+import '../../core/widgets/zone_gate.dart';
 import '../ads/screens/cheap_products_screen.dart';
+import '../ads/screens/create_ad_screen.dart';
+import '../profile/screens/news_hub_screen.dart';
+import '../tv_market/screens/tv_publish_screen.dart';
+import 'widgets/ava_bottom_nav.dart';
+import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
@@ -59,15 +64,13 @@ import 'widgets/promo_carousel.dart';
 import 'widgets/services_spotlight_carousel.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
-import '../tv_market/screens/tv_my_shop_screen.dart';
 import '../tv_market/widgets/home_video_stage.dart';
-import '../tv_market/repositories/tv_shop_repository.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
-const _bg = AppColors.lime;
-const _headerBorder = AppColors.limeEdge;
-const _brandGreen = AppColors.limeDeep;
-const _inactiveTab = Color(0xFF8AAB50);
+// Эски пастки меню ранглари (`_headerBorder`, `_brandGreen`,
+// `_inactiveTab`) билан бирга олиб ташланди — янги `AvaBottomNav`
+// токенлардан фойдаланади.
+const _bg = AvaLight.bg;
 
 /// Kichik ekranlar uchun matn/shrift masshtabini moslashtirish.
 double _homeUiScale(BuildContext context) {
@@ -133,8 +136,6 @@ class _HomeViewState extends State<_HomeView> {
   Timer? _walletHideTimer;
   Timer? _deferredBootstrapTimer;
   DateTime? _lastDeferredBootstrapAt;
-  bool _hasTvShop = false;
-  String _shopCheckPhone = '';
 
   @override
   void initState() {
@@ -169,22 +170,6 @@ class _HomeViewState extends State<_HomeView> {
     }
     // Config sync — fade тугагач, фақат керак бўлса; ортиқча rebuild йўқ.
     _scheduleDeferredConfigBootstrap();
-    unawaited(_refreshTvShopFlag());
-  }
-
-  Future<void> _refreshTvShopFlag() async {
-    if (!mounted) return;
-    final phone = context.read<HomeController>().phone;
-    final id = canonicalPhoneId(phone);
-    if (id.isEmpty) return;
-    try {
-      final ok = await TvShopRepository().hasShop(id);
-      if (!mounted) return;
-      _shopCheckPhone = id;
-      if (_hasTvShop != ok) setState(() => _hasTvShop = ok);
-    } catch (e) {
-      debugPrint('[Home] tv shop $e');
-    }
   }
 
   /// Pop анимациясидан кейин silent bootstrap; 45 с ичида такрорланмайди.
@@ -515,7 +500,7 @@ class _HomeViewState extends State<_HomeView> {
     }
     final phone = phoneDigits(context.read<HomeController>().phone);
     if (phone.length < 9) {
-      _HomeBottomNav.needPhone(context);
+      needPhoneForAction(context);
       return;
     }
     await _push(screen);
@@ -650,54 +635,92 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
+  /// Пастки менюнинг табларини қайта ишлаш.
+  Future<void> _onNavTap(AvaNavTab tab) async {
+    switch (tab) {
+      case AvaNavTab.home:
+        return;
+      case AvaNavTab.avagram:
+        await _push(const TvMarketFeedScreen());
+      case AvaNavTab.create:
+        await _openCreateSheet();
+      case AvaNavTab.messages:
+        await _push(const NewsHubScreen());
+      case AvaNavTab.cabinet:
+        // «Буюртмалар» энди алоҳида таб эмас — Кабинет (профил) ичида.
+        await _openProfileTab();
+    }
+  }
+
+  Future<void> _openProfileTab() async {
+    await openProfileScreen(context);
+    if (!mounted) return;
+    await context.read<HomeController>().refreshUser();
+    if (mounted) _onHomeResurface(revealWallet: true);
+  }
+
+  /// «＋» — видео / эълон / маҳсулот / хизмат / сотувчи.
+  Future<void> _openCreateSheet() async {
+    final action = await showAvaCreateSheet(context);
+    if (action == null || !mounted) return;
+
+    final phone = canonicalPhoneId(context.read<HomeController>().phone);
+    // Барча қўшиш йўллари эгалик телефонига боғланган.
+    if (phoneDigits(phone).length < 9) {
+      needPhoneForAction(context);
+      return;
+    }
+
+    switch (action) {
+      case AvaCreateAction.video:
+        await _push(const TvPublishScreen());
+      case AvaCreateAction.ad:
+        await _push(
+          const JobsScreen(initialTabIndex: JobsTabs.ad, openAddSheet: true),
+        );
+      case AvaCreateAction.service:
+        await _push(
+          const JobsScreen(
+            initialTabIndex: JobsTabs.service,
+            openAddSheet: true,
+          ),
+        );
+      case AvaCreateAction.product:
+        await _push(const CreateAdScreen());
+      case AvaCreateAction.seller:
+        await _push(
+          WholesaleMarketScreen(userPhone: phone, initialTabIndex: 1),
+        );
+    }
+  }
+
+  /// Юқори қатордаги ҳудуд тугмаси.
+  Future<void> _openRegionPicker() async {
+    final uid = phoneDigits(context.read<HomeController>().phone);
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => ZoneSelectScreen(
+          uid: uid,
+          allowCancel: true,
+          onDone: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    );
+    // Ҳудуд ўзгарган бўлса — бўлимлар янги ҳудуд бўйича қайта тўлади.
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final home = context.watch<HomeController>();
     final uid = phoneDigits(home.phone);
     final userRepo = context.read<UserRepository>();
-    final shopId = canonicalPhoneId(home.phone);
-    if (shopId.isNotEmpty && shopId != _shopCheckPhone) {
-      unawaited(_refreshTvShopFlag());
-    }
 
     return Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: _HomeBottomNav(
-        hasShop: _hasTvShop,
-        onStore: () async {
-          final phone = canonicalPhoneId(
-            context.read<HomeController>().phone,
-          );
-          if (phone.isEmpty) {
-            _HomeBottomNav.needPhone(context);
-            return;
-          }
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => TvMyShopScreen(ownerPhone: phone),
-            ),
-          );
-          if (mounted) {
-            await _refreshTvShopFlag();
-            _onHomeResurface(revealWallet: true);
-          }
-        },
-        onOrders: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const OrdersScreen()),
-          );
-          if (mounted) _onHomeResurface(revealWallet: true);
-        },
-        onWallet: () async {
-          await _HomeBottomNav.openWallet(context);
-          if (mounted) _onHomeResurface(revealWallet: true);
-        },
-        onProfile: () async {
-          await _HomeBottomNav.openProfile(context);
-          if (!context.mounted) return;
-          await context.read<HomeController>().refreshUser();
-          if (mounted) _onHomeResurface(revealWallet: true);
-        },
+      bottomNavigationBar: AvaBottomNav(
+        current: AvaNavTab.home,
+        onTap: _onNavTap,
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -734,6 +757,7 @@ class _HomeViewState extends State<_HomeView> {
                               Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            AvaTopBar(onPickRegion: _openRegionPicker),
                             SizedBox(height: _sectionGap(context, base: 10)),
                             AnimatedSize(
                               duration: const Duration(milliseconds: 280),
@@ -759,7 +783,7 @@ class _HomeViewState extends State<_HomeView> {
                                           lastTxIsCredit: null,
                                           onHistoryTap: () async {
                                             if (uid.length < 9) {
-                                              _HomeBottomNav.needPhone(
+                                              needPhoneForAction(
                                                   context);
                                               return;
                                             }
@@ -1035,7 +1059,7 @@ class _HomeViewState extends State<_HomeView> {
                                       context.read<HomeController>().phone,
                                     );
                                     if (phone.length < 9) {
-                                      _HomeBottomNav.needPhone(context);
+                                      needPhoneForAction(context);
                                       return;
                                     }
                                     await _push(
@@ -1250,471 +1274,41 @@ class _HomeShareButtonState extends State<_HomeShareButton> {
   }
 }
 
-class _HomeBottomNav extends StatelessWidget {
-  const _HomeBottomNav({
-    required this.onOrders,
-    required this.onWallet,
-    required this.onProfile,
-    this.onStore,
-    this.hasShop = false,
-  });
-
-  final VoidCallback onOrders;
-  final VoidCallback onWallet;
-  final VoidCallback onProfile;
-  final VoidCallback? onStore;
-  final bool hasShop;
-
-  static void needPhone(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(context.tr('need_phone_profile')),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-    openProfile(context);
-  }
-
-  static Future<void> openWallet(BuildContext context) async {
-    final phone = phoneDigits(context.read<HomeController>().phone);
-    if (phone.length < 9) {
-      needPhone(context);
-      return;
-    }
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => WalletScreen(phone: phone)),
-    );
-  }
-
-  static Future<void> openProfile(BuildContext context) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: _headerBorder, width: 0.5)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              _NavItem(
-                icon: _IconKind.home,
-                label: context.tr('bottom_home'),
-                active: true,
-                onTap: () {},
-              ),
-              _NavItem(
-                icon: _IconKind.package,
-                label: context.tr('bottom_orders'),
-                onTap: onOrders,
-              ),
-              if (hasShop && onStore != null)
-                _NavItem(
-                  icon: _IconKind.store,
-                  label: context.tr('tv_shop_mine'),
-                  onTap: onStore!,
-                ),
-              _NavItem(
-                icon: _IconKind.wallet,
-                label: context.tr('bottom_wallet'),
-                onTap: onWallet,
-              ),
-              _NavItem(
-                icon: _IconKind.user,
-                label: context.tr('bottom_profile'),
-                onTap: onProfile,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+/// Телефон киритилмаган — амални бажариб бўлмайди, профилга юборамиз.
+///
+/// Илгари бу `_HomeBottomNav` синфининг статик методи эди; пастки меню
+/// `AvaBottomNav` билан алмаштирилгач, ёрдамчилар шу ерга кўчди.
+void needPhoneForAction(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(context.tr('need_phone_profile')),
+      duration: const Duration(seconds: 3),
+    ),
+  );
+  unawaited(openProfileScreen(context));
 }
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final _IconKind icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? _brandGreen : _inactiveTab;
-    // Тизим шрифти катта бўлганда 56px'лик панелдан ошиб кетарди
-    // (BOTTOM OVERFLOWED) ва узун ёрлиқ («Буюртмалар») қирқиларди.
-    final scale = MediaQuery.textScalerOf(context).scale(10) / 10;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _StrokeIcon(icon, color: color, size: 20),
-            const SizedBox(height: 3),
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  textScaler: TextScaler.linear(scale.clamp(1.0, 1.2)),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-                    color: color,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+/// Ҳамён экрани.
+///
+/// Ҳамён пастки менюдан олиб ташланди (тавсиф талаби — «коддан
+/// ўчирилмайди, фақат интерфейсда яширилади»), лекин бу йўл қолди:
+/// ҳамён карточкаси, AVA AI ва EV ичидаги «тўлдириш» шуни чақиради.
+Future<void> openWalletScreen(BuildContext context) async {
+  final phone = phoneDigits(context.read<HomeController>().phone);
+  if (phone.length < 9) {
+    needPhoneForAction(context);
+    return;
   }
+  await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => WalletScreen(phone: phone)),
+  );
 }
 
-// ─── Stroke icons (Lucide-style) ───────────────────────────────────────────
-enum _IconKind {
-  home,
-  search,
-  message,
-  wallet,
-  user,
-  car,
-  navigation,
-  bus,
-  package,
-  shoppingBag,
-  wrench,
-  store,
-  briefcase,
-  shoppingCart,
-  tool,
-  receipt,
-  clock,
-}
-
-class _StrokeIcon extends StatelessWidget {
-  const _StrokeIcon(this.kind, {required this.color, this.size = 20});
-
-  final _IconKind kind;
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _StrokeIconPainter(kind: kind, color: color),
-      ),
-    );
-  }
-}
-
-class _StrokeIconPainter extends CustomPainter {
-  _StrokeIconPainter({required this.kind, required this.color});
-
-  final _IconKind kind;
-  final Color color;
-
-  static const _sw = 1.8;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _sw
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final s = size.width / 24;
-    canvas.scale(s);
-
-    switch (kind) {
-      case _IconKind.home:
-        _home(canvas, paint);
-      case _IconKind.search:
-        _search(canvas, paint);
-      case _IconKind.message:
-        _message(canvas, paint);
-      case _IconKind.wallet:
-        _wallet(canvas, paint);
-      case _IconKind.user:
-        _user(canvas, paint);
-      case _IconKind.car:
-        _car(canvas, paint);
-      case _IconKind.navigation:
-        _navigation(canvas, paint);
-      case _IconKind.bus:
-        _bus(canvas, paint);
-      case _IconKind.package:
-        _package(canvas, paint);
-      case _IconKind.shoppingBag:
-        _shoppingBag(canvas, paint);
-      case _IconKind.wrench:
-        _wrench(canvas, paint);
-      case _IconKind.store:
-        _store(canvas, paint);
-      case _IconKind.briefcase:
-        _briefcase(canvas, paint);
-      case _IconKind.shoppingCart:
-        _shoppingCart(canvas, paint);
-      case _IconKind.tool:
-        _tool(canvas, paint);
-      case _IconKind.receipt:
-        _receipt(canvas, paint);
-      case _IconKind.clock:
-        _clock(canvas, paint);
-    }
-  }
-
-  void _home(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(3, 10)
-        ..lineTo(12, 3)
-        ..lineTo(21, 10)
-        ..lineTo(21, 20)
-        ..lineTo(15, 20)
-        ..lineTo(15, 14)
-        ..lineTo(9, 14)
-        ..lineTo(9, 20)
-        ..lineTo(3, 20)
-        ..close(),
-      p,
-    );
-  }
-
-  void _search(Canvas c, Paint p) {
-    c.drawCircle(const Offset(10.5, 10.5), 5.5, p);
-    c.drawLine(const Offset(14.5, 14.5), const Offset(20, 20), p);
-  }
-
-  void _message(Canvas c, Paint p) {
-    c.drawRRect(
-      RRect.fromRectAndRadius(
-          const Rect.fromLTWH(3, 4, 18, 14), const Radius.circular(3)),
-      p,
-    );
-    c.drawPath(
-        Path()
-          ..moveTo(8, 18)
-          ..lineTo(10, 21)
-          ..lineTo(12, 18),
-        p);
-  }
-
-  void _wallet(Canvas c, Paint p) {
-    c.drawRRect(
-      RRect.fromRectAndRadius(
-          const Rect.fromLTWH(3, 6, 18, 13), const Radius.circular(2)),
-      p,
-    );
-    c.drawLine(const Offset(3, 10), const Offset(21, 10), p);
-    final fill = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    c.drawCircle(const Offset(17, 14), 1.2, fill);
-  }
-
-  void _user(Canvas c, Paint p) {
-    c.drawCircle(const Offset(12, 8), 3.5, p);
-    c.drawPath(
-      Path()
-        ..moveTo(5, 21)
-        ..quadraticBezierTo(12, 15, 19, 21),
-      p,
-    );
-  }
-
-  void _car(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(5, 16)
-        ..lineTo(7, 11)
-        ..lineTo(17, 11)
-        ..lineTo(19, 16)
-        ..close(),
-      p,
-    );
-    c.drawLine(const Offset(5, 16), const Offset(19, 16), p);
-    c.drawCircle(const Offset(8, 16), 2, p);
-    c.drawCircle(const Offset(16, 16), 2, p);
-  }
-
-  void _navigation(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(12, 3)
-        ..lineTo(20, 21)
-        ..lineTo(12, 17)
-        ..lineTo(4, 21)
-        ..close(),
-      p,
-    );
-  }
-
-  void _bus(Canvas c, Paint p) {
-    c.drawRRect(
-      RRect.fromRectAndRadius(
-          const Rect.fromLTWH(4, 5, 16, 14), const Radius.circular(2)),
-      p,
-    );
-    c.drawLine(const Offset(4, 11), const Offset(20, 11), p);
-    c.drawCircle(const Offset(8, 19), 1.5, p);
-    c.drawCircle(const Offset(16, 19), 1.5, p);
-  }
-
-  void _package(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(12, 3)
-        ..lineTo(21, 7)
-        ..lineTo(21, 19)
-        ..lineTo(3, 19)
-        ..lineTo(3, 7)
-        ..close(),
-      p,
-    );
-    c.drawLine(const Offset(12, 3), const Offset(12, 19), p);
-    c.drawLine(const Offset(3, 7), const Offset(12, 11), p);
-    c.drawLine(const Offset(21, 7), const Offset(12, 11), p);
-  }
-
-  void _shoppingBag(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(6, 8)
-        ..lineTo(8, 21)
-        ..lineTo(16, 21)
-        ..lineTo(18, 8),
-      p,
-    );
-    c.drawPath(
-      Path()
-        ..moveTo(9, 8)
-        ..cubicTo(9, 4, 15, 4, 15, 8),
-      p,
-    );
-  }
-
-  void _wrench(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(14, 4)
-        ..arcToPoint(const Offset(20, 10), radius: const Radius.circular(4))
-        ..lineTo(10, 20)
-        ..lineTo(6, 20)
-        ..lineTo(6, 16)
-        ..lineTo(14, 8),
-      p,
-    );
-  }
-
-  void _store(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(3, 9)
-        ..lineTo(12, 3)
-        ..lineTo(21, 9)
-        ..lineTo(21, 21)
-        ..lineTo(3, 21)
-        ..close(),
-      p,
-    );
-    c.drawLine(const Offset(9, 21), const Offset(9, 14), p);
-    c.drawLine(const Offset(15, 21), const Offset(15, 14), p);
-  }
-
-  void _briefcase(Canvas c, Paint p) {
-    c.drawRRect(
-      RRect.fromRectAndRadius(
-          const Rect.fromLTWH(4, 8, 16, 12), const Radius.circular(2)),
-      p,
-    );
-    c.drawPath(
-      Path()
-        ..moveTo(9, 8)
-        ..lineTo(9, 6)
-        ..lineTo(15, 6)
-        ..lineTo(15, 8),
-      p,
-    );
-    c.drawLine(const Offset(4, 13), const Offset(20, 13), p);
-  }
-
-  void _shoppingCart(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(3, 4)
-        ..lineTo(5, 18)
-        ..lineTo(19, 18)
-        ..lineTo(21, 6)
-        ..lineTo(7, 6)
-        ..close(),
-      p,
-    );
-    c.drawCircle(const Offset(8, 21), 1.5, p);
-    c.drawCircle(const Offset(17, 21), 1.5, p);
-  }
-
-  void _tool(Canvas c, Paint p) {
-    c.drawLine(const Offset(4, 20), const Offset(16, 8), p);
-    c.drawRRect(
-      RRect.fromRectAndRadius(
-          const Rect.fromLTWH(14, 5, 6, 4), const Radius.circular(1)),
-      p,
-    );
-    c.drawLine(const Offset(18, 12), const Offset(21, 15), p);
-    c.drawLine(const Offset(21, 12), const Offset(18, 15), p);
-  }
-
-  void _receipt(Canvas c, Paint p) {
-    c.drawPath(
-      Path()
-        ..moveTo(6, 3)
-        ..lineTo(18, 3)
-        ..lineTo(18, 21)
-        ..lineTo(6, 21)
-        ..close(),
-      p,
-    );
-    c.drawLine(const Offset(9, 8), const Offset(15, 8), p);
-    c.drawLine(const Offset(9, 12), const Offset(15, 12), p);
-    c.drawLine(const Offset(9, 16), const Offset(13, 16), p);
-  }
-
-  void _clock(Canvas c, Paint p) {
-    c.drawCircle(const Offset(12, 12), 9, p);
-    c.drawLine(const Offset(12, 12), const Offset(12, 7), p);
-    c.drawLine(const Offset(12, 12), const Offset(16, 14), p);
-  }
-
-  @override
-  bool shouldRepaint(covariant _StrokeIconPainter old) =>
-      old.kind != kind || old.color != color;
+/// Кабинет (профил) экрани.
+Future<void> openProfileScreen(BuildContext context) async {
+  await Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+  );
 }

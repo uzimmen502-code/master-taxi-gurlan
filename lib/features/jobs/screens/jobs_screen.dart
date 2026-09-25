@@ -13,24 +13,39 @@ import '../widgets/add_ad_sheet.dart';
 
 /// ИШ ЭЪЛОН — 2 таб: Иш бор, Хизмат таклифи.
 class JobsScreen extends StatelessWidget {
-  const JobsScreen({super.key, this.initialTabIndex = JobsTabs.ad});
+  const JobsScreen({
+    super.key,
+    this.initialTabIndex = JobsTabs.ad,
+    this.openAddSheet = false,
+  });
 
   /// [JobsTabs.ad], [JobsTabs.service].
   final int initialTabIndex;
+
+  /// Экран очилиши билан «янги эълон» варақасини очиш — бош саҳифадаги
+  /// «＋» менюсидан келганда, фойдаланувчи яна бир марта босмаслиги учун.
+  final bool openAddSheet;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (ctx) => JobsController(repo: ctx.read<JobsRepository>()),
-      child: _JobsView(initialTabIndex: initialTabIndex),
+      child: _JobsView(
+        initialTabIndex: initialTabIndex,
+        openAddSheet: openAddSheet,
+      ),
     );
   }
 }
 
 class _JobsView extends StatefulWidget {
-  const _JobsView({required this.initialTabIndex});
+  const _JobsView({
+    required this.initialTabIndex,
+    this.openAddSheet = false,
+  });
 
   final int initialTabIndex;
+  final bool openAddSheet;
 
   @override
   State<_JobsView> createState() => _JobsViewState();
@@ -49,6 +64,12 @@ class _JobsViewState extends State<_JobsView>
     _tabCtrl.addListener(() {
       if (mounted) setState(() {});
     });
+    if (widget.openAddSheet) {
+      // `JobsController` provider'и тайёр бўлгач — биринчи frame'дан кейин.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openAddAdSheet();
+      });
+    }
   }
 
   @override

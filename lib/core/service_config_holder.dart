@@ -31,6 +31,7 @@ class ServiceConfigHolder {
   static const _cacheKeyRegionId = 'svc_region_id';
   static const _cacheKeyDistrictId = 'svc_district_id';
   static const _cacheKeyDistrictLabel = 'svc_district_label';
+  static const _cacheKeyRegionLabel = 'svc_region_label';
 
   /// Config o'zgarganda UI yangilanishi uchun (Home grid, resume).
   static final ValueNotifier<int> revision = ValueNotifier(0);
@@ -52,6 +53,10 @@ class ServiceConfigHolder {
 
   /// UI kontekst: qisqa tuman nomi (`Гурлан`), bo'sh bo'lsa BrandTitle yashiradi.
   static String _districtLabel = '';
+
+  /// UI kontekst: viloyat nomi (`Хоразм`) — bosh sahifadagi hudud tugmasi
+  /// «туман, вилоят» ko'rinishida ko'rsatadi.
+  static String _regionLabel = '';
 
   /// Gating yoqilganmi. `false` (default) → hamma modul enabled (hozirgi holat).
   static bool _enforce = false;
@@ -97,6 +102,17 @@ class ServiceConfigHolder {
   static String get regionId => _regionId;
   static String get districtId => _districtId;
   static String get districtLabel => _districtLabel;
+  static String get regionLabel => _regionLabel;
+
+  /// Bosh sahifadagi hudud tugmasi uchun: «Гурлан, Хоразм» / «Гурлан» / ''.
+  /// Bo'sh qaytsa UI «Ҳудудни танланг» deb ko'rsatadi.
+  static String get geoLabel {
+    final d = _districtLabel.trim();
+    final r = _regionLabel.trim();
+    if (d.isEmpty) return r;
+    if (r.isEmpty) return d;
+    return '$d, $r';
+  }
 
   /// Order/trip hujjatlariga bosiladigan hisobot muhri (faqat boʻsh emaslar).
   /// Xizmat mavjudligiga taʼsir qilmaydi — faqat hisobot/dashboard uchun.
@@ -143,8 +159,10 @@ class ServiceConfigHolder {
       }
     }
     await _saveAreaToCache();
-    if (_districtId.isNotEmpty && _districtLabel.isEmpty) {
+    if ((_districtId.isNotEmpty && _districtLabel.isEmpty) ||
+        (_regionId.isNotEmpty && _regionLabel.isEmpty)) {
       await _resolveDistrictLabel(_districtId);
+      await _resolveRegionLabel(_regionId);
       await _saveAreaToCache();
     }
     if (_uiFingerprint() != before) {
@@ -161,6 +179,8 @@ class ServiceConfigHolder {
       ..write(_serviceAreaId)
       ..write('|')
       ..write(_districtLabel)
+      ..write('|')
+      ..write(_regionLabel)
       ..write('|');
     for (final id in kKnownModuleIds) {
       b
@@ -181,6 +201,7 @@ class ServiceConfigHolder {
       _regionId = '';
       _districtId = '';
       _districtLabel = '';
+      _regionLabel = '';
       _districtOverride = ServiceModuleConfig.empty;
       _areaOverride = ServiceModuleConfig.empty;
       await _saveAreaToCache();
@@ -195,6 +216,7 @@ class ServiceConfigHolder {
         _regionId = area.regionId;
         _districtId = area.districtId;
         await _resolveDistrictLabel(area.districtId);
+        await _resolveRegionLabel(area.regionId);
         await _loadDistrictOverride(area.districtId);
       } else {
         _districtOverride = ServiceModuleConfig.empty;
@@ -231,6 +253,7 @@ class ServiceConfigHolder {
       }
     }
     await _resolveDistrictLabel(_districtId);
+    await _resolveRegionLabel(_regionId);
     await _saveAreaToCache();
     _notifyRevision();
   }
@@ -246,6 +269,20 @@ class ServiceConfigHolder {
     } catch (e, st) {
       debugPrint('ServiceConfigHolder._loadDistrictOverride: $e\n$st');
       _districtOverride = ServiceModuleConfig.empty;
+    }
+  }
+
+  static Future<void> _resolveRegionLabel(String regionId) async {
+    final id = regionId.trim();
+    if (id.isEmpty) {
+      _regionLabel = '';
+      return;
+    }
+    try {
+      final region = await _repo.fetchRegion(id);
+      _regionLabel = region?.displayName.trim() ?? '';
+    } catch (e, st) {
+      debugPrint('ServiceConfigHolder._resolveRegionLabel: $e\n$st');
     }
   }
 
@@ -285,6 +322,7 @@ class ServiceConfigHolder {
       _regionId = prefs.getString(_cacheKeyRegionId) ?? '';
       _districtId = prefs.getString(_cacheKeyDistrictId) ?? '';
       _districtLabel = prefs.getString(_cacheKeyDistrictLabel) ?? '';
+      _regionLabel = prefs.getString(_cacheKeyRegionLabel) ?? '';
       _enforce = prefs.getBool(_cacheKeyEnforce) ?? false;
     } catch (_) {}
   }
@@ -309,6 +347,7 @@ class ServiceConfigHolder {
       await prefs.setString(_cacheKeyRegionId, _regionId);
       await prefs.setString(_cacheKeyDistrictId, _districtId);
       await prefs.setString(_cacheKeyDistrictLabel, _districtLabel);
+      await prefs.setString(_cacheKeyRegionLabel, _regionLabel);
     } catch (_) {}
   }
 
@@ -336,6 +375,7 @@ class ServiceConfigHolder {
     String regionId = '',
     String districtId = '',
     String districtLabel = '',
+    String regionLabel = '',
     bool enforce = false,
   }) {
     _defaults = defaults ?? ServiceModuleConfig.empty;
@@ -345,6 +385,7 @@ class ServiceConfigHolder {
     _regionId = regionId;
     _districtId = districtId;
     _districtLabel = districtLabel;
+    _regionLabel = regionLabel;
     _enforce = enforce;
   }
 
@@ -357,6 +398,7 @@ class ServiceConfigHolder {
     _regionId = '';
     _districtId = '';
     _districtLabel = '';
+    _regionLabel = '';
     _enforce = false;
   }
 }

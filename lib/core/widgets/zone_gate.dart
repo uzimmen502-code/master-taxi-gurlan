@@ -113,16 +113,23 @@ class _ZoneGateState extends State<ZoneGate> {
   }
 }
 
-/// Bir marталик bloklovchi zona tanlash ekrani (eski foydalanuvchilar uchun).
+/// Zona tanlash ekrani.
+///
+/// [ZoneGate] ichida bir martalik BLOKLOVCHI darvoza sifatida ishlaydi
+/// ([allowCancel] = false). Bosh sahifadagi hudud tugmasidan ochilganda
+/// esa foydalanuvchi fikridan qaytishi mumkin ([allowCancel] = true) —
+/// u yerda zona allaqachon tanlangan, majburlashning hojati yo'q.
 class ZoneSelectScreen extends StatefulWidget {
   const ZoneSelectScreen({
     super.key,
     required this.uid,
     required this.onDone,
+    this.allowCancel = false,
   });
 
   final String uid;
   final VoidCallback onDone;
+  final bool allowCancel;
 
   @override
   State<ZoneSelectScreen> createState() => _ZoneSelectScreenState();
@@ -169,8 +176,15 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: widget.allowCancel,
       child: Scaffold(
+        appBar: widget.allowCancel
+            ? AppBar(
+                backgroundColor: Colors.transparent,
+                foregroundColor: AppColors.primaryDark,
+                elevation: 0,
+              )
+            : null,
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(

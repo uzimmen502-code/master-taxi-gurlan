@@ -15,7 +15,15 @@ import 'wholesale_product_form_screen.dart';
 /// "Бозор" (ҳамма кўради) + "Мен сотувчиман" (рўйхатдан ўтиш → admin
 /// тасдиғи → маҳсулот қўшиш).
 class WholesaleMarketScreen extends StatefulWidget {
-  const WholesaleMarketScreen({super.key, required this.userPhone});
+  const WholesaleMarketScreen({
+    super.key,
+    required this.userPhone,
+    this.initialTabIndex = 0,
+  });
+
+  /// 0 — «Бозор», 1 — «Мен сотувчиман». Бош саҳифадаги «＋ → Сотувчи
+  /// бўлиш» дарҳол иккинчи табни очади.
+  final int initialTabIndex;
 
   /// Жорий фойдаланувчи телефони — бош экрандан узатилади (`HomeController`
   /// фақат Home subtree'ида мавжуд, push қилинган экранда `context.read`
@@ -36,7 +44,11 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
   }
 
   @override

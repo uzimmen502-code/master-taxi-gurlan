@@ -161,13 +161,28 @@ service cloud.firestore {
                     'carUpdatedAt']);
     }
 
-    // schedules → intercity_drivers sync (Phone Auth yo'q; driverId = telefon raqami)
+    // schedules → intercity_drivers sync.
+    //
+    // Ilgari bu ikki funksiya AUTH TALAB QILMASDI (izoh: "Phone Auth yo'q") —
+    // ya'ni istalgan odam istalgan haydovchining narxini, mashinasini yoki
+    // reysini qayta yozishi mumkin edi. Endi chaqiruvchi tokenidagi telefon
+    // hujjatdagi `phone` bilan mos kelishi shart: haydovchi o'z reysini
+    // e'lon qilaveradi, begona esa tega olmaydi.
+    function intercityDriverIsCaller() {
+      return isAuth()
+          && phoneDocIdsMatch(
+               userDocIdFromPhoneToken(),
+               phoneDigits(request.resource.data.get('phone', '')));
+    }
+
     function intercityDriverScheduleCreate() {
-      return request.resource.data.keys().hasAll(['name', 'phone', 'isActive']);
+      return intercityDriverIsCaller()
+          && request.resource.data.keys().hasAll(['name', 'phone', 'isActive']);
     }
 
     function intercityDriverScheduleSync() {
-      return request.resource.data.keys().hasAll(['name', 'phone', 'isActive'])
+      return intercityDriverIsCaller()
+          && request.resource.data.keys().hasAll(['name', 'phone', 'isActive'])
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly([
                 'name', 'phone', 'phoneDigits', 'plate', 'car',
@@ -287,14 +302,9 @@ service cloud.firestore {
               .hasOnly(['status', 'confirmedAt', 'updatedAt']);
     }
 
-    function intercityBookingPassengerCancelPatch() {
-      return resource.data.status in ['pending', 'confirmed']
-          && request.resource.data.status == 'cancelled'
-          && notChanged('userPhone')
-          && notChanged('driverId')
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['status', 'cancelReason', 'cancelledAt']);
-    }
+    // OLIB TASHLANDI: `intercityBookingPassengerCancelPatch()` —
+    // bekor qilish `seats` ni qaytarishni talab qiladi, u esa endi
+    // `cancelIntercityBooking` callable'ida.
 
     function intercityBookingPickupPatch() {
       return resource.data.status in ['pending', 'confirmed']
@@ -312,16 +322,9 @@ service cloud.firestore {
               .hasOnly(['pickedUp', 'pickedUpAt', 'updatedAt']);
     }
 
-    function intercityBookingCompletePatch() {
-      return phoneDocIdsMatch(
-              userDocIdFromPhoneToken(), resource.data.driverId)
-          && resource.data.status == 'confirmed'
-          && request.resource.data.status == 'completed'
-          && notChanged('userPhone')
-          && notChanged('driverId')
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['status', 'completedAt']);
-    }
+    // OLIB TASHLANDI: `intercityBookingCompletePatch()` —
+    // yakunlash ham `seats` ni qaytaradi, u `completeIntercityBooking`
+    // callable'ida.
 
     function intercityBookingDriverArchivePatch() {
       return phoneDocIdsMatch(
@@ -333,10 +336,14 @@ service cloud.firestore {
     }
 
     // createBooking transaction — faqat seats / vaqt maydonlari
-    function intercityDriverSeatBookingPatch() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['seats', 'lastBookedAt', 'updatedAt']);
-    }
+    // OLIB TASHLANDI: `intercityDriverSeatBookingPatch()`.
+    //
+    // U istalgan chaqiruvchiga (hatto tizimga kirmaganga) istalgan
+    // haydovchining `seats` maydonini qayta yozishga ruxsat berardi —
+    // reysni "to'ldirib" qo'yish yoki bo'sh o'rin "yasash" mumkin edi.
+    // Bron/bekor/yakunlash endi callable CF'larda
+    // (`createIntercityBooking`, `cancelIntercityBooking`,
+    // `completeIntercityBooking`), ular esa admin SDK bilan yozadi.
 
     function approvedDriverForTaxi(driverId, taxiType) {
       return exists(/databases/$(database)/documents/drivers/$(driverId))
@@ -1582,7 +1589,6 @@ service cloud.firestore {
           || intercityDriverEntertainmentAllowedPatch()
           || intercityDriverEntertainmentPatch()
           || intercityDriverListingEnd()
-          || intercityDriverSeatBookingPatch()
           || intercityTripStartPatch(id);
       allow delete: if false;
 
@@ -1614,36 +1620,30 @@ service cloud.firestore {
     match /intercity_bookings/{bookingId} {
       allow read: if intercityBookingParticipantRead();
 
-      // Яратиш — userPhone, driverId, status, totalAmount > 0 бўлиши шарт.
-      allow create: if isAuth()
-          && phoneDocIdsMatch(
-              userDocIdFromPhoneToken(), request.resource.data.userPhone)
-          && 'userPhone' in request.resource.data
-          && 'driverId' in request.resource.data
-          && 'status' in request.resource.data
-          && 'totalAmount' in request.resource.data
-          && request.resource.data.totalAmount is number
-          && request.resource.data.totalAmount > 0
-          && request.resource.data.status in ['pending', 'confirmed'];
+      // Яратиш — ФАҚАТ `createIntercityBooking` callable орқали (admin SDK
+      // қоидалардан ўтмайди). Илгари мижоз ўзи яратарди ва ўша транзакцияда
+      // ҳайдовчининг `seats` майдонига ҳам ёзарди.
+      allow create: if false;
 
-      // Янгилаш — faqat auth + owner (yo'lovchi/haydovchi) yoki admin
+      // Янгилаш — faqat auth + owner (yo'lovchi/haydovchi) yoki admin.
+      //
+      // Бекор қилиш ва якунлаш бу ердан ОЛИБ ТАШЛАНДИ: улар ҳайдовчининг
+      // `seats` майдонини қайтаришни талаб қилади, шунинг учун
+      // `cancelIntercityBooking` / `completeIntercityBooking` callable'лари
+      // орқали бажарилади. Қолгани (тасдиқлаш, манзил, «олиб кетилди»,
+      // архив) `seats`га тегмайди — мижозда қолаверади.
       allow update: if isAuth()
           && (
             (
               phoneDocIdsMatch(
                   userDocIdFromPhoneToken(), resource.data.userPhone)
-              && (
-                intercityBookingPassengerCancelPatch()
-                || intercityBookingPickupPatch()
-              )
+              && intercityBookingPickupPatch()
             )
             || (
               phoneDocIdsMatch(
                   userDocIdFromPhoneToken(), resource.data.driverId)
               && (
                 intercityBookingDriverConfirm()
-                || intercityBookingPassengerCancelPatch()
-                || intercityBookingCompletePatch()
                 || intercityBookingDriverArchivePatch()
                 || intercityBookingPickedUpPatch()
               )

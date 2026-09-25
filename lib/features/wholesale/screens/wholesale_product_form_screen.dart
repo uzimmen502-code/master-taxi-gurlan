@@ -24,18 +24,39 @@ const _kFixedTiers = <_FixedTier>[
   _FixedTier(50, '50+'),
 ];
 
+/// Хитой бозори учун валюта танлови. Бўш қиймат — сўм (модел `currency`
+/// бўш бўлса сўм деб қарайди), шунинг учун "сўм" чипи бўш сақланади.
+class _CurrencyOption {
+  const _CurrencyOption(this.value, this.label);
+  final String value;
+  final String label;
+}
+
+const _kCurrencies = <_CurrencyOption>[
+  _CurrencyOption('', 'сўм'),
+  _CurrencyOption('\$', '\$ доллар'),
+  _CurrencyOption('¥', '¥ юань'),
+];
+
 /// Маҳсулот қўшиш/таҳрирлаш — ном, тавсиф, нарх поғоналари, бирлик, расм(1-5).
+/// Хитой бозорида қўшимча: валюта ва етказиш муддати.
 class WholesaleProductFormScreen extends StatefulWidget {
   const WholesaleProductFormScreen({
     super.key,
     required this.seller,
     this.existing,
+    this.market = WholesaleProduct.marketWholesale,
   });
 
   final WholesaleSeller seller;
 
   /// `null` — янги маҳсулот, акс ҳолда — таҳрирлаш.
   final WholesaleProduct? existing;
+
+  /// Қайси бозорга қўшилаяпти — `wholesale` ёки `china`. Таҳрирлашда
+  /// [existing] нинг бозори устун: Rules эгага маҳсулотни бошқа бозорга
+  /// кўчиришга рухсат бермайди.
+  final String market;
 
   @override
   State<WholesaleProductFormScreen> createState() =>
@@ -54,6 +75,12 @@ class _WholesaleProductFormScreenState
   late final TextEditingController _descCtrl;
   late final TextEditingController _unitCtrl;
 
+  /// Хитой бозори: етказиш муддати (кун) — ихтиёрий.
+  late final TextEditingController _deliveryCtrl;
+
+  /// Хитой бозори: нарх валютаси (бўш — сўм).
+  String _currency = '';
+
   /// Ҳар бир тайёр поғона учун нарх контроллери (тартиби [_kFixedTiers]га мос).
   late final List<TextEditingController> _priceCtrls;
 
@@ -63,6 +90,15 @@ class _WholesaleProductFormScreenState
 
   bool get _isEdit => widget.existing != null;
 
+  /// Таҳрирлашда маҳсулотнинг ўз бозори, янгисида — экран узатгани.
+  String get _market => widget.existing?.market ?? widget.market;
+
+  bool get _isChina => _market == WholesaleProduct.marketChina;
+
+  /// Нарх майдонларидаги валюта ёрлиғи.
+  String get _currencyLabel =>
+      _currency.trim().isEmpty ? 'сўм' : _currency.trim();
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +106,10 @@ class _WholesaleProductFormScreenState
     _titleCtrl = TextEditingController(text: e?.title ?? '');
     _descCtrl = TextEditingController(text: e?.description ?? '');
     _unitCtrl = TextEditingController(text: e?.unit ?? 'дона');
+    _deliveryCtrl = TextEditingController(
+      text: (e?.deliveryDays ?? 0) > 0 ? '${e!.deliveryDays}' : '',
+    );
+    _currency = e?.currency.trim() ?? '';
     _priceCtrls =
         List.generate(_kFixedTiers.length, (_) => TextEditingController());
     if (e != null) {
@@ -89,6 +129,7 @@ class _WholesaleProductFormScreenState
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _unitCtrl.dispose();
+    _deliveryCtrl.dispose();
     for (final c in _priceCtrls) {
       c.dispose();
     }
@@ -155,6 +196,7 @@ class _WholesaleProductFormScreenState
               images: _newImages,
             );
       final imageUrls = [..._existingImageUrls, ...uploaded];
+      final days = int.tryParse(_deliveryCtrl.text.trim());
       final product = WholesaleProduct(
         id: widget.existing?.id ?? '',
         sellerId: widget.seller.phone,
@@ -165,6 +207,11 @@ class _WholesaleProductFormScreenState
         priceTiers: tiers,
         unit: _unitCtrl.text.trim().isEmpty ? 'дона' : _unitCtrl.text.trim(),
         imageUrls: imageUrls,
+        market: _market,
+        // Валюта ва етказиш муддати — фақат Хитой бозорида. Улгуржида
+        // нарх ҳамиша сўмда, шунинг учун бўш қолдирилади.
+        currency: _isChina ? _currency.trim() : '',
+        deliveryDays: _isChina && days != null && days > 0 ? days : null,
       );
       String productId;
       if (_isEdit) {
@@ -243,6 +290,24 @@ class _WholesaleProductFormScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEdit ? 'Маҳсулотни таҳрирлаш' : 'Янги маҳсулот'),
+        // Сотувчи қайси бозорга қўшаётганини кўриб турсин — иккала
+        // бозор битта коллекцияда, форма ҳам ўша форма.
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(28),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                _isChina ? 'Хитой бозори' : 'Улгуржи бозор',
+                style: const TextStyle(
+                  fontSize: AppText.labelSmall,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,
@@ -275,6 +340,10 @@ class _WholesaleProductFormScreenState
                   ? 'Камида 3 та белги'
                   : null,
             ),
+            if (_isChina) ...[
+              const SizedBox(height: 16),
+              _chinaSection(),
+            ],
             const SizedBox(height: 16),
             _tiersSection(),
             const SizedBox(height: 12),
@@ -301,6 +370,40 @@ class _WholesaleProductFormScreenState
           ],
         ),
       ),
+    );
+  }
+
+  /// Хитой бозорига хос майдонлар: валюта ва етказиш муддати.
+  /// Иккаласи ҳам ихтиёрий — валюта танланмаса сўм, муддат киритилмаса
+  /// карточкада кўрсатилмайди (`formatDelivery` бўш қайтаради).
+  Widget _chinaSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Нарх валютаси',
+            style: TextStyle(
+                fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          for (final c in _kCurrencies)
+            ChoiceChip(
+              label: Text(c.label),
+              selected: _currency.trim() == c.value,
+              onSelected: (_) => setState(() => _currency = c.value),
+            ),
+        ]),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _deliveryCtrl,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: const InputDecoration(
+            labelText: 'Етказиш муддати (кун) — ихтиёрий',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      ],
     );
   }
 
@@ -343,9 +446,9 @@ class _WholesaleProductFormScreenState
             controller: _priceCtrls[index],
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              labelText: 'Нарх (сўм) — ихтиёрий',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: 'Нарх ($_currencyLabel) — ихтиёрий',
+              border: const OutlineInputBorder(),
               isDense: true,
             ),
           ),

@@ -38,6 +38,7 @@ import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
 import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
+import '../wholesale/screens/wholesale_product_detail_screen.dart';
 import 'screens/courier_services_hub_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
@@ -607,9 +608,10 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
-  /// Улгуржи бозор — телефон Home subtree'дан узатилади (`WholesaleMarketScreen`
-  /// `HomeController` ни ўзи ўқий олмайди).
-  Future<void> _openWholesale() async {
+  /// Улгуржи ёки Хитой бозори — телефон Home subtree'дан узатилади
+  /// (`WholesaleMarketScreen` `HomeController` ни ўзи ўқий олмайди).
+  /// Иккала бозор битта модул калити (`wholesale_market`) остида.
+  Future<void> _openWholesale(String market) async {
     if (!ServiceConfigHolder.isOpenable('wholesale_market')) {
       _showTezKundaSnack();
       return;
@@ -617,8 +619,18 @@ class _HomeViewState extends State<_HomeView> {
     await _push(
       WholesaleMarketScreen(
         userPhone: canonicalPhoneId(context.read<HomeController>().phone),
+        market: market,
       ),
     );
+  }
+
+  /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
+  Future<void> _openWholesaleProduct(WholesaleProduct product) async {
+    if (!ServiceConfigHolder.isOpenable('wholesale_market')) {
+      _showTezKundaSnack();
+      return;
+    }
+    await _push(WholesaleProductDetailScreen(product: product));
   }
 
   /// Юқори қатордаги ҳудуд тугмаси.
@@ -814,8 +826,9 @@ class _HomeViewState extends State<_HomeView> {
                               HomeWholesaleSection(
                                 market: WholesaleProduct.marketWholesale,
                                 titleKey: 'home_module_wholesale',
-                                onOpenAll: () => _openWholesale(),
-                                onOpenProduct: (_) => _openWholesale(),
+                                onOpenAll: () => _openWholesale(
+                                    WholesaleProduct.marketWholesale),
+                                onOpenProduct: _openWholesaleProduct,
                               ),
                               SizedBox(height: AvaSpace.sectionMin),
                               // 8-бўлим: Хитой бозори. Архитектураси
@@ -824,8 +837,9 @@ class _HomeViewState extends State<_HomeView> {
                               HomeWholesaleSection(
                                 market: WholesaleProduct.marketChina,
                                 titleKey: 'home_module_china',
-                                onOpenAll: () => _openWholesale(),
-                                onOpenProduct: (_) => _openWholesale(),
+                                onOpenAll: () =>
+                                    _openWholesale(WholesaleProduct.marketChina),
+                                onOpenProduct: _openWholesaleProduct,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('ev_charging')) ...[

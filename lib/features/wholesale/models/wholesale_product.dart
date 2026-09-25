@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/utils/formatters.dart';
 import '../../ads/utils/ad_search_text.dart';
 
 /// Улгуржи нарх поғонаси: `minQty`дан бошлаб шу нархда сотилади
@@ -18,8 +19,10 @@ class WholesalePriceTier {
 
   Map<String, dynamic> toMap() => {'minQty': minQty, 'price': price};
 
-  /// «10+: 9 000 сўм» — қисқа кўриниш (admin/тафсилот учун).
-  String label(String unit) => '$minQty+ $unit: $price сўм';
+  /// «10+ дона: 9 000 сўм» — қисқа кўриниш (admin/тафсилот учун).
+  /// [currency] — Хитой бозорида маҳсулотнинг ўз валютаси.
+  String label(String unit, [String currency = kCurrencySum]) =>
+      '$minQty+ $unit: ${formatPrice(price)} $currency';
 }
 
 /// Поғоналарни `minQty` бўйича ўсиш тартибида саралайди (дублика ва
@@ -119,6 +122,15 @@ class WholesaleProduct implements AdSearchable {
   final int? deliveryDays;
 
   bool get isChina => market == marketChina;
+
+  /// Нарх ёнидаги валюта белгиси — Хитой бозорида ўзиники, қолганда сўм.
+  String get currencyLabel =>
+      currency.trim().isNotEmpty ? currency.trim() : kCurrencySum;
+
+  /// «дан 9 000 $ / дона» — карточка ва тафсилотдаги ягона нарх сатри.
+  String get priceLine =>
+      '${priceTiers.length > 1 ? 'дан ' : ''}'
+      '${formatPrice(basePrice)} $currencyLabel / $unit';
 
   bool get isPending => status == statusPending;
   bool get isActive => status == statusActive;
@@ -228,6 +240,12 @@ class WholesaleProduct implements AdSearchable {
       'searchTokens': AdSearchText.buildTokens(title, description),
       'status': statusPending,
       'updatedAt': FieldValue.serverTimestamp(),
+      // `market` бу ерда ЙЎҚ — Rules эгага маҳсулотни бир бозордан
+      // бошқасига кўчиришга рухсат бермайди. Валюта ва етказиш муддати
+      // эса таҳрирланади, лекин фақат Хитой бозорида — улгуржида бу
+      // майдонлар ишлатилмайди, шунинг учун уларга тегилмайди.
+      if (isChina) 'currency': currency.trim(),
+      if (isChina) 'deliveryDays': deliveryDays ?? FieldValue.delete(),
     };
   }
 }

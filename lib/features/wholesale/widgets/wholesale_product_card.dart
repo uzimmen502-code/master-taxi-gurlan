@@ -79,8 +79,7 @@ class WholesaleProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${product.priceTiers.length > 1 ? "дан " : ""}'
-                    '${product.basePrice} сўм / ${product.unit}',
+                    product.priceLine,
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
                         fontWeight: FontWeight.w600,

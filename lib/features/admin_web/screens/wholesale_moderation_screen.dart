@@ -348,6 +348,12 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             _badge(_productStatusLabel(p.status), color),
+            // Иккала бозор битта коллекцияда — модерацияда қайси бозор
+            // экани кўриниб турсин.
+            if (p.isChina) ...[
+              const SizedBox(width: 6),
+              _badge('Хитой', Colors.deepOrange),
+            ],
             const Spacer(),
             Text(_dateText(p.createdAt),
                 style: const TextStyle(color: Colors.black45, fontSize: 12)),
@@ -381,8 +387,11 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
                 const SizedBox(height: 4),
                 Text(
                   p.priceTiers.length > 1
-                      ? p.priceTiers.map((t) => t.label(p.unit)).join(' · ')
-                      : 'Нарх: ${p.basePrice} · МОҚ: ${p.moq} ${p.unit}',
+                      ? p.priceTiers
+                          .map((t) => t.label(p.unit, p.currencyLabel))
+                          .join(' · ')
+                      : 'Нарх: ${p.basePrice} ${p.currencyLabel}'
+                          ' · МОҚ: ${p.moq} ${p.unit}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ]),

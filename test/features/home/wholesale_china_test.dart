@@ -62,21 +62,35 @@ void main() {
     });
   });
 
-  group('priceCurrency', () {
-    testWidgets('valyuta bo‘sh — so‘m', (t) async {
-      final s = await _withContext(t, (c) => priceCurrency(c, _p()));
-      expect(s, 'сўм');
+  group('currencyLabel', () {
+    test('valyuta bo‘sh — so‘m', () {
+      expect(_p().currencyLabel, 'сўм');
     });
 
-    testWidgets('xitoy bozorida o‘z valyutasi', (t) async {
-      final s = await _withContext(
-        t,
-        (c) => priceCurrency(
-          c,
-          _p(market: WholesaleProduct.marketChina, currency: '\$'),
-        ),
+    test('xitoy bozorida o‘z valyutasi', () {
+      expect(
+        _p(market: WholesaleProduct.marketChina, currency: '\$').currencyLabel,
+        '\$',
       );
-      expect(s, '\$');
+    });
+  });
+
+  group('priceLine', () {
+    test('bitta pog‘ona — "dan" yo‘q', () {
+      expect(_p().priceLine, '9 000 сўм / дона');
+    });
+
+    test('bir nechta pog‘ona — eng pastidan', () {
+      final p = _p(tiers: const [
+        WholesalePriceTier(minQty: 5, price: 12000),
+        WholesalePriceTier(minQty: 50, price: 9000),
+      ]);
+      expect(p.priceLine, 'дан 12 000 сўм / дона');
+    });
+
+    test('xitoy bozorida o‘z valyutasi', () {
+      final p = _p(market: WholesaleProduct.marketChina, currency: '\$');
+      expect(p.priceLine, '9 000 \$ / дона');
     });
   });
 

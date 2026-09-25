@@ -22,12 +22,6 @@ String formatTierNote(BuildContext context, WholesaleProduct p) {
   return '${t.minQty}+ ${p.unit}';
 }
 
-/// Нарх валютаси: Хитой бозорида ўз валютаси, қолганда сўм.
-String priceCurrency(BuildContext context, WholesaleProduct p) {
-  final c = p.currency.trim();
-  return c.isNotEmpty ? c : kCurrencySum;
-}
-
 /// Хитой бозори учун етказиш муддати: «14 кун». Маълум бўлмаса бўш.
 String formatDelivery(BuildContext context, WholesaleProduct p) {
   final d = p.deliveryDays;
@@ -130,7 +124,7 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
               price: p.basePrice > 0
                   ? '${context.tr('home_price_from')} '
                       '${formatPrice(p.basePrice)} '
-                      '${priceCurrency(context, p)}'
+                      '${p.currencyLabel}'
                   : null,
               priceNote: formatTierNote(context, p),
               // Хитой бозорида етказиш муддати, улгуржида сотувчи номи.

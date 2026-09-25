@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
@@ -14,12 +13,20 @@ import 'wholesale_product_form_screen.dart';
 /// Улгуржи/кичик улгуржи бозор — умумий кириш нуқтаси.
 /// "Бозор" (ҳамма кўради) + "Мен сотувчиман" (рўйхатдан ўтиш → admin
 /// тасдиғи → маҳсулот қўшиш).
+///
+/// Хитой бозори ҳам ШУ экран — архитектураси бир хил (эга қарори), фақат
+/// [market] билан ажралади: ўша коллекция, ўша сотувчи рўйхати, ўша
+/// модерация. Сотувчи иккала бозорга ҳам маҳсулот қўя олади.
 class WholesaleMarketScreen extends StatefulWidget {
   const WholesaleMarketScreen({
     super.key,
     required this.userPhone,
     this.initialTabIndex = 0,
+    this.market = WholesaleProduct.marketWholesale,
   });
+
+  /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
+  final String market;
 
   /// 0 — «Бозор», 1 — «Мен сотувчиман». Бош саҳифадаги «＋ → Сотувчи
   /// бўлиш» дарҳол иккинчи табни очади.
@@ -58,11 +65,13 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
     super.dispose();
   }
 
+  bool get _isChina => widget.market == WholesaleProduct.marketChina;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Улгуржи бозор'),
+        title: Text(_isChina ? 'Хитой бозори' : 'Улгуржи бозор'),
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.black,
@@ -76,7 +85,10 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
       ),
       body: TabBarView(
         controller: _tabCtrl,
-        children: [_marketTab(), _SellerAreaTab(phone: widget.userPhone)],
+        children: [
+          _marketTab(),
+          _SellerAreaTab(phone: widget.userPhone, market: widget.market),
+        ],
       ),
     );
   }
@@ -99,8 +111,9 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
       Expanded(
         child: StreamBuilder<List<WholesaleProduct>>(
           stream: _query.trim().isEmpty
-              ? _productsRepo.getActiveProducts()
-              : _productsRepo.searchActiveProducts(_query),
+              ? _productsRepo.getActiveProducts(market: widget.market)
+              : _productsRepo.searchActiveProducts(_query,
+                  market: widget.market),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
@@ -140,9 +153,12 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
 /// "Мен сотувчиман" — сотувчи ҳолатига қараб: рўйхатдан ўтиш формаси,
 /// кутилмоқда/рад этилган ҳолат, ёки ўз маҳсулотлари рўйхати.
 class _SellerAreaTab extends StatefulWidget {
-  const _SellerAreaTab({required this.phone});
+  const _SellerAreaTab({required this.phone, required this.market});
 
   final String phone;
+
+  /// Маҳсулотлар шу бозорга қўшилади ва шу бозорники кўрсатилади.
+  final String market;
 
   @override
   State<_SellerAreaTab> createState() => _SellerAreaTabState();
@@ -226,7 +242,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         if (seller == null) return _registerForm();
         if (seller.isPending) return _statusCard(seller);
         if (seller.isRejected) return _statusCard(seller);
-        return _MyProductsView(seller: seller);
+        return _MyProductsView(seller: seller, market: widget.market);
       },
     );
   }
@@ -241,7 +257,10 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Ишлаб чиқарувчи, оптовик ёки ЯТТ сифатида маҳсулотларингизни улгуржи/кичик улгуржи савдога қўйишингиз мумкин. Рўйхатдан ўтгач, admin тасдиғидан кейин маҳсулот жойлаштира оласиз.',
+          'Ишлаб чиқарувчи, оптовик ёки ЯТТ сифатида маҳсулотларингизни улгуржи/кичик улгуржи савдога қўйишингиз мумкин. Рўйхатдан ўтгач, admin тасдиғидан кейин маҳсулот жойлаштира оласиз.'
+          // Рўйхат битта — иккала бозор ҳам `wholesale_sellers`дан
+          // фойдаланади, шунинг учун Хитой бозорида буни айтиб қўямиз.
+          '${widget.market == WholesaleProduct.marketChina ? ' Рўйхат умумий — битта рўйхатдан ўтиш иккала бозор учун ҳам етарли.' : ''}',
           style: TextStyle(color: Colors.grey.shade700),
         ),
         const SizedBox(height: 20),
@@ -321,9 +340,13 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
 }
 
 class _MyProductsView extends StatelessWidget {
-  const _MyProductsView({required this.seller});
+  const _MyProductsView({required this.seller, required this.market});
 
   final WholesaleSeller seller;
+
+  /// Фақат шу бозордаги маҳсулотлар кўрсатилади ва янгиси ҳам шу
+  /// бозорга қўшилади.
+  final String market;
 
   @override
   Widget build(BuildContext context) {
@@ -333,14 +356,15 @@ class _MyProductsView extends StatelessWidget {
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => WholesaleProductFormScreen(seller: seller),
+            builder: (_) =>
+                WholesaleProductFormScreen(seller: seller, market: market),
           ),
         ),
         icon: const Icon(Icons.add),
         label: const Text('Янги маҳсулот'),
       ),
       body: StreamBuilder<List<WholesaleProduct>>(
-        stream: repo.watchBySeller(seller.phone),
+        stream: repo.watchBySeller(seller.phone, market: market),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -491,8 +515,7 @@ class _MyProductsView extends StatelessWidget {
               ),
             ),
             Text(
-              '${p.priceTiers.length > 1 ? "дан " : ""}${formatMoney(p.basePrice)}'
-              ' / ${p.unit}',
+              p.priceLine,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

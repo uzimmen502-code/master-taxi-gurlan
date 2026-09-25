@@ -132,13 +132,17 @@ class WholesaleProductsRepository {
   }
 
   /// Фаол маҳсулотлар — қидирув (кирилл↔лотин, `CatalogSearch`).
+  ///
+  /// [market] берилса қидирув фақат ўша бозор ичида кечади — Хитой
+  /// бозоридан улгуржи маҳсулот чиқиб қолмаслиги учун.
   Stream<List<WholesaleProduct>> searchActiveProducts(
     String query, {
     int limit = 100,
+    String? market,
   }) {
     final q = query.trim();
     final poolLimit = q.isEmpty ? limit : feedLimit;
-    return getActiveProducts(limit: poolLimit).map((items) {
+    return getActiveProducts(limit: poolLimit, market: market).map((items) {
       final filtered = items.where((p) {
         return CatalogSearch.matches(q, [
           p.title,
@@ -154,11 +158,22 @@ class WholesaleProductsRepository {
   }
 
   /// Сотувчининг ўз маҳсулотлари (ҳар қандай статус).
-  Stream<List<WholesaleProduct>> watchBySeller(String sellerPhone) {
+  ///
+  /// [market] берилса фақат ўша бозордагилари — сотувчи «Хитой бозори»
+  /// табида улгуржи маҳсулотларини кўрмасин. Филтр клиентда: сотувчида
+  /// маҳсулот кам, устига эски ёзувларда `market` майдони йўқ.
+  Stream<List<WholesaleProduct>> watchBySeller(
+    String sellerPhone, {
+    String? market,
+  }) {
     final id = canonicalPhoneId(sellerPhone);
     if (id.isEmpty) return Stream.value(const []);
     return _col.where('sellerId', isEqualTo: id).snapshots().map((snap) {
-      final list = snap.docs.map(WholesaleProduct.fromFirestore).toList();
+      final all = snap.docs.map(WholesaleProduct.fromFirestore);
+      final list = (market == null
+              ? all
+              : all.where((p) => p.market == market))
+          .toList();
       list.sort((a, b) {
         final at = a.updatedAt ?? a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bt = b.updatedAt ?? b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);

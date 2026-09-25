@@ -74,9 +74,7 @@ class _WholesaleProductDetailScreenState
                     style: const TextStyle(
                         fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(
-                    '${p.priceTiers.length > 1 ? "дан " : ""}'
-                    '${p.basePrice} сўм / ${p.unit}',
+                Text(p.priceLine,
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -84,6 +82,13 @@ class _WholesaleProductDetailScreenState
                 const SizedBox(height: 4),
                 Text('Минимал буюртма: ${p.moq} ${p.unit}',
                     style: TextStyle(color: Colors.grey.shade700)),
+                // Хитой бозорида етказиш муддати — асосий саволлардан
+                // бири; киритилмаган бўлса умуман кўрсатилмайди.
+                if (p.isChina && (p.deliveryDays ?? 0) > 0) ...[
+                  const SizedBox(height: 4),
+                  Text('Етказиш муддати: ${p.deliveryDays} кун',
+                      style: TextStyle(color: Colors.grey.shade700)),
+                ],
                 if (p.priceTiers.length > 1) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -103,7 +108,7 @@ class _WholesaleProductDetailScreenState
                         for (final t in p.priceTiers)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(t.label(p.unit)),
+                            child: Text(t.label(p.unit, p.currencyLabel)),
                           ),
                       ],
                     ),

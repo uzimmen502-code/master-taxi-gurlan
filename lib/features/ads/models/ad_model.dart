@@ -23,6 +23,8 @@ class AdModel implements AdSearchable {
     this.adminNote = '',
     this.moderatedAt,
     this.moderatedBy = '',
+    this.districtId = '',
+    this.regionId = '',
   });
 
   static const String typeKey = 'cheap_product';
@@ -50,6 +52,11 @@ class AdModel implements AdSearchable {
   final String adminNote;
   final DateTime? moderatedAt;
   final String moderatedBy;
+
+  /// Эълон эгасининг ҳудуди — бош саҳифадаги 6-бўлимни филтрлаш учун.
+  /// `submitMarketAd` (CF) серверда ёзади; эски ёзувларда бўш.
+  final String districtId;
+  final String regionId;
 
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
@@ -91,6 +98,8 @@ class AdModel implements AdSearchable {
       adminNote: (d['adminNote'] ?? '') as String,
       moderatedAt: _parseDate(d['moderatedAt']),
       moderatedBy: (d['moderatedBy'] ?? '') as String,
+      districtId: ((d['districtId'] ?? '') as String).trim(),
+      regionId: ((d['regionId'] ?? '') as String).trim(),
     );
   }
 

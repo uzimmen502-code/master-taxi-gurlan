@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/merged_stream.dart';
 import '../../../services/market_ad_service.dart';
 import '../models/ad_model.dart';
 import '../services/ads_storage_service.dart';
@@ -122,6 +123,45 @@ class AdsRepository {
         .map(
           (snap) => snap.docs.map(AdModel.fromFirestore).toList(),
         );
+  }
+
+  /// Бош саҳифадаги 6-бўлим — «Аҳоли бозори», ҳудуд бўйича.
+  ///
+  /// [districtId] бўш бўлса (ҳудуд ҳали танланмаган) — оддий фаол
+  /// рўйхат. Бўш бўлмаса филтр СЕРВЕР томонда: лимит фақат шу тумандаги
+  /// эълонларга тегишли бўлади.
+  ///
+  /// Эски эълонларда `districtId` йўқ; Firestore'да «майдон йўқ» бўйича
+  /// сўров қилиб бўлмайди, шунинг учун улар иккинчи оқимда келади ва
+  /// клиентда қўшилади (backfill'гача барча туманда кўринади —
+  /// `functions/tools/backfill_ads_district.js`).
+  Stream<List<AdModel>> watchForHome({
+    required String districtId,
+    int limit = 5,
+  }) {
+    final id = districtId.trim();
+    if (id.isEmpty) return getActiveAds(limit: limit);
+
+    final scoped = _cheapQuery()
+        .where('status', isEqualTo: 'active')
+        .where('districtId', isEqualTo: id)
+        .orderBy('publishedAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs.map(AdModel.fromFirestore).toList());
+
+    final legacy = getActiveAds(limit: 60)
+        .map((l) => l.where((a) => a.districtId.trim().isEmpty).toList());
+
+    return mergeListStreams(scoped, legacy, idOf: (a) => a.id).map((list) {
+      final sorted = list.toList()
+        ..sort((a, b) {
+          final ap = a.publishedAt?.millisecondsSinceEpoch ?? 0;
+          final bp = b.publishedAt?.millisecondsSinceEpoch ?? 0;
+          return bp.compareTo(ap);
+        });
+      return sorted.take(limit).toList();
+    });
   }
 
   /// Фаол эълонлар: каталог қидируви (AND + кирилл/лотин) + релевантлик.

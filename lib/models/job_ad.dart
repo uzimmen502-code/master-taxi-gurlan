@@ -111,6 +111,8 @@ class JobAd {
     this.moderatedAt,
     this.adminNote = '',
     this.moderatedBy = '',
+    this.districtId = '',
+    this.regionId = '',
   });
 
   final String id;
@@ -138,6 +140,11 @@ class JobAd {
   final DateTime? moderatedAt;
   final String adminNote;
   final String moderatedBy;
+
+  /// Эълон эгасининг ҳудуди — бош саҳифадаги 2/3-бўлимларни филтрлаш
+  /// учун. `submitJobAd` (CF) серверда ёзади; эски ёзувларда бўш.
+  final String districtId;
+  final String regionId;
 
   static bool isJobsBoardType(String? type) => AdKindX.isJobsBoardType(type);
 
@@ -212,6 +219,8 @@ class JobAd {
       moderatedAt: (d['moderatedAt'] as Timestamp?)?.toDate(),
       adminNote: (d['adminNote'] ?? '') as String,
       moderatedBy: (d['moderatedBy'] ?? '') as String,
+      districtId: ((d['districtId'] ?? '') as String).trim(),
+      regionId: ((d['regionId'] ?? '') as String).trim(),
     );
   }
 }

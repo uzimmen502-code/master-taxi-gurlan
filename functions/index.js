@@ -631,6 +631,41 @@ function canonicalUid(v) {
 }
 
 /**
+ * E'lon egasining hududi — `users/{uid}` hujjatidan.
+ *
+ * Bosh sahifadagi 2/3/6-bo'limlar e'lonlarni `districtId` bo'yicha
+ * filtrlaydi. Hudud ATAYLAB mijozdan olinmaydi, balki serverda
+ * o'qiladi: aks holda foydalanuvchi o'z e'lonini istalgan tumanga
+ * "joylashtirib" qo'yishi mumkin edi.
+ *
+ * Hujjat 9 va 12 raqamli ID bilan yozilgan bo'lishi mumkin — ikkalasi
+ * ham tekshiriladi. Hudud topilmasa bo'sh obyekt qaytadi va e'lon
+ * hududsiz yoziladi (eski xatti-harakat).
+ */
+async function ownerGeoStamp(uid) {
+  const d = digits(uid);
+  if (d.length < 9) return {};
+  const ids = new Set([d]);
+  if (d.length === 12 && d.startsWith('998')) ids.add(d.slice(3));
+  if (d.length === 9) ids.add(`998${d}`);
+
+  for (const id of ids) {
+    try {
+      const snap = await db.collection('users').doc(id).get();
+      if (!snap.exists) continue;
+      const u = snap.data() || {};
+      const districtId = String(u.districtId || '').trim();
+      if (!districtId) continue;
+      const regionId = String(u.regionId || '').trim();
+      return regionId ? { districtId, regionId } : { districtId };
+    } catch (e) {
+      console.error('ownerGeoStamp', id, e.message || e);
+    }
+  }
+  return {};
+}
+
+/**
  * Home bottom badge — denormalized counters (client watches 2 docs, not 6–8 news streams).
  * - Broadcast: increment config/home_news_badge.broadcastSeq
  * - Personal (dialog/order): increment users/{uid}.homeBadgePersonal
@@ -6711,6 +6746,7 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
 
   const autoApprove = await isJobsAutoApproveEnabled();
   const status = autoApprove ? 'active' : 'pending';
+  const geo = await ownerGeoStamp(uid);
 
   const ref = await db.collection('ads').add({
     type,
@@ -6720,6 +6756,8 @@ exports.submitJobAd = functions.https.onCall(async (data, context) => {
     authorName: authorName || 'Фойдаланувчи',
     authorPhone: uid,
     address,
+    // Hudud serverda aniqlanadi (qarang: ownerGeoStamp).
+    ...geo,
     isUrgent,
     status,
     expiresAt,
@@ -7433,6 +7471,8 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
       new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
     );
 
+  const geo = await ownerGeoStamp(uid);
+
   const payload = {
     type: 'cheap_product',
     ownerId: uid,
@@ -7443,6 +7483,8 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
     price,
     phone: uid,
     sellerName,
+    // Hudud serverda aniqlanadi (qarang: ownerGeoStamp).
+    ...geo,
     imageUrls: imageUrls.map((u) => String(u)),
     status: autoApprove ? 'active' : 'pending',
     views: 0,

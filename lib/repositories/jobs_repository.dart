@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/utils/formatters.dart';
+import '../core/utils/merged_stream.dart';
 import '../models/job_ad.dart';
 import '../models/job_complaint.dart';
 import '../services/job_ad_service.dart';
@@ -41,6 +42,58 @@ class JobsRepository {
         .limit(limit)
         .snapshots()
         .map((snap) => snap.docs.map(JobAd.fromDoc).toList(growable: false));
+  }
+
+  /// Бош саҳифадаги 2 (эълонлар) ва 3 (хизмат таклифлари) бўлимлари.
+  ///
+  /// [districtId] бўш бўлмаса филтр СЕРВЕР томонда — лимит фақат шу
+  /// тумандагиларга тегишли бўлади. Муддати ўтганлар чиқарилади
+  /// (сервер ҳам `expirePendingTrips` да статусни ўзгартиради, лекин
+  /// орадаги бир дақиқада эскиси кўриниб қолмасин).
+  ///
+  /// Эски эълонларда `districtId` йўқ — улар иккинчи оқимда келади ва
+  /// клиентда қўшилади (қаранг: `backfill_ads_district.js`).
+  Stream<List<JobAd>> watchForHome(
+    String type, {
+    required String districtId,
+    int limit = 5,
+  }) {
+    Stream<List<JobAd>> clean(Stream<List<JobAd>> src) => src.map(
+          (l) => l.where((a) => !a.isExpired).toList(),
+        );
+
+    final id = districtId.trim();
+    if (id.isEmpty) {
+      return clean(watchActiveByType(type, limit: 40))
+          .map((l) => _newestFirst(l).take(limit).toList());
+    }
+
+    final scoped = clean(
+      _ads
+          .where('type', isEqualTo: type)
+          .where('status', isEqualTo: 'active')
+          .where('districtId', isEqualTo: id)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .snapshots()
+          .map((s) => s.docs.map(JobAd.fromDoc).toList(growable: false)),
+    );
+
+    final legacy = clean(watchActiveByType(type, limit: 60))
+        .map((l) => l.where((a) => a.districtId.trim().isEmpty).toList());
+
+    return mergeListStreams(scoped, legacy, idOf: (a) => a.id)
+        .map((l) => _newestFirst(l).take(limit).toList());
+  }
+
+  static List<JobAd> _newestFirst(List<JobAd> list) {
+    final out = list.toList()
+      ..sort((a, b) {
+        final at = a.createdAt?.millisecondsSinceEpoch ?? 0;
+        final bt = b.createdAt?.millisecondsSinceEpoch ?? 0;
+        return bt.compareTo(at);
+      });
+    return out;
   }
 
   /// Иш / хизмат / эълон feed (актив).

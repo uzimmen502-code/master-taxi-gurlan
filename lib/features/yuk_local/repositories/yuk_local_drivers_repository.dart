@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/merged_stream.dart';
 import '../models/yuk_local_driver.dart';
 import '../yuk_accept_radius.dart';
 import '../yuk_local_schedule.dart';
@@ -60,58 +59,7 @@ class YukLocalDriversRepository {
             .where((d) => d.hasNoDistrict)
             .toList());
 
-    return _merge(scoped, legacy);
-  }
-
-  /// Икки оқимни бирлаштиради: ҳар бири янгиланганда умумий рўйхат
-  /// қайта чиқади; ID бўйича такрор олиб ташланади.
-  static Stream<List<YukLocalDriver>> _merge(
-    Stream<List<YukLocalDriver>> a,
-    Stream<List<YukLocalDriver>> b,
-  ) {
-    var listA = <YukLocalDriver>[];
-    var listB = <YukLocalDriver>[];
-    var seenA = false;
-    var seenB = false;
-
-    final controller = StreamController<List<YukLocalDriver>>();
-    StreamSubscription<List<YukLocalDriver>>? subA;
-    StreamSubscription<List<YukLocalDriver>>? subB;
-
-    void emit() {
-      // Иккала оқимдан ҳам биринчи жавоб келмагунча чиқармаймиз —
-      // акс ҳолда рўйхат «сакраб» тўлади.
-      if (!seenA || !seenB) return;
-      final byId = <String, YukLocalDriver>{};
-      for (final d in [...listA, ...listB]) {
-        byId[d.id] = d;
-      }
-      if (!controller.isClosed) controller.add(byId.values.toList());
-    }
-
-    controller.onListen = () {
-      subA = a.listen(
-        (v) {
-          listA = v;
-          seenA = true;
-          emit();
-        },
-        onError: controller.addError,
-      );
-      subB = b.listen(
-        (v) {
-          listB = v;
-          seenB = true;
-          emit();
-        },
-        onError: controller.addError,
-      );
-    };
-    controller.onCancel = () async {
-      await subA?.cancel();
-      await subB?.cancel();
-    };
-    return controller.stream;
+    return mergeListStreams(scoped, legacy, idOf: (d) => d.id);
   }
 
   /// Ўз эълонлари — `createdAt` бўйича (янги тепада).

@@ -63,7 +63,9 @@ import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
 import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
+import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
+import 'widgets/home_market_section.dart';
 import 'widgets/home_yuk_local_section.dart';
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
@@ -803,6 +805,52 @@ class _HomeViewState extends State<_HomeView> {
                                 TvMarketFeedScreen(initialClip: clip),
                               ),
                             ),
+                            if (HomeModuleGate.showInGrid('jobs')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeAdsSection(
+                                adType: 'ad',
+                                titleKey: 'home_section_ads',
+                                onOpenAll: () => _push(
+                                  const JobsScreen(
+                                    initialTabIndex: JobsTabs.ad,
+                                  ),
+                                ),
+                                onOpenAd: (_) => _push(
+                                  const JobsScreen(
+                                    initialTabIndex: JobsTabs.ad,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeAdsSection(
+                                adType: 'service',
+                                titleKey: 'home_section_services',
+                                onOpenAll: () => _push(
+                                  const JobsScreen(
+                                    initialTabIndex: JobsTabs.service,
+                                  ),
+                                ),
+                                onOpenAd: (_) => _push(
+                                  const JobsScreen(
+                                    initialTabIndex: JobsTabs.service,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (HomeModuleGate.showInGrid(
+                                'cheap_products_home')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeMarketSection(
+                                onOpenAll: () => _openModule(
+                                  HomeModulesCatalog.byId(
+                                      'cheap_products_home'),
+                                ),
+                                onOpenAd: (_) => _openModule(
+                                  HomeModulesCatalog.byId(
+                                      'cheap_products_home'),
+                                ),
+                              ),
+                            ],
                             if (HomeModuleGate.showInGrid('yuk_local')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeYukLocalSection(

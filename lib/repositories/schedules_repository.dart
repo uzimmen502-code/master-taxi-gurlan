@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
 import 'intercity_bookings_repository.dart';
 import '../models/schedule.dart';
@@ -394,6 +395,9 @@ class SchedulesRepository {
             'routeLabel': stopsNormalized.isNotEmpty
                 ? stopsNormalized.join(' → ')
                 : '$fromNormalized → $toNormalized',
+            // Ҳудуд муҳри — бош саҳифадаги 4-бўлим «шу тумандан
+            // чиқаётган рейслар» ни шу майдон бўйича сўрайди.
+            ...ServiceConfigHolder.reportStamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           },
           SetOptions(merge: true));

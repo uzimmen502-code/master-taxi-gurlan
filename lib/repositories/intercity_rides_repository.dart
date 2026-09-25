@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/merged_stream.dart';
 import '../models/intercity_ride.dart';
 import '../utils/intercity_route_match.dart';
 
@@ -109,6 +110,77 @@ class IntercityRidesRepository {
         baseDate: baseDate,
       );
     });
+  }
+
+  /// Бош саҳифадаги 4-бўлим: шу тумандан чиқаётган яқин рейслар.
+  ///
+  /// Мавжуд [watchActiveRides] дан фарқи: у `from`+`to` жуфтлигини
+  /// талаб қилади (йўловчи қидируви), бу эса ЙЎНАЛИШСИЗ — рейслар
+  /// ҳайдовчининг ўз тумани бўйича олинади.
+  ///
+  /// Ўтиб кетган рейс чиқмайди: жўнаш вақти `scheduleDate` (кун) ва
+  /// `hour` (соат) дан йиғилади ва ҳозирги вақт билан солиштирилади.
+  ///
+  /// Эски ёзувларда `districtId` йўқ — улар иккинчи оқимда келади
+  /// (қаранг: `backfill_intercity_district.js`).
+  Stream<List<IntercityRide>> watchNearbyForHome({
+    required String districtId,
+    int limit = 5,
+  }) {
+    List<IntercityRide> upcoming(QuerySnapshot<Map<String, dynamic>> snap) {
+      final now = DateTime.now();
+      final out = <IntercityRide>[];
+      for (final doc in snap.docs) {
+        final ride = _fromHomeDoc(doc);
+        if (ride == null) continue;
+        if (ride.departureTime.isBefore(now)) continue;
+        out.add(ride);
+      }
+      out.sort((a, b) => a.departureTime.compareTo(b.departureTime));
+      return out;
+    }
+
+    final id = districtId.trim();
+    final base = _col.where('isActive', isEqualTo: true);
+
+    if (id.isEmpty) {
+      return base.snapshots().map((s) => upcoming(s).take(limit).toList());
+    }
+
+    final scoped = base
+        .where('districtId', isEqualTo: id)
+        .snapshots()
+        .map(upcoming);
+
+    // `_fromHomeDoc` ҳужжатнинг `districtId` ини `district` майдонига
+    // солади, шунинг учун ҳудудсиз эски ёзувлар шу бўйича ажратилади.
+    final legacy = base.snapshots().map(
+          (s) => upcoming(s).where((r) => r.district.trim().isEmpty).toList(),
+        );
+
+    return mergeListStreams(scoped, legacy, idOf: (r) => r.id).map((list) {
+      final sorted = list.toList()
+        ..sort((a, b) => a.departureTime.compareTo(b.departureTime));
+      return sorted.take(limit).toList();
+    });
+  }
+
+  /// Ҳужжатнинг ЎЗИДАН рейс қуради (йўловчи танлаган йўналишдан эмас).
+  /// `scheduleDate` бўш ёки нотўғри бўлса — рейс кўрсатилмайди.
+  IntercityRide? _fromHomeDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data();
+    final dateRaw = (d['scheduleDate'] as String?)?.trim() ?? '';
+    final date = DateTime.tryParse(dateRaw);
+    if (date == null) return null;
+    final from = (d['from'] as String?)?.trim() ?? '';
+    final to = (d['to'] as String?)?.trim() ?? '';
+    return IntercityRide.fromDoc(
+      doc,
+      fromCity: from,
+      toCity: to,
+      district: (d['districtId'] as String?)?.trim() ?? '',
+      baseDate: date,
+    );
   }
 
   Future<void> startTrip(String driverId) async {

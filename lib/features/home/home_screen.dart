@@ -65,6 +65,7 @@ import 'widgets/wallet_card.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
+import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
 import 'widgets/home_yuk_local_section.dart';
 
@@ -848,6 +849,20 @@ class _HomeViewState extends State<_HomeView> {
                                 onOpenAd: (_) => _openModule(
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
+                                ),
+                              ),
+                            ],
+                            if (HomeModuleGate.showInGrid('intercity')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeIntercitySection(
+                                onOpenAll: () => _openModule(
+                                  HomeModulesCatalog.byId('intercity'),
+                                ),
+                                onOpenRide: (ride) => _push(
+                                  IntercityTaxiScreen(
+                                    autoFrom: ride.fromCity,
+                                    autoTo: ride.toCity,
+                                  ),
                                 ),
                               ),
                             ],

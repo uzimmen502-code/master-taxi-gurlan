@@ -1799,6 +1799,44 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "assistant_conversations",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "assistant_messages",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
     }
   ]
 }

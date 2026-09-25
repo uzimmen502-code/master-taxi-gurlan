@@ -693,9 +693,12 @@ class _HomeViewState extends State<_HomeView> {
                             // Ҳамён карточкаси интерфейсдан олиб
                             // ташланди (тавсиф: «Ҳамён коддан
                             // ўчирилмайди, фақат интерфейсда
-                            // яширилади»). `WalletScreen` ва
-                            // `openWalletScreen()` жойида — AVA AI ва
-                            // EV ичидаги «тўлдириш» уларни чақиради.
+                            // яширилади»). `WalletScreen` жойида ва
+                            // ишлайверади: AVA AI ҳамда EV ичидаги
+                            // «тўлдириш» уни тўғридан-тўғри очади.
+                            // Қуйидаги `openWalletScreen()` эса ҳозир
+                            // чақирилмайди — ҳамён яна кўринадиган
+                            // бўлса, тайёр туриши учун қолдирилди.
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()

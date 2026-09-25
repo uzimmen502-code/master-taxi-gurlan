@@ -36,7 +36,7 @@ class HomeServiceActions {
     required this.openModule,
     required this.openYukModule,
     required this.openPayment,
-    required this.openDatingBot,
+    required this.openDating,
     required this.showComingSoon,
   });
 
@@ -44,7 +44,7 @@ class HomeServiceActions {
   final Future<void> Function(HomeModule module) openModule;
   final Future<void> Function(String moduleId, Widget screen) openYukModule;
   final Future<void> Function(PaymentProviderApp app) openPayment;
-  final Future<void> Function() openDatingBot;
+  final Future<void> Function() openDating;
   final void Function() showComingSoon;
 }
 
@@ -185,7 +185,7 @@ List<ServiceSpotlightItem> buildHomeServices(
       icon: Icons.favorite_rounded,
       iconColor: const Color(0xFFE53935),
       iconScale: 1.05,
-      onTap: () => a.openDatingBot(),
+      onTap: () => a.openDating(),
     ),
     ServiceSpotlightItem(
       moduleId: 'chatgpt',

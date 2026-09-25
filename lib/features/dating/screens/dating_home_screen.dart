@@ -10,6 +10,7 @@ import '../../../models/dating_interest.dart';
 import '../../../models/dating_match.dart';
 import '../../../models/dating_profile.dart';
 import '../../../repositories/dating_repository.dart';
+import '../dating_telegram_bot.dart';
 import '../services/dating_service.dart';
 import 'dating_chat_screen.dart';
 import 'dating_profile_form_screen.dart';
@@ -219,6 +220,7 @@ class _DatingHomeScreenState extends State<DatingHomeScreen> {
         title: Text(title),
         backgroundColor: datingAccent,
         foregroundColor: Colors.white,
+        actions: const [DatingBotButton()],
       ),
       body: body,
     );
@@ -259,6 +261,7 @@ class _DatingApprovedHome extends StatelessWidget {
               title: const Text('Танишув'),
               backgroundColor: datingAccent,
               foregroundColor: Colors.white,
+              actions: const [DatingBotButton()],
               bottom: TabBar(
                 controller: tabCtrl,
                 isScrollable: true,

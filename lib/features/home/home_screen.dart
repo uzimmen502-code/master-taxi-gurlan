@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../config.dart';
 import '../../core/app_share.dart';
@@ -30,6 +29,7 @@ import 'widgets/ava_bottom_nav.dart';
 import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
+import '../dating/screens/dating_home_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../assistant/assistant_entry.dart';
@@ -279,23 +279,14 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
-  static const _datingTelegramBotUrl = 'https://t.me/bilish_tanish_bot';
-
-  Future<void> _openDatingTelegramBot() async {
-    final uri = Uri.parse(_datingTelegramBotUrl);
-    try {
-      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Telegram очилмади')),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telegram очилмади')),
-      );
+  /// Танишув — иловадаги ўз экрани (эга қарори). Эски Telegram бот
+  /// ўчирилмади: у [DatingHomeScreen] нинг AppBar'идаги тугмадан очилади.
+  Future<void> _openDating() async {
+    if (!ServiceConfigHolder.isOpenable('dating')) {
+      _showTezKundaSnack();
+      return;
     }
+    await _push(const DatingHomeScreen());
   }
 
   Future<void> _openModule(HomeModule m) async {
@@ -463,7 +454,7 @@ class _HomeViewState extends State<_HomeView> {
         await _push(const CourierServicesHubScreen());
         return;
       case 'dating':
-        await _openDatingTelegramBot();
+        await _openDating();
         return;
       case 'jobs':
         await _push(
@@ -556,7 +547,7 @@ class _HomeViewState extends State<_HomeView> {
         openModule: _openModule,
         openYukModule: _openYukModule,
         openPayment: _openPaymentProvider,
-        openDatingBot: _openDatingTelegramBot,
+        openDating: _openDating,
         showComingSoon: _showTezKundaSnack,
       );
 
@@ -857,7 +848,7 @@ class _HomeViewState extends State<_HomeView> {
                                 viewerBirthDate: user?.birthDate ?? '',
                                 viewerGender:
                                     user?.gender ?? home.gender,
-                                onOpenAll: _openDatingTelegramBot,
+                                onOpenAll: _openDating,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[

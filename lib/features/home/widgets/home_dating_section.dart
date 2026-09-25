@@ -133,7 +133,14 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
           physics: const BouncingScrollPhysics(),
           itemCount: _items.length,
           separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (context, i) => _ProfileTile(profile: _items[i]),
+          // Карточка босилса АЙНАН ШУ профил эмас, танишув модули
+          // очилади: бегона профилни фақат ўзининг тасдиқланган профили
+          // бор фойдаланувчи кўриши керак, бу текширув эса
+          // `DatingHomeScreen` ичида.
+          itemBuilder: (context, i) => _ProfileTile(
+            profile: _items[i],
+            onTap: widget.onOpenAll,
+          ),
         ),
       ),
     );
@@ -141,9 +148,10 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
 }
 
 class _ProfileTile extends StatelessWidget {
-  const _ProfileTile({required this.profile});
+  const _ProfileTile({required this.profile, required this.onTap});
 
   final DatingProfile profile;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +160,7 @@ class _ProfileTile extends StatelessWidget {
 
     return AvaCard(
       width: 92,
+      onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: Column(
         mainAxisSize: MainAxisSize.min,

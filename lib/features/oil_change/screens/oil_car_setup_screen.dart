@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -243,7 +243,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
       child: Container(
         height: 5,
         decoration: BoxDecoration(
-          color: on ? AppColors.primary : const Color(0xFFD5E5D6),
+          color: on ? AppColors.primary : oilHubLine,
           borderRadius: BorderRadius.circular(99),
         ),
       ),
@@ -351,9 +351,9 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFEAF6EB),
+          color: oilHubOkSoft,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFB7DFB9)),
+          border: Border.all(color: oilHubLine),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +361,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
             Text(
               context.tr('oil_preview'),
               style: const TextStyle(
-                color: Color(0xFF1B7A28),
+                color: oilHubOk,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -636,7 +636,7 @@ class _OilTypeCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFD5E5D6)),
+            border: Border.all(color: oilHubLine),
           ),
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -659,7 +659,7 @@ class _OilTypeCard extends StatelessWidget {
                   Text(
                     type.km(context),
                     style: const TextStyle(
-                      color: Color(0xFF1B7A28),
+                      color: oilHubOk,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),

@@ -306,7 +306,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFD5E5D6)),
+          border: Border.all(color: oilHubLine),
         ),
         child: Row(
           children: [
@@ -351,17 +351,17 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFFFCFAFF),
-            Color(0xFFF3ECFF),
-            Color(0xFFE9DDF9),
+            oilHubSurface,
+            oilHubSurface2,
+            oilHubSurface2,
           ],
           stops: [0.0, 0.48, 1.0],
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFDDCFF0)),
+        border: Border.all(color: oilHubLine),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7E57C2).withValues(alpha: 0.13),
+            color: oilHubViolet.withValues(alpha: 0.13),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -394,7 +394,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
+                    color: oilHubOkSoft,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -402,7 +402,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                     style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1B5E20),
+                      color: oilHubOk,
                       height: 1,
                     ),
                   ),
@@ -418,7 +418,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                   minHeight: 28,
                 ),
                 iconSize: 15,
-                color: const Color(0xFF2E7D32),
+                color: oilHubOk,
                 icon: const Icon(Icons.edit_outlined),
               ),
             ],
@@ -431,7 +431,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.50),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE3D8F2)),
+                border: Border.all(color: oilHubLine),
               ),
               child: Text.rich(
                 TextSpan(
@@ -452,7 +452,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                     ),
                     const TextSpan(
                       text: '  •  ',
-                      style: TextStyle(color: Color(0xFF9A86B8)),
+                      style: TextStyle(color: oilHubMuted),
                     ),
                     TextSpan(
                       text: '${context.tr('oil_capacity_filter_short')}: ',
@@ -464,19 +464,19 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                     ),
                     const TextSpan(
                       text: '  •  ',
-                      style: TextStyle(color: Color(0xFF9A86B8)),
+                      style: TextStyle(color: oilHubMuted),
                     ),
                     TextSpan(
                       text: '${context.tr('oil_capacity_total_label')}: ',
                       style: const TextStyle(
-                        color: Color(0xFF2E7D32),
+                        color: oilHubOk,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     TextSpan(
                       text: '${cap.total} L',
                       style: const TextStyle(
-                        color: Color(0xFF1B5E20),
+                        color: oilHubOk,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -517,7 +517,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
 
     TableRow buildHeader() => TableRow(
           decoration: const BoxDecoration(
-            color: Color(0xFFEEF6EF),
+            color: oilHubSurface2,
           ),
           children: [
             _mileagePad(
@@ -527,13 +527,13 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
             _mileagePad(
               Text(
                 context.tr('oil_mileage_col_healthy_short'),
-                style: headStyle(color: const Color(0xFF2E7D32)),
+                style: headStyle(color: oilHubOk),
               ),
             ),
             _mileagePad(
               Text(
                 context.tr('oil_mileage_col_neglected_short'),
-                style: headStyle(color: const Color(0xFFEF6C00)),
+                style: headStyle(color: oilHubWarn),
               ),
               last: true,
             ),
@@ -542,14 +542,14 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
 
     TableRow buildRow(MileageReco r, {required bool zebra}) => TableRow(
           decoration: BoxDecoration(
-            color: zebra ? const Color(0xFFF7FAF7) : Colors.white,
+            color: zebra ? oilHubSurface2 : Colors.white,
           ),
           children: [
             _mileagePad(
               Text(
                 r.range.t(lang),
                 style: cellStyle(
-                  color: const Color(0xFF1B5E20),
+                  color: oilHubOk,
                   weight: FontWeight.w800,
                 ),
               ),
@@ -566,7 +566,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD5E5D6)),
+        border: Border.all(color: oilHubLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,7 +594,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
             borderRadius: BorderRadius.circular(10),
             child: Container(
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFD7E8D8)),
+                border: Border.all(color: oilHubLine),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Table(
@@ -605,11 +605,11 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                 },
                 border: TableBorder(
                   horizontalInside: BorderSide(
-                    color: const Color(0xFFE8F0E8),
+                    color: oilHubSurface2,
                     width: 1,
                   ),
                   verticalInside: BorderSide(
-                    color: const Color(0xFFE8F0E8),
+                    color: oilHubSurface2,
                     width: 1,
                   ),
                 ),
@@ -628,9 +628,9 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
               margin: const EdgeInsets.only(top: 6),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF4E8),
+                color: oilHubWarnSoft,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFFFCC80)),
+                border: Border.all(color: oilHubLine),
               ),
               child: Row(
                 children: [
@@ -638,7 +638,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                     child: Text(
                       r.range.t(lang),
                       style: cellStyle(
-                        color: const Color(0xFFE65100),
+                        color: oilHubWarn,
                         weight: FontWeight.w800,
                       ),
                     ),
@@ -646,7 +646,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                   Text(
                     r.healthy.t(lang),
                     style: cellStyle(
-                      color: const Color(0xFFBF360C),
+                      color: oilHubWarn,
                       weight: FontWeight.w800,
                     ),
                   ),
@@ -676,7 +676,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD5E5D6)),
+        border: Border.all(color: oilHubLine),
       ),
       child: OilSequentialBarsTicker(
         builder: (context, phaseOf) {
@@ -708,7 +708,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                               Text(
                                 oilAnimatedKmLabel(context, t, phaseOf(i)),
                                 style: const TextStyle(
-                                  color: Color(0xFF1B7A28),
+                                  color: oilHubOk,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
                                 ),
@@ -758,9 +758,9 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F6F2),
+          color: oilHubSurface2,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFD5E5D6)),
+          border: Border.all(color: oilHubLine),
         ),
         child: Column(
           children: [
@@ -824,7 +824,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFD5E5D6)),
+            border: Border.all(color: oilHubLine),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -908,10 +908,10 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFE8F5E9), Color(0xFFE3F2FD)],
+          colors: [oilHubOkSoft, Color(0xFFE3F2FD)],
         ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFB7DFB9)),
+        border: Border.all(color: oilHubLine),
       ),
       child: FittedBox(
         fit: BoxFit.scaleDown,
@@ -928,7 +928,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
             ],
             Text(
               '«DOCTOR OIL»',
-              style: base.copyWith(color: const Color(0xFF2E7D32)),
+              style: base.copyWith(color: oilHubOk),
             ),
             const SizedBox(width: 5),
             Text(

@@ -10,11 +10,11 @@ import '../../../core/utils/formatters.dart';
 import '../data/oil_catalog.dart';
 import '../data/oil_l10n.dart';
 import '../data/oil_type_article.dart';
+import '../oil_colors.dart';
 
-const oilHubBg = Color(0xFFF5F8F3);
-const oilHubInk = Color(0xFF1A2E1C);
-const oilHubMuted = Color(0xFF6B7C6E);
-const oilHubViolet = Color(0xFF6A3DE8);
+// Модул ранглари `oil_colors.dart` да; уни импорт қилганлар учун қайта
+// экспорт қиламиз — мавжуд `import 'oil_hub_widgets.dart'` лар ишлайверсин.
+export '../oil_colors.dart';
 
 enum OilBarVariant { mineral, semi, full }
 
@@ -605,7 +605,7 @@ void showOilProductSheet(BuildContext context, OilProduct p) {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF6EB),
+                color: oilHubOkSoft,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text.rich(
@@ -633,7 +633,7 @@ void showOilProductSheet(BuildContext context, OilProduct p) {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF3F5F2),
+                        color: oilHubSurface2,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text.rich(
@@ -710,7 +710,7 @@ void showOilTypeDetail(BuildContext context, OilTypeInfo t) {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFFD5E5D6),
+                color: oilHubLine,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -781,10 +781,10 @@ class OilProductCard extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: product.isOil
-                      ? const Color(0xFFE8F5E9)
-                      : const Color(0xFFEEF2F7),
+                      ? oilHubOkSoft
+                      : oilHubSurface2,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFD5E5D6)),
+                  border: Border.all(color: oilHubLine),
                 ),
                 child: Stack(
                   fit: StackFit.expand,
@@ -907,7 +907,7 @@ class OilRankCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: L.$3 ? AppColors.primary : const Color(0xFFD5E5D6),
+              color: L.$3 ? AppColors.primary : oilHubLine,
               width: L.$3 ? 1.6 : 1,
             ),
           ),

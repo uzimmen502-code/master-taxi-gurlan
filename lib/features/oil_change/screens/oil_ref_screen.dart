@@ -7,6 +7,7 @@ import '../../../models/oil_vehicle.dart';
 import '../../../repositories/oil_change_repository.dart';
 import '../data/oil_l10n.dart';
 import '../data/oil_ref_catalog.dart';
+import '../oil_colors.dart';
 import 'oil_car_setup_screen.dart';
 
 /// Chevrolet moy ma'lumotnomasi — Tavsiya birinchi + katalog tablar + avto gate.
@@ -183,7 +184,7 @@ class _OilRefScreenState extends State<OilRefScreen>
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF5F7F4),
+          backgroundColor: oilHubBg,
           appBar: AppBar(
             title: Text(context.tr('oil_ref_guide')),
             backgroundColor: AppColors.primary,
@@ -318,7 +319,7 @@ class _RecoTab extends StatelessWidget {
                         ? v.plate
                         : (v.model.isNotEmpty ? v.model : v.id),
                     style: TextStyle(
-                      color: on ? Colors.white : const Color(0xFF1A2E1B),
+                      color: on ? Colors.white : oilHubInk,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -342,7 +343,7 @@ class _RecoTab extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF3E0),
+              color: oilHubWarnSoft,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.orange.shade200),
             ),
@@ -385,7 +386,7 @@ class _SaeGuideSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD5E5D6)),
+        border: Border.all(color: oilHubLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -395,14 +396,14 @@ class _SaeGuideSection extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 15,
-              color: Color(0xFF1A2E1C),
+              color: oilHubInk,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             context.tr('oil_sae_guide_intro'),
             style: const TextStyle(
-                fontSize: 12.5, height: 1.4, color: Color(0xFF4A5A4C)),
+                fontSize: 12.5, height: 1.4, color: oilHubMuted),
           ),
           const SizedBox(height: 12),
           ...OilRefCatalog.saeGuide.asMap().entries.map(
@@ -417,7 +418,7 @@ class _SaeGuideSection extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 14,
-              color: Color(0xFF1A2E1C),
+              color: oilHubInk,
             ),
           ),
           const SizedBox(height: 8),
@@ -436,9 +437,10 @@ class _SaeAccordion extends StatelessWidget {
   final bool initiallyExpanded;
 
   static Color _badgeColor(String badge) => switch (badge) {
-        'ok' => const Color(0xFF2E7D32),
-        'hot' => const Color(0xFFE65100),
-        'warn' => const Color(0xFFF9A825),
+        'ok' => oilHubOk,
+        // «hot» — «warn»дан оғирроқ даража; иккаласи бир хил кўринмасин.
+        'hot' => oilHubDanger,
+        'warn' => oilHubWarn,
         'old' => const Color(0xFF6D4C41),
         'min' => const Color(0xFF546E7A),
         _ => const Color(0xFF546E7A),
@@ -451,9 +453,9 @@ class _SaeAccordion extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAF7),
+        color: oilHubSurface2,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE0EBE0)),
+        border: Border.all(color: oilHubLine),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -487,7 +489,7 @@ class _SaeAccordion extends StatelessWidget {
           ),
           subtitle: Text(
             entry.subtitle.t(lang),
-            style: const TextStyle(fontSize: 11.5, color: Color(0xFF6B7C6E)),
+            style: const TextStyle(fontSize: 11.5, color: oilHubMuted),
           ),
           children: [
             _param(context.tr('oil_sae_param_thickness'), entry.thickness.t(lang)),
@@ -503,13 +505,13 @@ class _SaeAccordion extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: entry.lpgBad
-                    ? const Color(0xFFFFF0F0)
-                    : const Color(0xFFEAF6EB),
+                    ? oilHubDangerSoft
+                    : oilHubOkSoft,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: entry.lpgBad
-                      ? const Color(0xFFFFCDD2)
-                      : const Color(0xFFB7DFB9),
+                      ? oilHubDanger
+                      : oilHubOk,
                 ),
               ),
               child: Text.rich(
@@ -526,8 +528,8 @@ class _SaeAccordion extends StatelessWidget {
                   fontSize: 12,
                   height: 1.4,
                   color: entry.lpgBad
-                      ? const Color(0xFFB71C1C)
-                      : const Color(0xFF1B5E20),
+                      ? oilHubDanger
+                      : oilHubOk,
                 ),
               ),
             ),
@@ -548,7 +550,7 @@ class _SaeAccordion extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 12,
-              color: Color(0xFF2E7D32),
+              color: oilHubOk,
             ),
           ),
           const SizedBox(height: 2),
@@ -557,7 +559,7 @@ class _SaeAccordion extends StatelessWidget {
             style: const TextStyle(
               fontSize: 12.5,
               height: 1.4,
-              color: Color(0xFF1A2E1C),
+              color: oilHubInk,
             ),
           ),
         ],
@@ -588,8 +590,8 @@ class _SaeCompareTable extends StatelessWidget {
         dataRowMaxHeight: 48,
         columnSpacing: 18,
         horizontalMargin: 10,
-        headingRowColor: WidgetStatePropertyAll(const Color(0xFFEEF6EF)),
-        border: TableBorder.all(color: const Color(0xFFE0EBE0), width: 1),
+        headingRowColor: WidgetStatePropertyAll(oilHubSurface2),
+        border: TableBorder.all(color: oilHubLine, width: 1),
         columns: [
           for (final h in headers)
             DataColumn(
@@ -598,7 +600,7 @@ class _SaeCompareTable extends StatelessWidget {
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 11.5,
-                  color: Color(0xFF1A2E1C),
+                  color: oilHubInk,
                 ),
               ),
             ),
@@ -615,8 +617,8 @@ class _SaeCompareTable extends StatelessWidget {
                         fontSize: 11.5,
                         fontWeight: i == 0 ? FontWeight.w700 : FontWeight.w500,
                         color: row[i].t(lang).contains('✅')
-                            ? const Color(0xFF2E7D32)
-                            : const Color(0xFF344736),
+                            ? oilHubOk
+                            : oilHubInk,
                       ),
                     ),
                   ),
@@ -743,7 +745,7 @@ class _OilRefCard extends StatelessWidget {
                   _chip(p.api, Colors.indigo),
                   if (p.acea.isNotEmpty) _chip(p.acea, Colors.teal),
                   if (p.dexos.isNotEmpty)
-                    _chip(p.dexos, const Color(0xFF2E7D32)),
+                    _chip(p.dexos, oilHubOk),
                   _chip(
                     context.tr('oil_ref_country').replaceAll('{c}', p.country),
                     Colors.blueGrey,
@@ -805,14 +807,14 @@ class _OilRefCard extends StatelessWidget {
   }
 
   static Color _typeColor(OilRefType t) => switch (t) {
-        OilRefType.full => const Color(0xFF1B7A28),
-        OilRefType.semi => const Color(0xFFE65100),
+        OilRefType.full => oilHubOk,
+        OilRefType.semi => oilHubWarn,
         OilRefType.mineral => const Color(0xFF5D4037),
       };
 
   static Color _ratingColor(double r) {
-    if (r >= 9.0) return const Color(0xFF2E7D32);
-    if (r >= 8.0) return const Color(0xFFF57F17);
+    if (r >= 9.0) return oilHubOk;
+    if (r >= 8.0) return oilHubWarn;
     return const Color(0xFF795548);
   }
 

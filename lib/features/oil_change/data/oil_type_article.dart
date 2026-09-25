@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../oil_colors.dart';
 import 'oil_l10n.dart';
 
 sealed class OilArtBlock {
@@ -12,7 +13,7 @@ sealed class OilArtBlock {
 }
 
 class ArtHero extends OilArtBlock {
-  const ArtHero(this.text, [this.color = const Color(0xFF1A2E1C)]);
+  const ArtHero(this.text, [this.color = oilHubInk]);
   final L3 text;
   final Color color;
 }
@@ -472,7 +473,7 @@ const _articles = <String, OilTypeArticle>{
     ArtHero(
       L3('Тўлиқ синтетик мой нима?', 'To‘liq sintetik moy nima?',
           'Что такое полностью синтетическое масло?'),
-      Color(0xFF1B7A28),
+      oilHubOk,
     ),
     ArtLead(L3(
       'Тўлиқ синтетик мотор мойи (Full Synthetic) — бу замонавий технологиялар асосида ишлаб чиқарилган энг юқори сифатли мотор мойи.',
@@ -722,9 +723,9 @@ class OilTypeArticleView extends StatelessWidget {
 
   final OilTypeArticle article;
 
-  static const _ink = Color(0xFF1A2E1C);
-  static const _muted = Color(0xFF6B7C6E);
-  static const _green = Color(0xFF1B5E20);
+  static const _ink = oilHubInk;
+  static const _muted = oilHubMuted;
+  static const _green = oilHubOk;
 
   @override
   Widget build(BuildContext context) {
@@ -789,7 +790,7 @@ class OilTypeArticleView extends StatelessWidget {
       ArtPros(:final items) => _list(
           [for (final i in items) i.t(lang)],
           '✔',
-          markColor: const Color(0xFF2E7D32),
+          markColor: oilHubOk,
         ),
       ArtCons(:final items) => _list([for (final i in items) i.t(lang)], '❌'),
       ArtBrands(:final items) => Padding(
@@ -803,9 +804,9 @@ class OilTypeArticleView extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0F3EF),
+                    color: oilHubSurface2,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFDCE7DC)),
+                    border: Border.all(color: oilHubLine),
                   ),
                   child: Text(
                     s.t(lang),
@@ -824,9 +825,9 @@ class OilTypeArticleView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F6F2),
+            color: oilHubSurface2,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFD5E5D6)),
+            border: Border.all(color: oilHubLine),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,10 +872,10 @@ class OilTypeArticleView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAF6EB),
+            color: oilHubOkSoft,
             borderRadius: BorderRadius.circular(12),
             border: const Border(
-              left: BorderSide(color: Color(0xFF2E7D32), width: 4),
+              left: BorderSide(color: oilHubOk, width: 4),
             ),
           ),
           child: Column(
@@ -902,12 +903,12 @@ class OilTypeArticleView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: positive ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E9),
+            color: positive ? oilHubOkSoft : oilHubWarnSoft,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: positive
-                  ? const Color(0xFFA5D6A7)
-                  : const Color(0xFFFFCC9E),
+                  ? oilHubOkSoft
+                  : oilHubLine,
             ),
           ),
           child: Column(
@@ -917,8 +918,8 @@ class OilTypeArticleView extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: positive
-                      ? const Color(0xFF1B7A28)
-                      : const Color(0xFFE65100),
+                      ? oilHubOk
+                      : oilHubWarn,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -954,7 +955,7 @@ class OilTypeArticleView extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF3F6F2),
+                    color: oilHubSurface2,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -1000,9 +1001,9 @@ class OilTypeArticleView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F6F2),
+            color: oilHubSurface2,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFD5E5D6)),
+            border: Border.all(color: oilHubLine),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1042,9 +1043,9 @@ class OilTypeArticleView extends StatelessWidget {
           margin: const EdgeInsets.only(top: 4, bottom: 8),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFBEA),
+            color: oilHubWarnSoft,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFFE082)),
+            border: Border.all(color: oilHubLine),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1088,7 +1089,7 @@ class OilTypeArticleView extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFFFE082)),
+                          border: Border.all(color: oilHubLine),
                         ),
                         child: Text(
                           s.t(lang),
@@ -1127,8 +1128,8 @@ class OilTypeArticleView extends StatelessWidget {
               columnSpacing: 16,
               horizontalMargin: 10,
               headingRowColor:
-                  const WidgetStatePropertyAll(Color(0xFFEEF6EF)),
-              border: TableBorder.all(color: const Color(0xFFE0EBE0)),
+                  const WidgetStatePropertyAll(oilHubSurface2),
+              border: TableBorder.all(color: oilHubLine),
               columns: [
                 for (final h in headers)
                   DataColumn(
@@ -1154,7 +1155,7 @@ class OilTypeArticleView extends StatelessWidget {
                               fontSize: 11.5,
                               fontWeight:
                                   i == 0 ? FontWeight.w700 : FontWeight.w500,
-                              color: const Color(0xFF344736),
+                              color: oilHubInk,
                             ),
                           ),
                         ),
@@ -1207,7 +1208,7 @@ class OilTypeArticleView extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD5E5D6)),
+        border: Border.all(color: oilHubLine),
       ),
       child: Column(
         children: [

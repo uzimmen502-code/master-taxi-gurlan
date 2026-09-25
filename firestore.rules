@@ -333,10 +333,13 @@ service cloud.firestore {
     }
 
     // createBooking transaction — faqat seats / vaqt maydonlari
-    function intercityDriverSeatBookingPatch() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['seats', 'lastBookedAt', 'updatedAt']);
-    }
+    // 2026-09-24 QA: OLIB TASHLANDI (ataylab). Bu funksiya faqat o'zgargan
+    // maydon NOMLARINI tekshirardi — qiymatni ham, kim yozayotganini ham
+    // emas. Natijada istalgan (hatto anonim) klient istalgan haydovchining
+    // `seats` ini 0 ga (sabotaj) yoki katta songa (overbooking) yozib
+    // qo'ya olardi. `seats` endi faqat Admin SDK orqali o'zgaradi:
+    // `intercityCreateBooking` / `intercityCancelBooking` /
+    // `intercityCompleteBooking` callable'lari va `expirePendingTrips`.
 
     function approvedDriverForTaxi(driverId, taxiType) {
       return exists(/databases/$(database)/documents/drivers/$(driverId))
@@ -1573,17 +1576,27 @@ service cloud.firestore {
     match /intercity_drivers/{id} {
       allow read: if true;
       // Haydovchi profili — admin / Phone Auth owner; anonim: schedule sync yoki seat patch
-      allow create: if isAdmin() || isOwner(id) || intercityDriverScheduleCreate()
+      // 2026-09-24 QA (ega qarori): e'lonni faqat EGASI (`isOwner(id)`,
+      // id = haydovchi telefoni), admin yoki Admin SDK (CF) yozadi.
+      //
+      // Avval bu yerda auth/egalik talab qilmaydigan bir nechta yo'l bor edi
+      // (`intercityDriverScheduleCreate/ScheduleSync/PanelPatch/
+      // AutoAcceptPatch/ListingEnd`). `allow` — ILI-zanjir bo'lgani uchun
+      // ulardan bittasi o'tsa yetardi: emulator testida begona (hatto anonim)
+      // klient boshqa haydovchining `seats`, `price`, `from/to`, `stops`,
+      // `routeLabel` ini qayta yozdi va `isActive: false` bilan reysini
+      // o'chirdi. `isOwner(id)` haydovchining o'z "ishga chiqish" oqimini
+      // to'liq qoplaydi (uchala chaqiruv ham o'z telefonini beradi), shuning
+      // uchun o'sha yo'llar keraksiz — olib tashlandi.
+      //
+      // Faqat kino (entertainment) yo'llari qoldi: ular admin-web PIN
+      // sirtidan keladi va `entertainmentAllowed`/`entertainmentIds` dan
+      // boshqasiga tegmaydi.
+      allow create: if isAdmin() || isOwner(id)
           || intercityDriverEntertainmentAllowedCreate();
       allow update: if isAdmin() || isOwner(id)
-          || intercityDriverScheduleSync()
-          || intercityDriverPanelPatch()
-          || intercityDriverAutoAcceptPatch()
           || intercityDriverEntertainmentAllowedPatch()
-          || intercityDriverEntertainmentPatch()
-          || intercityDriverListingEnd()
-          || intercityDriverSeatBookingPatch()
-          || intercityTripStartPatch(id);
+          || intercityDriverEntertainmentPatch();
       allow delete: if false;
 
       // Doimiy mijоз aggregation — bron transaction'ida
@@ -1614,36 +1627,31 @@ service cloud.firestore {
     match /intercity_bookings/{bookingId} {
       allow read: if intercityBookingParticipantRead();
 
-      // Яратиш — userPhone, driverId, status, totalAmount > 0 бўлиши шарт.
-      allow create: if isAuth()
-          && phoneDocIdsMatch(
-              userDocIdFromPhoneToken(), request.resource.data.userPhone)
-          && 'userPhone' in request.resource.data
-          && 'driverId' in request.resource.data
-          && 'status' in request.resource.data
-          && 'totalAmount' in request.resource.data
-          && request.resource.data.totalAmount is number
-          && request.resource.data.totalAmount > 0
-          && request.resource.data.status in ['pending', 'confirmed'];
+      // Яратиш — 2026-09-24 QA: client endi TO'G'RIDAN-TO'G'RI create QILA
+      // OLMAYDI. Faqat `intercityCreateBooking` callable (Admin SDK) yoki
+      // admin. Sabab: eski qoida `status: 'confirmed'` ga ruxsat berardi —
+      // yo'lovchi haydovchi tasdig'ini aylanib o'ta olardi; bundan tashqari
+      // bron bilan birga `intercity_drivers.seats` ni ham client yozardi
+      // (qarang: intercity_drivers update izohi).
+      allow create: if isAdmin();
 
-      // Янгилаш — faqat auth + owner (yo'lovchi/haydovchi) yoki admin
+      // Янгилаш — bekor qilish (cancel) va yakunlash (complete) ham serverga
+      // ko'chdi (`intercityCancelBooking` / `intercityCompleteBooking`),
+      // chunki ular `seats` ni o'zgartiradi. Client'da faqat seat'ga
+      // tegmaydigan patch'lar qoldi: haydovchi tasdig'i, pickup manzili,
+      // arxiv va "olib ketildi" belgisi.
       allow update: if isAuth()
           && (
             (
               phoneDocIdsMatch(
                   userDocIdFromPhoneToken(), resource.data.userPhone)
-              && (
-                intercityBookingPassengerCancelPatch()
-                || intercityBookingPickupPatch()
-              )
+              && intercityBookingPickupPatch()
             )
             || (
               phoneDocIdsMatch(
                   userDocIdFromPhoneToken(), resource.data.driverId)
               && (
                 intercityBookingDriverConfirm()
-                || intercityBookingPassengerCancelPatch()
-                || intercityBookingCompletePatch()
                 || intercityBookingDriverArchivePatch()
                 || intercityBookingPickedUpPatch()
               )

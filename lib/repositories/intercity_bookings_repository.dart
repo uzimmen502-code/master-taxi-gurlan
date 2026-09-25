@@ -1,12 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/l10n/offline_l10n.dart';
-import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
-import '../features/intercity_taxi/intercity_driver_alert_text.dart';
 import '../models/intercity_booking.dart';
-import '../utils/intercity_places.dart';
 
 /// Қайтариладиган специфик хатолар — UI улар орқали аниқ snackbar кўрсатади.
 class IntercityBookingException implements Exception {
@@ -41,10 +39,12 @@ enum IntercityBookingErrorKind {
 ///   - **Мижознинг охирги бронлари** (`watchByUser`)
 ///   - **Бронни бекор қилиш** (`cancelBooking`) — seat реверт + counters decrement
 class IntercityBookingsRepository {
-  IntercityBookingsRepository({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+  IntercityBookingsRepository({FirebaseFirestore? db, FirebaseFunctions? functions})
+      : _db = db ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
 
   CollectionReference<Map<String, dynamic>> get _bookings =>
       _db.collection('intercity_bookings');
@@ -52,15 +52,49 @@ class IntercityBookingsRepository {
   CollectionReference<Map<String, dynamic>> get _drivers =>
       _db.collection('intercity_drivers');
 
-  static String _bookingRouteNotice(IntercityBooking b) {
-    final raw = b.driverRouteLabel.trim().isNotEmpty
-        ? b.driverRouteLabel
-        : b.routeShort;
-    return IntercityPlaces.shortRouteLabel(raw);
+  /// CF хатосини UI тушунадиган [IntercityBookingErrorKind]га айлантиради.
+  static IntercityBookingException _mapFunctionsError(
+      FirebaseFunctionsException e) {
+    final detail = (e.message ?? '').trim();
+    switch (detail) {
+      case 'not_enough_seats':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.notEnoughSeats, 'Бўш ўринлар етарли эмас');
+      case 'driver_inactive':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.driverInactive, 'Бу рейс энди қабул қилмайди');
+      case 'driver_not_found':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.driverNotFound, 'Ҳайдовчи профили топилмади');
+      case 'already_booked_driver':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.alreadyBooked,
+            'Сизда бу ҳайдовчига актив брон мавжуд');
+      case 'already_active':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.alreadyActive, 'Сизда актив брон мавжуд');
+      case 'phone_required':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.unknown,
+            'Телефон рақамингиз профилда сақланган эмас');
+      case 'ride_not_accepting':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.unknown, 'ride_not_accepting');
+      // Нарх серверда бошқача — жим равишда бошқа суммага ёзиб қўймаймиз.
+      case 'price_changed':
+        return const IntercityBookingException(
+            IntercityBookingErrorKind.unknown,
+            'Нарх янгиланди. Рейсни қайта юклаб, нархни текширинг.');
+    }
+    if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+      return const IntercityBookingException(
+        IntercityBookingErrorKind.permissionDenied,
+        'booking_permission_denied',
+      );
+    }
+    return IntercityBookingException(
+        IntercityBookingErrorKind.unknown, 'Бронлашда хатолик: $detail');
   }
-
-  CollectionReference<Map<String, dynamic>> _driverClients(String driverId) =>
-      _drivers.doc(driverId).collection('clients');
 
   // ─── Мижознинг бронлари ─────────────────────────────────────────────
 
@@ -160,20 +194,19 @@ class IntercityBookingsRepository {
 
   // ─── Ишончли бронь яратиш ────────────────────────────────────────────
 
-  /// Транзакция ичида:
-  ///   1. Driver ҳужжати ўқилади. Агар мавжуд бўлса:
-  ///      - `isActive == false` → `driverInactive`
-  ///      - `seats < passengers` → `notEnoughSeats`
-  ///      - `seats` майдони `passengers`га камайтирилади
-  ///     Агар мавжуд бўлмаса (demo ride) — seat reservation o'tkazib yuboriladi,
-  ///     лекин бошқа ҳамма нарса — booking, client aggregation, notification —
-  ///     одатдагидек бажарилади.
-  ///   2. `intercity_bookings/{id}` яратилади (auto-id).
-  ///   3. `intercity_drivers/{driverId}/clients/{userPhone}` aggregation
-  ///      counters ошади (atomic increment).
-  ///   4. `notifications` коллекциясига xabar ёзилади.
+  /// Бронь яратиш — 2026-09-24 дан бошлаб **тўлиқ серверда**
+  /// (`intercityCreateBooking` callable, Admin SDK). Илгари бу клиент
+  /// транзакцияси эди, шунинг учун `intercity_drivers.seats` клиентга очиқ
+  /// бўлиши керак эди — бу эса исталган клиентга исталган ҳайдовчининг
+  /// ўринларини ёзиш имконини берарди (QA топилмаси #1). Энди Firestore
+  /// Rules клиентга ҳам `seats` патчини, ҳам бронь `create`ни блоклайди.
   ///
-  /// Қайтиш қиймати — янги бронь объекти (айнан жорий ҳолат билан).
+  /// Сервер бажаради: ҳайдовчини ўқиш ва валидация (isActive, seats),
+  /// seat камайтириш, бронь яратиш (status'ни **сервер** `autoAcceptBookings`
+  /// бўйича белгилайди — клиент ўзини `confirmed` қила олмайди, топилма #2),
+  /// қулфлар, мижоз aggregation ва хабарномалар.
+  ///
+  /// Қайтиш қиймати — янги бронь объекти (сервердан келган id/status билан).
   Future<IntercityBooking> createBooking({
     required String driverId,
     required String driverPhone,
@@ -213,217 +246,61 @@ class IntercityBookingsRepository {
     final now = DateTime.now();
     final expiresAt = now.add(const Duration(minutes: 30));
 
-    final bookingRef = _bookings.doc();
-    final driverRef = _drivers.doc(driverId);
-    final clientRef = _driverClients(driverId).doc(userKey);
-    final notifRef = _db.collection('notifications').doc();
-    final lockRef =
-        _db.collection('intercity_booking_locks').doc('${driverId}_$userKey');
-    final passengerLockRef =
-        _db.collection('intercity_passenger_locks').doc(userKey);
-
-    final driverPre = await driverRef.get();
-    if (!driverPre.exists) {
-      throw const IntercityBookingException(
-        IntercityBookingErrorKind.driverNotFound,
-        'Ҳайдовчи профили топилмади',
-      );
-    }
-    final autoAccept =
-        (driverPre.data()?['autoAcceptBookings'] as bool?) ?? false;
-    final initialStatus = autoAccept
-        ? IntercityBookingStatus.confirmed
-        : IntercityBookingStatus.pending;
-
-    final pickupRequestBody =
-        await OfflineL10n.tr('intercity_pickup_request_body');
-    final bookingConfirmedTitle =
-        await OfflineL10n.tr('booking_confirmed_title');
-
     try {
-      await _db.runTransaction((tx) async {
-        // Барча `tx.get`'ларни биринчи галда чақириш керак — Firestore талаби.
-        final driverSnap = await tx.get(driverRef);
-        final clientSnap = await tx.get(clientRef);
-        final lockSnap = await tx.get(lockRef);
-        final passengerLockSnap = await tx.get(passengerLockRef);
-        final driverData = driverSnap.data() ?? const <String, dynamic>{};
-
-        if (!driverSnap.exists) {
-          throw const IntercityBookingException(
-            IntercityBookingErrorKind.driverNotFound,
-            'Ҳайдовчи профили топилмади',
-          );
-        }
-
-        // #19 — транзакция ичида актив брон қулфи
-        if (lockSnap.exists) {
-          final activeId = lockSnap.data()?['bookingId'] as String?;
-          if (activeId != null && activeId.isNotEmpty) {
-            final existing = await tx.get(_bookings.doc(activeId));
-            if (existing.exists) {
-              final st = existing.data()?['status'] as String? ?? '';
-              if (st == IntercityBookingStatus.pending ||
-                  st == IntercityBookingStatus.confirmed) {
-                throw const IntercityBookingException(
-                  IntercityBookingErrorKind.alreadyBooked,
-                  'Сизда бу ҳайдовчига актив брон мавжуд',
-                );
-              }
-            }
-          }
-        }
-
-        if (passengerLockSnap.exists) {
-          final existingBookingId =
-              passengerLockSnap.data()?['bookingId'] as String? ?? '';
-          if (existingBookingId.isNotEmpty) {
-            final existingRef = _bookings.doc(existingBookingId);
-            final existingSnap = await tx.get(existingRef);
-            if (existingSnap.exists) {
-              final status = existingSnap.data()?['status'] as String? ?? '';
-              if (status == IntercityBookingStatus.pending ||
-                  status == IntercityBookingStatus.confirmed) {
-                throw const IntercityBookingException(
-                  IntercityBookingErrorKind.alreadyActive,
-                  'Сизда актив брон мавжуд',
-                );
-              }
-            }
-          }
-        }
-
-        final data = driverData;
-        final isListed = (data['isActive'] as bool?) ?? true;
-        if (!isListed) {
-          throw const IntercityBookingException(
-              IntercityBookingErrorKind.driverInactive,
-              'Бу рейс энди қабул қилмайди');
-        }
-        final seats = (data['seats'] as num?)?.toInt() ?? 0;
-        if (seats < passengers) {
-          throw const IntercityBookingException(
-              IntercityBookingErrorKind.notEnoughSeats,
-              'Бўш ўринлар етарли эмас');
-        }
-        // maleCount/femaleCount — CF `updateDriverGenderStats` (onCreate/onUpdate).
-        tx.update(driverRef, {
-          'seats': seats - passengers,
-          'lastBookedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        tx.set(lockRef, {
-          'bookingId': bookingRef.id,
-          'driverId': driverId,
-          'userKey': userKey,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        tx.set(passengerLockRef, {
-          'bookingId': bookingRef.id,
-          'driverId': driverId,
-          'userPhone': canonicalPhoneId(userPhone),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        // 2. Booking ҳужжати
-        tx.set(bookingRef, {
-          'userPhone': canonicalPhoneId(userPhone),
-          'userName': userName,
-          'userGender': userGender,
-          'userBirthDate': userBirthDate,
-          'driverId': driverId,
-          'driverPhone': driverPhone,
-          'driverName': driverName,
-          'carNumber': carNumber,
-          'fromCity': fromCity,
-          'toCity': toCity,
-          'district': district,
-          'passengers': passengers,
-          'pricePerSeat': pricePerSeat,
-          'totalAmount': totalAmount,
-          'status': initialStatus,
-          'driverRouteLabel': IntercityPlaces.rawRouteFromTrip(driverData),
-          'createdAt': FieldValue.serverTimestamp(),
-          'expiresAt': Timestamp.fromDate(expiresAt),
-          'departureTime': Timestamp.fromDate(departureTime),
-          if (initialStatus == IntercityBookingStatus.confirmed)
-            'confirmedAt': FieldValue.serverTimestamp(),
-          'pickupAddress': '',
-          'dropoffNote': '',
-          'archivedByDriver': false,
-          ...ServiceConfigHolder.reportStamp(),
-        });
-
-        // 3. Доимий мижоз aggregation. `firstBookingAt` фақат биринчи бронда
-        //    ёзилади — keyingi bronlar fақат `lastBookingAt`ни yangilaydi.
-        final clientPatch = <String, Object?>{
-          'userName': userName,
-          'userPhoneRaw': userPhone,
-          'bookingCount': FieldValue.increment(1),
-          'totalSpent': FieldValue.increment(totalAmount),
-          'lastBookingAt': FieldValue.serverTimestamp(),
-          'lastBookingId': bookingRef.id,
-        };
-        if (!clientSnap.exists) {
-          clientPatch['firstBookingAt'] = FieldValue.serverTimestamp();
-          clientPatch['completedCount'] = 0;
-        }
-        tx.set(clientRef, clientPatch, SetOptions(merge: true));
-
-        final driverRouteRaw = IntercityPlaces.rawRouteFromTrip(driverData);
-        final routeText = IntercityPlaces.shortRouteLabel(driverRouteRaw);
-
-        // 4. Ҳайдовчига push (FCMService `notifications` коллекциясини кузатади)
-        if (driverPhone.isNotEmpty) {
-          tx.set(notifRef, {
-            'targetPhone': notificationTargetPhone(driverPhone),
-            'title': initialStatus == IntercityBookingStatus.pending
-                ? '🔔 Янги брон сўрови!'
-                : '🚗 Янги бронь!',
-            'body': intercityDriverBookingAlertBody(
-              userName: userName,
-              routeLabel: routeText,
-              passengers: passengers,
-              userPhone: userPhone,
-              pricePart: ', ${formatMoney(totalAmount)}',
-            ),
-            'sent': false,
-            'type': initialStatus == IntercityBookingStatus.pending
-                ? 'intercity_booking_pending'
-                : 'intercity_booking',
-            'bookingId': bookingRef.id,
-            'priority': 'high',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        if (initialStatus == IntercityBookingStatus.confirmed &&
-            userPhone.isNotEmpty) {
-          final pNotif = _db.collection('notifications').doc();
-          tx.set(pNotif, {
-            'targetPhone': notificationTargetPhone(userPhone),
-            'title': '✅ $bookingConfirmedTitle',
-            'body': pickupRequestBody,
-            'sent': false,
-            'type': 'intercity_pickup_request',
-            'bookingId': bookingRef.id,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
+      final res = await _functions
+          .httpsCallable('intercityCreateBooking')
+          .call<Map<String, dynamic>>({
+        'driverId': driverId,
+        'passengers': passengers,
+        'pricePerSeat': pricePerSeat,
+        'userName': userName,
+        'userGender': userGender,
+        'userBirthDate': userBirthDate,
+        'fromCity': fromCity,
+        'toCity': toCity,
+        'district': district,
+        'departureTimeMs': departureTime.millisecondsSinceEpoch,
+        // Такрор босиш/тармоқ retry'ида дубль бронь бўлмаслиги учун.
+        'idempotencyKey':
+            '${userKey}_${driverId}_${now.millisecondsSinceEpoch ~/ 1000}',
       });
+
+      final data = Map<String, dynamic>.from(res.data);
+      final bookingId = (data['bookingId'] as String?) ?? '';
+      final status =
+          (data['status'] as String?) ?? IntercityBookingStatus.pending;
+      if (bookingId.isEmpty) {
+        throw const IntercityBookingException(
+            IntercityBookingErrorKind.unknown, 'Бронлашда хатолик');
+      }
+
+      return IntercityBooking(
+        id: bookingId,
+        userPhone: userPhone,
+        userName: userName,
+        driverId: driverId,
+        driverPhone: driverPhone,
+        driverName: driverName,
+        carNumber: carNumber,
+        fromCity: fromCity,
+        toCity: toCity,
+        district: district,
+        passengers: passengers,
+        pricePerSeat: pricePerSeat,
+        totalAmount: totalAmount,
+        status: status,
+        createdAt: now,
+        expiresAt: expiresAt,
+        departureTime: departureTime,
+        userGender: userGender,
+        userBirthDate: userBirthDate,
+        confirmedAt:
+            status == IntercityBookingStatus.confirmed ? now : null,
+      );
+    } on FirebaseFunctionsException catch (e) {
+      throw _mapFunctionsError(e);
     } on IntercityBookingException {
       rethrow;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        throw const IntercityBookingException(
-          IntercityBookingErrorKind.permissionDenied,
-          'booking_permission_denied',
-        );
-      }
-      throw IntercityBookingException(
-          IntercityBookingErrorKind.unknown, 'Бронлашда хатолик: ${e.message ?? e.code}');
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('permission-denied')) {
@@ -435,31 +312,6 @@ class IntercityBookingsRepository {
       throw IntercityBookingException(
           IntercityBookingErrorKind.unknown, 'Бронлашда хатолик: $e');
     }
-
-    return IntercityBooking(
-      id: bookingRef.id,
-      userPhone: userPhone,
-      userName: userName,
-      driverId: driverId,
-      driverPhone: driverPhone,
-      driverName: driverName,
-      carNumber: carNumber,
-      fromCity: fromCity,
-      toCity: toCity,
-      district: district,
-      passengers: passengers,
-      pricePerSeat: pricePerSeat,
-      totalAmount: totalAmount,
-      status: initialStatus,
-      createdAt: now,
-      expiresAt: expiresAt,
-      departureTime: departureTime,
-      userGender: userGender,
-      userBirthDate: userBirthDate,
-      confirmedAt:
-          initialStatus == IntercityBookingStatus.confirmed ? now : null,
-      driverRouteLabel: IntercityPlaces.rawRouteFromTrip(driverPre.data()),
-    );
   }
 
   // ─── Ҳайдовчи бронлари ───────────────────────────────────────────────
@@ -544,48 +396,19 @@ class IntercityBookingsRepository {
     );
   }
 
+  /// Сафарни якунлаш — серверда (`intercityCompleteBooking`): статус,
+  /// seat қайтариш (seatCapacity билан чекланган) ва йўловчига хабар.
+  /// Seat мутацияси клиентда қолдирилмади — қаранг [createBooking] изоҳи.
   Future<void> completeBooking({
     required String bookingId,
     required String driverId,
   }) async {
-    final ref = _bookings.doc(bookingId);
-    final snap = await ref.get();
-    if (!snap.exists) return;
-    final b = IntercityBooking.fromDoc(snap);
-    if (b.driverId != driverId || !b.isActive) return;
-
-    await ref.update({
-      'status': IntercityBookingStatus.completed,
-      'completedAt': FieldValue.serverTimestamp(),
-    });
-
-    final driverRef = _drivers.doc(b.driverId);
-    final driverSnap = await driverRef.get();
-    if (driverSnap.exists) {
-      final data = driverSnap.data() ?? const <String, dynamic>{};
-      final driverListed = (data['isActive'] as bool?) ?? true;
-      final updates = <String, Object>{
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      if (driverListed) {
-        final currentSeats = (data['seats'] as num?)?.toInt() ?? 0;
-        final capacity = (data['seatCapacity'] as num?)?.toInt();
-        final restored = currentSeats + b.passengers;
-        updates['seats'] = capacity != null
-            ? (restored > capacity ? capacity : restored)
-            : restored;
-      }
-      await driverRef.update(updates);
-    }
-
-    if (b.userPhone.isNotEmpty) {
-      await _writePassengerNotification(
-        userPhone: b.userPhone,
-        title: '⭐ Сафар якунланди',
-        body: '${b.driverName} · ${_bookingRouteNotice(b)}. Раҳмат, яна кўрамиз!',
-        type: 'intercity_trip_completed',
-        bookingId: bookingId,
-      );
+    try {
+      await _functions
+          .httpsCallable('intercityCompleteBooking')
+          .call<Map<String, dynamic>>({'bookingId': bookingId});
+    } on FirebaseFunctionsException catch (e) {
+      throw _mapFunctionsError(e);
     }
   }
 
@@ -678,125 +501,26 @@ class IntercityBookingsRepository {
 
   /// Мижоз ёки ҳайдовчи бекор қилади.
   ///
-  /// Транзакция:
-  ///   1. Бронь `active` эмас бўлса — silently skip.
-  ///   2. Booking → `status: cancelled`, `cancelReason`, `cancelledAt`.
-  ///   3. Driver ҳужжатида `seats` ни passengers ҳажмида orqaga қайтарамиз.
-  ///   4. Client aggregation: `bookingCount` ва `totalSpent` decrement.
+  ///
+  /// 2026-09-24: бекор қилиш ҳам **серверда** (`intercityCancelBooking`):
+  /// статус, seat қайтариш (seatCapacity билан чекланган), мижоз
+  /// aggregation, қулф тозалаш ва хабарномалар (йўловчига, йўловчи ўзи
+  /// бекор қилса — ҳайдовчига ҳам). Рухсат серверда текширилади: фақат
+  /// иштирокчи (йўловчи/ҳайдовчи) ёки админ. Қаранг [createBooking] изоҳи.
   Future<void> cancelBooking({
     required String bookingId,
     String? reason,
   }) async {
-    final bookingRef = _bookings.doc(bookingId);
-
-    IntercityBooking? cancelledBooking;
-
     try {
-      // Аввал booking ҳужжатини олиб, ҳамма ref'ларни тайёрлаб қўямиз —
-      // транзакция ичида ҳамма `tx.get`'лар `tx.update`'лардан олдин бўлиши керак.
-      final pre = await bookingRef.get();
-      if (!pre.exists) return;
-      final b = IntercityBooking.fromDoc(pre);
-      if (!b.isActive) return;
-
-      final driverRef = _drivers.doc(b.driverId);
-      final userKey = canonicalPhoneId(b.userPhone);
-      final clientRef = userKey.isNotEmpty
-          ? _driverClients(b.driverId).doc(userKey)
-          : null;
-      final lockRef = userKey.isNotEmpty
-          ? _db
-              .collection('intercity_booking_locks')
-              .doc('${b.driverId}_$userKey')
-          : null;
-      await _db.runTransaction((tx) async {
-        // 1. READS — барча
-        final bookingSnap = await tx.get(bookingRef);
-        if (!bookingSnap.exists) return;
-        final fresh = IntercityBooking.fromDoc(bookingSnap);
-        if (!fresh.isActive) return;
-
-        final driverSnap = await tx.get(driverRef);
-        final clientSnap =
-            clientRef != null ? await tx.get(clientRef) : null;
-        final lockSnap =
-            lockRef != null ? await tx.get(lockRef) : null;
-
-        // 2. WRITES
-        if (driverSnap.exists) {
-          final seats =
-              (driverSnap.data()?['seats'] as num?)?.toInt() ?? 0;
-          tx.update(driverRef, {
-            'seats': seats + fresh.passengers,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        tx.update(bookingRef, {
-          'status': IntercityBookingStatus.cancelled,
-          'cancelReason': reason ?? '',
-          'cancelledAt': FieldValue.serverTimestamp(),
-        });
-
-        if (clientRef != null && clientSnap != null && clientSnap.exists) {
-          tx.update(clientRef, {
-            'bookingCount': FieldValue.increment(-1),
-            'totalSpent': FieldValue.increment(-fresh.totalAmount),
-            'lastBookingAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        // Qulfni o'chirish auth talab qiladi; bookingId ni tozalash — create/update kabi ochiq.
-        if (lockSnap != null && lockSnap.exists) {
-          tx.update(lockRef!, {
-            'bookingId': FieldValue.delete(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        cancelledBooking = fresh;
+      await _functions
+          .httpsCallable('intercityCancelBooking')
+          .call<Map<String, dynamic>>({
+        'bookingId': bookingId,
+        'reason': reason ?? '',
       });
-
-      final cb = cancelledBooking;
-      if (cb != null && cb.userPhone.isNotEmpty) {
-        final r = (reason ?? '').toLowerCase();
-        final byDriver = r.contains('ҳайдовчи') || r.contains('haydovchi');
-        final tripEnded = r.contains('рейсни бекор') || r.contains('yangi reys');
-        await _writePassengerNotification(
-          userPhone: cb.userPhone,
-          title: tripEnded
-              ? '❌ Рейс бекор — бронингиз ҳам ёпилди'
-              : byDriver
-                  ? '❌ Ҳайдовчи бронни рад этди'
-                  : '❌ Брон бекор қилинди',
-          body: tripEnded
-              ? '${_bookingRouteNotice(cb)}. Ҳайдовчи қайта ишга чиқса, янидан брон қилинг.'
-              : byDriver
-                  ? '${_bookingRouteNotice(cb)}. Бошқа ҳайдовчи танланг ёки қайта уриниб кўринг.'
-                  : '${_bookingRouteNotice(cb)}. Ўринлар қайта бўшатилди.',
-          type: 'intercity_booking_cancelled',
-          bookingId: bookingId,
-        );
-      }
-    } on IntercityBookingException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        throw const IntercityBookingException(
-          IntercityBookingErrorKind.permissionDenied,
-          'booking_permission_denied',
-        );
-      }
-      throw const IntercityBookingException(
-          IntercityBookingErrorKind.unknown, 'booking_cancel_failed');
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('permission-denied')) {
-        throw const IntercityBookingException(
-          IntercityBookingErrorKind.permissionDenied,
-          'booking_permission_denied',
-        );
-      }
+    } on FirebaseFunctionsException catch (e) {
+      throw _mapFunctionsError(e);
+    } catch (_) {
       throw const IntercityBookingException(
           IntercityBookingErrorKind.unknown, 'booking_cancel_failed');
     }

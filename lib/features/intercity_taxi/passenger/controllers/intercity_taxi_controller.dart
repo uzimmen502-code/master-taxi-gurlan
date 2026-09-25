@@ -320,8 +320,12 @@ class IntercityTaxiController extends ChangeNotifier {
   }) async {
     if (isBooking) return (null, null);
 
+    // Эга қарори (2026-09-24): рейсларни КЎРИШ очиқ, лекин ҳар қандай амал
+    // (брон) — фақат рўйхатдан ўтгандан кейин. Аноним (меҳмон) сессия
+    // аввал «профилда телефонни тўлдиринг» деган чалғитувчи хабар оларди;
+    // сервер ҳам уни `phone_required` билан рад қилади.
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
+    if (currentUser == null || currentUser.isAnonymous) {
       return (null, 'auth_required_to_order');
     }
 

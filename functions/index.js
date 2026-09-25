@@ -9737,6 +9737,445 @@ exports.onIntercityBookingCancelled = functions.firestore
       return null;
     });
 
+// ═══════════════════════════════════════════════════════════════════
+// INTERCITY — o'rin (seats) mutatsiyasi va bron yaratish SERVER tomonda
+// (Admin SDK). 2026-09-24 QA: `intercityDriverSeatBookingPatch()` rules
+// funksiyasi faqat o'zgargan maydon NOMLARINI tekshirardi — qiymatni
+// yoki egalikni emas, shuning uchun istalgan (hatto anonim) klient
+// `intercity_drivers/{id}.seats` ni 0 ga (sabotaj) yoki katta songa
+// (overbooking) yozib qo'ya olardi. Shuningdek bron `create` qoidasi
+// `status: 'confirmed'` ga ruxsat berardi — yo'lovchi haydovchi
+// tasdig'ini aylanib o'ta olardi.
+//
+// Yechim: seat kamaytirish/qaytarish va bron yaratish faqat shu
+// callable'lar orqali; firestore.rules client uchun ikkalasini ham
+// bloklaydi (EV `payAndCreateEvStation` bilan bir xil naqsh).
+// ═══════════════════════════════════════════════════════════════════
+
+/** phoneDocIdsMatch (rules) ning JS ko'zgusi — 9 xonali/998 shakllari. */
+function intercityPhoneMatch(a, b) {
+  const x = digits(a);
+  const y = digits(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (y.length === 9 && x === `998${y}`) return true;
+  if (x.length === 9 && y === `998${x}`) return true;
+  return false;
+}
+
+function intercityRouteText(driver, fallback) {
+  const d = driver || {};
+  const label = String(d.routeLabel || '').trim();
+  if (label) return label;
+  const from = String(d.from || (fallback && fallback.fromCity) || '').trim();
+  const to = String(d.to || (fallback && fallback.toCity) || '').trim();
+  if (from && to) return `${from} → ${to}`;
+  return to || from || 'Йўналиш';
+}
+
+async function intercityCallerIsAdmin(caller) {
+  const uid = canonicalUid(caller);
+  if (!uid) return false;
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    const role = (snap.data() || {}).role || 'user';
+    return ['admin', 'superadmin', 'dispatcher'].includes(role);
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Seat qaytarish — har doim seatCapacity bilan cheklanadi. */
+function intercityRestoredSeats(driverData, passengers) {
+  const d = driverData || {};
+  const seats = Number(d.seats) || 0;
+  const restored = seats + (Number(passengers) || 1);
+  const cap = d.seatCapacity != null ? Number(d.seatCapacity) : null;
+  if (cap != null && Number.isFinite(cap)) return Math.min(restored, cap);
+  return restored;
+}
+
+exports.intercityCreateBooking = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+  }
+  const userKey = callerPhone(context);
+  if (!userKey || userKey.length < 9) {
+    throw new functions.https.HttpsError('failed-precondition', 'phone_required');
+  }
+
+  const driverId = String(data.driverId || '').trim();
+  const passengers = parseInt(String(data.passengers ?? 0), 10);
+  // Client yuborgan narx — faqat "men shu narxni ko'rgandim" deyish uchun.
+  // HAQIQIY narx haydovchi hujjatidan (`price`) tranzaksiya ichida o'qiladi.
+  const shownPricePerSeat = parseInt(String(data.pricePerSeat ?? 0), 10);
+  if (!driverId) {
+    throw new functions.https.HttpsError('invalid-argument', 'driverId');
+  }
+  if (!Number.isFinite(passengers) || passengers < 1 || passengers > 8) {
+    throw new functions.https.HttpsError('invalid-argument', 'passengers');
+  }
+
+  const userName = String(data.userName || '').trim();
+  const userGender = String(data.userGender || '').trim();
+  const userBirthDate = String(data.userBirthDate || '').trim();
+  const fromCity = String(data.fromCity || '').trim();
+  const toCity = String(data.toCity || '').trim();
+  const district = String(data.district || '').trim();
+  const depMs = Number(data.departureTimeMs);
+  const departureTime = Number.isFinite(depMs) && depMs > 0
+    ? admin.firestore.Timestamp.fromMillis(depMs)
+    : null;
+  const idem = String(data.idempotencyKey || '').trim();
+
+  const bookingsCol = db.collection('intercity_bookings');
+  const driverRef = db.collection('intercity_drivers').doc(driverId);
+  const clientRef = driverRef.collection('clients').doc(userKey);
+  const lockRef = db.collection('intercity_booking_locks')
+      .doc(`${driverId}_${userKey}`);
+  const passengerLockRef = db.collection('intercity_passenger_locks')
+      .doc(userKey);
+  const idemRef = idem
+    ? db.collection('intercity_booking_idem').doc(idem)
+    : null;
+  const bookingRef = bookingsCol.doc();
+
+  return db.runTransaction(async (tx) => {
+    // ── READS ────────────────────────────────────────────────────────
+    if (idemRef) {
+      const idemSnap = await tx.get(idemRef);
+      if (idemSnap.exists) return (idemSnap.data() || {}).result;
+    }
+    const driverSnap = await tx.get(driverRef);
+    if (!driverSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'driver_not_found');
+    }
+    const driver = driverSnap.data() || {};
+    const lockSnap = await tx.get(lockRef);
+    const pLockSnap = await tx.get(passengerLockRef);
+    const clientSnap = await tx.get(clientRef);
+
+    const activeBlocks = async (snap) => {
+      if (!snap.exists) return false;
+      const id = String((snap.data() || {}).bookingId || '');
+      if (!id) return false;
+      const bSnap = await tx.get(bookingsCol.doc(id));
+      if (!bSnap.exists) return false;
+      const st = String((bSnap.data() || {}).status || '');
+      return st === 'pending' || st === 'confirmed';
+    };
+    if (await activeBlocks(lockSnap)) {
+      throw new functions.https.HttpsError(
+          'already-exists', 'already_booked_driver');
+    }
+    if (await activeBlocks(pLockSnap)) {
+      throw new functions.https.HttpsError('already-exists', 'already_active');
+    }
+
+    if (driver.isActive === false) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'driver_inactive');
+    }
+    const seats = Number(driver.seats) || 0;
+    if (seats < passengers) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'not_enough_seats');
+    }
+
+    // Narx — haqiqat manbai haydovchi hujjati, client emas.
+    const pricePerSeat = Number(driver.price) || 0;
+    if (!Number.isFinite(pricePerSeat) || pricePerSeat <= 0) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'ride_not_accepting');
+    }
+    // Client boshqa narx ko'rsatgan bo'lsa — jim ravishda boshqa summaga
+    // yozib qo'ymaymiz: UI yangilanib, foydalanuvchi qayta tasdiqlasin.
+    if (shownPricePerSeat > 0 && shownPricePerSeat !== pricePerSeat) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'price_changed');
+    }
+    const totalAmount = passengers * pricePerSeat;
+
+    // Status SERVER tomonda hal qilinadi — client `confirmed` deb yubora olmaydi.
+    const status = driver.autoAcceptBookings === true ? 'confirmed' : 'pending';
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const expiresAt = admin.firestore.Timestamp.fromMillis(
+        Date.now() + 30 * 60000);
+    const routeLabel = intercityRouteText(driver, {fromCity, toCity});
+
+    // ── WRITES ───────────────────────────────────────────────────────
+    tx.update(driverRef, {
+      seats: seats - passengers,
+      lastBookedAt: now,
+      updatedAt: now,
+    });
+    tx.set(lockRef, {
+      bookingId: bookingRef.id, driverId, userKey, updatedAt: now,
+    });
+    tx.set(passengerLockRef, {
+      bookingId: bookingRef.id,
+      driverId,
+      userPhone: canonicalUid(userKey),
+      createdAt: now,
+    });
+    tx.set(bookingRef, {
+      userPhone: canonicalUid(userKey),
+      userName,
+      userGender,
+      userBirthDate,
+      driverId,
+      driverPhone: String(driver.phone || ''),
+      driverName: String(driver.name || ''),
+      carNumber: String(driver.plate || driver.car || ''),
+      fromCity,
+      toCity,
+      district,
+      passengers,
+      pricePerSeat,
+      totalAmount,
+      status,
+      driverRouteLabel: routeLabel,
+      createdAt: now,
+      expiresAt,
+      departureTime: departureTime || now,
+      pickupAddress: '',
+      dropoffNote: '',
+      archivedByDriver: false,
+      createdBy: 'cf',
+      ...(status === 'confirmed' ? {confirmedAt: now} : {}),
+    });
+
+    const clientPatch = {
+      userName,
+      userPhoneRaw: userKey,
+      bookingCount: admin.firestore.FieldValue.increment(1),
+      totalSpent: admin.firestore.FieldValue.increment(totalAmount),
+      lastBookingAt: now,
+      lastBookingId: bookingRef.id,
+    };
+    if (!clientSnap.exists) {
+      clientPatch.firstBookingAt = now;
+      clientPatch.completedCount = 0;
+    }
+    tx.set(clientRef, clientPatch, {merge: true});
+
+    const driverPhone = digits(driver.phone || '');
+    if (driverPhone.length >= 9) {
+      tx.set(db.collection('notifications').doc(), {
+        targetPhone: driverPhone,
+        title: status === 'pending' ? '🔔 Янги брон сўрови!' : '🚗 Янги бронь!',
+        body: `${userName || 'Йўловчи'} · ${routeLabel} · ${passengers} ўрин`,
+        sent: false,
+        type: status === 'pending'
+          ? 'intercity_booking_pending'
+          : 'intercity_booking',
+        bookingId: bookingRef.id,
+        priority: 'high',
+        createdAt: now,
+      });
+    }
+    if (status === 'confirmed') {
+      tx.set(db.collection('notifications').doc(), {
+        targetPhone: userKey,
+        title: '✅ Брон тасдиқланди',
+        body: `${routeLabel}. Ҳайдовчи сиз билан боғланади.`,
+        sent: false,
+        type: 'intercity_pickup_request',
+        bookingId: bookingRef.id,
+        createdAt: now,
+      });
+    }
+
+    const result = {ok: true, bookingId: bookingRef.id, status};
+    if (idemRef) tx.set(idemRef, {result, createdAt: now});
+    return result;
+  });
+});
+
+exports.intercityCancelBooking = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+  }
+  const caller = callerPhone(context);
+  const bookingId = String(data.bookingId || '').trim();
+  const reason = String(data.reason || '').trim();
+  if (!bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bookingId');
+  }
+  const isAdminCaller = await intercityCallerIsAdmin(caller);
+  const bookingRef = db.collection('intercity_bookings').doc(bookingId);
+
+  const outcome = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(bookingRef);
+    if (!snap.exists) return {skipped: 'not_found'};
+    const b = snap.data() || {};
+
+    const isPassenger = intercityPhoneMatch(caller, b.userPhone);
+    const isDriver = intercityPhoneMatch(caller, b.driverId) ||
+        intercityPhoneMatch(caller, b.driverPhone);
+    if (!isPassenger && !isDriver && !isAdminCaller) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'not_participant');
+    }
+
+    const status = String(b.status || '');
+    if (status !== 'pending' && status !== 'confirmed') {
+      return {skipped: 'not_active'};
+    }
+
+    const driverRef = db.collection('intercity_drivers').doc(String(b.driverId || ''));
+    const driverSnap = await tx.get(driverRef);
+    const userKey = digits(b.userPhone || '');
+    const clientRef = userKey.length >= 9
+      ? driverRef.collection('clients').doc(userKey)
+      : null;
+    const clientSnap = clientRef ? await tx.get(clientRef) : null;
+    const lockRef = userKey.length >= 9
+      ? db.collection('intercity_booking_locks')
+          .doc(`${b.driverId}_${userKey}`)
+      : null;
+    const lockSnap = lockRef ? await tx.get(lockRef) : null;
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    if (driverSnap.exists) {
+      tx.update(driverRef, {
+        seats: intercityRestoredSeats(driverSnap.data(), b.passengers),
+        updatedAt: now,
+      });
+    }
+    tx.update(bookingRef, {
+      status: 'cancelled',
+      cancelReason: reason,
+      cancelledAt: now,
+    });
+    if (clientRef && clientSnap && clientSnap.exists) {
+      tx.update(clientRef, {
+        bookingCount: admin.firestore.FieldValue.increment(-1),
+        totalSpent: admin.firestore.FieldValue.increment(
+            -(Number(b.totalAmount) || 0)),
+        lastBookingAt: now,
+      });
+    }
+    if (lockRef && lockSnap && lockSnap.exists) {
+      tx.update(lockRef, {
+        bookingId: admin.firestore.FieldValue.delete(),
+        updatedAt: now,
+      });
+    }
+
+    return {ok: true, booking: b, byDriver: isDriver && !isPassenger};
+  });
+
+  if (!outcome || outcome.ok !== true) {
+    return {ok: false, skipped: (outcome && outcome.skipped) || 'unknown'};
+  }
+
+  const b = outcome.booking;
+  const route = String(b.driverRouteLabel || '').trim() ||
+      intercityRouteText(null, b);
+  const passengerPhone = digits(b.userPhone || '');
+  const driverPhone = digits(b.driverPhone || b.driverId || '');
+  const tripEnded = reason.includes('рейсни бекор') || reason.includes('yangi reys');
+
+  const writes = [];
+  if (passengerPhone.length >= 9) {
+    writes.push(db.collection('notifications').add({
+      targetPhone: passengerPhone,
+      title: tripEnded
+        ? '❌ Рейс бекор — бронингиз ҳам ёпилди'
+        : outcome.byDriver
+          ? '❌ Ҳайдовчи бронни рад этди'
+          : '❌ Брон бекор қилинди',
+      body: `${route}. Ўринлар қайта бўшатилди.`,
+      sent: false,
+      type: 'intercity_booking_cancelled',
+      bookingId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    }));
+  }
+  // Yo'lovchi o'zi bekor qilgan bo'lsa — haydovchiga ham xabar (o'rin bo'shadi).
+  if (!outcome.byDriver && !tripEnded && driverPhone.length >= 9) {
+    writes.push(db.collection('notifications').add({
+      targetPhone: driverPhone,
+      title: '❌ Йўловчи бронни бекор қилди',
+      body: `${String(b.userName || 'Йўловчи')} · ${route}. Ўрин(лар) бўшади.`,
+      sent: false,
+      type: 'intercity_booking_cancelled',
+      bookingId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    }));
+  }
+  await Promise.all(writes);
+  return {ok: true};
+});
+
+exports.intercityCompleteBooking = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Auth required');
+  }
+  const caller = callerPhone(context);
+  const bookingId = String(data.bookingId || '').trim();
+  if (!bookingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'bookingId');
+  }
+  const isAdminCaller = await intercityCallerIsAdmin(caller);
+  const bookingRef = db.collection('intercity_bookings').doc(bookingId);
+
+  const outcome = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(bookingRef);
+    if (!snap.exists) return {skipped: 'not_found'};
+    const b = snap.data() || {};
+
+    const isDriver = intercityPhoneMatch(caller, b.driverId) ||
+        intercityPhoneMatch(caller, b.driverPhone);
+    if (!isDriver && !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'not_driver');
+    }
+
+    const status = String(b.status || '');
+    if (status !== 'pending' && status !== 'confirmed') {
+      return {skipped: 'not_active'};
+    }
+
+    const driverRef = db.collection('intercity_drivers').doc(String(b.driverId || ''));
+    const driverSnap = await tx.get(driverRef);
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    tx.update(bookingRef, {status: 'completed', completedAt: now});
+    // Rейс davom etayotgan bo'lsa (isActive) — o'rin qayta bo'shatiladi.
+    if (driverSnap.exists && (driverSnap.data() || {}).isActive !== false) {
+      tx.update(driverRef, {
+        seats: intercityRestoredSeats(driverSnap.data(), b.passengers),
+        updatedAt: now,
+      });
+    } else if (driverSnap.exists) {
+      tx.update(driverRef, {updatedAt: now});
+    }
+    return {ok: true, booking: b};
+  });
+
+  if (!outcome || outcome.ok !== true) {
+    return {ok: false, skipped: (outcome && outcome.skipped) || 'unknown'};
+  }
+  const b = outcome.booking;
+  const passengerPhone = digits(b.userPhone || '');
+  if (passengerPhone.length >= 9) {
+    const route = String(b.driverRouteLabel || '').trim() ||
+        intercityRouteText(null, b);
+    await db.collection('notifications').add({
+      targetPhone: passengerPhone,
+      title: '⭐ Сафар якунланди',
+      body: `${String(b.driverName || 'Ҳайдовчи')} · ${route}. Раҳмат, яна кўрамиз!`,
+      sent: false,
+      type: 'intercity_trip_completed',
+      bookingId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  return {ok: true};
+});
+
 exports.updateIntercityDriverRating = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError(

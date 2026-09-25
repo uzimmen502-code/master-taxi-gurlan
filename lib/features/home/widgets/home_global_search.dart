@@ -3,19 +3,62 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/search_index_entry.dart';
 import '../../../repositories/search_index_repository.dart';
+import '../../tv_market/models/tv_clip.dart';
+import '../../tv_market/repositories/tv_clips_repository.dart';
+import 'ava_chip.dart';
+import 'home_search_kind.dart';
 
-/// Асосий экран: глобал қидирув («Тавсия этамиз»дан олдин).
+/// Қидирув натижаси — индекс ёзуви ёки видео клип.
+///
+/// Видео `search_index` да ЙЎҚ (уни у ерга ёзадиган Cloud Function
+/// йўқ), шунинг учун клиплар `tv_clips` дан бевосита қидирилади ва шу
+/// ерда бирлаштирилади. Сервер ўзгариши талаб қилинмайди.
+class HomeSearchHit {
+  const HomeSearchHit.entry(this.entry)
+      : clip = null,
+        kind = null;
+
+  HomeSearchHit.video(TvClip this.clip)
+      : entry = null,
+        kind = HomeSearchKind.video;
+
+  final SearchIndexEntry? entry;
+  final TvClip? clip;
+  final HomeSearchKind? kind;
+
+  HomeSearchKind get type => kind ?? homeSearchKindOf(entry!);
+
+  String get title => entry?.title ?? clip!.title;
+
+  String get subtitle =>
+      entry?.subtitle ?? clip!.districtLabel;
+
+  int? get price {
+    if (entry != null) return entry!.price;
+    return clip!.hasPrice ? clip!.price : null;
+  }
+
+  String get imageUrl => entry?.imageUrl ?? clip!.posterUrl;
+}
+
+/// 0-бўлим: «AVA'дан қидириш».
+///
+/// Натижаларда тур белгиси бор: Эълон · Хизмат · Маҳсулот · Видео.
 class HomeGlobalSearchBar extends StatefulWidget {
   const HomeGlobalSearchBar({
     super.key,
     required this.onOpenEntry,
+    required this.onOpenClip,
   });
 
   final Future<void> Function(SearchIndexEntry entry) onOpenEntry;
+  final Future<void> Function(TvClip clip) onOpenClip;
 
   @override
   State<HomeGlobalSearchBar> createState() => _HomeGlobalSearchBarState();
@@ -23,11 +66,13 @@ class HomeGlobalSearchBar extends StatefulWidget {
 
 class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   final _repo = SearchIndexRepository();
+  final _clips = TvClipsRepository();
   final _ctrl = TextEditingController();
   final _focus = FocusNode();
+
   Timer? _debounce;
   bool _loading = false;
-  List<SearchIndexEntry> _results = const [];
+  List<HomeSearchHit> _results = const [];
   String _query = '';
 
   @override
@@ -45,6 +90,7 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   }
 
   void _onChanged(String v) {
+    setState(() {}); // тозалаш тугмаси дарҳол пайдо бўлсин
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 220), () {
       unawaited(_runSearch(v));
@@ -67,10 +113,24 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
       _loading = true;
     });
     try {
-      final list = await _repo.search(q, limit: 36);
+      // Иккита манба параллел — бири йиқилса иккинчиси барибир чиқади.
+      final results = await Future.wait<List<HomeSearchHit>>([
+        _repo
+            .search(q, limit: 30)
+            .then((l) => l.map(HomeSearchHit.entry).toList())
+            .catchError((_) => <HomeSearchHit>[]),
+        _clips
+            .searchByTitle(
+              query: q,
+              districtId: ServiceConfigHolder.districtId,
+              limit: 6,
+            )
+            .then((l) => l.map(HomeSearchHit.video).toList())
+            .catchError((_) => <HomeSearchHit>[]),
+      ]);
       if (!mounted || _ctrl.text.trim() != q) return;
       setState(() {
-        _results = list;
+        _results = [...results[0], ...results[1]];
         _loading = false;
       });
     } catch (_) {
@@ -91,255 +151,88 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
     });
   }
 
-  IconData _iconFor(SearchIndexEntry e) {
-    switch (e.iconKey) {
-      case 'taxi':
-        return Icons.local_taxi_outlined;
-      case 'shop':
-        return Icons.storefront_outlined;
-      case 'job':
-        return Icons.work_outline;
-      case 'food':
-        return Icons.restaurant_outlined;
-      case 'bread':
-        return Icons.bakery_dining_outlined;
-      case 'yuk':
-        return Icons.local_shipping_outlined;
-      case 'milk':
-        return Icons.water_drop_outlined;
-      case 'oil':
-        return Icons.oil_barrel_outlined;
-      case 'carpet':
-        return Icons.cleaning_services_outlined;
-      // Эски `search_index/sell` ёзуви прод'дан ўчирилгунча — модул
-      // олиб ташланган, лекин натижа иконкасиз қолмасин (босилса
-      // Бозорга олиб боради, қаранг: `home_screen._openSearchResult`).
-      case 'sell':
-        return Icons.sell_outlined;
-      default:
-        return Icons.search;
+  Future<void> _open(HomeSearchHit hit) async {
+    if (hit.clip != null) {
+      await widget.onOpenClip(hit.clip!);
+    } else {
+      await widget.onOpenEntry(hit.entry!);
     }
+    if (mounted) _clear();
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ava;
     final showPanel = _query.length >= 2;
-    final fieldEmpty = _ctrl.text.isEmpty;
+    final empty = _ctrl.text.isEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              // Пастки чуқурлик — лайм фондан ажралиб туради
-              BoxShadow(
-                color: AppColors.limeDeep.withValues(alpha: 0.28),
-                offset: const Offset(0, 3),
-                blurRadius: 8,
-                spreadRadius: 0,
-              ),
-              // Юқори енгил «ёруғлик» — 3D рельеф
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.85),
-                offset: const Offset(0, -1),
-                blurRadius: 2,
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.white,
-            elevation: 0,
-            borderRadius: BorderRadius.circular(12),
-            clipBehavior: Clip.antiAlias,
-            child: TextField(
-              controller: _ctrl,
-              focusNode: _focus,
-              onChanged: (v) {
-                setState(() {}); // «Қидирув:» дарҳол яширилади
-                _onChanged(v);
-              },
-              textInputAction: TextInputAction.search,
-              cursorHeight: 18,
-              cursorColor: AppColors.limeDeep,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.25,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1B2E0A),
-              ),
-              decoration: InputDecoration(
-                // Бўш: лупа + «Қидирув:» тўқ + мисоллар хира. Ёзилганда фақат матн.
-                hintText: fieldEmpty ? 'такси, нон, иш, Лабо…' : null,
-                hintStyle: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                ),
-                // prefix эмас — Row: баъзи Flutter версияларида prefix яширинади.
-                prefixIcon: Padding(
-                  padding: const EdgeInsets.only(left: 10, right: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.search,
-                        size: 26,
-                        color: AppColors.limeDeep,
-                      ),
-                      if (fieldEmpty) ...[
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Қидирув:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            height: 1.25,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.limeDeep,
-                          ),
-                        ),
-                      ],
-                    ],
+        TextField(
+          controller: _ctrl,
+          focusNode: _focus,
+          onChanged: _onChanged,
+          textInputAction: TextInputAction.search,
+          style: AvaText.body.copyWith(color: c.ink),
+          decoration: InputDecoration(
+            hintText: context.tr('home_search_hint'),
+            prefixIcon: Icon(Icons.search_rounded, color: c.ink3),
+            suffixIcon: empty
+                ? null
+                : IconButton(
+                    tooltip: context.tr('home_search_clear'),
+                    onPressed: _clear,
+                    icon: Icon(Icons.close_rounded, size: 18, color: c.ink3),
                   ),
-                ),
-                prefixIconConstraints: BoxConstraints(
-                  minWidth: fieldEmpty ? 118 : 44,
-                  minHeight: 42,
-                ),
-                suffixIcon: fieldEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Тозалаш',
-                        onPressed: _clear,
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          Icons.clear,
-                          size: 18,
-                          color: AppColors.sectionMuted.withValues(alpha: 0.9),
-                        ),
-                      ),
-                suffixIconConstraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 42,
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.limeDeep,
-                    width: 1.4,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.limeDeep,
-                    width: 1.4,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.limeDeep,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
         ),
         if (showPanel) ...[
-          const SizedBox(height: 8),
-          Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            elevation: 2,
-            shadowColor: Colors.black26,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360),
-              child: _loading
-                  ? const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(
-                        child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
+          const SizedBox(height: AvaSpace.gap),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 360),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(AvaRadius.card),
+              border: Border.all(color: c.line),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: _loading
+                ? const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  )
+                : _results.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          context
+                              .tr('home_search_empty')
+                              .replaceAll('{query}', _query),
+                          textAlign: TextAlign.center,
+                          style: AvaText.caption.copyWith(color: c.ink2),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        itemCount: _results.length,
+                        separatorBuilder: (_, __) =>
+                            Divider(height: 1, color: c.line),
+                        itemBuilder: (context, i) => _ResultRow(
+                          hit: _results[i],
+                          onTap: () => _open(_results[i]),
                         ),
                       ),
-                    )
-                  : _results.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            '«$_query» бўйича топилмади',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          itemCount: _results.length,
-                          separatorBuilder: (_, __) => Divider(
-                            height: 1,
-                            color: Colors.grey.shade200,
-                          ),
-                          itemBuilder: (context, i) {
-                            final e = _results[i];
-                            return ListTile(
-                              dense: true,
-                              leading: _Thumb(entry: e, icon: _iconFor(e)),
-                              title: Text(
-                                e.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              subtitle: Text(
-                                [
-                                  if (e.subtitle.isNotEmpty) e.subtitle,
-                                  if (e.price != null && e.price! > 0)
-                                    '${formatPrice(e.price!)} сўм',
-                                ].join(' · '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              trailing: Text(
-                                e.type == SearchIndexEntry.typeService ||
-                                        e.type ==
-                                            SearchIndexEntry.typeIntercityRoute
-                                    ? 'ОЧИШ'
-                                    : 'КЎРИШ',
-                                style: TextStyle(
-                                  color: AppColors.button,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              onTap: () async {
-                                await widget.onOpenEntry(e);
-                                if (mounted) _clear();
-                              },
-                            );
-                          },
-                        ),
-            ),
           ),
         ],
       ],
@@ -347,39 +240,105 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   }
 }
 
-class _Thumb extends StatelessWidget {
-  const _Thumb({required this.entry, required this.icon});
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({required this.hit, required this.onTap});
 
-  final SearchIndexEntry entry;
-  final IconData icon;
+  final HomeSearchHit hit;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final url = entry.imageUrl.trim();
-    if (url.startsWith('http')) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CachedNetworkImage(
-          imageUrl: url,
-          width: 44,
-          height: 44,
-          fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => _iconBox(),
-        ),
-      );
-    }
-    return _iconBox();
-  }
+    final c = context.ava;
+    final price = hit.price;
 
-  Widget _iconBox() {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F7E8),
-        borderRadius: BorderRadius.circular(8),
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AvaTap.minSize),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              _Thumb(hit: hit),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      hit.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AvaText.productName.copyWith(color: c.ink),
+                    ),
+                    const SizedBox(height: 4),
+                    // Тур белгиси — тавсиф талаби.
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        AvaChip(
+                          label: hit.type.label(context),
+                          icon: hit.type.icon,
+                          tone: AvaChipTone.brand,
+                        ),
+                        if (hit.subtitle.isNotEmpty)
+                          Text(
+                            hit.subtitle,
+                            style: AvaText.caption.copyWith(color: c.ink3),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (price != null && price > 0) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '${formatPrice(price)} $kCurrencySum',
+                  style: AvaText.price.copyWith(color: c.brand),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-      child: Icon(icon, color: AppColors.button, size: 22),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.hit});
+
+  final HomeSearchHit hit;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final url = hit.imageUrl.trim();
+
+    Widget fallback() => Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: c.surface2,
+            borderRadius: BorderRadius.circular(AvaRadius.card - 4),
+          ),
+          child: Icon(hit.type.icon, color: c.ink3, size: 20),
+        );
+
+    if (!url.startsWith('http')) return fallback();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AvaRadius.card - 4),
+      child: CachedNetworkImage(
+        imageUrl: url,
+        width: 42,
+        height: 42,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => fallback(),
+      ),
     );
   }
 }

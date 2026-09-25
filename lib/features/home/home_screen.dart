@@ -798,6 +798,9 @@ class _HomeViewState extends State<_HomeView> {
                             const SizedBox(height: 16),
                             HomeGlobalSearchBar(
                               onOpenEntry: _openSearchEntry,
+                              onOpenClip: (clip) => _push(
+                                TvMarketFeedScreen(initialClip: clip),
+                              ),
                             ),
                             if (HomeModuleGate.showInGrid('tv_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),

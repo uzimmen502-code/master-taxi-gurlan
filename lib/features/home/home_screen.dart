@@ -12,11 +12,9 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/payment_provider_launcher.dart';
 import '../../l10n/app_localizations.dart';
-import '../../models/active_trip.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/home_ticker_ad.dart';
-import '../../repositories/intercity_bookings_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
@@ -53,7 +51,9 @@ import '../marshrut/passenger/screens/marshrut_taxi_screen.dart';
 import '../profile/screens/profile_screen.dart';
 import '../profile/screens/wallet_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
+import 'controllers/active_orders_controller.dart';
 import 'controllers/home_controller.dart';
+import 'widgets/active_order_card.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
 import '../../models/search_index_entry.dart';
@@ -111,8 +111,14 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => HomeController(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => HomeController()),
+        ChangeNotifierProvider(
+          create: (ctx) =>
+              ActiveOrdersController(rides: ctx.read<RidesRepository>()),
+        ),
+      ],
       child: const _HomeView(),
     );
   }
@@ -128,7 +134,6 @@ class _HomeView extends StatefulWidget {
 class _HomeViewState extends State<_HomeView> {
   StreamSubscription<void>? _promoSub;
   VoidCallback? _configListener;
-  bool _tripResumeDone = false;
   String? _lastAppliedServiceAreaId;
   /// Home қайта очилганда ҳамён 11 с яна кўринсин.
   int _walletRevealEpoch = 0;
@@ -148,8 +153,11 @@ class _HomeViewState extends State<_HomeView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ServiceConfigHolder.bootstrap());
-      unawaited(_runTripResumeOnce());
-      _checkActiveIntercityBooking();
+      // Фаол буюртма топилганда АВТОМАТИК кузатиш экранига ўтиш олиб
+      // ташланди (эга қарори) — энди `ActiveOrderCard` кўринади ва ўтиш
+      // фойдаланувчи босганда бўлади. Push орқали келган «сафар қабул
+      // қилинди» йўли тегилмади: `push_navigation` ўзи `LocalTaxiScreen`
+      // га ўтади ва `resume_local_trip_id` ни ўша экран ишлатади.
       final c = context.read<HomeController>();
       _promoSub = c.onAgroPromo.listen(_showAgroPromo);
       unawaited(IntercityDriverResume.tryResumeOnAppLaunch(context));
@@ -222,120 +230,6 @@ class _HomeViewState extends State<_HomeView> {
     }());
   }
 
-  Future<void> _runTripResumeOnce() async {
-    if (_tripResumeDone) return;
-    _tripResumeDone = true;
-    await _checkActiveLocalTrip();
-    if (!mounted) return;
-    await _checkActiveMarshrutTrip();
-  }
-
-  Future<void> _checkActiveIntercityBooking() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final role = prefs.getString('user_role') ?? 'user';
-      if (role == 'driver') return;
-
-      final phone = prefs.getString('user_phone') ?? '';
-      if (phone.isEmpty) return;
-
-      final from = prefs.getString('last_intercity_from') ?? '';
-      final to = prefs.getString('last_intercity_to') ?? '';
-      if (from.isEmpty || to.isEmpty) return;
-
-      final repo = IntercityBookingsRepository();
-      final booking = await repo.findActiveBookingForUser(phone);
-      if (booking == null) return;
-      if (!mounted) return;
-
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => IntercityTaxiScreen(autoFrom: from, autoTo: to),
-        ),
-      );
-    } catch (e) {
-      debugPrint('_checkActiveIntercityBooking: $e');
-    }
-  }
-
-  Future<void> _checkActiveLocalTrip() async {
-    try {
-      if (!mounted) return;
-      final repo = context.read<RidesRepository>();
-      final prefs = await SharedPreferences.getInstance();
-      final role = prefs.getString('user_role') ?? 'user';
-      if (role == 'driver') return;
-
-      final phone = prefs.getString('user_phone') ?? '';
-      if (phone.isEmpty) return;
-
-      final resumeId = prefs.getString('resume_local_trip_id') ?? '';
-      if (resumeId.isNotEmpty) {
-        await prefs.remove('resume_local_trip_id');
-        final trip = await repo.getTrip(resumeId);
-        if (trip != null && mounted) {
-          await _navigateLocalTrip(trip, resumeId);
-          return;
-        }
-      }
-
-      final doc = await repo.findActiveLocalTripDoc(phone);
-      if (doc == null || !mounted) return;
-      final trip = repo.activeTripFromDoc(doc);
-      if (trip == null) return;
-      await _navigateLocalTrip(trip, doc.id);
-    } catch (e) {
-      debugPrint('_checkActiveLocalTrip: $e');
-    }
-  }
-
-  Future<void> _navigateLocalTrip(ActiveTrip trip, String tripId) async {
-    if (!mounted) return;
-    if (trip.status == 'accepted') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => LocalTaxiActiveTripScreen(tripId: tripId),
-        ),
-      );
-    } else if (trip.status == 'searching') {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SearchingScreen(
-            from: trip.fromAddr,
-            to: trip.toAddr,
-            taxiType: 'local',
-            tripId: tripId,
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _checkActiveMarshrutTrip() async {
-    try {
-      if (!mounted) return;
-      final repo = context.read<RidesRepository>();
-      final prefs = await SharedPreferences.getInstance();
-      final role = prefs.getString('user_role') ?? 'user';
-      if (role == 'driver') return;
-
-      final phone = prefs.getString('user_phone') ?? '';
-      if (phone.isEmpty) return;
-
-      final doc = await repo.findActiveMarshrutTripDoc(phone);
-      if (doc == null || !mounted) return;
-      final trip = repo.activeTripFromDoc(doc);
-      if (trip == null || trip.status != 'accepted') return;
-
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => MarshrutAcceptedScreen(trip: trip),
-        ),
-      );
-    } catch (e) {
-      debugPrint('_checkActiveMarshrutTrip: $e');
-    }
-  }
 
   @override
   void dispose() {
@@ -694,6 +588,37 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
+  /// Фаол буюртма карточкаси босилганда — тегишли кузатиш экрани.
+  Future<void> _openActiveOrder(HomeActiveOrder order) async {
+    final trip = order.trip;
+    switch (order.kind) {
+      case ActiveOrderKind.localTaxi:
+        if (trip == null) return;
+        await _push(
+          trip.status == 'searching'
+              ? SearchingScreen(
+                  from: trip.fromAddr,
+                  to: trip.toAddr,
+                  taxiType: 'local',
+                  tripId: trip.id,
+                )
+              : LocalTaxiActiveTripScreen(tripId: trip.id),
+        );
+      case ActiveOrderKind.marshrut:
+        if (trip == null) return;
+        await _push(MarshrutAcceptedScreen(trip: trip));
+      case ActiveOrderKind.intercity:
+        final prefs = await SharedPreferences.getInstance();
+        if (!mounted) return;
+        await _push(
+          IntercityTaxiScreen(
+            autoFrom: prefs.getString('last_intercity_from'),
+            autoTo: prefs.getString('last_intercity_to'),
+          ),
+        );
+    }
+  }
+
   /// Юқори қатордаги ҳудуд тугмаси.
   Future<void> _openRegionPicker() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
@@ -758,6 +683,7 @@ class _HomeViewState extends State<_HomeView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AvaTopBar(onPickRegion: _openRegionPicker),
+                            _ActiveOrderSlot(onOpen: _openActiveOrder),
                             SizedBox(height: _sectionGap(context, base: 10)),
                             AnimatedSize(
                               duration: const Duration(milliseconds: 280),
@@ -1183,6 +1109,39 @@ class _HomeViewState extends State<_HomeView> {
             child: const _HomeShareButton(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Фаол буюртма карточкаси учун жой.
+///
+/// Телефонни controller'га боғлайди ва фақат шу қисм қайта қурилади —
+/// буюртма ҳолати ўзгарганда бутун бош саҳифа rebuild бўлмайди.
+class _ActiveOrderSlot extends StatelessWidget {
+  const _ActiveOrderSlot({required this.onOpen});
+
+  final Future<void> Function(HomeActiveOrder order) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = phoneDigits(context.select<HomeController, String>(
+      (c) => c.phone,
+    ));
+    final orders = context.watch<ActiveOrdersController>();
+    // `bind` такрор чақирилса ҳам ичида телефон ўзгармаса ҳеч нарса
+    // қилмайди, шунинг учун build'дан чақириш хавфсиз.
+    orders.bind(phone);
+
+    final primary = orders.primary;
+    if (primary == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ActiveOrderCard(
+        order: primary,
+        extraCount: orders.extraCount,
+        onTap: () => onOpen(primary),
       ),
     );
   }

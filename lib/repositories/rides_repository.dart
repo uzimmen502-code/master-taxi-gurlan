@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/service_config_holder.dart';
@@ -706,6 +707,64 @@ class RidesRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Бош саҳифадаги фаол буюртма карточкаси учун — реал вақт.
+  ///
+  /// Сўров шакли [findActiveLocalTripDoc] билан АЙНАН бир хил
+  /// (`userPhone` + `taxiType` + `status whereIn`), шунинг учун янги
+  /// Firestore индекси керак эмас. Саралаш ва муддат текшируви —
+  /// клиентда, худди бир марталик вариантдагидек.
+  Stream<List<ActiveTrip>> watchActiveLocalTripsForUser(String phone) {
+    if (phone.isEmpty) return Stream.value(const []);
+    return _trips
+        .where('userPhone', isEqualTo: phone)
+        .where('taxiType', isEqualTo: 'local')
+        .where('status', whereIn: ['searching', 'accepted'])
+        .snapshots()
+        .map((snap) => _activeTripsFrom(snap, expiredStatus: 'searching'))
+        .handleError((Object e) {
+      debugPrint('watchActiveLocalTripsForUser: $e');
+    });
+  }
+
+  /// Маршрут — қаранг: [watchActiveLocalTripsForUser].
+  Stream<List<ActiveTrip>> watchActiveMarshrutTripsForUser(String phone) {
+    if (phone.isEmpty) return Stream.value(const []);
+    return _trips
+        .where('userPhone', isEqualTo: phone)
+        .where('taxiType', isEqualTo: 'marshrut')
+        .where('status', whereIn: ['pending', 'accepted'])
+        .snapshots()
+        .map((snap) => _activeTripsFrom(snap, expiredStatus: 'pending'))
+        .handleError((Object e) {
+      debugPrint('watchActiveMarshrutTripsForUser: $e');
+    });
+  }
+
+  /// Янгиси тепада; муддати ўтган [expiredStatus] ёзувлари чиқарилади.
+  List<ActiveTrip> _activeTripsFrom(
+    QuerySnapshot<Map<String, dynamic>> snap, {
+    required String expiredStatus,
+  }) {
+    final docs = snap.docs.toList()
+      ..sort((a, b) {
+        final ta = a.data()['createdAt'] as Timestamp?;
+        final tb = b.data()['createdAt'] as Timestamp?;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+    final out = <ActiveTrip>[];
+    for (final doc in docs) {
+      final d = doc.data();
+      if ((d['status'] ?? '') == expiredStatus && _isExpiredTripData(d)) {
+        continue;
+      }
+      out.add(ActiveTrip.fromDoc(doc));
+    }
+    return out;
   }
 
   ActiveTrip? activeTripFromDoc(

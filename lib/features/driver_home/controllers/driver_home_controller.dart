@@ -246,6 +246,7 @@ class DriverHomeController extends ChangeNotifier {
         lockedFare: t.lockedFare,
         lockedDistanceKm: t.lockedDistanceKm,
         fareLockVersion: t.fareLockVersion,
+        arrivedAt: t.arrivedAt,
       );
 
   void _setAcceptedFromActiveTrip(ActiveTrip trip) {
@@ -736,6 +737,43 @@ class DriverHomeController extends ChangeNotifier {
   }
 
   // ─── Сафарни якунлаш ─────────────────────────────────────────────
+  /// «Етиб келдим» — йўловчига бош саҳифадаги карточкада кўринади.
+  ///
+  /// Оптимистик: тугма дарҳол ўзгаради, стрим кейин тасдиқлайди.
+  Future<void> markArrived() async {
+    final ride = acceptedRide;
+    if (ride == null || ride.hasArrived) return;
+    acceptedRide = TripRequest(
+      id: ride.id,
+      userPhone: ride.userPhone,
+      userName: ride.userName,
+      userGender: ride.userGender,
+      userBirthDate: ride.userBirthDate,
+      fromLat: ride.fromLat,
+      fromLng: ride.fromLng,
+      toLat: ride.toLat,
+      toLng: ride.toLng,
+      from: ride.from,
+      to: ride.to,
+      taxiType: ride.taxiType,
+      secsLeft: ride.secsLeft,
+      distanceKm: ride.distanceKm,
+      scheduleId: ride.scheduleId,
+      targetDriverId: ride.targetDriverId,
+      reservedBy: ride.reservedBy,
+      lockedFare: ride.lockedFare,
+      lockedDistanceKm: ride.lockedDistanceKm,
+      fareLockVersion: ride.fareLockVersion,
+      arrivedAt: DateTime.now(),
+    );
+    notifyListeners();
+    try {
+      await _ridesRepo.markDriverArrived(ride.id);
+    } catch (e) {
+      debugPrint('markArrived: $e');
+    }
+  }
+
   Future<int> finishRide({
     required int fare,
     required int cashPaid,

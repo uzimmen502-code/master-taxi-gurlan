@@ -27,6 +27,7 @@ class TripRequest {
     this.lockedFare = 0,
     this.lockedDistanceKm = 0,
     this.fareLockVersion = 0,
+    this.arrivedAt,
   });
 
   final String id;
@@ -50,7 +51,13 @@ class TripRequest {
   final double lockedDistanceKm;
   final int fareLockVersion;
 
+  /// Ҳайдовчи олиб кетиш нуқтасига етиб келган вақт (қаранг:
+  /// `ActiveTrip.arrivedAt` — нега статус эмас, майдон эканлиги).
+  final DateTime? arrivedAt;
+
   bool get hasLockedFare => lockedFare > 0;
+
+  bool get hasArrived => arrivedAt != null;
 
   /// `userBirthDate` (YYYY-MM-DD) дан ёшни ҳисоблайди. Бўш бўлса `null`.
   int? get age {
@@ -110,6 +117,7 @@ class TripRequest {
       lockedFare: (d['lockedFare'] as num?)?.toInt() ?? 0,
       lockedDistanceKm: (d['lockedDistanceKm'] as num?)?.toDouble() ?? 0,
       fareLockVersion: (d['fareLockVersion'] as num?)?.toInt() ?? 0,
+      arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
     );
   }
 }

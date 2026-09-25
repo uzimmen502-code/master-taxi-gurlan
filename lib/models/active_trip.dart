@@ -46,6 +46,17 @@ class ActiveTrip {
 
   final DateTime? createdAt;
   final DateTime? expiresAt;
+
+  /// Ҳайдовчи олиб кетиш нуқтасига етиб келган вақт.
+  ///
+  /// Атайлаб алоҳида МАЙДОН, янги `status` эмас: `status == 'accepted'`
+  /// ни текширадиган сўровлар, Firestore қоидалари ва Cloud Function'лар
+  /// (`findActiveLocalTripDoc`, `watchAcceptedForDriver`, `completeLocalTrip`,
+  /// `expirePendingTrips`) ўзгаришсиз ишлайверади. Бош саҳифадаги фаол
+  /// буюртма карточкаси шу майдонга қараб «Йўлда» ёки «Етиб келди»
+  /// деб кўрсатади.
+  final DateTime? arrivedAt;
+
   final int offerTimeoutSeconds;
   final String cancelledBy;
   final String cancelReason;
@@ -87,6 +98,7 @@ class ActiveTrip {
     this.scheduleId = '',
     this.createdAt,
     this.expiresAt,
+    this.arrivedAt,
     this.offerTimeoutSeconds = 0,
     this.cancelledBy = '',
     this.cancelReason = '',
@@ -100,6 +112,9 @@ class ActiveTrip {
   });
 
   bool get isAccepted => status == 'accepted';
+
+  /// Ҳайдовчи етиб келганми (қаранг: [arrivedAt]).
+  bool get hasArrived => arrivedAt != null;
   bool get isCancelled => status == 'cancelled';
   bool get isPassengerCancelled =>
       isCancelled &&
@@ -151,6 +166,7 @@ class ActiveTrip {
       scheduleId: (d['scheduleId'] ?? '') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
       expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
+      arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
       offerTimeoutSeconds: (d['offerTimeoutSeconds'] as num?)?.toInt() ?? 0,
       cancelledBy: (d['cancelledBy'] ?? '') as String,
       cancelReason: (d['cancelReason'] ?? '') as String,

@@ -9,10 +9,15 @@ class ActiveRideCard extends StatelessWidget {
     super.key,
     required this.ride,
     required this.onComplete,
+    this.onArrived,
   });
 
   final TripRequest ride;
   final VoidCallback onComplete;
+
+  /// «Етиб келдим» — йўловчининг бош саҳифасидаги карточка «Йўлда» дан
+  /// «Етиб келди» га ўтади. `null` бўлса тугма кўрсатилмайди.
+  final VoidCallback? onArrived;
 
   static const _green = AppColors.primaryDark;
 
@@ -43,6 +48,38 @@ class ActiveRideCard extends StatelessWidget {
         Text('📍 ${ride.from} → ${ride.to}',
             style: TextStyle(
                 fontSize: AppText.bodySmall, color: Colors.grey.shade700)),
+        const SizedBox(height: 10),
+        if (onArrived != null && !ride.hasArrived)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onArrived,
+              icon: const Icon(Icons.where_to_vote_outlined, size: 18),
+              label: const Text('ЕТИБ КЕЛДИМ'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _green,
+                side: const BorderSide(color: _green),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          )
+        else if (ride.hasArrived)
+          Row(
+            children: const [
+              Icon(Icons.where_to_vote, color: _green, size: 16),
+              SizedBox(width: 6),
+              Text(
+                'Йўловчи хабардор қилинди',
+                style: TextStyle(
+                  fontSize: AppText.bodySmall,
+                  fontWeight: FontWeight.w600,
+                  color: _green,
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 10),
         SizedBox(
           width: double.infinity,

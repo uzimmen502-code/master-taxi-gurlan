@@ -231,6 +231,27 @@ class RidesRepository {
     });
   }
 
+  /// Ҳайдовчи «Етиб келдим» деб белгилайди.
+  ///
+  /// `status` ЎЗГАРМАЙДИ (`accepted` бўлиб қолади) — фақат `arrivedAt`
+  /// қўйилади. Шунинг учун `findActiveLocalTripDoc`, `watchAcceptedForDriver`,
+  /// `completeLocalTrip` ва `expirePendingTrips` ўзгаришсиз ишлайверади.
+  /// Firestore қоидалари бу ёзувни фақат шу сафарга бириктирилган
+  /// ҳайдовчига ва фақат бир марта (қайта босилса ҳам) рухсат беради.
+  Future<void> markDriverArrived(String tripId) async {
+    if (tripId.trim().isEmpty) return;
+    await _db.runTransaction((t) async {
+      final ref = _trips.doc(tripId);
+      final snap = await t.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data()!;
+      if ((data['status'] as String? ?? '') != 'accepted') return;
+      // Такрор босиш вақтни силжитмасин.
+      if (data['arrivedAt'] != null) return;
+      t.update(ref, {'arrivedAt': FieldValue.serverTimestamp()});
+    });
+  }
+
   // ─── Marshrut (route taxi) ─────────────────────────────────────────
 
   static String normalizeMarshrutPhone(String phone) =>

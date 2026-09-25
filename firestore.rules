@@ -973,6 +973,20 @@ service cloud.firestore {
           && approvedDriverForTaxi(uid, prev.taxiType)
           && affectedKeys.hasOnly(localTripDriverAcceptFields());
 
+      // «Етиб келдим» — фақат шу сафарга бириктирилган ҳайдовчи, фақат
+      // `accepted` ҳолатида, фақат `arrivedAt` майдонини, ва фақат БИР
+      // МАРТА (аввал бўш бўлса). Статус ўзгармайди — шунинг учун
+      // якунлаш/бекор қилиш оқимларига таъсир қилмайди.
+      let isDriverArrival = prev.status == 'accepted'
+          && d.status == prev.status
+          && (
+            (prev.acceptedDriverId != '' && uid == prev.acceptedDriverId)
+            || (prev.driverId != '' && uid == prev.driverId)
+          )
+          && !('arrivedAt' in prev)
+          && affectedKeys.hasOnly(['arrivedAt'])
+          && d.arrivedAt is timestamp;
+
       let isDriverRelease = prev.status == 'accepted'
           && d.status == 'searching'
           && (
@@ -989,6 +1003,7 @@ service cloud.firestore {
             || isPassengerFareLock
             || isDriverFareLock
             || isBroadcastAccept
+            || isDriverArrival
             || isDriverRelease
           );
     }

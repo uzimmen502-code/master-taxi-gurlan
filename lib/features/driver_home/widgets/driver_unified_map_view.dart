@@ -730,6 +730,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                         child: ActiveRideCard(
                           ride: c.acceptedRide!,
                           onComplete: widget.onCompleteNonLocalRide,
+                          onArrived: c.markArrived,
                         ),
                       ),
                     if (!inLocalTrip && c.isOnline && !showOffers)
@@ -974,28 +975,67 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                 color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
           ],
         ),
-        child: Row(children: [
-          const Icon(Icons.phone, color: _green, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              ride.userPhone.isNotEmpty ? ride.userPhone : '—',
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              const Icon(Icons.phone, color: _green, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ride.userPhone.isNotEmpty ? ride.userPhone : '—',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: ride.userPhone.isEmpty
+                    ? null
+                    : () => callPhone(ride.userPhone),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _green,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.call, size: 18),
+                label: Text(context.tr('trip_call_driver')),
+              ),
+            ]),
+            // Бу панел ҳайдовчи йўловчига 120 м яқинлашганда чиқади —
+            // «Етиб келдим» учун худди шу пайт.
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ride.hasArrived
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.where_to_vote,
+                            color: _green, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          context.tr('driver_arrived_notified'),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _green,
+                          ),
+                        ),
+                      ],
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () => context
+                          .read<DriverHomeController>()
+                          .markArrived(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _green,
+                        side: const BorderSide(color: _green),
+                      ),
+                      icon: const Icon(Icons.where_to_vote_outlined, size: 18),
+                      label: Text(context.tr('driver_arrived_action')),
+                    ),
             ),
-          ),
-          FilledButton.icon(
-            onPressed: ride.userPhone.isEmpty
-                ? null
-                : () => callPhone(ride.userPhone),
-            style: FilledButton.styleFrom(
-              backgroundColor: _green,
-              visualDensity: VisualDensity.compact,
-            ),
-            icon: const Icon(Icons.call, size: 18),
-            label: Text(context.tr('trip_call_driver')),
-          ),
-        ]),
+          ],
+        ),
       );
 
   Widget _tripBottomPanel(TripRequest ride) {

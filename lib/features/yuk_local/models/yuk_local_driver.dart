@@ -45,6 +45,8 @@ class YukLocalDriver {
     required this.expiresAt,
     required this.createdAt,
     required this.updatedAt,
+    this.districtId = '',
+    this.regionId = '',
     this.rating = 0,
     this.completedLoads = 0,
     this.isDemo = false,
@@ -75,6 +77,17 @@ class YukLocalDriver {
   final DateTime? expiresAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Эълон қайси туманга тегишли — рўйхатни ҳудуд бўйича филтрлаш учун.
+  ///
+  /// Эълон жойлаштирилганда `ServiceConfigHolder` дан ёзилади. ЭСКИ
+  /// ёзувларда бўш: улар backfill'гача «ҳудудсиз» ҳисобланади ва
+  /// барча туманда кўринади (қаранг: `watchCatalog`).
+  final String districtId;
+  final String regionId;
+
+  /// Ҳудуди ҳали ёзилмаган эски эълонми.
+  bool get hasNoDistrict => districtId.trim().isEmpty;
 
   final double rating;
   final int completedLoads;
@@ -161,6 +174,8 @@ class YukLocalDriver {
       expiresAt: expires,
       createdAt: created,
       updatedAt: asDate(j['updatedAt']),
+      districtId: '${j['districtId'] ?? ''}'.trim(),
+      regionId: '${j['regionId'] ?? ''}'.trim(),
       rating: asDouble(j['rating'], 0),
       completedLoads: asInt(j['completedLoads']),
       isDemo: j['isDemo'] == true,
@@ -186,6 +201,8 @@ class YukLocalDriver {
     DateTime? expiresAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? districtId,
+    String? regionId,
   }) {
     return YukLocalDriver(
       id: id,
@@ -208,6 +225,8 @@ class YukLocalDriver {
       expiresAt: expiresAt ?? this.expiresAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      districtId: districtId ?? this.districtId,
+      regionId: regionId ?? this.regionId,
       rating: rating,
       completedLoads: completedLoads,
       isDemo: isDemo,

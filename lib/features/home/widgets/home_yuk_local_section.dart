@@ -59,7 +59,9 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
   void _listen() {
     _sub?.cancel();
     if (mounted) setState(() => _status = AvaSectionStatus.loading);
-    _sub = _repo.watchCatalog().listen(
+    _sub = _repo
+        .watchCatalog(districtId: ServiceConfigHolder.districtId)
+        .listen(
       (all) {
         if (!mounted) return;
         // `isVisibleInSearch` — GPS бор, муддати ўтмаган ва иш вақтида.

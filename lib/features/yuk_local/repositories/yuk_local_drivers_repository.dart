@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/service_config_holder.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/yuk_local_driver.dart';
 import '../yuk_accept_radius.dart';
@@ -22,10 +25,93 @@ class YukLocalDriversRepository {
       _db.collection('yuk_local_drivers');
 
   /// Каталог (қидирув) — онлайн фильтрсиз; клиентда иш вақти/TTL/GPS.
-  Stream<List<YukLocalDriver>> watchCatalog({int limit = watchLimit}) {
-    return _col.limit(limit).snapshots().map(
-          (snap) => snap.docs.map(_fromDoc).toList(),
-        );
+  ///
+  /// [districtId] берилса рўйхат ҲУДУД БЎЙИЧА филтрланади. Филтр
+  /// серверда бажарилади, шунинг учун лимит ҳар доим шу тумандаги
+  /// эълонларга тегишли — бошқа туман эълонлари лимитни «еб қўймайди».
+  ///
+  /// Эски эълонларда `districtId` йўқ. Firestore'да «майдон йўқ» бўйича
+  /// сўров қилиб бўлмайди, шунинг учун улар АЛОҲИДА оқимда келади ва
+  /// клиентда қўшилади — backfill қилингунча биронта эълон йўқолиб
+  /// кетмайди (`functions/tools/backfill_yuk_local_district.js`).
+  /// Backfill'дан кейин иккинчи оқим бўшайди ва уни олиб ташласа бўлади.
+  Stream<List<YukLocalDriver>> watchCatalog({
+    int limit = watchLimit,
+    String districtId = '',
+  }) {
+    final id = districtId.trim();
+    if (id.isEmpty) {
+      return _col.limit(limit).snapshots().map(
+            (snap) => snap.docs.map(_fromDoc).toList(),
+          );
+    }
+
+    final scoped = _col
+        .where('districtId', isEqualTo: id)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(_fromDoc).toList());
+
+    final legacy = _col
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map(_fromDoc)
+            .where((d) => d.hasNoDistrict)
+            .toList());
+
+    return _merge(scoped, legacy);
+  }
+
+  /// Икки оқимни бирлаштиради: ҳар бири янгиланганда умумий рўйхат
+  /// қайта чиқади; ID бўйича такрор олиб ташланади.
+  static Stream<List<YukLocalDriver>> _merge(
+    Stream<List<YukLocalDriver>> a,
+    Stream<List<YukLocalDriver>> b,
+  ) {
+    var listA = <YukLocalDriver>[];
+    var listB = <YukLocalDriver>[];
+    var seenA = false;
+    var seenB = false;
+
+    final controller = StreamController<List<YukLocalDriver>>();
+    StreamSubscription<List<YukLocalDriver>>? subA;
+    StreamSubscription<List<YukLocalDriver>>? subB;
+
+    void emit() {
+      // Иккала оқимдан ҳам биринчи жавоб келмагунча чиқармаймиз —
+      // акс ҳолда рўйхат «сакраб» тўлади.
+      if (!seenA || !seenB) return;
+      final byId = <String, YukLocalDriver>{};
+      for (final d in [...listA, ...listB]) {
+        byId[d.id] = d;
+      }
+      if (!controller.isClosed) controller.add(byId.values.toList());
+    }
+
+    controller.onListen = () {
+      subA = a.listen(
+        (v) {
+          listA = v;
+          seenA = true;
+          emit();
+        },
+        onError: controller.addError,
+      );
+      subB = b.listen(
+        (v) {
+          listB = v;
+          seenB = true;
+          emit();
+        },
+        onError: controller.addError,
+      );
+    };
+    controller.onCancel = () async {
+      await subA?.cancel();
+      await subB?.cancel();
+    };
+    return controller.stream;
   }
 
   /// Ўз эълонлари — `createdAt` бўйича (янги тепада).
@@ -116,6 +202,10 @@ class YukLocalDriversRepository {
       'workStartMinutes': start,
       'workEndMinutes': end,
       'updatedAt': FieldValue.serverTimestamp(),
+      // Ҳудуд муҳри — рўйхатни туман бўйича филтрлаш учун. `reportStamp`
+      // фақат бўш бўлмаган қийматларни беради, шунинг учун ҳудуд ҳали
+      // танланмаган бўлса эски хатти-ҳаракат сақланади.
+      ...ServiceConfigHolder.reportStamp(),
     };
 
     if (!existing.exists) {

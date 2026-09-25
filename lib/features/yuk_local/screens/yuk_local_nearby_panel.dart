@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
@@ -79,7 +80,11 @@ class YukLocalNearbyPanelState extends State<YukLocalNearbyPanel>
   Future<void> _bootstrap() async {
     // GPS рухсати диалоги рўйхат юкланишини блокламаслиги керак.
     unawaited(ensureGps());
-    _sub = _repo.watchCatalog().listen(
+    // Ҳудуд бўйича — бош саҳифадаги 5-бўлим билан бир хил рўйхат
+    // чиқсин (у ҳам `ServiceConfigHolder.districtId` ни узатади).
+    _sub = _repo
+        .watchCatalog(districtId: ServiceConfigHolder.districtId)
+        .listen(
       (list) {
         if (!mounted) return;
         setState(() {

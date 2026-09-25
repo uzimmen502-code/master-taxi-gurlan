@@ -131,7 +131,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                       ? Colors.red.shade700
                       : product.remaining <= 5
                           ? Colors.orange.shade700
-                          : Colors.green.shade700,
+                          : AvaLight.ok,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(

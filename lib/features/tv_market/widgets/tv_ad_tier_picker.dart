@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../services/tv_ad_service.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// «Эълон» тариф (5) × муддат (7/15/30 кун) × қамров (туман/вилоят/
 /// республика) — AVA TV тариф жадвали. Жорий wallet баланси кўринади;
@@ -196,11 +197,11 @@ class _ScopeTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF00E676).withValues(alpha: 0.14)
+              ? AvaLight.ok.withValues(alpha: 0.14)
               : Colors.white,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? const Color(0xFF00E676) : Colors.grey.shade300,
+            color: selected ? AvaLight.ok : Colors.grey.shade300,
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -209,7 +210,7 @@ class _ScopeTile extends StatelessWidget {
             Icon(
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
               size: 18,
-              color: selected ? const Color(0xFF00A853) : Colors.grey,
+              color: selected ? AvaLight.ok : Colors.grey,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -263,11 +264,11 @@ class _TierTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF00E676).withValues(alpha: 0.14)
+              ? AvaLight.ok.withValues(alpha: 0.14)
               : Colors.white,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? const Color(0xFF00E676) : Colors.grey.shade300,
+            color: selected ? AvaLight.ok : Colors.grey.shade300,
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -276,7 +277,7 @@ class _TierTile extends StatelessWidget {
             Icon(
               selected ? Icons.radio_button_checked : Icons.radio_button_off,
               size: 18,
-              color: selected ? const Color(0xFF00A853) : Colors.grey,
+              color: selected ? AvaLight.ok : Colors.grey,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -324,7 +325,7 @@ class _DurationChip extends StatelessWidget {
     return ChoiceChip(
       selected: selected,
       onSelected: onTap == null ? null : (_) => onTap!(),
-      selectedColor: const Color(0xFF00E676),
+      selectedColor: AvaLight.ok,
       label: Text(
         price > 0
             ? '$days ${context.tr('tv_ad_days_suffix')} · ${formatMoney(price)}'

@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Vitrina mahsulot kartasi — rasmlar, tanlash, zoom, tavsif.
 class TvShopItemCard extends StatelessWidget {
@@ -34,7 +35,7 @@ class TvShopItemCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: highlight
-                ? const Color(0xFF00E676)
+                ? AvaLight.ok
                 : Colors.grey.shade200,
             width: highlight ? 1.6 : 1,
           ),
@@ -60,8 +61,8 @@ class TvShopItemCard extends StatelessWidget {
                       if (highlight)
                         _Chip(
                           label: context.tr('tv_channel_from_reel'),
-                          fill: const Color(0xFF00E676).withValues(alpha: 0.14),
-                          text: const Color(0xFF007A3D),
+                          fill: AvaLight.ok.withValues(alpha: 0.14),
+                          text: AvaLight.ok,
                         ),
                       _Chip(
                         label: context.tr(kindKey),
@@ -100,7 +101,7 @@ class TvShopItemCard extends StatelessWidget {
                     Text(
                       formatMoney(item.price),
                       style: const TextStyle(
-                        color: Color(0xFF00A853),
+                        color: AvaLight.ok,
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
                       ),

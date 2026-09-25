@@ -8,8 +8,9 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/agro_pickup_order.dart';
 import '../../../repositories/agro_pickup_orders_repository.dart';
 import '../../../services/agro_pickup_service.dart';
+import '../../../core/theme/ava_tokens.dart';
 
-const _green = Color(0xFF2E7D32);
+const _green = AvaLight.ok;
 
 /// Kuryer — sut qabul (olib ketish) vazifalari.
 class AgroPickupCourierScreen extends StatefulWidget {
@@ -92,7 +93,7 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6FAF2),
+        backgroundColor: AvaLight.surface2,
         appBar: AppBar(
           title: Text(context.tr('agro_courier_title')),
           backgroundColor: _green,

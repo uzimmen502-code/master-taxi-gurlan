@@ -213,7 +213,7 @@ class _CollectionTasksBannerState extends State<_CollectionTasksBanner> {
       builder: (ctx, snap) {
         final count = (snap.data ?? const <CollectionTask>[]).length;
         return Material(
-          color: Colors.teal.shade50,
+          color: AvaLight.okSoft,
           child: InkWell(
             onTap: () {
               Navigator.of(context).push(
@@ -228,7 +228,7 @@ class _CollectionTasksBannerState extends State<_CollectionTasksBanner> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: BorderSide(color: Colors.teal.shade100),
+                  bottom: BorderSide(color: AvaLight.okSoft),
                 ),
               ),
               child: Row(children: [
@@ -243,11 +243,11 @@ class _CollectionTasksBannerState extends State<_CollectionTasksBanner> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.teal.shade900,
+                      color: AvaLight.ok,
                     ),
                   ),
                 ),
-                Icon(Icons.chevron_right, color: Colors.teal.shade700),
+                Icon(Icons.chevron_right, color: AvaLight.ok),
               ]),
             ),
           ),
@@ -310,7 +310,7 @@ class _AgroPickupBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFE8F5E9),
+      color: AvaLight.okSoft,
       child: InkWell(
         onTap: () {
           Navigator.of(context).push(
@@ -323,7 +323,7 @@ class _AgroPickupBanner extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: Colors.green.shade100),
+              bottom: BorderSide(color: AvaLight.okSoft),
             ),
           ),
           child: Row(
@@ -336,11 +336,11 @@ class _AgroPickupBanner extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade900,
+                    color: AvaLight.ok,
                   ),
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.green.shade700),
+              Icon(Icons.chevron_right, color: AvaLight.ok),
             ],
           ),
         ),

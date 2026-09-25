@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/data_url_image.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Тўлиқ экран: pinch/double-tap зум, свайп, миниатюра танлаш.
 Future<void> openTvShopPhotoGallery(
@@ -180,7 +181,7 @@ class _TvShopPhotoCarouselState extends State<TvShopPhotoCarousel> {
                   top: 10,
                   right: 10,
                   child: Material(
-                    color: const Color(0xFF00E676),
+                    color: AvaLight.ok,
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(
                       onTap: widget.onVideo,
@@ -237,7 +238,7 @@ class _TvShopPhotoCarouselState extends State<TvShopPhotoCarousel> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: selected
-                              ? const Color(0xFF00E676)
+                              ? AvaLight.ok
                               : Colors.grey.shade300,
                           width: selected ? 2.2 : 1,
                         ),
@@ -394,7 +395,7 @@ class _TvShopPhotoGalleryPageState extends State<TvShopPhotoGalleryPage> {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: selected
-                                      ? const Color(0xFF00E676)
+                                      ? AvaLight.ok
                                       : Colors.white24,
                                   width: selected ? 2.2 : 1,
                                 ),

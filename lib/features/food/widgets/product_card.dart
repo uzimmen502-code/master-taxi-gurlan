@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../models/food_product.dart';
 import '../controllers/food_controller.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Овqat маҳсулоти карточкаси — emoji, ном, изоҳ, нарх ва "Қўшиш" / Tanlandi.
 class ProductCard extends StatelessWidget {
@@ -91,7 +92,7 @@ class ProductCard extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.green),
+                        color: AvaLight.ok),
                   ),
                   const SizedBox(height: 10),
                   Align(
@@ -145,7 +146,7 @@ class ProductCard extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.green),
+                        color: AvaLight.ok),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -237,22 +238,22 @@ class ProductCard extends StatelessWidget {
     if (inCart) {
       return Container(
         decoration: BoxDecoration(
-          color: Colors.green[50],
+          color: AvaLight.okSoft,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green[300]!),
+          border: Border.all(color: AvaLight.ok),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
+            Icon(Icons.check_circle, size: 16, color: AvaLight.ok),
             const SizedBox(width: 6),
             Text(
               loc.translate('selected'),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.green[700],
+                color: AvaLight.ok,
               ),
             ),
           ],
@@ -262,7 +263,7 @@ class ProductCard extends StatelessWidget {
     return ElevatedButton(
       onPressed: outOfStock ? null : () => controller.addToCart(product),
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green,
+        backgroundColor: AvaLight.ok,
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),

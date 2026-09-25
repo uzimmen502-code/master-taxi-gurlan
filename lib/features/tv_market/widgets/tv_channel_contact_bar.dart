@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Pastki qism — qoʻngʻiroq CTA (kanal va vitrina).
 class TvChannelContactBar extends StatelessWidget {
@@ -28,7 +29,7 @@ class TvChannelContactBar extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00E676),
+              backgroundColor: AvaLight.ok,
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),

@@ -7,6 +7,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/agro_pickup_order.dart';
 import '../../../repositories/agro_pickup_orders_repository.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 const _accent = Color(0xFF4A6FA5);
 
@@ -38,7 +39,7 @@ class _MilkPickupOrdersScreenState extends State<MilkPickupOrdersScreen> {
   Widget build(BuildContext context) {
     final phone = _phone;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF5),
+      backgroundColor: AvaLight.surface2,
       appBar: AppBar(
         title: Text(context.tr('milk_my_orders')),
         backgroundColor: _accent,

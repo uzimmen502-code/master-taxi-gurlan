@@ -8,6 +8,7 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/carpet_wash_order.dart';
 import '../../../repositories/carpet_wash_orders_repository.dart';
 import '../../../services/carpet_wash_service.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 const _brown = Color(0xFF6D4C41);
 
@@ -135,7 +136,7 @@ class _CarpetWashCourierScreenState extends State<CarpetWashCourierScreen> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF6FAF2),
+        backgroundColor: AvaLight.surface2,
         appBar: AppBar(
           title: Text(context.tr('carpet_courier_title')),
           backgroundColor: _brown,

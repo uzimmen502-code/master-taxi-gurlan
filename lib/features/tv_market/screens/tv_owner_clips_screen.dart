@@ -9,6 +9,7 @@ import '../services/tv_clip_delete.dart';
 import '../widgets/tv_clip_poster.dart';
 import 'tv_market_feed_screen.dart';
 import 'tv_publish_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Сотувчининг ролик рўйхати (дўкон ҳали йўқ бўлса).
 class TvOwnerClipsScreen extends StatefulWidget {
@@ -187,7 +188,7 @@ class _TvOwnerClipsScreenState extends State<TvOwnerClipsScreen> {
                                     Text(
                                       formatMoney(clip.price),
                                       style: const TextStyle(
-                                        color: Color(0xFF00A853),
+                                        color: AvaLight.ok,
                                         fontWeight: FontWeight.w800,
                                         fontSize: 13,
                                       ),

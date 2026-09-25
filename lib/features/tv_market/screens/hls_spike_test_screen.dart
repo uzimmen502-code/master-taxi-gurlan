@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// T1 SPIKE — vaqtinchalik, faqat qo'lda ishga tushiriladigan sinov ekrani.
 /// Hech qanday route/navigatsiyaga ulanmagan — ataylab. Sinash uchun
@@ -266,7 +267,7 @@ class _HlsSpikeTestScreenState extends State<HlsSpikeTestScreen> {
                       child: Text(
                         _sizeLog.isEmpty ? '(hali yo\'q)' : _sizeLog.join('\n'),
                         style: const TextStyle(
-                          color: Colors.greenAccent,
+                          color: AvaLight.ok,
                           fontFamily: 'monospace',
                           fontSize: 11,
                         ),

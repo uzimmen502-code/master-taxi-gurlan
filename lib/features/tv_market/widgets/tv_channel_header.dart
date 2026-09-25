@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_owner_avatar.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Оммaviy kanal boshi — ism, tuman, roliklar va jami ko‘rish.
 class TvChannelHeader extends StatelessWidget {
@@ -165,7 +166,7 @@ class _FollowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: following ? Colors.white : const Color(0xFF00E676),
+      color: following ? Colors.white : AvaLight.ok,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(

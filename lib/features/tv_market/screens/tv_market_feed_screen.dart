@@ -36,6 +36,7 @@ import 'tv_clip_search_screen.dart';
 import 'tv_my_shop_screen.dart';
 import 'tv_publish_screen.dart';
 import 'tv_shop_public_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// TV Market — тўлиқ экран вертикал видео лента.
 class TvMarketFeedScreen extends StatefulWidget {
@@ -1233,7 +1234,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
             // ажратувчи чизиқ чизади — у олиб ташланди. Яшил
             // индикатор (қайси таб очиқлиги) жойида қолади.
             dividerHeight: 0,
-            indicatorColor: const Color(0xFF00E676),
+            indicatorColor: AvaLight.ok,
             indicatorWeight: 2.5,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
@@ -1523,7 +1524,7 @@ class _EmptyFeed extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF00E676),
+                backgroundColor: AvaLight.ok,
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 22,

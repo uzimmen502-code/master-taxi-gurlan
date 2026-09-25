@@ -17,6 +17,7 @@ import '../widgets/tv_channel_header.dart';
 import '../widgets/tv_clip_poster.dart';
 import 'tv_market_feed_screen.dart';
 import 'tv_publish_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Doʻkonsiz nashriyotchi kanali — roliklar grid + qoʻngʻiroq.
 class TvChannelScreen extends StatefulWidget {
@@ -226,7 +227,7 @@ class _TvChannelScreenState extends State<TvChannelScreen> {
       floatingActionButton: widget.isOwner
           ? FloatingActionButton.extended(
               onPressed: _publish,
-              backgroundColor: const Color(0xFF00E676),
+              backgroundColor: AvaLight.ok,
               foregroundColor: Colors.black,
               icon: const Icon(Icons.videocam_rounded),
               label: Text(
@@ -346,7 +347,7 @@ class _ClipTile extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border.all(
               color: highlight
-                  ? const Color(0xFF00E676)
+                  ? AvaLight.ok
                   : Colors.grey.shade200,
               width: highlight ? 2 : 1,
             ),
@@ -370,7 +371,7 @@ class _ClipTile extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00E676),
+                            color: AvaLight.ok,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -435,7 +436,7 @@ class _ClipTile extends StatelessWidget {
                       Text(
                         formatMoney(clip.price),
                         style: const TextStyle(
-                          color: Color(0xFF00A853),
+                          color: AvaLight.ok,
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                         ),

@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../models/tv_shop.dart';
 import 'tv_shop_photo_gallery.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Очиқ дўкон / Аҳоли бозори — 2 устунли товар плиткаси.
 class TvShopItemGridCard extends StatelessWidget {
@@ -35,7 +36,7 @@ class TvShopItemGridCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: highlight
-                  ? const Color(0xFF00E676)
+                  ? AvaLight.ok
                   : const Color(0xFFE6E8EE),
               width: highlight ? 1.6 : 1,
             ),
@@ -60,7 +61,7 @@ class TvShopItemGridCard extends StatelessWidget {
                         top: 6,
                         child: _Pill(
                           text: context.tr('tv_shop_mine'),
-                          color: const Color(0xFF00E676),
+                          color: AvaLight.ok,
                           fg: Colors.black,
                         ),
                       ),
@@ -110,7 +111,7 @@ class TvShopItemGridCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFF00A853),
+                            color: AvaLight.ok,
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
                           ),

@@ -11,6 +11,7 @@ import '../../../repositories/user_repository.dart';
 import '../models/tv_clip.dart';
 import '../services/tv_ad_service.dart';
 import 'tv_ad_tier_picker.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Эълонни узайтириш — тариф + муддат танлаб, wallet'дан тўлаш.
 /// Видеони қайта юклаш шарт эмас (CF `renewTvAd` фақат муддатни узайтиради).
@@ -217,7 +218,7 @@ class _TvAdRenewSheetState extends State<_TvAdRenewSheet> {
                         fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
+                    backgroundColor: AvaLight.ok,
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

@@ -622,7 +622,7 @@ class _PriceSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F8E9),
+        color: AvaLight.surface2,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _green.withValues(alpha: 0.3)),
       ),

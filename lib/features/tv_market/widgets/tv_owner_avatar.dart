@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Жойлаштирувчи аватари: расм бор бўлса network image, бўлмаса исм бош ҳарфи.
 /// [onEdit] берилса, тагида таҳрирлаш белгиси кўринади (эгаси экрани учун).
@@ -15,7 +16,7 @@ class TvOwnerAvatar extends StatelessWidget {
     this.photoUrl = '',
     this.radius = 16,
     this.onEdit,
-    this.initialColor = const Color(0xFF007A3D),
+    this.initialColor = AvaLight.ok,
   });
 
   final String name;
@@ -33,7 +34,7 @@ class TvOwnerAvatar extends StatelessWidget {
     final url = photoUrl.trim();
     final avatar = CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFF00E676).withValues(alpha: 0.18),
+      backgroundColor: AvaLight.ok.withValues(alpha: 0.18),
       backgroundImage: url.isNotEmpty ? NetworkImage(url) : null,
       child: url.isEmpty
           ? Text(

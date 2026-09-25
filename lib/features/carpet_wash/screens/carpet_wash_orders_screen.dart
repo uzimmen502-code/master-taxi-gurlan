@@ -7,6 +7,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/carpet_wash_order.dart';
 import '../../../repositories/carpet_wash_orders_repository.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 const _accent = Color(0xFF6D4C41);
 
@@ -38,7 +39,7 @@ class _CarpetWashOrdersScreenState extends State<CarpetWashOrdersScreen> {
   Widget build(BuildContext context) {
     final phone = _phone;
     return Scaffold(
-      backgroundColor: const Color(0xFFF6FAF2),
+      backgroundColor: AvaLight.surface2,
       appBar: AppBar(
         title: Text(context.tr('carpet_my_orders')),
         backgroundColor: _accent,

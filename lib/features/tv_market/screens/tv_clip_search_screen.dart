@@ -8,6 +8,7 @@ import '../../ads/utils/ad_search_text.dart';
 import '../models/tv_clip.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../widgets/tv_clip_poster.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Ролик қидируви — CatalogSearch, 3 тил, қора экран.
 class TvClipSearchScreen extends StatefulWidget {
@@ -25,7 +26,7 @@ class TvClipSearchScreen extends StatefulWidget {
 }
 
 class _TvClipSearchScreenState extends State<TvClipSearchScreen> {
-  static const _lime = Color(0xFF00E676);
+  static const _lime = AvaLight.ok;
 
   final _repo = TvClipsRepository();
   final _ctrl = TextEditingController();
@@ -384,7 +385,7 @@ class _HighlightTitle extends StatelessWidget {
       fontWeight: FontWeight.w700,
       fontSize: 13,
     );
-    final hit = base.copyWith(color: const Color(0xFF00E676));
+    final hit = base.copyWith(color: AvaLight.ok);
     final q = query.trim();
     if (q.length < 2) {
       return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: base);

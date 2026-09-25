@@ -17,6 +17,7 @@ import '../../ads/screens/cheap_products_screen.dart';
 import 'tv_publish_screen.dart';
 import 'tv_shop_item_photos_screen.dart';
 import 'tv_shop_public_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Эгасининг мини-дўкони — товар/нарх/видео таҳрири.
 class TvMyShopScreen extends StatefulWidget {
@@ -383,7 +384,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
           controller: _tabController,
           labelColor: Colors.black87,
           unselectedLabelColor: Colors.black54,
-          indicatorColor: const Color(0xFF00E676),
+          indicatorColor: AvaLight.ok,
           indicatorWeight: 3,
           tabs: [
             Tab(text: context.tr('tv_my_shop_tab_items')),
@@ -397,7 +398,7 @@ class _TvMyShopScreenState extends State<TvMyShopScreen>
           final isItems = _tabController.index == 0;
           return FloatingActionButton.extended(
             onPressed: () => _openPublish(),
-            backgroundColor: const Color(0xFF00E676),
+            backgroundColor: AvaLight.ok,
             foregroundColor: Colors.black,
             icon: Icon(isItems ? Icons.add_rounded : Icons.videocam_rounded),
             label: Text(
@@ -530,7 +531,7 @@ class _OwnerManageCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Color(0xFF00A853),
+                      color: AvaLight.ok,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
@@ -589,7 +590,7 @@ class _OwnerManageCard extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onRenew,
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF00E676),
+                        backgroundColor: AvaLight.ok,
                         foregroundColor: Colors.black,
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 6),

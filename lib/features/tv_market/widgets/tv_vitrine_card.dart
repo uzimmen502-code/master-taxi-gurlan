@@ -9,6 +9,7 @@ import '../models/tv_shop.dart';
 import '../repositories/tv_clips_repository.dart';
 import '../screens/tv_market_feed_screen.dart';
 import '../screens/tv_shop_public_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// AVA расмий SKU ва сотувчи витринасини ажратиш.
 class TvVitrineCard extends StatelessWidget {
@@ -153,7 +154,7 @@ class TvVitrineCard extends StatelessWidget {
                       Text(
                         formatMoney(item.price),
                         style: const TextStyle(
-                          color: Color(0xFF00A853),
+                          color: AvaLight.ok,
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
                         ),
@@ -169,7 +170,7 @@ class TvVitrineCard extends StatelessWidget {
                             child: FilledButton(
                               onPressed: () => _call(context),
                               style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF00E676),
+                                backgroundColor: AvaLight.ok,
                                 foregroundColor: Colors.black,
                                 padding: EdgeInsets.zero,
                                 shape: RoundedRectangleBorder(

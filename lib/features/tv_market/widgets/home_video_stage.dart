@@ -24,6 +24,7 @@ import '../services/tv_segment_prefetcher.dart';
 import 'tv_clip_poster.dart';
 import 'tv_owner_action_bar.dart';
 import 'tv_owner_avatar.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Home пастидаги овозсиз видеолар (sliver) — пастга скролл кейинги клип.
 class HomeVideoStage extends StatefulWidget {
@@ -590,7 +591,7 @@ class _HomeClipCard extends StatelessWidget {
                         Text(
                           formatMoney(clip.price),
                           style: const TextStyle(
-                            color: Color(0xFF00E676),
+                            color: AvaLight.ok,
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
                           ),
@@ -641,7 +642,7 @@ class _HomeClipCard extends StatelessWidget {
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.28),
-                          foregroundColor: const Color(0xFF00E676),
+                          foregroundColor: AvaLight.ok,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),

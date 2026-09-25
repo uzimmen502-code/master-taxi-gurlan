@@ -28,6 +28,7 @@ import '../utils/tv_clip_search.dart';
 import '../utils/tv_news_detector.dart';
 import '../widgets/tv_ad_tier_picker.dart';
 import '../widgets/tv_clip_poster.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// TV Market — видео жойлаш экрани.
 class TvPublishScreen extends StatefulWidget {
@@ -1452,7 +1453,7 @@ class _PublishProgress extends StatelessWidget {
         LinearProgressIndicator(
           value: determinate ? progress : null,
           backgroundColor: Colors.grey.shade200,
-          color: const Color(0xFF00E676),
+          color: AvaLight.ok,
           minHeight: 6,
           borderRadius: BorderRadius.circular(3),
         ),
@@ -1503,7 +1504,7 @@ class _SubmitButton extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00E676),
+          backgroundColor: AvaLight.ok,
           foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

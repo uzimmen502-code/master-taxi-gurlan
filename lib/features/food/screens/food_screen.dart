@@ -11,6 +11,7 @@ import '../controllers/food_controller.dart';
 import '../widgets/food_cart_sheet.dart';
 import '../widgets/product_card.dart';
 import '../../../models/food_product.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 class FoodScreen extends StatelessWidget {
   const FoodScreen({super.key, this.highlightProductId});
@@ -108,7 +109,7 @@ class _FoodViewState extends State<_FoodView> {
     return Scaffold(
       appBar: AppBar(
         title: Text(loc.translate('food_order')),
-        backgroundColor: Colors.green,
+        backgroundColor: AvaLight.ok,
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -160,10 +161,10 @@ class _FoodViewState extends State<_FoodView> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.green : Colors.grey[100],
+                        color: isSelected ? AvaLight.ok : Colors.grey[100],
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: isSelected ? Colors.green : Colors.grey[300]!,
+                          color: isSelected ? AvaLight.ok : Colors.grey[300]!,
                         ),
                       ),
                       child: Text(
@@ -282,7 +283,7 @@ class _FoodViewState extends State<_FoodView> {
       floatingActionButton: c.cartItemCount > 0
           ? FloatingActionButton.extended(
               onPressed: () => _showCart(context),
-              backgroundColor: Colors.green,
+              backgroundColor: AvaLight.ok,
               foregroundColor: Colors.white,
               icon: Stack(
                 clipBehavior: Clip.none,

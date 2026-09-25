@@ -5,6 +5,7 @@ import '../models/tv_clip.dart';
 import '../models/tv_comment.dart';
 import '../repositories/tv_clips_repository.dart';
 import 'tv_owner_avatar.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Изоҳлар шифти — фақат тайёр саволлар (эркин матн йўқ, spam хавфи паст).
 /// Чақирувчи томон auth текширувини аллақачон ўтказган бўлиши керак.
@@ -282,7 +283,7 @@ class _TvCommentSheetState extends State<_TvCommentSheet> {
                           ? null
                           : _sendText,
                       icon: const Icon(Icons.send_rounded),
-                      color: const Color(0xFF00A853),
+                      color: AvaLight.ok,
                     ),
                   ],
                 ),
@@ -310,7 +311,7 @@ class _QuickChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-      backgroundColor: const Color(0xFF00E676).withValues(alpha: 0.14),
+      backgroundColor: AvaLight.ok.withValues(alpha: 0.14),
       side: BorderSide.none,
       onPressed: enabled ? onTap : null,
     );

@@ -3,17 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../models/ava_book.dart';
 import '../repositories/ava_book_repository.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 // ── "O'qish rejimi" — ilovaning umumiy neon-lime temasidan ataylab ajratilgan
 // mustaqil rang palitrasi (qog'oz + tўq yashil siyoh), uzoq matnni o'qishga
 // mos. Shuning uchun bu yerda AppColors ishlatilmaydi.
 const _paper = Color(0xFFF2F0DE);
-const _ink = Color(0xFF2B3420);
-const _inkStrong = Color(0xFF20290F);
+const _ink = AvaLight.ink;
+const _inkStrong = AvaLight.ink;
 const _muted = Color(0xFF4A5738);
 const _mutedSoft = Color(0xFF6E7A57);
-const _accent = Color(0xFF6E9B00);
-const _accentBright = Color(0xFFB7FF1A);
+const _accent = AvaLight.ok;
+const _accentBright = AvaLight.brand;
 
 enum _UnitKind { cover, intro, partDivider, chapter, partOnly, finalPage }
 
@@ -606,9 +607,9 @@ class _ProsePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Муҳим чегара', style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: Color(0xFF5C7A1E))),
+              const Text('Муҳим чегара', style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, fontSize: 10.5, letterSpacing: 0.8, color: AvaLight.ink2)),
               const SizedBox(height: 6),
-              Text(b.text ?? '', style: const TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF3A4429))),
+              Text(b.text ?? '', style: const TextStyle(fontSize: 13, height: 1.5, color: AvaLight.ink2)),
             ],
           ),
         );
@@ -663,7 +664,7 @@ class _ProsePage extends StatelessWidget {
                             child: const Text('?', style: TextStyle(fontFamily: 'monospace', fontSize: 9, fontWeight: FontWeight.w700, color: _accentBright)),
                           ),
                           const SizedBox(width: 8),
-                          Expanded(child: Text(it, style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 13.5, height: 1.5, color: Color(0xFF3A4429)))),
+                          Expanded(child: Text(it, style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 13.5, height: 1.5, color: AvaLight.ink2))),
                         ],
                       ),
                     ))
@@ -791,7 +792,7 @@ class _ContentsDrawer extends StatelessWidget {
       title: Text(
         label,
         style: TextStyle(
-          color: active ? _accentBright : const Color(0xFFD8E0C8),
+          color: active ? _accentBright : AvaLight.line,
           fontWeight: active ? FontWeight.w700 : FontWeight.w500,
           fontSize: dense ? 13 : 14.5,
         ),

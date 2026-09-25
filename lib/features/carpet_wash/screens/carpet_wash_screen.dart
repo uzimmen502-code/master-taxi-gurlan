@@ -13,9 +13,10 @@ import '../../../repositories/settings_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/carpet_wash_service.dart';
 import 'carpet_wash_orders_screen.dart';
+import '../../../core/theme/ava_tokens.dart';
 
-const _bg = Color(0xFFF6FAF2);
-const _titleDark = Color(0xFF1A3A20);
+const _bg = AvaLight.surface2;
+const _titleDark = AvaLight.ink;
 const _accent = Color(0xFF6D4C41);
 
 /// Gilam yuvish — sodda buyurtma formasi.

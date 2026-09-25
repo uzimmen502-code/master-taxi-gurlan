@@ -6,6 +6,7 @@ import '../models/tv_clip.dart';
 import '../utils/tv_view_format.dart';
 import 'tv_owner_action_bar.dart';
 import 'tv_owner_avatar.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Видео устидаги UI: ўнг тугмалар (лайм дўкон) + паст маълумот + Боғланиш / Таҳрир+Ўчириш.
 /// Фақат ўз виджетлари hit-test қилади — вертикал скролл бўш жойдан ўтади.
@@ -104,7 +105,7 @@ class TvClipOverlay extends StatelessWidget {
                         onPressed: onContact,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.28),
-                          foregroundColor: const Color(0xFF00E676),
+                          foregroundColor: AvaLight.ok,
                           padding: const EdgeInsets.symmetric(horizontal: 9),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -203,7 +204,7 @@ class _InfoColumn extends StatelessWidget {
               Text(
                 formatMoney(clip.price),
                 style: const TextStyle(
-                  color: Color(0xFF00E676),
+                  color: AvaLight.ok,
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                   shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
@@ -410,7 +411,7 @@ class _ShopActionBtn extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: const Color(0xFF00E676),
+              color: AvaLight.ok,
               shape: BoxShape.circle,
               boxShadow: const [
                 BoxShadow(color: Colors.black54, blurRadius: 6),

@@ -29,8 +29,8 @@ class OnboardingBootstrapScreen extends StatefulWidget {
 }
 
 class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
-  static const _ink = Color(0xFF102418);
-  static const _muted = Color(0xFF4A6741);
+  static const _ink = AvaLight.ink;
+  static const _muted = AvaLight.ink2;
 
   String? _error;
   bool _retrying = false;
@@ -105,9 +105,9 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Color(0xFFE8F5E9),
-              Color(0xFFF4FAF2),
-              Color(0xFFDCEDC8),
+              AvaLight.okSoft,
+              AvaLight.surface2,
+              AvaLight.line,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,

@@ -32,8 +32,8 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
   /// «Давом этиш» тумансиз босилганда — сариқ баннер.
   bool _showDistrictWarn = false;
 
-  static const _ink = Color(0xFF102418);
-  static const _muted = Color(0xFF4A6741);
+  static const _ink = AvaLight.ink;
+  static const _muted = AvaLight.ink2;
   static const _warnBg = Color(0xFFFEF9C3);
   static const _warnBorder = Color(0xFFFDE68A);
   static const _warnText = Color(0xFF854D0E);
@@ -127,9 +127,9 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Color(0xFFE8F5E9),
-              Color(0xFFF4FAF2),
-              Color(0xFFDCEDC8),
+              AvaLight.okSoft,
+              AvaLight.surface2,
+              AvaLight.line,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -206,7 +206,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: on
-                                          ? const Color(0xFFE8F5E9)
+                                          ? AvaLight.okSoft
                                           : const Color(0xFFF3F4F6),
                                       borderRadius: BorderRadius.circular(14),
                                       border: Border.all(

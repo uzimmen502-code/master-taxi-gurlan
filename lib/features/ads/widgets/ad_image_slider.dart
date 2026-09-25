@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'ad_image_gallery.dart';
+import '../../../core/theme/ava_tokens.dart';
 
 /// Full-width image pager with dot indicators.
 class AdImageSlider extends StatefulWidget {
@@ -35,7 +36,7 @@ class _AdImageSliderState extends State<AdImageSlider> {
       return SizedBox(
         height: widget.height,
         child: const ColoredBox(
-          color: Color(0xFFEDF7E8),
+          color: AvaLight.surface2,
           child: Center(child: Icon(Icons.image_not_supported, size: 48)),
         ),
       );

@@ -34,12 +34,12 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   bool _loading = false;
   bool _checkedLimit = false;
 
-  static const _ink = Color(0xFF102418);
+  static const _ink = AvaLight.ink;
   static const _muted = Color(0xFF4A6740);
   static const _fieldFill = Color(0xFFFFFFFF);
-  static const _chipBg = Color(0xFF1B3D12);
-  static const _chipFg = Color(0xFFD9FF3F);
-  static const _pageBg = Color(0xFFF3F8E8);
+  static const _chipBg = AvaLight.brand;
+  static const _chipFg = AvaLight.brandInk;
+  static const _pageBg = AvaLight.bg;
 
   @override
   void initState() {
@@ -237,11 +237,11 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFC8E09A)),
+        borderSide: const BorderSide(color: AvaLight.line),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFC8E09A)),
+        borderSide: const BorderSide(color: AvaLight.line),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -425,9 +425,9 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8F2D0),
+                      color: AvaLight.brandSoft,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFC8E09A)),
+                      border: Border.all(color: AvaLight.line),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,7 +523,7 @@ class _IntroCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1B3D12), Color(0xFF2E5C1E)],
+          colors: [AvaLight.brand, AvaLight.brand],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -533,12 +533,12 @@ class _IntroCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: const Color(0xFFD9FF3F).withValues(alpha: 0.18),
+              color: AvaLight.brandInk.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.storefront_rounded,
-              color: Color(0xFFD9FF3F),
+              color: AvaLight.brandInk,
               size: 24,
             ),
           ),
@@ -552,7 +552,7 @@ class _IntroCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFFD9FF3F),
+                    color: AvaLight.brandInk,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -608,7 +608,7 @@ class _PhotoPickerRow extends StatelessWidget {
                     child: Container(
                       width: 108,
                       height: 108,
-                      color: const Color(0xFFE8F2D0),
+                      color: AvaLight.brandSoft,
                       child: kIsWeb
                           ? Image.network(
                               f.path,
@@ -630,7 +630,7 @@ class _PhotoPickerRow extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1B3D12).withValues(alpha: 0.85),
+                          color: AvaLight.brand.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -638,7 +638,7 @@ class _PhotoPickerRow extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFFD9FF3F),
+                            color: AvaLight.brandInk,
                           ),
                         ),
                       ),
@@ -647,7 +647,7 @@ class _PhotoPickerRow extends StatelessWidget {
                     right: -4,
                     top: -4,
                     child: Material(
-                      color: const Color(0xFF1B3D12),
+                      color: AvaLight.brand,
                       shape: const CircleBorder(),
                       child: InkWell(
                         customBorder: const CircleBorder(),
@@ -681,7 +681,7 @@ class _PhotoPickerRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: const Color(0xFF8BC34A),
+                      color: AvaLight.line,
                       width: 1.4,
                     ),
                   ),
@@ -692,7 +692,7 @@ class _PhotoPickerRow extends StatelessWidget {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE8F2D0),
+                          color: AvaLight.brandSoft,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -708,7 +708,7 @@ class _PhotoPickerRow extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF102418),
+                          color: AvaLight.ink,
                         ),
                       ),
                     ],

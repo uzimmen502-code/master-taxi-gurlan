@@ -41,8 +41,8 @@ class _OnboardingView extends StatefulWidget {
 }
 
 class _OnboardingViewState extends State<_OnboardingView> {
-  static const _ink = Color(0xFF102418);
-  static const _muted = Color(0xFF4A6741);
+  static const _ink = AvaLight.ink;
+  static const _muted = AvaLight.ink2;
   static const _green = AppColors.primary;
   static const _greenDark = AppColors.primaryDark;
 
@@ -164,7 +164,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFE8F5E9), Color(0xFFF4FAF2), Color(0xFFDCEDC8)],
+            colors: [AvaLight.okSoft, AvaLight.surface2, AvaLight.line],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -407,8 +407,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: warm
-              ? const [Color(0xFFFFF8E1), Color(0xFFE8F5E9)]
-              : const [Color(0xFFE3F2FD), Color(0xFFE8F5E9)],
+              ? const [Color(0xFFFFF8E1), AvaLight.okSoft]
+              : const [Color(0xFFE3F2FD), AvaLight.okSoft],
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
@@ -454,7 +454,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: on ? const Color(0xFFE8F5E9) : const Color(0xFFF3F4F6),
+            color: on ? AvaLight.okSoft : const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: on ? _green : Colors.transparent,

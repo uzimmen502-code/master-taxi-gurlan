@@ -7,8 +7,6 @@ import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
-import 'ava_chip.dart';
-import 'ava_list_row.dart';
 import 'ava_section.dart';
 
 /// 2 ва 3-бўлимлар: «Яқинингиздаги эълонлар» ва «…хизмат таклифлари».
@@ -83,57 +81,71 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ava;
     return AvaSection(
       title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
-      child: Column(
-        children: [
-          for (var i = 0; i < _items.length; i++)
-            Padding(
-              padding: EdgeInsets.only(bottom: i == _items.length - 1 ? 0 : 8),
-              child: _AdRow(
-                ad: _items[i],
+      child: Container(
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(AvaRadius.card),
+          border: Border.all(color: c.line),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          children: [
+            for (var i = 0; i < _items.length; i++)
+              _AdTitleRow(
+                title: _items[i].titleOrText,
                 onTap: () => widget.onOpenAd(_items[i]),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _AdRow extends StatelessWidget {
-  const _AdRow({required this.ad, required this.onTap});
+/// Битта эълон сарлавҳаси — қора нуқта (●) + матн, битта қатор.
+class _AdTitleRow extends StatelessWidget {
+  const _AdTitleRow({required this.title, required this.onTap});
 
-  final JobAd ad;
+  final String title;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-
-    // Тавсиф: тур, сарлавҳа, нарх ва жойланган вақт.
-    final meta = <Widget>[
-      AvaChip(
-        label: ad.kind.label,
-        tone: ad.isUrgent ? AvaChipTone.warn : AvaChipTone.neutral,
-      ),
-      if (ad.timeAgo.isNotEmpty)
-        Text(
-          ad.timeAgo,
-          style: AvaText.caption.copyWith(color: c.ink3),
-        ),
-    ];
-
-    return AvaListRow(
-      title: ad.titleOrText,
-      subtitle: ad.address,
-      meta: meta,
-      // Нарх `priceText` — эркин матн («200 000 сўм», «Шартномавий»).
-      price: ad.priceText.trim().isEmpty ? null : ad.priceText.trim(),
+    return InkWell(
       onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: c.ink,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AvaText.body.copyWith(color: c.ink),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

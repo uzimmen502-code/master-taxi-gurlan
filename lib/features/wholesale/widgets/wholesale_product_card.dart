@@ -75,7 +75,7 @@ class WholesaleProductCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: AppText.bodyMedium, fontWeight: FontWeight.w700),
+                        fontSize: AppText.bodyMedium, fontWeight: FontWeight.w400),
                   ),
                   const SizedBox(height: 2),
                   Text(

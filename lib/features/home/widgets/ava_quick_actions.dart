@@ -62,9 +62,9 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final bg = action.highlighted ? c.brand : c.surface;
-    final fg = action.highlighted ? c.brandInk : c.brand;
-    final labelColor = action.highlighted ? c.brandInk : c.ink2;
+    final bg = action.highlighted ? c.accentLime : c.surface;
+    final fg = action.highlighted ? c.accentLimeInk : c.accentLimeIcon;
+    final labelColor = c.ink;
 
     return Semantics(
       button: true,
@@ -81,7 +81,7 @@ class _Tile extends StatelessWidget {
             color: bg,
             borderRadius: BorderRadius.circular(AvaRadius.card),
             border: Border.all(
-              color: action.highlighted ? c.brand : c.line,
+              color: action.highlighted ? c.accentLime : c.line,
             ),
           ),
           child: Column(

@@ -80,12 +80,15 @@ class _RegionButton extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AvaText.caption.copyWith(
-                            color: chosen ? c.ink : c.warn,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            style: AvaText.caption.copyWith(
+                              color: chosen ? c.ink : c.warn,
+                            ),
                           ),
                         ),
                       ),

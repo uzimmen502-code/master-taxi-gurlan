@@ -169,25 +169,53 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _ctrl,
-          focusNode: _focus,
-          onChanged: _onChanged,
-          textInputAction: TextInputAction.search,
-          style: AvaText.body.copyWith(color: c.ink),
-          decoration: InputDecoration(
-            hintText: context.tr('home_search_hint'),
-            prefixIcon: Icon(Icons.search_rounded, color: c.ink3),
-            suffixIcon: empty
-                ? null
-                : IconButton(
-                    tooltip: context.tr('home_search_clear'),
-                    onPressed: _clear,
-                    icon: Icon(Icons.close_rounded, size: 18, color: c.ink3),
+        Container(
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(AvaRadius.search),
+            border: Border.all(color: c.line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  focusNode: _focus,
+                  onChanged: _onChanged,
+                  textInputAction: TextInputAction.search,
+                  style: AvaText.body.copyWith(color: c.ink),
+                  decoration: InputDecoration(
+                    hintText: context.tr('home_search_hint'),
+                    suffixIcon: empty
+                        ? null
+                        : IconButton(
+                            tooltip: context.tr('home_search_clear'),
+                            onPressed: _clear,
+                            icon: Icon(Icons.close_rounded,
+                                size: 18, color: c.ink3),
+                          ),
+                    filled: false,
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                   ),
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+              ),
+              Material(
+                color: c.accentLime,
+                child: InkWell(
+                  onTap: () => _onChanged(_ctrl.text),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: Icon(Icons.search_rounded,
+                        size: 18, color: c.accentLimeInk),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         if (showPanel) ...[

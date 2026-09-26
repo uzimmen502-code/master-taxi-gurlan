@@ -20,9 +20,9 @@ abstract final class AvaLight {
   static const surface = Color(0xFFFFFFFF);
   static const surface2 = Color(0xFFEEF1F6);
   static const line = Color(0xFFDFE4EC);
-  static const ink = Color(0xFF151A23);
-  static const ink2 = Color(0xFF525B6B);
-  static const ink3 = Color(0xFF8891A0);
+  static const ink = Color(0xFF1A1A1A);
+  static const ink2 = Color(0xFF6B6B6B);
+  static const ink3 = Color(0xFF9E9E9E);
   static const brand = Color(0xFF1E4FD8);
   static const brandInk = Color(0xFFFFFFFF);
   static const brandSoft = Color(0xFFE8EEFF);
@@ -37,6 +37,16 @@ abstract final class AvaLight {
   /// Қиймат палитрага мослаб танланди — эга тасдиқласа, ўзгармайди.
   static const danger = Color(0xFFC0332E);
   static const dangerSoft = Color(0xFFFDECEA);
+
+  /// Лайм акцент — фақат «Барча хизматлар» катаги ва қидирув майдони
+  /// учун (эга қарори). `brand`ни алмаштирмайди, унга қўшимча.
+  static const accentLime = Color(0xFFCCD631);
+
+  /// Лайм фон устидаги матн/иконка — контраст учун қора-яшил тон.
+  static const accentLimeInk = Color(0xFF2B2E1A);
+
+  /// Лайм фонсиз (оддий) ҳолатдаги хизмат-иконка ранги — тўқроқ стоп.
+  static const accentLimeIcon = Color(0xFF8A9424);
 }
 
 /// Қоронғи режим хом қийматлари (ҳозирча уланмаган).
@@ -60,6 +70,11 @@ abstract final class AvaDark {
   /// Қаранг: [AvaLight.danger].
   static const danger = Color(0xFFFF8A80);
   static const dangerSoft = Color(0xFF3A1D1B);
+
+  /// Қаранг: [AvaLight.accentLime].
+  static const accentLime = Color(0xFFCCD631);
+  static const accentLimeInk = Color(0xFF2B2E1A);
+  static const accentLimeIcon = Color(0xFFB9C93E);
 }
 
 // ─── Тема кенгайтмаси ───────────────────────────────────────────────────────
@@ -88,6 +103,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     required this.chip,
     required this.danger,
     required this.dangerSoft,
+    required this.accentLime,
+    required this.accentLimeInk,
+    required this.accentLimeIcon,
   });
 
   /// Экран фони.
@@ -135,6 +153,11 @@ class AvaColors extends ThemeExtension<AvaColors> {
   final Color danger;
   final Color dangerSoft;
 
+  /// Лайм акцент — қаранг: [AvaLight.accentLime].
+  final Color accentLime;
+  final Color accentLimeInk;
+  final Color accentLimeIcon;
+
   static const light = AvaColors(
     bg: AvaLight.bg,
     surface: AvaLight.surface,
@@ -153,6 +176,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     chip: AvaLight.chip,
     danger: AvaLight.danger,
     dangerSoft: AvaLight.dangerSoft,
+    accentLime: AvaLight.accentLime,
+    accentLimeInk: AvaLight.accentLimeInk,
+    accentLimeIcon: AvaLight.accentLimeIcon,
   );
 
   static const dark = AvaColors(
@@ -173,6 +199,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     chip: AvaDark.chip,
     danger: AvaDark.danger,
     dangerSoft: AvaDark.dangerSoft,
+    accentLime: AvaDark.accentLime,
+    accentLimeInk: AvaDark.accentLimeInk,
+    accentLimeIcon: AvaDark.accentLimeIcon,
   );
 
   @override
@@ -194,6 +223,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     Color? chip,
     Color? danger,
     Color? dangerSoft,
+    Color? accentLime,
+    Color? accentLimeInk,
+    Color? accentLimeIcon,
   }) {
     return AvaColors(
       bg: bg ?? this.bg,
@@ -213,6 +245,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
       chip: chip ?? this.chip,
       danger: danger ?? this.danger,
       dangerSoft: dangerSoft ?? this.dangerSoft,
+      accentLime: accentLime ?? this.accentLime,
+      accentLimeInk: accentLimeInk ?? this.accentLimeInk,
+      accentLimeIcon: accentLimeIcon ?? this.accentLimeIcon,
     );
   }
 
@@ -238,6 +273,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
       chip: c(chip, other.chip),
       danger: c(danger, other.danger),
       dangerSoft: c(dangerSoft, other.dangerSoft),
+      accentLime: c(accentLime, other.accentLime),
+      accentLimeInk: c(accentLimeInk, other.accentLimeInk),
+      accentLimeIcon: c(accentLimeIcon, other.accentLimeIcon),
     );
   }
 }
@@ -270,14 +308,17 @@ abstract final class AvaSpace {
   /// Экран четидаги бўшлиқ.
   static const double screen = 16;
 
-  /// Бўлимлар орасидаги минимал масофа.
-  static const double sectionMin = 20;
+  /// Бўлимлар орасидаги минимал масофа (Avito услуби — зич feed).
+  static const double sectionMin = 4;
 
   /// Бўлимлар орасидаги максимал масофа.
-  static const double sectionMax = 24;
+  static const double sectionMax = 6;
 
   /// Қатор ичидаги кичик оралиқ.
   static const double gap = 8;
+
+  /// Бўлим сарлавҳаси ↔ мазмуни орасидаги масофа (Avito услуби).
+  static const double sectionHeaderGap = 2;
 }
 
 /// Босиш майдонининг минимал ўлчами.
@@ -290,45 +331,45 @@ abstract final class AvaTap {
 /// Ранг берилмаган: уни чақирувчи `context.ava` дан олади, шунда
 /// қоронғи режимда услубларни дублаш керак бўлмайди.
 abstract final class AvaText {
-  /// Бўлим сарлавҳаси — 16/800.
+  /// Бўлим сарлавҳаси — 16/600 (Avito услуби: фақат нарх «оғир»).
   static const sectionTitle = TextStyle(
     fontSize: 16,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w600,
     height: 1.25,
   );
 
-  /// Маҳсулот номи — 13/700.
+  /// Маҳсулот номи — 13/400 (фото биринчи, матн иккинчи даражали).
   static const productName = TextStyle(
     fontSize: 13,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w400,
     height: 1.3,
   );
 
-  /// Нарх — 14/800 (ранги `brand`).
+  /// Нарх — 14/700 (ранги `brand`) — ягона «оғир нуқта».
   static const price = TextStyle(
     fontSize: 14,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w700,
     height: 1.2,
   );
 
-  /// Асосий матн — 14/500.
+  /// Асосий матн — 14/400.
   static const body = TextStyle(
     fontSize: 14,
-    fontWeight: FontWeight.w500,
+    fontWeight: FontWeight.w400,
     height: 1.35,
   );
 
-  /// Изоҳ — 12/600.
+  /// Изоҳ — 12/400.
   static const caption = TextStyle(
     fontSize: 12,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w400,
     height: 1.3,
   );
 
-  /// Пастки меню ёрлиғи — 11/700.
+  /// Пастки меню ёрлиғи — 11/500.
   static const navLabel = TextStyle(
     fontSize: 11,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w500,
     height: 1.2,
   );
 }

@@ -7,7 +7,6 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/dating_public_profile.dart';
 import '../../../repositories/dating_repository.dart';
-import 'ava_card.dart';
 import 'ava_section.dart';
 
 /// 18 ёш — бўлим кўриниши учун энг кичик ёш.
@@ -121,43 +120,41 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
       return const SizedBox.shrink();
     }
 
+    final c = context.ava;
     return AvaSection(
       title: context.tr('dating_short_label'),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
       skeletonRows: 1,
-      child: SizedBox(
-        // Ички чет (10×2) + бош ҳарф доираси (44) + оралиқ (6) + исм ва
-        // ёш қаторлари. Қатъий баландлик шрифт 130% бўлганда тошарди.
-        height: 70 +
-            MediaQuery.textScalerOf(context)
-                    .scale(AvaText.productName.fontSize ?? 13) *
-                1.5 +
-            MediaQuery.textScalerOf(context)
-                    .scale(AvaText.caption.fontSize ?? 12) *
-                1.5,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          itemCount: _items.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          // Карточка босилса АЙНАН ШУ профил эмас, танишув модули
-          // очилади: бегона профилни фақат ўзининг тасдиқланган профили
-          // бор фойдаланувчи кўриши керак, бу текширув эса
-          // `DatingHomeScreen` ичида.
-          itemBuilder: (context, i) => _ProfileTile(
-            profile: _items[i],
-            onTap: widget.onOpenAll,
-          ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(AvaRadius.card),
+          border: Border.all(color: c.line),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          children: [
+            for (final profile in _items)
+              _ProfileRow(
+                // Карточка босилса АЙНАН ШУ профил эмас, танишув модули
+                // очилади: бегона профилни фақат ўзининг тасдиқланган
+                // профили бор фойдаланувчи кўриши керак, бу текширув
+                // эса `DatingHomeScreen` ичида.
+                profile: profile,
+                onTap: widget.onOpenAll,
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ProfileTile extends StatelessWidget {
-  const _ProfileTile({required this.profile, required this.onTap});
+/// Битта профил — қора нуқта (●) + бош ҳарф доираси + исм, ёш.
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({required this.profile, required this.onTap});
 
   final DatingPublicProfile profile;
   final VoidCallback onTap;
@@ -167,41 +164,49 @@ class _ProfileTile extends StatelessWidget {
     final c = context.ava;
     final age = profile.age;
 
-    return AvaCard(
-      width: 92,
+    return InkWell(
       onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Расм ЎРНИГА бош ҳарф — профил фотоси чизилмайди.
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: c.brandSoft,
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: c.ink, shape: BoxShape.circle),
             ),
-            child: Text(
-              datingInitial(profile.displayName),
-              style: AvaText.sectionTitle.copyWith(color: c.brand),
+            const SizedBox(width: 8),
+            // Расм ЎРНИГА бош ҳарф — профил фотоси чизилмайди.
+            Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.brandSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                datingInitial(profile.displayName),
+                style: AvaText.caption.copyWith(
+                  color: c.brand,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            profile.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AvaText.productName.copyWith(color: c.ink),
-          ),
-          if (age != null)
-            Text(
-              '$age',
-              style: AvaText.caption.copyWith(color: c.ink3),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                age != null
+                    ? '${profile.displayName}, $age'
+                    : profile.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AvaText.body.copyWith(color: c.ink),
+              ),
             ),
-          // Шаҳар / жойлашув АТАЙЛАБ кўрсатилмайди.
-        ],
+            // Шаҳар / жойлашув АТАЙЛАБ кўрсатилмайди.
+          ],
+        ),
       ),
     );
   }

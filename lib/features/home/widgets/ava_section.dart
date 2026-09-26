@@ -60,7 +60,7 @@ class AvaSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Header(title: title, onSeeAll: onSeeAll),
-        const SizedBox(height: AvaSpace.gap),
+        const SizedBox(height: AvaSpace.sectionHeaderGap),
         switch (status) {
           AvaSectionStatus.ready =>
             child ?? const SizedBox.shrink(),

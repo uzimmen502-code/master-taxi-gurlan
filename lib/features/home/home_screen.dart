@@ -740,6 +740,16 @@ class _HomeViewState extends State<_HomeView> {
                                 TvMarketFeedScreen(initialClip: clip),
                               ),
                             ),
+                            if (HomeModuleGate.showInGrid('dating')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeDatingSection(
+                                viewerUid: uid,
+                                viewerBirthDate: user?.birthDate ?? '',
+                                viewerGender:
+                                    user?.gender ?? home.gender,
+                                onOpenAll: _openDating,
+                              ),
+                            ],
                             if (HomeModuleGate.showInGrid('jobs')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeAdsSection(
@@ -772,20 +782,6 @@ class _HomeViewState extends State<_HomeView> {
                                 ),
                               ),
                             ],
-                            if (HomeModuleGate.showInGrid(
-                                'cheap_products_home')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeMarketSection(
-                                onOpenAll: () => _openModule(
-                                  HomeModulesCatalog.byId(
-                                      'cheap_products_home'),
-                                ),
-                                onOpenAd: (_) => _openModule(
-                                  HomeModulesCatalog.byId(
-                                      'cheap_products_home'),
-                                ),
-                              ),
-                            ],
                             if (HomeModuleGate.showInGrid('intercity')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeIntercitySection(
@@ -810,6 +806,22 @@ class _HomeViewState extends State<_HomeView> {
                                 onOpenDriver: (_) => _openYukModule(
                                   'yuk_local',
                                   const YukLocalScreen(),
+                                ),
+                              ),
+                            ],
+                            // Бозор учлиги: Аҳоли бозори → Улгуржи бозори →
+                            // Хитой бозори — эга қарори бўйича кетма-кет.
+                            if (HomeModuleGate.showInGrid(
+                                'cheap_products_home')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeMarketSection(
+                                onOpenAll: () => _openModule(
+                                  HomeModulesCatalog.byId(
+                                      'cheap_products_home'),
+                                ),
+                                onOpenAd: (_) => _openModule(
+                                  HomeModulesCatalog.byId(
+                                      'cheap_products_home'),
                                 ),
                               ),
                             ],
@@ -840,16 +852,6 @@ class _HomeViewState extends State<_HomeView> {
                               HomeEvSection(
                                 onOpenMap: () =>
                                     _push(const EvChargingMapScreen()),
-                              ),
-                            ],
-                            if (HomeModuleGate.showInGrid('dating')) ...[
-                              SizedBox(height: AvaSpace.sectionMin),
-                              HomeDatingSection(
-                                viewerUid: uid,
-                                viewerBirthDate: user?.birthDate ?? '',
-                                viewerGender:
-                                    user?.gender ?? home.gender,
-                                onOpenAll: _openDating,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid('tv_market')) ...[

@@ -2237,5 +2237,8 @@
   "ad_district_hint": "Не где живёте вы, а где находится ТОВАР. Покупатель ищет именно по этому району.",
   "ad_district_choose": "Выберите район",
   "ad_district_region": "Область",
-  "ad_district_required": "Выберите регион"
+  "ad_district_required": "Выберите регион",
+  "update_required_title": "Приложение обновлено",
+  "update_required_body": "Установите новую версию, чтобы продолжить. Это нужно сделать один раз.",
+  "update_required_button": "Обновить"
 }

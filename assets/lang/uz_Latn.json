@@ -2237,5 +2237,8 @@
   "ad_district_hint": "Siz qayerda yashashingiz emas, MOL qayerda ekani. Xaridor shu tuman bo'yicha qidiradi.",
   "ad_district_choose": "Tumanni tanlang",
   "ad_district_region": "Viloyat",
-  "ad_district_required": "Hududni tanlang"
+  "ad_district_required": "Hududni tanlang",
+  "update_required_title": "Ilova yangilandi",
+  "update_required_body": "Davom etish uchun yangi versiyani o'rnating. Bu bir martalik ish.",
+  "update_required_button": "Yangilash"
 }

@@ -2238,5 +2238,8 @@
   "ad_district_hint": "Сиз қаерда яшашингиз эмас, МОЛ қаерда экани. Харидор шу туман бўйича қидиради.",
   "ad_district_choose": "Туманни танланг",
   "ad_district_region": "Вилоят",
-  "ad_district_required": "Ҳудудни танланг"
+  "ad_district_required": "Ҳудудни танланг",
+  "update_required_title": "Илова янгиланди",
+  "update_required_body": "Давом этиш учун янги версияни ўрнатинг. Бу бир марталик иш.",
+  "update_required_button": "Янгилаш"
 }

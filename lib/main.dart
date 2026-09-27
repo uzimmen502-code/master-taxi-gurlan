@@ -67,7 +67,9 @@ import 'features/ads/repositories/ads_repository.dart';
 import 'features/ads/services/ads_storage_service.dart';
 import 'core/l10n/locale_notifier.dart';
 import 'core/passenger_cancel_rules_holder.dart';
+import 'core/app_version_gate.dart';
 import 'core/service_config_holder.dart';
+import 'core/widgets/app_version_gate_view.dart';
 import 'core/utils/firestore_crash_guard.dart';
 import 'services/deferred_settlement_queue.dart';
 import 'utils/locale_utils.dart';
@@ -121,6 +123,10 @@ void main() async {
   // Module gating — oxirgi kesh; Firestore refresh Home post-frame'da.
   await ServiceConfigHolder.loadCacheOnly();
 
+  // Minimal versiya darvozasi — kesh'dan (tarmoqsiz, tez). Tarmoq
+  // yangilanishi splash tugagach (`_deferredMobileBootstrap`).
+  await AppVersionGate.loadCacheOnly();
+
   // —— Stage B: splash/UI bilan parallel (Firestore network) ——
   unawaited(PassengerCancelRulesHolder.load());
 
@@ -146,6 +152,11 @@ Future<void> _deferredMobileBootstrap({
   required bool deferRoleSync,
   required bool isAnonymousAuth,
 }) async {
+  // Minimal versiya darvozasi — tarmoqdan yangilash. Splash tugagach,
+  // chunki bu birinchi frame'ni kutdirmasligi kerak. Xato bo'lsa kesh
+  // saqlanadi va ilova baribir ishlayveradi (qarang: AppVersionGate).
+  unawaited(AppVersionGate.refresh());
+
   if (deferRoleSync) {
     try {
       await UserRoleSync().syncToPreferences();
@@ -266,6 +277,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(AppVersionGate.refresh());
       unawaited(ServiceConfigHolder.bootstrap());
       unawaited(DeferredSettlementQueue.flush());
       unawaited(DatingYouthPromoService.maybeShowOnAppOpen());
@@ -338,12 +350,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             debugShowCheckedModeBanner: false,
             title: 'AVA',
             theme: AppTheme.light,
-            home: _homeFor(resolveHomeScreenKind(
-              languageSelected: widget.languageSelected,
-              isReturningUser: widget.isReturningUser,
-              hasFirebaseAuth: widget.hasFirebaseAuth,
-              isAnonymousAuth: widget.isAnonymousAuth,
-            )),
+            // Darvoza MaterialApp ICHIDA — `context.tr` uchun
+            // AppLocalizations kerak. Odatda ko'rinmaydi: faqat
+            // `minSupportedBuild` shu APK'dan yuqori bo'lsa ishlaydi.
+            home: AppVersionGateView(
+              child: _homeFor(resolveHomeScreenKind(
+                languageSelected: widget.languageSelected,
+                isReturningUser: widget.isReturningUser,
+                hasFirebaseAuth: widget.hasFirebaseAuth,
+                isAnonymousAuth: widget.isAnonymousAuth,
+              )),
+            ),
             ),
           );
         },

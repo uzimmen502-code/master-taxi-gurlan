@@ -276,6 +276,9 @@ firebase deploy --only firestore:rules
 
 **Ҳали текширилмаган:** callable'ларнинг бизнес-мантиғи учун E2E тест йўқ (functions emulator + auth керак) — реал брон билан бир марта синаб кўрилсин.
 
+**Илдиз сабаб ҳал қилинди (2026-09-27):** минимал версия дарвозаси
+қўшилди — қаранг **В-10**. Бундан кейин бу вазият такрорланмайди.
+
 ### ⚠️ ҲОДИСА (2026-09-27): қоидалар тасодифан деплой қилинди ва қайтарилди
 
 `firebase deploy --only "functions:submitMarketAd,firestore:rules"` — битта буйруқда эълон ҳудуди учун CF ва қоидалар юборилди. Натижада шу бўлимда «деплой қилинмасин» деб ёзилган intercity чекловлари production'га тушди.
@@ -460,3 +463,62 @@ video format 406x720 bitrate=1227kbps id=2      ← id=2 = ЭНГ ЮҚОРИ п�
 - [x] Admin config: `config/module_defaults` ҳужжатида `yuk_local` ва `yuk_intercity` учун `status: enabled` аниқ ёзилди (аввалги `yuk_birja` статусига мос) — энди alias'дан мустақил, admin панелдан алоҳида бошқарилади.
 - [x] Эски `yuk_birja` бутунлай олиб ташланди: `kKnownModuleIds`/`kModuleIdAliases` ([service_module_config.dart](lib/models/service_module_config.dart)), alias fallback логикаси ([service_config_holder.dart](lib/core/service_config_holder.dart)), admin панель ёрлиғи ([service_config_admin_screen.dart](lib/features/admin_web/screens/service_config_admin_screen.dart)) кодидан, ва орфан `modules.yuk_birja` майдони production `config/module_defaults`дан. **Эслатма:** тарихий маълумот билан мослик учун сақланган жойлар (`global_search.dart`, `push_navigation.dart`, `home_screen.dart` даги эски `yuk_birja` индекс/push фолбэклари, `functions/index.js`даги idempotent `deleteSearchIndexEntry`) — қасддан тегилмади.
 - [ ] **Ҳали қолган:** бу code ўзгаришлари admin панелида кўриниши учун `scripts/build_combined_web.ps1` + `firebase deploy --only hosting` керак (жонли админ панели ҳали эски build'да — `yuk_local`/`yuk_intercity` алоҳида қатор сифатида кўринмайди, "Yuk birjasi" ҳам ҳали ўчмаган). Бу асосий фойдаланувчи веб-иловасини ҳам биргаликда деплой қилади.
+
+---
+
+## В-10. Минимал версия дарвозаси (2026-09-27) — КОД ТАЙЁР, ҲУЖЖАТ КУТИЛМОҚДА
+
+**Нега.** 2026-09-27 да `firestore.rules` деплойи Play'даги эски иловани
+бузди ва брон 4с 56д ишламади. Ягона чора қоидани қайтариш эди, чунки
+серверда эски иловага «сен эскирдинг» дейиш механизми ЙЎҚ эди. Бу дарвоза
+ўша механизм.
+
+**Қаерда:** `config/app_version` — МАВЖУД `config` коллекциясида
+(`firestore.rules:1334`: `read: if true`, `write: if isAdmin()`).
+Шунинг учун **янги қоида ҳам, қоида деплойи ҳам керак эмас**.
+
+**Ҳужжат (эга Firestore консолидан қўлда яратади):**
+
+```json
+{
+  "minSupportedBuild": 0,
+  "latestBuild": 0,
+  "message": {
+    "uz_Cyrl": "Илова янгиланди. Давом этиш учун янгиланг",
+    "uz_Latn": "Ilova yangilandi. Davom etish uchun yangilang",
+    "ru": "Приложение обновлено. Обновите для продолжения"
+  }
+}
+```
+
+`0` = дарвоза ўчиқ. Ҳужжат умуман бўлмаса ҳам илова нормал ишлайди.
+
+**⚠️ ЧЕКЛАНИШ — яхши тушуниб олинг.** Дарвоза фақат уни ЎЗ ИЧИГА ОЛГАН
+версияларда ишлайди. У биринчи марта 1.0.33 да чиқади. Демак:
+
+| `minSupportedBuild` | Кимни блоклайди |
+|---|---|
+| 70 ёки пастроқ | ҲЕЧ КИМНИ (1.0.32 ва ундан эскиларда бу код йўқ) |
+| 71 (1.0.33) | ҳеч кимни — 1.0.33 нинг ўзи ўтади |
+| 1.0.33 дан КЕЙИНГИ build | 1.0.33 фойдаланувчиларини |
+
+Яъни биринчи фойдали қиймат — 1.0.33 дан **кейинги** релиз рақами.
+
+**Хавфсизлик тамойили: ХАТОДА ОЧИҚ ҚОЛАДИ.** Ўз build рақами ўқилмаса,
+ҳужжат бўлмаса, қиймат сон бўлмаса ёки Firestore узилса — дарвоза
+ЁПИЛМАЙДИ. Firestore узилиши бутун иловани ишдан чиқармаслиги керак.
+Буни 13 та тест қўриқлайди (`test/core/app_version_gate_test.dart`).
+
+**Файллар:**
+- `lib/core/app_version_gate.dart` — ҳолат, кеш, қарор
+- `lib/repositories/app_version_repository.dart` — Firestore ўқиш
+- `lib/core/widgets/app_version_gate_view.dart` — ўровчи + экран
+- `lib/main.dart` — кешдан старт, splash'дан кейин ва resume'да янгилаш
+- 19 та тест
+
+**Қадам (эга):**
+1. Firestore консолида `config/app_version` ҳужжатини юқоридаги қиймат
+   билан яратиш (иккала сон ҳам `0`). Ҳозир қилса ҳам, кейин қилса ҳам
+   бўлади — таъсири йўқ.
+2. 1.0.33 чиққандан КЕЙИН, сервер контракти ўзгарадиган биринчи
+   релизда `minSupportedBuild` ни ўша релиз рақамига кўтариш.

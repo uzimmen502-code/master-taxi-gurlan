@@ -22,16 +22,25 @@ class AdsStorageService {
       throw ArgumentError('ownerId is required');
     }
     final urls = <String>[];
-    for (final file in images) {
-      final bytes = await _compress(file);
-      final name =
-          '${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
-      final ref = _storage.ref().child('ads').child(ownerId).child(name);
-      await ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      urls.add(await ref.getDownloadURL());
+    try {
+      for (final file in images) {
+        final bytes = await _compress(file);
+        final name =
+            '${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}.jpg';
+        final ref = _storage.ref().child('ads').child(ownerId).child(name);
+        await ref.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        urls.add(await ref.getDownloadURL());
+      }
+    } catch (_) {
+      // Ярим йўлда узилди (масалан 3-расмда тармоқ кетди) — аввалги
+      // расмлар Storage'да эгасиз қолиб кетмасин. Чақирувчи хатони
+      // барибир кўради, шунинг учун уни ютмаймиз — фақат ортидан
+      // тозалаб, қайта отамиз.
+      await deleteAdImages(ownerId: ownerId, imageUrls: urls);
+      rethrow;
     }
     return urls;
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../screens/edit_ad_screen.dart';
@@ -31,26 +32,28 @@ class MyAdActions extends StatelessWidget {
           case 'hide':
             await _confirm(
               context,
-              title: 'Яшириш',
-              body: 'Эълон яширилади. Кейинчалик қайта жойлаштириш мумкин.',
+              title: context.tr('my_ad_hide'),
+              body: context.tr('my_ad_hide_body'),
               onConfirm: () => repo.deactivateAd(ad.id),
             );
             break;
           case 'republish':
             await _confirm(
               context,
-              title: 'Қайта жойлаштириш',
-              body:
-                  'Эълон қайта модерацияга юборилади. Админ тасдиқлагач '
-                  'бозорда кўринади.',
+              title: context.tr('my_ad_republish'),
+              // Аввал бу ерда «Админ тасдиқлагач бозорда кўринади» деб
+              // ёзилган эди — бу ЁЛҒОН: `settings/app.marketAutoApprove`
+              // ёқиқ бўлса эълон дарҳол чиқади, админ аралашмайди.
+              // Янги матн иккала режимда ҳам тўғри.
+              body: context.tr('my_ad_republish_body'),
               onConfirm: () => repo.requestRepublish(ad.id),
             );
             break;
           case 'delete':
             await _confirm(
               context,
-              title: 'Ўчириш',
-              body: 'Эълон тўлиқ ўчирилади. Давом этасизми?',
+              title: context.tr('delete'),
+              body: context.tr('my_ad_delete_body'),
               onConfirm: () => repo.deleteAd(ad.id),
               destructive: true,
             );
@@ -58,27 +61,30 @@ class MyAdActions extends StatelessWidget {
         }
       },
       itemBuilder: (ctx) {
-        if (isActive) {
-          return [
-            const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
-            const PopupMenuItem(value: 'hide', child: Text('Яшириш')),
-            const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
-          ];
+        final edit = PopupMenuItem(
+          value: 'edit',
+          child: Text(ctx.tr('edit')),
+        );
+        final hide = PopupMenuItem(
+          value: 'hide',
+          child: Text(ctx.tr('my_ad_hide')),
+        );
+        final remove = PopupMenuItem(
+          value: 'delete',
+          child: Text(ctx.tr('delete')),
+        );
+        // Фаол ва текширувдаги эълонда бир хил амаллар.
+        if (isActive || isPending) {
+          return [edit, hide, remove];
         }
-        if (isPending) {
-          return [
-            const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
-            const PopupMenuItem(value: 'hide', child: Text('Яшириш')),
-            const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
-          ];
-        }
+        // Яширилган / муддати тугаган — қайта жойлаштириш мумкин.
         return [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'republish',
-            child: Text('Қайта жойлаштириш'),
+            child: Text(ctx.tr('my_ad_republish')),
           ),
-          const PopupMenuItem(value: 'edit', child: Text('Таҳрирлаш')),
-          const PopupMenuItem(value: 'delete', child: Text('Ўчириш')),
+          edit,
+          remove,
         ];
       },
     );
@@ -99,12 +105,12 @@ class MyAdActions extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Йўқ'),
+            child: Text(ctx.tr('no')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
-              'Ҳа',
+              ctx.tr('yes'),
               style: TextStyle(
                 color: destructive ? Colors.red : null,
               ),
@@ -118,14 +124,18 @@ class MyAdActions extends StatelessWidget {
         await onConfirm();
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(destructive ? 'Ўчирилди' : 'Сақланди')),
+            SnackBar(
+              content: Text(
+                context.tr(destructive ? 'my_ad_deleted' : 'saved'),
+              ),
+            ),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Хатолик: $e'),
+              content: Text('${context.tr('error')}: $e'),
               backgroundColor: Colors.red,
             ),
           );

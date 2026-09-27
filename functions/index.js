@@ -1148,6 +1148,30 @@ exports.onAdUpdate = functions.firestore
       return null;
     }
 
+    // Модерацияга юборилди (эга «Қайта жойлаштириш» босди) — `expiresAt`
+    // ЯНГИЛАНАДИ.
+    //
+    // Усиз қуйидаги тузоқ бор эди (аудит, 2026-09-27): муддати тугаган
+    // эълон `inactive` бўлади, эга уни `pending` қилади — лекин
+    // `expiresAt` ЎТМИШДА қолади, чунки қоида эгага бу майдонни ёзишга
+    // рухсат бермайди (`cheapProductOwnerUpdateOk`). `expirePendingTrips`
+    // эса ҳар 1 дақиқада `pending` + муддати ўтганни яна `inactive`
+    // қилади. Натижа: авто-тасдиқ ЎЧИРИЛГАН бўлса эълонни қайта
+    // жойлаштириб БЎЛМАЙДИ — тугма ишлагандек кўринади, бир дақиқада
+    // ҳаммаси ортга қайтади ва админ уни навбатда кўрмайди ҳам.
+    //
+    // Авто-тасдиқ ёқиқ бўлса юқоридаги тармоқ аллақачон `active` қилиб,
+    // ўз муддатини ёзган ва бу ергача етиб келмайди.
+    if (isMarket && after.status === 'pending' && before.status !== 'pending') {
+      await change.after.ref.update({
+        expiresAt: marketPendingExpiresAt(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      // Статус ўзгармагани учун бу ёзув триггерни қайта ишга туширмайди
+      // (юқоридаги `before.status === after.status` гуарди).
+      return null;
+    }
+
     const uid = digits(after.authorPhone || after.ownerId || '');
     if (uid.length < 9) return;
 
@@ -1180,16 +1204,28 @@ exports.onAdUpdate = functions.firestore
         if (!isMarket) return;
         const moderatedChanged =
           String(before.moderatedAt || '') !== String(after.moderatedAt || '');
-        // Owner hide — jim; admin reject/hide — хабар.
-        if (before.status === 'pending') {
+        // Муддати ўзи тугаганми — `expirePendingTrips` шу майдонни ёзади.
+        //
+        // Бу текширув БИРИНЧИ туриши шарт: автомат тугашда `moderatedAt`
+        // ўзгармайди, шунинг учун у қуйидаги «эга ўзи яширди» тармоғига
+        // тушиб, жимгина қайтиб кетарди — сотувчи 60 кундан кейин эълони
+        // лентадан тушганини УМУМАН билмасди (аудит, 2026-09-27).
+        const autoExpired =
+          String(before.autoExpiredAt || '') !== String(after.autoExpiredAt || '');
+        // Owner hide — jim; admin reject/hide ва автомат тугаш — хабар.
+        if (autoExpired) {
+          title = '⏳ Бозор эълонингиз муддати тугади';
+        } else if (before.status === 'pending') {
           title = '⛔ Бозор эълони қабул қилинмади';
         } else if (before.status === 'active' && moderatedChanged) {
           title = '🙈 Бозор эълони яширилди';
         } else {
           return;
         }
-        body = preview || (after.adminNote || 'Менинг эълонларимда кўринг');
-        dataType = 'market_ad_moderation';
+        body = autoExpired
+          ? (preview || 'Қайта жойлаштириш — «Менинг эълонларим»да')
+          : (preview || after.adminNote || 'Менинг эълонларимда кўринг');
+        dataType = autoExpired ? 'market_ad_expired' : 'market_ad_moderation';
         break;
       }
       case 'pending':
@@ -7364,6 +7400,39 @@ function marketActiveExpiresAt() {
   );
 }
 
+/**
+ * Эълоннинг ҳудуди: клиент юборган туман (текширилган) ёки эга профили.
+ *
+ * Текширув шарт — `districtId` фақат ҳақиқий `geo_districts` ҳужжати
+ * бўлиши мумкин, акс ҳолда эълон мавжуд бўлмаган туманга ёзилиб,
+ * ҳеч кимнинг лентасида кўринмай қоларди. `regionId` клиентдан
+ * ОЛИНМАЙДИ — у туман ҳужжатидан ўқилади, шунда икковининг мос
+ * келиши кафолатланади.
+ */
+async function marketAdGeoStamp(uid, data) {
+  const districtId = String((data && data.districtId) || '').trim();
+  if (districtId) {
+    try {
+      const snap = await db.collection('geo_districts').doc(districtId).get();
+      if (snap.exists) {
+        const d = snap.data() || {};
+        const regionId = String(d.regionId || '').trim();
+        return regionId ? {districtId, regionId} : {districtId};
+      }
+      console.warn('marketAdGeoStamp: nomaʼlum districtId', districtId);
+    } catch (e) {
+      console.error('marketAdGeoStamp', districtId, e.message || e);
+    }
+  }
+  return ownerGeoStamp(uid);
+}
+
+function marketPendingExpiresAt() {
+  return admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
+  );
+}
+
 function marketPhoneVariants(uid) {
   const u = canonicalUid(uid);
   return [...new Set([
@@ -7471,7 +7540,18 @@ exports.submitMarketAd = functions.https.onCall(async (data, context) => {
       new Date(Date.now() + MARKET_PENDING_TTL_DAYS * 24 * 60 * 60 * 1000),
     );
 
-  const geo = await ownerGeoStamp(uid);
+  // ҲУДУД — МАҲСУЛОТНИКИ, сотувчиникимас (аудит, 2026-09-27).
+  //
+  // Илгари бу ерда фақат `ownerGeoStamp(uid)` бор эди, яъни эълонга
+  // сотувчининг ЯШАШ ЖОЙИ ёзиларди. Помидор сотилганда иккиси устма-уст
+  // тушади, лекин уй/ер/машина сотилганда йўқ: Тошкентда яшаб Хоразмдаги
+  // уйини сотаётган одамнинг эълони Тошкентга тушар ва хоразмлик харидор
+  // уни ҚИДИРУВДА ТОПА ОЛМАС эди.
+  //
+  // Энди клиент маҳсулот ҳудудини юборади ва у `geo_districts` бўйича
+  // ТЕКШИРИЛАДИ (ёлғон id ўтиб кетмасин). Юборилмаса — эски хулқ:
+  // профилдан олинади. Play'даги жорий версия шу йўл билан ишлайверади.
+  const geo = await marketAdGeoStamp(uid, data);
 
   const payload = {
     type: 'cheap_product',
@@ -11732,10 +11812,68 @@ exports.transcodeEntertainmentVideo = onObjectFinalized(
 // Firestore'да барибир янги URL туради.
 const TV_CLIP_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
+// ─────────────────────────────────────────────────────────────────────
+// ПОҒОНА ҚИСҚА ҚИРРА (short edge) БЎЙИЧА ЎЛЧАНАДИ, БАЛАНДЛИК БЎЙИЧА ЭМАС.
+//
+// Аввал `scale=-2:'min(720,ih)'` эди — яъни БАЛАНДЛИК чегараланарди. Бу
+// горизонтал видео учун тўғри, лекин AVAGram — ВЕРТИКАЛ лента: манба
+// 720×1280 бўлади (клиент `Res1280x720Quality` = `atMost(720,1280)`).
+// Ўшанда ih=1280 → баландлик 720 га тушади ва КЕНГЛИК 405 пикселгача
+// қисқаради. Яъни «720p» деб номланган энг юқори поғона амалда 406×720,
+// «360p» эса 202×360 эди.
+//
+// Қурилмада ўлчанди (TECNO LH7n, `dumpsys media.metrics`, 2026-09-26):
+// барча клиплар 202×360 декодланган — 1080 пиксел кенгликдаги экранга
+// 5.3 баравар чўзилган. Расмнинг хиралиги айнан шундан.
+//
+// Қуйидаги ифода қисқа қиррани чегаралайди ва ориентацияни ҳисобга
+// олади (локал ўлчов, ffmpeg 6.1.1):
+//   портрет 720×1280 → 720×1280 / 480×854 / 360×640
+//   ландшафт 1280×720 → 1280×720 / 854×480 / 640×360
+//   квадрат  600×600  → 600×600  / 480×480 / 360×360
+// `min()` туфайли ҳеч қачон КАТТАЛАШТИРМАЙДИ (кичик манба ўз ўлчамида
+// қолади), `-2` эса ўлчамни жуфт сақлайди (h264 учун шарт).
+//
+// maxrate — энди 3.15 баравар кўп пикселга мос: 406×720 (292k пиксел)
+// ўрнига 720×1280 (922k пиксел). Эски 2140k шу ўлчамда етарли эмас эди.
+function tvClipScaleExpr(shortEdge) {
+  return `scale=w='if(gt(iw,ih),-2,min(${shortEdge},iw))':` +
+      `h='if(gt(iw,ih),min(${shortEdge},ih),-2)'`;
+}
+
+// Поғона ВЕРСИЯСИ — клип ҳужжатига `variantLadder` бўлиб ёзилади.
+//
+// Нима учун керак: поғона ўзгарганда мавжуд клипларни қайта transcode
+// қилиш КЕРАК, лекин буни `videoVariants` таркибига қараб билиб
+// бўлмайди — калитлар ('720p'/'480p'/'360p') ўша-ўша қолади, фақат
+// уларнинг ичидаги ҳақиқий ўлчам ўзгаради. Версия белгиси
+// `tools/backfill_tv_clip_variants.js` га «бу клип эски поғонада» деб
+// аниқ айтади.
+//
+//   1 — баландлик бўйича (`scale=-2:'min(H,ih)'`), CRF 26. Вертикал
+//       клипда амалда 406×720 / 270×480 / 202×360.
+//   2 — қисқа қирра бўйича ([tvClipScaleExpr]), поғонага боғлиқ CRF.
+//       Вертикал клипда 720×1280 / 480×854 / 360×640.
+//   3 — 2 билан бир хил ЎЛЧАМ, лекин энг паст поғона қаттиқ
+//       чегараланган (maxrate 800k→600k, CRF 26→27). Сабаби: v2 да
+//       ўлчанган пол 946 kbps чиққан — эски полдан 3.5 баравар оғир,
+//       яъни заиф тармоқ ҳимояси йўқолган эди.
+const TV_CLIP_LADDER_VERSION = 3;
+
+// ЭНГ ПАСТ поғона — «хавфсизлик поли», у ерда мақсад сифат эмас,
+// УЗИЛМАСЛИК. Биринчи ўлчовда (2026-09-26, backfill қилинган 3 клип)
+// CRF 26 + maxrate 800k да у ўртача 946 kbps чиқди — эски 202×360
+// поғонасидан (≈270 kbps) 3.5 баравар оғир. Ўлчам ўсиши (202×360 →
+// 360×640) керак эди, лекин полни бунчалик оғирлаштириш заиф тармоқда
+// айнан биз тузатмоқчи бўлган қотишни қайтариб келарди.
+//
+// Шунинг учун пол қаттиқ чегараланади: maxrate 600k. 360×640 @ 600 kbps
+// ҳамон эски полдан анча тиниқ (пиксел сони 3.2 баравар кўп), лекин
+// трафиги унга яқин қолади.
 const TV_CLIP_VARIANT_SPECS = [
-  {key: '720p', maxHeight: 720, maxrate: '2140k', bufsize: '3000k'},
-  {key: '480p', maxHeight: 480, maxrate: '856k', bufsize: '1200k'},
-  {key: '360p', maxHeight: 360, maxrate: '450k', bufsize: '650k'},
+  {key: '720p', shortEdge: 720, crf: '23', maxrate: '3000k', bufsize: '4500k'},
+  {key: '480p', shortEdge: 480, crf: '24', maxrate: '1500k', bufsize: '2250k'},
+  {key: '360p', shortEdge: 360, crf: '27', maxrate: '600k', bufsize: '900k'},
 ];
 
 // В-4 2-босқич (2026-09-18): пастдаги асосий pass БАРЧА вариантларни
@@ -11747,7 +11885,8 @@ const TV_CLIP_VARIANT_SPECS = [
 // шунинг учун [fastTrack360pIfPossible] орқали АЛОҲИДА, тезкор,
 // ФАҚАТ-360p pass қўшилди: асосий (синалган, юқорида, ўзгартирилмаган)
 // pass'дан олдин ишга тушади ва натижани Firestore'га дарҳол ёзади.
-const TV_CLIP_FAST_360P_SPEC = {maxHeight: 360, maxrate: '450k', bufsize: '650k'};
+const TV_CLIP_FAST_360P_SPEC =
+    {shortEdge: 360, crf: '27', maxrate: '600k', bufsize: '900k'};
 
 /**
  * В-4 2-босқич: асосий (720p+480p+360p) БИТТА-pass'дан ОЛДИН, фақат
@@ -11788,7 +11927,7 @@ const TV_CLIP_WATERMARK_PAD = 0.035; // четдан чекинма (кенгл�
 const TV_CLIP_WATERMARK_ALPHA = 0.88;
 
 async function renderShareCopyIfPossible(
-    clipId, srcMp4, bucketName, bucket, ffmpegPath, secsSince) {
+    clipId, srcMp4, bucketName, bucket, ffmpegPath, secsSince, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11817,7 +11956,11 @@ async function renderShareCopyIfPossible(
       '-map', '0:a?',
       '-c:v', 'libx264',
       '-preset', 'veryfast',
-      '-crf', '26',
+      // Манба — тайёр 720p варианти (энди вертикал клипда ҳақиқий
+      // 720×1280). Бу нусха ТАШҚАРИГА чиқади (Instagram/YouTube, улашиш),
+      // шунинг учун CRF юқори поғонаники билан бир хил: 26 да иккинчи
+      // авлод кодлаш кўзга ташланадиган даражада бузарди.
+      '-crf', '23',
       // Овоз аллақачон биз кодлаган AAC — қайта кодлаш шарт эмас.
       '-c:a', 'copy',
       '-movflags', '+faststart',
@@ -11831,7 +11974,7 @@ async function renderShareCopyIfPossible(
       return '';
     }
 
-    const destPath = `tv_clip_variants/${clipId}/share.mp4`;
+    const destPath = `tv_clip_variants/${clipId}/${runId}/share.mp4`;
     const token = crypto.randomUUID();
     await bucket.upload(tmpOut, {
       destination: destPath,
@@ -11855,7 +11998,7 @@ async function renderShareCopyIfPossible(
 }
 
 async function fastTrack360pIfPossible(
-    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince) {
+    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11868,10 +12011,10 @@ async function fastTrack360pIfPossible(
       '-y',
       '-t', String(TV_CLIP_MAX_SECONDS),
       '-i', tmpIn,
-      '-vf', `scale=-2:'min(${spec.maxHeight},ih)'`,
+      '-vf', tvClipScaleExpr(spec.shortEdge),
       '-c:v', 'libx264',
       '-preset', 'veryfast',
-      '-crf', '26',
+      '-crf', spec.crf,
       '-maxrate', spec.maxrate,
       '-bufsize', spec.bufsize,
       '-force_key_frames',
@@ -11890,7 +12033,7 @@ async function fastTrack360pIfPossible(
       return;
     }
 
-    const destPath = `tv_clip_variants/${clipId}/360p_fast.mp4`;
+    const destPath = `tv_clip_variants/${clipId}/${runId}/360p_fast.mp4`;
     const token = crypto.randomUUID();
     await bucket.upload(tmpOut, {
       destination: destPath,
@@ -12002,7 +12145,7 @@ async function claimTvClipTranscode(clipRef, videoUrl) {
 //
 // Хатолик бўлса '' қайтаради — HLS қўшимча, мажбурий эмас: клип
 // MP4 вариантлари билан барибир чоп этилаверади.
-async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
+async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -12052,28 +12195,53 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
       let playlist = fs.readFileSync(playlistPath, 'utf8');
       // Playlist'даги нисбий файл номи — абсолют, token'ли URL'га.
       const tsUrl = await uploadWithToken(
-          tsPath, `tv_clip_hls/${clipId}/${tsName}`, 'video/mp2t');
+          tsPath, `tv_clip_hls/${clipId}/${runId}/${tsName}`, 'video/mp2t');
       playlist = playlist.split(tsName).join(tsUrl);
       fs.writeFileSync(playlistPath, playlist, 'utf8');
 
       const variantUrl = await uploadWithToken(
-          playlistPath, `tv_clip_hls/${clipId}/${quality}.m3u8`,
+          playlistPath, `tv_clip_hls/${clipId}/${runId}/${quality}.m3u8`,
           'application/vnd.apple.mpegurl');
 
-      // BANDWIDTH — master playlist учун мажбурий. Ҳақиқий ўлчамдан
-      // ҳисоблаймиз: умумий байт / умумий давомийлик.
-      const seconds = [...playlist.matchAll(/#EXTINF:([\d.]+)/g)]
-          .reduce((sum, m) => sum + parseFloat(m[1]), 0);
-      const bytes = fs.statSync(tsPath).size;
-      const bandwidth = seconds > 0
-          ? Math.round((bytes * 8) / seconds)
+      // BANDWIDTH — master playlist учун мажбурий ва HLS спецификацияси
+      // бўйича бу ЭНГ ЮҚОРИ (peak) сегмент тезлиги, ўртача эмас. Аввал бу
+      // ерда ўртача ёзиларди (умумий байт / умумий давомийлик) —
+      // ExoPlayer'нинг `AdaptiveTrackSelection`и вариантни ўзи талаб
+      // қиладиган тармоқдан АРЗОНроқ деб баҳолаб, мураккаб саҳнада
+      // (bitrate маҳаллий равишда maxrate'га чиқканда) тортиб кета
+      // олмайдиган поғонани танларди — натижада айнан ҳаракатли жойда
+      // буферланиш. Ўртачаси энди AVERAGE-BANDWIDTH'га ёзилади (плеер
+      // узоқ муддатли режалаш учун ўшани ишлатади).
+      //
+      // `single_file` HLS'да ҳар сегмент — битта файл ичидаги диапазон,
+      // шунинг учун сегмент ўлчами `#EXT-X-BYTERANGE:<len>@<off>` дан
+      // олинади (файлнинг ўзи битта — `statSync` фақат йиғиндини берарди).
+      const extinfs = [...playlist.matchAll(/#EXTINF:([\d.]+)/g)]
+          .map((m) => parseFloat(m[1]));
+      const ranges = [...playlist.matchAll(/#EXT-X-BYTERANGE:(\d+)/g)]
+          .map((m) => parseInt(m[1], 10));
+      const totalSeconds = extinfs.reduce((s, v) => s + v, 0);
+      const totalBytes = ranges.length === extinfs.length && ranges.length > 0
+          ? ranges.reduce((s, v) => s + v, 0)
+          : fs.statSync(tsPath).size;
+      const avgBandwidth = totalSeconds > 0
+          ? Math.round((totalBytes * 8) / totalSeconds)
           : 1000000;
+      let peakBandwidth = avgBandwidth;
+      if (ranges.length === extinfs.length) {
+        for (let i = 0; i < ranges.length; i++) {
+          if (extinfs[i] <= 0) continue;
+          const rate = Math.round((ranges[i] * 8) / extinfs[i]);
+          if (rate > peakBandwidth) peakBandwidth = rate;
+        }
+      }
 
       const probe = spawnSync(ffmpegPath, ['-i', mp4Path], {stdio: 'pipe'});
       const dim = /Video: .*?, (\d+)x(\d+)/.exec(probe.stderr.toString());
 
       streams.push({
-        bandwidth,
+        bandwidth: peakBandwidth,
+        avgBandwidth,
         resolution: dim ? `${dim[1]}x${dim[2]}` : '',
         url: variantUrl,
       });
@@ -12087,6 +12255,7 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     const master = ['#EXTM3U', '#EXT-X-VERSION:4'];
     for (const s of streams) {
       const attrs = [`BANDWIDTH=${s.bandwidth}`];
+      if (s.avgBandwidth) attrs.push(`AVERAGE-BANDWIDTH=${s.avgBandwidth}`);
       if (s.resolution) attrs.push(`RESOLUTION=${s.resolution}`);
       master.push(`#EXT-X-STREAM-INF:${attrs.join(',')}`, s.url);
     }
@@ -12094,7 +12263,7 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     fs.writeFileSync(masterPath, master.join('\n') + '\n', 'utf8');
 
     return await uploadWithToken(
-        masterPath, `tv_clip_hls/${clipId}/master.m3u8`,
+        masterPath, `tv_clip_hls/${clipId}/${runId}/master.m3u8`,
         'application/vnd.apple.mpegurl');
   } catch (e) {
     console.error('packageTvClipHls error:', clipId, e.message || e);
@@ -12103,6 +12272,79 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     try {
       fs.rmSync(workDir, {recursive: true, force: true});
     } catch (_) {}
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ҚАЙТА TRANSCODE ЭСКИ URL'НИ БЕКОР ҚИЛМАСЛИГИ КЕРАК.
+//
+// Аввал вариантлар ҲАР САФАР бир хил йўлга (`tv_clip_variants/{id}/
+// 720p.mp4`, `tv_clip_hls/{id}/master.m3u8`) янги download token билан
+// қайта юкланарди. Объект алмаштирилганда ЭСКИ TOKEN БЕКОР БЎЛАДИ, яъни
+// ўша пайтда лентани очиб турган ҳар бир фойдаланувчининг URL'и 403
+// бўлиб қоларди. Лента `.get()` билан бир марта юкланади (Firestore'га
+// обуна йўқ), шунинг учун URL ўзи янгиланмайди ҳам — натижада
+// `initialize()` 15 сония кутиб timeout билан тугайди ва экранда видео
+// ўрнига муқова қотиб қолади.
+//
+// Қурилмада ўлчанди (2026-09-26 20:31, backfill кетаётганда):
+//   [TvPlayerPool] TimeoutException after 0:00:15.000000
+//   [TvPlayback] ... buffered=0ms events=0 firstFrame=5176ms
+// buffered=0 — яъни ижро узилмаган; видео УМУМАН бошланмаган.
+//
+// Бу backfill'га хос эмас: эга ўз клипининг видеосини алмаштирганда
+// (`onTvClipVideoReplacedV2`) ҳам айни шу содир бўлади.
+//
+// Ечим: ҳар transcode ЎЗ ЙЎЛИГА ёзади (`.../{clipId}/{runId}/...`).
+// Эски URL эски файлга кўрсатиб тураверади ва ишлайверади. Йўл ҳар
+// сафар янги бўлгани учун `immutable` кэш сарлавҳаси ҳам тўғри қолади
+// (қаранг: [TV_CLIP_CACHE_CONTROL]) — барқарор URL'да у, аксинча,
+// клиентга ЭСКИ видеони абадий кўрсатиб турарди.
+//
+// Тозалаш: янги transcode бошланишида, ҳужжатдаги ЖОРИЙ run'дан бошқа
+// ҳамма run'лар ўчирилади. Шунда ҳар доим кўпи билан 2 авлод туради —
+// жорийси (ҳужжатда) ва янги ёзилаётгани — ва ҳеч қачон томоша
+// қилинаётган авлод ўчиб кетмайди.
+function tvClipRunId() {
+  return Date.now().toString(36);
+}
+
+/**
+ * [keepRun]дан бошқа барча run папкаларини ўчиради. Best-effort:
+ * тозалаш йиқилса transcode давом этаверади (фақат сақлаш харажати).
+ *
+ * [keepRun] БЎШ бўлса — ҳеч нарса ўчирилмайди. Бу — клипнинг версияли
+ * йўлга БИРИНЧИ марта ўтиши: ҳужжатда ҳали `variantRun` йўқ, демак
+ * ҳозир томоша қилинаётган нарса — айнан эски, версиясиз файллар.
+ * Уларни шу ерда ўчириш биз тузатаётган муаммонинг ўзини (эски URL
+ * ишламай қолиши) такрорларди. Улар кейинги transcode'да, бир авлод
+ * эскиргач тозаланади.
+ */
+async function cleanupOldTvClipRuns(bucket, clipId, keepRun) {
+  if (!keepRun) return;
+  for (const root of ['tv_clip_variants', 'tv_clip_hls']) {
+    try {
+      const [files] = await bucket.getFiles({prefix: `${root}/${clipId}/`});
+      const stale = files.filter((f) => {
+        const rest = f.name.slice(`${root}/${clipId}/`.length);
+        const seg = rest.split('/')[0];
+        // Папкасиз эски (версиясиз) файллар ҳам шу ерда тозаланади —
+        // улар `rest`да «/» сақламайди.
+        const isVersioned = rest.includes('/');
+        return isVersioned ? seg !== keepRun : true;
+      });
+      for (const f of stale) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+      if (stale.length > 0) {
+        console.log(
+            `tv clip ${clipId}: ${root} — ${stale.length} ta eski fayl tozalandi`);
+      }
+    } catch (e) {
+      console.error(`cleanupOldTvClipRuns ${root} ${clipId}:`, e.message || e);
+    }
   }
 }
 
@@ -12119,6 +12361,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     return;
   }
 
+  const runId = tvClipRunId();
+
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -12130,6 +12374,17 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
   const tmpIn = path.join(
       os.tmpdir(), `${clipId}_in${path.extname(srcPath) || '.mp4'}`);
   const tmpOutputs = [];
+
+  // Эски авлодларни тозалаш — ЯНГИСИНИ ЁЗИШДАН ОЛДИН ва ҳужжатдаги
+  // ЖОРИЙ run'ни сақлаб қолиб. Шунда ҳозир томоша қилинаётган авлод
+  // тегилмайди, ундан олдингилари эса кетади (қаранг: юқоридаги изоҳ).
+  try {
+    const cur = await clipRef.get();
+    const liveRun = (cur.exists ? cur.data() : {}).variantRun || '';
+    await cleanupOldTvClipRuns(bucket, clipId, liveRun);
+  } catch (e) {
+    console.error('transcodeTvClipVideo cleanup skip:', clipId, e.message || e);
+  }
 
   // Босқичма-босқич вақт ўлчови. Давомийлик чегарасини (ҳозир 180с)
   // тахминдан эмас, ҳақиқий рақамдан белгилаш учун: логда ҳар бир
@@ -12157,7 +12412,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // pass — хато бўлса ҳам асосий pipeline'га таъсир қилмайди (қаранг:
     // [fastTrack360pIfPossible] ҳужжати).
     await fastTrack360pIfPossible(
-        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince);
+        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince,
+        runId);
 
     // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
     // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб
@@ -12174,7 +12430,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     const splitLabels =
         TV_CLIP_VARIANT_SPECS.map((_, i) => `[s${i}]`).join('');
     const scaleChain = TV_CLIP_VARIANT_SPECS
-        .map((spec, i) => `[s${i}]scale=-2:'min(${spec.maxHeight},ih)'[v${i}]`)
+        .map((spec, i) => `[s${i}]${tvClipScaleExpr(spec.shortEdge)}[v${i}]`)
         .join('; ');
 
     // `-t` айнан `-i`дан ОЛДИН — кириш опцияси сифатида. Шунда манба
@@ -12200,7 +12456,10 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
             '-map', '0:a?',
             '-c:v', 'libx264',
             '-preset', 'veryfast',
-            '-crf', '26',
+            // CRF энди поғонага боғлиқ: юқори поғона (720) кўз билан
+            // кўринадиган даражада тозароқ бўлиши керак, паст поғона эса
+            // заиф тармоқ учун арзон қолиши керак.
+            '-crf', spec.crf,
             // CRF sifatni ushlab turadi, bular esa shiftni: murakkab sahnada
             // bitrate variantning ABR'dagi o'rnidan oshib ketmasin.
             '-maxrate', spec.maxrate,
@@ -12295,7 +12554,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       if (!fs.existsSync(tmpOut) || fs.statSync(tmpOut).size <= 0) continue;
       readyMp4[spec.key] = tmpOut;
 
-      const destPath = `tv_clip_variants/${clipId}/${spec.key}.mp4`;
+      const destPath = `tv_clip_variants/${clipId}/${runId}/${spec.key}.mp4`;
       const token = crypto.randomUUID();
       await bucket.upload(tmpOut, {
         destination: destPath,
@@ -12322,7 +12581,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
         readyMp4['720p'] || readyMp4['480p'] || readyMp4['360p'] || '';
     if (shareSrc) {
       const shareUrl = await renderShareCopyIfPossible(
-          clipId, shareSrc, bucketName, bucket, ffmpegPath, secsSince);
+          clipId, shareSrc, bucketName, bucket, ffmpegPath, secsSince, runId);
       if (shareUrl) variants.share = shareUrl;
     }
 
@@ -12332,7 +12591,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     let hlsUrl = '';
     if (Object.keys(readyMp4).length > 0) {
       const tHls = Date.now();
-      hlsUrl = await packageTvClipHls(clipId, bucket, bucketName, readyMp4);
+      hlsUrl = await packageTvClipHls(
+          clipId, bucket, bucketName, readyMp4, runId);
       console.log(
           `tv clip ${clipId} timing: hls ${secsSince(tHls)}s ` +
           `(${hlsUrl ? 'ok' : 'yoq'})`);
@@ -12345,6 +12605,10 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       await clipRef.update({
         videoVariants: variants,
         hlsUrl,
+        variantLadder: TV_CLIP_LADDER_VERSION,
+        // Кейинги transcode шу run'ни «тирик» деб билади ва ўчирмайди
+        // (қаранг: [cleanupOldTvClipRuns]).
+        variantRun: runId,
         processingStatus: 'ready',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -12384,11 +12648,28 @@ const {
   onDocumentUpdated,
 } = require('firebase-functions/v2/firestore');
 
+// cpu 2 → 4: поғона қисқа қирра бўйича ўлчанадиган бўлгач (қаранг
+// [tvClipScaleExpr]) вертикал клипда кодланадиган пиксел сони 3.15
+// баравар ошди (406×720+270×480+202×360 → 720×1280+480×854+360×640).
+//
+// Локал ўлчов (бир хил машина, 90с портрет 720×1280 манба, ffmpeg
+// 6.1.1, айнан шу аргументлар билан эски ва янги поғона):
+//   шовқинли манба (testsrc2):  19.3с → 21.1с  (×1.10)
+//   деталли манба (mandelbrot): 20.7с → 26.4с  (×1.28)
+// Яъни вақт пиксел сонига ПРОПОРЦИОНАЛ ошмайди — қимматли қисм манбани
+// декодлаш ва filter graph, у эса иккала ҳолатда бир хил.
+//
+// Демак 540с (2-авлод event-driven функция учун максимум, ўзгартириб
+// бўлмайди) эски cpu=2 да ҳам етарди: ўлчанган энг оғир ҳолат ~240с
+// эди, ×1.28 билан ~307с. cpu 4 — заҳира: энг узун (600с) ва энг оғир
+// манбада ҳам timeout'га тушиб, клип `processingStatus: 'error'` билан
+// лентадан тушиб қолмаслиги учун. Хотира 4GiB'да қолади — у ҳеч қачон
+// чегара бўлмаган (ffmpeg бу ўлчамларда жуда кам хотира ейди).
 const TV_CLIP_TRANSCODE_V2_OPTS = {
   document: 'tv_clips/{clipId}',
   region: 'us-central1',
   memory: '4GiB',
-  cpu: 2,
+  cpu: 4,
   timeoutSeconds: 540,
 };
 
@@ -12487,8 +12768,14 @@ exports.onTvClipRejected = functions.firestore
       return null;
     });
 
-// Klip o'chirilganda `tv_clip_variants/{clipId}/` papkasini ham tozalash —
-// aks holda transcode variantlari Storage'da "yetim" qolib, xarajat oshadi.
+// Klip o'chirilganda transcode natijalarini ham tozalash — aks holda
+// ular Storage'da "yetim" qolib, xarajat oshadi.
+//
+// `tv_clip_hls/` ilgari BU YERDA YO'Q EDI — faqat `tv_clip_variants/`
+// o'chirilardi, ya'ni har o'chirilgan klipning HLS segmentlari (eng
+// katta fayllar: har variant uchun bitta `single_file` .ts) Storage'da
+// abadiy qolib ketardi. Versiyalangan yo'l (`{clipId}/{runId}/…`)
+// qo'shilgandan keyin bu yanada qimmatga tushardi.
 exports.onTvClipDeleted = functions.firestore
     .document('tv_clips/{clipId}')
     .onDelete(async (snap) => {
@@ -12497,6 +12784,7 @@ exports.onTvClipDeleted = functions.firestore
         const bucket = admin.storage().bucket(
             'master-taxi-gurlan.firebasestorage.app');
         await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+        await bucket.deleteFiles({prefix: `tv_clip_hls/${clipId}/`});
       } catch (e) {
         console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
       }
@@ -12715,6 +13003,9 @@ async function deleteTvClipMedia(clipId, data) {
     await Promise.all(paths.map((p) =>
       bucket.file(p).delete().catch(() => {})));
     await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+    // `tv_clip_hls/` ilgari bu yerda ham yo'q edi — qarang:
+    // `onTvClipDeleted` izohi.
+    await bucket.deleteFiles({prefix: `tv_clip_hls/${clipId}/`});
   } catch (e) {
     console.error('deleteTvClipMedia:', clipId, e.message || e);
   }

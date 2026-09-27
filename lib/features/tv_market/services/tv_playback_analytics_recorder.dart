@@ -30,15 +30,26 @@ class TvPlaybackAnalyticsRecorder {
   int _bufferEvents = 0;
   Duration _maxPosition = Duration.zero;
 
+  /// [since] — ҳисоб бошланадиган ОН. Буни чақирувчи беради ва у одатда
+  /// СВАЙП вақти бўлади, `attach()` вақти эмас.
+  ///
+  /// Нима учун муҳим: `attach()` фақат `prepare()` (ExoPlayer яратилиши +
+  /// `initialize()`, 15 сониягача) ВА `play()` тугагандан КЕЙИН
+  /// чақирилади. Шунинг учун `attachedAt`дан ҳисоблаган `firstFrame`
+  /// кутишнинг деярли ҳаммасини ташлаб юборар ва қурилмада ҳар доим
+  /// ~100 мс чиқарди (2026-09-26 ўлчови: 5 клип — 100, 99, 99, 100 мс).
+  /// Яъни «биринчи кадр» метрикаси йиллар давомида аслида ҲЕЧ НИМАНИ
+  /// ўлчамаган — фойдаланувчи сезадиган кутиш ўлчовдан ташқарида қолган.
   void attach({
     required VideoPlayerController controller,
     required String clipId,
+    DateTime? since,
   }) {
     detach();
     if (clipId.isEmpty) return;
     _ctrl = controller;
     _clipId = clipId;
-    _attachedAt = DateTime.now();
+    _attachedAt = since ?? DateTime.now();
     _listener = _onTick;
     controller.addListener(_listener!);
     _onTick();

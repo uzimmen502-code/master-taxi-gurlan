@@ -12,6 +12,8 @@ class MarketAdService {
     required int price,
     required String sellerName,
     required List<String> imageUrls,
+    String districtId = '',
+    String regionId = '',
   }) async {
     final res = await _fn.httpsCallable('submitMarketAd').call({
       'title': title,
@@ -19,6 +21,10 @@ class MarketAdService {
       'price': price,
       'sellerName': sellerName,
       'imageUrls': imageUrls,
+      // Бўш бўлса сервер эга профилидан олади — эски клиентлар
+      // (Play'даги жорий версия) шу йўл билан ишлайверади.
+      if (districtId.trim().isNotEmpty) 'districtId': districtId.trim(),
+      if (regionId.trim().isNotEmpty) 'regionId': regionId.trim(),
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     return (data['adId'] ?? '') as String;

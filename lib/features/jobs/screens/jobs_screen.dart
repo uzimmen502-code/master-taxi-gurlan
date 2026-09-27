@@ -17,6 +17,7 @@ class JobsScreen extends StatelessWidget {
     super.key,
     this.initialTabIndex = JobsTabs.ad,
     this.openAddSheet = false,
+    this.highlightAdId = '',
   });
 
   /// [JobsTabs.ad], [JobsTabs.service].
@@ -26,6 +27,16 @@ class JobsScreen extends StatelessWidget {
   /// «＋» менюсидан келганда, фойдаланувчи яна бир марта босмаслиги учун.
   final bool openAddSheet;
 
+  /// Бош саҳифадаги қатордан келинганда — АЙНАН ўша эълоннинг `id`си.
+  ///
+  /// Ўша эълон рўйхатнинг ТЕПАСИГА чиқарилади ва ажратиб кўрсатилади.
+  /// Нега шундай: бу экранда эълоннинг ўз тафсилот саҳифаси йўқ —
+  /// карточканинг ўзи тўлиқ маълумот (матн, нарх, телефон, «Қўнғироқ»).
+  /// Шунинг учун «очиш» = ўша карточкани дарҳол кўз олдига чиқариш.
+  /// Аввал бу ерда ҳеч нарса узатилмасди ва фойдаланувчи босган эълонини
+  /// умумий рўйхатдан қайтадан қидирарди.
+  final String highlightAdId;
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -33,19 +44,33 @@ class JobsScreen extends StatelessWidget {
       child: _JobsView(
         initialTabIndex: initialTabIndex,
         openAddSheet: openAddSheet,
+        highlightAdId: highlightAdId,
       ),
     );
   }
+}
+
+/// [highlightAdId] рўйхат тепасига кўчирилган нусхани қайтаради.
+///
+/// Сof функция — виджетсиз тестланади. Эълон топилмаса (муддати тугаган,
+/// ўчирилган ёки бошқа табда) рўйхат ЎЗГАРМАЙДИ.
+List<JobAd> jobsFeedWithHighlightFirst(List<JobAd> feed, String highlightId) {
+  if (highlightId.isEmpty) return feed;
+  final i = feed.indexWhere((a) => a.id == highlightId);
+  if (i <= 0) return feed;
+  return [feed[i], ...feed.take(i), ...feed.skip(i + 1)];
 }
 
 class _JobsView extends StatefulWidget {
   const _JobsView({
     required this.initialTabIndex,
     this.openAddSheet = false,
+    this.highlightAdId = '',
   });
 
   final int initialTabIndex;
   final bool openAddSheet;
+  final String highlightAdId;
 
   @override
   State<_JobsView> createState() => _JobsViewState();
@@ -223,9 +248,15 @@ class _JobsViewState extends State<_JobsView>
         Expanded(
           child: TabBarView(
             controller: _tabCtrl,
-            children: const [
-              _Feed(kindFilter: AdKind.ad),
-              _Feed(kindFilter: AdKind.service),
+            children: [
+              _Feed(
+                kindFilter: AdKind.ad,
+                highlightAdId: widget.highlightAdId,
+              ),
+              _Feed(
+                kindFilter: AdKind.service,
+                highlightAdId: widget.highlightAdId,
+              ),
             ],
           ),
         ),
@@ -236,9 +267,10 @@ class _JobsViewState extends State<_JobsView>
 
 /// Битта таб контенти.
 class _Feed extends StatelessWidget {
-  const _Feed({this.kindFilter});
+  const _Feed({this.kindFilter, this.highlightAdId = ''});
 
   final AdKind? kindFilter;
+  final String highlightAdId;
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +293,13 @@ class _Feed extends StatelessWidget {
           );
         }
         final all = snap.data ?? const <JobAd>[];
-        final list = c.feedForTab(all, kind: kindFilter);
+        // Қидирув бошланганда ажратиб кўрсатиш ўринсиз — фойдаланувчи
+        // энди бошқа нарса қидиряпти.
+        final highlight = c.searchQuery.isEmpty ? highlightAdId : '';
+        final list = jobsFeedWithHighlightFirst(
+          c.feedForTab(all, kind: kindFilter),
+          highlight,
+        );
         if (list.isEmpty) {
           return _EmptyState(
             kind: kindFilter,
@@ -271,7 +309,10 @@ class _Feed extends StatelessWidget {
         return ListView.builder(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 90),
           itemCount: list.length,
-          itemBuilder: (_, i) => AdCard(ad: list[i]),
+          itemBuilder: (_, i) => AdCard(
+            ad: list[i],
+            highlighted: highlight.isNotEmpty && list[i].id == highlight,
+          ),
         );
       },
     );

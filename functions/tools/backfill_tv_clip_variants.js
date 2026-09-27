@@ -46,9 +46,18 @@ const DELAY_MS = argValue('--delay', 20000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// `index.js`даги `TV_CLIP_LADDER_VERSION` билан МОС ТУРИШИ ШАРТ.
+const LADDER_VERSION = 3;
+
 function needsBackfill(d) {
   const variants = d.videoVariants || {};
-  return !variants['360p'];
+  if (!variants['360p']) return true;
+  // Поғона версияси эскилиги — 2026-09-26 дан бошлаб вариантлар ҚИСҚА
+  // ҚИРРА бўйича ўлчанади. Эски клипларда калитлар ('720p' ва ҳк.) ўша-ўша,
+  // лекин вертикал видеода ҳақиқий ўлчам 406×720 / 202×360 бўлиб қолган —
+  // яъни `videoVariants` таркибига қараб буни АЖРАТИБ БЎЛМАЙДИ. Белгиси
+  // йўқ клип = 1-версия.
+  return (Number(d.variantLadder) || 1) < LADDER_VERSION;
 }
 
 async function main() {
@@ -93,7 +102,7 @@ async function main() {
       .reduce((sum, t) => sum + (Number(t.d.duration) || 0), 0);
 
   console.log(`active клиплар:        ${snap.size}`);
-  console.log(`360p аллақачон бор:    ${already}`);
+  console.log(`поғона v${LADDER_VERSION} аллақачон:  ${already}`);
   console.log(`videoUrl йўқ:          ${noVideo}`);
   console.log(`processingStatus=error:${errored} (ўтказиб юборилди)`);
   console.log(`BACKFILL КЕРАК:        ${todo.length}`);

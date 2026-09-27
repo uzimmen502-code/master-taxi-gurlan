@@ -20,6 +20,8 @@ import '../../repositories/home_ticker_repository.dart';
 import '../../shared/widgets/no_internet_banner.dart';
 import 'widgets/home_info_ticker.dart';
 import '../../core/widgets/zone_gate.dart';
+import '../ads/models/ad_model.dart';
+import '../ads/screens/ad_details_screen.dart';
 import '../ads/screens/cheap_products_screen.dart';
 import '../ads/screens/create_ad_screen.dart';
 import '../profile/screens/news_hub_screen.dart';
@@ -28,10 +30,9 @@ import 'widgets/ava_bottom_nav.dart';
 import 'widgets/ava_top_bar.dart';
 import '../bread/screens/bread_screen.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
-import '../dating/screens/dating_home_screen.dart';
+import '../dating/dating_telegram_bot.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
-import '../assistant/assistant_entry.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
@@ -56,7 +57,7 @@ import '../relatives/screens/relatives_screen.dart';
 import 'controllers/active_orders_controller.dart';
 import 'controllers/home_controller.dart';
 import 'home_services_catalog.dart';
-import 'widgets/ava_quick_actions.dart';
+import 'widgets/home_services_olx_row.dart';
 import 'widgets/active_order_card.dart';
 import 'home_module_gate.dart';
 import 'home_modules_catalog.dart';
@@ -278,14 +279,24 @@ class _HomeViewState extends State<_HomeView> {
     }
   }
 
-  /// Танишув — иловадаги ўз экрани (эга қарори). Эски Telegram бот
-  /// ўчирилмади: у [DatingHomeScreen] нинг AppBar'идаги тугмадан очилади.
+  /// Танишув — ТАШҚИ Telegram бот (@bilish_tanish_bot).
+  ///
+  /// Эга қарори (2026-09-26, аввалги талабга қайтиш): бўлим фойдаланувчини
+  /// тўғридан-тўғри ботга олиб боради. Сабаби ўлчовдан аниқ: ботда 18 744
+  /// ойлик фойдаланувчи бор, иловадаги `dating_profiles` коллекцияси эса
+  /// БЎШ (0 профил) — яъни илова ичидаги экран фойдаланувчини бўш рўйхатга
+  /// олиб борарди.
+  ///
+  /// [DatingHomeScreen] ва унинг CF'лари РЕПОДА ҚОЛАДИ (ўчирилмайди) —
+  /// келажакда бот билан синхронлаш қилинса, улар тайёр туради. Ҳозир
+  /// уларга ҳеч қаердан йўл йўқ.
   Future<void> _openDating() async {
     if (!ServiceConfigHolder.isOpenable('dating')) {
       _showTezKundaSnack();
       return;
     }
-    await _push(const DatingHomeScreen());
+    if (!mounted) return;
+    await openDatingTelegramBot(context);
   }
 
   Future<void> _openModule(HomeModule m) async {
@@ -559,13 +570,10 @@ class _HomeViewState extends State<_HomeView> {
     );
   }
 
-  Future<void> _openAssistant() async {
-    await openAssistantEntry(
-      context,
-      phone: context.read<HomeController>().phone,
-      push: _push,
-    );
-  }
+  // `_openAssistant` олиб ташланди: у фақат эски `AvaQuickActions`
+  // катагида ишлатиларди. AVA ёрдамчиси ҳамон очилади — хизматлар
+  // рўйхатидаги `chatgpt` банди айнан шу `openAssistantEntry` ни
+  // чақиради (`home_services_catalog.dart`).
 
   /// Фаол буюртма карточкаси босилганда — тегишли кузатиш экрани.
   Future<void> _openActiveOrder(HomeActiveOrder order) async {
@@ -612,6 +620,19 @@ class _HomeViewState extends State<_HomeView> {
         market: market,
       ),
     );
+  }
+
+  /// Аҳоли бозори бўлимидаги қатор — АЙНАН ўша эълоннинг тафсилоти.
+  ///
+  /// Илгари бу ерда эълон объекти `(_)` билан ташлаб юбориларди ва
+  /// модулнинг умумий рўйхати очиларди — фойдаланувчи босган эълонини
+  /// рўйхатдан қайтадан қидиришга мажбур эди.
+  Future<void> _openMarketAd(AdModel ad) async {
+    if (!ServiceConfigHolder.isOpenable('cheap_products_home')) {
+      _showTezKundaSnack();
+      return;
+    }
+    await _push(AdDetailsScreen(ad: ad));
   }
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
@@ -714,24 +735,18 @@ class _HomeViewState extends State<_HomeView> {
                             ),
                             SizedBox(height: _sectionGap(context, base: 12)),
                             SizedBox(height: _sectionGap(context, base: 12)),
-                            AvaQuickActions(
-                              actions: defaultQuickActions(
+                            // Хизматлар — OLX бош экранидаги жойлашув:
+                            // 2 қатор, ёнга скролл, ранг доира ичида расм
+                            // (қаранг: [HomeServicesOlxRow] — ўлчамлар
+                            // olx.uz дан жонли олинган). Аввал бу ерда
+                            // 6 та иконкали квадрат тугма (`AvaQuickActions`)
+                            // турарди — эга қарори, 2026-09-26.
+                            HomeServicesOlxRow(
+                              items: buildHomeServices(
                                 context,
-                                onOpenAll: _openAllServices,
-                                onTaxi: () => _openModule(
-                                  HomeModulesCatalog.byId('local_taxi'),
-                                ),
-                                onIntercity: () => _openModule(
-                                  HomeModulesCatalog.byId('intercity'),
-                                ),
-                                onMarket: () => _openModule(
-                                  HomeModulesCatalog.byId(
-                                      'cheap_products_home'),
-                                ),
-                                onAssistant: _openAssistant,
-                                onAvagram: () =>
-                                    _push(const TvMarketFeedScreen()),
+                                a: _serviceActions,
                               ),
+                              onTitleTap: _openAllServices,
                             ),
                             const SizedBox(height: 16),
                             HomeGlobalSearchBar(
@@ -760,9 +775,12 @@ class _HomeViewState extends State<_HomeView> {
                                     initialTabIndex: JobsTabs.ad,
                                   ),
                                 ),
-                                onOpenAd: (_) => _push(
-                                  const JobsScreen(
+                                // АЙНАН босилган эълон тепага чиқади ва
+                                // ажратиб кўрсатилади.
+                                onOpenAd: (ad) => _push(
+                                  JobsScreen(
                                     initialTabIndex: JobsTabs.ad,
+                                    highlightAdId: ad.id,
                                   ),
                                 ),
                               ),
@@ -775,9 +793,10 @@ class _HomeViewState extends State<_HomeView> {
                                     initialTabIndex: JobsTabs.service,
                                   ),
                                 ),
-                                onOpenAd: (_) => _push(
-                                  const JobsScreen(
+                                onOpenAd: (ad) => _push(
+                                  JobsScreen(
                                     initialTabIndex: JobsTabs.service,
+                                    highlightAdId: ad.id,
                                   ),
                                 ),
                               ),
@@ -819,10 +838,9 @@ class _HomeViewState extends State<_HomeView> {
                                   HomeModulesCatalog.byId(
                                       'cheap_products_home'),
                                 ),
-                                onOpenAd: (_) => _openModule(
-                                  HomeModulesCatalog.byId(
-                                      'cheap_products_home'),
-                                ),
+                                // АЙНАН босилган эълон очилади (умумий
+                                // рўйхат эмас) — тафсилот экрани бор.
+                                onOpenAd: _openMarketAd,
                               ),
                             ],
                             if (HomeModuleGate.showInGrid(

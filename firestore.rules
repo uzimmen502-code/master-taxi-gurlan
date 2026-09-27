@@ -2055,10 +2055,18 @@ service cloud.firestore {
           && request.resource.data.imageUrls is list
           && request.resource.data.imageUrls.size() >= 1
           && request.resource.data.imageUrls.size() <= 5
+          // `districtId`/`regionId` — эга МАҲСУЛОТ ҳудудини тузата олиши
+          // учун (аудит, 2026-09-27). Мавжудлиги `geo_districts` бўйича
+          // текширилади: ёлғон id ёзилса эълон ҳеч кимнинг лентасида
+          // кўринмай қоларди.
           && changed.hasOnly([
                 'title', 'titleLower', 'searchTokens', 'description', 'price',
-                'sellerName', 'imageUrls', 'status', 'updatedAt'
+                'sellerName', 'imageUrls', 'status', 'updatedAt',
+                'districtId', 'regionId'
               ])
+          && (!changed.hasAny(['districtId'])
+              || (request.resource.data.districtId is string
+                  && exists(/databases/$(database)/documents/geo_districts/$(request.resource.data.districtId))))
           && (!('searchTokens' in request.resource.data)
               || (request.resource.data.searchTokens is list
                   && request.resource.data.searchTokens.size() <= 64))

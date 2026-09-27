@@ -10,11 +10,13 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../onboarding/screens/phone_reverify_screen.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
+import '../widgets/ad_district_field.dart';
 
 /// Онлайн бозорга янги эълон жойлаш — профессионал форма.
 class CreateAdScreen extends StatefulWidget {
@@ -30,6 +32,10 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   final _priceCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
 
+  /// Эълоннинг ҳудуди. Стандарти — сотувчининг ўз тумани
+  /// ([_loadDefaultDistrict]), лекин ўзгартириш мумкин.
+  AdDistrictValue _district = AdDistrictValue.empty;
+
   final List<XFile> _newImages = [];
   bool _loading = false;
   bool _checkedLimit = false;
@@ -44,7 +50,10 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkLimit());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLimit();
+      _loadDefaultDistrict();
+    });
   }
 
   Future<void> _checkLimit() async {
@@ -79,6 +88,27 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
   Future<String> _ownerId() async {
     final prefs = await SharedPreferences.getInstance();
     return canonicalPhoneId(prefs.getString('user_phone') ?? '');
+  }
+
+  /// Стандарт ҳудуд — фойдаланувчининг ўз тумани.
+  ///
+  /// 10 ҳолатдан 9 тасида мол ҳам ўша ерда, шунинг учун фойдаланувчи
+  /// одатда ҳеч нарса танламайди. Профилда туман бўлмаса майдон бўш
+  /// қолади ва валидатор танлашни талаб қилади — бу ҳам фойда: ўша
+  /// пайтгача бундай эълон ТУМАНСИЗ чиқиб, барча туманда кўринарди.
+  Future<void> _loadDefaultDistrict() async {
+    final districtId = ServiceConfigHolder.districtId.trim();
+    if (districtId.isEmpty) return;
+    final regionId = ServiceConfigHolder.regionId.trim();
+    final label = ServiceConfigHolder.districtLabel.trim();
+    if (!mounted || label.isEmpty) return;
+    setState(() {
+      _district = AdDistrictValue(
+        districtId: districtId,
+        regionId: regionId,
+        label: label,
+      );
+    });
   }
 
   String _sellerName() {
@@ -131,6 +161,15 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_district.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('ad_district_required')),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
     if (_newImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -169,13 +208,19 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
     if (!mounted) return;
     setState(() => _loading = true);
     final limitFullMsg = context.tr('create_ad_err_limit_full');
+    final repo = context.read<AdsRepository>();
+    final storage = context.read<AdsStorageService>();
+    // Расмлар CF'дан ОЛДИН юкланади (CF'га тайёр URL керак). Демак CF
+    // рад этса — улар Storage'да эгасиз қолади. Аввал шундай бўларди ва
+    // уларни ҳеч нарса тозаламасди: `deleteAdImages` фақат ҲУЖЖАТ
+    // ўчирилганда чақиларди, ҳужжат эса яратилмаган (аудит, 2026-09-27).
+    // Шунинг учун юкланган URL'ларни шу ерда ушлаб турамиз.
+    var uploaded = const <String>[];
     try {
-      final repo = context.read<AdsRepository>();
-      final storage = context.read<AdsStorageService>();
       if (!await repo.canCreateAd(ownerId)) {
         throw StateError(limitFullMsg);
       }
-      final urls = await storage.uploadImages(
+      uploaded = await storage.uploadImages(
         ownerId: ownerId,
         images: _newImages,
       );
@@ -184,14 +229,28 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
         description: _descCtrl.text.trim(),
         price: int.parse(_priceCtrl.text.trim()),
         sellerName: _sellerName(),
-        imageUrls: urls,
+        imageUrls: uploaded,
+        districtId: _district.districtId,
+        regionId: _district.regionId,
       );
+      // Муваффақиятли — энди расмлар ҳужжатга тегишли, тозаланмайди.
+      uploaded = const [];
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.tr('create_ad_success'))),
       );
       Navigator.pop(context);
     } catch (e) {
+      // Best-effort тозалаш: бу ҳам йиқилса фойдаланувчига кўрсатадиган
+      // янги хато йўқ — у аллақачон асосий хатони кўради.
+      if (uploaded.isNotEmpty) {
+        try {
+          await storage.deleteAdImages(
+            ownerId: ownerId,
+            imageUrls: uploaded,
+          );
+        } catch (_) {}
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -420,6 +479,13 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                       }
                       return null;
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  // Эълоннинг ҳудуди — МАҲСУЛОТ қаерда (сотувчи қаерда
+                  // яшаши эмас). Қаранг: [AdDistrictField] ҳужжати.
+                  AdDistrictField(
+                    value: _district,
+                    onChanged: (v) => setState(() => _district = v),
                   ),
                   const SizedBox(height: 8),
                   Container(

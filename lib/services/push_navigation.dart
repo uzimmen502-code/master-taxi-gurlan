@@ -10,7 +10,7 @@ import '../features/intercity_taxi/driver/intercity_driver_resume.dart';
 import '../features/intercity_taxi/driver/screens/intercity_driver_panel_screen.dart';
 import '../features/intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
 import '../features/relatives/screens/relatives_screen.dart';
-import '../features/dating/screens/dating_home_screen.dart';
+import '../features/dating/dating_telegram_bot.dart';
 import '../l10n/app_localizations.dart';
 import '../features/ads/screens/my_ads_screen.dart';
 import '../features/jobs/screens/jobs_screen.dart';
@@ -371,10 +371,12 @@ class PushNavigation {
       return;
     }
 
+    // Танишув — ТАШҚИ Telegram бот (қаранг: `HomeScreen._openDating`).
+    // `dating_youth_promo` — фойдаланувчини танишувга таклиф қилувчи
+    // хабарнома; у иловадаги БЎШ экранни эмас, айнан ботни очиши керак,
+    // акс ҳолда таклиф ҳеч қаерга олиб бормайди.
     if (screen == 'dating' || type == 'dating_youth_promo') {
-      await nav.push(
-        MaterialPageRoute(builder: (_) => const DatingHomeScreen()),
-      );
+      await openDatingTelegramBot(nav.context);
       return;
     }
 

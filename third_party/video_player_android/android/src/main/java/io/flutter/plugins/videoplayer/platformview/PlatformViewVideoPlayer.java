@@ -57,17 +57,23 @@ public class PlatformViewVideoPlayer extends VideoPlayer {
         options,
         () -> {
           androidx.media3.exoplayer.trackselection.DefaultTrackSelector trackSelector =
-              new androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context);
+              // AVA: qisqa-format ABR — pog'ona 10s emas, ~1.5s ichida ko'tariladi.
+              io.flutter.plugins.videoplayer.AvaTrackSelection.create(context);
           ExoPlayer.Builder builder =
               new ExoPlayer.Builder(context)
                   .setTrackSelector(trackSelector)
                   // AVA: qisqa-format lenta uchun chegaralangan bufer.
                   .setLoadControl(io.flutter.plugins.videoplayer.AvaLoadControl.create())
-                  // AVA: birinchi variant doim eng pasti (prefetch kesh'iga mos).
+                  // AVA: birinchi variant doim eng pasti (prefetch kesh'iga mos);
+                  // metr process-wide, ya'ni o'lchov kliplar orasida saqlanadi.
                   .setBandwidthMeter(
                       io.flutter.plugins.videoplayer.AvaBandwidthMeter.create(context))
                   .setMediaSourceFactory(asset.getMediaSourceFactory(context));
-          return builder.build();
+          ExoPlayer player = builder.build();
+          // AVA: ABR diagnostikasi — `adb logcat -s AvaPlayback`.
+          player.addAnalyticsListener(
+              new io.flutter.plugins.videoplayer.AvaPlaybackLog());
+          return player;
         });
   }
 

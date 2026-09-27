@@ -104,10 +104,15 @@ void main() {
           child: SizedBox.shrink(),
         ),
       );
-      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+      expect(find.byKey(kSeeAllArrowKey), findsNothing);
     });
 
-    testWidgets('босиш майдони камида 44', (tester) async {
+    testWidgets('босиш майдони камида 32', (tester) async {
+      // 44 → 32 (эга қарори, 2026-09-27: сарлавҳа билан майдон
+      // орасидаги масофа қисқартирилсин). Айнан шу қиймат сарлавҳа
+      // ҚАТОРИНИНГ баландлигини белгилар эди — сарлавҳа матни 20px,
+      // қолгани бўш жой. Тугманинг ЭНИ ўзгармади (матн + стрелка +
+      // чекинма), шунинг учун тегиш қийинлашмайди.
       await _pump(
         tester,
         AvaSection(
@@ -119,12 +124,75 @@ void main() {
       );
       final box = tester.getSize(
         find.ancestor(
-          of: find.byIcon(Icons.arrow_forward_rounded),
+          of: find.byKey(kSeeAllArrowKey),
           matching: find.byType(ConstrainedBox),
         ).first,
       );
-      expect(box.height, greaterThanOrEqualTo(44.0));
+      expect(box.height, greaterThanOrEqualTo(32.0));
     });
+
+    testWidgets('стрелка чизилган — статик иконка эмас', (tester) async {
+      // `MaterialIcons` статик шрифт, `Icon(weight: …)` унга таъсир
+      // қилмайди. Стрелка қалин бўлиши учун у CustomPaint билан
+      // чизилади — кимдир уни яна `Icon`га қайтарса, шу тест айтади.
+      await _pump(
+        tester,
+        AvaSection(
+          title: 'AVAGram',
+          status: AvaSectionStatus.ready,
+          onSeeAll: () {},
+          child: const SizedBox.shrink(),
+        ),
+      );
+      expect(find.byKey(kSeeAllArrowKey), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+    });
+  });
+
+  group('AvaRowPager — қатор баландлиги матнни кесмайди', () {
+    // 2026-09-27, қурилмада (TECNO LH7n, font_scale=1.3): лентадаги ҳар
+    // бир қаторнинг пастки думлари («р», «у») қирқилган эди. Сабаб —
+    // `rowHeight` қатъий 14px const эди, 130% шрифтда эса матн 18.2px
+    // жой сўрайди.
+    //
+    // Эски тестлар буни ЎТКАЗИБ ЮБОРГАН: улар `takeException()` ни
+    // текширарди, `SizedBox` эса тошган болани хатосиз, ЖИМГИНА
+    // қирқади. Шунинг учун бу ерда баландликлар ўзаро солиштирилади.
+    const sample = 'Электрик — уй симларини тортиш';
+
+    for (final scale in [1.0, 1.3, 2.0]) {
+      testWidgets('матнли қатор (×$scale)', (tester) async {
+        late double rowH;
+        await _pump(
+          tester,
+          Builder(
+            builder: (c) {
+              rowH = AvaRowPager.textRowHeight(c);
+              return const Text(
+                sample,
+                maxLines: 1,
+                style: AvaText.feedRow,
+              );
+            },
+          ),
+          scale: scale,
+        );
+        final textH = tester.getSize(find.byType(Text)).height;
+        expect(
+          rowH,
+          greaterThanOrEqualTo(textH),
+          reason: 'қатор ($rowH) матндан ($textH) паст — кесилади',
+        );
+      });
+
+      // Эслатма (2026-09-27): олдин бу ерда «аватарли қатор» учун
+      // алоҳида тест бор эди. Эга қарори бўйича танишув бўлими ҳам
+      // AYNAN `textRowHeight` ни ишлатадиган бўлди ва `avatarRow`
+      // константаси олиб ташланди, шунинг учун у тест тавтологияга
+      // айланиб қолди (иккала томон бир функцияни чақирар эди) —
+      // сохта тест сақлагандан кўра олиб ташланди. Танишув қаторининг
+      // баландлиги энди ТУЗИЛИШ жиҳатидан кафолатланган.
+    }
   });
 
   group('130% шрифтда кесилиш йўқ', () {

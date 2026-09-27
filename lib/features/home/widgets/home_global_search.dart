@@ -176,46 +176,51 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
             border: Border.all(color: c.line),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _ctrl,
-                  focusNode: _focus,
-                  onChanged: _onChanged,
-                  textInputAction: TextInputAction.search,
-                  style: AvaText.body.copyWith(color: c.ink),
-                  decoration: InputDecoration(
-                    hintText: context.tr('home_search_hint'),
-                    suffixIcon: empty
-                        ? null
-                        : IconButton(
-                            tooltip: context.tr('home_search_clear'),
-                            onPressed: _clear,
-                            icon: Icon(Icons.close_rounded,
-                                size: 18, color: c.ink3),
-                          ),
-                    filled: false,
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+          // `IntrinsicHeight` шарт: скролл ичида баландлик чегарасиз
+          // келади, `stretch` эса уни infinity га чўзиб NaN матрица
+          // ҳосил қилар эди (қурилмада бутун саҳифа устма-уст тушган).
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    focusNode: _focus,
+                    onChanged: _onChanged,
+                    textInputAction: TextInputAction.search,
+                    style: AvaText.body.copyWith(color: c.ink),
+                    decoration: InputDecoration(
+                      hintText: context.tr('home_search_hint'),
+                      suffixIcon: empty
+                          ? null
+                          : IconButton(
+                              tooltip: context.tr('home_search_clear'),
+                              onPressed: _clear,
+                              icon: Icon(Icons.close_rounded,
+                                  size: 18, color: c.ink3),
+                            ),
+                      filled: false,
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                    ),
                   ),
                 ),
-              ),
-              Material(
-                color: c.accentLime,
-                child: InkWell(
-                  onTap: () => _onChanged(_ctrl.text),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Icon(Icons.search_rounded,
-                        size: 18, color: c.accentLimeInk),
+                Material(
+                  color: c.brand,
+                  child: InkWell(
+                    onTap: () => _onChanged(_ctrl.text),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Icon(Icons.search_rounded,
+                          size: 18, color: c.brandInk),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (showPanel) ...[

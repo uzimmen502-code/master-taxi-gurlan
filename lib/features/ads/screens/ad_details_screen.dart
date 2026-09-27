@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/utils/formatters.dart';
@@ -30,6 +31,15 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   static int _similarEmpty = 0;
   static int _similarErrors = 0;
 
+  /// Шу сеансда ҳисобланган эълонлар — битта эълон бир марта.
+  ///
+  /// Аввал `incrementViews` экран ҲАР очилганда ишлар эди: орқага-олдинга
+  /// юриш ҳисобни шишириб юборарди, эга ўз эълонини очса ҳам +1 бўларди
+  /// (аудит, 2026-09-27). AVAGram'да бу аллақачон тўғри қилинган
+  /// (`TvClipViewRecorder`: вақт чегараси + сеанс + 24 соат дедупи ва
+  /// эганинг ўзи ҳисобланмайди) — бу ерда ўшанинг ихчам шакли.
+  static final Set<String> _countedThisSession = <String>{};
+
   late final Future<List<AdModel>> _similarAdsFuture;
   bool _similarOutcomeLogged = false;
 
@@ -39,9 +49,38 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
     _similarAdsFuture = _enableSimilarAds
         ? context.read<AdsRepository>().getSimilarAds(current: widget.ad, limit: 6)
         : Future.value(const <AdModel>[]);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdsRepository>().incrementViews(widget.ad.id);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _countViewOnce());
+  }
+
+  Future<void> _countViewOnce() async {
+    final ad = widget.ad;
+    if (ad.id.isEmpty) return;
+    // Фаол бўлмаган эълонда қоида барибир рад этади — бекорга ёзмаймиз.
+    if (!ad.isActive) return;
+    if (!_countedThisSession.add(ad.id)) return;
+
+    final me = phoneDigits(await _myPhone());
+    // Эга ўз эълонини очганда ҳисоб ошмайди.
+    if (me.isNotEmpty && phonesMatch(me, ad.ownerId)) return;
+
+    try {
+      if (!mounted) return;
+      await context.read<AdsRepository>().incrementViews(ad.id);
+    } catch (e) {
+      // Ҳисоб — иккинчи даражали; узилса экран барибир ишлайверади.
+      // Аввал бу чақирув `await`сиз эди ва хато Zone'га чиқиб кетарди.
+      _countedThisSession.remove(ad.id);
+      debugPrint('[AdDetails] views: $e');
+    }
+  }
+
+  Future<String> _myPhone() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('user_phone') ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   void _logSimilarAdsError(Object error, [StackTrace? stackTrace]) {

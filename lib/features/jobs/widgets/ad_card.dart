@@ -15,9 +15,14 @@ class AdCard extends StatelessWidget {
   const AdCard({
     super.key,
     required this.ad,
+    this.highlighted = false,
   });
 
   final JobAd ad;
+
+  /// Бош саҳифадаги қатордан айнан шу эълонга келинган — кўз дарҳол
+  /// топиши учун контури қалин ва ранги ажралиб туради.
+  final bool highlighted;
 
   Color get _kindColor => JobsColors.accentFor(ad.kind);
 
@@ -88,12 +93,17 @@ class AdCard extends StatelessWidget {
         color: JobsColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: mine ? color.withValues(alpha: 0.45) : JobsColors.border,
+          color: highlighted
+              ? color
+              : (mine ? color.withValues(alpha: 0.45) : JobsColors.border),
+          width: highlighted ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
+              color: highlighted
+                  ? color.withValues(alpha: 0.22)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: highlighted ? 10 : 6,
               offset: const Offset(0, 2)),
         ],
       ),

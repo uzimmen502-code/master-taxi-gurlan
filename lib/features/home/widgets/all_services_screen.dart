@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/ava_tokens.dart';
 import '../home_module_gate.dart';
+import 'service_circle_tile.dart';
 import 'services_spotlight_carousel.dart';
 
-/// Барча кўринадиган хизматлар — битта экранда грид.
+/// Барча кўринадиган хизматлар — OLX бош экранидаги «Разделы на сервисе
+/// OLX» услубидаги грид.
+///
+/// Услуб olx.uz дан 2026-09-26 да жонли ўлчанган — қаранг:
+/// [ServiceCircleTile] ҳужжати (88px доира, 156px катак, 16/600 ёрлиқ,
+/// рамкасиз ва соясиз).
 class AllServicesScreen extends StatelessWidget {
   const AllServicesScreen({super.key, required this.items});
 
@@ -13,21 +19,26 @@ class AllServicesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ava;
     final visible = items
         .where((e) => HomeModuleGate.showInGrid(e.moduleId))
         .toList(growable: false);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4FAF2),
+      backgroundColor: c.bg,
       appBar: AppBar(
-        backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
+        backgroundColor: c.surface,
+        foregroundColor: c.ink,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shape: Border(bottom: BorderSide(color: c.line)),
         title: Text(
           context.tr('home_services_all_title'),
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
             fontSize: 18,
+            color: c.ink,
           ),
         ),
       ),
@@ -35,24 +46,25 @@ class AllServicesScreen extends StatelessWidget {
           ? Center(
               child: Text(
                 context.tr('home_not_available'),
-                style: const TextStyle(
-                  color: Color(0xFF4A6741),
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: c.ink2, fontWeight: FontWeight.w600),
               ),
             )
           : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 10,
-                childAspectRatio: 0.88,
+              padding: const EdgeInsets.fromLTRB(12, 18, 12, 32),
+              // `mainAxisExtent` — катак баландлиги АНИҚ 156px (OLX'даги
+              // қиймат); `maxCrossAxisExtent` эса устун сонини экран
+              // кенглигига қараб ўзи танлайди: телефонда 3, кенгроқ
+              // экранда 4–5. Шунда доира ҳамма жойда бир хил ўлчамда
+              // қолади — фақат оралиқ ўзгаради.
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 132,
+                mainAxisExtent: ServiceCircleTile.tileHeight,
+                mainAxisSpacing: 6,
+                crossAxisSpacing: 6,
               ),
               itemCount: visible.length,
-              itemBuilder: (context, index) {
-                return ServiceSpotlightTile(item: visible[index]);
-              },
+              itemBuilder: (context, index) =>
+                  ServiceCircleTile(item: visible[index]),
             ),
     );
   }

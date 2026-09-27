@@ -145,6 +145,7 @@ class _HomeEvSectionState extends State<HomeEvSection> {
     final center = _items.isEmpty ? null : _items.first;
 
     return AvaSection(
+      moduleId: 'ev_charging',
       title: context.tr('home_module_ev_charging'),
       status: _status,
       onSeeAll: widget.onOpenMap,

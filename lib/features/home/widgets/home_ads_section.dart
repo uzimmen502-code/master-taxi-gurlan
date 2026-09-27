@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/session_shuffle.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../home_demo_feed.dart';
 import 'ava_section.dart';
 
 /// 2 ва 3-бўлимлар: «Яқинингиздаги эълонлар» ва «…хизмат таклифлари».
@@ -28,7 +31,9 @@ class HomeAdsSection extends StatefulWidget {
   final VoidCallback onOpenAll;
   final void Function(JobAd ad) onOpenAd;
 
-  static const limit = 5;
+  /// Реал эълонлар шунчагача кўрсатилади; қолган жой намунавий
+  /// қаторларга берилади (қаранг: [HomeDemoFeed]).
+  static const limit = HomeDemoFeed.capacity;
 
   @override
   State<HomeAdsSection> createState() => _HomeAdsSectionState();
@@ -36,6 +41,7 @@ class HomeAdsSection extends StatefulWidget {
 
 class _HomeAdsSectionState extends State<HomeAdsSection> {
   final _repo = JobsRepository();
+  final Random _rnd = sessionRandom();
   StreamSubscription<List<JobAd>>? _sub;
 
   AvaSectionStatus _status = AvaSectionStatus.loading;
@@ -60,10 +66,15 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
       (list) {
         if (!mounted) return;
         setState(() {
-          _items = list;
-          _status = list.isEmpty
-              ? AvaSectionStatus.empty
-              : AvaSectionStatus.ready;
+          // Ҳар очилишда бошқа тартиб; кўрилиб турганлар ўрнида қолади.
+          _items = mergeShuffled(
+            current: _items,
+            incoming: list,
+            idOf: (a) => a.id,
+            random: _rnd,
+          );
+          // Намунавий қаторлар доим бор, шунинг учун «бўш» ҳолат йўқ.
+          _status = AvaSectionStatus.ready;
         });
       },
       onError: (Object e) {
@@ -81,26 +92,35 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ava;
+    // Реал эълонлардан кейин қолган жой намунавий қаторларга берилади;
+    // реал эълон 10 тага етганда улар ўз-ўзидан йўқолади.
+    final demo = HomeDemoFeed.fill(
+      context,
+      keys: widget.adType == 'service'
+          ? HomeDemoFeed.serviceKeys
+          : HomeDemoFeed.adKeys,
+      realCount: _items.length,
+      random: _rnd,
+    );
     return AvaSection(
+      moduleId: 'jobs',
       title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(AvaRadius.card),
-          border: Border.all(color: c.line),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          children: [
-            for (var i = 0; i < _items.length; i++)
+      // Ботиқ майдон — қаторлар унинг ичида (қаранг: [AvaInsetPanel]).
+      child: AvaInsetPanel(
+        child: AvaRowPager(
+          rowHeight: AvaRowPager.textRowHeight(context),
+          onOpenModule: widget.onOpenAll,
+          rows: [
+            for (final ad in _items)
               _AdTitleRow(
-                title: _items[i].titleOrText,
-                onTap: () => widget.onOpenAd(_items[i]),
+                title: ad.titleOrText,
+                onTap: () => widget.onOpenAd(ad),
               ),
+            for (final label in demo)
+              _AdTitleRow(title: label, onTap: widget.onOpenAll),
           ],
         ),
       ),
@@ -118,33 +138,32 @@ class _AdTitleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
+    // Қаторлар ораси айнан 1px: ички вертикал чет йўқ, масофани
+    // `Column`даги 1px оралиқ беради.
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(top: 6),
-              decoration: BoxDecoration(
-                color: c.ink,
-                shape: BoxShape.circle,
-              ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: c.ink,
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AvaText.body.copyWith(color: c.ink),
-              ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AvaText.feedRow.copyWith(color: c.inkRow),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

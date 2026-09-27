@@ -35,19 +35,38 @@ class TvClipCompress {
     VideoQuality.Res640x480Quality,
   ];
 
-  static VideoQuality qualityFor({int? height, int? bytes}) {
+  /// Қарор ҚИСҚА ҚИРРА (short edge) бўйича қабул қилинади.
+  ///
+  /// Аввал фақат `height` қаралар эди. AVAGram — вертикал лента: портрет
+  /// клипда баландлик УЗУН қирра (720×1280 да h=1280). Шунинг учун
+  /// «баландлиги 720 дан катта» шарти портрет видеода ДОИМО тўғри чиқар
+  /// ва аллақачон 720×1280 бўлган, кичик (≤3.5MB) файл ҳам бекорга
+  /// қайта кодланарди — яъни ҳар юкланган клип иловада бир марта, кейин
+  /// серверда яна бир марта йўқотишли кодлашдан ўтарди (икки авлод
+  /// сифат йўқотиш). Қисқа қирра билан бундай файл умуман тегилмайди.
+  ///
+  /// [width] берилмаса — эски хулқ (`height` қисқа қирра деб қаралади),
+  /// шунинг учун эскирган чақирувлар ўзгармайди.
+  static int _shortEdge(int? width, int? height) {
+    final w = width ?? 0;
     final h = height ?? 0;
+    if (w > 0 && h > 0) return w < h ? w : h;
+    return h;
+  }
+
+  static VideoQuality qualityFor({int? height, int? width, int? bytes}) {
+    final s = _shortEdge(width, height);
     final b = bytes ?? 0;
-    if (h > 0 && h <= 540 && b > skipIfAtMostBytes) {
+    if (s > 0 && s <= 540 && b > skipIfAtMostBytes) {
       return VideoQuality.Res960x540Quality;
     }
     return VideoQuality.Res1280x720Quality;
   }
 
-  static bool shouldSkip({int? height, int? bytes}) {
-    final h = height ?? 0;
+  static bool shouldSkip({int? height, int? width, int? bytes}) {
+    final s = _shortEdge(width, height);
     final b = bytes ?? 0;
-    return b > 0 && b <= skipIfAtMostBytes && h > 0 && h <= maxHeight;
+    return b > 0 && b <= skipIfAtMostBytes && s > 0 && s <= maxHeight;
   }
 
   /// Сиқишдан олдин кесиш керакми — керак бўлмаса `null`.
@@ -84,9 +103,11 @@ class TvClipCompress {
       }
       final trimTo = trimToSeconds(info.duration);
       final height = info.height;
+      final width = info.width;
       // Кесиш керак бўлса сиқишни ўтказиб юбориб бўлмайди — кесиш
       // айнан сиқиш давомида бажарилади.
-      if (trimTo == null && shouldSkip(height: height, bytes: bytesIn)) {
+      if (trimTo == null &&
+          shouldSkip(height: height, width: width, bytes: bytesIn)) {
         return TvClipCompressResult(
           path: path,
           bytesIn: bytesIn,
@@ -100,7 +121,8 @@ class TvClipCompress {
         onProgress?.call(n.clamp(0.0, 1.0));
       });
       try {
-        final startQuality = qualityFor(height: height, bytes: bytesIn);
+        final startQuality =
+            qualityFor(height: height, width: width, bytes: bytesIn);
         var startIndex = _qualityLadder.indexOf(startQuality);
         if (startIndex < 0) startIndex = 0;
 

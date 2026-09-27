@@ -21,6 +21,9 @@ abstract final class AvaLight {
   static const surface2 = Color(0xFFEEF1F6);
   static const line = Color(0xFFDFE4EC);
   static const ink = Color(0xFF1A1A1A);
+  static const inkRow = Color(0xFF3A3A3A);
+  static const insetEdgeTop = Color(0xFFD2D9E4);
+  static const insetEdgeBottom = Color(0xFFFBFCFE);
   static const ink2 = Color(0xFF6B6B6B);
   static const ink3 = Color(0xFF9E9E9E);
   static const brand = Color(0xFF1E4FD8);
@@ -37,16 +40,6 @@ abstract final class AvaLight {
   /// Қиймат палитрага мослаб танланди — эга тасдиқласа, ўзгармайди.
   static const danger = Color(0xFFC0332E);
   static const dangerSoft = Color(0xFFFDECEA);
-
-  /// Лайм акцент — фақат «Барча хизматлар» катаги ва қидирув майдони
-  /// учун (эга қарори). `brand`ни алмаштирмайди, унга қўшимча.
-  static const accentLime = Color(0xFFCCD631);
-
-  /// Лайм фон устидаги матн/иконка — контраст учун қора-яшил тон.
-  static const accentLimeInk = Color(0xFF2B2E1A);
-
-  /// Лайм фонсиз (оддий) ҳолатдаги хизмат-иконка ранги — тўқроқ стоп.
-  static const accentLimeIcon = Color(0xFF8A9424);
 }
 
 /// Қоронғи режим хом қийматлари (ҳозирча уланмаган).
@@ -56,6 +49,9 @@ abstract final class AvaDark {
   static const surface2 = Color(0xFF232834);
   static const line = Color(0xFF333A48);
   static const ink = Color(0xFFEDEFF4);
+  static const inkRow = Color(0xFFFFFFFF);
+  static const insetEdgeTop = Color(0xFF151922);
+  static const insetEdgeBottom = Color(0xFF2E3543);
   static const ink2 = Color(0xFFAEB5C4);
   static const ink3 = Color(0xFF7C8494);
   static const brand = Color(0xFF6E93FF);
@@ -70,11 +66,6 @@ abstract final class AvaDark {
   /// Қаранг: [AvaLight.danger].
   static const danger = Color(0xFFFF8A80);
   static const dangerSoft = Color(0xFF3A1D1B);
-
-  /// Қаранг: [AvaLight.accentLime].
-  static const accentLime = Color(0xFFCCD631);
-  static const accentLimeInk = Color(0xFF2B2E1A);
-  static const accentLimeIcon = Color(0xFFB9C93E);
 }
 
 // ─── Тема кенгайтмаси ───────────────────────────────────────────────────────
@@ -91,6 +82,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     required this.surface2,
     required this.line,
     required this.ink,
+    required this.inkRow,
+    required this.insetEdgeTop,
+    required this.insetEdgeBottom,
     required this.ink2,
     required this.ink3,
     required this.brand,
@@ -103,9 +97,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
     required this.chip,
     required this.danger,
     required this.dangerSoft,
-    required this.accentLime,
-    required this.accentLimeInk,
-    required this.accentLimeIcon,
   });
 
   /// Экран фони.
@@ -122,6 +113,20 @@ class AvaColors extends ThemeExtension<AvaColors> {
 
   /// Асосий матн.
   final Color ink;
+
+  /// Бош саҳифа бўлимидаги ЭЪЛОН ҚАТОРИ матни — асосий матндан САЛ очроқ
+  /// (эга қарори, 2026-09-26). Атайлаб алоҳида токен: глобал [ink] га
+  /// тегилмайди, яъни қолган экранлардаги матн ўз рангида қолади.
+  final Color inkRow;
+
+  /// Ботиқ майдоннинг ТЕПА чети — фондан тўқроқ.
+  ///
+  /// Flutter'да CSS'даги inset соя йўқ, шунинг учун «чуқурча» ҳисси
+  /// икки четнинг фарқи билан ясалади: тепаси тўқ, пасти оч.
+  final Color insetEdgeTop;
+
+  /// Ботиқ майдоннинг ПАСТ чети — фондан очроқ.
+  final Color insetEdgeBottom;
 
   /// Иккиламчи матн.
   final Color ink2;
@@ -153,17 +158,15 @@ class AvaColors extends ThemeExtension<AvaColors> {
   final Color danger;
   final Color dangerSoft;
 
-  /// Лайм акцент — қаранг: [AvaLight.accentLime].
-  final Color accentLime;
-  final Color accentLimeInk;
-  final Color accentLimeIcon;
-
   static const light = AvaColors(
     bg: AvaLight.bg,
     surface: AvaLight.surface,
     surface2: AvaLight.surface2,
     line: AvaLight.line,
     ink: AvaLight.ink,
+    inkRow: AvaLight.inkRow,
+    insetEdgeTop: AvaLight.insetEdgeTop,
+    insetEdgeBottom: AvaLight.insetEdgeBottom,
     ink2: AvaLight.ink2,
     ink3: AvaLight.ink3,
     brand: AvaLight.brand,
@@ -176,9 +179,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
     chip: AvaLight.chip,
     danger: AvaLight.danger,
     dangerSoft: AvaLight.dangerSoft,
-    accentLime: AvaLight.accentLime,
-    accentLimeInk: AvaLight.accentLimeInk,
-    accentLimeIcon: AvaLight.accentLimeIcon,
   );
 
   static const dark = AvaColors(
@@ -187,6 +187,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     surface2: AvaDark.surface2,
     line: AvaDark.line,
     ink: AvaDark.ink,
+    inkRow: AvaDark.inkRow,
+    insetEdgeTop: AvaDark.insetEdgeTop,
+    insetEdgeBottom: AvaDark.insetEdgeBottom,
     ink2: AvaDark.ink2,
     ink3: AvaDark.ink3,
     brand: AvaDark.brand,
@@ -199,9 +202,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
     chip: AvaDark.chip,
     danger: AvaDark.danger,
     dangerSoft: AvaDark.dangerSoft,
-    accentLime: AvaDark.accentLime,
-    accentLimeInk: AvaDark.accentLimeInk,
-    accentLimeIcon: AvaDark.accentLimeIcon,
   );
 
   @override
@@ -211,6 +211,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
     Color? surface2,
     Color? line,
     Color? ink,
+    Color? inkRow,
+    Color? insetEdgeTop,
+    Color? insetEdgeBottom,
     Color? ink2,
     Color? ink3,
     Color? brand,
@@ -223,9 +226,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
     Color? chip,
     Color? danger,
     Color? dangerSoft,
-    Color? accentLime,
-    Color? accentLimeInk,
-    Color? accentLimeIcon,
   }) {
     return AvaColors(
       bg: bg ?? this.bg,
@@ -233,6 +233,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
       surface2: surface2 ?? this.surface2,
       line: line ?? this.line,
       ink: ink ?? this.ink,
+      inkRow: inkRow ?? this.inkRow,
+      insetEdgeTop: insetEdgeTop ?? this.insetEdgeTop,
+      insetEdgeBottom: insetEdgeBottom ?? this.insetEdgeBottom,
       ink2: ink2 ?? this.ink2,
       ink3: ink3 ?? this.ink3,
       brand: brand ?? this.brand,
@@ -245,9 +248,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
       chip: chip ?? this.chip,
       danger: danger ?? this.danger,
       dangerSoft: dangerSoft ?? this.dangerSoft,
-      accentLime: accentLime ?? this.accentLime,
-      accentLimeInk: accentLimeInk ?? this.accentLimeInk,
-      accentLimeIcon: accentLimeIcon ?? this.accentLimeIcon,
     );
   }
 
@@ -261,6 +261,9 @@ class AvaColors extends ThemeExtension<AvaColors> {
       surface2: c(surface2, other.surface2),
       line: c(line, other.line),
       ink: c(ink, other.ink),
+      inkRow: c(inkRow, other.inkRow),
+      insetEdgeTop: c(insetEdgeTop, other.insetEdgeTop),
+      insetEdgeBottom: c(insetEdgeBottom, other.insetEdgeBottom),
       ink2: c(ink2, other.ink2),
       ink3: c(ink3, other.ink3),
       brand: c(brand, other.brand),
@@ -273,9 +276,6 @@ class AvaColors extends ThemeExtension<AvaColors> {
       chip: c(chip, other.chip),
       danger: c(danger, other.danger),
       dangerSoft: c(dangerSoft, other.dangerSoft),
-      accentLime: c(accentLime, other.accentLime),
-      accentLimeInk: c(accentLimeInk, other.accentLimeInk),
-      accentLimeIcon: c(accentLimeIcon, other.accentLimeIcon),
     );
   }
 }
@@ -318,7 +318,11 @@ abstract final class AvaSpace {
   static const double gap = 8;
 
   /// Бўлим сарлавҳаси ↔ мазмуни орасидаги масофа (Avito услуби).
-  static const double sectionHeaderGap = 2;
+  ///
+  /// 2 → 0 (эга қарори, 2026-09-27). Эслатма: кўзга ташланадиган
+  /// масофанинг асосий қисми бу эмас эди — уни «Барчаси» тугмасининг
+  /// босиш майдони ҳосил қиларди (қаранг: `_SeeAllButton.minHeight`).
+  static const double sectionHeaderGap = 0;
 }
 
 /// Босиш майдонининг минимал ўлчами.
@@ -357,6 +361,20 @@ abstract final class AvaText {
     fontSize: 14,
     fontWeight: FontWeight.w400,
     height: 1.35,
+  );
+
+  /// Бош саҳифа бўлимидаги эълон/қатор матни — **12/400, қатор баландлиги
+  /// АНИҚ 14 px** (эга қарори, 2026-09-26: аввал 14 px шрифт ва 18.9 px
+  /// қатор эди — зич лентага баланд ва йирик эди).
+  ///
+  /// `height` — шрифт ўлчамига КЎПАЙТУВЧИ, шунинг учун каср кўринишида
+  /// (14/12) ёзилган: шрифт ўзгарса, махражни ўзгартириш кифоя — қатор
+  /// барибир 14 px бўлиб қолади. Бешала қатор бўлими (эълон, хизмат,
+  /// шаҳарлараро, туман ичида юк, танишув) шу битта жойдан созланади.
+  static const feedRow = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 14 / 12,
   );
 
   /// Изоҳ — 12/400.

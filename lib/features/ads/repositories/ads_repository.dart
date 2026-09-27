@@ -39,12 +39,18 @@ class AdsRepository {
   }
 
   /// Янги эълон — CF `submitMarketAd` (auth + phone=token + лимитлар).
+  ///
+  /// [districtId] — МАҲСУЛОТ қаерда (сотувчи қаерда яшаши эмас). Бўш
+  /// узатилса сервер эски хулққа қайтади: эга профилидан олади
+  /// (`ownerGeoStamp`).
   Future<String> createAd({
     required String title,
     required String description,
     required int price,
     required String sellerName,
     required List<String> imageUrls,
+    String districtId = '',
+    String regionId = '',
   }) {
     return MarketAdService.submitAd(
       title: title,
@@ -52,6 +58,8 @@ class AdsRepository {
       price: price,
       sellerName: sellerName,
       imageUrls: imageUrls,
+      districtId: districtId,
+      regionId: regionId,
     );
   }
 
@@ -164,14 +172,46 @@ class AdsRepository {
     });
   }
 
+  /// Қидирув учун СЕРВЕР томонда торайтирилган ҳовуз.
+  ///
+  /// Аввал қидирув доим `getActiveAds(limit: 200)` устида ишларди, яъни
+  /// 200 тадан эски фаол эълон қидирувда ЖИМГИНА топилмай қоларди
+  /// (аудит, 2026-09-27: ҳозир 46 та фаол эълон бор, шунинг учун ҳали
+  /// сезилмайди — 200 дан ошганда бошланарди).
+  ///
+  /// Энди биринчи сўз `searchTokens` бўйича серверда филтрланади. Токенлар
+  /// кирилл ва лотин вариантини ҳам сақлайди (`buildMarketSearchTokens`,
+  /// CF), шунинг учун ёзув тури муҳим эмас. Топилганлар устида эски
+  /// каталог қидируви (AND + релевантлик) ўзгаришсиз ишлайверади.
+  ///
+  /// Эски эълонларда `searchTokens` бўлмаслиги мумкин — ўшанда бу оқим
+  /// уларни топмайди, шунинг учун қуйида у эски ҳовуз билан бирлашади.
+  Stream<List<AdModel>> _searchPool(String q) {
+    final token = CatalogSearch.normalize(q)
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 2)
+        .firstOrNull;
+    final recent = getActiveAds(limit: feedLimit);
+    if (token == null) return recent;
+
+    final byToken = _cheapQuery()
+        .where('status', isEqualTo: 'active')
+        .where('searchTokens', arrayContains: token)
+        .limit(searchLimit)
+        .snapshots()
+        .map((s) => s.docs.map(AdModel.fromFirestore).toList());
+
+    return mergeListStreams(byToken, recent, idOf: (a) => a.id);
+  }
+
   /// Фаол эълонлар: каталог қидируви (AND + кирилл/лотин) + релевантлик.
   Stream<List<AdModel>> searchActiveAds(
     String query, {
     int limit = searchLimit,
   }) {
     final q = query.trim();
-    final poolLimit = q.isEmpty ? limit : feedLimit;
-    return getActiveAds(limit: poolLimit).map((ads) {
+    final pool = q.isEmpty ? getActiveAds(limit: limit) : _searchPool(q);
+    return pool.map((ads) {
       var list = ads.where((ad) {
         return CatalogSearch.matches(q, [
           ad.title,

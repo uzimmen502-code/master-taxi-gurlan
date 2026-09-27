@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/session_shuffle.dart';
 import '../../../models/dating_public_profile.dart';
 import '../../../repositories/dating_repository.dart';
+import '../home_demo_feed.dart';
 import 'ava_section.dart';
 
 /// 18 ёш — бўлим кўриниши учун энг кичик ёш.
@@ -57,7 +60,9 @@ class HomeDatingSection extends StatefulWidget {
 
   final VoidCallback onOpenAll;
 
-  static const limit = 5;
+  /// Реал профиллар шунчагача; қолган жой намунавий қаторларга берилади.
+  /// Ойнада 5 таси кўринади, қолгани скролл ([AvaRowViewport]).
+  static const limit = HomeDemoFeed.capacity;
 
   @override
   State<HomeDatingSection> createState() => _HomeDatingSectionState();
@@ -65,6 +70,7 @@ class HomeDatingSection extends StatefulWidget {
 
 class _HomeDatingSectionState extends State<HomeDatingSection> {
   final _repo = DatingRepository();
+  final Random _rnd = sessionRandom();
   StreamSubscription<List<DatingPublicProfile>>? _sub;
 
   AvaSectionStatus _status = AvaSectionStatus.loading;
@@ -94,10 +100,15 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
       (list) {
         if (!mounted) return;
         setState(() {
-          _items = list.take(HomeDatingSection.limit).toList();
-          _status = _items.isEmpty
-              ? AvaSectionStatus.empty
-              : AvaSectionStatus.ready;
+          // Ҳар очилишда бошқа тартиб; кўрилиб турганлар ўрнида қолади.
+          _items = mergeShuffled(
+            current: _items,
+            incoming: list.take(HomeDatingSection.limit).toList(),
+            idOf: (p) => p.userId,
+            random: _rnd,
+          );
+          // Намунавий қаторлар доим бор, шунинг учун «бўш» ҳолат йўқ.
+          _status = AvaSectionStatus.ready;
         });
       },
       onError: (Object e) {
@@ -120,31 +131,43 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
       return const SizedBox.shrink();
     }
 
-    final c = context.ava;
+    // Реал профиллардан кейин қолган жой намунавий қаторларга берилади;
+    // реал профил 10 тага етганда улар ўз-ўзидан йўқолади.
+    final demo = HomeDemoFeed.fill(
+      context,
+      keys: HomeDemoFeed.profileKeysFor(widget.viewerGender),
+      realCount: _items.length,
+      random: _rnd,
+    );
     return AvaSection(
+      moduleId: 'dating',
       title: context.tr('dating_short_label'),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
       skeletonRows: 1,
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(AvaRadius.card),
-          border: Border.all(color: c.line),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          children: [
-            for (final profile in _items)
+      // Ботиқ майдон — қаторлар унинг ичида (қаранг: [AvaInsetPanel]).
+      child: AvaInsetPanel(
+        child: AvaRowPager(
+          // Бошқа бўлимлар билан АЙНАН бир хил қатор баландлиги — бош
+          // ҳарф доираси шу баландликка мослашади (эга қарори,
+          // 2026-09-27).
+          rowHeight: AvaRowPager.textRowHeight(context),
+          onOpenModule: widget.onOpenAll,
+          rows: [
+            for (final p in _items)
               _ProfileRow(
-                // Карточка босилса АЙНАН ШУ профил эмас, танишув модули
+                // Қатор босилса АЙНАН ШУ профил эмас, танишув модули
                 // очилади: бегона профилни фақат ўзининг тасдиқланган
                 // профили бор фойдаланувчи кўриши керак, бу текширув
                 // эса `DatingHomeScreen` ичида.
-                profile: profile,
+                label: p.age != null
+                    ? '${p.displayName}, ${p.age}'
+                    : p.displayName,
                 onTap: widget.onOpenAll,
               ),
+            for (final label in demo)
+              _ProfileRow(label: label, onTap: widget.onOpenAll),
           ],
         ),
       ),
@@ -152,22 +175,27 @@ class _HomeDatingSectionState extends State<HomeDatingSection> {
   }
 }
 
-/// Битта профил — қора нуқта (●) + бош ҳарф доираси + исм, ёш.
+/// Битта қатор — қора нуқта (●) + бош ҳарф доираси + «исм, ёш».
 class _ProfileRow extends StatelessWidget {
-  const _ProfileRow({required this.profile, required this.onTap});
+  const _ProfileRow({required this.label, required this.onTap});
 
-  final DatingPublicProfile profile;
+  /// Тайёр ёзув: «Дилноза, 24».
+  final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ava;
-    final age = profile.age;
 
+    final c = context.ava;
+    // Бош ҳарф доираси қатор баландлигига тенг — шунда танишув қатори
+    // бошқа бўлимлардаги матн қаторидан баланд бўлиб кетмайди. Олдин у
+    // қатъий 28px эди ва қаторлар икки баробар сийрак кўринарди.
+    final avatar = AvaRowPager.textRowHeight(context);
+    // Қаторлар ораси айнан 1px: ички вертикал чет йўқ.
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.zero,
         child: Row(
           children: [
             Container(
@@ -178,16 +206,22 @@ class _ProfileRow extends StatelessWidget {
             const SizedBox(width: 8),
             // Расм ЎРНИГА бош ҳарф — профил фотоси чизилмайди.
             Container(
-              width: 28,
-              height: 28,
+              width: avatar,
+              height: avatar,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: c.brandSoft,
                 shape: BoxShape.circle,
               ),
+              // Ҳарф доира билан бирга кичраяди. `height: 1` — акс ҳолда
+              // шрифтнинг ўз қатор оралиғи доирадан ошиб, ҳарф пастга
+              // сурилиб қоларди.
               child: Text(
-                datingInitial(profile.displayName),
-                style: AvaText.caption.copyWith(
+                datingInitial(label),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: avatar * 0.6,
+                  height: 1,
                   color: c.brand,
                   fontWeight: FontWeight.w700,
                 ),
@@ -196,12 +230,10 @@ class _ProfileRow extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                age != null
-                    ? '${profile.displayName}, $age'
-                    : profile.displayName,
+                label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AvaText.body.copyWith(color: c.ink),
+                style: AvaText.feedRow.copyWith(color: c.inkRow),
               ),
             ),
             // Шаҳар / жойлашув АТАЙЛАБ кўрсатилмайди.

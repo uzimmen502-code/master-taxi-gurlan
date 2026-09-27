@@ -10,6 +10,7 @@ import '../../../core/theme/app_theme.dart';
 import '../models/ad_model.dart';
 import '../repositories/ads_repository.dart';
 import '../services/ads_storage_service.dart';
+import '../widgets/ad_district_field.dart';
 
 /// Edit existing cheap product ad.
 class EditAdScreen extends StatefulWidget {
@@ -31,10 +32,19 @@ class _EditAdScreenState extends State<EditAdScreen> {
   final List<XFile> _newImages = [];
   bool _loading = false;
 
+  /// Маҳсулот ҳудуди — эга нотўғри танлаган бўлса тузата олади.
+  AdDistrictValue _district = AdDistrictValue.empty;
+
   @override
   void initState() {
     super.initState();
     final ad = widget.ad;
+    _district = AdDistrictValue(
+      districtId: ad.districtId,
+      regionId: ad.regionId,
+      // Ёрлиқ эълонда сақланмайди — фойдаланувчи қайта танласа тўлади.
+      label: ad.districtId.isEmpty ? '' : ad.districtId,
+    );
     _titleCtrl = TextEditingController(text: ad.title);
     _priceCtrl = TextEditingController(text: '${ad.price}');
     _descCtrl = TextEditingController(text: ad.description);
@@ -105,6 +115,14 @@ class _EditAdScreenState extends State<EditAdScreen> {
         'price': int.parse(_priceCtrl.text.trim()),
         'imageUrls': urls,
       };
+      // Ҳудуд ўзгартирилган бўлса — эга нотўғри жойни тузатяпти.
+      // Қоида `districtId` ни `geo_districts` бўйича текширади.
+      if (!_district.isEmpty && _district.districtId != ad.districtId) {
+        patch['districtId'] = _district.districtId;
+        if (_district.regionId.isNotEmpty) {
+          patch['regionId'] = _district.regionId;
+        }
+      }
       // Фаол эълон таҳрири — қайта модерация.
       if (ad.isActive) {
         patch['status'] = 'pending';
@@ -270,6 +288,12 @@ class _EditAdScreenState extends State<EditAdScreen> {
                       if (t.length < 3) return 'Камида 3 белги';
                       return null;
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  // Маҳсулот ҳудуди — нотўғри бўлса шу ердан тузатилади.
+                  AdDistrictField(
+                    value: _district,
+                    onChanged: (v) => setState(() => _district = v),
                   ),
                   const SizedBox(height: 8),
                   Text(

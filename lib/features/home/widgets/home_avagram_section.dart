@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/session_shuffle.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import '../../tv_market/widgets/tv_clip_poster.dart';
@@ -38,40 +41,84 @@ class HomeAvagramSection extends StatefulWidget {
 
 class _HomeAvagramSectionState extends State<HomeAvagramSection> {
   final _repo = TvClipsRepository();
+  final _scroll = ScrollController();
+  final Random _rnd = sessionRandom();
 
   AvaSectionStatus _status = AvaSectionStatus.loading;
   List<TvClip> _clips = const [];
 
+  /// Чексиз лента курсорлари — қаранг: [TvClipsRepository.fetchHomePage].
+  DocumentSnapshot<Map<String, dynamic>>? _nearbyCursor;
+  DocumentSnapshot<Map<String, dynamic>>? _allCursor;
+  bool _nearbyExhausted = false;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     unawaited(_load());
   }
 
-  Future<void> _load() async {
-    if (mounted) setState(() => _status = AvaSectionStatus.loading);
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loadingMore || !_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (pos.pixels < pos.maxScrollExtent - 240) return;
+    unawaited(_load(more: true));
+  }
+
+  Future<void> _load({bool more = false}) async {
+    if (more) {
+      _loadingMore = true;
+    } else if (mounted) {
+      setState(() => _status = AvaSectionStatus.loading);
+    }
     try {
       final page = await _repo.fetchHomePage(
         districtId: ServiceConfigHolder.districtId,
         limit: HomeAvagramSection.limit,
+        excludeIds: more ? {for (final c in _clips) c.id} : const {},
+        nearbyCursor: more ? _nearbyCursor : null,
+        allCursor: more ? _allCursor : null,
+        nearbyExhausted: more && _nearbyExhausted,
       );
       if (!mounted) return;
       setState(() {
-        _clips = page.clips;
-        _status = page.clips.isEmpty
-            ? AvaSectionStatus.empty
-            : AvaSectionStatus.ready;
+        // Ҳар саҳифа келганда аралаштирилади, аввалгилари ўрнида қолади —
+        // сеанс уруғи туфайли ҳар очилишда тартиб бошқача бўлади.
+        _clips = mergeShuffled(
+          current: _clips,
+          incoming: more ? [..._clips, ...page.clips] : page.clips,
+          idOf: (c) => c.id,
+          random: _rnd,
+        );
+        _nearbyCursor = page.nearbyCursor;
+        _allCursor = page.allCursor;
+        _nearbyExhausted = page.nearbyExhausted;
+        _hasMore = page.hasMore;
+        _status =
+            _clips.isEmpty ? AvaSectionStatus.empty : AvaSectionStatus.ready;
       });
     } catch (e) {
       debugPrint('[HomeAvagram] $e');
       if (!mounted) return;
-      setState(() => _status = AvaSectionStatus.error);
+      if (!more) setState(() => _status = AvaSectionStatus.error);
+    } finally {
+      _loadingMore = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return AvaSection(
+      moduleId: 'tv_market',
       title: context.tr('home_module_tv_market'),
       status: _status,
       onSeeAll: widget.onOpenAll,
@@ -85,6 +132,7 @@ class _HomeAvagramSectionState extends State<HomeAvagramSection> {
                 .scale(AvaText.caption.fontSize ?? 12) *
                 1.5,
         child: ListView.separated(
+          controller: _scroll,
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
           itemCount: _clips.length,

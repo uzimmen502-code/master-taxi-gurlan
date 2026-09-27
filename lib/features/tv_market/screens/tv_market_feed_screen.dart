@@ -452,6 +452,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
 
   Future<void> _activate(int index) async {
     if (index < 0 || index >= _clips.length || !tvCanPlay) return;
+    // Свайп они — «биринчи кадргача кутиш» шу ердан ўлчанади. Пастдаги
+    // `attach()` `prepare()` ва `play()`дан КЕЙИН чақирилади, шунинг учун
+    // ўлчовни ўша ерда бошлаш кутишнинг деярли ҳаммасини ташлаб юборади
+    // (қаранг: `TvPlaybackAnalyticsRecorder.attach`).
+    final startedAt = DateTime.now();
     final gen = ++_activateGen;
     final clip = _clips[index];
     final url = _urlFor(clip);
@@ -495,7 +500,11 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     unawaited(_maybePatchOwnerName(clip));
     if (ctrl != null && ctrl.value.isInitialized) {
       _attachViewRecorder(ctrl, clip);
-      _playbackAnalytics.attach(controller: ctrl, clipId: clip.id);
+      _playbackAnalytics.attach(
+        controller: ctrl,
+        clipId: clip.id,
+        since: startedAt,
+      );
     } else {
       _playbackAnalytics.detach();
     }

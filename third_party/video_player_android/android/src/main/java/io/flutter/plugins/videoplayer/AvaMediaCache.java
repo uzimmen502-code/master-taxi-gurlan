@@ -3,8 +3,9 @@
 // Media3 SimpleCache: ExoPlayer o'qigan har bir HLS segment/playlist diskka
 // yoziladi va keyingi o'qishda (orqaga svayp, qayta kirish, `releaseAll()`dan
 // keyin resume) tarmoqsiz keladi. Qo'shimcha: `prefetch()` — ExoPlayer
-// instance YARATMASDAN (RAM ≈ 0) keyingi klipning master playlist + eng past
-// variant media playlist + birinchi N soniya segmentlarini `CacheWriter`
+// instance YARATMASDAN (RAM ≈ 0) keyingi klipning master playlist + player
+// AYNAN tanlaydigan variant ([selectVariant] — joriy bandwidth bahosiga
+// qarab) media playlist'i + birinchi N soniya segmentlarini `CacheWriter`
 // bilan shu kesh'ga oldindan yozadi. Svaypda player ochilganda birinchi
 // frame keshdan keladi.
 //
@@ -178,9 +179,9 @@ public final class AvaMediaCache {
       Uri mediaUri = masterUri;
       HlsMediaPlaylist media;
       if (playlist instanceof HlsMultivariantPlaylist) {
-        Uri lowest = lowestVariant((HlsMultivariantPlaylist) playlist);
-        if (lowest == null) return;
-        mediaUri = lowest;
+        Uri chosen = selectVariant(app, (HlsMultivariantPlaylist) playlist);
+        if (chosen == null) return;
+        mediaUri = chosen;
         HlsPlaylist mp = fetchAndParse(ds, mediaUri, url);
         if (!(mp instanceof HlsMediaPlaylist)) return;
         media = (HlsMediaPlaylist) mp;
@@ -227,11 +228,33 @@ public final class AvaMediaCache {
     }
   }
 
+  /**
+   * Prefetch учун манба. `setTransferListener` — ҲАЛ ҚИЛУВЧИ деталь.
+   *
+   * <p>Усиз ABR умуман ишламайди, ва бу 2026-09-26 да қурилмада
+   * ўлчанди: `AvaPlaybackLog` бутун сессия давомида ЯККА битта
+   * `bw sample elapsed=0ms bytes=0 estimate=100kbps` кўрсатди — яъни
+   * плеер ҳеч қачон тармоқдан ўқимаган.
+   *
+   * <p>Сабаби: сегментларни тармоқдан айнан ШУ prefetcher тортади,
+   * плеер эса тайёрини SimpleCache'дан (диск) ўқийди. Кеш ўқиши эса
+   * `BandwidthMeter` учун "ўтказма" эмас. Натижада метр 100 kbps
+   * боshланғич баҳосида МУЗЛАБ қолади, `AdaptiveTrackSelection` эса шу
+   * баҳога қараб (ўз мантиғи бўйича тўғри) доим энг паст поғонани
+   * танлайверади. Кеш қанча яхши ишласа, сифат шунча ёмон — ўз-ўзини
+   * кучайтирувчи ҳалқа.
+   *
+   * <p>Энди ҳақиқий тармоқ иши қаерда бажарилса, ўлчов ҳам ўша ерда
+   * олинади. Listener ФАҚАТ HTTP (upstream) қатламига уланади — кеш
+   * қатламига эмас, акс ҳолда диск тезлиги тармоқ деб ҳисобланиб,
+   * баҳо сохта равишда осмонга чиқиб кетарди.
+   */
   private static CacheDataSource newCacheDataSource(Context app) {
     DefaultHttpDataSource.Factory http =
         new DefaultHttpDataSource.Factory()
             .setUserAgent("ExoPlayer")
-            .setAllowCrossProtocolRedirects(true);
+            .setAllowCrossProtocolRedirects(true)
+            .setTransferListener(AvaBandwidthMeter.create(app).getTransferListener());
     return new CacheDataSource.Factory()
         .setCache(get(app))
         .setUpstreamDataSourceFactory(http)
@@ -264,13 +287,41 @@ public final class AvaMediaCache {
     }
   }
 
+  /**
+   * Плеер АЙНАН қайси вариантни танласа — ўшани кешга ёзади.
+   *
+   * <p>Аввал бу ерда доим ЭНГ ПАСТ вариант ёзиларди. Ўшанда бу тўғри эди:
+   * {@link AvaBandwidthMeter} ҳар плеер учун 100 kbps'дан бошлангани учун
+   * плеер ҳам доим энг пастини оларди — иккови мос тушарди.
+   *
+   * <p>Метр process-wide singleton бўлгандан кейин (2026-09-26) бу мослик
+   * БУЗИЛАДИ: иккинчи клипдан бошлаб плеер ҳақиқий ўлчовга қараб юқори
+   * вариантни сўрайди, prefetcher эса ҳамон энг пастини ёзиб турса —
+   * кеш умуман ишламай қолади (кеш промахи → биринчи кадр тармоқдан,
+   * яъни СЕКИНРОҚ). Шунинг учун танлов бу ерда ҳам
+   * {@code AdaptiveTrackSelection.determineIdealSelectedIndex} мантиғи
+   * билан бир хил: {@code баҳо × BANDWIDTH_FRACTION} дан ошмайдиган энг
+   * юқори вариант, ҳеч бири сиғмаса — энг пасти.
+   */
   @Nullable
-  private static Uri lowestVariant(HlsMultivariantPlaylist master) {
+  private static Uri selectVariant(Context app, HlsMultivariantPlaylist master) {
     List<HlsMultivariantPlaylist.Variant> variants = master.variants;
+    HlsMultivariantPlaylist.Variant lowest = null;
     HlsMultivariantPlaylist.Variant best = null;
+    long effective =
+        (long)
+            (AvaBandwidthMeter.create(app).getBitrateEstimate()
+                * AvaTrackSelection.BANDWIDTH_FRACTION);
     for (HlsMultivariantPlaylist.Variant v : variants) {
-      if (best == null || v.format.bitrate < best.format.bitrate) best = v;
+      int bitrate = v.format.bitrate;
+      if (lowest == null || bitrate < lowest.format.bitrate) lowest = v;
+      if (bitrate != androidx.media3.common.Format.NO_VALUE
+          && bitrate <= effective
+          && (best == null || bitrate > best.format.bitrate)) {
+        best = v;
+      }
     }
+    if (best == null) best = lowest;
     return best == null ? null : best.url;
   }
 

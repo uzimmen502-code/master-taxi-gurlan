@@ -1,7 +1,7 @@
 name: ava_gurlan
 description: "AVA Zona - 5 modulli mobil ilova"
 publish_to: 'none'
-version: 1.0.30+68
+version: 1.0.32+70
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
@@ -75,15 +75,27 @@ dependencies:
   google_fonts: ^8.2.1
   markdown: ^7.3.1
 
-# video_player_android 2.9.5 — vendored nusxa, ikkita patch:
+# video_player_android 2.9.5 — vendored nusxa, beshta patch:
 #  1) ExoPlayer LoadControl buferi 50s → 20s (AvaLoadControl.java) —
 #     TextureVideoPlayer/PlatformViewVideoPlayer'dagi `.setLoadControl(...)`.
 #  2) Media3 SimpleCache + HLS segment prefetch (AvaMediaCache.java) —
 #     HttpVideoAsset.getMediaSourceFactory'dagi `unstableWrapWithCache(...)`
 #     (faqat http(s)); ilova tomonida MainActivity.kt `tv_media_cache` kanali.
-#  3) Birinchi variant doim eng pasti (AvaBandwidthMeter.java) —
-#     TextureVideoPlayer/PlatformViewVideoPlayer'dagi `.setBandwidthMeter(...)`.
-# Plugin yangilanganda: pub nusxasini qayta ko'chirib, uchala patch fayl va
+#     Prefetch'ning HTTP qatlamiga `setTransferListener(...)` ULANGAN bo'lishi
+#     SHART — busiz bandwidth metri hech narsa o'lchamaydi va ABR o'ladi
+#     (2026-09-26 qurilma o'lchovi; qarang: AvaMediaCache.newCacheDataSource).
+#  3) Birinchi variant doim eng pasti + metr process-wide singleton
+#     (AvaBandwidthMeter.java) — `.setBandwidthMeter(...)`. Singleton SHART:
+#     har player uchun yangi metr o'lchovni nolga qaytarib, ABR'ni butunlay
+#     ishlamas qilgan edi (2026-09-26 qurilma o'lchovi).
+#  4) Qisqa-format ABR parametrlari (AvaTrackSelection.java) —
+#     `.setTrackSelector(...)`. Standart 10s "quality increase" chegarasi
+#     8 soniyalik ko'rishda hech qachon bajarilmaydi.
+#  5) ABR diagnostikasi (AvaPlaybackLog.java) — `.addAnalyticsListener(...)`.
+#     `adb logcat -s AvaPlayback`: bandwidth bahosi va tanlangan variant
+#     o'lchami. Aynan shu 2–3 qatorlik log yuqoridagi 2) dagi xatoni
+#     topdi — usiz muammo ko'rinmas edi.
+# Plugin yangilanganda: pub nusxasini qayta ko'chirib, beshala patch fayl va
 # ularning chaqiruv qatorlarini qaytadan qo'shish kerak.
 dependency_overrides:
   video_player_android:

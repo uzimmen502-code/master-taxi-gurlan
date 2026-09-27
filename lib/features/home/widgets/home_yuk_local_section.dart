@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/service_config_holder.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../../core/utils/session_shuffle.dart';
 import '../../yuk_local/models/yuk_local_driver.dart';
 import '../../yuk_local/repositories/yuk_local_drivers_repository.dart';
 import '../../yuk_shared/yuk_vehicle_types.dart';
+import '../home_demo_feed.dart';
 import 'ava_section.dart';
 
 /// Юк сиғими — «500 кг» ёки «3.5 т».
@@ -35,7 +38,9 @@ class HomeYukLocalSection extends StatefulWidget {
   final VoidCallback onOpenAll;
   final void Function(YukLocalDriver driver) onOpenDriver;
 
-  static const limit = 5;
+  /// Ойнада 5 таси кўринади, қолгани скролл ([AvaRowViewport]) — шунинг
+  /// учун 5 эмас, 10 та юкланади. Бу бўлимда намунавий қатор йўқ.
+  static const limit = HomeDemoFeed.capacity;
 
   @override
   State<HomeYukLocalSection> createState() => _HomeYukLocalSectionState();
@@ -43,6 +48,7 @@ class HomeYukLocalSection extends StatefulWidget {
 
 class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
   final _repo = YukLocalDriversRepository();
+  final Random _rnd = sessionRandom();
   StreamSubscription<List<YukLocalDriver>>? _sub;
 
   AvaSectionStatus _status = AvaSectionStatus.loading;
@@ -70,7 +76,13 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
             return bt.compareTo(at);
           });
         setState(() {
-          _items = visible.take(HomeYukLocalSection.limit).toList();
+          // Ҳар очилишда бошқа тартиб; кўрилиб турганлар ўрнида қолади.
+          _items = mergeShuffled(
+            current: _items,
+            incoming: visible.take(HomeYukLocalSection.limit).toList(),
+            idOf: (d) => d.id,
+            random: _rnd,
+          );
           _status = _items.isEmpty
               ? AvaSectionStatus.empty
               : AvaSectionStatus.ready;
@@ -97,25 +109,22 @@ class _HomeYukLocalSectionState extends State<HomeYukLocalSection> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ava;
     return AvaSection(
+      moduleId: 'yuk_local',
       title: context.tr('home_section_yuk_local'),
       status: _status,
       onSeeAll: widget.onOpenAll,
       onRetry: _listen,
-      child: Container(
-        decoration: BoxDecoration(
-          color: c.surface,
-          borderRadius: BorderRadius.circular(AvaRadius.card),
-          border: Border.all(color: c.line),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
-          children: [
-            for (var i = 0; i < _items.length; i++)
+      // Ботиқ майдон — қаторлар унинг ичида (қаранг: [AvaInsetPanel]).
+      child: AvaInsetPanel(
+        child: AvaRowPager(
+          rowHeight: AvaRowPager.textRowHeight(context),
+          onOpenModule: widget.onOpenAll,
+          rows: [
+            for (final driver in _items)
               _BulletRow(
-                title: _titleOf(context, _items[i], _place(_items[i])),
-                onTap: () => widget.onOpenDriver(_items[i]),
+                title: _titleOf(context, driver, _place(driver)),
+                onTap: () => widget.onOpenDriver(driver),
               ),
           ],
         ),
@@ -146,30 +155,28 @@ class _BulletRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
+    // Қаторлар ораси айнан 1px: ички вертикал чет йўқ.
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(top: 6),
-              decoration: BoxDecoration(color: c.ink, shape: BoxShape.circle),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(color: c.ink, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AvaText.feedRow.copyWith(color: c.inkRow),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AvaText.body.copyWith(color: c.ink),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

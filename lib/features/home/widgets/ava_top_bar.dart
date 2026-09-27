@@ -80,15 +80,10 @@ class _RegionButton extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            style: AvaText.caption.copyWith(
-                              color: chosen ? c.ink : c.warn,
-                            ),
+                        child: _ShrinkToFitText(
+                          text: label,
+                          style: AvaText.caption.copyWith(
+                            color: chosen ? c.ink : c.warn,
                           ),
                         ),
                       ),
@@ -104,6 +99,43 @@ class _RegionButton extends StatelessWidget {
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// Матнни берилган кенгликка сиғгунча кичрайтиради — қирқилмайди.
+///
+/// `FittedBox` матннинг ҳақиқий ўлчамини ўзи ўлчайди, шунинг учун
+/// шрифт метрикасини қўлда тахмин қилишдан аниқроқ. Кенглик чекланмаган
+/// ёки 0 бўлган layout pass'да эса у Transform matrix'ни NaN қилиб
+/// қўйиши мумкин, шунинг учун бундай ҳолатда оддий `Text` чизилади.
+class _ShrinkToFitText extends StatelessWidget {
+  const _ShrinkToFitText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final label = Text(
+          text,
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        );
+
+        final maxWidth = constraints.maxWidth;
+        if (!maxWidth.isFinite || maxWidth <= 1 || text.isEmpty) return label;
+
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: label,
         );
       },
     );

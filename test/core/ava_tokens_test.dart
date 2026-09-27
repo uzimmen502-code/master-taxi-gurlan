@@ -61,8 +61,11 @@ void main() {
       expect(AvaSpace.screen, 16);
       expect(AvaTap.minSize, 44);
       expect(AvaText.sectionTitle.fontSize, 16);
-      expect(AvaText.sectionTitle.fontWeight, FontWeight.w800);
-      expect(AvaText.price.fontWeight, FontWeight.w800);
+      // Avito редизайнидан кейин (commit 7806f87) саҳифада ЯГОНА «оғир»
+      // нуқта — нарх; сарлавҳа эса w800 дан w600 га туширилган. Тест
+      // ўшанда янгиланмай қолиб, шу пайтгача йиқилиб турган эди.
+      expect(AvaText.sectionTitle.fontWeight, FontWeight.w600);
+      expect(AvaText.price.fontWeight, FontWeight.w700);
       expect(AvaText.navLabel.fontSize, 11);
     });
   });

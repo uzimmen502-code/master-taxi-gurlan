@@ -72,10 +72,17 @@ class HomeRealtySection extends StatefulWidget {
   const HomeRealtySection({
     super.key,
     required this.onOpenAll,
+    required this.onOpenMap,
     required this.onOpenListing,
   });
 
+  /// «Барчаси →» — лента экрани.
   final VoidCallback onOpenAll;
+
+  /// Харита расми босилганда — ТЎЛИҚ ЭКРАНЛИ харита. Расмни босган
+  /// одам харита кутади, рўйхат эмас (эга қарори, 2026-09-28).
+  final VoidCallback onOpenMap;
+
   final void Function(RealtyListing listing) onOpenListing;
 
   static const int limit = 10;
@@ -180,7 +187,7 @@ class _HomeRealtySectionState extends State<HomeRealtySection> {
               items: _items,
               center: _center,
               headers: _mapHeaders,
-              onTap: widget.onOpenAll,
+              onTap: widget.onOpenMap,
             ),
           ],
         ],

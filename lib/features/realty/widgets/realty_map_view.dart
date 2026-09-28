@@ -129,25 +129,6 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
-  /// Тахминий ҳудуд доираси. Радиус серверда силкитиш радиусига тенг
-  /// (≈1.2 км) — доира «объект шу доира ичида» деб ҲАҚҚОНИЙ айтади,
-  /// марказида эмас.
-  static const double _approxRadiusMeters = 1200;
-
-  Set<Circle> _circles() {
-    return {
-      for (final r in _approx)
-        Circle(
-          circleId: CircleId('approx_${r.id}'),
-          center: LatLng(r.areaLat, r.areaLng),
-          radius: _approxRadiusMeters,
-          strokeWidth: 2,
-          strokeColor: RealtyTabs.colorFor(r.tier),
-          fillColor: RealtyTabs.colorFor(r.tier).withValues(alpha: 0.14),
-        ),
-    };
-  }
-
   Set<Marker> _markers() {
     final markers = <Marker>{};
 
@@ -191,7 +172,9 @@ class _RealtyMapViewState extends State<RealtyMapView> {
         zoom: widget.initialZoom,
       ),
       markers: _markers(),
-      circles: _circles(),
+      // Пин атрофидаги «тахминий ҳудуд» доираси олиб ташланди (эга
+      // қарори, 2026-09-28) — пинларнинг ўзи етарли, доира харитани
+      // ифлослантирар эди. Нуқталарнинг тахминийлиги легендада ёзилган.
       myLocationEnabled: true,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: false,

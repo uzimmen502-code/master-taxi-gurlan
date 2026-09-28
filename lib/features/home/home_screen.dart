@@ -66,6 +66,7 @@ import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
 import '../realty/screens/realty_detail_screen.dart';
+import '../realty/screens/realty_map_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
@@ -813,6 +814,8 @@ class _HomeViewState extends State<_HomeView> {
                               SizedBox(height: AvaSpace.sectionMin),
                               HomeRealtySection(
                                 onOpenAll: () => _push(const RealtyScreen()),
+                                onOpenMap: () =>
+                                    _push(const RealtyMapScreen()),
                                 onOpenListing: (listing) => _push(
                                   RealtyDetailScreen(listing: listing),
                                 ),

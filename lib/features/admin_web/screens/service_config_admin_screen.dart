@@ -55,6 +55,7 @@ const Map<String, String> _moduleLabels = {
   'pay_payme': 'Payme',
   'pay_paynet': 'Paynet',
   'wholesale_market': 'Улгуржи бозор',
+  'realty': 'Кўчмас мулк',
 };
 
 String _labelFor(String id) => _moduleLabels[id] ?? id;
@@ -1189,13 +1190,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           color: _enforce ? Colors.orange.shade300 : Colors.grey.shade300,
         ),
       ),
-      // `IntrinsicHeight` + `stretch` — «Baseline» тугмаси ёнидаги матн
-      // блоки билан БИР ХИЛ баландликда бўлсин (эга қарори, 2026-09-28).
-      // Аввал тугма ўртада, матндан паст турарди.
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      child: Row(
+        children: [
           Expanded(
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -1221,17 +1217,22 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             icon: _savingGlobal
                 ? const _Spinner()
                 : const Icon(Icons.tune, size: 16),
-            label: Text(_hasDirtyDefaults ? 'Baseline*' : 'Baseline'),
+            label: Text(
+              _hasDirtyDefaults ? 'Baseline*' : 'Baseline',
+              maxLines: 1,
+              style: const TextStyle(fontSize: 12),
+            ),
+            // Кичик, БИР ҚАТОР тугма (эга қарори, 2026-09-28):
+            // `Material` нинг стандарт 48px минимал баландлиги олиб
+            // ташланади, акс ҳолда тугма ёнидаги матндан баланд туради.
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              // `stretch` баландликни беради — минимал баландлик уни
-              // чеклаб қўймасин.
-              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              minimumSize: const Size(0, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-          ],
-        ),
+        ],
       ),
     );
   }

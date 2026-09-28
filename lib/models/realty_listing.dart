@@ -29,12 +29,27 @@ extension RealtyTierX on RealtyTier {
     }
   }
 
-  /// Фойдаланувчи ҳозир сотиб ола оладими. 2-босқичда `promo`/`urgent`
-  /// ҳам `true` бўлади (ҳамёндан тўлов + `settings/app.realtyPricing`).
+  /// Янги эълон яратишда танланадими.
+  ///
+  /// Фақат ОДДИЙ: бир уй учта эълон эмас, битта ёзув (концепция,
+  /// 6-бўлим). РЕКЛАМА ва СРОЧНО эълон жойлангач, мавжуд объектга
+  /// сотиб олинади (`purchaseRealtyTier`).
   bool get isPurchasable => this == RealtyTier.plain;
 
-  /// СРОЧНО учун концепцияда белгиланган муддатлар.
-  static const List<int> urgentDurationDays = [3, 7, 15];
+  bool get isPaid => this != RealtyTier.plain;
+
+  /// Пуллик даража муддат вариантлари — сервердаги `PAID_DURATIONS`
+  /// билан бир хил бўлиши шарт.
+  List<int> get durationOptions {
+    switch (this) {
+      case RealtyTier.promo:
+        return const [7, 15, 30];
+      case RealtyTier.urgent:
+        return const [3, 7, 15];
+      case RealtyTier.plain:
+        return const [];
+    }
+  }
 
   /// Бепул ОДДИЙ эълон қанча кун кўринади.
   static const int plainExpiryDays = 30;

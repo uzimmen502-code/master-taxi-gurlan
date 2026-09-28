@@ -6,20 +6,50 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_realty_service.dart';
+import 'realty_settings_admin_panel.dart';
 
 /// 🏠 Кўчмас мулк модерацияси.
 ///
 /// Нега керак: `realtyAutoApprove` ёқиқ бўлганда эълонлар текширувсиз
 /// лентага тушади. Алдов ёки нотўғри эълонни олиб ташлашнинг ягона
 /// йўли Firestore консоли бўлиб қолмаслиги учун шу экран бор.
-class RealtyModerationScreen extends StatefulWidget {
+class RealtyModerationScreen extends StatelessWidget {
   const RealtyModerationScreen({super.key});
 
   @override
-  State<RealtyModerationScreen> createState() => _RealtyModerationScreenState();
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: const [
+          TabBar(
+            tabs: [
+              Tab(text: 'Модерация'),
+              Tab(text: 'Нарх ва созламалар'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _ModerationTab(),
+                RealtySettingsAdminPanel(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _RealtyModerationScreenState extends State<RealtyModerationScreen> {
+class _ModerationTab extends StatefulWidget {
+  const _ModerationTab();
+
+  @override
+  State<_ModerationTab> createState() => _ModerationTabState();
+}
+
+class _ModerationTabState extends State<_ModerationTab> {
   final _repo = RealtyRepository();
 
   /// null — ҳамма ёзув.

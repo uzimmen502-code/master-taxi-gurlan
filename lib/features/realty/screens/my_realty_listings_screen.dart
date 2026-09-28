@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_tier_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 
@@ -200,6 +201,16 @@ class _MyListingTileState extends State<_MyListingTile> {
     }
   }
 
+  /// Пуллик даража учун « · 5 кун» қўшимчаси; ОДДИЙда бўш.
+  String _tierDaysSuffix(BuildContext context) {
+    final r = widget.listing;
+    final until = r.tierUntil;
+    if (!r.tier.isPaid || until == null) return '';
+    final days = until.difference(DateTime.now()).inDays;
+    if (days < 0) return '';
+    return ' · $days ${context.tr('realty_days_short')}';
+  }
+
   /// «Қолди: 12 кун» ёки «Муддати тугаган».
   String _expiryLabel(BuildContext context) {
     final r = widget.listing;
@@ -283,11 +294,16 @@ class _MyListingTileState extends State<_MyListingTile> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          context.tr(RealtyTabs.labelKey(r.tier)),
+                          // Пуллик даражада қанча кун қолгани ҳам ёзилади —
+                          // эга узайтириш кераклигини шу ердан кўради.
+                          context.tr(RealtyTabs.labelKey(r.tier)) +
+                              _tierDaysSuffix(context),
                           style: TextStyle(
                             fontSize: AppText.labelTiny,
                             fontWeight: FontWeight.w600,
-                            color: c.ink3,
+                            color: r.tier.isPaid
+                                ? RealtyTabs.colorFor(r.tier)
+                                : c.ink3,
                           ),
                         ),
                         const Spacer(),
@@ -328,6 +344,30 @@ class _MyListingTileState extends State<_MyListingTile> {
               ),
             ),
             Divider(height: 1, color: c.line),
+            // Пуллик даража — блокланган ёки муддати тугаган объектга
+            // сотилмайди (сервер ҳам рад этади, тугмани ҳам кўрсатмаймиз).
+            if (!r.isExpired && r.status != 'blocked')
+              TextButton.icon(
+                onPressed: _deleting
+                    ? null
+                    : () => showRealtyTierSheet(context, listing: r),
+                icon: Icon(
+                  r.tier.isPaid ? Icons.autorenew : Icons.campaign_outlined,
+                  size: 18,
+                ),
+                label: Text(
+                  context.tr(
+                    r.tier.isPaid ? 'realty_tier_renew' : 'realty_tier_buy',
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: RealtyTabs.colorFor(
+                    r.tier.isPaid ? r.tier : RealtyTier.promo,
+                  ),
+                ),
+              ),
+            if (!r.isExpired && r.status != 'blocked')
+              Divider(height: 1, color: c.line),
             Row(
               children: [
                 Expanded(

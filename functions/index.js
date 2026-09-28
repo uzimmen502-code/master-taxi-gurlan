@@ -26,6 +26,7 @@ attachAssistant(exports, {
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
   functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
+  notifyUserInApp,
 });
 
 const DEVICE_BINDING_MAX_FAILED = 5;

@@ -213,7 +213,7 @@ class _TierFeed extends StatelessWidget {
                 context.tr(
                   tier == RealtyTier.plain
                       ? 'realty_feed_empty'
-                      : 'realty_feed_paid_soon',
+                      : 'realty_feed_paid_empty',
                 ),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: c.ink2, fontSize: AppText.bodyMedium),

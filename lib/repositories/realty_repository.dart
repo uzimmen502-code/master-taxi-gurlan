@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/utils/formatters.dart';
@@ -237,6 +238,78 @@ class RealtyRepository {
     }
   }
 
+  /// РЕКЛАМА ёки СРОЧНО сотиб олиш / узайтириш (AVA ҳамёнидан).
+  ///
+  /// Хатолар: `insufficient_balance` (`details.price`, `details.balance`),
+  /// `not_owner`, `listing_blocked`, `bad_duration`.
+  Future<RealtyPurchaseResult> purchaseTier({
+    required String listingId,
+    required RealtyTier tier,
+    required int durationDays,
+  }) async {
+    try {
+      final res = await _functions
+          .httpsCallable(
+            'purchaseRealtyTier',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          )
+          .call({
+        'idempotencyKey': _uuid.v4(),
+        'listingId': listingId,
+        'tier': tier.key,
+        'durationDays': durationDays,
+      });
+      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      return RealtyPurchaseResult(
+        listingId: (data['listingId'] ?? listingId) as String,
+        tier: RealtyTierX.parse(data['tier']),
+        durationDays: (data['durationDays'] as num?)?.toInt() ?? durationDays,
+        price: (data['price'] as num?)?.toInt() ?? 0,
+        tierUntil: DateTime.fromMillisecondsSinceEpoch(
+          (data['tierUntil'] as num?)?.toInt() ?? 0,
+        ),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  /// Тариф жадвали: даража → {кун: нарх}. Админ панелдан таҳрирланади.
+  ///
+  /// Сервер жавоб бермаса бўш жадвал қайтади — чақирувчи «нарх
+  /// юкланмади» деб кўрсатсин, ноль нархни эмас.
+  Future<Map<RealtyTier, Map<int, int>>> loadPricing() async {
+    try {
+      final res = await _functions.httpsCallable('getRealtyPricing').call();
+      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      final pricing = Map<String, dynamic>.from(
+        raw['pricing'] as Map? ?? const {},
+      );
+      final out = <RealtyTier, Map<int, int>>{};
+      for (final entry in pricing.entries) {
+        final tier = RealtyTierX.parse(entry.key);
+        final days = Map<String, dynamic>.from(entry.value as Map? ?? const {});
+        final parsed = <int, int>{};
+        for (final e in days.entries) {
+          final k = int.tryParse(e.key);
+          final v = (e.value as num?)?.toInt();
+          if (k != null && v != null) parsed[k] = v;
+        }
+        if (parsed.isNotEmpty) out[tier] = parsed;
+      }
+      return out;
+    } catch (e) {
+      debugPrint('[RealtyRepository] loadPricing $e');
+      return const {};
+    }
+  }
+
   /// Эга ўз объектини ўчиради («сотилди» ёки нотўғри киритилди).
   Future<void> deleteMine(String listingId) async {
     try {
@@ -263,6 +336,23 @@ class RealtySubmitResult {
   final int freeLeft;
 
   bool get isLive => status == 'active';
+}
+
+/// `purchaseRealtyTier` муваффақиятли натижаси.
+class RealtyPurchaseResult {
+  const RealtyPurchaseResult({
+    required this.listingId,
+    required this.tier,
+    required this.durationDays,
+    required this.price,
+    required this.tierUntil,
+  });
+
+  final String listingId;
+  final RealtyTier tier;
+  final int durationDays;
+  final int price;
+  final DateTime tierUntil;
 }
 
 class RealtyException implements Exception {

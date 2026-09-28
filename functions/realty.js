@@ -20,7 +20,7 @@ const { encode: geohashEncode } = require('./geo_hash');
 function attachRealty(exports, deps) {
   const {
     functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
-    assertAdmin,
+    assertAdmin, notifyUserInApp,
   } = deps;
 
   /** Бепул ОДДИЙ объект лимити — концепциянинг 2-бўлими. */
@@ -29,8 +29,28 @@ function attachRealty(exports, deps) {
   /** Бепул ОДДИЙ эълон қанча кун кўринади. */
   const PLAIN_EXPIRY_DAYS = 30;
 
-  /** 1-босқичда фақат бепул ОДДИЙ сотиб олинади. */
+  /**
+   * Янги эълон яратишда фақат бепул ОДДИЙ бўлади. РЕКЛАМА ва СРОЧНО —
+   * мавжуд объектга `purchaseRealtyTier` орқали сотиб олинади, чунки
+   * концепцияда бир уй учта эълон эмас, битта ёзув (6-бўлим).
+   */
   const PURCHASABLE_TIERS = ['plain'];
+
+  /** Пуллик даражалар ва уларнинг муддат вариантлари (концепция, 2-бўлим). */
+  const PAID_DURATIONS = {
+    promo: [7, 15, 30],
+    urgent: [3, 7, 15],
+  };
+
+  /**
+   * `settings/app.realtyPricing` топилмаса ишлатиладиган бошланғич
+   * нархлар. СРОЧНО РЕКЛАМАдан қиммат — концепциянинг талаби.
+   * Ҳақиқий нархларни эга админ панелдан белгилайди.
+   */
+  const REALTY_PRICING_DEFAULT = {
+    promo: { 7: 20000, 15: 35000, 30: 60000 },
+    urgent: { 3: 25000, 7: 45000, 15: 80000 },
+  };
 
   const ts = () => admin.firestore.FieldValue.serverTimestamp();
 
@@ -320,6 +340,169 @@ function attachRealty(exports, deps) {
     return { ok: true };
   });
 
+  // ─── 2-босқич: пуллик РЕКЛАМА ва СРОЧНО ───────────────────────
+
+  /** Нарх: `settings/app.realtyPricing.{tier}.{days}`, бўлмаса default. */
+  async function realtyPriceFor(tier, days) {
+    const fallback = (REALTY_PRICING_DEFAULT[tier] || {})[days] || 0;
+    try {
+      const snap = await db.collection('settings').doc('app').get();
+      const map = (snap.data() || {}).realtyPricing;
+      const tierMap = map && typeof map === 'object' ? map[tier] : null;
+      if (tierMap && typeof tierMap === 'object'
+          && tierMap[String(days)] != null) {
+        const v = Number(tierMap[String(days)]);
+        if (Number.isFinite(v) && v >= 0) return Math.round(v);
+      }
+    } catch (e) {
+      console.error('realtyPriceFor', e.message || e);
+    }
+    return fallback;
+  }
+
+  /**
+   * Мавжуд объектга РЕКЛАМА ёки СРОЧНО сотиб олиш (ва узайтириш).
+   *
+   * Тўлов AVA ҳамёнидан (`users/{uid}.bonusBalance`), `publishTvAd`
+   * билан бир хил нақш: идемпотентлик калити, баланс текшируви, дебит
+   * ва ёзув янгиланиши — ҳаммаси битта транзакцияда.
+   *
+   * ⚠️ МУДДАТ ҲИСОБИ — ЭГА ЭЪТИБОРИГА. Концепцияда «муддат тугаса
+   * объектнинг ўзи ўчирилади» дейилган. Уни сўзма-сўз олсак, 28 куни
+   * қолган ОДДИЙ эълонга 3 кунлик СРОЧНО олган одам 25 кунини
+   * йўқотарди — бу шикоят келтирадиган нуқсон. Шунинг учун:
+   *   • `tierUntil` — пуллик даража қанча туриши;
+   *   • `expiresAt` — объектнинг ўзи қачон ўчиши, ҳозиргисидан
+   *     ҚИСҚАРМАЙДИ (`max`).
+   * Даража муддати тугаса объект ўчмайди, ОДДИЙга қайтади
+   * (`realtyExpirySweep`), объектнинг ўзи эса `expiresAt` да ўчади.
+   */
+  exports.purchaseRealtyTier = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const d = data || {};
+
+      const idempotencyKey = String(d.idempotencyKey || '').trim();
+      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
+      const idemRef = db.collection('wallet_idempotency')
+        .doc('realty_tier_' + idempotencyKey);
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) {
+        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
+      }
+
+      const listingId = String(d.listingId || '').trim();
+      if (!listingId) throw fail('invalid-argument', 'listing_required');
+
+      const tier = String(d.tier || '');
+      if (!Object.keys(PAID_DURATIONS).includes(tier)) {
+        throw fail('invalid-argument', 'bad_tier');
+      }
+      const days = parseInt(String(d.durationDays || 0), 10);
+      if (!PAID_DURATIONS[tier].includes(days)) {
+        throw fail('invalid-argument', 'bad_duration');
+      }
+
+      const price = await realtyPriceFor(tier, days);
+      const listingRef = db.collection('realty_listings').doc(listingId);
+      const userRef = db.collection('users').doc(uid);
+      const durationMs = days * 24 * 60 * 60 * 1000;
+
+      try {
+        return await db.runTransaction(async (t) => {
+          const idemSnap = await t.get(idemRef);
+          if (idemSnap.exists) {
+            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
+          }
+
+          const snap = await t.get(listingRef);
+          if (!snap.exists) throw fail('not-found', 'listing_not_found');
+          const cur = snap.data() || {};
+          if (String(cur.ownerId || '') !== uid) {
+            throw fail('permission-denied', 'not_owner');
+          }
+          if (cur.status === 'blocked') {
+            throw fail('failed-precondition', 'listing_blocked');
+          }
+
+          if (price > 0) {
+            const userSnap = await t.get(userRef);
+            if (!userSnap.exists) throw fail('not-found', 'user_not_found');
+            const balance = (userSnap.data() || {}).bonusBalance || 0;
+            if (balance < price) {
+              throw fail('failed-precondition', 'insufficient_balance', {
+                price, balance,
+              });
+            }
+            t.update(userRef, {
+              bonusBalance: admin.firestore.FieldValue.increment(-price),
+              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            t.set(userRef.collection('wallet_ledger').doc(), {
+              type: 'realty_tier_purchase',
+              amount: price,
+              debitCredit: 'debit',
+              note: `Кўчмас мулк (${tier}) — ${days} кун`,
+              refType: 'realty_listing',
+              refId: listingId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+
+          // Худди шу даража ҳали амал қилаётган бўлса — устига қўшилади,
+          // акс ҳолда ҳозирдан бошланади (`renewTvAd` билан бир хил).
+          const curUntil = cur.tierUntil && cur.tierUntil.toMillis
+            ? cur.tierUntil.toMillis() : 0;
+          const base = (cur.tier === tier && curUntil > Date.now())
+            ? curUntil : Date.now();
+          const tierUntilMs = base + durationMs;
+
+          const curExpires = cur.expiresAt && cur.expiresAt.toMillis
+            ? cur.expiresAt.toMillis() : 0;
+          const expiresMs = Math.max(curExpires, tierUntilMs);
+
+          t.update(listingRef, {
+            tier,
+            tierUntil: admin.firestore.Timestamp.fromMillis(tierUntilMs),
+            expiresAt: admin.firestore.Timestamp.fromMillis(expiresMs),
+            expiryWarnedAt: admin.firestore.FieldValue.delete(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          const res = {
+            ok: true,
+            listingId,
+            tier,
+            durationDays: days,
+            price,
+            tierUntil: tierUntilMs,
+          };
+          t.set(idemRef, {
+            type: 'purchaseRealtyTier',
+            result: res,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return res;
+        });
+      } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error('purchaseRealtyTier', e);
+        throw fail('internal', 'purchase_failed');
+      }
+    });
+
+  /** Нархлар жадвали — илова тариф варағида кўрсатиш учун. */
+  exports.getRealtyPricing = functions.https.onCall(async () => {
+    const out = {};
+    for (const tier of Object.keys(PAID_DURATIONS)) {
+      out[tier] = {};
+      for (const days of PAID_DURATIONS[tier]) {
+        out[tier][String(days)] = await realtyPriceFor(tier, days);
+      }
+    }
+    return { pricing: out };
+  });
+
   // ─── Админ панел ───────────────────────────────────────────────
   // `admin_jobs_service.dart` билан бир хил нақш: текширув сервер
   // томонда `assertAdmin()` да, Firestore rules'га таянилмайди.
@@ -370,8 +553,10 @@ function attachRealty(exports, deps) {
     .timeZone('Asia/Tashkent')
     .onRun(async () => {
       const now = admin.firestore.Timestamp.now();
+
+      // 1) Муддати тугаган объектлар — ўчирилади.
       let deleted = 0;
-      // Партия-партия: битта юришда 500 тагача (Firestore batch чегараси).
+      // Партия-партия: битта юришда 400 тагача (Firestore batch чегараси).
       for (let round = 0; round < 10; round += 1) {
         const snap = await db.collection('realty_listings')
           .where('expiresAt', '<=', now)
@@ -384,7 +569,89 @@ function attachRealty(exports, deps) {
         deleted += snap.size;
         if (snap.size < 400) break;
       }
-      console.log('realtyExpirySweep deleted', deleted);
+
+      // 2) Пуллик даража муддати тугаган, лекин объектнинг ўзи ҳали
+      //    яшайдиганлар — ОДДИЙга қайтади (қаранг: `purchaseRealtyTier`
+      //    изоҳидаги муддат ҳисоби).
+      let downgraded = 0;
+      for (let round = 0; round < 10; round += 1) {
+        const snap = await db.collection('realty_listings')
+          .where('tierUntil', '<=', now)
+          .limit(400)
+          .get();
+        if (snap.empty) break;
+        const batch = db.batch();
+        let writes = 0;
+        snap.docs.forEach((doc) => {
+          if ((doc.data() || {}).tier === 'plain') return;
+          batch.update(doc.ref, {
+            tier: 'plain',
+            tierUntil: null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          writes += 1;
+        });
+        if (writes > 0) await batch.commit();
+        downgraded += writes;
+        if (snap.size < 400) break;
+      }
+
+      console.log(
+        `realtyExpirySweep deleted=${deleted} downgraded=${downgraded}`,
+      );
+      return null;
+    });
+
+  /**
+   * Муддат тугашидан 1 кун олдин эгасига огоҳлантириш + «узайтириш»
+   * таклифи (концепциянинг 9-бўлимидаги тавсия).
+   *
+   * Иккита фойдаси бор: объект тасодифан ўчиб кетмайди ва AVA такрорий
+   * тўлов олади. `expiryWarnedAt` — бир хил эълон учун такрор хабар
+   * юборилмаслиги учун.
+   */
+  exports.realtyExpiryWarning = functions
+    .runWith({ timeoutSeconds: 540 })
+    .pubsub.schedule('0 10 * * *')
+    .timeZone('Asia/Tashkent')
+    .onRun(async () => {
+      const now = Date.now();
+      const horizon = admin.firestore.Timestamp.fromMillis(
+        now + 24 * 60 * 60 * 1000,
+      );
+      const snap = await db.collection('realty_listings')
+        .where('expiresAt', '<=', horizon)
+        .limit(300)
+        .get();
+
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const d = doc.data() || {};
+        if (d.expiryWarnedAt) continue;
+        const exp = d.expiresAt && d.expiresAt.toMillis
+          ? d.expiresAt.toMillis() : 0;
+        if (!exp || exp <= now) continue; // аллақачон тугаган — sweep иши
+        try {
+          await notifyUserInApp({
+            userId: String(d.ownerId || ''),
+            title: '🏠 Эълон муддати тугаяпти',
+            body: `«${String(d.title || '').slice(0, 60)}» эртага лентадан `
+              + 'ўчади. Муддатни узайтиришингиз мумкин.',
+            category: 'info',
+            source: 'realty',
+            dataType: 'realty_expiry',
+            screen: 'realty_my',
+            extraData: { listingId: doc.id },
+          });
+          await doc.ref.update({
+            expiryWarnedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          sent += 1;
+        } catch (e) {
+          console.error('realtyExpiryWarning', doc.id, e.message || e);
+        }
+      }
+      console.log('realtyExpiryWarning sent', sent);
       return null;
     });
 }

@@ -8,6 +8,7 @@ import '../realty_tabs.dart';
 import '../widgets/realty_tier_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
+import 'realty_pro_screen.dart';
 
 /// «Менинг объектларим» — эга ўз эълонларини кўради ва ўчиради.
 ///
@@ -18,23 +19,155 @@ import 'realty_detail_screen.dart';
 /// Бу ерда кўринадиган объектлар лентадагидан фарқ қилади: `pending`
 /// (текширувда) ва муддати тугаганлари ҳам чиқади, чунки эга улар
 /// қаердалигини билиши керак.
-class MyRealtyListingsScreen extends StatelessWidget {
+class MyRealtyListingsScreen extends StatefulWidget {
   const MyRealtyListingsScreen({super.key});
 
-  /// Бепул ўринни банд қилиб турган объектлар — сервердаги
-  /// `countActivePlain` билан бир хил ҳисоб.
-  static int usedFreeSlots(List<RealtyListing> items) => items
-      .where((r) =>
-          r.tier == RealtyTier.plain && r.status != 'blocked' && !r.isExpired)
-      .length;
+  @override
+  State<MyRealtyListingsScreen> createState() =>
+      _MyRealtyListingsScreenState();
+}
+
+class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
+  final _repo = RealtyRepository();
+
+  RealtyQuota _quota = RealtyQuota.empty;
+
+  /// Гуруҳли амаллар учун белгиланганлар (концепция, 5-бўлим).
+  final Set<String> _selected = {};
+  bool _bulkBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuota();
+  }
+
+  Future<void> _loadQuota() async {
+    final quota = await _repo.fetchQuota();
+    if (mounted) setState(() => _quota = quota);
+  }
+
+  Future<void> _bulkDelete(List<RealtyListing> all) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.tr('realty_delete_title')),
+        content: Text(
+          '${_selected.length} · ${context.tr('realty_delete_body')}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(context.tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              context.tr('delete'),
+              style: TextStyle(color: RealtyTabs.colorFor(RealtyTier.urgent)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _bulkBusy = true);
+    // Биттадан: сервер ҳар бирида эгалик ва квотани текширади.
+    for (final id in _selected.toList()) {
+      try {
+        await _repo.deleteMine(id);
+      } catch (_) {
+        // Биттаси ўчмаса қолганлари давом этсин — рўйхат stream
+        // орқали барибир ҳақиқий ҳолатни кўрсатади.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _bulkBusy = false;
+    });
+    await _loadQuota();
+  }
+
+  /// Белгиланганларнинг ҳаммасига бирданига РЕКЛАМА ёки СРОЧНО.
+  ///
+  /// Тариф варағи битта объект учун ёзилган, шунинг учун бу ерда
+  /// биринчисини кўрсатамиз ва шу танловни қолганларига қўллаймиз.
+  Future<void> _bulkPromote(List<RealtyListing> items) async {
+    final first = items.firstWhere(
+      (r) => _selected.contains(r.id),
+      orElse: () => items.first,
+    );
+    final result = await showRealtyTierSheet(
+      context,
+      listing: first,
+      bulkCount: _selected.length,
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _bulkBusy = true);
+    var failed = 0;
+    for (final id in _selected.toList()) {
+      if (id == first.id) continue; // варақнинг ўзи буни сотиб олди
+      try {
+        await _repo.purchaseTier(
+          listingId: id,
+          tier: result.tier,
+          durationDays: result.durationDays,
+        );
+      } catch (_) {
+        failed += 1;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _bulkBusy = false;
+    });
+    if (failed > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${context.tr('realty_bulk_failed')}: $failed'),
+        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final repo = RealtyRepository();
+    final repo = _repo;
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(title: Text(context.tr('realty_my_title'))),
+      appBar: AppBar(
+        title: Text(
+          _selected.isEmpty
+              ? context.tr('realty_my_title')
+              : '${_selected.length}',
+        ),
+        leading: _selected.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(_selected.clear),
+              ),
+        actions: [
+          if (_selected.isEmpty)
+            IconButton(
+              tooltip: context.tr('realty_pro_title'),
+              icon: const Icon(Icons.workspace_premium_outlined),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RealtyProScreen(),
+                  ),
+                );
+                await _loadQuota();
+              },
+            ),
+        ],
+      ),
       body: StreamBuilder<List<RealtyListing>>(
         stream: repo.watchMine(),
         builder: (context, snap) {
@@ -54,10 +187,12 @@ class MyRealtyListingsScreen extends StatelessWidget {
             );
           }
           final items = snap.data ?? const <RealtyListing>[];
-          final used = usedFreeSlots(items);
           return Column(
             children: [
-              _FreeSlotsBar(used: used),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                child: RealtyQuotaBar(quota: _quota),
+              ),
               Expanded(
                 child: items.isEmpty
                     ? Center(
@@ -79,9 +214,23 @@ class MyRealtyListingsScreen extends StatelessWidget {
                         itemBuilder: (_, i) => _MyListingTile(
                           listing: items[i],
                           repo: repo,
+                          selected: _selected.contains(items[i].id),
+                          selectionMode: _selected.isNotEmpty,
+                          onToggleSelect: () => setState(() {
+                            final id = items[i].id;
+                            if (!_selected.remove(id)) _selected.add(id);
+                          }),
+                          onChanged: _loadQuota,
                         ),
                       ),
               ),
+              if (_selected.isNotEmpty)
+                _BulkBar(
+                  count: _selected.length,
+                  busy: _bulkBusy,
+                  onDelete: () => _bulkDelete(items),
+                  onPromote: () => _bulkPromote(items),
+                ),
             ],
           );
         },
@@ -90,57 +239,85 @@ class MyRealtyListingsScreen extends StatelessWidget {
   }
 }
 
-/// «Бепул ўрин: 1 / 2» — эга нечта ўрни қолганини доим кўриб турсин.
-class _FreeSlotsBar extends StatelessWidget {
-  const _FreeSlotsBar({required this.used});
+/// Гуруҳли амаллар панели — белгиланганлар устида битта амал.
+class _BulkBar extends StatelessWidget {
+  const _BulkBar({
+    required this.count,
+    required this.busy,
+    required this.onDelete,
+    required this.onPromote,
+  });
 
-  final int used;
+  final int count;
+  final bool busy;
+  final VoidCallback onDelete;
+  final VoidCallback onPromote;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final full = used >= RealtyTierX.freePlainLimit;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.line,
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.surface,
+          border: Border(top: BorderSide(color: c.line)),
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            full ? Icons.info_outline : Icons.check_circle_outline,
-            size: 18,
-            color: full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${context.tr('realty_my_free_slots')}: '
-              '$used / ${RealtyTierX.freePlainLimit}',
+        child: Row(
+          children: [
+            Text(
+              '${context.tr('realty_bulk_selected')}: $count',
               style: TextStyle(
-                fontSize: AppText.bodyMedium,
-                fontWeight: FontWeight.w600,
-                color: c.ink,
+                fontSize: AppText.bodySmall,
+                color: c.ink2,
               ),
             ),
-          ),
-        ],
+            const Spacer(),
+            TextButton.icon(
+              onPressed: busy ? null : onPromote,
+              icon: const Icon(Icons.campaign_outlined, size: 18),
+              label: Text(context.tr('realty_tier_buy')),
+              style: TextButton.styleFrom(
+                foregroundColor: RealtyTabs.colorFor(RealtyTier.promo),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: busy ? null : onDelete,
+              icon: busy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline, size: 18),
+              label: Text(context.tr('delete')),
+              style: TextButton.styleFrom(
+                foregroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-
 class _MyListingTile extends StatefulWidget {
-  const _MyListingTile({required this.listing, required this.repo});
+  const _MyListingTile({
+    required this.listing,
+    required this.repo,
+    required this.selected,
+    required this.selectionMode,
+    required this.onToggleSelect,
+    required this.onChanged,
+  });
 
   final RealtyListing listing;
   final RealtyRepository repo;
+  final bool selected;
+  final bool selectionMode;
+  final VoidCallback onToggleSelect;
+  final VoidCallback onChanged;
 
   @override
   State<_MyListingTile> createState() => _MyListingTileState();
@@ -149,12 +326,23 @@ class _MyListingTile extends StatefulWidget {
 class _MyListingTileState extends State<_MyListingTile> {
   bool _deleting = false;
 
-  void _openEdit() {
-    Navigator.of(context).push(
+  Future<void> _openEdit() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => AddRealtyListingScreen(existing: widget.listing),
       ),
     );
+    widget.onChanged();
+  }
+
+  /// «Нусха олиш» — янги объект, нуқта шу уйда қолади (5-бўлим).
+  Future<void> _openCopy() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AddRealtyListingScreen(copyFrom: widget.listing),
+      ),
+    );
+    widget.onChanged();
   }
 
   Future<void> _confirmDelete() async {
@@ -254,19 +442,27 @@ class _MyListingTileState extends State<_MyListingTile> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color: c.surface,
+          color: widget.selected ? c.brandSoft : c.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: c.line),
+          border: Border.all(
+            color: widget.selected ? c.brand : c.line,
+            width: widget.selected ? 2 : 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => RealtyDetailScreen(listing: r),
-                ),
-              ),
+              // Белгилаш режимида босиш танлайди, узоқ босиш эса
+              // режимни бошлайди — гуруҳли амаллар учун (5-бўлим).
+              onLongPress: widget.onToggleSelect,
+              onTap: widget.selectionMode
+                  ? widget.onToggleSelect
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RealtyDetailScreen(listing: r),
+                        ),
+                      ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
                 child: Column(
@@ -375,6 +571,15 @@ class _MyListingTileState extends State<_MyListingTile> {
                     onPressed: _deleting ? null : _openEdit,
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     label: Text(context.tr('edit')),
+                    style: TextButton.styleFrom(foregroundColor: c.ink2),
+                  ),
+                ),
+                SizedBox(height: 28, child: VerticalDivider(color: c.line)),
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: _deleting ? null : _openCopy,
+                    icon: const Icon(Icons.copy_all_outlined, size: 18),
+                    label: Text(context.tr('realty_copy')),
                     style: TextButton.styleFrom(foregroundColor: c.ink2),
                   ),
                 ),

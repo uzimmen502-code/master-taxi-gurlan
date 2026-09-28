@@ -15,23 +15,36 @@ import '../realty_tabs.dart';
 ///
 /// Тўлов AVA ҳамёнидан. Баланс етмаса «Ҳамённи тўлдиринг» дейилади ва
 /// сотиб олиш амалга ошмайди.
-Future<bool> showRealtyTierSheet(
+///
+/// [bulkCount] берилса — гуруҳли режим: варақ [listing] га сотиб олади
+/// ва танланган даража/муддатни қайтаради, чақирувчи уни қолган
+/// объектларга қўллайди (концепция, 5-бўлим: «гуруҳли амаллар»).
+Future<RealtyTierChoice?> showRealtyTierSheet(
   BuildContext context, {
   required RealtyListing listing,
-}) async {
-  final done = await showModalBottomSheet<bool>(
+  int bulkCount = 1,
+}) {
+  return showModalBottomSheet<RealtyTierChoice>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _TierSheet(listing: listing),
+    builder: (_) => _TierSheet(listing: listing, bulkCount: bulkCount),
   );
-  return done == true;
+}
+
+/// Варақда танланган даража ва муддат.
+class RealtyTierChoice {
+  const RealtyTierChoice({required this.tier, required this.durationDays});
+
+  final RealtyTier tier;
+  final int durationDays;
 }
 
 class _TierSheet extends StatefulWidget {
-  const _TierSheet({required this.listing});
+  const _TierSheet({required this.listing, this.bulkCount = 1});
 
   final RealtyListing listing;
+  final int bulkCount;
 
   @override
   State<_TierSheet> createState() => _TierSheetState();
@@ -85,7 +98,7 @@ class _TierSheetState extends State<_TierSheet> {
         durationDays: days,
       );
       if (!mounted) return;
-      navigator.pop(true);
+      navigator.pop(RealtyTierChoice(tier: _tier, durationDays: days));
       messenger.showSnackBar(SnackBar(
         // `formatMoney` ўзи «сўм» қўшади — такрорламаймиз.
         content: Text(
@@ -146,11 +159,21 @@ class _TierSheetState extends State<_TierSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                widget.listing.titleOrText,
+                widget.bulkCount > 1
+                    ? '${context.tr('realty_bulk_selected')}: '
+                        '${widget.bulkCount}'
+                    : widget.listing.titleOrText,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: AppText.bodySmall, color: c.ink3),
               ),
+              if (widget.bulkCount > 1) ...[
+                const SizedBox(height: 4),
+                Text(
+                  context.tr('realty_bulk_price_hint'),
+                  style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+                ),
+              ],
               const SizedBox(height: 16),
 
               Row(

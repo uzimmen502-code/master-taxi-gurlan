@@ -29,7 +29,8 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny([
             'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
-            'realtyUnlocksLeft', 'realtyOwnerKey'
+            'realtyUnlocksLeft', 'realtyOwnerKey',
+            'realtyPro', 'realtyTeamOwner'
           ]);
     }
 
@@ -679,7 +680,8 @@ service cloud.firestore {
           && request.resource.data.keys().hasAll(['phone'])
           && !request.resource.data.keys().hasAny([
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
-               'realtyUnlocksLeft', 'realtyOwnerKey'
+               'realtyUnlocksLeft', 'realtyOwnerKey',
+               'realtyPro', 'realtyTeamOwner'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
@@ -2937,6 +2939,18 @@ service cloud.firestore {
     match /users/{userId}/realty_unlocked/{listingId} {
       allow read: if isOwner(userId) || isAdmin();
       allow write: if false;
+    }
+
+    // Риэлтор воситалари (концепция, 5-бўлим) — пул билан боғлиқ эмас,
+    // фақат эгасининг ўз қулайлиги. Шунинг учун клиент ўзи ёзади.
+    //   realty_places — «сақланган уйлар»: тез-тез ишлатиладиган уй ва
+    //     турар-жой мажмуалари нуқтаси билан.
+    //   realty_prefs/template — компаниянинг стандарт матни ва шартлари.
+    match /users/{userId}/realty_places/{placeId} {
+      allow read, write: if isOwner(userId);
+    }
+    match /users/{userId}/realty_prefs/{docId} {
+      allow read, write: if isOwner(userId);
     }
 
   }

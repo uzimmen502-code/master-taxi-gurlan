@@ -454,6 +454,169 @@ class RealtyRepository {
     }
   }
 
+  // ─── Риэлторлик компанияси воситалари (концепция, 5-бўлим) ───
+
+  /// Пакет ҳисоблагичи — банд ўрин, лимит ва муддат.
+  Future<RealtyQuota> fetchQuota() async {
+    try {
+      final res = await _functions.httpsCallable('getRealtyQuota').call();
+      final d = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      final until = (d['proExpiresAt'] as num?)?.toInt() ?? 0;
+      return RealtyQuota(
+        used: (d['used'] as num?)?.toInt() ?? 0,
+        limit: (d['limit'] as num?)?.toInt() ?? 0,
+        isPro: d['isPro'] == true,
+        proExpiresAt: until > 0
+            ? DateTime.fromMillisecondsSinceEpoch(until)
+            : null,
+      );
+    } catch (e) {
+      debugPrint('[RealtyRepository] fetchQuota $e');
+      return RealtyQuota.empty;
+    }
+  }
+
+  Future<List<RealtyProPlan>> loadProPlans() async {
+    try {
+      final res = await _functions.httpsCallable('getRealtyProPlans').call();
+      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      final list = raw['plans'] as List? ?? const [];
+      return list.map((e) {
+        final m = Map<String, dynamic>.from(e as Map);
+        return RealtyProPlan(
+          id: (m['id'] ?? '') as String,
+          objects: (m['objects'] as num?)?.toInt() ?? 0,
+          days: (m['days'] as num?)?.toInt() ?? 0,
+          price: (m['price'] as num?)?.toInt() ?? 0,
+        );
+      }).where((p) => p.id.isNotEmpty).toList();
+    } catch (e) {
+      debugPrint('[RealtyRepository] loadProPlans $e');
+      return const [];
+    }
+  }
+
+  Future<void> purchaseProPackage(String planId) async {
+    try {
+      await _functions
+          .httpsCallable(
+            'purchaseRealtyProPackage',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          )
+          .call({'idempotencyKey': _uuid.v4(), 'planId': planId});
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  /// Сақланган уйлар — янги объектда нуқтани қайта қўйиш ўрнига танлаш.
+  Stream<List<RealtySavedPlace>> watchSavedPlaces() {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return Stream.value(const <RealtySavedPlace>[]);
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_places')
+        .orderBy('label')
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) {
+              final d = doc.data();
+              return RealtySavedPlace(
+                id: doc.id,
+                label: (d['label'] ?? '') as String,
+                lat: (d['lat'] as num?)?.toDouble() ?? 0,
+                lng: (d['lng'] as num?)?.toDouble() ?? 0,
+              );
+            }).toList());
+  }
+
+  Future<void> savePlace({
+    required String label,
+    required double lat,
+    required double lng,
+  }) async {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return;
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_places')
+        .add({'label': label.trim(), 'lat': lat, 'lng': lng});
+  }
+
+  Future<void> deleteSavedPlace(String placeId) async {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return;
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_places')
+        .doc(placeId)
+        .delete();
+  }
+
+  /// Шаблон — компаниянинг стандарт матни ва шартлари (бир марта
+  /// киритилади, кейин ҳар объектга автоматик тўлади).
+  Future<String> loadTemplateText() async {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return '';
+    try {
+      final snap = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('realty_prefs')
+          .doc('template')
+          .get();
+      return ((snap.data() ?? const {})['text'] ?? '') as String;
+    } catch (e) {
+      debugPrint('[RealtyRepository] loadTemplateText $e');
+      return '';
+    }
+  }
+
+  Future<void> saveTemplateText(String text) async {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return;
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_prefs')
+        .doc('template')
+        .set({'text': text.trim()});
+  }
+
+  Future<void> addTeamMember(String phone) async {
+    try {
+      await _functions
+          .httpsCallable('addRealtyTeamMember')
+          .call({'phone': phone});
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  Future<void> removeTeamMember(String phone) async {
+    try {
+      await _functions
+          .httpsCallable('removeRealtyTeamMember')
+          .call({'phone': phone});
+    } on FirebaseFunctionsException catch (e) {
+      throw RealtyException(e.message ?? e.code);
+    }
+  }
+
   /// Эга ўз объектини ўчиради («сотилди» ёки нотўғри киритилди).
   Future<void> deleteMine(String listingId) async {
     try {
@@ -480,6 +643,64 @@ class RealtySubmitResult {
   final int freeLeft;
 
   bool get isLive => status == 'active';
+}
+
+/// Пакет ҳисоблагичи (концепция, 5-бўлим: «Пакетда қанча объект ўрни
+/// ва муддат қолгани доим кўриниб туради»).
+class RealtyQuota {
+  const RealtyQuota({
+    required this.used,
+    required this.limit,
+    required this.isPro,
+    this.proExpiresAt,
+  });
+
+  static const empty = RealtyQuota(used: 0, limit: 0, isPro: false);
+
+  final int used;
+  final int limit;
+  final bool isPro;
+  final DateTime? proExpiresAt;
+
+  int get left => (limit - used).clamp(0, limit);
+  bool get isFull => used >= limit;
+
+  int? get proDaysLeft {
+    final until = proExpiresAt;
+    if (until == null) return null;
+    final days = until.difference(DateTime.now()).inDays;
+    return days < 0 ? 0 : days;
+  }
+}
+
+/// Профессионал пакет режаси.
+class RealtyProPlan {
+  const RealtyProPlan({
+    required this.id,
+    required this.objects,
+    required this.days,
+    required this.price,
+  });
+
+  final String id;
+  final int objects;
+  final int days;
+  final int price;
+}
+
+/// «Сақланган уй» — риэлтор тез-тез ишлайдиган манзил (5-бўлим).
+class RealtySavedPlace {
+  const RealtySavedPlace({
+    required this.id,
+    required this.label,
+    required this.lat,
+    required this.lng,
+  });
+
+  final String id;
+  final String label;
+  final double lat;
+  final double lng;
 }
 
 /// `purchaseRealtyTier` муваффақиятли натижаси.

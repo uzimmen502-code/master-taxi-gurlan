@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -26,10 +28,19 @@ import '../realty_tabs.dart';
 /// умуман жойлаштирилмайди. Шунинг учун нуқта танланмагунча сақлаш
 /// тугмаси ўчиқ туради — бу фуқарога ҳам, риэлторга ҳам бирдек.
 class AddRealtyListingScreen extends StatefulWidget {
-  const AddRealtyListingScreen({super.key, this.existing});
+  const AddRealtyListingScreen({
+    super.key,
+    this.existing,
+    this.copyFrom,
+  });
 
   /// Бўш бўлмаса — таҳрирлаш режими.
   final RealtyListing? existing;
+
+  /// «Нусха олиш» (концепция, 5-бўлим): олдинги объектдан нусха —
+  /// фақат қават, хона, майдон ва нарх ўзгартирилади, харитадаги нуқта
+  /// шу уйда қолади. Янги ЁЗУВ яратилади, [existing] эмас.
+  final RealtyListing? copyFrom;
 
   @override
   State<AddRealtyListingScreen> createState() =>
@@ -59,15 +70,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
   MapPickerResult? _point;
 
-  /// Таҳрирлашда аввал юкланган расмлар (URL) ва янги танланганлар
-  /// (локал файл) ёнма-ён туради — жами [_maxImages] тадан ошмайди.
-  final List<String> _keptUrls = [];
-  final List<XFile> _images = [];
+  /// Расмлар БИТТА рўйхатда: аввал юкланганлари (URL) ва ҳозир
+  /// танланганлари (локал файл) аралаш туради. Битта рўйхат бўлгани
+  /// учун тартибни суриб ўзгартириш мумкин — биринчиси муқова бўлади
+  /// (концепция, 5-бўлим: «кўп расм юклаш ва тартибини ўзгартириш»).
+  final List<_PhotoItem> _photos = [];
   bool _submitting = false;
 
   Color get _tierColor => RealtyTabs.colorFor(_tier);
 
-  int get _imageCount => _keptUrls.length + _images.length;
+  int get _imageCount => _photos.length;
 
   bool get _canSubmit =>
       !_submitting &&
@@ -75,24 +87,117 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       _titleCtrl.text.trim().length >= 3 &&
       _textCtrl.text.trim().length >= 3;
 
+  /// Қоралама калити — фақат янги, бўш форма учун (концепция, 5-бўлим:
+  /// «объектни бўлиб-бўлиб тўлдириш мумкин»). Таҳрир ва нусхада
+  /// қоралама ишлатилмайди: улар аллақачон тўлдирилган формадан
+  /// бошланади.
+  static const _draftKey = 'realty_draft_v1';
+
   @override
   void initState() {
     super.initState();
-    final e = widget.existing;
-    if (e == null) return;
-    _deal = e.deal;
-    _tier = e.tier;
-    _contact = e.contactMode;
-    _titleCtrl.text = e.title;
-    _textCtrl.text = e.text;
-    _priceCtrl.text = e.priceText;
-    _addressCtrl.text = e.addressText;
-    _roomsCtrl.text = e.rooms?.toString() ?? '';
-    _floorCtrl.text = e.floor?.toString() ?? '';
-    _totalFloorsCtrl.text = e.totalFloors?.toString() ?? '';
-    _areaCtrl.text = e.areaM2 == null ? '' : '${e.areaM2}';
-    _keptUrls.addAll(e.imageUrls);
-    _loadPoint(e.id);
+    final source = widget.existing ?? widget.copyFrom;
+    if (source == null) {
+      _restoreDraft();
+      _applyTemplate();
+      return;
+    }
+    _deal = source.deal;
+    _contact = source.contactMode;
+    _titleCtrl.text = source.title;
+    _textCtrl.text = source.text;
+    _addressCtrl.text = source.addressText;
+    _totalFloorsCtrl.text = source.totalFloors?.toString() ?? '';
+
+    if (widget.existing != null) {
+      // Таҳрир — ҳаммаси ўз ҳолича.
+      _tier = source.tier;
+      _priceCtrl.text = source.priceText;
+      _roomsCtrl.text = source.rooms?.toString() ?? '';
+      _floorCtrl.text = source.floor?.toString() ?? '';
+      _areaCtrl.text = source.areaM2 == null ? '' : '${source.areaM2}';
+      _photos.addAll(source.imageUrls.map(_PhotoItem.url));
+    }
+    // Нусхада қават, хона, майдон, нарх ва расмлар АТАЙЛАБ бўш
+    // қолдирилади — концепцияда айнан шулар ўзгартирилади дейилган.
+
+    _loadPoint(source.id);
+  }
+
+  /// Қораламани тиклаш. Расмлар сақланмайди — локал файл йўллари
+  /// илова қайта очилганда ишончсиз бўлади.
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty || !mounted) return;
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      setState(() {
+        _deal = RealtyDealX.parse(d['deal']);
+        _contact = RealtyContactModeX.parse(d['contact']);
+        _titleCtrl.text = (d['title'] ?? '') as String;
+        _textCtrl.text = (d['text'] ?? '') as String;
+        _priceCtrl.text = (d['price'] ?? '') as String;
+        _addressCtrl.text = (d['address'] ?? '') as String;
+        _roomsCtrl.text = (d['rooms'] ?? '') as String;
+        _floorCtrl.text = (d['floor'] ?? '') as String;
+        _totalFloorsCtrl.text = (d['totalFloors'] ?? '') as String;
+        _areaCtrl.text = (d['area'] ?? '') as String;
+        final lat = (d['lat'] as num?)?.toDouble();
+        final lng = (d['lng'] as num?)?.toDouble();
+        if (lat != null && lng != null) {
+          _point = MapPickerResult(
+            lat: lat,
+            lng: lng,
+            label: (d['pointLabel'] ?? '') as String,
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('[AddRealty] restoreDraft $e');
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    if (_isEdit || widget.copyFrom != null) return;
+    if (_titleCtrl.text.trim().isEmpty && _textCtrl.text.trim().isEmpty) {
+      return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_draftKey, jsonEncode({
+        'deal': _deal.key,
+        'contact': _contact.key,
+        'title': _titleCtrl.text,
+        'text': _textCtrl.text,
+        'price': _priceCtrl.text,
+        'address': _addressCtrl.text,
+        'rooms': _roomsCtrl.text,
+        'floor': _floorCtrl.text,
+        'totalFloors': _totalFloorsCtrl.text,
+        'area': _areaCtrl.text,
+        if (_point != null) 'lat': _point!.lat,
+        if (_point != null) 'lng': _point!.lng,
+        if (_point != null) 'pointLabel': _point!.label,
+      }));
+    } catch (e) {
+      debugPrint('[AddRealty] saveDraft $e');
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
+  }
+
+  /// Шаблон — компаниянинг стандарт матни (концепция, 5-бўлим).
+  /// Фақат янги, бўш формага тўлади; нусха ёки таҳрирга тегмайди.
+  Future<void> _applyTemplate() async {
+    final text = await _repo.loadTemplateText();
+    if (!mounted || text.isEmpty || _textCtrl.text.trim().isNotEmpty) return;
+    setState(() => _textCtrl.text = text);
   }
 
   /// Аниқ координата очиқ ҳужжатда йўқ (у пуллик ахборот) — эга учун
@@ -113,6 +218,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
   @override
   void dispose() {
+    // Экран ёпилганда ёзилгани сақланиб қолади — фойдаланувчи кейин
+    // давом эттиради.
+    _saveDraft();
     _titleCtrl.dispose();
     _textCtrl.dispose();
     _priceCtrl.dispose();
@@ -139,6 +247,70 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     });
   }
 
+  /// «Сақланган уйлар» — рўйхатдан танлаш, пин қайта қўйилмайди.
+  Future<void> _pickSavedPlace() async {
+    final place = await showModalBottomSheet<RealtySavedPlace>(
+      context: context,
+      builder: (sheetCtx) => SafeArea(
+        child: StreamBuilder<List<RealtySavedPlace>>(
+          stream: _repo.watchSavedPlaces(),
+          builder: (context, snap) {
+            final places = snap.data ?? const <RealtySavedPlace>[];
+            if (places.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  context.tr('realty_saved_places_empty'),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                for (final p in places)
+                  ListTile(
+                    leading: const Icon(Icons.home_work_outlined),
+                    title: Text(p.label),
+                    onTap: () => Navigator.of(sheetCtx).pop(p),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      onPressed: () => _repo.deleteSavedPlace(p.id),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    if (place == null || !mounted) return;
+    setState(() {
+      _point = MapPickerResult(
+        lat: place.lat,
+        lng: place.lng,
+        label: place.label,
+      );
+      if (_addressCtrl.text.trim().isEmpty) _addressCtrl.text = place.label;
+    });
+  }
+
+  /// Танланган нуқтани «сақланган уйлар»га қўшиш.
+  Future<void> _saveCurrentPlace() async {
+    final point = _point;
+    if (point == null) return;
+    final label = _addressCtrl.text.trim().isNotEmpty
+        ? _addressCtrl.text.trim()
+        : point.label.trim();
+    if (label.isEmpty) return;
+    await _repo.savePlace(label: label, lat: point.lat, lng: point.lng);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(context.tr('realty_place_saved')),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   Future<void> _pickImages() async {
     final room = _maxImages - _imageCount;
     if (room <= 0) return;
@@ -148,7 +320,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     );
     if (picked.isEmpty || !mounted) return;
     setState(() {
-      _images.addAll(picked.take(room));
+      _photos.addAll(picked.take(room).map(_PhotoItem.file));
     });
   }
 
@@ -161,17 +333,27 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
     var uploaded = const <String>[];
     try {
-      if (_images.isNotEmpty) {
+      final newFiles = _photos.where((p) => p.file != null).toList();
+      if (newFiles.isNotEmpty) {
         final ownerId = canonicalPhoneId(
           FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
         );
         uploaded = await _storage.uploadImages(
           ownerId: ownerId,
-          images: _images,
+          images: newFiles.map((p) => p.file!).toList(),
         );
       }
-      // Таҳрирлашда: сақлаб қолинганлар + янги юкланганлар.
-      final images = [..._keptUrls, ...uploaded];
+      // Экрандаги ТАРТИБ сақланади: янги юкланган URL'лар ўз ўрнига
+      // қўйилади, шунда фойдаланувчи сурган тартиб базага ҳам тушади.
+      var nextUpload = 0;
+      final images = [
+        for (final p in _photos)
+          if (p.url != null) p.url! else uploaded[nextUpload++],
+      ];
+      final keptUrls = _photos
+          .where((p) => p.url != null)
+          .map((p) => p.url!)
+          .toList();
       final existing = widget.existing;
       final result = existing == null
           ? await _repo.submitListing(
@@ -209,7 +391,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       // Эга олиб ташлаган эски расмлар Storage'да қолиб кетмасин.
       final removed = existing == null
           ? const <String>[]
-          : existing.imageUrls.where((u) => !_keptUrls.contains(u)).toList();
+          : existing.imageUrls.where((u) => !keptUrls.contains(u)).toList();
       if (removed.isNotEmpty) {
         await _storage.deleteAdImages(
           ownerId: canonicalPhoneId(
@@ -219,13 +401,17 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         );
       }
       if (!mounted) return;
+      // Матн қораламани тозалашдан ОЛДИН олинади: `await` дан кейин
+      // `context` ишлатиш хавфли (экран ёпилган бўлиши мумкин).
+      final message = context.tr(
+        _isEdit
+            ? (result.isLive ? 'realty_saved' : 'realty_submit_pending')
+            : (result.isLive ? 'realty_submit_live' : 'realty_submit_pending'),
+      );
+      await _clearDraft();
       navigator.pop();
       messenger.showSnackBar(SnackBar(
-        content: Text(context.tr(
-          _isEdit
-              ? (result.isLive ? 'realty_saved' : 'realty_submit_pending')
-              : (result.isLive ? 'realty_submit_live' : 'realty_submit_pending'),
-        )),
+        content: Text(message),
         backgroundColor: _tierColor,
         behavior: SnackBarBehavior.floating,
       ));
@@ -334,7 +520,24 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               onTap: _pickPoint,
               color: _tierColor,
             ),
-            const SizedBox(height: 16),
+            // «Сақланган уйлар» — риэлтор бир хил уйга пин қўявермасин.
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: _submitting ? null : _pickSavedPlace,
+                  icon: const Icon(Icons.home_work_outlined, size: 16),
+                  label: Text(context.tr('realty_saved_places')),
+                ),
+                const Spacer(),
+                if (_point != null)
+                  TextButton.icon(
+                    onPressed: _submitting ? null : _saveCurrentPlace,
+                    icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                    label: Text(context.tr('realty_save_place')),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
 
             _field(_titleCtrl, 'realty_field_title', maxLength: 120),
             const SizedBox(height: 10),
@@ -369,15 +572,25 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
             _label(context, 'realty_field_photos'),
             _PhotoStrip(
-              keptUrls: _keptUrls,
-              images: _images,
+              photos: _photos,
               onAdd: (_submitting || _imageCount >= _maxImages)
                   ? null
                   : _pickImages,
-              onRemoveUrl: (i) => setState(() => _keptUrls.removeAt(i)),
-              onRemove: (i) => setState(() => _images.removeAt(i)),
+              onRemove: (i) => setState(() => _photos.removeAt(i)),
+              onReorder: (from, to) => setState(() {
+                final item = _photos.removeAt(from);
+                _photos.insert(to > from ? to - 1 : to, item);
+              }),
               addLabel: context.tr('realty_add_photo'),
             ),
+            if (_photos.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  context.tr('realty_photo_order_hint'),
+                  style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+                ),
+              ),
             const SizedBox(height: 16),
 
             _label(context, 'realty_field_contact'),
@@ -607,122 +820,163 @@ class _PointField extends StatelessWidget {
   }
 }
 
-/// Расмлар тасмаси: таҳрирлашда аввал сақланган расмлар (URL) олдинда,
-/// ҳозир танланган янгилари кейин туради. Иккови ҳам ўчирилиши мумкин.
+/// Тасмадаги битта расм — ё аввал юкланган URL, ё ҳозир танланган файл.
+class _PhotoItem {
+  const _PhotoItem._(this.url, this.file);
+
+  factory _PhotoItem.url(String url) => _PhotoItem._(url, null);
+  factory _PhotoItem.file(XFile file) => _PhotoItem._(null, file);
+
+  final String? url;
+  final XFile? file;
+}
+
+/// Расмлар тасмаси — босиб туриб суриш билан тартиб ўзгаради.
+/// Биринчиси муқова бўлади, шунинг учун унда «муқова» белгиси бор.
 class _PhotoStrip extends StatelessWidget {
   const _PhotoStrip({
-    required this.keptUrls,
-    required this.images,
+    required this.photos,
     required this.onAdd,
-    required this.onRemoveUrl,
     required this.onRemove,
+    required this.onReorder,
     required this.addLabel,
   });
 
-  final List<String> keptUrls;
-  final List<XFile> images;
+  final List<_PhotoItem> photos;
   final VoidCallback? onAdd;
-  final void Function(int index) onRemoveUrl;
   final void Function(int index) onRemove;
+  final void Function(int oldIndex, int newIndex) onReorder;
   final String addLabel;
-
-  Widget _removeBadge(VoidCallback onTap) {
-    return Positioned(
-      right: 12,
-      top: 4,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(2),
-          decoration: const BoxDecoration(
-            color: Colors.black54,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.close, size: 14, color: Colors.white),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
     return SizedBox(
       height: 96,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
           GestureDetector(
             onTap: onAdd,
-            child: Container(
-              width: 96,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: c.line),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_a_photo_outlined, color: c.ink3),
-                  const SizedBox(height: 4),
-                  Text(
-                    addLabel,
-                    style: TextStyle(
-                      fontSize: AppText.labelTiny,
-                      color: c.ink3,
+            child: Opacity(
+              opacity: onAdd == null ? 0.45 : 1,
+              child: Container(
+                width: 96,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: c.line),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_a_photo_outlined, color: c.ink3),
+                    const SizedBox(height: 4),
+                    Text(
+                      addLabel,
+                      style: TextStyle(
+                        fontSize: AppText.labelTiny,
+                        color: c.ink3,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          for (var i = 0; i < keptUrls.length; i++)
-            Stack(
-              children: [
-                Container(
-                  width: 96,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: c.line),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.network(
-                    keptUrls[i],
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: c.surface2,
-                      child: Icon(Icons.image, color: c.ink3),
+          Expanded(
+            child: ReorderableListView.builder(
+              scrollDirection: Axis.horizontal,
+              buildDefaultDragHandles: false,
+              itemCount: photos.length,
+              onReorder: onReorder,
+              itemBuilder: (context, i) => ReorderableDragStartListener(
+                key: ValueKey(photos[i].url ?? photos[i].file!.path),
+                index: i,
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 96,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: i == 0 ? c.brand : c.line,
+                          width: i == 0 ? 2 : 1,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _thumb(context, photos[i]),
                     ),
-                  ),
+                    Positioned(
+                      right: 12,
+                      top: 4,
+                      child: GestureDetector(
+                        onTap: () => onRemove(i),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (i == 0)
+                      Positioned(
+                        left: 4,
+                        bottom: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.brand,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            context.tr('realty_photo_cover'),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: c.brandInk,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                _removeBadge(() => onRemoveUrl(i)),
-              ],
+              ),
             ),
-          for (var i = 0; i < images.length; i++)
-            Stack(
-              children: [
-                Container(
-                  width: 96,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: c.line),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  // Web'да `XFile.path` — blob URL, мобилда эса реал
-                  // файл йўли (`create_ad_screen.dart`даги каби).
-                  child: kIsWeb
-                      ? Image.network(images[i].path, fit: BoxFit.cover)
-                      : Image.file(File(images[i].path), fit: BoxFit.cover),
-                ),
-                _removeBadge(() => onRemove(i)),
-              ],
-            ),
+          ),
         ],
       ),
     );
   }
+
+  Widget _thumb(BuildContext context, _PhotoItem item) {
+    final c = context.ava;
+    final url = item.url;
+    if (url != null) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: c.surface2,
+          child: Icon(Icons.image, color: c.ink3),
+        ),
+      );
+    }
+    // Web'да `XFile.path` — blob URL, мобилда реал файл йўли.
+    return kIsWeb
+        ? Image.network(item.file!.path, fit: BoxFit.cover)
+        : Image.file(File(item.file!.path), fit: BoxFit.cover);
+  }
 }
+

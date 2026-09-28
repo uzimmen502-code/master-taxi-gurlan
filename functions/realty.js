@@ -132,16 +132,22 @@ function attachRealty(exports, deps) {
   }
 
   /**
-   * Эгалик текшируви — телефон ЁПИҚ ҳужжатда тургани учун ўша ердан
-   * ўқилади (очиқ ҳужжатда фақат `ownerKey` бор).
+   * Эгалик текшируви — `ownerKey` бўйича, телефон бўйича эмас.
+   *
+   * Шу туфайли ЖАМОА АККАУНТИ ўз-ўзидан ишлайди (концепция, 5-бўлим):
+   * компаниянинг бир неча ходими битта `realtyOwnerKey` ни улашади,
+   * шунинг учун ҳар бири компания объектларини таҳрирлай олади.
    */
   async function assertOwner(listingId, uid) {
-    const snap = await db.collection('realty_listings').doc(listingId)
-      .collection('private').doc('detail').get();
-    if (!snap.exists || String((snap.data() || {}).ownerId || '') !== uid) {
+    const [listing, myKey] = await Promise.all([
+      db.collection('realty_listings').doc(listingId).get(),
+      ensureOwnerKey(uid),
+    ]);
+    const key = String((listing.data() || {}).ownerKey || '');
+    if (!listing.exists || !key || key !== myKey) {
       throw fail('permission-denied', 'not_owner');
     }
-    return snap.data() || {};
+    return listing.data() || {};
   }
 
   /** Эганинг ҳозир кўриниб турган ОДДИЙ объектлари сони. */
@@ -192,10 +198,14 @@ function attachRealty(exports, deps) {
     }
 
     const ownerKey = await ensureOwnerKey(uid);
-    const freeUsed = await countActivePlain(ownerKey);
-    if (freeUsed >= FREE_PLAIN_LIMIT) {
+    const pro = await activeProPlan(uid);
+    const used = await countActivePlain(ownerKey);
+    // Профессионал пакет бор бўлса лимит ўша пакетники, бепул 2 та эмас
+    // (концепция, 5-бўлим: риэлтор кўп объект жойлайди).
+    const limit = pro ? pro.objects : FREE_PLAIN_LIMIT;
+    if (used >= limit) {
       throw fail('resource-exhausted', 'free_limit_reached', {
-        limit: FREE_PLAIN_LIMIT,
+        limit, pro: pro !== null,
       });
     }
 
@@ -287,7 +297,7 @@ function attachRealty(exports, deps) {
       ok: true,
       listingId: ref.id,
       status: autoApprove ? 'active' : 'pending',
-      freeLeft: Math.max(0, FREE_PLAIN_LIMIT - freeUsed - 1),
+      freeLeft: Math.max(0, limit - used - 1),
     };
   });
 
@@ -737,6 +747,243 @@ function attachRealty(exports, deps) {
     }
     return { pricing: out };
   });
+
+  // ─── 4-босқич: риэлторлик компанияси ──────────────────────────
+  // Концепциянинг 5-бўлими: объектлар биттадан киритилади ва ҳар бири
+  // харитага боғланади — бу қоида ЎЗГАРМАЙДИ. Лекин компанияга шу
+  // ишни тезлаштирадиган воситалар берилади.
+
+  /**
+   * Профессионал пакет режалари. Админ `settings/app.realtyProPlans`
+   * орқали алмаштиради: [{id, objects, days, price}].
+   */
+  const PRO_PLANS_DEFAULT = [
+    { id: 'pro_25', objects: 25, days: 30, price: 250000 },
+    { id: 'pro_60', objects: 60, days: 30, price: 500000 },
+    { id: 'pro_150', objects: 150, days: 90, price: 1200000 },
+  ];
+
+  async function proPlans() {
+    try {
+      const snap = await db.collection('settings').doc('app').get();
+      const raw = (snap.data() || {}).realtyProPlans;
+      if (Array.isArray(raw) && raw.length) {
+        const parsed = raw
+          .map((p) => ({
+            id: String((p || {}).id || '').trim(),
+            objects: Math.round(Number((p || {}).objects) || 0),
+            days: Math.round(Number((p || {}).days) || 0),
+            price: Math.round(Number((p || {}).price) || 0),
+          }))
+          .filter((p) => p.id && p.objects > 0 && p.days > 0 && p.price >= 0);
+        if (parsed.length) return parsed;
+      }
+    } catch (e) {
+      console.error('proPlans', e.message || e);
+    }
+    return PRO_PLANS_DEFAULT;
+  }
+
+  /** Фойдаланувчининг амал қилаётган профессионал пакети ёки `null`. */
+  async function activeProPlan(uid) {
+    try {
+      const snap = await db.collection('users').doc(uid).get();
+      const pro = (snap.data() || {}).realtyPro;
+      if (!pro || typeof pro !== 'object') return null;
+      const until = pro.expiresAt && pro.expiresAt.toMillis
+        ? pro.expiresAt.toMillis() : 0;
+      if (!until || until < Date.now()) return null;
+      const objects = Math.round(Number(pro.objects) || 0);
+      if (objects <= 0) return null;
+      return { objects, expiresAt: until, planId: String(pro.planId || '') };
+    } catch (e) {
+      console.error('activeProPlan', e.message || e);
+      return null;
+    }
+  }
+
+  exports.getRealtyProPlans = functions.https.onCall(async () => {
+    return { plans: await proPlans() };
+  });
+
+  /**
+   * Профессионал пакет сотиб олиш.
+   *
+   * Амал қилаётган пакет устига олинса, объект ўрни ва муддат
+   * ҚЎШИЛАДИ — эски пакет куймайди (`purchaseRealtyTier` билан бир хил
+   * мантиқ).
+   */
+  exports.purchaseRealtyProPackage = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const d = data || {};
+
+      const idempotencyKey = String(d.idempotencyKey || '').trim();
+      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
+      const idemRef = db.collection('wallet_idempotency')
+        .doc('realty_pro_' + idempotencyKey);
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) {
+        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
+      }
+
+      const planId = String(d.planId || '').trim();
+      const plan = (await proPlans()).find((p) => p.id === planId);
+      if (!plan) throw fail('invalid-argument', 'bad_plan');
+
+      const userRef = db.collection('users').doc(uid);
+      try {
+        return await db.runTransaction(async (t) => {
+          const idemSnap = await t.get(idemRef);
+          if (idemSnap.exists) {
+            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
+          }
+          const userSnap = await t.get(userRef);
+          if (!userSnap.exists) throw fail('not-found', 'user_not_found');
+          const u = userSnap.data() || {};
+
+          if (plan.price > 0) {
+            const balance = u.bonusBalance || 0;
+            if (balance < plan.price) {
+              throw fail('failed-precondition', 'insufficient_balance', {
+                price: plan.price, balance,
+              });
+            }
+            t.update(userRef, {
+              bonusBalance: admin.firestore.FieldValue.increment(-plan.price),
+              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            t.set(userRef.collection('wallet_ledger').doc(), {
+              type: 'realty_pro_purchase',
+              amount: plan.price,
+              debitCredit: 'debit',
+              note: `Риэлтор пакети ${plan.id} — ${plan.objects} объект, `
+                + `${plan.days} кун`,
+              refType: 'realty_pro',
+              refId: plan.id,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+
+          const cur = u.realtyPro || {};
+          const curUntil = cur.expiresAt && cur.expiresAt.toMillis
+            ? cur.expiresAt.toMillis() : 0;
+          const base = curUntil > Date.now() ? curUntil : Date.now();
+          const expiresMs = base + plan.days * 24 * 60 * 60 * 1000;
+          const objects = (curUntil > Date.now()
+            ? Math.round(Number(cur.objects) || 0) : 0) + plan.objects;
+
+          t.set(userRef, {
+            realtyPro: {
+              planId: plan.id,
+              objects,
+              expiresAt: admin.firestore.Timestamp.fromMillis(expiresMs),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+          }, { merge: true });
+
+          const res = {
+            ok: true,
+            planId: plan.id,
+            objects,
+            price: plan.price,
+            expiresAt: expiresMs,
+          };
+          t.set(idemRef, {
+            type: 'purchaseRealtyProPackage',
+            result: res,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return res;
+        });
+      } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error('purchaseRealtyProPackage', e);
+        throw fail('internal', 'purchase_failed');
+      }
+    });
+
+  /** Пакет ҳисоблагичи — иловада доим кўриниб туриши учун. */
+  exports.getRealtyQuota = functions.https.onCall(async (data, context) => {
+    const uid = requireUid(context);
+    const ownerKey = await ensureOwnerKey(uid);
+    const pro = await activeProPlan(uid);
+    const used = await countActivePlain(ownerKey);
+    return {
+      used,
+      limit: pro ? pro.objects : FREE_PLAIN_LIMIT,
+      isPro: pro !== null,
+      proExpiresAt: pro ? pro.expiresAt : 0,
+    };
+  });
+
+  /**
+   * Жамоа аккаунти — ходимни компания пакетига улаш.
+   *
+   * Иш принципи: ходим компаниянинг `realtyOwnerKey` ини УЛАШАДИ.
+   * Шунда ходим киритган объект ҳам компания объекти бўлиб қолади,
+   * `assertOwner` эса иккаласига ҳам бирдек рухсат беради — алоҳида
+   * «жамоа» жадвали ва унга қарайдиган қўшимча қоида керак эмас.
+   *
+   * Фақат профессионал пакет эгаси ходим қўша олади.
+   */
+  exports.addRealtyTeamMember = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const pro = await activeProPlan(uid);
+      if (!pro) throw fail('failed-precondition', 'pro_required');
+
+      const memberPhone = canonicalUid(
+        String((data || {}).phone || '').replace(/\D/g, ''),
+      );
+      if (!memberPhone || memberPhone.length < 9) {
+        throw fail('invalid-argument', 'bad_phone');
+      }
+      if (memberPhone === uid) throw fail('invalid-argument', 'self');
+
+      const memberRef = db.collection('users').doc(memberPhone);
+      const memberSnap = await memberRef.get();
+      if (!memberSnap.exists) throw fail('not-found', 'member_not_found');
+      const member = memberSnap.data() || {};
+
+      // Ходимнинг ўз эълонлари бўлса, уларни компанияга кўчириб
+      // юбормаймиз — бу унинг шахсий контенти.
+      const ownerKey = await ensureOwnerKey(uid);
+      const memberKey = String(member.realtyOwnerKey || '');
+      if (memberKey && memberKey !== ownerKey) {
+        const own = await db.collection('realty_listings')
+          .where('ownerKey', '==', memberKey).limit(1).get();
+        if (!own.empty) throw fail('failed-precondition', 'member_has_listings');
+      }
+
+      await memberRef.set({
+        realtyOwnerKey: ownerKey,
+        realtyTeamOwner: uid,
+      }, { merge: true });
+
+      return { ok: true, memberPhone };
+    });
+
+  /** Ходимни жамоадан чиқариш — ўз калитини қайта олади. */
+  exports.removeRealtyTeamMember = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const memberPhone = canonicalUid(
+        String((data || {}).phone || '').replace(/\D/g, ''),
+      );
+      if (!memberPhone) throw fail('invalid-argument', 'bad_phone');
+
+      const memberRef = db.collection('users').doc(memberPhone);
+      const snap = await memberRef.get();
+      if (String((snap.data() || {}).realtyTeamOwner || '') !== uid) {
+        throw fail('permission-denied', 'not_team_owner');
+      }
+      await memberRef.set({
+        realtyOwnerKey: crypto.randomBytes(12).toString('hex'),
+        realtyTeamOwner: admin.firestore.FieldValue.delete(),
+      }, { merge: true });
+      return { ok: true };
+    });
 
   // ─── Админ панел ───────────────────────────────────────────────
   // `admin_jobs_service.dart` билан бир хил нақш: текширув сервер

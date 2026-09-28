@@ -43,6 +43,13 @@ class RealtyMapView extends StatefulWidget {
 }
 
 class _RealtyMapViewState extends State<RealtyMapView> {
+  /// Шундан кичик чегара «битта нуқта» деб ҳисобланади (≈2 км).
+  static const double _minSpanDegrees = 0.02;
+
+  /// Битта нуқта бўлганда камера зуми — тахминий катакча (≈20 км)
+  /// атрофи кўриниб турсин.
+  static const double _singlePointZoom = 11;
+
   GoogleMapController? _map;
   bool _didFitAll = false;
   int _fitAttempts = 0;
@@ -96,7 +103,25 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     final map = _map;
     if (bounds == null || map == null) return;
     try {
-      await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48));
+      // Нуқталар битта бўлса (ёки ҳаммаси бир катакда) чегара нолга
+      // тенг бўлиб қолади ва `newLatLngBounds` максимал зумга кетади —
+      // экранда фақат бўш яшил майдон кўринади (қурилмада сезилди,
+      // 2026-09-28). Шунинг учун бундай ҳолда белгиланган зум.
+      final latSpan =
+          (bounds.northeast.latitude - bounds.southwest.latitude).abs();
+      final lngSpan =
+          (bounds.northeast.longitude - bounds.southwest.longitude).abs();
+      if (latSpan < _minSpanDegrees && lngSpan < _minSpanDegrees) {
+        await map.animateCamera(CameraUpdate.newLatLngZoom(
+          LatLng(
+            (bounds.northeast.latitude + bounds.southwest.latitude) / 2,
+            (bounds.northeast.longitude + bounds.southwest.longitude) / 2,
+          ),
+          _singlePointZoom,
+        ));
+      } else {
+        await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48));
+      }
       _didFitAll = true;
     } catch (e) {
       _fitAttempts += 1;

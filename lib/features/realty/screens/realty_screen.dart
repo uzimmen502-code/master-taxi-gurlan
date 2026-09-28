@@ -93,6 +93,16 @@ class _RealtyScreenState extends State<RealtyScreen>
         ],
         bottom: TabBar(
           controller: _tabs,
+          // Ранглар АНИҚ берилади: иловада `TabBarTheme` йўқ, Material 3
+          // эса стандарт ҳолда `colorScheme` дан тус олади ва кўк
+          // AppBar устида ёзув деярли ўқилмай қолади (қурилмада
+          // текширилди, 2026-09-28 — танланган таб умуман кўринмасди).
+          labelColor: c.brandInk,
+          unselectedLabelColor: c.brandInk.withValues(alpha: 0.65),
+          indicatorColor: c.brandInk,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
           labelStyle: const TextStyle(
             fontSize: AppText.bodyMedium,
             fontWeight: FontWeight.w700,
@@ -204,8 +214,12 @@ class _MapPanelState extends State<_MapPanel> {
                   (_) => _loadExact(visibleUnlocked),
                 );
               }
+              // Легенда ХАРИТА УСТИДА: пастда турганда «Эълон қўшиш»
+              // тугмаси уни ёпиб қўяр эди (қурилмада текширилди,
+              // 2026-09-28).
               return Column(
                 children: [
+                  const _MapLegend(),
                   Expanded(
                     child: RealtyMapView(
                       listings: listings,
@@ -213,7 +227,6 @@ class _MapPanelState extends State<_MapPanel> {
                       onListingTap: widget.onOpen,
                     ),
                   ),
-                  const _MapLegend(),
                 ],
               );
             },
@@ -233,7 +246,8 @@ class _MapLegend extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: c.line)),
+        color: c.surface,
+        border: Border(bottom: BorderSide(color: c.line)),
       ),
       child: Row(
         children: [

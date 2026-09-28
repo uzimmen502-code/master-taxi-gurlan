@@ -17,6 +17,7 @@ import '../platform_store/screens/platform_store_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
+import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
 import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
@@ -287,6 +288,24 @@ List<ServiceSpotlightItem> buildHomeServices(
           userPhone: canonicalPhoneId(
             context.read<HomeController>().phone,
           ),
+        ));
+      },
+    ),
+    ServiceSpotlightItem(
+      moduleId: 'china_market',
+      label: context.tr('home_module_china'),
+      icon: Icons.local_shipping_outlined,
+      iconColor: const Color(0xFF0E7C72),
+      onTap: () {
+        if (!ServiceConfigHolder.isOpenable('china_market')) {
+          a.showComingSoon();
+          return;
+        }
+        a.push(WholesaleMarketScreen(
+          userPhone: canonicalPhoneId(
+            context.read<HomeController>().phone,
+          ),
+          market: WholesaleProduct.marketChina,
         ));
       },
     ),

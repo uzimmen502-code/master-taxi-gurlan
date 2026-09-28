@@ -55,6 +55,7 @@ const Map<String, String> _moduleLabels = {
   'pay_payme': 'Payme',
   'pay_paynet': 'Paynet',
   'wholesale_market': 'Улгуржи бозор',
+  'china_market': 'Хитой бозори',
   'realty': 'Кўчмас мулк',
 };
 
@@ -759,7 +760,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                // Ўртага тенгланади (эга қарори, 2026-09-28): аввал
+                // `start` эди ва вилоят танлагичи баланд enforce
+                // панелининг ёнида тепага ёпишиб, остида бўш жой
+                // қоларди.
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Column(
@@ -784,7 +789,10 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
                     SizedBox(width: 220, child: _regionPicker()),
                   ],
                   const SizedBox(width: 8),
-                  SizedBox(width: 320, child: _enforceBar()),
+                  // 320 тор эди: сарлавҳа 2 қаторга, изоҳ 3 қаторга
+                  // бўлиниб, панел баландлашиб кетарди. Кенгайтирилди —
+                  // иккови ҳам бир қаторга сиғади ва баландлик тушади.
+                  SizedBox(width: 470, child: _enforceBar()),
                 ],
               ),
             ],
@@ -1196,14 +1204,20 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
+              // Иккови ҳам БИР ҚАТОР — панел баландлиги матн ўралишига
+              // қараб ўзгармасин.
               title: const Text(
                 'Config-driven rejim (enforce)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 _enforce
                     ? 'YOQILGAN — faqat yoqilgan modullar ochiladi'
                     : 'OʻCHIQ — barcha modul ochiladi',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11),
               ),
               value: _enforce,

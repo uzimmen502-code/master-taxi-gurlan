@@ -328,6 +328,7 @@ const _kServiceIcons = <String, IconData>{
   'dating': Icons.favorite_rounded,
   'chatgpt': Icons.auto_awesome_rounded,
   'wholesale_market': Icons.warehouse_outlined,
+  'china_market': Icons.local_shipping_outlined,
   'realty': Icons.apartment_rounded,
 };
 
@@ -384,6 +385,10 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFF8E7BF0);
     case 'wholesale_market':
       return const Color(0xFF12A594);
+    // Хитой бозори — улгуржининг «қариндоши», шунинг учун ўша фируза
+    // оиласидан, лекин тўқроқ туси билан ажралиб туради.
+    case 'china_market':
+      return const Color(0xFF0E7C72);
     case 'platform_store':
       return const Color(0xFF3F6FE4);
     case 'sell':

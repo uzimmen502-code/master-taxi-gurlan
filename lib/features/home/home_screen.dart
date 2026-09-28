@@ -870,10 +870,16 @@ class _HomeViewState extends State<_HomeView> {
                                     WholesaleProduct.marketWholesale),
                                 onOpenProduct: _openWholesaleProduct,
                               ),
+                            ],
+                            // Хитой бозори. Архитектураси улгуржи билан
+                            // бир хил (эга қарори) — ўша коллекция,
+                            // `market` билан ажралади. Лекин ДАРВОЗАСИ
+                            // алоҳида (эга қарори, 2026-09-28): аввал
+                            // `wholesale_market` га боғланган эди ва
+                            // админ панелда мустақил ёқиб бўлмасди.
+                            if (HomeModuleGate.showInGrid(
+                                'china_market')) ...[
                               SizedBox(height: AvaSpace.sectionMin),
-                              // 8-бўлим: Хитой бозори. Архитектураси
-                              // улгуржи билан бир хил (эга қарори) —
-                              // ўша коллекция, `market` билан ажралади.
                               HomeWholesaleSection(
                                 market: WholesaleProduct.marketChina,
                                 titleKey: 'home_module_china',

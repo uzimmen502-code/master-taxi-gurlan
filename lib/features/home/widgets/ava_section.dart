@@ -88,22 +88,60 @@ class AvaInsetPanel extends StatelessWidget {
 
   final Widget child;
 
+  /// Юқоридаги «соя» чизиғининг баландлиги — ботиқлик шундан сезилади.
+  static const double _shadeHeight = 10;
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
     return Container(
       decoration: BoxDecoration(
-        color: c.surface2,
+        // Фон ОҚ (эга қарори, 2026-09-28) — аввал `surface2` (оч кулранг)
+        // эди. Оқ фонда қора матн контрасти юқори ва майдон саҳифа
+        // фонидан аниқроқ ажралади.
+        color: c.surface,
         borderRadius: BorderRadius.circular(AvaRadius.card),
         border: Border(
-          top: BorderSide(color: c.insetEdgeTop),
-          bottom: BorderSide(color: c.insetEdgeBottom),
+          // Ботиқлик кучайтирилди: тепа чети қалинроқ ва тўқроқ, паст
+          // чети эса ёруғ — ёруғлик тепадан тушгандек кўринади.
+          top: BorderSide(color: c.insetEdgeTop, width: 2),
+          bottom: BorderSide(color: c.insetEdgeBottom, width: 2),
           left: BorderSide(color: c.line),
           right: BorderSide(color: c.line),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: child,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: child,
+          ),
+          // Ички соя. Flutter'да `BoxShadow` фақат ташқарига тушади,
+          // шунинг учун ботиқлик тепадаги градиент чизиқ билан
+          // ясалади — бу ҳар икки мавзуда ҳам тўғри ишлайди.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: _shadeHeight,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      c.insetEdgeTop.withValues(alpha: 0.45),
+                      c.insetEdgeTop.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

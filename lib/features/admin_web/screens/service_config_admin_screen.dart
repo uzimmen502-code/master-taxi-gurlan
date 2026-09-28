@@ -1189,8 +1189,13 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
           color: _enforce ? Colors.orange.shade300 : Colors.grey.shade300,
         ),
       ),
-      child: Row(
-        children: [
+      // `IntrinsicHeight` + `stretch` — «Baseline» тугмаси ёнидаги матн
+      // блоки билан БИР ХИЛ баландликда бўлсин (эга қарори, 2026-09-28).
+      // Аввал тугма ўртада, матндан паст турарди.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           Expanded(
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -1220,9 +1225,13 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 12),
+              // `stretch` баландликни беради — минимал баландлик уни
+              // чеклаб қўймасин.
+              minimumSize: Size.zero,
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

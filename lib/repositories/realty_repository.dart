@@ -62,6 +62,32 @@ class RealtyRepository {
         .map((snap) => _live(snap.docs, deal: deal));
   }
 
+  /// Бош саҳифадаги «Кўчмас мулк» бўлими.
+  ///
+  /// Бош саҳифа бўлимлари ТУМАН бўйича филтрланади (`jobs_repository`
+  /// даги `watchForHome` билан бир хил қоида) — тўлиқ доскадан фарқи
+  /// шу. [districtId] бўш бўлса филтр қўлланмайди.
+  ///
+  /// Даража аҳамиятсиз: бош саҳифада учала TAB аралаш кўринади,
+  /// янгиси юқорида.
+  Stream<List<RealtyListing>> watchForHome({
+    required String districtId,
+    int limit = 10,
+  }) {
+    final id = districtId.trim();
+    Query<Map<String, dynamic>> q =
+        _col.where('status', isEqualTo: 'active');
+    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
+    return q
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map(RealtyListing.fromDoc)
+            .where((r) => !r.isExpired)
+            .toList());
+  }
+
   /// Эганинг очиқ ҳужжатдаги калити (`users/{uid}.realtyOwnerKey`).
   ///
   /// Телефон очиқ эълонда сақланмагани учун ўз объектларини шу калит

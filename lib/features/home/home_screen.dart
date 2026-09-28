@@ -65,6 +65,8 @@ import '../../models/search_index_entry.dart';
 import 'widgets/all_services_screen.dart';
 import 'widgets/home_alive_background.dart';
 import 'widgets/home_global_search.dart';
+import '../realty/screens/realty_detail_screen.dart';
+import '../realty/screens/realty_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import 'widgets/home_ads_section.dart';
 import 'widgets/home_avagram_section.dart';
@@ -72,6 +74,7 @@ import 'widgets/home_dating_section.dart';
 import 'widgets/home_ev_section.dart';
 import 'widgets/home_intercity_section.dart';
 import 'widgets/home_market_section.dart';
+import 'widgets/home_realty_section.dart';
 import 'widgets/home_wholesale_section.dart';
 import 'widgets/home_yuk_local_section.dart';
 
@@ -798,6 +801,20 @@ class _HomeViewState extends State<_HomeView> {
                                     initialTabIndex: JobsTabs.service,
                                     highlightAdId: ad.id,
                                   ),
+                                ),
+                              ),
+                            ],
+                            // Кўчмас мулк — эълонлар оиласининг давоми
+                            // (эга қарори, 2026-09-28): «Яқинингиздаги
+                            // эълонлар» ва «Хизмат таклифлари»дан кейин,
+                            // транспортдан олдин. Сабаби: бу ҳам эълон
+                            // доскаси, бозор бўлимлари эса маҳсулот савдоси.
+                            if (HomeModuleGate.showInGrid('realty')) ...[
+                              SizedBox(height: AvaSpace.sectionMin),
+                              HomeRealtySection(
+                                onOpenAll: () => _push(const RealtyScreen()),
+                                onOpenListing: (listing) => _push(
+                                  RealtyDetailScreen(listing: listing),
                                 ),
                               ),
                             ],

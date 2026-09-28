@@ -328,6 +328,7 @@ const _kServiceIcons = <String, IconData>{
   'dating': Icons.favorite_rounded,
   'chatgpt': Icons.auto_awesome_rounded,
   'wholesale_market': Icons.warehouse_outlined,
+  'realty': Icons.apartment_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -407,6 +408,10 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFF9B6BD6);
     case 'ev_charging':
       return const Color(0xFF2FBF71);
+    // Кўчмас мулк — тўқ кўк: «ишонч, келишув» маъноси, ва бўлим
+    // ичидаги яшил/мандарин/қизил пинлар билан тўқнашмайди.
+    case 'realty':
+      return const Color(0xFF1F4E79);
     // ── Тўлов провайдерлари ─────────────────────────────────────
     // Бренд логотиплари ўз рангига эга — доира ОЧ нейтрал бўлади,
     // акс ҳолда логотип билан ранг тўқнашади.

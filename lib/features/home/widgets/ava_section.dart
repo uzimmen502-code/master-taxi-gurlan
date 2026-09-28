@@ -89,7 +89,13 @@ class AvaInsetPanel extends StatelessWidget {
   final Widget child;
 
   /// Юқоридаги «соя» чизиғининг баландлиги — ботиқлик шундан сезилади.
-  static const double _shadeHeight = 10;
+  /// Эга қарори (2026-09-28): ботиқлик яна 2 баробар чуқурлаштирилди —
+  /// 10 → 20, соя тиниқлиги 0.45 → 0.80, чет қалинлиги 2 → 3.
+  static const double _shadeHeight = 20;
+
+  /// Пастдаги ёруғ чизиқ — ёруғлик тепадан тушгандек кўриниш беради
+  /// ва ботиқликни кучайтиради.
+  static const double _highlightHeight = 8;
 
   @override
   Widget build(BuildContext context) {
@@ -104,8 +110,8 @@ class AvaInsetPanel extends StatelessWidget {
         border: Border(
           // Ботиқлик кучайтирилди: тепа чети қалинроқ ва тўқроқ, паст
           // чети эса ёруғ — ёруғлик тепадан тушгандек кўринади.
-          top: BorderSide(color: c.insetEdgeTop, width: 2),
-          bottom: BorderSide(color: c.insetEdgeBottom, width: 2),
+          top: BorderSide(color: c.insetEdgeTop, width: 3),
+          bottom: BorderSide(color: c.insetEdgeBottom, width: 3),
           left: BorderSide(color: c.line),
           right: BorderSide(color: c.line),
         ),
@@ -132,8 +138,28 @@ class AvaInsetPanel extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      c.insetEdgeTop.withValues(alpha: 0.45),
+                      c.insetEdgeTop.withValues(alpha: 0.80),
                       c.insetEdgeTop.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: _highlightHeight,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      c.insetEdgeBottom.withValues(alpha: 0.9),
+                      c.insetEdgeBottom.withValues(alpha: 0),
                     ],
                   ),
                 ),

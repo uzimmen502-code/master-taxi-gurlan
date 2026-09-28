@@ -17,14 +17,25 @@ function clampNum(raw, min, max, fallback, digits = 3) {
 }
 
 /**
- * `markers=lat,lng|lat,lng` — eng ko'pi 10 ta, har biri chegarada.
- * Noto'g'ri qiymatlar shunchaki tashlab yuboriladi.
+ * Markerlar soni chegarasi.
+ *
+ * 10 dan 60 ga ko'tarildi (ega qarori, 2026-09-28): ko'chmas mulk bosh
+ * sahifasida har bir obyekt o'z pini bilan ko'rinsin. Rasm JONSIZ, shuning
+ * uchun pin soni ishlashga ta'sir qilmaydi — yagona haqiqiy cheklov
+ * Google Static Maps URL uzunligi (8192 belgi). Bitta marker kodlangan
+ * holda ~16 belgi, ya'ni 60 ta ≈ 1 KB — zaxira katta.
+ */
+const MAX_STATIC_MAP_MARKERS = 60;
+
+/**
+ * `markers=lat,lng|lat,lng` — eng ko'pi [MAX_STATIC_MAP_MARKERS] ta,
+ * har biri chegarada. Noto'g'ri qiymatlar shunchaki tashlab yuboriladi.
  */
 function parseStaticMapMarkers(raw) {
   if (!raw) return [];
   return String(raw)
     .split('|')
-    .slice(0, 10)
+    .slice(0, MAX_STATIC_MAP_MARKERS)
     .map((pair) => {
       const [a, b] = String(pair).split(',');
       const lat = clampNum(a, UZ_BOUNDS.latMin, UZ_BOUNDS.latMax, NaN);
@@ -51,6 +62,12 @@ function buildStaticMapQuery(query = {}) {
   const w = clampNum(query.w, 120, 640, 400, 0);
   const h = clampNum(query.h, 80, 640, 200, 0);
   const markers = parseStaticMapMarkers(query.markers);
+  // Marker rangi — chaqiruvchi beradi (ko'chmas mulk daraja rangini
+  // ishlatadi). Faqat `0xRRGGBB` shakli qabul qilinadi, aks holda EV
+  // uchun ishlatilgan ko'k qoladi.
+  const color = /^0x[0-9a-fA-F]{6}$/.test(String(query.color || ''))
+    ? String(query.color)
+    : '0x1E4FD8';
 
   const params = [
     `center=${lat},${lng}`,
@@ -62,7 +79,7 @@ function buildStaticMapQuery(query = {}) {
   if (markers.length > 0) {
     params.push(
       'markers=' +
-        encodeURIComponent(`size:small|color:0x1E4FD8|${markers.join('|')}`),
+        encodeURIComponent(`size:small|color:${color}|${markers.join('|')}`),
     );
   }
   return params.join('&');
@@ -70,6 +87,7 @@ function buildStaticMapQuery(query = {}) {
 
 module.exports = {
   UZ_BOUNDS,
+  MAX_STATIC_MAP_MARKERS,
   clampNum,
   parseStaticMapMarkers,
   buildStaticMapQuery,

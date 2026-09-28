@@ -62,21 +62,17 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
-  /// Катакча бўйича гуруҳлаш — тахминий режим шу гуруҳлардан қурилади.
-  Map<String, List<RealtyListing>> get _cells {
-    final out = <String, List<RealtyListing>>{};
-    for (final r in widget.listings) {
-      if (widget.exactPoints.containsKey(r.id)) continue; // аниқ пин бўлади
-      final key = r.geohash4.isEmpty ? '${r.areaLat},${r.areaLng}' : r.geohash4;
-      (out[key] ??= []).add(r);
-    }
-    return out;
-  }
+  /// Очилмаган объектлар — ҳар бири АЛОҲИДА, чунки серверда ҳар
+  /// объектнинг ўз силкитилган нуқтаси бор (≈1.2 км). Аввал улар
+  /// geohash4 катакчаси бўйича гуруҳланар ва бутун туман битта
+  /// нуқтага йиғилиб қолар эди.
+  List<RealtyListing> get _approx => widget.listings
+      .where((r) => !widget.exactPoints.containsKey(r.id))
+      .toList();
 
   List<LatLng> get _allPoints => [
         for (final e in widget.exactPoints.values) e,
-        for (final group in _cells.values)
-          LatLng(group.first.areaLat, group.first.areaLng),
+        for (final r in _approx) LatLng(r.areaLat, r.areaLng),
       ];
 
   LatLngBounds? _bounds() {
@@ -133,28 +129,23 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
-  /// Тахминий ҳудуд — катакча устидаги доира. Радиус 8 км: бу «объект
-  /// шу атрофда» дегани, аниқ манзил эмас.
+  /// Тахминий ҳудуд доираси. Радиус серверда силкитиш радиусига тенг
+  /// (≈1.2 км) — доира «объект шу доира ичида» деб ҲАҚҚОНИЙ айтади,
+  /// марказида эмас.
+  static const double _approxRadiusMeters = 1200;
+
   Set<Circle> _circles() {
     return {
-      for (final entry in _cells.entries)
+      for (final r in _approx)
         Circle(
-          circleId: CircleId('cell_${entry.key}'),
-          center: LatLng(entry.value.first.areaLat, entry.value.first.areaLng),
-          radius: 8000,
+          circleId: CircleId('approx_${r.id}'),
+          center: LatLng(r.areaLat, r.areaLng),
+          radius: _approxRadiusMeters,
           strokeWidth: 2,
-          strokeColor: RealtyTabs.colorFor(_topTier(entry.value)),
-          fillColor:
-              RealtyTabs.colorFor(_topTier(entry.value)).withValues(alpha: 0.14),
+          strokeColor: RealtyTabs.colorFor(r.tier),
+          fillColor: RealtyTabs.colorFor(r.tier).withValues(alpha: 0.14),
         ),
     };
-  }
-
-  /// Катакчадаги энг «баланд» даража — доира ранги шунга қараб.
-  RealtyTier _topTier(List<RealtyListing> group) {
-    if (group.any((r) => r.tier == RealtyTier.urgent)) return RealtyTier.urgent;
-    if (group.any((r) => r.tier == RealtyTier.promo)) return RealtyTier.promo;
-    return RealtyTier.plain;
   }
 
   Set<Marker> _markers() {
@@ -174,20 +165,19 @@ class _RealtyMapViewState extends State<RealtyMapView> {
       ));
     }
 
-    // Тахминий катакчалар — сони кўрсатилган битта белги.
-    for (final entry in _cells.entries) {
-      final group = entry.value;
+    // Очилмаганлар — ҳар бири ўз пини билан, лекин пин ТАХМИНИЙ
+    // нуқтада. Карточкани очиш мумкин: аниқ жой барибир кўрсатилмайди,
+    // харидор ахборотни ичкарида сотиб олади.
+    for (final r in _approx) {
       markers.add(Marker(
-        markerId: MarkerId('cellPin_${entry.key}'),
-        position: LatLng(group.first.areaLat, group.first.areaLng),
+        markerId: MarkerId('approxPin_${r.id}'),
+        position: LatLng(r.areaLat, r.areaLng),
         icon: BitmapDescriptor.defaultMarkerWithHue(
-          RealtyTabs.markerHueFor(_topTier(group)),
+          RealtyTabs.markerHueFor(r.tier),
         ),
         alpha: 0.75,
-        infoWindow: InfoWindow(title: '${group.length} объект'),
-        // Битта объект бўлса ҳам карточкани очамиз — аниқ жой барибир
-        // кўрсатилмайди, харидор ахборотни ичкарида сотиб олади.
-        onTap: group.length == 1 ? () => widget.onListingTap(group.first) : null,
+        infoWindow: InfoWindow(title: r.titleOrText),
+        onTap: () => widget.onListingTap(r),
       ));
     }
     return markers;

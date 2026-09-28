@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-const { encode: geohashEncode, cellCenter } = require('./geo_hash');
+const { encode: geohashEncode } = require('./geo_hash');
 
 /**
  * «Кўчмас мулк Кластери» — сервер томони (1-босқич).
@@ -83,6 +83,32 @@ function attachRealty(exports, deps) {
       console.error('realty.appSetting', field, e.message || e);
       return fallback;
     }
+  }
+
+  /**
+   * ОЧИҚ ҳужжатдаги тахминий нуқта.
+   *
+   * Аввал бу geohash4 катакчасининг маркази эди (≈20 км). Лекин
+   * битта тумандаги ҳамма объект БИТТА нуқтага тушиб қолар, харитада
+   * бир дона пин кўринарди. Энди ҳар бир объект ўз нуқтасини олади:
+   * аниқ координата [JITTER_METERS] радиусида тасодифий силкитилади.
+   *
+   * НЕГА ХАВФСИЗ: силкитиш БИР МАРТА, объект яратилганда ҳисобланади
+   * ва ўзгармайди. Агар у ҳар ўқишда қайта ҳисобланса, бир нечта
+   * қийматнинг ўртачаси аниқ нуқтани очиб қўйган бўларди.
+   * Координата 3 хонагача яхлитланади (≈110 м тўр).
+   */
+  const JITTER_METERS = 1200;
+
+  function jitteredPoint(lat, lng) {
+    const angle = Math.random() * 2 * Math.PI;
+    // `sqrt` — доира бўйлаб текис тақсимот (акс ҳолда марказга зичланади).
+    const dist = Math.sqrt(Math.random()) * JITTER_METERS;
+    const dLat = (dist * Math.cos(angle)) / 111320;
+    const dLng = (dist * Math.sin(angle))
+      / (111320 * Math.cos((lat * Math.PI) / 180) || 1);
+    const round3 = (v) => Number(v.toFixed(3));
+    return { lat: round3(lat + dLat), lng: round3(lng + dLng) };
   }
 
   /** Қидирув учун оддий токенлар — `ad_search_text.dart` билан бир хил ғоя. */
@@ -240,8 +266,8 @@ function attachRealty(exports, deps) {
     const totalFloors = optionalInt(d.totalFloors, 1, 200);
     const areaM2 = optionalNum(d.areaM2, 1, 100000);
 
-    // Аниқ нуқта ўрнига катакча маркази — бу ОЧИҚ ҳужжатга тушади.
-    const cell = cellCenter(lat, lng, 4);
+    // Аниқ нуқта ўрнига силкитилган нуқта — бу ОЧИҚ ҳужжатга тушади.
+    const cell = jitteredPoint(lat, lng);
 
     const ref = db.collection('realty_listings').doc();
     const batch = db.batch();
@@ -359,7 +385,17 @@ function attachRealty(exports, deps) {
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');
 
-    const cell = cellCenter(lat, lng, 4);
+    // Нуқта ўзгармаган бўлса ЭСКИ силкитиш сақланади. Ҳар таҳрирда
+    // қайта силкитилса, бир неча қийматнинг ўртачаси аниқ жойни очиб
+    // қўйган бўларди.
+    const prevDetail = await ref.collection('private').doc('detail').get();
+    const prev = prevDetail.data() || {};
+    const samePoint = Number(prev.lat) === lat && Number(prev.lng) === lng;
+    const cell = (samePoint
+        && Number.isFinite(Number(current.areaLat))
+        && Number.isFinite(Number(current.areaLng)))
+      ? { lat: Number(current.areaLat), lng: Number(current.areaLng) }
+      : jitteredPoint(lat, lng);
 
     await ref.update({
       deal: d.deal === 'rent' ? 'rent' : 'sale',

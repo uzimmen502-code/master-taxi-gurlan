@@ -7,6 +7,7 @@
  */
 const assert = require('assert');
 const {
+  MAX_STATIC_MAP_MARKERS,
   clampNum,
   parseStaticMapMarkers,
   buildStaticMapQuery,
@@ -48,9 +49,39 @@ ok('noto`g`ri juftlik tashlanadi', () => {
     ['41.84,60.39', '42,60.5'],
   );
 });
-ok('eng ko`pi 10 ta', () => {
-  const many = Array.from({ length: 25 }, () => '41.84,60.39').join('|');
-  assert.strictEqual(parseStaticMapMarkers(many).length, 10);
+ok('eng ko`pi MAX_STATIC_MAP_MARKERS ta', () => {
+  const many = Array.from(
+    { length: MAX_STATIC_MAP_MARKERS + 15 },
+    () => '41.84,60.39',
+  ).join('|');
+  assert.strictEqual(
+    parseStaticMapMarkers(many).length,
+    MAX_STATIC_MAP_MARKERS,
+  );
+});
+ok('chegaradagi marker soni URL uzunligini buzmaydi', () => {
+  // Google Static Maps URL chegarasi — 8192 belgi. To'liq to'ldirilgan
+  // so'rov ham undan ancha kichik bo'lishi kerak.
+  const many = Array.from(
+    { length: MAX_STATIC_MAP_MARKERS },
+    () => '41.840,60.390',
+  ).join('|');
+  const q = buildStaticMapQuery({ markers: many });
+  assert.ok(q.length < 4000, `uzunlik: ${q.length}`);
+});
+ok('marker rangi berilishi mumkin', () => {
+  const q = buildStaticMapQuery({
+    markers: '41.84,60.39',
+    color: '0x3FAE5A',
+  });
+  assert.ok(q.includes('color%3A0x3FAE5A'), q);
+});
+ok('noto`g`ri rang e`tiborsiz qoldiriladi', () => {
+  const q = buildStaticMapQuery({
+    markers: '41.84,60.39',
+    color: 'javascript:alert(1)',
+  });
+  assert.ok(q.includes('color%3A0x1E4FD8'), q);
 });
 ok('O`zbekiston chegarasidan tashqarisi qisiladi', () => {
   // London (51.5, -0.12) — chegaraga qisiladi, begona hududga so'rov ketmaydi.

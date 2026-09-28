@@ -6,29 +6,34 @@ import '../realty_tabs.dart';
 
 /// Эълонлар остидаги умумий харита (концепция, 7-бўлим).
 ///
-/// ⚠️ 1-босқичда бу виджет ЭКРАНГА УЛАНМАГАН. Пакети йўқ фойдаланувчига
-/// аниқ пин кўрсатиш пулли ахборотни бепул бериб қўяди, шунинг учун
-/// харита ахборот пакетлари билан бирга, 3-босқичда ёқилади. Файл
-/// ўшангача тайёр ҳолда турибди (қаранг: `screens/realty_screen.dart`).
+/// ИККИ РЕЖИМДА ишлайди — бу шу бўлимнинг пул топиш мантиғи:
+///   • **Тахминий ҳудуд** (пакетсиз ёки очилмаган объект): бир geohash4
+///     катакчасидаги объектлар БИТТА доира қилиб бирлаштирилади, доира
+///     маркази катакча ўртаси (≈20 км), ичида объектлар сони. Аниқ
+///     нуқта кўрсатилмайди — у пуллик ахборот (9-бўлим).
+///   • **Аниқ пин**: фойдаланувчи ахборот пакетидан очган объектлар.
+///     Уларнинг координатаси [exactPoints] орқали берилади.
 ///
-/// `ev_map_view.dart` билан бир хил нақш: `GoogleMap` чақируви шу файл
-/// ичида изоляция қилинади, биринчи нуқталар келганда камера ҳаммасини
-/// қамраб оладиган қилиб мосланади.
-///
-/// Кластерлаш ҳозир йўқ — объектлар сони кўпайганда `EvClusterCalculator`
-/// нақши шу ерга кўчирилади.
+/// Аниқ координата иловага умуман келмайди: у Firestore қоидаси билан
+/// ёпилган `private/detail` ҳужжатида. Шунинг учун бу виджет «тахминий»
+/// режимда аниқ нуқтани билмайди ҳам — яширмайди, эгаси йўқ.
 class RealtyMapView extends StatefulWidget {
   const RealtyMapView({
     super.key,
     required this.listings,
     required this.onListingTap,
+    this.exactPoints = const {},
     this.centerLat = 41.2995,
     this.centerLng = 69.2401,
-    this.initialZoom = 12,
+    this.initialZoom = 10,
   });
 
   final List<RealtyListing> listings;
   final ValueChanged<RealtyListing> onListingTap;
+
+  /// Очилган объектлар: `listingId` → аниқ координата.
+  final Map<String, LatLng> exactPoints;
+
   final double centerLat;
   final double centerLng;
   final double initialZoom;
@@ -50,14 +55,32 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
-  LatLngBounds? _bounds() {
-    if (widget.listings.isEmpty) return null;
-    double? minLat, maxLat, minLng, maxLng;
+  /// Катакча бўйича гуруҳлаш — тахминий режим шу гуруҳлардан қурилади.
+  Map<String, List<RealtyListing>> get _cells {
+    final out = <String, List<RealtyListing>>{};
     for (final r in widget.listings) {
-      minLat = (minLat == null || r.lat < minLat) ? r.lat : minLat;
-      maxLat = (maxLat == null || r.lat > maxLat) ? r.lat : maxLat;
-      minLng = (minLng == null || r.lng < minLng) ? r.lng : minLng;
-      maxLng = (maxLng == null || r.lng > maxLng) ? r.lng : maxLng;
+      if (widget.exactPoints.containsKey(r.id)) continue; // аниқ пин бўлади
+      final key = r.geohash4.isEmpty ? '${r.areaLat},${r.areaLng}' : r.geohash4;
+      (out[key] ??= []).add(r);
+    }
+    return out;
+  }
+
+  List<LatLng> get _allPoints => [
+        for (final e in widget.exactPoints.values) e,
+        for (final group in _cells.values)
+          LatLng(group.first.areaLat, group.first.areaLng),
+      ];
+
+  LatLngBounds? _bounds() {
+    final pts = _allPoints;
+    if (pts.isEmpty) return null;
+    double? minLat, maxLat, minLng, maxLng;
+    for (final p in pts) {
+      minLat = (minLat == null || p.latitude < minLat) ? p.latitude : minLat;
+      maxLat = (maxLat == null || p.latitude > maxLat) ? p.latitude : maxLat;
+      minLng = (minLng == null || p.longitude < minLng) ? p.longitude : minLng;
+      maxLng = (maxLng == null || p.longitude > maxLng) ? p.longitude : maxLng;
     }
     return LatLngBounds(
       southwest: LatLng(minLat!, minLng!),
@@ -85,17 +108,64 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
+  /// Тахминий ҳудуд — катакча устидаги доира. Радиус 8 км: бу «объект
+  /// шу атрофда» дегани, аниқ манзил эмас.
+  Set<Circle> _circles() {
+    return {
+      for (final entry in _cells.entries)
+        Circle(
+          circleId: CircleId('cell_${entry.key}'),
+          center: LatLng(entry.value.first.areaLat, entry.value.first.areaLng),
+          radius: 8000,
+          strokeWidth: 2,
+          strokeColor: RealtyTabs.colorFor(_topTier(entry.value)),
+          fillColor:
+              RealtyTabs.colorFor(_topTier(entry.value)).withValues(alpha: 0.14),
+        ),
+    };
+  }
+
+  /// Катакчадаги энг «баланд» даража — доира ранги шунга қараб.
+  RealtyTier _topTier(List<RealtyListing> group) {
+    if (group.any((r) => r.tier == RealtyTier.urgent)) return RealtyTier.urgent;
+    if (group.any((r) => r.tier == RealtyTier.promo)) return RealtyTier.promo;
+    return RealtyTier.plain;
+  }
+
   Set<Marker> _markers() {
-    return widget.listings
-        .map((r) => Marker(
-              markerId: MarkerId(r.id),
-              position: LatLng(r.lat, r.lng),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                RealtyTabs.markerHueFor(r.tier),
-              ),
-              onTap: () => widget.onListingTap(r),
-            ))
-        .toSet();
+    final markers = <Marker>{};
+
+    // Очилган объектлар — аниқ пин.
+    for (final r in widget.listings) {
+      final point = widget.exactPoints[r.id];
+      if (point == null) continue;
+      markers.add(Marker(
+        markerId: MarkerId(r.id),
+        position: point,
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          RealtyTabs.markerHueFor(r.tier),
+        ),
+        onTap: () => widget.onListingTap(r),
+      ));
+    }
+
+    // Тахминий катакчалар — сони кўрсатилган битта белги.
+    for (final entry in _cells.entries) {
+      final group = entry.value;
+      markers.add(Marker(
+        markerId: MarkerId('cellPin_${entry.key}'),
+        position: LatLng(group.first.areaLat, group.first.areaLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          RealtyTabs.markerHueFor(_topTier(group)),
+        ),
+        alpha: 0.75,
+        infoWindow: InfoWindow(title: '${group.length} объект'),
+        // Битта объект бўлса ҳам карточкани очамиз — аниқ жой барибир
+        // кўрсатилмайди, харидор ахборотни ичкарида сотиб олади.
+        onTap: group.length == 1 ? () => widget.onListingTap(group.first) : null,
+      ));
+    }
+    return markers;
   }
 
   @override
@@ -106,6 +176,7 @@ class _RealtyMapViewState extends State<RealtyMapView> {
         zoom: widget.initialZoom,
       ),
       markers: _markers(),
+      circles: _circles(),
       myLocationEnabled: true,
       myLocationButtonEnabled: false,
       zoomControlsEnabled: false,

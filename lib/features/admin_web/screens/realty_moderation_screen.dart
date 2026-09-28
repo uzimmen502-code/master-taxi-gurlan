@@ -118,7 +118,12 @@ class _ListingTile extends StatefulWidget {
 
 class _ListingTileState extends State<_ListingTile> {
   final _svc = AdminRealtyService();
+  final _repo = RealtyRepository();
   bool _busy = false;
+
+  /// Бир марта ўқилади — `build` ҳар сафар янги сўров юбормасин.
+  late final Future<RealtyDetail?> _detail =
+      _repo.fetchDetail(widget.listing.id);
 
   String get _adminPhone =>
       context.read<AdminAuthService>().phoneDigits ?? '';
@@ -184,9 +189,15 @@ class _ListingTileState extends State<_ListingTile> {
                 const SizedBox(width: 6),
                 _chip(r.deal.key),
                 const Spacer(),
-                Text(
-                  r.ownerPhone,
-                  style: const TextStyle(fontSize: AppText.labelSmall),
+                // Телефон ва аниқ координата ёпиқ ҳужжатда — админ
+                // уларни кўра олади, лекин рўйхат учун алоҳида ўқиш
+                // керак (ҳар карта учун битта қўшимча сўров).
+                FutureBuilder<RealtyDetail?>(
+                  future: _detail,
+                  builder: (context, snap) => Text(
+                    snap.data?.ownerPhone ?? '…',
+                    style: const TextStyle(fontSize: AppText.labelSmall),
+                  ),
                 ),
               ],
             ),
@@ -209,11 +220,20 @@ class _ListingTileState extends State<_ListingTile> {
               style: const TextStyle(fontSize: AppText.bodySmall),
             ),
             const SizedBox(height: 4),
-            Text(
-              'Координата: ${r.lat.toStringAsFixed(5)}, '
-              '${r.lng.toStringAsFixed(5)}'
-              '${r.addressText.isEmpty ? '' : ' · ${r.addressText}'}',
-              style: const TextStyle(fontSize: AppText.labelSmall),
+            FutureBuilder<RealtyDetail?>(
+              future: _detail,
+              builder: (context, snap) {
+                final d = snap.data;
+                final coord = d == null
+                    ? '…'
+                    : '${d.lat.toStringAsFixed(5)}, '
+                        '${d.lng.toStringAsFixed(5)}';
+                return Text(
+                  'Координата: $coord'
+                  '${r.addressText.isEmpty ? '' : ' · ${r.addressText}'}',
+                  style: const TextStyle(fontSize: AppText.labelSmall),
+                );
+              },
             ),
             if (r.imageUrls.isNotEmpty) ...[
               const SizedBox(height: 8),

@@ -1,6 +1,8 @@
 'use strict';
 
-const { encode: geohashEncode } = require('./geo_hash');
+const crypto = require('crypto');
+
+const { encode: geohashEncode, cellCenter } = require('./geo_hash');
 
 /**
  * «Кўчмас мулк Кластери» — сервер томони (1-босқич).
@@ -107,10 +109,45 @@ function attachRealty(exports, deps) {
     return n;
   }
 
+  /**
+   * Эганинг очиқ ҳужжатдаги калити.
+   *
+   * НЕГА телефон эмас: очиқ ҳужжатда `ownerId` (телефон рақами) турса,
+   * харидор пакет сотиб олмасдан ҳам базадан эганинг рақамини ўқиб
+   * олган бўларди — ахборот пакетининг маъноси қолмасди. Шунинг учун
+   * очиқ ҳужжатда фақат тасодифий калит, телефон эса ёпиқ
+   * `private/detail` ҳужжатида.
+   *
+   * Калит бир марта яратилади ва `users/{uid}.realtyOwnerKey` да
+   * сақланади — эга ўз объектларини шу калит бўйича топади.
+   */
+  async function ensureOwnerKey(uid) {
+    const userRef = db.collection('users').doc(uid);
+    const snap = await userRef.get();
+    const existing = String((snap.data() || {}).realtyOwnerKey || '').trim();
+    if (existing) return existing;
+    const key = crypto.randomBytes(12).toString('hex');
+    await userRef.set({ realtyOwnerKey: key }, { merge: true });
+    return key;
+  }
+
+  /**
+   * Эгалик текшируви — телефон ЁПИҚ ҳужжатда тургани учун ўша ердан
+   * ўқилади (очиқ ҳужжатда фақат `ownerKey` бор).
+   */
+  async function assertOwner(listingId, uid) {
+    const snap = await db.collection('realty_listings').doc(listingId)
+      .collection('private').doc('detail').get();
+    if (!snap.exists || String((snap.data() || {}).ownerId || '') !== uid) {
+      throw fail('permission-denied', 'not_owner');
+    }
+    return snap.data() || {};
+  }
+
   /** Эганинг ҳозир кўриниб турган ОДДИЙ объектлари сони. */
-  async function countActivePlain(uid) {
+  async function countActivePlain(ownerKey) {
     const snap = await db.collection('realty_listings')
-      .where('ownerId', '==', uid)
+      .where('ownerKey', '==', ownerKey)
       .where('tier', '==', 'plain')
       .limit(50)
       .get();
@@ -154,7 +191,8 @@ function attachRealty(exports, deps) {
       throw fail('invalid-argument', 'location_required');
     }
 
-    const freeUsed = await countActivePlain(uid);
+    const ownerKey = await ensureOwnerKey(uid);
+    const freeUsed = await countActivePlain(ownerKey);
     if (freeUsed >= FREE_PLAIN_LIMIT) {
       throw fail('resource-exhausted', 'free_limit_reached', {
         limit: FREE_PLAIN_LIMIT,
@@ -192,9 +230,15 @@ function attachRealty(exports, deps) {
     const totalFloors = optionalInt(d.totalFloors, 1, 200);
     const areaM2 = optionalNum(d.areaM2, 1, 100000);
 
-    const ref = await db.collection('realty_listings').add({
-      ownerId: uid,
-      ownerPhone: uid,
+    // Аниқ нуқта ўрнига катакча маркази — бу ОЧИҚ ҳужжатга тушади.
+    const cell = cellCenter(lat, lng, 4);
+
+    const ref = db.collection('realty_listings').doc();
+    const batch = db.batch();
+
+    // ─── ОЧИҚ ҳужжат: тавсиф, тахминий ҳудуд ───
+    batch.set(ref, {
+      ownerKey,
       ownerName: ownerName || 'Фойдаланувчи',
       deal,
       tier,
@@ -207,11 +251,11 @@ function attachRealty(exports, deps) {
       ...(totalFloors === null ? {} : { totalFloors }),
       ...(areaM2 === null ? {} : { areaM2 }),
       imageUrls,
-      lat,
-      lng,
+      areaLat: cell.lat,
+      areaLng: cell.lng,
       geohash4: geohashEncode(lat, lng, 4),
       contactMode,
-      ...(agentPhone ? { agentPhone } : {}),
+      hasAgent: agentPhone !== '',
       avagramClipId: '',
       adClipId: '',
       status: autoApprove ? 'active' : 'pending',
@@ -226,6 +270,18 @@ function attachRealty(exports, deps) {
         ? { moderatedAt: ts(), moderatedBy: 'auto', autoApproved: true }
         : {}),
     });
+
+    // ─── ЁПИҚ ҳужжат: айнан шу иккови пуллик ахборот ───
+    batch.set(ref.collection('private').doc('detail'), {
+      ownerId: uid,
+      lat,
+      lng,
+      ownerPhone: uid,
+      ...(agentPhone ? { agentPhone } : {}),
+      updatedAt: ts(),
+    });
+
+    await batch.commit();
 
     return {
       ok: true,
@@ -256,9 +312,7 @@ function attachRealty(exports, deps) {
     const snap = await ref.get();
     if (!snap.exists) throw fail('not-found', 'listing_not_found');
     const current = snap.data() || {};
-    if (String(current.ownerId || '') !== uid) {
-      throw fail('permission-denied', 'not_owner');
-    }
+    await assertOwner(listingId, uid);
 
     const title = String(d.title || '').trim().slice(0, 120);
     if (title.length < 3) throw fail('invalid-argument', 'title_required');
@@ -295,6 +349,8 @@ function attachRealty(exports, deps) {
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');
 
+    const cell = cellCenter(lat, lng, 4);
+
     await ref.update({
       deal: d.deal === 'rent' ? 'rent' : 'sale',
       title,
@@ -310,16 +366,26 @@ function attachRealty(exports, deps) {
       areaM2: areaM2 === null
         ? admin.firestore.FieldValue.delete() : areaM2,
       imageUrls,
-      lat,
-      lng,
+      // Очиқ ҳужжатда фақат тахминий марказ (қаранг: `ensureOwnerKey`).
+      areaLat: cell.lat,
+      areaLng: cell.lng,
       geohash4: geohashEncode(lat, lng, 4),
       contactMode,
-      agentPhone: agentPhone || admin.firestore.FieldValue.delete(),
+      hasAgent: agentPhone !== '',
       searchTokens: buildSearchTokens(title, text),
       status: nextStatus,
       editedAt: ts(),
       updatedAt: ts(),
     });
+
+    await ref.collection('private').doc('detail').set({
+      ownerId: uid,
+      lat,
+      lng,
+      ownerPhone: uid,
+      ...(agentPhone ? { agentPhone } : {}),
+      updatedAt: ts(),
+    }, { merge: false });
 
     return { ok: true, listingId, status: nextStatus };
   });
@@ -333,12 +399,23 @@ function attachRealty(exports, deps) {
     const ref = db.collection('realty_listings').doc(listingId);
     const snap = await ref.get();
     if (!snap.exists) throw fail('not-found', 'listing_not_found');
-    if (String((snap.data() || {}).ownerId || '') !== uid) {
-      throw fail('permission-denied', 'not_owner');
-    }
-    await ref.delete();
+    await assertOwner(listingId, uid);
+    await deleteListingDeep(ref);
     return { ok: true };
   });
+
+  /**
+   * Ёзувни ёпиқ ҳужжати билан бирга ўчиради.
+   *
+   * Firestore'да ҳужжат ўчирилса ички коллекцияси ЎЧМАЙДИ — эътибор
+   * берилмаса, `private/detail` (телефон ва аниқ координата) базада
+   * етим бўлиб қолаверарди.
+   */
+  async function deleteListingDeep(ref) {
+    const subs = await ref.collection('private').listDocuments();
+    await Promise.all(subs.map((doc) => doc.delete()));
+    await ref.delete();
+  }
 
   // ─── 2-босқич: пуллик РЕКЛАМА ва СРОЧНО ───────────────────────
 
@@ -403,6 +480,10 @@ function attachRealty(exports, deps) {
         throw fail('invalid-argument', 'bad_duration');
       }
 
+      // Эгалик транзакциядан ТАШҚАРИДА текширилади: телефон ёпиқ
+      // ҳужжатда, уни транзакция ичида ўқиш керак эмас.
+      await assertOwner(listingId, uid);
+
       const price = await realtyPriceFor(tier, days);
       const listingRef = db.collection('realty_listings').doc(listingId);
       const userRef = db.collection('users').doc(uid);
@@ -418,9 +499,6 @@ function attachRealty(exports, deps) {
           const snap = await t.get(listingRef);
           if (!snap.exists) throw fail('not-found', 'listing_not_found');
           const cur = snap.data() || {};
-          if (String(cur.ownerId || '') !== uid) {
-            throw fail('permission-denied', 'not_owner');
-          }
           if (cur.status === 'blocked') {
             throw fail('failed-precondition', 'listing_blocked');
           }
@@ -503,6 +581,163 @@ function attachRealty(exports, deps) {
     return { pricing: out };
   });
 
+  // ─── 3-босқич: ахборот пакети ─────────────────────────────────
+  // Концепциянинг 4-бўлими: AVA уй сотилгани учун комиссия олмайди,
+  // объектлар ҳақидаги АХБОРОТ хизмати учун ҳақ олади. Пакет — шунча
+  // объектнинг аниқ маълумотини очиш ҳуқуқи.
+
+  /** Пакет ўлчамлари — концепцияда «масалан, 5 объект ёки 10 объект». */
+  const PACKAGE_SIZES = [5, 10];
+
+  const PACKAGE_PRICING_DEFAULT = { 5: 30000, 10: 50000 };
+
+  async function packagePriceFor(size) {
+    const fallback = PACKAGE_PRICING_DEFAULT[size] || 0;
+    try {
+      const snap = await db.collection('settings').doc('app').get();
+      const map = (snap.data() || {}).realtyPackagePricing;
+      if (map && typeof map === 'object' && map[String(size)] != null) {
+        const v = Number(map[String(size)]);
+        if (Number.isFinite(v) && v >= 0) return Math.round(v);
+      }
+    } catch (e) {
+      console.error('packagePriceFor', e.message || e);
+    }
+    return fallback;
+  }
+
+  /** Ахборот пакети — ҳамёндан тўлов, `realtyUnlocksLeft` га қўшилади. */
+  exports.purchaseRealtyPackage = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const d = data || {};
+
+      const idempotencyKey = String(d.idempotencyKey || '').trim();
+      if (!idempotencyKey) throw fail('invalid-argument', 'idem_required');
+      const idemRef = db.collection('wallet_idempotency')
+        .doc('realty_pkg_' + idempotencyKey);
+      const existingIdem = await idemRef.get();
+      if (existingIdem.exists) {
+        return (existingIdem.data() || {}).result || { ok: true, duplicate: true };
+      }
+
+      const size = parseInt(String(d.size || 0), 10);
+      if (!PACKAGE_SIZES.includes(size)) {
+        throw fail('invalid-argument', 'bad_package_size');
+      }
+      const price = await packagePriceFor(size);
+      const userRef = db.collection('users').doc(uid);
+
+      try {
+        return await db.runTransaction(async (t) => {
+          const idemSnap = await t.get(idemRef);
+          if (idemSnap.exists) {
+            return (idemSnap.data() || {}).result || { ok: true, duplicate: true };
+          }
+          const userSnap = await t.get(userRef);
+          if (!userSnap.exists) throw fail('not-found', 'user_not_found');
+          const u = userSnap.data() || {};
+
+          if (price > 0) {
+            const balance = u.bonusBalance || 0;
+            if (balance < price) {
+              throw fail('failed-precondition', 'insufficient_balance', {
+                price, balance,
+              });
+            }
+            t.update(userRef, {
+              bonusBalance: admin.firestore.FieldValue.increment(-price),
+              balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            t.set(userRef.collection('wallet_ledger').doc(), {
+              type: 'realty_package_purchase',
+              amount: price,
+              debitCredit: 'debit',
+              note: `Кўчмас мулк ахборот пакети — ${size} объект`,
+              refType: 'realty_package',
+              refId: `${size}`,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+
+          // Қолган ўринлар устига қўшилади — эски пакет куймайди.
+          t.set(userRef, {
+            realtyUnlocksLeft:
+              admin.firestore.FieldValue.increment(size),
+            realtyPackageAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          const left = Number(u.realtyUnlocksLeft || 0) + size;
+          const res = { ok: true, size, price, unlocksLeft: left };
+          t.set(idemRef, {
+            type: 'purchaseRealtyPackage',
+            result: res,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return res;
+        });
+      } catch (e) {
+        if (e instanceof functions.https.HttpsError) throw e;
+        console.error('purchaseRealtyPackage', e);
+        throw fail('internal', 'purchase_failed');
+      }
+    });
+
+  /**
+   * Битта объектнинг аниқ маълумотини очиш — пакетдан 1 ўрин ейди.
+   *
+   * Очилгач `users/{uid}/realty_unlocked/{listingId}` ҳужжати яратилади;
+   * `firestore.rules` айнан шу ҳужжат борлигига қараб ёпиқ
+   * `private/detail` ни ўқишга рухсат беради. Такрор очишда ўрин
+   * ЕЙИЛМАЙДИ — бир марта тўланган объект доим очиқ қолади.
+   */
+  exports.unlockRealtyListing = functions.https.onCall(
+    async (data, context) => {
+      const uid = requireUid(context);
+      const listingId = String((data || {}).listingId || '').trim();
+      if (!listingId) throw fail('invalid-argument', 'listing_required');
+
+      const listingRef = db.collection('realty_listings').doc(listingId);
+      const listingSnap = await listingRef.get();
+      if (!listingSnap.exists) throw fail('not-found', 'listing_not_found');
+
+      const userRef = db.collection('users').doc(uid);
+      const unlockRef = userRef.collection('realty_unlocked').doc(listingId);
+
+      return db.runTransaction(async (t) => {
+        const existing = await t.get(unlockRef);
+        if (existing.exists) {
+          const u = await t.get(userRef);
+          return {
+            ok: true,
+            alreadyUnlocked: true,
+            unlocksLeft: Number((u.data() || {}).realtyUnlocksLeft || 0),
+          };
+        }
+        const userSnap = await t.get(userRef);
+        const left = Number((userSnap.data() || {}).realtyUnlocksLeft || 0);
+        if (left <= 0) throw fail('failed-precondition', 'no_unlocks_left');
+
+        t.update(userRef, {
+          realtyUnlocksLeft: admin.firestore.FieldValue.increment(-1),
+        });
+        t.set(unlockRef, {
+          listingId,
+          unlockedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { ok: true, alreadyUnlocked: false, unlocksLeft: left - 1 };
+      });
+    });
+
+  /** Пакет нархлари — илова варағида кўрсатиш учун. */
+  exports.getRealtyPackagePricing = functions.https.onCall(async () => {
+    const out = {};
+    for (const size of PACKAGE_SIZES) {
+      out[String(size)] = await packagePriceFor(size);
+    }
+    return { pricing: out };
+  });
+
   // ─── Админ панел ───────────────────────────────────────────────
   // `admin_jobs_service.dart` билан бир хил нақш: текширув сервер
   // томонда `assertAdmin()` да, Firestore rules'га таянилмайди.
@@ -535,7 +770,7 @@ function attachRealty(exports, deps) {
       await assertAdmin(d.adminPhone, context);
       const listingId = String(d.listingId || '').trim();
       if (!listingId) throw fail('invalid-argument', 'listing_required');
-      await db.collection('realty_listings').doc(listingId).delete();
+      await deleteListingDeep(db.collection('realty_listings').doc(listingId));
       return { ok: true };
     });
 
@@ -554,20 +789,23 @@ function attachRealty(exports, deps) {
     .onRun(async () => {
       const now = admin.firestore.Timestamp.now();
 
-      // 1) Муддати тугаган объектлар — ўчирилади.
+      // 1) Муддати тугаган объектлар — ёпиқ ҳужжати билан ўчирилади.
       let deleted = 0;
-      // Партия-партия: битта юришда 400 тагача (Firestore batch чегараси).
       for (let round = 0; round < 10; round += 1) {
         const snap = await db.collection('realty_listings')
           .where('expiresAt', '<=', now)
-          .limit(400)
+          .limit(150)
           .get();
         if (snap.empty) break;
-        const batch = db.batch();
-        snap.docs.forEach((doc) => batch.delete(doc.ref));
-        await batch.commit();
-        deleted += snap.size;
-        if (snap.size < 400) break;
+        for (const doc of snap.docs) {
+          try {
+            await deleteListingDeep(doc.ref);
+            deleted += 1;
+          } catch (e) {
+            console.error('realtyExpirySweep delete', doc.id, e.message || e);
+          }
+        }
+        if (snap.size < 150) break;
       }
 
       // 2) Пуллик даража муддати тугаган, лекин объектнинг ўзи ҳали
@@ -632,8 +870,12 @@ function attachRealty(exports, deps) {
           ? d.expiresAt.toMillis() : 0;
         if (!exp || exp <= now) continue; // аллақачон тугаган — sweep иши
         try {
+          // Эганинг рақами ёпиқ ҳужжатда (очиқда фақат `ownerKey`).
+          const priv = await doc.ref.collection('private').doc('detail').get();
+          const ownerId = String((priv.data() || {}).ownerId || '');
+          if (!ownerId) continue;
           await notifyUserInApp({
-            userId: String(d.ownerId || ''),
+            userId: ownerId,
             title: '🏠 Эълон муддати тугаяпти',
             body: `«${String(d.title || '').slice(0, 60)}» эртага лентадан `
               + 'ўчади. Муддатни узайтиришингиз мумкин.',

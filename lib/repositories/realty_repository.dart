@@ -62,15 +62,159 @@ class RealtyRepository {
         .map((snap) => _live(snap.docs, deal: deal));
   }
 
+  /// Эганинг очиқ ҳужжатдаги калити (`users/{uid}.realtyOwnerKey`).
+  ///
+  /// Телефон очиқ эълонда сақланмагани учун ўз объектларини шу калит
+  /// бўйича топамиз. Калит биринчи эълон яратилганда серверда пайдо
+  /// бўлади — унгача бўш бўлиши нормал.
+  Future<String> myOwnerKey() async {
+    final cached = _ownerKeyCache;
+    if (cached != null) return cached;
+    final uid = _currentUserId;
+    if (uid.isEmpty) return '';
+    try {
+      final snap = await _db.collection('users').doc(uid).get();
+      final key = ((snap.data() ?? const {})['realtyOwnerKey'] ?? '') as String;
+      if (key.isNotEmpty) _ownerKeyCache = key;
+      return key;
+    } catch (e) {
+      debugPrint('[RealtyRepository] myOwnerKey $e');
+      return '';
+    }
+  }
+
+  String? _ownerKeyCache;
+
   /// Эганинг ўз объектлари — бепул лимитни кўрсатиш ва таҳрир учун.
   Stream<List<RealtyListing>> watchMine() {
+    return Stream.fromFuture(myOwnerKey()).asyncExpand((key) {
+      if (key.isEmpty) return Stream.value(const <RealtyListing>[]);
+      return _col
+          .where('ownerKey', isEqualTo: key)
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snap) => snap.docs.map(RealtyListing.fromDoc).toList());
+    });
+  }
+
+  /// Аниқ координата ва алоқа — ПУЛЛИК ахборот.
+  ///
+  /// Рухсат бўлмаса (пакетдан очилмаган) `null` қайтади. Бу хато эмас —
+  /// қоида шундай ишлайди, шунинг учун лог ҳам ёзилмайди.
+  Future<RealtyDetail?> fetchDetail(String listingId) async {
+    try {
+      final snap =
+          await _col.doc(listingId).collection('private').doc('detail').get();
+      if (!snap.exists) return null;
+      return RealtyDetail.fromMap(snap.data() ?? const {});
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') {
+        debugPrint('[RealtyRepository] fetchDetail ${e.code}');
+      }
+      return null;
+    }
+  }
+
+  /// Шу объект пакетдан очилганми.
+  Stream<bool> watchUnlocked(String listingId) {
     final uid = _currentUserId;
-    if (uid.isEmpty) return Stream.value(const <RealtyListing>[]);
-    return _col
-        .where('ownerId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
+    if (uid.isEmpty) return Stream.value(false);
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_unlocked')
+        .doc(listingId)
         .snapshots()
-        .map((snap) => snap.docs.map(RealtyListing.fromDoc).toList());
+        .map((s) => s.exists)
+        .handleError((Object _) {});
+  }
+
+  /// Очилган объектларнинг ID'лари — харитада аниқ пин кўрсатиш учун.
+  Stream<Set<String>> watchUnlockedIds() {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return Stream.value(const <String>{});
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_unlocked')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.id).toSet());
+  }
+
+  /// Пакетда қолган ўринлар сони.
+  Stream<int> watchUnlocksLeft() {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return Stream.value(0);
+    return _db.collection('users').doc(uid).snapshots().map(
+          (s) => ((s.data() ?? const {})['realtyUnlocksLeft'] as num?)
+                  ?.toInt() ??
+              0,
+        );
+  }
+
+  /// Объектни очиш — пакетдан 1 ўрин ейди. Такрор очишда ўрин кетмайди.
+  ///
+  /// Хатолар: `no_unlocks_left` (пакет тугаган ёки умуман йўқ).
+  Future<int> unlockListing(String listingId) async {
+    try {
+      final res = await _functions
+          .httpsCallable('unlockRealtyListing')
+          .call({'listingId': listingId});
+      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  /// Ахборот пакети сотиб олиш (5 ёки 10 объект).
+  Future<int> purchasePackage(int size) async {
+    try {
+      final res = await _functions
+          .httpsCallable(
+            'purchaseRealtyPackage',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          )
+          .call({'idempotencyKey': _uuid.v4(), 'size': size});
+      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  /// Пакет нархлари: ўлчам → нарх.
+  Future<Map<int, int>> loadPackagePricing() async {
+    try {
+      final res =
+          await _functions.httpsCallable('getRealtyPackagePricing').call();
+      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
+      final pricing = Map<String, dynamic>.from(
+        raw['pricing'] as Map? ?? const {},
+      );
+      final out = <int, int>{};
+      for (final e in pricing.entries) {
+        final k = int.tryParse(e.key);
+        final v = (e.value as num?)?.toInt();
+        if (k != null && v != null) out[k] = v;
+      }
+      return out;
+    } catch (e) {
+      debugPrint('[RealtyRepository] loadPackagePricing $e');
+      return const {};
+    }
   }
 
   /// Админ модерацияси — статус бўйича навбат.

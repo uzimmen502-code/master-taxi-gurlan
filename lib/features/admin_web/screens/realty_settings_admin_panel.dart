@@ -41,6 +41,12 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         for (final d in tier.durationOptions) d: TextEditingController(),
       },
   };
+  /// Ахборот пакети ўлчамлари — сервердаги `PACKAGE_SIZES` билан мос.
+  static const _packageSizes = [5, 10];
+
+  final Map<int, TextEditingController> _pkgCtrls = {
+    for (final s in _packageSizes) s: TextEditingController(),
+  };
   final _agentPhoneCtrl = TextEditingController();
 
   bool _autoApprove = true;
@@ -62,6 +68,9 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         c.dispose();
       }
     }
+    for (final c in _pkgCtrls.values) {
+      c.dispose();
+    }
     _agentPhoneCtrl.dispose();
     super.dispose();
   }
@@ -77,6 +86,10 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         for (final d in tier.durationOptions) {
           _ctrls[tier]![d]!.text = '${pricing[tier]?[d] ?? 0}';
         }
+      }
+      final pkgPricing = await _repo.loadPackagePricing();
+      for (final s in _packageSizes) {
+        _pkgCtrls[s]!.text = '${pkgPricing[s] ?? 0}';
       }
       final doc = await FirebaseFirestore.instance
           .collection('settings')
@@ -125,6 +138,24 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
         }
       }
 
+      final packagePricing = <String, dynamic>{};
+      for (final s in _packageSizes) {
+        final v = int.tryParse(_pkgCtrls[s]!.text.trim());
+        if (v == null || v < 0) {
+          throw FormatException('Ахборот пакети — $s объект нархи нотўғри');
+        }
+        packagePricing['$s'] = v;
+      }
+      // Катта пакет объект ҳисобида арзонроқ бўлиши керак, акс ҳолда
+      // уни ҳеч ким олмайди.
+      final per5 = (packagePricing['5'] as int) / 5;
+      final per10 = (packagePricing['10'] as int) / 10;
+      if (per10 > per5) {
+        throw const FormatException(
+          '10 объектли пакет битта объект ҳисобида қимматроқ чиқяпти',
+        );
+      }
+
       final phone = _agentPhoneCtrl.text.replaceAll(RegExp(r'\D'), '');
       if (phone.isNotEmpty && phone.length < 9) {
         throw const FormatException('Риэлтор рақами нотўғри');
@@ -133,6 +164,7 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
       await FirebaseFirestore.instance.collection('settings').doc('app').set(
         {
           'realtyPricing': pricing,
+          'realtyPackagePricing': packagePricing,
           'realtyAgentPhone': phone,
           'realtyAutoApprove': _autoApprove,
           'realtyPricingUpdatedAt': FieldValue.serverTimestamp(),
@@ -207,6 +239,40 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
                 ),
                 const SizedBox(height: 18),
               ],
+
+              const Divider(height: 32),
+              const Text(
+                'Ахборот пакети (харидор тўлайди)',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Уй сотилгани учун комиссия эмас — объект маълумотини '
+                'очиш ҳақи. Битта объект очилса, у доим очиқ қолади.',
+                style: TextStyle(fontSize: AppText.bodySmall),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (final s in _packageSizes) ...[
+                    Expanded(
+                      child: TextField(
+                        controller: _pkgCtrls[s],
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: InputDecoration(
+                          labelText: '$s объект',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                ],
+              ),
 
               const Divider(height: 32),
               TextField(

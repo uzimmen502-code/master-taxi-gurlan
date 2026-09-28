@@ -95,15 +95,14 @@ extension RealtyContactModeX on RealtyContactMode {
 class RealtyListing {
   const RealtyListing({
     required this.id,
-    required this.ownerId,
+    required this.ownerKey,
     required this.ownerName,
-    required this.ownerPhone,
     required this.deal,
     required this.tier,
     required this.title,
     required this.text,
-    required this.lat,
-    required this.lng,
+    required this.areaLat,
+    required this.areaLng,
     required this.status,
     this.priceText = '',
     this.rooms,
@@ -114,7 +113,7 @@ class RealtyListing {
     this.geohash4 = '',
     this.addressText = '',
     this.contactMode = RealtyContactMode.owner,
-    this.agentPhone = '',
+    this.hasAgent = false,
     this.avagramClipId = '',
     this.adClipId = '',
     this.districtId = '',
@@ -129,10 +128,12 @@ class RealtyListing {
 
   final String id;
 
-  /// Эга — `users/{phoneDigits}` ҳужжат ID'и (`canonicalPhoneId`).
-  final String ownerId;
+  /// Эганинг ОПАҚ калити (`users/{uid}.realtyOwnerKey`) — телефон эмас.
+  ///
+  /// Телефон очиқ ҳужжатда сақланмайди: у ахборот пакети сотадиган
+  /// нарсанинг бир қисми, шунинг учун [RealtyDetail] ичида.
+  final String ownerKey;
   final String ownerName;
-  final String ownerPhone;
 
   final RealtyDeal deal;
   final RealtyTier tier;
@@ -148,12 +149,15 @@ class RealtyListing {
 
   final List<String> imageUrls;
 
-  /// Харитадаги нуқта — МАЖБУРИЙ (концепция, 7-бўлим). Координатасиз
-  /// эълон умуман яратилмайди, шунинг учун бу иккови nullable эмас.
-  final double lat;
-  final double lng;
+  /// ТАХМИНИЙ ҳудуд маркази — `geohash4` катакчасининг ўртаси (≈20 км).
+  ///
+  /// Бу объектнинг аниқ жойи ЭМАС. Аниқ нуқта [RealtyDetail] да ва
+  /// фақат эга, админ ёки пакетидан шу объектни очган харидорга
+  /// кўринади (концепция, 9-бўлим: «Пакетсиз — тахминий ҳудуд»).
+  final double areaLat;
+  final double areaLng;
 
-  /// Харита сўрови учун катак — `GeoHash.encode(lat, lng, precision: 4)`.
+  /// Харита катакчаси — `GeoHash.encode(lat, lng, precision: 4)`.
   final String geohash4;
 
   /// Матнли манзил — харидорга қўшимча аниқлик учун, нуқта ўрнини босмайди.
@@ -161,10 +165,8 @@ class RealtyListing {
 
   final RealtyContactMode contactMode;
 
-  /// AVA риэлторлик хизматининг рақами — эга [RealtyContactMode.avaAgent]
-  /// ни танлаганда серверда `settings/app.realtyAgentPhone` дан босилади.
-  /// Бўш бўлса UI эга рақамига қайтади (хизмат ҳали ишга тушмаган).
-  final String agentPhone;
+  /// AVA риэлторлик хизмати рақами ёзилганми (рақамнинг ўзи ёпиқ).
+  final bool hasAgent;
 
   /// AVAGram видеоси (бепул) ва видео-реклама (пуллик) — иккови ҳам
   /// ихтиёрий. Бўш бўлса эълонда «Видеони кўриш» тугмаси кўринмайди.
@@ -205,12 +207,6 @@ class RealtyListing {
 
   String get titleOrText => title.trim().isEmpty ? text : title.trim();
 
-  /// Харидор босадиган рақам — эга танлаган мурожаат усулига мос.
-  String get contactPhone =>
-      contactMode == RealtyContactMode.avaAgent && agentPhone.isNotEmpty
-          ? agentPhone
-          : ownerPhone;
-
   /// «3 хона · 4/9 қават · 68 м²» — бўш майдонлар тушиб қолади.
   String get specsLabel {
     final parts = <String>[
@@ -233,9 +229,8 @@ class RealtyListing {
   factory RealtyListing.fromMap(String id, Map<String, dynamic> d) {
     return RealtyListing(
       id: id,
-      ownerId: (d['ownerId'] ?? '') as String,
+      ownerKey: (d['ownerKey'] ?? '') as String,
       ownerName: (d['ownerName'] ?? '') as String,
-      ownerPhone: (d['ownerPhone'] ?? '') as String,
       deal: RealtyDealX.parse(d['deal']),
       tier: RealtyTierX.parse(d['tier']),
       title: (d['title'] ?? '') as String,
@@ -246,12 +241,12 @@ class RealtyListing {
       totalFloors: (d['totalFloors'] as num?)?.toInt(),
       areaM2: d['areaM2'] as num?,
       imageUrls: List<String>.from(d['imageUrls'] ?? const <String>[]),
-      lat: (d['lat'] as num?)?.toDouble() ?? 0,
-      lng: (d['lng'] as num?)?.toDouble() ?? 0,
+      areaLat: (d['areaLat'] as num?)?.toDouble() ?? 0,
+      areaLng: (d['areaLng'] as num?)?.toDouble() ?? 0,
       geohash4: (d['geohash4'] ?? '') as String,
       addressText: (d['addressText'] ?? '') as String,
       contactMode: RealtyContactModeX.parse(d['contactMode']),
-      agentPhone: (d['agentPhone'] ?? '') as String,
+      hasAgent: d['hasAgent'] == true,
       avagramClipId: (d['avagramClipId'] ?? '') as String,
       adClipId: (d['adClipId'] ?? '') as String,
       status: (d['status'] ?? 'active') as String,
@@ -272,4 +267,38 @@ class RealtyListing {
     if (v is String && v.isNotEmpty) return DateTime.tryParse(v);
     return null;
   }
+}
+
+/// `realty_listings/{id}/private/detail` — ПУЛЛИК ахборот.
+///
+/// Аниқ координата ва алоқа рақами. Firestore қоидаси уни фақат учта
+/// ҳолатда беради: сўровчи — эга, админ, ёки шу объектни ахборот
+/// пакетидан очган харидор. Рухсат бўлмаса ўқиш `permission-denied`
+/// билан тугайди ва репозиторий `null` қайтаради — бу хато эмас,
+/// нормал «ҳали очилмаган» ҳолат.
+class RealtyDetail {
+  const RealtyDetail({
+    required this.lat,
+    required this.lng,
+    required this.ownerPhone,
+    this.agentPhone = '',
+  });
+
+  final double lat;
+  final double lng;
+  final String ownerPhone;
+  final String agentPhone;
+
+  /// Харидор босадиган рақам — эга танлаган мурожаат усулига мос.
+  String contactPhone(RealtyContactMode mode) =>
+      mode == RealtyContactMode.avaAgent && agentPhone.isNotEmpty
+          ? agentPhone
+          : ownerPhone;
+
+  factory RealtyDetail.fromMap(Map<String, dynamic> d) => RealtyDetail(
+        lat: (d['lat'] as num?)?.toDouble() ?? 0,
+        lng: (d['lng'] as num?)?.toDouble() ?? 0,
+        ownerPhone: (d['ownerPhone'] ?? '') as String,
+        agentPhone: (d['agentPhone'] ?? '') as String,
+      );
 }

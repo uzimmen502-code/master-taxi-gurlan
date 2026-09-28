@@ -92,11 +92,23 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     _totalFloorsCtrl.text = e.totalFloors?.toString() ?? '';
     _areaCtrl.text = e.areaM2 == null ? '' : '${e.areaM2}';
     _keptUrls.addAll(e.imageUrls);
-    _point = MapPickerResult(
-      lat: e.lat,
-      lng: e.lng,
-      label: e.addressText,
-    );
+    _loadPoint(e.id);
+  }
+
+  /// Аниқ координата очиқ ҳужжатда йўқ (у пуллик ахборот) — эга учун
+  /// ёпиқ `private/detail` дан ўқилади. Келгунча нуқта майдони «бўш»
+  /// кўринади ва сақлаш тугмаси ўчиқ туради, шунда эга тасодифан
+  /// координатасиз сақлаб юбормайди.
+  Future<void> _loadPoint(String listingId) async {
+    final detail = await _repo.fetchDetail(listingId);
+    if (!mounted || detail == null) return;
+    setState(() {
+      _point = MapPickerResult(
+        lat: detail.lat,
+        lng: detail.lng,
+        label: _addressCtrl.text,
+      );
+    });
   }
 
   @override

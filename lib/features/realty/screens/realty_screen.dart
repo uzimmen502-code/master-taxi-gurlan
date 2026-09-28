@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
@@ -8,6 +9,8 @@ import '../../../repositories/realty_repository.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_card.dart';
+import '../widgets/realty_map_view.dart';
+import '../widgets/realty_package_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 
@@ -16,14 +19,12 @@ import 'realty_detail_screen.dart';
 /// Тузилиши концепциянинг 1-бўлимидан: учта TAB (ОДДИЙ / РЕКЛАМА /
 /// СРОЧНО) ва танланган TAB лентаси.
 ///
-/// ⚠️ ХАРИТА ҲОЗИР КЎРСАТИЛМАЙДИ (эга қарори, 2026-09-28). Концепция
-/// бўйича пакети йўқ фойдаланувчига аниқ пин эмас, тахминий ҳудуд
-/// кўриниши керак (9-бўлим) — аммо ахборот пакетлари 3-босқичда
-/// қўшилади. Шунгача харитани кўрсатиш пулли ахборотни бепул бериб
-/// қўяр эди, шунинг учун у бутунлай олиб турилди. Виджети тайёр:
-/// `widgets/realty_map_view.dart` — 3-босқичда шу ерга қайтарилади.
+/// Харита лента остида (3-босқичдан бошлаб). Пакети йўқ фойдаланувчи
+/// объектнинг аниқ жойини эмас, тахминий ҳудуд доирасини кўради —
+/// аниқ координата иловага умуман келмайди, у Firestore қоидаси билан
+/// ёпилган (9-бўлим).
 ///
-/// Кириш қоидаси (9-бўлим): лентани меҳмон ҳам кўради, эълон
+/// Кириш қоидаси (9-бўлим): лентани меҳмон ҳам кўради, харита ва эълон
 /// жойлаштириш — фақат рўйхатдан ўтганлар учун.
 class RealtyScreen extends StatefulWidget {
   const RealtyScreen({super.key});
@@ -77,6 +78,19 @@ class _RealtyScreenState extends State<RealtyScreen>
       backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(context.tr('realty_title')),
+        actions: [
+          // Пакетни олдиндан ҳам олиш мумкин — объект очишда кутиб
+          // қолмасин. Қолган ўринлар шу ерда кўринади.
+          if (!_isGuest)
+            StreamBuilder<int>(
+              stream: _repo.watchUnlocksLeft(),
+              builder: (context, snap) => TextButton.icon(
+                onPressed: () => showRealtyPackageSheet(context),
+                icon: const Icon(Icons.confirmation_number_outlined, size: 18),
+                label: Text('${snap.data ?? 0}'),
+              ),
+            ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           labelStyle: const TextStyle(
@@ -116,8 +130,139 @@ class _RealtyScreenState extends State<RealtyScreen>
               ],
             ),
           ),
-          // Харита шу ерда турган эди — 3-босқичда (ахборот пакети
-          // билан бирга) қайтади. Синф изоҳига қаранг.
+          if (!_isGuest)
+            _MapPanel(repo: _repo, deal: _deal, onOpen: _openDetail),
+        ],
+      ),
+    );
+  }
+}
+
+/// Лента остидаги умумий харита.
+///
+/// Очилмаган объектлар катакча доираси бўлиб кўринади, пакетдан
+/// очилганлари аниқ пин билан. Аниқ координата фақат очилганлар учун
+/// сўралади — қолгани иловага умуман келмайди.
+class _MapPanel extends StatefulWidget {
+  const _MapPanel({
+    required this.repo,
+    required this.deal,
+    required this.onOpen,
+  });
+
+  final RealtyRepository repo;
+  final RealtyDeal? deal;
+  final ValueChanged<RealtyListing> onOpen;
+
+  @override
+  State<_MapPanel> createState() => _MapPanelState();
+}
+
+class _MapPanelState extends State<_MapPanel> {
+  static const double _height = 260;
+
+  /// `listingId` → аниқ координата. Бир марта ўқилгач кешда қолади.
+  final Map<String, LatLng> _exact = {};
+  final Set<String> _requested = {};
+
+  Future<void> _loadExact(Iterable<String> ids) async {
+    final missing = ids.where((id) => !_requested.contains(id)).toList();
+    if (missing.isEmpty) return;
+    _requested.addAll(missing);
+    for (final id in missing) {
+      final detail = await widget.repo.fetchDetail(id);
+      if (!mounted) return;
+      if (detail != null) {
+        setState(() => _exact[id] = LatLng(detail.lat, detail.lng));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Container(
+      height: _height,
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: StreamBuilder<Set<String>>(
+        stream: widget.repo.watchUnlockedIds(),
+        builder: (context, unlockedSnap) {
+          final unlocked = unlockedSnap.data ?? const <String>{};
+          return StreamBuilder<List<RealtyListing>>(
+            stream: widget.repo.watchForMap(deal: widget.deal),
+            builder: (context, snap) {
+              final listings = snap.data ?? const <RealtyListing>[];
+              final visibleUnlocked = listings
+                  .map((r) => r.id)
+                  .where(unlocked.contains)
+                  .toList();
+              if (visibleUnlocked.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _loadExact(visibleUnlocked),
+                );
+              }
+              return Column(
+                children: [
+                  Expanded(
+                    child: RealtyMapView(
+                      listings: listings,
+                      exactPoints: _exact,
+                      onListingTap: widget.onOpen,
+                    ),
+                  ),
+                  const _MapLegend(),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MapLegend extends StatelessWidget {
+  const _MapLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          for (final tier in RealtyTabs.order) ...[
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: RealtyTabs.colorFor(tier),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              context.tr(RealtyTabs.labelKey(tier)),
+              style: TextStyle(fontSize: AppText.labelTiny, color: c.ink2),
+            ),
+            const SizedBox(width: 10),
+          ],
+          const Spacer(),
+          Expanded(
+            flex: 3,
+            child: Text(
+              context.tr('realty_map_approx_hint'),
+              textAlign: TextAlign.right,
+              maxLines: 2,
+              style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+            ),
+          ),
         ],
       ),
     );

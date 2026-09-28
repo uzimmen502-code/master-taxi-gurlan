@@ -20,9 +20,17 @@ service cloud.firestore {
 
     // Клиент баланс майдонларини ўзгартира олмасин (фақат Cloud Functions)
     // assistantPaidUntil — пуллик Pro муддати, фақат assistantBuyPackage (сервер).
+    // `realtyUnlocksLeft` — пулга сотиб олинган ахборот пакети қолдиғи,
+    // `realtyOwnerKey` — очиқ эълондаги эга калити. Иккови ҳам фақат
+    // Cloud Function (Admin SDK) томонидан ёзилади: клиент ўзига
+    // текинга пакет ёзиб қўймасин ёки бошқанинг эълонини ўзиники
+    // қилиб олмасин.
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil']);
+          .hasAny([
+            'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
+            'realtyUnlocksLeft', 'realtyOwnerKey'
+          ]);
     }
 
     // Firebase Phone Auth
@@ -669,7 +677,10 @@ service cloud.firestore {
       // update — Phone Auth (`isOwner`) yoki mehmon profil patch (`usersGuestProfilePatchOnly`).
       allow create: if isAuth()
           && request.resource.data.keys().hasAll(['phone'])
-          && !request.resource.data.keys().hasAny(['bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil'])
+          && !request.resource.data.keys().hasAny([
+               'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
+               'realtyUnlocksLeft', 'realtyOwnerKey'
+             ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
       allow update: if (
@@ -2868,23 +2879,64 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // 🏠 КЎЧМАС МУЛК КЛАСТЕРИ — `realty_listings`
     //
-    //   Ўқиш: эълонлар лентасини МЕҲМОН ҳам кўра олади (концепция,
-    //   9-бўлим) — шунинг учун `isAuth()` кифоя, телефон талаб
-    //   қилинмайди. Қолган хизматлар (эълон қўйиш, харита, пакетлар)
-    //   ilova qatlamida рўйхатдан ўтганларга чекланади.
+    //   ЁЗУВ ИККИГА АЖРАТИЛГАН — бу шу бўлимнинг асосий хавфсизлик
+    //   қарори. Концепция (4-бўлим) объект ҳақидаги АХБОРОТНИ сотади.
+    //   Агар аниқ координата ва алоқа рақами очиқ ҳужжатда турса,
+    //   ҳар қандай фойдаланувчи уларни базадан пакетсиз ўқиб олар,
+    //   ахборот пакетининг маъноси қолмас эди. Шунинг учун:
+    //     • очиқ ҳужжат — тавсиф, нарх, расм ва ТАХМИНИЙ ҳудуд
+    //       (`areaLat`/`areaLng` = geohash4 катакчаси маркази, ≈20 км);
+    //       эга ҳам телефон билан эмас, тасодифий `ownerKey` билан;
+    //     • `private/detail` — АНИҚ координата ва телефон; уни фақат
+    //       эга, админ ёки шу объектни пакетидан очган харидор ўқийди.
+    //
+    //   Ўқиш: лентани МЕҲМОН ҳам кўра олади (концепция, 9-бўлим) —
+    //   шунинг учун очиқ ҳужжатга `isAuth()` кифоя.
     //
     //   Ёзиш: клиент тўғридан-тўғри яратмайди — фақат
     //   `submitRealtyListing` (Admin SDK) орқали. Сабаби: бепул лимит
-    //   (2 та объект), ҳудуд тамғаси ва муддат серверда ҳисобланади,
-    //   булар клиентга ишониб бўлмайдиган қийматлар
+    //   (2 та объект), ҳудуд тамғаси ва муддат серверда ҳисобланади
     //   (`ev_charging_stations` билан бир хил қоида).
-    //
-    //   Ўчириш ҳам CF орқали (`deleteRealtyListing`) — эга текшируви
-    //   ва кейинчалик тўлов қайтариш мантиғи бир жойда турсин.
     // ══════════════════════════════════════
+    function realtyOwnerKey() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/users/$(uid))
+        ? get(/databases/$(database)/documents/users/$(uid))
+            .data.get('realtyOwnerKey', '')
+        : '';
+    }
+
+    function realtyListingIsMine(listingId) {
+      let key = realtyOwnerKey();
+      return key != ''
+          && get(/databases/$(database)/documents/realty_listings/$(listingId))
+               .data.get('ownerKey', '') == key;
+    }
+
+    // Пакетдан очилган объект — `unlockRealtyListing` CF яратади.
+    function realtyUnlockedByMe(listingId) {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && exists(/databases/$(database)/documents/users/$(uid)/realty_unlocked/$(listingId));
+    }
+
     match /realty_listings/{listingId} {
       allow read: if isAuth();
       allow create, update, delete: if isAdmin();
+
+      match /private/{docId} {
+        allow read: if isAdmin()
+            || realtyListingIsMine(listingId)
+            || realtyUnlockedByMe(listingId);
+        allow write: if false; // фақат Cloud Function (Admin SDK)
+      }
+    }
+
+    // Очилган объектлар рўйхати — эга ўзиникини кўради, ёзув фақат CF.
+    match /users/{userId}/realty_unlocked/{listingId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
     }
 
   }

@@ -28,6 +28,8 @@ const List<String> kKnownModuleIds = [
   'pay_payme',
   'pay_paynet',
   'wholesale_market',
+  // «Кўчмас мулк Кластери» — 1-босқич (лента + харита + бепул ОДДИЙ эълон).
+  'realty',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

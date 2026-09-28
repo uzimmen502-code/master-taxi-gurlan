@@ -22,6 +22,7 @@ import 'identity_approvals_screen.dart';
 import 'pending_codes_screen.dart';
 import 'intercity_admin_screen.dart';
 import 'ev_station_moderation_screen.dart';
+import 'realty_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
@@ -136,6 +137,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'EV зарядлаш',
       icon: Icons.ev_station_outlined,
       description: 'Report qilingan zaryadlash nuqtalari moderatsiyasi',
+    ),
+    _AdminSection(
+      label: 'Кўчмас мулк',
+      icon: Icons.apartment_outlined,
+      description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
     ),
     _AdminSection(
       label: 'AVA дўкони',
@@ -420,6 +426,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'EV зарядлаш') {
       return const EvStationModerationScreen();
+    }
+    if (section.label == 'Кўчмас мулк') {
+      return const RealtyModerationScreen();
     }
     if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();
@@ -892,6 +901,13 @@ class _Sidebar extends StatelessWidget {
         return db
             .collection('ev_charging_stations')
             .where('reportCount', isGreaterThan: 0)
+            .snapshots()
+            .map((s) => s.docs.length);
+      case 'Кўчмас мулк':
+        return db
+            .collection('realty_listings')
+            .where('status', isEqualTo: 'pending')
+            .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
       case 'Улгуржи бозор':

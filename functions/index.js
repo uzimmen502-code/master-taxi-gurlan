@@ -22,6 +22,11 @@ const { attachAssistant } = require('./assistant_chat');
 attachAssistant(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger,
 });
+// Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
+const { attachRealty } = require('./realty');
+attachRealty(exports, {
+  functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
+});
 
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */

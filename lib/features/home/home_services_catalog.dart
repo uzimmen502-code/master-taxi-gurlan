@@ -14,6 +14,7 @@ import '../jobs/jobs_tabs.dart';
 import '../jobs/screens/jobs_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
+import '../realty/screens/realty_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
@@ -247,6 +248,12 @@ List<ServiceSpotlightItem> buildHomeServices(
       label: context.tr('home_module_ev_charging'),
       imagePath: 'assets/images/services/service_ev_charging.png',
       onTap: () => a.push(const EvChargingMapScreen()),
+    ),
+    ServiceSpotlightItem(
+      moduleId: 'realty',
+      label: context.tr('home_module_realty'),
+      icon: Icons.apartment_rounded,
+      onTap: () => a.push(const RealtyScreen()),
     ),
     ServiceSpotlightItem(
       moduleId: 'pay_click',

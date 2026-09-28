@@ -8,6 +8,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_package_sheet.dart';
+import '../widgets/realty_video_sheet.dart';
 
 /// Битта объект карточкаси.
 ///
@@ -195,7 +196,28 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
                 color: c.ink,
               ),
             ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
+
+          // «Видеони кўриш» — фақат эга видео боғлаган бўлса (3-бўлим).
+          // Видео БЕПУЛ кўрилади: ахборот пакети аниқ манзил ва алоқа
+          // учун, видео учун эмас.
+          if (r.hasVideo) ...[
+            OutlinedButton.icon(
+              onPressed: () => openRealtyVideo(context, clipId: r.videoClipId),
+              icon: const Icon(Icons.play_circle_outline, size: 20),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: tierColor,
+                side: BorderSide(color: tierColor),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              label: Text(context.tr('realty_watch_video')),
+            ),
+            const SizedBox(height: 14),
+          ],
+          const SizedBox(height: 4),
 
           if (r.addressText.isNotEmpty) ...[
             Row(

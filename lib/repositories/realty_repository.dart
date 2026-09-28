@@ -85,6 +85,10 @@ class RealtyRepository {
 
   String? _ownerKeyCache;
 
+  /// Жорий фойдаланувчининг рақами — AVAGram клиплари шу бўйича
+  /// сақланади (`tv_clips.ownerPhone`).
+  Future<String> myOwnerPhone() async => _currentUserId;
+
   /// Эганинг ўз объектлари — бепул лимитни кўрсатиш ва таҳрир учун.
   Stream<List<RealtyListing>> watchMine() {
     return Stream.fromFuture(myOwnerKey()).asyncExpand((key) {
@@ -451,6 +455,40 @@ class RealtyRepository {
     } catch (e) {
       debugPrint('[RealtyRepository] loadPricing $e');
       return const {};
+    }
+  }
+
+  // ─── Видео боғлаш (концепция, 3-бўлим) ───
+
+  /// Объектга видео боғлаш. Бепул AVAGram ёки пуллик реклама эканини
+  /// сервер клипнинг ўзидан аниқлайди — клиент айта олмайди.
+  Future<void> linkVideo({
+    required String listingId,
+    required String clipId,
+  }) async {
+    try {
+      await _functions.httpsCallable('linkRealtyVideo').call({
+        'listingId': listingId,
+        'clipId': clipId,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  Future<void> unlinkVideo(String listingId) async {
+    try {
+      await _functions
+          .httpsCallable('unlinkRealtyVideo')
+          .call({'listingId': listingId});
+    } on FirebaseFunctionsException catch (e) {
+      throw RealtyException(e.message ?? e.code);
     }
   }
 

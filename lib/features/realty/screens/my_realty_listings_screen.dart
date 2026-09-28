@@ -6,6 +6,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_tier_sheet.dart';
+import '../widgets/realty_video_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 import 'realty_pro_screen.dart';
@@ -562,8 +563,26 @@ class _MyListingTileState extends State<_MyListingTile> {
                   ),
                 ),
               ),
-            if (!r.isExpired && r.status != 'blocked')
-              Divider(height: 1, color: c.line),
+            Divider(height: 1, color: c.line),
+            // Видео боғлаш — ихтиёрий (концепция, 3-бўлим).
+            TextButton.icon(
+              onPressed: _deleting
+                  ? null
+                  : () => showRealtyVideoSheet(context, listing: r),
+              icon: Icon(
+                r.hasVideo
+                    ? Icons.play_circle_outline
+                    : Icons.video_call_outlined,
+                size: 18,
+              ),
+              label: Text(
+                context.tr(
+                  r.hasVideo ? 'realty_video_change' : 'realty_video_link',
+                ),
+              ),
+              style: TextButton.styleFrom(foregroundColor: c.ink2),
+            ),
+            Divider(height: 1, color: c.line),
             Row(
               children: [
                 Expanded(

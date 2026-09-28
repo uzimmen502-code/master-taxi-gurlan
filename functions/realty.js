@@ -985,6 +985,60 @@ function attachRealty(exports, deps) {
       return { ok: true };
     });
 
+  // ─── 5-босқич: видеони эълонга боғлаш ─────────────────────────
+  // Концепциянинг 3-бўлими: видеони матнли эълонга боғлаш ИХТИЁРИЙ.
+  // Боғланса, эълон охирида «Видеони кўриш» тугмаси пайдо бўлади ва
+  // айнан шу объект видеосини очади. Боғланмаса — эълон тугмасиз,
+  // одатдагидек кўринади.
+
+  /**
+   * Видеони объектга боғлаш.
+   *
+   * Клип КИМНИКИ эканини ва тури (бепул AVAGram ёки пуллик реклама)
+   * серверда аниқланади — клиент «бу реклама видеоси» деб айта
+   * олмайди. Бепул/пуллик фарқи `tv_clips.category === 'ad'` бўйича.
+   */
+  exports.linkRealtyVideo = functions.https.onCall(async (data, context) => {
+    const uid = requireUid(context);
+    const d = data || {};
+    const listingId = String(d.listingId || '').trim();
+    const clipId = String(d.clipId || '').trim();
+    if (!listingId || !clipId) throw fail('invalid-argument', 'bad_args');
+
+    await assertOwner(listingId, uid);
+
+    const clipSnap = await db.collection('tv_clips').doc(clipId).get();
+    if (!clipSnap.exists) throw fail('not-found', 'clip_not_found');
+    const clip = clipSnap.data() || {};
+    if (canonicalUid(String(clip.ownerPhone || '')) !== uid) {
+      throw fail('permission-denied', 'not_clip_owner');
+    }
+    if (clip.status !== 'active') {
+      throw fail('failed-precondition', 'clip_not_active');
+    }
+
+    const isAd = String(clip.category || '') === 'ad';
+    await db.collection('realty_listings').doc(listingId).update({
+      [isAd ? 'adClipId' : 'avagramClipId']: clipId,
+      updatedAt: ts(),
+    });
+    return { ok: true, clipId, paid: isAd };
+  });
+
+  /** Видео боғламасини олиб ташлаш — клипнинг ўзи ўчирилмайди. */
+  exports.unlinkRealtyVideo = functions.https.onCall(async (data, context) => {
+    const uid = requireUid(context);
+    const listingId = String((data || {}).listingId || '').trim();
+    if (!listingId) throw fail('invalid-argument', 'listing_required');
+    await assertOwner(listingId, uid);
+    await db.collection('realty_listings').doc(listingId).update({
+      avagramClipId: '',
+      adClipId: '',
+      updatedAt: ts(),
+    });
+    return { ok: true };
+  });
+
   // ─── Админ панел ───────────────────────────────────────────────
   // `admin_jobs_service.dart` билан бир хил нақш: текширув сервер
   // томонда `assertAdmin()` да, Firestore rules'га таянилмайди.

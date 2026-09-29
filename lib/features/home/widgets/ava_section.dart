@@ -77,11 +77,21 @@ class AvaProductShelf extends StatelessWidget {
 /// шунинг учун қатор баландлиги (14px), шрифт (12px) ва оралиқ (1px)
 /// ўзгармайди.
 ///
-/// ─── ИККИ ҚАВАТ (эга қарори, 2026-09-29 — «D» варианти) ───
+/// ─── УЧ ҚАВАТ (эга қарори, 2026-09-29 — «D» сояси + «1c» рамка) ───
 ///
-/// • Ички майдон — БИРИНЧИ қават. Фони [AvaColors.surface2], яъни
-///   картадан бир поғона тўқроқ: қават фарқи рангдан ҳам сезилади.
-/// • Ташқи карта — УСТКИ қават. У ички майдонга соя ташлайди.
+/// • Саҳифа фони — `#F3F5F8` ([AvaColors.bg]).
+/// • ОҚ РАМКА — устки қават, виджетнинг ўзи чизади ([AvaColors.surface]).
+/// • Ички майдон — БИРИНЧИ қават. Фони [AvaColors.surface2], рамкадан
+///   бир поғона тўқроқ: қават фарқи рангдан ҳам сезилади.
+///
+/// Рамка НИМА УЧУН кўшилди: `AvaSection` — шунчаки `Column`, унинг фони
+/// йўқ, яъни бўлимлар тўғридан-тўғри саҳифа фонида турарди. Майдон
+/// (`#EEF1F6`) билан саҳифа (`#F3F5F8`) фарқи каналларига 5/4/2 — деярли
+/// кўринмас эди, ва чуқурликни ёлғиз соя кўтариб турарди. Оқ билан
+/// фарқ 17/14/9, яъни уч баробар кучли.
+///
+/// «1c» — рамкада ҳошия ҳам, соя ҳам ЙЎҚ: фақат ранг поғонаси. Энг арзон
+/// чизиш ва энг тинч кўриниш (эга танлови).
 ///
 /// Соя майдоннинг ЎЗ ЧЕГАРАСИДА кесилади ва матнга ёйилмайди. Аввалги
 /// ечим тепадан пастга 20px градиент чизар эди — у чуқурлик эмас,
@@ -109,30 +119,55 @@ class AvaInsetPanel extends StatelessWidget {
   /// Хиралик радиуси — CSS'даги `blur-radius` билан бир хил маънода.
   static const double _blur = band * 1.6;
 
+  /// Оқ рамканинг ички бўшлиғи. Бўлим шунинг ИККИ баробарига узаяди
+  /// (10px да +20px, олтита бўлимда ~120px) — камайтирмоқчи бўлсангиз
+  /// фақат шу сонга тегинг.
+  static const double framePad = 10;
+
+  /// Ички майдон радиуси — рамканикидан кичикроқ, шунда ичкарига
+  /// жойлашган бўлиб кўринади.
+  static const double _innerRadius = 10;
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    final radius = BorderRadius.circular(AvaRadius.card);
-    // Қирқим аввалги ечимда ҳам бор эди (`clipBehavior: Clip.antiAlias`) —
-    // бола виджет юмалоқ бурчакдан чиқиб кетмасин.
-    return ClipRRect(
-      borderRadius: radius,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: c.surface2, borderRadius: radius),
-        child: CustomPaint(
-          // `foregroundPainter` — соя матн УСТИДАН чизилади, лекин у
-          // чеккадаги тасмада қолгани учун матнга тегмайди.
-          foregroundPainter: _InsetShadowPainter(
-            color: c.insetShadow,
-            radius: AvaRadius.card,
-            dy: _dy,
-            blur: _blur,
-          ),
-          child: Padding(
-            // Вертикал 4 → 6: матн соя тасмасига кирмасин. Бўлим шундан
-            // 4px га узаяди, қатор баландлиги эса ўзгармайди.
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: child,
+    final innerRadius = BorderRadius.circular(_innerRadius);
+    // УСТКИ ҚАВАТ — оқ рамка. Ҳошия ҳам, соя ҳам йўқ («1c»): қават
+    // фарқини рангнинг ўзи кўтаради.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(AvaRadius.card),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(framePad),
+        // Қирқим аввалги ечимда ҳам бор эди
+        // (`clipBehavior: Clip.antiAlias`) — бола виджет юмалоқ
+        // бурчакдан чиқиб кетмасин.
+        child: ClipRRect(
+          borderRadius: innerRadius,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.surface2,
+              borderRadius: innerRadius,
+            ),
+            child: CustomPaint(
+              // `foregroundPainter` — соя матн УСТИДАН чизилади, лекин у
+              // чеккадаги тасмада қолгани учун матнга тегмайди.
+              foregroundPainter: _InsetShadowPainter(
+                color: c.insetShadow,
+                radius: _innerRadius,
+                dy: _dy,
+                blur: _blur,
+              ),
+              child: Padding(
+                // Вертикал 4 → 6: матн соя тасмасига кирмасин. Қатор
+                // баландлиги ва шрифт ўзгармайди.
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: child,
+              ),
+            ),
           ),
         ),
       ),

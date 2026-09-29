@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
@@ -175,15 +176,16 @@ class _WholesaleProductFormScreenState
     final tiers = _collectTiers();
     if (tiers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Камида битта поғона нархини киритинг'),
+        SnackBar(
+          content: Text(context.tr('wholesale_err_tier_required')),
         ),
       );
       return;
     }
     if (_totalImageCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Камида битта расм қўшинг')),
+        SnackBar(
+            content: Text(context.tr('wholesale_err_image_required'))),
       );
       return;
     }
@@ -217,15 +219,23 @@ class _WholesaleProductFormScreenState
       if (_isEdit) {
         productId = widget.existing!.id;
         await _repo.ownerUpdate(productId, product);
+        // Эга олиб ташлаган расмлар Storage'да эгасиз қолмасин
+        // (2026-09-29). Аввал улар у ерда абадий қолиб кетар эди.
+        final removed = widget.existing!.imageUrls
+            .where((u) => !_existingImageUrls.contains(u))
+            .toList(growable: false);
+        if (removed.isNotEmpty) {
+          await _storage.deleteImages(removed);
+        }
       } else {
         productId = await _repo.create(product);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isEdit
-              ? 'Маҳсулот янгиланди — қайта модерацияга юборилди'
-              : 'Маҳсулот юборилди — admin тасдиғини кутинг'),
+          content: Text(context.tr(
+            _isEdit ? 'wholesale_saved_updated' : 'wholesale_saved_sent',
+          )),
         ),
       );
       await _offerVideo(productId);
@@ -234,7 +244,8 @@ class _WholesaleProductFormScreenState
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
+        SnackBar(backgroundColor: Colors.red, content:
+              Text(context.tr('error_generic').replaceAll('{error}', '$e'))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -248,20 +259,18 @@ class _WholesaleProductFormScreenState
     final wants = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('🎥 Видеообзор қўшасизми?'),
-        content: const Text(
-          'Маҳсулот видеосини AVAGram лентасига жойлашингиз мумкин — '
-          'бепул («Маҳсулот») ёки пуллик реклама сифатида («Реклама», '
-          'тариф/муддат танлаб). Кейинроқ ҳам маҳсулот менюсидан қўша оласиз.',
+        title: Text(context.tr('wholesale_video_dialog_title')),
+        content: Text(
+          context.tr('wholesale_video_dialog_body'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Кейинроқ'),
+            child: Text(context.tr('wholesale_later')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Видео қўшиш'),
+            child: Text(context.tr('wholesale_add_video')),
           ),
         ],
       ),
@@ -275,12 +284,13 @@ class _WholesaleProductFormScreenState
       );
       if (!mounted || !linked) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Видео маҳсулотга боғланди')),
+        SnackBar(content: Text(context.tr('wholesale_video_linked'))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
+        SnackBar(backgroundColor: Colors.red, content:
+              Text(context.tr('error_generic').replaceAll('{error}', '$e'))),
       );
     }
   }
@@ -289,7 +299,9 @@ class _WholesaleProductFormScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Маҳсулотни таҳрирлаш' : 'Янги маҳсулот'),
+        title: Text(context.tr(
+          _isEdit ? 'wholesale_form_title_edit' : 'wholesale_new_product',
+        )),
         // Сотувчи қайси бозорга қўшаётганини кўриб турсин — иккала
         // бозор битта коллекцияда, форма ҳам ўша форма.
         bottom: PreferredSize(
@@ -299,7 +311,8 @@ class _WholesaleProductFormScreenState
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                _isChina ? 'Хитой бозори' : 'Улгуржи бозор',
+                context.tr(
+                    _isChina ? 'wholesale_title_china' : 'wholesale_title'),
                 style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w600,
@@ -319,12 +332,12 @@ class _WholesaleProductFormScreenState
             TextFormField(
               controller: _titleCtrl,
               maxLength: 120,
-              decoration: const InputDecoration(
-                labelText: 'Маҳсулот номи',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.tr('wholesale_field_name'),
+                border: const OutlineInputBorder(),
               ),
               validator: (v) => (v == null || v.trim().length < 3)
-                  ? 'Камида 3 та белги'
+                  ? context.tr('wholesale_min_3_chars')
                   : null,
             ),
             const SizedBox(height: 12),
@@ -332,12 +345,12 @@ class _WholesaleProductFormScreenState
               controller: _descCtrl,
               maxLength: 2000,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Тавсиф',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.tr('wholesale_field_desc'),
+                border: const OutlineInputBorder(),
               ),
               validator: (v) => (v == null || v.trim().length < 3)
-                  ? 'Камида 3 та белги'
+                  ? context.tr('wholesale_min_3_chars')
                   : null,
             ),
             if (_isChina) ...[
@@ -351,9 +364,9 @@ class _WholesaleProductFormScreenState
               controller: _unitCtrl,
               // Поғона ёрлиқлари («1–9 дона» ва ҳ.к.) шу бирликка эргашади.
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Бирлик (дона, қути, палет...)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.tr('wholesale_field_unit'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 24),
@@ -365,7 +378,7 @@ class _WholesaleProductFormScreenState
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(_isEdit ? 'Сақлаш' : 'Юбориш'),
+                  : Text(context.tr(_isEdit ? 'save' : 'wholesale_submit')),
             ),
           ],
         ),
@@ -380,7 +393,7 @@ class _WholesaleProductFormScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Нарх валютаси',
+        Text(context.tr('wholesale_currency'),
             style: TextStyle(
                 fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
@@ -397,9 +410,9 @@ class _WholesaleProductFormScreenState
           controller: _deliveryCtrl,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            labelText: 'Етказиш муддати (кун) — ихтиёрий',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: context.tr('wholesale_field_delivery_days'),
+            border: const OutlineInputBorder(),
             isDense: true,
           ),
         ),
@@ -412,13 +425,12 @@ class _WholesaleProductFormScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Нарх поғоналари',
+        Text(context.tr('wholesale_price_tiers'),
             style: const TextStyle(
                 fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Text(
-          'Сон оралиғига қараб нарх. Тўлдириш ихтиёрий — камида биттасини '
-          'киритинг (бўш поғоналар сақланмайди).',
+          context.tr('wholesale_tiers_help'),
           style: TextStyle(fontSize: AppText.labelTiny, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 10),
@@ -447,7 +459,9 @@ class _WholesaleProductFormScreenState
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(
-              labelText: 'Нарх ($_currencyLabel) — ихтиёрий',
+              labelText: context
+                  .tr('wholesale_field_tier_price')
+                  .replaceAll('{currency}', _currencyLabel),
               border: const OutlineInputBorder(),
               isDense: true,
             ),
@@ -461,7 +475,10 @@ class _WholesaleProductFormScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Расмлар (1-$_maxImages)',
+        Text(
+            context
+                .tr('wholesale_images_n')
+                .replaceAll('{max}', '$_maxImages'),
             style: const TextStyle(
                 fontSize: AppText.bodyMedium, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),

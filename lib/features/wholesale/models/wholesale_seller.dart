@@ -27,6 +27,23 @@ class WholesaleSeller {
   static const typeYatt = 'yatt';
   static const sellerTypes = [typeManufacturer, typeWholesaler, typeYatt];
 
+  /// Сотувчи тури — матн калити (2026-09-29). Иловадаги экранлар шуни
+  /// `context.tr` билан ишлатади: бўлим уч тилда чиқиши керак.
+  /// [typeLabel] эса ўзгаришсиз қолди — уни админ веб-панели ишлатади,
+  /// у ерда таржима қатлами йўқ.
+  static String typeLabelKey(String type) {
+    switch (type) {
+      case typeManufacturer:
+        return 'wholesale_seller_type_manufacturer';
+      case typeWholesaler:
+        return 'wholesale_seller_type_wholesaler';
+      case typeYatt:
+        return 'wholesale_seller_type_ip';
+      default:
+        return '';
+    }
+  }
+
   static String typeLabel(String type) {
     switch (type) {
       case typeManufacturer:

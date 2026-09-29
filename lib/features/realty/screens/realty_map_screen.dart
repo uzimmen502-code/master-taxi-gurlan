@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/service_config_holder.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
@@ -19,8 +21,8 @@ import 'realty_detail_screen.dart';
 /// харита эса пастда сиқилиб турар эди. EV бўлимида бу масала аллақачон
 /// шундай ечилган: статик расм → тўлиқ экранли харита.
 ///
-/// Очилмаган объектлар тахминий доира билан, пакетдан очилганлари
-/// аниқ пин билан кўринади.
+/// Очилмаган объектлар тахминий нуқтада, пакетдан очилганлари аниқ
+/// жойида кўринади — иккови ҳам нарх ёрлиғи билан.
 class RealtyMapScreen extends StatefulWidget {
   const RealtyMapScreen({super.key, this.deal});
 
@@ -33,6 +35,8 @@ class RealtyMapScreen extends StatefulWidget {
 
 class _RealtyMapScreenState extends State<RealtyMapScreen> {
   final _repo = RealtyRepository();
+  final _mapKey = GlobalKey<RealtyMapViewState>();
+  final _searchCtrl = TextEditingController();
 
   /// `listingId` → аниқ координата. Бир марта ўқилгач кешда қолади.
   final Map<String, LatLng> _exact = {};
@@ -40,17 +44,44 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
 
   late RealtyDeal? _deal = widget.deal;
 
+  /// Бўш бўлса — бутун ҳудуд. Фойдаланувчининг ўз тумани билан
+  /// бошланади: бош саҳифа бўлимлари ҳам шундай ишлайди, ва бу
+  /// сўровни 300 талик чегарага тиқилиб қолишдан сақлайди.
+  late String _districtId = ServiceConfigHolder.districtId.trim();
+
+  /// Камерани қайта мослаш белгиси — филтр ёки ҳудуд алмашганда ошади.
+  int _fitToken = 0;
+
+  /// Пастдаги карточка тасмасида турган объект.
+  String? _selectedId;
+
+  /// Харитадаги қидирув матни — юкланган эълонлар ичидан филтрлайди.
+  ///
+  /// Геокодер ИШЛАТИЛМАЙДИ: аниқ манзил пуллик ахборот, шунинг учун
+  /// манзил бўйича жойга бориш пакетсиз фойдаланувчига ўша ахборотни
+  /// текинга берган бўлар эди. Қидирув эълон матни ва нархи бўйича.
+  String _query = '';
+
+  bool get _hasDistrict => ServiceConfigHolder.districtId.trim().isNotEmpty;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Очилган объектларнинг аниқ нуқтасини ПАРАЛЛЕЛ ўқийди.
   Future<void> _loadExact(Iterable<String> ids) async {
     final missing = ids.where((id) => !_requested.contains(id)).toList();
     if (missing.isEmpty) return;
     _requested.addAll(missing);
-    for (final id in missing) {
-      final detail = await _repo.fetchDetail(id);
-      if (!mounted) return;
-      if (detail != null) {
-        setState(() => _exact[id] = LatLng(detail.lat, detail.lng));
+    final details = await _repo.fetchDetails(missing);
+    if (!mounted || details.isEmpty) return;
+    setState(() {
+      for (final e in details.entries) {
+        _exact[e.key] = LatLng(e.value.lat, e.value.lng);
       }
-    }
+    });
   }
 
   void _openDetail(RealtyListing listing) {
@@ -88,6 +119,35 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
     if (bought && mounted) _openDetail(listing);
   }
 
+  /// Қидирувга мос эълонлар. Бўш сўровда ҳаммаси.
+  List<RealtyListing> _filtered(List<RealtyListing> all) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return all;
+    return all.where((r) {
+      return r.titleOrText.toLowerCase().contains(q) ||
+          r.priceText.toLowerCase().contains(q) ||
+          r.specsLabel.toLowerCase().contains(q) ||
+          r.addressText.toLowerCase().contains(q);
+    }).toList(growable: false);
+  }
+
+  void _setDeal(RealtyDeal? d) => setState(() {
+        _deal = d;
+        _selectedId = null;
+        _fitToken++;
+      });
+
+  void _setDistrict(String id) => setState(() {
+        _districtId = id;
+        _selectedId = null;
+        _fitToken++;
+      });
+
+  void _selectFromStrip(RealtyListing r) {
+    setState(() => _selectedId = r.id);
+    _mapKey.currentState?.focusOn(r);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -102,10 +162,22 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
       ),
       body: Column(
         children: [
-          RealtyDealFilter(
-            deal: _deal,
-            onChanged: (d) => setState(() => _deal = d),
+          RealtyDealFilter(deal: _deal, onChanged: _setDeal),
+          _SearchBar(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            onClear: () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
           ),
+          if (_hasDistrict)
+            _ScopeSwitch(
+              districtOnly: _districtId.isNotEmpty,
+              onChanged: (districtOnly) => _setDistrict(
+                districtOnly ? ServiceConfigHolder.districtId.trim() : '',
+              ),
+            ),
           const RealtyMapLegend(),
           Expanded(
             child: StreamBuilder<Set<String>>(
@@ -113,9 +185,13 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
               builder: (context, unlockedSnap) {
                 final unlocked = unlockedSnap.data ?? const <String>{};
                 return StreamBuilder<List<RealtyListing>>(
-                  stream: _repo.watchForMap(deal: _deal),
+                  stream: _repo.watchForMap(
+                    deal: _deal,
+                    districtId: _districtId,
+                  ),
                   builder: (context, snap) {
-                    final listings = snap.data ?? const <RealtyListing>[];
+                    final all = snap.data ?? const <RealtyListing>[];
+                    final listings = _filtered(all);
                     final visibleUnlocked = listings
                         .map((r) => r.id)
                         .where(unlocked.contains)
@@ -125,10 +201,54 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
                         (_) => _loadExact(visibleUnlocked),
                       );
                     }
-                    return RealtyMapView(
-                      listings: listings,
-                      exactPoints: _exact,
-                      onListingTap: (r) => _onPinTap(r, unlocked),
+                    return Stack(
+                      children: [
+                        RealtyMapView(
+                          key: _mapKey,
+                          listings: listings,
+                          exactPoints: _exact,
+                          selectedId: _selectedId,
+                          fitToken: _fitToken,
+                          onSelectionChanged: (r) =>
+                              setState(() => _selectedId = r.id),
+                          onListingTap: (r) => _onPinTap(r, unlocked),
+                        ),
+                        if (listings.isEmpty && snap.hasData)
+                          Center(
+                            child: Container(
+                              margin: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.surface,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                context.tr('realty_map_empty'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: c.ink2),
+                              ),
+                            ),
+                          ),
+                        // Пастдаги карточка тасмаси: пин босилганда шу
+                        // ерга сурилади, тасма сурилганда камера жойига
+                        // боради — рўйхатга қайтмасдан объектларни
+                        // кўриб чиқиш мумкин.
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _ListingStrip(
+                            listings: listings,
+                            selectedId: _selectedId,
+                            unlocked: unlocked,
+                            onSelected: _selectFromStrip,
+                            onOpen: (r) => _onPinTap(r, unlocked),
+                          ),
+                        ),
+                      ],
                     );
                   },
                 );
@@ -143,6 +263,307 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
   Future<void> _openAdd() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AddRealtyListingScreen()),
+    );
+  }
+}
+
+/// Харитадаги қидирув — юкланган эълонлар ичидан.
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: TextStyle(color: c.ink, fontSize: AppText.bodyMedium),
+        decoration: InputDecoration(
+          hintText: context.tr('realty_map_search_hint'),
+          prefixIcon: Icon(Icons.search, size: 20, color: c.ink3),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: Icon(Icons.close, size: 18, color: c.ink3),
+                  onPressed: onClear,
+                ),
+          filled: true,
+          fillColor: c.surface,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: c.line),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: c.line),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Туманимда» ↔ «Бутун ҳудуд». Сўров 300 та билан чекланган, шунинг
+/// учун ҳудудни торайтириш — фойдаланувчи учун ҳам, сўров учун ҳам
+/// фойда.
+class _ScopeSwitch extends StatelessWidget {
+  const _ScopeSwitch({required this.districtOnly, required this.onChanged});
+
+  final bool districtOnly;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    Widget chip(String labelKey, bool value) {
+      final selected = districtOnly == value;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? c.brand : c.surface,
+              border: Border.all(color: selected ? c.brand : c.line),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              context.tr(labelKey),
+              style: TextStyle(
+                fontSize: AppText.labelLarge,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : c.ink2,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Row(
+        children: [
+          chip('realty_map_scope_district', true),
+          chip('realty_map_scope_all', false),
+        ],
+      ),
+    );
+  }
+}
+
+/// Харита остидаги сурилувчи карточка тасмаси.
+class _ListingStrip extends StatefulWidget {
+  const _ListingStrip({
+    required this.listings,
+    required this.selectedId,
+    required this.unlocked,
+    required this.onSelected,
+    required this.onOpen,
+  });
+
+  final List<RealtyListing> listings;
+  final String? selectedId;
+  final Set<String> unlocked;
+
+  /// Тасма сурилганда — камера шу объектга борсин.
+  final ValueChanged<RealtyListing> onSelected;
+
+  /// Карточка босилганда — тафсилот ёки пакет таклифи.
+  final ValueChanged<RealtyListing> onOpen;
+
+  @override
+  State<_ListingStrip> createState() => _ListingStripState();
+}
+
+class _ListingStripState extends State<_ListingStrip> {
+  static const double _cardWidth = 246;
+  late final PageController _ctrl =
+      PageController(viewportFraction: 0.82, initialPage: _indexOfSelected());
+
+  int _indexOfSelected() {
+    final id = widget.selectedId;
+    if (id == null) return 0;
+    final i = widget.listings.indexWhere((r) => r.id == id);
+    return i < 0 ? 0 : i;
+  }
+
+  @override
+  void didUpdateWidget(_ListingStrip old) {
+    super.didUpdateWidget(old);
+    // Пин босилганда тасма ўша карточкага сурилсин.
+    if (widget.selectedId != old.selectedId && widget.selectedId != null) {
+      final i = _indexOfSelected();
+      if (_ctrl.hasClients && i != _ctrl.page?.round()) {
+        _ctrl.animateToPage(
+          i,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.listings.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 118,
+      child: PageView.builder(
+        controller: _ctrl,
+        padEnds: false,
+        itemCount: widget.listings.length,
+        onPageChanged: (i) => widget.onSelected(widget.listings[i]),
+        itemBuilder: (_, i) {
+          final r = widget.listings[i];
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 4, 12),
+            child: SizedBox(
+              width: _cardWidth,
+              child: _StripCard(
+                listing: r,
+                unlocked: widget.unlocked.contains(r.id),
+                onTap: () => widget.onOpen(r),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StripCard extends StatelessWidget {
+  const _StripCard({
+    required this.listing,
+    required this.unlocked,
+    required this.onTap,
+  });
+
+  final RealtyListing listing;
+  final bool unlocked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    final tierColor = RealtyTabs.colorFor(listing.tier);
+    final image =
+        listing.imageUrls.isNotEmpty ? listing.imageUrls.first : null;
+    return Material(
+      color: c.surface,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 84,
+              height: double.infinity,
+              child: image == null
+                  ? Container(
+                      color: c.surface2,
+                      child: Icon(Icons.home_outlined, color: c.ink3),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: image,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => ColoredBox(color: c.surface2),
+                      errorWidget: (_, __, ___) => Container(
+                        color: c.surface2,
+                        child: Icon(Icons.home_outlined, color: c.ink3),
+                      ),
+                    ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: tierColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            listing.priceText.trim().isEmpty
+                                ? context.tr('realty_price_unset')
+                                : listing.priceText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: AppText.bodyMedium,
+                              color: c.ink,
+                            ),
+                          ),
+                        ),
+                        if (!unlocked)
+                          Icon(Icons.lock_outline, size: 14, color: c.ink3),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      listing.titleOrText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppText.labelLarge,
+                        color: c.ink2,
+                        height: 1.25,
+                      ),
+                    ),
+                    if (listing.specsLabel.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        listing.specsLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppText.labelTiny,
+                          color: c.ink3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -244,33 +665,40 @@ class RealtyMapLegend extends StatelessWidget {
         color: c.surface,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Row(
+      // `Wrap` — аввал бу `Row` эди ва ичида `Spacer` билан бирга
+      // `Expanded` турар эди: тор экранда доимий оверфлоу хавфи бор
+      // қурилиш. Энди элементлар керак бўлса кейинги қаторга ўтади.
+      child: Wrap(
+        alignment: WrapAlignment.start,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 4,
         children: [
-          for (final tier in RealtyTabs.order) ...[
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: RealtyTabs.colorFor(tier),
-                shape: BoxShape.circle,
-              ),
+          for (final tier in RealtyTabs.order)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: RealtyTabs.colorFor(tier),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  context.tr(RealtyTabs.labelKey(tier)),
+                  style: TextStyle(
+                    fontSize: AppText.labelTiny,
+                    color: c.ink2,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            Text(
-              context.tr(RealtyTabs.labelKey(tier)),
-              style: TextStyle(fontSize: AppText.labelTiny, color: c.ink2),
-            ),
-            const SizedBox(width: 10),
-          ],
-          const Spacer(),
-          Expanded(
-            flex: 3,
-            child: Text(
-              context.tr('realty_map_approx_hint'),
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
-            ),
+          Text(
+            context.tr('realty_map_approx_hint'),
+            style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
           ),
         ],
       ),

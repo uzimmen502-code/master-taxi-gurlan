@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/wholesale_product.dart';
 
@@ -87,7 +88,10 @@ class WholesaleProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'МОҚ: ${product.moq} ${product.unit}',
+                    context
+                        .tr('wholesale_moq_short')
+                        .replaceAll('{qty}', '${product.moq}')
+                        .replaceAll('{unit}', product.unit),
                     style: TextStyle(
                         fontSize: AppText.labelTiny, color: Colors.grey.shade600),
                   ),

@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../models/wholesale_product.dart';
@@ -30,7 +32,7 @@ class _WholesaleProductDetailScreenState
     final ok = await callPhone(widget.product.sellerId);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Қўнғироқ қилиб бўлмади')),
+        SnackBar(content: Text(context.tr('wholesale_call_failed'))),
       );
     }
   }
@@ -43,7 +45,7 @@ class _WholesaleProductDetailScreenState
     );
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Видео топилмади')),
+        SnackBar(content: Text(context.tr('wholesale_video_not_found'))),
       );
     }
   }
@@ -61,7 +63,7 @@ class _WholesaleProductDetailScreenState
               child: PageView(
                 children: [
                   for (final url in p.imageUrls)
-                    Image.network(url, fit: BoxFit.cover),
+                    CachedNetworkImage(imageUrl: url, fit: BoxFit.cover),
                 ],
               ),
             ),
@@ -80,13 +82,20 @@ class _WholesaleProductDetailScreenState
                         fontWeight: FontWeight.w700,
                         color: AppColors.primaryDark)),
                 const SizedBox(height: 4),
-                Text('Минимал буюртма: ${p.moq} ${p.unit}',
+                Text(
+                    context
+                        .tr('wholesale_min_order')
+                        .replaceAll('{qty}', '${p.moq}')
+                        .replaceAll('{unit}', p.unit),
                     style: TextStyle(color: Colors.grey.shade700)),
                 // Хитой бозорида етказиш муддати — асосий саволлардан
                 // бири; киритилмаган бўлса умуман кўрсатилмайди.
                 if (p.isChina && (p.deliveryDays ?? 0) > 0) ...[
                   const SizedBox(height: 4),
-                  Text('Етказиш муддати: ${p.deliveryDays} кун',
+                  Text(
+                      context
+                          .tr('wholesale_delivery_days')
+                          .replaceAll('{days}', '${p.deliveryDays}'),
                       style: TextStyle(color: Colors.grey.shade700)),
                 ],
                 if (p.priceTiers.length > 1) ...[
@@ -100,7 +109,7 @@ class _WholesaleProductDetailScreenState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Нарх поғоналари',
+                        Text(context.tr('wholesale_price_tiers'),
                             style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 color: Colors.grey.shade800)),
@@ -129,7 +138,7 @@ class _WholesaleProductDetailScreenState
                     Expanded(
                       child: Text(
                         p.sellerCompanyName.isEmpty
-                            ? 'Сотувчи'
+                            ? context.tr('wholesale_seller_label')
                             : p.sellerCompanyName,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
@@ -141,14 +150,14 @@ class _WholesaleProductDetailScreenState
                   OutlinedButton.icon(
                     onPressed: _openVideo,
                     icon: const Icon(Icons.play_circle_outline),
-                    label: const Text('🎥 Видеообзорни кўриш'),
+                    label: Text(context.tr('wholesale_watch_video')),
                   ),
                   const SizedBox(height: 10),
                 ],
                 FilledButton.icon(
                   onPressed: _call,
                   icon: const Icon(Icons.call),
-                  label: const Text('Қўнғироқ қилиш'),
+                  label: Text(context.tr('wholesale_call')),
                 ),
               ],
             ),

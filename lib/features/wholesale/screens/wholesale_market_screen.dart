@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/fair_mix.dart';
 import '../../../models/platform_product.dart';
@@ -11,6 +13,7 @@ import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
 import '../repositories/wholesale_sellers_repository.dart';
+import '../services/wholesale_storage_service.dart';
 import '../services/wholesale_video_link.dart';
 import '../widgets/wholesale_product_card.dart';
 import 'wholesale_product_detail_screen.dart';
@@ -113,15 +116,17 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isChina ? 'Хитой бозори' : 'Улгуржи бозор'),
+        title: Text(
+          context.tr(_isChina ? 'wholesale_title_china' : 'wholesale_title'),
+        ),
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.black,
           unselectedLabelColor: Colors.black54,
           indicatorColor: Colors.black,
-          tabs: const [
-            Tab(text: 'Бозор'),
-            Tab(text: 'Сотувчи'),
+          tabs: [
+            Tab(text: context.tr('wholesale_tab_market')),
+            Tab(text: context.tr('wholesale_tab_seller')),
           ],
         ),
       ),
@@ -143,7 +148,7 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
           controller: _searchCtrl,
           onChanged: (v) => setState(() => _query = v),
           decoration: InputDecoration(
-            hintText: 'Маҳсулот, компания номи бўйича қидириш...',
+            hintText: context.tr('wholesale_search_hint'),
             prefixIcon: const Icon(Icons.search),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             isDense: true,
@@ -164,7 +169,9 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
             final items = snap.data ?? const <WholesaleProduct>[];
             final platform = _filteredPlatform();
             if (items.isEmpty && platform.isEmpty) {
-              return const Center(child: Text('Маҳсулот топилмади'));
+              return Center(
+                child: Text(context.tr('wholesale_empty_products')),
+              );
             }
             // Навбатма-навбат: AVA товари лентанинг бошида тўпланиб
             // қолмасин, сотувчилар товари ҳам кўринсин.
@@ -244,13 +251,13 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
     final company = _companyCtrl.text.trim();
     if (company.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Компания номини киритинг')),
+        SnackBar(content: Text(context.tr('wholesale_err_company_name'))),
       );
       return;
     }
     if (_sellerType.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Сотувчи турини танланг')),
+        SnackBar(content: Text(context.tr('wholesale_err_seller_type'))),
       );
       return;
     }
@@ -264,14 +271,17 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Юборилди — admin тасдиғини кутинг'),
-        ),
+        SnackBar(content: Text(context.tr('wholesale_register_sent'))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            context.tr('error_generic').replaceAll('{error}', '$e'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _registering = false);
@@ -286,7 +296,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Сотувчи бўлиш учун аввал профилда телефон рақамингизни тасдиқланг.',
+            context.tr('wholesale_need_phone'),
             textAlign: TextAlign.center,
           ),
         ),
@@ -311,26 +321,28 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
-          'Улгуржи сотувчи сифатида рўйхатдан ўтинг',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Text(
+          context.tr('wholesale_register_title'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
-          'Ишлаб чиқарувчи, оптовик ёки ЯТТ сифатида маҳсулотларингизни улгуржи/кичик улгуржи савдога қўйишингиз мумкин. Рўйхатдан ўтгач, admin тасдиғидан кейин маҳсулот жойлаштира оласиз.'
           // Рўйхат битта — иккала бозор ҳам `wholesale_sellers`дан
           // фойдаланади, шунинг учун Хитой бозорида буни айтиб қўямиз.
-          '${widget.market == WholesaleProduct.marketChina ? ' Рўйхат умумий — битта рўйхатдан ўтиш иккала бозор учун ҳам етарли.' : ''}',
+          context.tr('wholesale_register_body') +
+              (widget.market == WholesaleProduct.marketChina
+                  ? context.tr('wholesale_register_body_china')
+                  : ''),
           style: TextStyle(color: Colors.grey.shade700),
         ),
         const SizedBox(height: 20),
-        const Text('Сиз кимсиз?',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+        Text(context.tr('wholesale_who_are_you'),
+            style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
           for (final t in WholesaleSeller.sellerTypes)
             ChoiceChip(
-              label: Text(WholesaleSeller.typeLabel(t)),
+              label: Text(context.tr(WholesaleSeller.typeLabelKey(t))),
               selected: _sellerType == t,
               onSelected: (_) => setState(() => _sellerType = t),
             ),
@@ -338,17 +350,17 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
         const SizedBox(height: 16),
         TextField(
           controller: _companyCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Компания номи',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: context.tr('wholesale_field_company'),
+            border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _ownerCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Раҳбар исми (ихтиёрий)',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: context.tr('wholesale_field_owner'),
+            border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 20),
@@ -359,7 +371,7 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Рўйхатдан ўтиш'),
+              : Text(context.tr('wholesale_register_cta')),
         ),
       ],
     );
@@ -381,14 +393,17 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
             const SizedBox(height: 12),
             Text(
               pending
-                  ? 'Аризангиз кўриб чиқилмоқда'
-                  : 'Аризангиз рад этилди',
+                  ? context.tr('wholesale_status_pending_title')
+                  : context.tr('wholesale_status_rejected_title'),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             if (!pending && seller.adminNote.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('Сабаб: ${seller.adminNote}',
+              Text(
+                  context
+                      .tr('wholesale_reason')
+                      .replaceAll('{note}', seller.adminNote),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade700)),
             ],
@@ -421,7 +436,7 @@ class _MyProductsView extends StatelessWidget {
           ),
         ),
         icon: const Icon(Icons.add),
-        label: const Text('Янги маҳсулот'),
+        label: Text(context.tr('wholesale_new_product')),
       ),
       body: StreamBuilder<List<WholesaleProduct>>(
         stream: repo.watchBySeller(seller.phone, market: market),
@@ -431,8 +446,8 @@ class _MyProductsView extends StatelessWidget {
           }
           final items = snap.data ?? const <WholesaleProduct>[];
           if (items.isEmpty) {
-            return const Center(
-                child: Text('Ҳали маҳсулот қўшмагансиз — «Янги маҳсулот»'));
+            return Center(
+                child: Text(context.tr('wholesale_no_products_yet')));
           }
           // Расмлар AVA Дўкон (Сотувчи POS) каби — катта, cover, грид карта
           // (эга қарори, 2026-09-24). Аввал кичик CircleAvatarли ListTile эди.
@@ -452,6 +467,53 @@ class _MyProductsView extends StatelessWidget {
     );
   }
 
+  /// Ўчириш — ТАСДИҚ билан (2026-09-29).
+  ///
+  /// Аввал меню банди босилиши биланоқ маҳсулот ўчиб кетар эди: битта
+  /// нотўғри тегиш сотувчининг маҳсулотини бутунлай йўқотарди.
+  /// Ҳужжат ўчгач расмлар ҳам Storage'дан тозаланади — уларга бошқа
+  /// ҳеч ким мурожаат қилмайди, аввал эса улар у ерда абадий қолиб
+  /// кетар эди (`WholesaleStorageService.deleteImages` ёзилган, лекин
+  /// ҳеч қаердан чақирилмас эди).
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WholesaleProductsRepository repo,
+    WholesaleProduct p,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final deletedText = context.tr('wholesale_deleted');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(dialogCtx.tr('wholesale_delete_title')),
+        content: Text(
+          dialogCtx
+              .tr('wholesale_delete_body')
+              .replaceAll('{title}', p.title),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text(dialogCtx.tr('cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text(dialogCtx.tr('delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await repo.delete(p.id);
+    // Расмлар ҳужжатдан КЕЙИН ўчирилади: Storage хатоси эълоннинг
+    // ўчишига тўсқинлик қилмасин.
+    if (p.imageUrls.isNotEmpty) {
+      await WholesaleStorageService().deleteImages(p.imageUrls);
+    }
+    messenger.showSnackBar(SnackBar(content: Text(deletedText)));
+  }
+
   Widget _myProductTile(
     BuildContext context,
     WholesaleProductsRepository repo,
@@ -469,7 +531,7 @@ class _MyProductsView extends StatelessWidget {
       } else if (action == 'hide') {
         await repo.deactivate(p.id);
       } else if (action == 'delete') {
-        await repo.delete(p.id);
+        await _confirmDelete(context, repo, p);
       } else if (action == 'add_video') {
         await _addVideo(context, repo, p);
       } else if (action == 'view_video') {
@@ -500,13 +562,12 @@ class _MyProductsView extends StatelessWidget {
                       color: Colors.grey.shade100,
                       child: p.imageUrls.isEmpty
                           ? const Icon(Icons.inventory_2_outlined, size: 40)
-                          : Image.network(
-                              p.imageUrls.first,
+                          : CachedNetworkImage(
+                              imageUrl: p.imageUrls.first,
                               width: double.infinity,
                               height: double.infinity,
                               fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                              errorBuilder: (_, __, ___) => const Icon(
+                              errorWidget: (_, __, ___) => const Icon(
                                   Icons.image_not_supported_outlined),
                             ),
                     ),
@@ -539,22 +600,25 @@ class _MyProductsView extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         iconSize: 20,
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
-                              value: 'edit', child: Text('Таҳрирлаш')),
-                          const PopupMenuItem(
+                          PopupMenuItem(
+                              value: 'edit', child: Text(context.tr('edit'))),
+                          PopupMenuItem(
                             value: 'add_video',
-                            child: Text('🎥 Видеообзор / реклама қўшиш'),
+                            child: Text(context.tr('wholesale_menu_add_video')),
                           ),
                           if (p.videoClipIds.isNotEmpty)
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'view_video',
-                              child: Text('Видеони кўриш'),
+                              child:
+                                  Text(context.tr('wholesale_menu_view_video')),
                             ),
                           if (p.isActive)
-                            const PopupMenuItem(
-                                value: 'hide', child: Text('Яшириш')),
-                          const PopupMenuItem(
-                              value: 'delete', child: Text('Ўчириш')),
+                            PopupMenuItem(
+                                value: 'hide',
+                                child: Text(context.tr('wholesale_menu_hide'))),
+                          PopupMenuItem(
+                              value: 'delete',
+                              child: Text(context.tr('delete'))),
                         ],
                       ),
                     ),
@@ -585,7 +649,8 @@ class _MyProductsView extends StatelessWidget {
               ),
             ),
             Text(
-              'МОҚ ${p.moq} ${p.unit} · ${_statusLabel(p.status)}',
+              '${context.tr('wholesale_moq_line').replaceAll('{qty}', '${p.moq}').replaceAll('{unit}', p.unit)}'
+              ' · ${context.tr(_statusLabelKey(p.status))}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
@@ -610,12 +675,17 @@ class _MyProductsView extends StatelessWidget {
       );
       if (!context.mounted || !linked) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Видео маҳсулотга боғланди')),
+        SnackBar(content: Text(context.tr('wholesale_video_linked'))),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text('Хатолик: $e')),
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            context.tr('error_generic').replaceAll('{error}', '$e'),
+          ),
+        ),
       );
     }
   }
@@ -628,14 +698,14 @@ class _MyProductsView extends StatelessWidget {
     );
   }
 
-  String _statusLabel(String status) {
+  String _statusLabelKey(String status) {
     switch (status) {
       case WholesaleProduct.statusPending:
-        return 'Кутяпти';
+        return 'wholesale_status_pending';
       case WholesaleProduct.statusActive:
-        return 'Фаол';
+        return 'wholesale_status_active';
       case WholesaleProduct.statusInactive:
-        return 'Яширилган';
+        return 'wholesale_status_inactive';
       default:
         return status;
     }

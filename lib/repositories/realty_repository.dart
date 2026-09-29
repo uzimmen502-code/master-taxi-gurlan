@@ -51,12 +51,25 @@ class RealtyRepository {
   ///
   /// ⚠️ 1-босқичда ҲЕЧ КИМ чақирмайди: харита ахборот пакетлари билан
   /// бирга, 3-босқичда ёқилади (қаранг: `realty_screen.dart` изоҳи).
+  /// Харита учун эълонлар.
+  ///
+  /// `orderBy` МАЖБУРИЙ (2026-09-29): усиз Firestore лимитга тушган
+  /// ҳужжатларни ихтиёрий тартибда танлар эди — 300 тадан ошганда
+  /// харитада «энг янгилари» эмас, тасодифий 300 таси кўринарди.
+  /// [districtId] берилса фақат ўша туман. Иккала сўров учун ҳам
+  /// композит индекслар аллақачон мавжуд (`status+createdAt` ва
+  /// `status+districtId+createdAt`).
   Stream<List<RealtyListing>> watchForMap({
     RealtyDeal? deal,
+    String districtId = '',
     int limit = 300,
   }) {
-    return _col
-        .where('status', isEqualTo: 'active')
+    final id = districtId.trim();
+    Query<Map<String, dynamic>> q =
+        _col.where('status', isEqualTo: 'active');
+    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
+    return q
+        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snap) => _live(snap.docs, deal: deal));
@@ -252,6 +265,30 @@ class RealtyRepository {
   /// `null` берилса ҳамма ёзув (янгиси юқорида). Фойдаланувчи
   /// оқимларидан фарқли: муддати тугаганлар ҳам чиқади, чунки админ
   /// уларни кўра олиши керак.
+  /// Бир нечта объектнинг ёпиқ тафсилотини ПАРАЛЛЕЛ ўқийди.
+  ///
+  /// Аввал харита экрани уларни кетма-кет, битталаб ўқир эди: 10
+  /// объектли пакетда бу 10 та кетма-кет бориш-келиш, яъни пинлар
+  /// бирин-кетин «сакраб» жойига тушарди. Партия чегараси Firestore'ни
+  /// бир вақтда кўп сўров билан кўмиб ташламаслик учун.
+  Future<Map<String, RealtyDetail>> fetchDetails(
+    Iterable<String> ids, {
+    int batchSize = 10,
+  }) async {
+    final out = <String, RealtyDetail>{};
+    final list = ids.toList(growable: false);
+    for (var i = 0; i < list.length; i += batchSize) {
+      final batch = list.skip(i).take(batchSize);
+      final results = await Future.wait(batch.map(fetchDetail));
+      var j = 0;
+      for (final id in batch) {
+        final d = results[j++];
+        if (d != null) out[id] = d;
+      }
+    }
+    return out;
+  }
+
   Stream<List<RealtyListing>> watchForModeration({
     String? status,
     int limit = 200,
@@ -280,8 +317,9 @@ class RealtyRepository {
         .where((r) => !r.isExpired)
         .where((r) => deal == null || r.deal == deal)
         .toList();
-    // `watchForMap` серверда тартибламайди (индекссиз) — лентадагидек
-    // янгиси юқорида турсин.
+    // Сўровлар серверда `createdAt` бўйича тартибланади, лекин муддати
+    // ўтганлар ва бошқа даража мана шу ерда чиқариб ташланади —
+    // натижа барибир янгиси юқорида турсин.
     items.sort((a, b) {
       final ax = a.createdAt, bx = b.createdAt;
       if (ax == null || bx == null) return 0;

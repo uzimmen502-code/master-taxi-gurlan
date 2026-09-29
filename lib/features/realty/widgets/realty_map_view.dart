@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -7,59 +10,100 @@ import '../realty_tabs.dart';
 /// Эълонлар остидаги умумий харита (концепция, 7-бўлим).
 ///
 /// ИККИ РЕЖИМДА ишлайди — бу шу бўлимнинг пул топиш мантиғи:
-///   • **Тахминий ҳудуд** (пакетсиз ёки очилмаган объект): бир geohash4
-///     катакчасидаги объектлар БИТТА доира қилиб бирлаштирилади, доира
-///     маркази катакча ўртаси (≈20 км), ичида объектлар сони. Аниқ
-///     нуқта кўрсатилмайди — у пуллик ахборот (9-бўлим).
+///   • **Тахминий нуқта** (пакетсиз ёки очилмаган объект): серверда ҳар
+///     объект учун ≈1.2 км радиусда БИР МАРТА силкитилган нуқта.
 ///   • **Аниқ пин**: фойдаланувчи ахборот пакетидан очган объектлар.
 ///     Уларнинг координатаси [exactPoints] орқали берилади.
 ///
 /// Аниқ координата иловага умуман келмайди: у Firestore қоидаси билан
 /// ёпилган `private/detail` ҳужжатида. Шунинг учун бу виджет «тахминий»
 /// режимда аниқ нуқтани билмайди ҳам — яширмайди, эгаси йўқ.
+///
+/// Пин ўрнида НАРХ ЁРЛИҒИ чизилади (эга қарори, 2026-09-29). Бозор
+/// стандарти шу: харидор харитага қараб дарҳол нарх тақсимотини кўради.
+/// Тахминий объектда нарх олдида «~» туради — бу нархнинг эмас, ЖОЙнинг
+/// тахминий эканини эслатади (изоҳ легендада).
 class RealtyMapView extends StatefulWidget {
   const RealtyMapView({
     super.key,
     required this.listings,
     required this.onListingTap,
     this.exactPoints = const {},
+    this.selectedId,
+    this.onSelectionChanged,
+    this.fitToken = 0,
     this.centerLat = 41.2995,
     this.centerLng = 69.2401,
     this.initialZoom = 10,
   });
 
   final List<RealtyListing> listings;
+
+  /// Ёрлиқ босилганда — карточка очиш ёки пакет таклифи.
   final ValueChanged<RealtyListing> onListingTap;
 
   /// Очилган объектлар: `listingId` → аниқ координата.
   final Map<String, LatLng> exactPoints;
+
+  /// Пастдаги карточка тасмасида турган объект — ёрлиғи катталашади.
+  final String? selectedId;
+
+  /// Харитадаги ёрлиқ босилганда тасма шунга сурилсин.
+  final ValueChanged<RealtyListing>? onSelectionChanged;
+
+  /// Бу сон ўзгарса камера рўйхатга ҚАЙТА мосланади. Филтр ёки ҳудуд
+  /// алмашганда керак: аввал камера биринчи мослашдан кейин умуман
+  /// ҳаракатланмас, Сотиш'дан Ижара'га ўтилганда экранда эски жой
+  /// қолиб кетар эди.
+  final int fitToken;
 
   final double centerLat;
   final double centerLng;
   final double initialZoom;
 
   @override
-  State<RealtyMapView> createState() => _RealtyMapViewState();
+  State<RealtyMapView> createState() => RealtyMapViewState();
 }
 
-class _RealtyMapViewState extends State<RealtyMapView> {
+class RealtyMapViewState extends State<RealtyMapView> {
   /// Шундан кичик чегара «битта нуқта» деб ҳисобланади (≈2 км).
   static const double _minSpanDegrees = 0.02;
 
-  /// Битта нуқта бўлганда камера зуми — тахминий катакча (≈20 км)
-  /// атрофи кўриниб турсин.
+  /// Битта нуқта бўлганда камера зуми — тахминий ҳудуд атрофи кўринсин.
   static const double _singlePointZoom = 11;
 
   GoogleMapController? _map;
   bool _didFitAll = false;
   int _fitAttempts = 0;
+  int _appliedFitToken = 0;
+
+  /// Чизилган ёрлиқлар: калит → расм. Ҳар кадрда қайта чизилмасин —
+  /// бир ёрлиқни чизиш canvas + PNG кодлаш, бу арзон эмас.
+  final Map<String, BitmapDescriptor> _iconCache = {};
+  bool _iconsBuilding = false;
+  bool _iconsDirty = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // `initState` ЭМАС: ёрлиқни чизиш учун `devicePixelRatio` керак, у
+    // эса `MediaQuery` дан олинади — `initState` да InheritedWidget'га
+    // мурожаат қилиш ман этилган (debug'да assert тушади).
+    _rebuildIcons();
+  }
 
   @override
   void didUpdateWidget(RealtyMapView old) {
     super.didUpdateWidget(old);
+    if (widget.fitToken != _appliedFitToken) {
+      _appliedFitToken = widget.fitToken;
+      _didFitAll = false;
+      _fitAttempts = 0;
+    }
     if (!_didFitAll && widget.listings.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitAll());
     }
+    _rebuildIcons();
   }
 
   /// Очилмаган объектлар — ҳар бири АЛОҲИДА, чунки серверда ҳар
@@ -70,10 +114,154 @@ class _RealtyMapViewState extends State<RealtyMapView> {
       .where((r) => !widget.exactPoints.containsKey(r.id))
       .toList();
 
+  LatLng _pointOf(RealtyListing r) =>
+      widget.exactPoints[r.id] ?? LatLng(r.areaLat, r.areaLng);
+
   List<LatLng> get _allPoints => [
-        for (final e in widget.exactPoints.values) e,
-        for (final r in _approx) LatLng(r.areaLat, r.areaLng),
+        for (final r in widget.listings) _pointOf(r),
       ];
+
+  // ───────────────────────── Ёрлиқ расмлари ─────────────────────────
+
+  /// Харитада кўринадиган матн. Нарх ёзилмаган эълонда даража номи
+  /// ўрнига қисқа белги — ёрлиқ бўш қолмасин.
+  static String labelTextFor(RealtyListing r, {required bool approx}) {
+    var p = r.priceText.trim();
+    if (p.isEmpty) return approx ? '~ ?' : '?';
+    // Узун матн харитани тўсиб қўймасин.
+    if (p.length > 14) p = '${p.substring(0, 13)}…';
+    return approx ? '~ $p' : p;
+  }
+
+  String _iconKey(RealtyListing r, {required bool approx}) {
+    final selected = widget.selectedId == r.id;
+    return '${r.tier.name}|$selected|${labelTextFor(r, approx: approx)}';
+  }
+
+  Future<void> _rebuildIcons() async {
+    // Чизиш давом этаётган бўлса — белги қўйиб кетамиз, тугагач ўзи
+    // яна бир айланади. Акс ҳолда чизиш вақтида келган янги эълонлар
+    // ёрлиқсиз қолиб кетарди.
+    if (_iconsBuilding) {
+      _iconsDirty = true;
+      return;
+    }
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 2.0;
+    final needed = <String, ({RealtyListing r, bool approx})>{};
+    for (final r in widget.listings) {
+      final approx = !widget.exactPoints.containsKey(r.id);
+      final key = _iconKey(r, approx: approx);
+      if (!_iconCache.containsKey(key)) {
+        needed[key] = (r: r, approx: approx);
+      }
+    }
+    if (needed.isEmpty) return;
+    _iconsBuilding = true;
+    try {
+      for (final e in needed.entries) {
+        final bytes = await _drawLabel(
+          text: labelTextFor(e.value.r, approx: e.value.approx),
+          color: RealtyTabs.colorFor(e.value.r.tier),
+          selected: widget.selectedId == e.value.r.id,
+          dpr: dpr,
+        );
+        if (bytes == null) continue;
+        _iconCache[e.key] = BitmapDescriptor.bytes(bytes, imagePixelRatio: dpr);
+      }
+    } catch (err) {
+      // Чизиш бузилса хариталар барибир ишласин — стандарт пин қолади.
+      debugPrint('RealtyMapView._rebuildIcons: $err');
+    } finally {
+      _iconsBuilding = false;
+      if (mounted) setState(() {});
+      if (_iconsDirty && mounted) {
+        _iconsDirty = false;
+        await _rebuildIcons();
+      }
+    }
+  }
+
+  /// Нарх ёрлиғини PNG қилиб чизади: тўлдирилган юмалоқ тўртбурчак,
+  /// оқ матн ва пастда кичик учбурчак — у объект нуқтасини кўрсатади.
+  Future<Uint8List?> _drawLabel({
+    required String text,
+    required Color color,
+    required bool selected,
+    required double dpr,
+  }) async {
+    final fontSize = selected ? 13.0 : 11.5;
+    final padH = selected ? 10.0 : 8.0;
+    final padV = selected ? 6.0 : 4.5;
+    const tailH = 6.0;
+    final border = selected ? 2.0 : 1.0;
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+
+    final w = painter.width + padH * 2 + border * 2;
+    final h = painter.height + padV * 2 + border * 2 + tailH;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(dpr);
+
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, w, h - tailH),
+      const Radius.circular(7),
+    );
+
+    // Оқ ҳошия — ёрлиқ ҳар қандай харита фонида ажралиб турсин.
+    canvas.drawRRect(
+      bodyRect,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(border, border, w - border * 2, h - tailH - border * 2),
+        const Radius.circular(6),
+      ),
+      Paint()..color = color,
+    );
+
+    // Пастки учбурчак — аниқ нуқтани кўрсатади.
+    final tail = Path()
+      ..moveTo(w / 2 - 5, h - tailH - 0.5)
+      ..lineTo(w / 2, h)
+      ..lineTo(w / 2 + 5, h - tailH - 0.5)
+      ..close();
+    canvas.drawPath(tail, Paint()..color = Colors.white);
+    final tailInner = Path()
+      ..moveTo(w / 2 - 3.5, h - tailH - 1.5)
+      ..lineTo(w / 2, h - 1.5)
+      ..lineTo(w / 2 + 3.5, h - tailH - 1.5)
+      ..close();
+    canvas.drawPath(tailInner, Paint()..color = color);
+
+    painter.paint(canvas, Offset(padH + border, padV + border));
+
+    final image = await recorder
+        .endRecording()
+        .toImage((w * dpr).ceil(), (h * dpr).ceil());
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    painter.dispose();
+    return data?.buffer.asUint8List();
+  }
+
+  // ───────────────────────────── Камера ─────────────────────────────
 
   LatLngBounds? _bounds() {
     final pts = _allPoints;
@@ -89,6 +277,17 @@ class _RealtyMapViewState extends State<RealtyMapView> {
       southwest: LatLng(minLat!, minLng!),
       northeast: LatLng(maxLat!, maxLng!),
     );
+  }
+
+  /// Танланган объектга камерани суриш — пастдаги тасма сурилганда.
+  Future<void> focusOn(RealtyListing r) async {
+    final map = _map;
+    if (map == null) return;
+    try {
+      await map.animateCamera(CameraUpdate.newLatLng(_pointOf(r)));
+    } catch (e) {
+      debugPrint('RealtyMapView.focusOn: $e');
+    }
   }
 
   /// `newLatLngBounds` харита ҳали лейаут қилинмаганда хато ташлаши
@@ -116,7 +315,7 @@ class _RealtyMapViewState extends State<RealtyMapView> {
           _singlePointZoom,
         ));
       } else {
-        await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 48));
+        await map.animateCamera(CameraUpdate.newLatLngBounds(bounds, 56));
       }
       _didFitAll = true;
     } catch (e) {
@@ -129,36 +328,30 @@ class _RealtyMapViewState extends State<RealtyMapView> {
     }
   }
 
+  // ──────────────────────────── Маркерлар ───────────────────────────
+
   Set<Marker> _markers() {
     final markers = <Marker>{};
-
-    // Очилган объектлар — аниқ пин.
     for (final r in widget.listings) {
-      final point = widget.exactPoints[r.id];
-      if (point == null) continue;
+      final approx = !widget.exactPoints.containsKey(r.id);
+      final icon = _iconCache[_iconKey(r, approx: approx)];
       markers.add(Marker(
         markerId: MarkerId(r.id),
-        position: point,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          RealtyTabs.markerHueFor(r.tier),
-        ),
-        onTap: () => widget.onListingTap(r),
-      ));
-    }
-
-    // Очилмаганлар — ҳар бири ўз пини билан, лекин пин ТАХМИНИЙ
-    // нуқтада. Карточкани очиш мумкин: аниқ жой барибир кўрсатилмайди,
-    // харидор ахборотни ичкарида сотиб олади.
-    for (final r in _approx) {
-      markers.add(Marker(
-        markerId: MarkerId('approxPin_${r.id}'),
-        position: LatLng(r.areaLat, r.areaLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          RealtyTabs.markerHueFor(r.tier),
-        ),
-        alpha: 0.75,
-        infoWindow: InfoWindow(title: r.titleOrText),
-        onTap: () => widget.onListingTap(r),
+        position: _pointOf(r),
+        // Ёрлиқ ҳали чизилмаган бўлса стандарт пин — харита бўш
+        // турмасин.
+        icon: icon ??
+            BitmapDescriptor.defaultMarkerWithHue(
+              RealtyTabs.markerHueFor(r.tier),
+            ),
+        // Ёрлиқ пастки учи билан нуқтани кўрсатади (стандарт пиннинг
+        // ҳам таянчи шу).
+        anchor: const Offset(0.5, 1),
+        zIndex: widget.selectedId == r.id ? 10 : (approx ? 1 : 2),
+        onTap: () {
+          widget.onSelectionChanged?.call(r);
+          widget.onListingTap(r);
+        },
       ));
     }
     return markers;
@@ -172,12 +365,15 @@ class _RealtyMapViewState extends State<RealtyMapView> {
         zoom: widget.initialZoom,
       ),
       markers: _markers(),
-      // Пин атрофидаги «тахминий ҳудуд» доираси олиб ташланди (эга
-      // қарори, 2026-09-28) — пинларнинг ўзи етарли, доира харитани
-      // ифлослантирар эди. Нуқталарнинг тахминийлиги легендада ёзилган.
+      // Пин атрофидаги «тахминий ҳудуд» доираси олиб ташланган (эга
+      // қарори, 2026-09-28) — доира харитани ифлослантирар эди.
+      // Нуқталарнинг тахминийлиги ёрлиқдаги «~» ва легендада ёзилган.
       myLocationEnabled: true,
-      myLocationButtonEnabled: false,
+      myLocationButtonEnabled: true,
       zoomControlsEnabled: false,
+      // Пастдаги карточка тасмаси «менинг жойим» тугмасини тўсиб
+      // қўймасин.
+      padding: const EdgeInsets.only(bottom: 132),
       onMapCreated: (c) {
         _map = c;
         if (!_didFitAll && widget.listings.isNotEmpty) {

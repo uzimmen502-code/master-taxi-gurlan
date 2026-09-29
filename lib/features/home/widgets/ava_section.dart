@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
@@ -73,103 +75,128 @@ class AvaProductShelf extends StatelessWidget {
 ///
 /// Ботиқлик ҳар бир қаторга эмас, уларнинг УМУМИЙ майдонига берилади —
 /// шунинг учун қатор баландлиги (14px), шрифт (12px) ва оралиқ (1px)
-/// ўзгармайди, бўлим ҳам узаймайди.
+/// ўзгармайди.
 ///
-/// Flutter'да CSS'даги `inset` соя йўқ. «Чуқурча» ҳисси уч нарса билан
-/// ясалади: фон картадан бир поғона тўқроқ ([AvaColors.surface2]), тепа
-/// чети фондан тўқроқ, паст чети эса деярли оқ. Кўз буни ичкарига
-/// босилган майдон деб ўқийди. Қоронғи режимда фарқ тескари бўлади —
-/// токенлар буни ўзи ҳал қилади.
+/// ─── ИККИ ҚАВАТ (эга қарори, 2026-09-29 — «D» варианти) ───
+///
+/// • Ички майдон — БИРИНЧИ қават. Фони [AvaColors.surface2], яъни
+///   картадан бир поғона тўқроқ: қават фарқи рангдан ҳам сезилади.
+/// • Ташқи карта — УСТКИ қават. У ички майдонга соя ташлайди.
+///
+/// Соя майдоннинг ЎЗ ЧЕГАРАСИДА кесилади ва матнга ёйилмайди. Аввалги
+/// ечим тепадан пастга 20px градиент чизар эди — у чуқурлик эмас,
+/// биринчи икки қатор устидаги хиралик бўлиб кўринарди (эга, 2026-09-29).
+///
+/// Flutter'да CSS'даги `box-shadow: inset` нинг муқобили ЙЎҚ: `BoxShadow`
+/// фақат ташқарига тушади. Шунинг учун соя [_InsetShadowPainter] да
+/// қўлда чизилади — майдон шакли қирқим қилиб қўйилади ва соя ўша
+/// қирқим ичида қолади.
 ///
 /// Аввал ҳар бўлим шу кўринишни ўз ичида, қўлда ясар эди (бешта бир хил
-/// `Container`) — энди битта жойда.
+/// `Container`) — энди битта жойда. Уни олтита бўлим ишлатади.
 class AvaInsetPanel extends StatelessWidget {
   const AvaInsetPanel({super.key, required this.child});
 
   final Widget child;
 
-  /// Юқоридаги «соя» чизиғининг баландлиги — ботиқлик шундан сезилади.
-  /// Эга қарори (2026-09-28): ботиқлик яна 2 баробар чуқурлаштирилди —
-  /// 10 → 20, соя тиниқлиги 0.45 → 0.80, чет қалинлиги 2 → 3.
-  static const double _shadeHeight = 20;
+  /// Соя тасмасининг кенглиги. Силжиш ва хиралик шундан ҳисобланади,
+  /// яъни чуқурликни БИТТА сон бошқаради.
+  static const double band = 4;
 
-  /// Пастдаги ёруғ чизиқ — ёруғлик тепадан тушгандек кўриниш беради
-  /// ва ботиқликни кучайтиради.
-  static const double _highlightHeight = 8;
+  /// Соянинг пастга силжиши — ёруғлик тепадан тушгандек кўринсин.
+  static const double _dy = band * 0.5;
+
+  /// Хиралик радиуси — CSS'даги `blur-radius` билан бир хил маънода.
+  static const double _blur = band * 1.6;
 
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
-    return Container(
-      decoration: BoxDecoration(
-        // Фон ОҚ (эга қарори, 2026-09-28) — аввал `surface2` (оч кулранг)
-        // эди. Оқ фонда қора матн контрасти юқори ва майдон саҳифа
-        // фонидан аниқроқ ажралади.
-        color: c.surface,
-        borderRadius: BorderRadius.circular(AvaRadius.card),
-        border: Border(
-          // Ботиқлик кучайтирилди: тепа чети қалинроқ ва тўқроқ, паст
-          // чети эса ёруғ — ёруғлик тепадан тушгандек кўринади.
-          top: BorderSide(color: c.insetEdgeTop, width: 3),
-          bottom: BorderSide(color: c.insetEdgeBottom, width: 3),
-          left: BorderSide(color: c.line),
-          right: BorderSide(color: c.line),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    final radius = BorderRadius.circular(AvaRadius.card);
+    // Қирқим аввалги ечимда ҳам бор эди (`clipBehavior: Clip.antiAlias`) —
+    // бола виджет юмалоқ бурчакдан чиқиб кетмасин.
+    return ClipRRect(
+      borderRadius: radius,
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: c.surface2, borderRadius: radius),
+        child: CustomPaint(
+          // `foregroundPainter` — соя матн УСТИДАН чизилади, лекин у
+          // чеккадаги тасмада қолгани учун матнга тегмайди.
+          foregroundPainter: _InsetShadowPainter(
+            color: c.insetShadow,
+            radius: AvaRadius.card,
+            dy: _dy,
+            blur: _blur,
+          ),
+          child: Padding(
+            // Вертикал 4 → 6: матн соя тасмасига кирмасин. Бўлим шундан
+            // 4px га узаяди, қатор баландлиги эса ўзгармайди.
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: child,
           ),
-          // Ички соя. Flutter'да `BoxShadow` фақат ташқарига тушади,
-          // шунинг учун ботиқлик тепадаги градиент чизиқ билан
-          // ясалади — бу ҳар икки мавзуда ҳам тўғри ишлайди.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: _shadeHeight,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      c.insetEdgeTop.withValues(alpha: 0.80),
-                      c.insetEdgeTop.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: _highlightHeight,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      c.insetEdgeBottom.withValues(alpha: 0.9),
-                      c.insetEdgeBottom.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+/// Ички соя — [AvaInsetPanel] учун.
+///
+/// Ишлаш тартиби: майдон шакли қирқим қилиб қўйилади, сўнг унинг ичига
+/// «тешикли» шакл хираланган ҳолда чизилади. Тешикнинг чети хираланганда
+/// соя майдон ичига қараб тушади, қирқим эса уни чегарада тўхтатади:
+/// на ташқарига чиқади, на матнга ёйилади.
+class _InsetShadowPainter extends CustomPainter {
+  const _InsetShadowPainter({
+    required this.color,
+    required this.radius,
+    required this.dy,
+    required this.blur,
+  });
+
+  final Color color;
+  final double radius;
+
+  /// Соянинг пастга силжиши.
+  final double dy;
+
+  /// Хиралик радиуси.
+  final double blur;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    canvas.save();
+    // Қирқим — соя шу чегарадан ташқарига чиқа олмайди.
+    canvas.clipRRect(rrect);
+    // Ташқи тўртбурчакдан майдон шаклини айириб «ҳалқа» оламиз. Ҳалқа
+    // хираланганда унинг ички чети майдонга соя бўлиб тушади.
+    final ring = Path.combine(
+      ui.PathOperation.difference,
+      Path()..addRect(rrect.outerRect.inflate(blur * 2 + dy + 1)),
+      Path()..addRRect(rrect.shift(Offset(0, dy))),
+    );
+    canvas.drawPath(
+      ring,
+      Paint()
+        ..color = color
+        // `MaskFilter.blur` сигма билан ишлайди, CSS эса радиус билан:
+        // сигма ≈ радиус / 2.
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, blur / 2),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_InsetShadowPainter old) =>
+      old.color != color ||
+      old.radius != radius ||
+      old.dy != dy ||
+      old.blur != blur;
 }
 
 /// Бўлим ичидаги қаторлар — [visibleRows] таси кўринади, қолгани ЁНГА

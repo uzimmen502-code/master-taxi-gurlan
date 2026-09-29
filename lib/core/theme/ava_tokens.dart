@@ -24,6 +24,11 @@ abstract final class AvaLight {
   static const inkRow = Color(0xFF3A3A3A);
   static const insetEdgeTop = Color(0xFFD2D9E4);
   static const insetEdgeBottom = Color(0xFFFBFCFE);
+
+  /// Ботиқ майдоннинг ички сояси — кўк-кулранг, 55% тиниқлик.
+  /// Ёруғ мавзуда соф қора соя «кир» бўлиб кўринади, шунинг учун тус
+  /// фон оиласидан олинган.
+  static const insetShadow = Color(0x8C586882);
   static const ink2 = Color(0xFF6B6B6B);
   static const ink3 = Color(0xFF9E9E9E);
   static const brand = Color(0xFF1E4FD8);
@@ -52,6 +57,10 @@ abstract final class AvaDark {
   static const inkRow = Color(0xFFFFFFFF);
   static const insetEdgeTop = Color(0xFF151922);
   static const insetEdgeBottom = Color(0xFF2E3543);
+
+  /// Қоронғи мавзуда соя деярли қора ва кучлироқ: фон аллақачон тўқ,
+  /// суст соя умуман кўринмай қолади.
+  static const insetShadow = Color(0xB8000000);
   static const ink2 = Color(0xFFAEB5C4);
   static const ink3 = Color(0xFF7C8494);
   static const brand = Color(0xFF6E93FF);
@@ -85,6 +94,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
     required this.inkRow,
     required this.insetEdgeTop,
     required this.insetEdgeBottom,
+    required this.insetShadow,
     required this.ink2,
     required this.ink3,
     required this.brand,
@@ -128,6 +138,13 @@ class AvaColors extends ThemeExtension<AvaColors> {
   /// Ботиқ майдоннинг ПАСТ чети — фондан очроқ.
   final Color insetEdgeBottom;
 
+  /// Ботиқ майдоннинг ИЧКИ сояси (эга қарори, 2026-09-29 — «D» варианти).
+  ///
+  /// Тиниқлиги токеннинг ўзида: чақирувчи уни ўзгартирмайди, шунда
+  /// иккала мавзуда ҳам соя бир хил кучда кўринади.
+  /// Қаранг: `AvaInsetPanel`.
+  final Color insetShadow;
+
   /// Иккиламчи матн.
   final Color ink2;
 
@@ -167,6 +184,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
     inkRow: AvaLight.inkRow,
     insetEdgeTop: AvaLight.insetEdgeTop,
     insetEdgeBottom: AvaLight.insetEdgeBottom,
+    insetShadow: AvaLight.insetShadow,
     ink2: AvaLight.ink2,
     ink3: AvaLight.ink3,
     brand: AvaLight.brand,
@@ -190,6 +208,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
     inkRow: AvaDark.inkRow,
     insetEdgeTop: AvaDark.insetEdgeTop,
     insetEdgeBottom: AvaDark.insetEdgeBottom,
+    insetShadow: AvaDark.insetShadow,
     ink2: AvaDark.ink2,
     ink3: AvaDark.ink3,
     brand: AvaDark.brand,
@@ -214,6 +233,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
     Color? inkRow,
     Color? insetEdgeTop,
     Color? insetEdgeBottom,
+    Color? insetShadow,
     Color? ink2,
     Color? ink3,
     Color? brand,
@@ -236,6 +256,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
       inkRow: inkRow ?? this.inkRow,
       insetEdgeTop: insetEdgeTop ?? this.insetEdgeTop,
       insetEdgeBottom: insetEdgeBottom ?? this.insetEdgeBottom,
+      insetShadow: insetShadow ?? this.insetShadow,
       ink2: ink2 ?? this.ink2,
       ink3: ink3 ?? this.ink3,
       brand: brand ?? this.brand,
@@ -264,6 +285,7 @@ class AvaColors extends ThemeExtension<AvaColors> {
       inkRow: c(inkRow, other.inkRow),
       insetEdgeTop: c(insetEdgeTop, other.insetEdgeTop),
       insetEdgeBottom: c(insetEdgeBottom, other.insetEdgeBottom),
+      insetShadow: c(insetShadow, other.insetShadow),
       ink2: c(ink2, other.ink2),
       ink3: c(ink3, other.ink3),
       brand: c(brand, other.brand),

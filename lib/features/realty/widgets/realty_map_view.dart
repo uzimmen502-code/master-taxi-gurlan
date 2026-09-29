@@ -93,8 +93,8 @@ class RealtyMapViewState extends State<RealtyMapView> {
   }
 
   @override
-  void didUpdateWidget(RealtyMapView old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(RealtyMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
     if (widget.fitToken != _appliedFitToken) {
       _appliedFitToken = widget.fitToken;
       _didFitAll = false;
@@ -105,14 +105,6 @@ class RealtyMapViewState extends State<RealtyMapView> {
     }
     _rebuildIcons();
   }
-
-  /// Очилмаган объектлар — ҳар бири АЛОҲИДА, чунки серверда ҳар
-  /// объектнинг ўз силкитилган нуқтаси бор (≈1.2 км). Аввал улар
-  /// geohash4 катакчаси бўйича гуруҳланар ва бутун туман битта
-  /// нуқтага йиғилиб қолар эди.
-  List<RealtyListing> get _approx => widget.listings
-      .where((r) => !widget.exactPoints.containsKey(r.id))
-      .toList();
 
   LatLng _pointOf(RealtyListing r) =>
       widget.exactPoints[r.id] ?? LatLng(r.areaLat, r.areaLng);
@@ -347,7 +339,7 @@ class RealtyMapViewState extends State<RealtyMapView> {
         // Ёрлиқ пастки учи билан нуқтани кўрсатади (стандарт пиннинг
         // ҳам таянчи шу).
         anchor: const Offset(0.5, 1),
-        zIndex: widget.selectedId == r.id ? 10 : (approx ? 1 : 2),
+        zIndexInt: widget.selectedId == r.id ? 10 : (approx ? 1 : 2),
         onTap: () {
           widget.onSelectionChanged?.call(r);
           widget.onListingTap(r);

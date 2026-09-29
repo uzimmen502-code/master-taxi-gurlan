@@ -292,9 +292,9 @@ class _SellerAreaTabState extends State<_SellerAreaTab> {
   Widget build(BuildContext context) {
     final phone = _phone;
     if (phone.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
             context.tr('wholesale_need_phone'),
             textAlign: TextAlign.center,

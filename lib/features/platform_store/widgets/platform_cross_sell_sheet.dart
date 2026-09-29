@@ -176,7 +176,7 @@ class _SuggestTile extends StatelessWidget {
     final qty = c.qtyOf(product.id);
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(product.price),
+          formatPrice(product.displayPrice),
         );
 
     return Container(

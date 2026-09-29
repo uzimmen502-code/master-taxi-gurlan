@@ -50,7 +50,7 @@ class PlatformProductCard extends StatelessWidget {
     final out = c.isOutOfStock(product);
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(product.price),
+          formatPrice(product.displayPrice),
         );
 
     return Material(

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'price_tier.dart';
+
 /// Платформа дўкони товари (`platform_products`).
 ///
 /// `totalStock <= 0` → лимитсиз. Қолдиқ = totalStock − soldToday.
@@ -23,6 +25,7 @@ class PlatformProduct {
     this.showInMarket = true,
     this.sortOrder = 0,
     this.goodsKind = '',
+    this.priceTiers = const [],
     this.createdAt,
   });
 
@@ -48,6 +51,43 @@ class PlatformProduct {
 
   /// `food` | `non_food` | ''.
   final String goodsKind;
+
+  /// Улгуржи нарх поғоналари (2026-09-29, эга қарори: «АВА дўкони
+  /// бундан кейин Улгуржи бозор мақомида»).
+  ///
+  /// БЎШ БЎЛИШИ НОРМАЛ: поғона қўйилмаган товар аввалгидек битта
+  /// [price] билан сотилади ва Улгуржи лентасига чиқмайди. Шу сабабли
+  /// эски ёзувларга миграция керак эмас — дўкон ўз ҳолича ишлайверади.
+  final List<PriceTier> priceTiers;
+
+  bool get hasPriceTiers => priceTiers.isNotEmpty;
+
+  /// Экранда кўрсатиладиган нарх. Админ фақат поғона қўйиб, [price] ни
+  /// бўш қолдирса карталарда «0 сўм» чиқиб қолмасин.
+  int get displayPrice => price > 0 ? price : wholesaleBasePrice;
+
+  /// Минимал улгуржи буюртма — энг паст поғона.
+  int get wholesaleMinQty =>
+      priceTiers.isEmpty ? minQty : priceTiers.first.minQty;
+
+  /// «дан 9 000 сўм» — лентада кўрсатиладиган бошланғич нарх.
+  int get wholesaleBasePrice =>
+      priceTiers.isEmpty ? price : priceTiers.first.price;
+
+  /// Берилган миқдорга тўғри келадиган нарх: [qty] дан кичик ёки тенг
+  /// энг юқори поғона. Поғона йўқ бўлса — одатдаги [price].
+  int priceForQty(int qty) {
+    if (priceTiers.isEmpty) return price;
+    var result = priceTiers.first.price;
+    for (final t in priceTiers) {
+      if (qty >= t.minQty) {
+        result = t.price;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
 
   /// Жойлаштириш вақти (тартиб учун).
   final DateTime? createdAt;
@@ -143,6 +183,7 @@ class PlatformProduct {
       showInMarket: d['showInMarket'] as bool? ?? true,
       sortOrder: (d['sortOrder'] as num?)?.toInt() ?? 0,
       goodsKind: normalizeKind(d['goodsKind']?.toString()),
+      priceTiers: parsePriceTiers(d['priceTiers']),
       createdAt: d['createdAt'] is Timestamp
           ? (d['createdAt'] as Timestamp).toDate()
           : null,
@@ -166,6 +207,7 @@ class PlatformProduct {
     bool? showInMarket,
     int? sortOrder,
     String? goodsKind,
+    List<PriceTier>? priceTiers,
     DateTime? createdAt,
   }) {
     return PlatformProduct(
@@ -185,6 +227,7 @@ class PlatformProduct {
       showInMarket: showInMarket ?? this.showInMarket,
       sortOrder: sortOrder ?? this.sortOrder,
       goodsKind: goodsKind ?? this.goodsKind,
+      priceTiers: priceTiers ?? this.priceTiers,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -219,6 +262,7 @@ class PlatformProduct {
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
         'goodsKind': normalizeKind(goodsKind),
+        ..._tierField(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -237,6 +281,16 @@ class PlatformProduct {
         'showInMarket': showInMarket,
         'sortOrder': sortOrder,
         'goodsKind': normalizeKind(goodsKind),
+        ..._tierField(),
         'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+  static const maxPriceTiers = 5;
+
+  Map<String, dynamic> _tierField() => {
+        'priceTiers': sortPriceTiers(priceTiers)
+            .take(maxPriceTiers)
+            .map((t) => t.toMap())
+            .toList(growable: false),
       };
 }

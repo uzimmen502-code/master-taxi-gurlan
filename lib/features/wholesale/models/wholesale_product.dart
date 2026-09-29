@@ -1,39 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/formatters.dart';
+import '../../../models/price_tier.dart';
 import '../../ads/utils/ad_search_text.dart';
 
-/// Улгуржи нарх поғонаси: `minQty`дан бошлаб шу нархда сотилади
-/// (масалан 1-9 дона — 10000 сўм, 10+ дона — 9000 сўм).
-class WholesalePriceTier {
-  const WholesalePriceTier({required this.minQty, required this.price});
+export '../../../models/price_tier.dart' show PriceTier;
 
-  final int minQty;
-  final int price;
+/// Нарх поғонаси таърифи `lib/models/price_tier.dart` га кўчирилди
+/// (2026-09-29): энди AVA дўкони товари ҳам айнан шу поғоналар билан
+/// сотилади ва Улгуржи лентасида кўринади, шунинг учун таъриф битта
+/// бўлиши керак. Бу ерда эски ном сақлаб қолинган — улгуржи модули,
+/// формаси, карточкаси ва админ панели уни шу ном билан ишлатади.
+typedef WholesalePriceTier = PriceTier;
 
-  factory WholesalePriceTier.fromMap(Map<String, dynamic> m) =>
-      WholesalePriceTier(
-        minQty: (m['minQty'] as num?)?.toInt() ?? 1,
-        price: (m['price'] as num?)?.toInt() ?? 0,
-      );
-
-  Map<String, dynamic> toMap() => {'minQty': minQty, 'price': price};
-
-  /// «10+ дона: 9 000 сўм» — қисқа кўриниш (admin/тафсилот учун).
-  /// [currency] — Хитой бозорида маҳсулотнинг ўз валютаси.
-  String label(String unit, [String currency = kCurrencySum]) =>
-      '$minQty+ $unit: ${formatPrice(price)} $currency';
-}
-
-/// Поғоналарни `minQty` бўйича ўсиш тартибида саралайди (дублика ва
-/// нотўғри қийматлар четлаб ўтилади).
+/// Эски ном — [sortPriceTiers] нинг тақалмаси.
 List<WholesalePriceTier> sortWholesalePriceTiers(
   List<WholesalePriceTier> tiers,
-) {
-  final clean = tiers.where((t) => t.minQty >= 1 && t.price > 0).toList()
-    ..sort((a, b) => a.minQty.compareTo(b.minQty));
-  return clean;
-}
+) =>
+    sortPriceTiers(tiers);
 
 /// Улгуржи/кичик улгуржи маҳсулот эълони — `wholesale_products/{id}`.
 ///
@@ -148,14 +132,8 @@ class WholesaleProduct implements AdSearchable {
     return null;
   }
 
-  static List<WholesalePriceTier> _parseTiers(dynamic raw) {
-    if (raw is! List) return const [];
-    final tiers = raw
-        .whereType<Map>()
-        .map((m) => WholesalePriceTier.fromMap(Map<String, dynamic>.from(m)))
-        .toList();
-    return sortWholesalePriceTiers(tiers);
-  }
+  static List<WholesalePriceTier> _parseTiers(dynamic raw) =>
+      parsePriceTiers(raw);
 
   factory WholesaleProduct.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,

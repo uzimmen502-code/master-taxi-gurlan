@@ -44,11 +44,15 @@ class PlatformStoreController extends ChangeNotifier {
   int get cartItemCount => _cart.values.fold(0, (a, b) => a + b);
 
   /// Фақат маҳсулотлар жами.
+  ///
+  /// Улгуржи поғонаси бор товарда МИҚДОРГА мос нарх олинади
+  /// (`priceForQty`) — 2026-09-29. Поғонасиз товарда у одатдаги
+  /// `price` ни қайтаради, шунинг учун эски хулқ ўзгармайди.
   int get cartTotal {
     var sum = 0;
     for (final e in _cart.entries) {
       final p = _byId(e.key);
-      if (p != null) sum += p.price * e.value;
+      if (p != null) sum += p.priceForQty(e.value) * e.value;
     }
     return sum;
   }
@@ -222,7 +226,9 @@ class PlatformStoreController extends ChangeNotifier {
   }
 
   void addToCart(PlatformProduct p) {
-    if (!p.inStock || p.price <= 0) return;
+    // Поғонали товарда `price` бўш бўлиши мумкин — нарх поғонадан
+    // олинади, шунинг учун таъсирчан нарх текширилади.
+    if (!p.inStock || p.priceForQty(p.minQty) <= 0) return;
     final next = (qtyOf(p.id) + p.step).clamp(p.minQty, 999999);
     if (_wouldExceed(p, next)) return;
     _cart[p.id] = next;
@@ -291,12 +297,13 @@ class PlatformStoreController extends ChangeNotifier {
         final p = _byId(entry.key);
         if (p == null) continue;
         final qty = entry.value;
+        final unitPrice = p.priceForQty(qty);
         items.add({
           'name': p.name,
-          'price': p.price,
+          'price': unitPrice,
           'qty': qty,
           'unit': p.unit,
-          'total': p.price * qty,
+          'total': unitPrice * qty,
           'productId': p.id,
           'inventoryId': p.id,
         });

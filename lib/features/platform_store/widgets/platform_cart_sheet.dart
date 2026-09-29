@@ -424,10 +424,12 @@ class _CartLine extends StatelessWidget {
     final c = context.watch<PlatformStoreController>();
     final p = c.productOf(id);
     if (p == null) return const SizedBox.shrink();
-    final line = p.price * qty;
+    // Улгуржи поғонаси бор товарда шу миқдорга мос нарх.
+    final tierPrice = p.priceForQty(qty);
+    final line = tierPrice * qty;
     final unitPrice = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(p.price),
+          formatPrice(tierPrice),
         );
 
     return Container(

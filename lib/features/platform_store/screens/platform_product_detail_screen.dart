@@ -274,7 +274,7 @@ class _ProductPageState extends State<_ProductPage>
     final qty = c.qtyOf(product.id);
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(product.price),
+          formatPrice(product.displayPrice),
         );
     final similar = _similar();
     final hasNext = widget.pageIndex < widget.pageCount - 1;
@@ -394,6 +394,12 @@ class _ProductPageState extends State<_ProductPage>
                           height: 1,
                         ),
                       ),
+                      // Улгуржи поғоналари (2026-09-29) — жорий миқдорга
+                      // мос поғона ажратиб кўрсатилади.
+                      if (product.hasPriceTiers) ...[
+                        const SizedBox(height: 8),
+                        _PriceTiers(product: product, qty: qty),
+                      ],
                       if (!out && !product.isUnlimitedStock) ...[
                         const SizedBox(height: 8),
                         Text(
@@ -825,7 +831,7 @@ class _SimilarCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final priceText = context.tr('price_sum_short').replaceAll(
           '{price}',
-          formatPrice(product.price),
+          formatPrice(product.displayPrice),
         );
     return Material(
       color: AvaStoreColors.surface,
@@ -935,6 +941,76 @@ class _Thumb extends StatelessWidget {
       Icons.shopping_bag_outlined,
       size: 22,
       color: AvaStoreColors.muted,
+    );
+  }
+}
+
+
+/// Улгуржи нарх поғоналари — харидор қанчадан бошлаб арзонлашишини
+/// кўриб турсин (эга қарори, 2026-09-29).
+class _PriceTiers extends StatelessWidget {
+  const _PriceTiers({required this.product, required this.qty});
+
+  final PlatformProduct product;
+
+  /// Саватдаги жорий миқдор — қайси поғона амалдалигини белгилайди.
+  final int qty;
+
+  @override
+  Widget build(BuildContext context) {
+    final tiers = product.priceTiers;
+    if (tiers.isEmpty) return const SizedBox.shrink();
+    final activePrice = product.priceForQty(qty <= 0 ? product.minQty : qty);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AvaStoreColors.soft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.tr('wholesale_price_tiers'),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AvaStoreColors.deep.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final t in tiers)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
+                  Icon(
+                    t.price == activePrice
+                        ? Icons.check_circle
+                        : Icons.circle_outlined,
+                    size: 14,
+                    color: t.price == activePrice
+                        ? AvaStoreColors.deep
+                        : AvaStoreColors.deep.withValues(alpha: 0.35),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      t.label(product.unit),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: t.price == activePrice
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                        color: AvaStoreColors.deep,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

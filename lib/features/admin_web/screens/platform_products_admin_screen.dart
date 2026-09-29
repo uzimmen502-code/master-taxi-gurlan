@@ -16,6 +16,7 @@ import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../bread/services/bread_image_storage.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/price_tier.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
@@ -1077,6 +1078,11 @@ class _EditDialogState extends State<_EditDialog> {
   late bool _inMarket;
   late String _goodsKind;
   late String _docId;
+
+  /// Улгуржи нарх поғоналари (2026-09-29). Поғона қўйилган товар
+  /// Улгуржи бозор лентасига чиқади; бўш қолдирилса — товар аввалгидек
+  /// фақат AVA дўконида, битта нарх билан сотилади.
+  late List<_TierRow> _tiers;
   late List<String> _imageUrls;
   bool _uploading = false;
   StreamSubscription<html.Event>? _pasteSub;
@@ -1101,6 +1107,10 @@ class _EditDialogState extends State<_EditDialog> {
     _inMarket = e?.showInMarket ?? true;
     _goodsKind = e?.goodsKind ?? '';
     _imageUrls = List<String>.from(e?.displayImages ?? const <String>[]);
+    _tiers = [
+      for (final t in e?.priceTiers ?? const <PriceTier>[])
+        _TierRow(minQty: '${t.minQty}', price: '${t.price}'),
+    ];
     _pasteSub = html.document.onPaste.listen(_onDocumentPaste);
   }
 
@@ -1113,6 +1123,9 @@ class _EditDialogState extends State<_EditDialog> {
     _unit.dispose();
     _stock.dispose();
     _sort.dispose();
+    for (final t in _tiers) {
+      t.dispose();
+    }
     super.dispose();
   }
 
@@ -1306,6 +1319,7 @@ class _EditDialogState extends State<_EditDialog> {
         showInMarket: _inMarket,
         sortOrder: int.tryParse(_sort.text.trim()) ?? 0,
         goodsKind: _goodsKind,
+        priceTiers: _collectTiers(),
       ),
     );
   }
@@ -1541,6 +1555,8 @@ class _EditDialogState extends State<_EditDialog> {
                 value: _inMarket,
                 onChanged: (v) => setState(() => _inMarket = v),
               ),
+              const Divider(height: 24),
+              _tierEditor(),
             ],
           ),
         ),
@@ -1556,6 +1572,101 @@ class _EditDialogState extends State<_EditDialog> {
         ),
       ],
     );
+  }
+
+  List<PriceTier> _collectTiers() {
+    final out = <PriceTier>[];
+    for (final t in _tiers) {
+      final q = int.tryParse(t.minQty.text.trim()) ?? 0;
+      final p = int.tryParse(t.price.text.trim()) ?? 0;
+      if (q >= 1 && p > 0) out.add(PriceTier(minQty: q, price: p));
+    }
+    return sortPriceTiers(out).take(PlatformProduct.maxPriceTiers).toList();
+  }
+
+  /// Улгуржи поғоналари таҳрири.
+  Widget _tierEditor() {
+    final unit = _unit.text.trim().isEmpty ? 'дона' : _unit.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Улгуржи нарх поғоналари',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Поғона қўйилса товар УЛГУРЖИ БОЗОР лентасига ҳам чиқади. '
+          'Бўш қолдирилса — товар фақат AVA дўконида, битта нарх билан.',
+          style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 8),
+        for (var i = 0; i < _tiers.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: _tiers[i].minQty,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'дан',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(unit, style: TextStyle(color: Colors.grey.shade700)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _tiers[i].price,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'нархи (сўм)',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Олиб ташлаш',
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(() {
+                    _tiers.removeAt(i).dispose();
+                  }),
+                ),
+              ],
+            ),
+          ),
+        if (_tiers.length < PlatformProduct.maxPriceTiers)
+          TextButton.icon(
+            onPressed: () => setState(() => _tiers.add(_TierRow())),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Поғона қўшиш'),
+          ),
+      ],
+    );
+  }
+}
+
+/// Битта поғона қатори — админ формасидаги контроллерлар.
+class _TierRow {
+  _TierRow({String minQty = '', String price = ''})
+      : minQty = TextEditingController(text: minQty),
+        price = TextEditingController(text: price);
+
+  final TextEditingController minQty;
+  final TextEditingController price;
+
+  void dispose() {
+    minQty.dispose();
+    price.dispose();
   }
 }
 

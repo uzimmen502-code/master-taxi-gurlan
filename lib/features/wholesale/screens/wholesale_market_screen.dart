@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/fair_mix.dart';
+import '../../../models/platform_product.dart';
+import '../../../repositories/platform_products_repository.dart';
+import '../../ads/widgets/platform_market_card.dart';
 import '../models/wholesale_product.dart';
 import '../models/wholesale_seller.dart';
 import '../repositories/wholesale_products_repository.dart';
@@ -46,7 +52,18 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
   late final TabController _tabCtrl;
   final _searchCtrl = TextEditingController();
   final _productsRepo = WholesaleProductsRepository();
+  final _platformRepo = PlatformProductsRepository();
   String _query = '';
+
+  /// AVA дўконининг улгуржи товарлари — эга қарори (2026-09-29):
+  /// «АВА дўкони бундан кейин Улгуржи бозор мақомида». Лентада улар
+  /// сотувчилар товари билан НАВБАТМА-НАВБАТ туради (`FairMix`), яъни
+  /// AVA юқорида тўпланиб қолмайди — Аҳоли бозоридаги қоида билан бир хил.
+  List<PlatformProduct> _platform = const [];
+
+  /// Хитой бозорида AVA товари кўрсатилмайди: у ердаги товар хорижий
+  /// етказиб берувчиники, валюта ва етказиш муддати ҳам бошқа.
+  bool get _showPlatform => !_isChina;
 
   @override
   void initState() {
@@ -56,6 +73,31 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
       vsync: this,
       initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
+    if (_showPlatform) unawaited(_loadPlatform());
+  }
+
+  Future<void> _loadPlatform() async {
+    try {
+      final list = await _platformRepo.fetchForWholesale();
+      if (!mounted) return;
+      setState(() => _platform = list);
+    } catch (e) {
+      // AVA товарлари юкланмаса ҳам лента сотувчилар товари билан
+      // ишлайверсин.
+      debugPrint('[Wholesale] loadPlatform $e');
+    }
+  }
+
+  /// Қидирувга мос AVA товарлари. Қидирув бўш бўлса — ҳаммаси.
+  List<PlatformProduct> _filteredPlatform() {
+    final q = _query.trim().toLowerCase();
+    if (!_showPlatform) return const [];
+    if (q.isEmpty) return _platform;
+    return _platform
+        .where((p) =>
+            p.name.toLowerCase().contains(q) ||
+            p.description.toLowerCase().contains(q))
+        .toList(growable: false);
   }
 
   @override
@@ -120,9 +162,16 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
               return const Center(child: CircularProgressIndicator());
             }
             final items = snap.data ?? const <WholesaleProduct>[];
-            if (items.isEmpty) {
+            final platform = _filteredPlatform();
+            if (items.isEmpty && platform.isEmpty) {
               return const Center(child: Text('Маҳсулот топилмади'));
             }
+            // Навбатма-навбат: AVA товари лентанинг бошида тўпланиб
+            // қолмасин, сотувчилар товари ҳам кўринсин.
+            final entries = FairMix.roundRobin<_MarketEntry>([
+              platform.map(_MarketEntry.platform).toList(growable: false),
+              items.map(_MarketEntry.seller).toList(growable: false),
+            ]);
             return GridView.builder(
               padding: const EdgeInsets.all(12),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -131,17 +180,28 @@ class _WholesaleMarketScreenState extends State<WholesaleMarketScreen>
                 crossAxisSpacing: 10,
                 childAspectRatio: 0.72,
               ),
-              itemCount: items.length,
-              itemBuilder: (_, i) => WholesaleProductCard(
-                product: items[i],
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        WholesaleProductDetailScreen(product: items[i]),
+              itemCount: entries.length,
+              itemBuilder: (_, i) {
+                final e = entries[i];
+                final avaProduct = e.platform;
+                if (avaProduct != null) {
+                  return PlatformMarketCard(
+                    product: avaProduct,
+                    catalog: platform,
+                    wholesale: true,
+                  );
+                }
+                final p = e.seller!;
+                return WholesaleProductCard(
+                  product: p,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => WholesaleProductDetailScreen(product: p),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         ),
@@ -580,4 +640,19 @@ class _MyProductsView extends StatelessWidget {
         return status;
     }
   }
+}
+
+
+/// Улгуржи лентасидаги битта катак: ё сотувчи товари, ё AVA дўкони
+/// товари (эга қарори, 2026-09-29).
+class _MarketEntry {
+  const _MarketEntry._({this.seller, this.platform});
+
+  factory _MarketEntry.seller(WholesaleProduct p) =>
+      _MarketEntry._(seller: p);
+  factory _MarketEntry.platform(PlatformProduct p) =>
+      _MarketEntry._(platform: p);
+
+  final WholesaleProduct? seller;
+  final PlatformProduct? platform;
 }

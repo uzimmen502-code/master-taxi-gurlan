@@ -25,12 +25,17 @@ class PlatformMarketCard extends StatelessWidget {
     super.key,
     required this.product,
     this.catalog = const [],
+    this.wholesale = false,
   });
 
   final PlatformProduct product;
 
   /// Лентадаги бошқа AVA товарлари — тафсилотда суриб ўтиш учун.
   final List<PlatformProduct> catalog;
+
+  /// Улгуржи бозор лентасида — нарх «дан ... / дона» кўринишида ва
+  /// минимал буюртма кўрсатилади (2026-09-29).
+  final bool wholesale;
 
   /// Тафсилот экрани саватни `PlatformStoreController`дан олади, шунинг
   /// учун у шу маршрутда яратилади ва маршрут ёпилганда ўзи тозаланади
@@ -113,13 +118,29 @@ class PlatformMarketCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      formatMoney(product.price),
+                      wholesale
+                          ? '${product.priceTiers.length > 1 ? 'дан ' : ''}'
+                              '${formatMoney(product.wholesaleBasePrice)}'
+                              ' / ${product.unit}'
+                          : formatMoney(product.displayPrice),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w700,
                         fontSize: AppText.bodySmall,
                       ),
                     ),
+                    if (wholesale)
+                      Text(
+                        'МОҚ ${product.wholesaleMinQty} ${product.unit}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
                     const Spacer(),
                     Text(
                       '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}',

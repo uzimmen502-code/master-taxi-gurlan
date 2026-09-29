@@ -130,6 +130,20 @@ class PlatformProductsRepository {
         .toList(growable: false);
   }
 
+  /// Улгуржи бозор лентаси учун — AVA дўкони товарлари.
+  ///
+  /// Эга қарори (2026-09-29): «АВА дўкони бундан кейин Улгуржи бозор
+  /// мақомида». Лентага фақат НАРХ ПОҒОНАСИ қўйилган товар чиқади:
+  /// поғонасиз товар улгуржи эмас, у дўконнинг одатдаги чакана товари.
+  /// Шу қоида туфайли эски ёзувларни миграция қилиш керак бўлмади.
+  Future<List<PlatformProduct>> fetchForWholesale({int limit = 40}) async {
+    final all = await fetchCatalog(limit: catalogLimit);
+    return all
+        .where((p) => p.active && p.hasPriceTiers)
+        .take(limit)
+        .toList(growable: false);
+  }
+
   Future<PlatformProduct?> getById(String id) async {
     final doc = await _col.doc(id).get();
     if (!doc.exists) return null;

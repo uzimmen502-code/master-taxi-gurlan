@@ -409,7 +409,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                               },
                             );
                           }
-                          return AdCard(ad: e.ad!);
+                          return AdCard(ad: e.ad!, catalog: ads);
                         },
                       ),
                     ),

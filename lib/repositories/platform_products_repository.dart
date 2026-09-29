@@ -103,7 +103,9 @@ class PlatformProductsRepository {
     // Default АВТО — витрина бўш қолмасин.
     final auto = settings.data()?['platformFeaturedAuto'] != false;
     final all = await fetchCatalog(limit: catalogLimit);
-    final eligible = all.where((p) => p.price > 0).toList();
+    // «Нофаол» товар витринада ҳам кўринмаслиги керак — `fetchForMarket`
+    // билан бир хил қоида.
+    final eligible = all.where((p) => p.active && p.price > 0).toList();
     final pool = auto
         ? eligible
         : eligible.where((p) => p.featuredOnHome).toList();
@@ -111,11 +113,19 @@ class PlatformProductsRepository {
     return pool.take(take).toList(growable: false);
   }
 
-  /// Онлайн бозор лентаси учун.
+  /// Онлайн бозор (Аҳоли бозори) лентаси учун.
+  ///
+  /// Админ панелдаги ИККАЛА дарвоза ҳам ҳисобга олинади (2026-09-29):
+  ///   • `active` — «нофаол» қилинган товар лентада кўринмаслиги керак;
+  ///   • `showInMarket` — «бозор» белгиси олиб ташланган товар фақат
+  ///     AVA дўконида қолади, лентага чиқмайди.
+  /// Аввал фақат `price > 0` текширилар эди — шунинг учун ўчирилган ва
+  /// «бозор»дан олиб ташланган товарлар ҳам лентага тушиб қолар,
+  /// админнинг белгиси умуман ишламас эди (қурилмада сезилди).
   Future<List<PlatformProduct>> fetchForMarket({int limit = 40}) async {
     final all = await fetchCatalog(limit: catalogLimit);
     return all
-        .where((p) => p.price > 0)
+        .where((p) => p.active && p.showInMarket && p.price > 0)
         .take(limit)
         .toList(growable: false);
   }

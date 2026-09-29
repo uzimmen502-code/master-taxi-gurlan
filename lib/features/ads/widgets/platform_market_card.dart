@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
@@ -7,13 +10,48 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
-import '../../platform_store/screens/platform_store_screen.dart';
+import '../../platform_store/controllers/platform_store_controller.dart';
+import '../../platform_store/screens/platform_product_detail_screen.dart';
 
 /// Онлайн бозор лентасидаги платформа товари (AVA белгиси).
+///
+/// Босилганда АЙНАН ШУ товарнинг тафсилоти очилади (2026-09-29).
+/// Аввал бутун `PlatformStoreScreen` очилар эди — фойдаланувчи лентадан
+/// чиқиб кетар, босган товари эса қайси экранда экани номаълум қолар,
+/// яъни AVA товари лентага «аралашмай» алоҳида ажралиб турар эди.
+/// Эълон ва дўкон карталари аллақачон шундай ишлайди: карта → тафсилот.
 class PlatformMarketCard extends StatelessWidget {
-  const PlatformMarketCard({super.key, required this.product});
+  const PlatformMarketCard({
+    super.key,
+    required this.product,
+    this.catalog = const [],
+  });
 
   final PlatformProduct product;
+
+  /// Лентадаги бошқа AVA товарлари — тафсилотда суриб ўтиш учун.
+  final List<PlatformProduct> catalog;
+
+  /// Тафсилот экрани саватни `PlatformStoreController`дан олади, шунинг
+  /// учун у шу маршрутда яратилади ва маршрут ёпилганда ўзи тозаланади
+  /// (`PlatformStoreScreen` билан бир хил андоза).
+  void _openDetail(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChangeNotifierProvider<PlatformStoreController>(
+          create: (_) {
+            final c = PlatformStoreController();
+            unawaited(c.init());
+            return c;
+          },
+          child: PlatformProductDetailScreen(
+            product: product,
+            catalog: catalog.isEmpty ? [product] : catalog,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,12 +60,7 @@ class PlatformMarketCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PlatformStoreScreen()),
-          );
-        },
+        onTap: () => _openDetail(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

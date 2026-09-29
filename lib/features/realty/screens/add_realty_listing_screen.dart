@@ -17,6 +17,7 @@ import '../../../repositories/realty_repository.dart';
 import '../../ads/services/ads_storage_service.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
 import '../realty_tabs.dart';
+import 'realty_pro_screen.dart';
 
 /// Кўчмас мулк объекти — янгисини қўшиш ва мавжудини таҳрирлаш.
 ///
@@ -70,6 +71,15 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
   MapPickerResult? _point;
 
+  /// Банд/бепул объект ўрни. Янги объектда экран очилиши билан
+  /// ўқилади — фойдаланувчи формани тўлдириб бўлиб, сақлашда «лимит
+  /// тугади» эшитмасин (қурилмада сезилди, 2026-09-29).
+  RealtyQuota _quota = RealtyQuota.empty;
+
+  /// `RealtyQuota.empty` да `limit == 0`, яъни `isFull` ҳам `true` —
+  /// юкланмасдан туриб «лимит тугади» деб кўрсатмаслик учун керак.
+  bool _quotaLoaded = false;
+
   /// Расмлар БИТТА рўйхатда: аввал юкланганлари (URL) ва ҳозир
   /// танланганлари (локал файл) аралаш туради. Битта рўйхат бўлгани
   /// учун тартибни суриб ўзгартириш мумкин — биринчиси муқова бўлади
@@ -81,9 +91,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
 
   int get _imageCount => _photos.length;
 
+  /// Манзил МАЖБУРИЙ (эга қарори, 2026-09-29). Харитадаги нуқта
+  /// тахминий кўрсаткич, матнли манзил эса харидорга — кўча, уй, мўлжал.
+  /// Иккови бир-бирини алмаштирмайди, шунинг учун иккови ҳам талаб
+  /// қилинади. Сервер ҳам шуни текширади (`address_required`).
+  bool get _addressOk => _addressCtrl.text.trim().length >= 5;
+
   bool get _canSubmit =>
       !_submitting &&
       _point != null &&
+      _addressOk &&
       _titleCtrl.text.trim().length >= 3 &&
       _textCtrl.text.trim().length >= 3;
 
@@ -96,6 +113,8 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   @override
   void initState() {
     super.initState();
+    // Таҳрирда ўрин сони ўзгармайди — квота фақат янги объектга керак.
+    if (!_isEdit) _loadQuota();
     final source = widget.existing ?? widget.copyFrom;
     if (source == null) {
       _restoreDraft();
@@ -122,6 +141,52 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     // қолдирилади — концепцияда айнан шулар ўзгартирилади дейилган.
 
     _loadPoint(source.id);
+  }
+
+  Future<void> _loadQuota() async {
+    try {
+      final q = await _repo.fetchQuota();
+      if (!mounted) return;
+      setState(() {
+        _quota = q;
+        _quotaLoaded = true;
+      });
+    } catch (e) {
+      // Квота ўқилмаса форма барибир ишлайди — лимитни сервер айтади.
+      debugPrint('[AddRealty] loadQuota $e');
+    }
+  }
+
+  /// Бепул ўрин тугаганда пакет таклифи.
+  ///
+  /// Аввал фақат «Бепул лимит тугади» деган SnackBar чиқар эди —
+  /// фойдаланувчига НИМА ҚИЛИШ кераклиги айтилмас, риэлтор пакети
+  /// экрани эса фақат профил орқали топилар эди (қурилмада сезилди,
+  /// 2026-09-29).
+  Future<void> _offerProPackage() async {
+    final bought = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(context.tr('realty_limit_dialog_title')),
+        content: Text(context.tr('realty_limit_dialog_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text(context.tr('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text(context.tr('realty_limit_dialog_cta')),
+          ),
+        ],
+      ),
+    );
+    if (bought != true || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const RealtyProScreen()),
+    );
+    // Пакет олинган бўлиши мумкин — ўринни қайта ўқиймиз.
+    if (mounted) await _loadQuota();
   }
 
   /// Қораламани тиклаш. Расмлар сақланмайди — локал файл йўллари
@@ -427,6 +492,12 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       }
       if (!mounted) return;
       setState(() => _submitting = false);
+      // Лимит тугаган бўлса — хабар эмас, ЧИҚИШ ЙЎЛИ кўрсатилади.
+      if (e.code == 'free_limit_reached') {
+        await _loadQuota();
+        if (mounted) await _offerProPackage();
+        return;
+      }
       messenger.showSnackBar(SnackBar(
         content: Text(_errorText(e)),
         backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
@@ -448,6 +519,8 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         return context.tr('realty_error_free_limit');
       case 'location_required':
         return context.tr('realty_error_location');
+      case 'address_required':
+        return context.tr('realty_error_address');
       case 'tier_not_available':
         return context.tr('realty_error_tier_soon');
       default:
@@ -567,7 +640,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             const SizedBox(height: 10),
             _field(_areaCtrl, 'realty_field_area', numeric: true, maxLength: 7),
             const SizedBox(height: 10),
-            _field(_addressCtrl, 'realty_field_address', maxLength: 300),
+            _field(
+              _addressCtrl,
+              'realty_field_address',
+              maxLength: 300,
+              required: true,
+              // Янги, ҳали тегилмаган формада қизил хато чиқмасин;
+              // таҳрирда эса эски (манзилсиз) эълон дарҳол кўрсатилади.
+              showError: !_addressOk && (_isEdit || _addressCtrl.text.isNotEmpty),
+              helper: context.tr('realty_field_address_hint'),
+            ),
             const SizedBox(height: 16),
 
             _label(context, 'realty_field_photos'),
@@ -641,14 +723,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             const SizedBox(height: 8),
             // Бепул лимит фақат янги объектга тегишли — таҳрирлашда
             // ўрин сони ўзгармайди.
-            if (!_isEdit)
-              Center(
-                child: Text(
-                  context.tr('realty_free_limit_hint'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
-                ),
-              ),
+            if (!_isEdit) _quotaStrip(context),
           ],
         ),
       ),
@@ -709,8 +784,12 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     int maxLines = 1,
     int? maxLength,
     bool numeric = false,
+    bool required = false,
+    bool showError = false,
+    String? helper,
   }) {
     final c = context.ava;
+    final errColor = RealtyTabs.colorFor(RealtyTier.urgent);
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
@@ -721,8 +800,15 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       onChanged: (_) => setState(() {}),
       style: TextStyle(color: c.ink),
       decoration: InputDecoration(
-        labelText: context.tr(labelKey),
+        // Мажбурий майдон — юлдузча билан, харитадаги нуқта майдони
+        // билан бир хил андоза.
+        labelText:
+            required ? '${context.tr(labelKey)} *' : context.tr(labelKey),
         labelStyle: TextStyle(color: c.ink2, fontWeight: FontWeight.w600),
+        helperText: helper,
+        helperMaxLines: 2,
+        helperStyle: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+        errorText: showError ? context.tr('realty_error_address') : null,
         filled: true,
         fillColor: c.surface,
         counterText: '',
@@ -732,7 +818,10 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: c.line),
+          borderSide: BorderSide(
+            color: showError ? errColor : c.line,
+            width: showError ? 1.5 : 1,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -742,6 +831,74 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
+    );
+  }
+
+  /// Банд ўрин йўлакчаси — статик «2 тагача бепул» ёзуви ўрнига.
+  ///
+  /// Ўрин тугаган бўлса шу ернинг ўзида «Пакет олиш» тугмаси чиқади:
+  /// фойдаланувчи формани тўлдиришдан ОЛДИН билиб олсин.
+  Widget _quotaStrip(BuildContext context) {
+    final c = context.ava;
+    if (!_quotaLoaded) {
+      return Center(
+        child: Text(
+          context.tr('realty_free_limit_hint'),
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+        ),
+      );
+    }
+    final full = _quota.isFull;
+    final accent = full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3;
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _quota.isPro
+                  ? Icons.workspace_premium_outlined
+                  : Icons.home_outlined,
+              size: 15,
+              color: accent,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '${context.tr(_quota.isPro ? 'realty_pro_quota' : 'realty_my_free_slots')}'
+                ': ${_quota.used} / ${_quota.limit}',
+                style: TextStyle(
+                  fontSize: AppText.labelTiny,
+                  color: accent,
+                  fontWeight: full ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (full) ...[
+          const SizedBox(height: 6),
+          Text(
+            context.tr('realty_limit_dialog_body'),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: AppText.labelTiny, color: c.ink3),
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: _submitting ? null : _offerProPackage,
+            icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: c.brand,
+              side: BorderSide(color: c.brand),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            label: Text(context.tr('realty_limit_dialog_cta')),
+          ),
+        ],
+      ],
     );
   }
 }

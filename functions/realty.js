@@ -223,6 +223,14 @@ function attachRealty(exports, deps) {
       throw fail('invalid-argument', 'location_required');
     }
 
+    // ─── Матнли манзил — мажбурий (эга қарори, 2026-09-29) ───
+    // Харитадаги нуқта очиқ ҳужжатда ТАХМИНИЙ (≈1.2 км силкитилган),
+    // шунинг учун у матнли манзилнинг ўрнини боса олмайди: харидор
+    // пакетни очгач кўча ва уй рақамини кўриши керак.
+    if (String(d.addressText || '').trim().length < 5) {
+      throw fail('invalid-argument', 'address_required');
+    }
+
     const ownerKey = await ensureOwnerKey(uid);
     const pro = await activeProPlan(uid);
     const used = await countActivePlain(ownerKey);
@@ -361,6 +369,12 @@ function attachRealty(exports, deps) {
         || lat < -90 || lat > 90 || lng < -180 || lng > 180
         || (lat === 0 && lng === 0)) {
       throw fail('invalid-argument', 'location_required');
+    }
+
+    // Таҳрирда ҳам манзил мажбурий — акс ҳолда эга эълонни жойлагач
+    // манзилни ўчириб, текин «тизер» қилиб қўя оларди.
+    if (String(d.addressText || '').trim().length < 5) {
+      throw fail('invalid-argument', 'address_required');
     }
 
     const contactMode = d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner';

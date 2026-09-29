@@ -374,7 +374,10 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
                         itemBuilder: (_, i) {
                           final e = entries[i];
                           if (e.platform != null) {
-                            return PlatformMarketCard(product: e.platform!);
+                            return PlatformMarketCard(
+                              product: e.platform!,
+                              catalog: platform,
+                            );
                           }
                           if (e.shop != null) {
                             final item = e.shop!;

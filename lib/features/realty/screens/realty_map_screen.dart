@@ -7,6 +7,7 @@ import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
 import '../widgets/realty_map_view.dart';
+import '../widgets/realty_package_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
 
@@ -58,6 +59,35 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
     );
   }
 
+  /// Пин босилганда — ҳимоя шу ерда ишлайди (эга қарори, 2026-09-29).
+  ///
+  /// Очилмаган объектда фойдаланувчи ТЎҒРИДАН-ТЎҒРИ карточкага тушмайди:
+  /// аввал харитадаги нуқта тахминий экани айтилади ва пакет таклиф
+  /// қилинади. Аввал пин ҳам, босилиши ҳам очилган объект билан бир хил
+  /// эди — харидор пинни аниқ манзил деб ўйлар, ҳолбуки у ≈1.2 км
+  /// силкитилган.
+  Future<void> _onPinTap(RealtyListing listing, Set<String> unlocked) async {
+    if (unlocked.contains(listing.id)) {
+      _openDetail(listing);
+      return;
+    }
+    if (!mounted) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ApproxPinSheet(listing: listing),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'detail') {
+      _openDetail(listing);
+      return;
+    }
+    // 'package' — пакет варағи. Олингач харитадаги оқим узилмасин:
+    // фойдаланувчи ўша объект карточкасида очишни давом эттиради.
+    final bought = await showRealtyPackageSheet(context);
+    if (bought && mounted) _openDetail(listing);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -65,7 +95,10 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(context.tr('realty_map_title')),
-        actions: [RealtyAddButton(onTap: _openAdd)],
+        actions: [
+          _UnlocksLeftChip(stream: _repo.watchUnlocksLeft()),
+          RealtyAddButton(onTap: _openAdd),
+        ],
       ),
       body: Column(
         children: [
@@ -95,7 +128,7 @@ class _RealtyMapScreenState extends State<RealtyMapScreen> {
                     return RealtyMapView(
                       listings: listings,
                       exactPoints: _exact,
-                      onListingTap: _openDetail,
+                      onListingTap: (r) => _onPinTap(r, unlocked),
                     );
                   },
                 );
@@ -241,6 +274,153 @@ class RealtyMapLegend extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Очилмаган пин босилганда чиқадиган варақ: нуқта тахминий экани ва
+/// аниқ манзилни очиш таклифи.
+class _ApproxPinSheet extends StatelessWidget {
+  const _ApproxPinSheet({required this.listing});
+
+  final RealtyListing listing;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ava;
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: c.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(top: 5, right: 8),
+                  decoration: BoxDecoration(
+                    color: RealtyTabs.colorFor(listing.tier),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    listing.titleOrText,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: AppText.bodyLarge,
+                      color: c.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lock_outline, size: 18, color: c.ink3),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    context.tr('realty_map_locked_body'),
+                    style: TextStyle(
+                      fontSize: AppText.labelLarge,
+                      color: c.ink2,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop('package'),
+              icon: const Icon(Icons.lock_open_outlined, size: 18),
+              style: FilledButton.styleFrom(
+                backgroundColor: c.brand,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              label: Text(context.tr('realty_map_locked_cta')),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('detail'),
+              child: Text(context.tr('realty_map_locked_open_card')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Пакетда қолган объект сони — сарлавҳа қаторида.
+/// Пакети йўқ фойдаланувчида умуман кўринмайди.
+class _UnlocksLeftChip extends StatelessWidget {
+  const _UnlocksLeftChip({required this.stream});
+
+  final Stream<int> stream;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: stream,
+      builder: (context, snap) {
+        final left = snap.data ?? 0;
+        if (left <= 0) return const SizedBox.shrink();
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_open_outlined,
+                    size: 14, color: Colors.white),
+                const SizedBox(width: 4),
+                Text(
+                  '$left',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: AppText.labelLarge,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

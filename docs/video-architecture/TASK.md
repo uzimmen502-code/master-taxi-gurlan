@@ -551,14 +551,24 @@ Note on ordering: `processingStatus: 'ready'` is written by the fast-track 360p 
 `resolveClipBackend` covers that window by falling back to the URL host, and the
 fast-track URL is already the R2 one — verified.
 
-### 11.4 Original uploads are never deleted on clip delete (pre-existing)
+### 11.4 Original uploads on clip delete — fixed 2026-10-02
 
-`onTvClipDeleted` removes only the *processed* outputs. The user's original upload at
-`tv_clips/{phone}/{file}.mp4` (~20–80 MB) is deleted only by `deleteTvClipMedia`,
-which runs on news expiry — not when a user deletes their own clip. So every deleted
-clip leaves its original behind forever. Pre-existing behavior, unchanged here, but it
-feeds the storage line in `cost_model.py` and is worth a separate fix once it is
-confirmed that "restore a deleted clip" is not a wanted feature.
+**Was:** `onTvClipDeleted` removed only the *processed* outputs. The user's original
+upload at `tv_clips/{phone}/{file}.mp4` (~20–80 MB) and its poster were deleted only
+by `deleteTvClipMedia`, which runs on news expiry — so a clip the user deleted
+themselves left its original behind forever, growing the storage line in
+`cost_model.py`.
+
+**Now:** `onTvClipDeleted` calls `deleteTvClipMedia`, so both delete paths (owner
+deleted / expired) go through one function and cannot drift apart. The owner confirmed
+that "restore a deleted clip" is not a wanted feature.
+
+Ad clips keep their files **on expiry** on purpose (possible reactivation) — that
+decision stays in `expireTvContent`, which simply does not call the function for them.
+Deleting the document removes an ad's files too.
+
+Verified live on a test clip: before delete, 2 files under `tv_clips/{phone}/`; after,
+0 — plus the log line `R2 12 obyekt o'chdi, 12 URL edge keshdan chiqarildi`.
 
 ### 11.5 Original verification plan (for reference)
 

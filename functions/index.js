@@ -11067,8 +11067,9 @@ exports.clipPage = functions
 // uni boshqa platformalarda ishlata olmaysiz"). Cheklovsiz kalitni esa APK
 // ichiga solib bo'lmaydi — uni ochib o'qish mumkin va hisob bizniki.
 //
-// Shuning uchun kalit FAQAT shu yerda: `MAPS_STATIC_KEY` (functions/.env,
-// git'ga tushmaydi). Ilova rasmni shu funksiyadan so'raydi.
+// Shuning uchun kalit FAQAT shu yerda: `MAPS_STATIC_KEY` (Secret Manager,
+// quyida `runWith({secrets})` orqali bog'lanadi). Ilova rasmni shu
+// funksiyadan so'raydi.
 //
 // Suiiste'moldan himoya:
 //   1. Firebase ID token shart (ilova foydalanuvchisi bo'lishi kerak);
@@ -11080,7 +11081,15 @@ exports.clipPage = functions
 const evStaticMapQuery = require('./ev_static_map');
 
 exports.evStaticMap = functions
-  .runWith({ memory: '256MB', timeoutSeconds: 20 })
+  .runWith({
+    memory: '256MB',
+    timeoutSeconds: 20,
+    // Secret Manager'дан. Илгари `functions/.env` орқали ОЧИҚ МАТНДА
+    // environment variable сифатида деплой қилинарди — яъни лойиҳага
+    // ўқиш ҳуқуқи бор ҳар ким ва ҳар қандай `gcloud functions describe`
+    // чиқиши калитни кўрарди.
+    secrets: ['MAPS_STATIC_KEY'],
+  })
   .https.onRequest(async (req, res) => {
     // Rasm `<img>` kabi olinadi — CORS ochiq bo'lsin (web admin uchun ham).
     res.set('Access-Control-Allow-Origin', '*');

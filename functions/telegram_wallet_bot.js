@@ -40,8 +40,21 @@ function attachTelegramWalletBot(exports, deps) {
     assertNotDeviceTrustLimited,
   } = deps;
 
+  // Бот токени ва webhook сири — Secret Manager'дан (`runWith({secrets})`
+  // орқали боғланади, `process.env` дан ўқилади). Илгари иккови ҳам
+  // `functions/.env` да эди, яъни ҳар деплойда ОЧИҚ МАТНДА функциянинг
+  // environment variable'ига ёзиларди ва `gcloud functions describe`
+  // чиқишида кўринарди.
+  //
+  // `TELEGRAM_WALLET_BOT_USERNAME` махфий ЭМАС (ботнинг оммавий номи) —
+  // у `.env` да қолади ва ҳеч қандай боғлаш талаб қилмайди.
+  const TG_BOT_SECRETS = ['TELEGRAM_WALLET_BOT_TOKEN'];
+  const TG_WEBHOOK_SECRETS = [
+    'TELEGRAM_WALLET_BOT_TOKEN',
+    'TELEGRAM_WALLET_WEBHOOK_SECRET',
+  ];
+
   function tgConfig() {
-    // Modern env (functions/.env) — functions.config() deprecated (EOL Mar 2027).
     return {
       token: String(process.env.TELEGRAM_WALLET_BOT_TOKEN || '').trim(),
       username: String(process.env.TELEGRAM_WALLET_BOT_USERNAME || '')
@@ -450,7 +463,11 @@ function attachTelegramWalletBot(exports, deps) {
   });
 
   // ─── Callable: app withdraw request (own wallet → cash via admin) ─
-  exports.requestWalletWithdraw = functions.https.onCall(async (data, context) => {
+  // Авто-тасдиқда фойдаланувчига Telegram'да хабар юборилади
+  // (`maybeAutoApproveWithdraw` → `approveWithdrawInternal` → `tgSend`).
+  exports.requestWalletWithdraw = functions
+      .runWith({secrets: TG_BOT_SECRETS})
+      .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Auth required');
     }
@@ -626,7 +643,9 @@ function attachTelegramWalletBot(exports, deps) {
   });
 
   // ─── Callable: admin review top-up ───────────────────────────────
-  exports.adminReviewWalletTopUp = functions.https.onCall(async (data, context) => {
+  exports.adminReviewWalletTopUp = functions
+      .runWith({secrets: TG_BOT_SECRETS})
+      .https.onCall(async (data, context) => {
     const callerUid = await requireCallerRoles(
         context, ['superadmin', 'finance'], 'Finance role required');
     const requestId = String((data && data.requestId) || '').trim();
@@ -689,7 +708,9 @@ function attachTelegramWalletBot(exports, deps) {
   });
 
   // ─── Callable: admin review withdraw ─────────────────────────────
-  exports.adminReviewWalletWithdraw = functions.https.onCall(async (data, context) => {
+  exports.adminReviewWalletWithdraw = functions
+      .runWith({secrets: TG_BOT_SECRETS})
+      .https.onCall(async (data, context) => {
     const callerUid = await requireCallerRoles(
         context, ['superadmin', 'finance'], 'Finance role required');
     const requestId = String((data && data.requestId) || '').trim();
@@ -1291,7 +1312,9 @@ function attachTelegramWalletBot(exports, deps) {
   }
 
   // ─── HTTP webhook ────────────────────────────────────────────────
-  exports.telegramWalletBotWebhook = functions.https.onRequest(async (req, res) => {
+  exports.telegramWalletBotWebhook = functions
+      .runWith({secrets: TG_WEBHOOK_SECRETS})
+      .https.onRequest(async (req, res) => {
     if (req.method !== 'POST') {
       res.status(405).send('POST only');
       return;

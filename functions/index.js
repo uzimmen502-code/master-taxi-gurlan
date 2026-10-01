@@ -11143,7 +11143,7 @@ const TV_CLIP_FAST_360P_SPEC = {maxHeight: 360, maxrate: '450k', bufsize: '650k'
  * bu ham tozalanadi (qarang: `onTvClipDeleted`).
  */
 async function fastTrack360pIfPossible(
-    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince, runId) {
+    clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11178,19 +11178,10 @@ async function fastTrack360pIfPossible(
       return;
     }
 
-    const destPath = `tv_clip_variants/${clipId}/${runId}/360p_fast.mp4`;
-    const token = crypto.randomUUID();
-    await bucket.upload(tmpOut, {
-      destination: destPath,
-      metadata: {
-        contentType: 'video/mp4',
-        cacheControl: TV_CLIP_CACHE_CONTROL,
-        metadata: {firebaseStorageDownloadTokens: token},
-      },
-    });
-    const encoded = encodeURIComponent(destPath);
-    const url = `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
-        `/o/${encoded}?alt=media&token=${token}`;
+    const url = await output.upload(
+        tmpOut,
+        {clipId, runId, kind: 'variant', name: '360p_fast.mp4'},
+        'video/mp4');
 
     await clipRef.update({
       'videoVariants.360p': url,
@@ -11290,7 +11281,7 @@ async function claimTvClipTranscode(clipRef, videoUrl) {
 //
 // Хатолик бўлса '' қайтаради — HLS қўшимча, мажбурий эмас: клип
 // MP4 вариантлари билан барибир чоп этилаверади.
-async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId) {
+async function packageTvClipHls(clipId, output, mp4ByQuality, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11298,19 +11289,8 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId)
   const ffmpegPath = require('ffmpeg-static');
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `hls_${clipId}_`));
-  const uploadWithToken = async (localPath, destPath, contentType) => {
-    const token = crypto.randomUUID();
-    await bucket.upload(localPath, {
-      destination: destPath,
-      metadata: {
-        contentType,
-        cacheControl: TV_CLIP_CACHE_CONTROL,
-        metadata: {firebaseStorageDownloadTokens: token},
-      },
-    });
-    return `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
-        `/o/${encodeURIComponent(destPath)}?alt=media&token=${token}`;
-  };
+  const put = (localPath, name, contentType) =>
+    output.upload(localPath, {clipId, runId, kind: 'hls', name}, contentType);
 
   try {
     const streams = [];
@@ -11339,14 +11319,12 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId)
 
       let playlist = fs.readFileSync(playlistPath, 'utf8');
       // Playlist'даги нисбий файл номи — абсолют, token'ли URL'га.
-      const tsUrl = await uploadWithToken(
-          tsPath, `tv_clip_hls/${clipId}/${runId}/${tsName}`, 'video/mp2t');
+      const tsUrl = await put(tsPath, tsName, 'video/mp2t');
       playlist = playlist.split(tsName).join(tsUrl);
       fs.writeFileSync(playlistPath, playlist, 'utf8');
 
-      const variantUrl = await uploadWithToken(
-          playlistPath, `tv_clip_hls/${clipId}/${runId}/${quality}.m3u8`,
-          'application/vnd.apple.mpegurl');
+      const variantUrl = await put(
+          playlistPath, `${quality}.m3u8`, 'application/vnd.apple.mpegurl');
 
       // BANDWIDTH — master playlist учун мажбурий. Ҳақиқий ўлчамдан
       // ҳисоблаймиз: умумий байт / умумий давомийлик.
@@ -11381,9 +11359,8 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId)
     const masterPath = path.join(workDir, 'master.m3u8');
     fs.writeFileSync(masterPath, master.join('\n') + '\n', 'utf8');
 
-    return await uploadWithToken(
-        masterPath, `tv_clip_hls/${clipId}/${runId}/master.m3u8`,
-        'application/vnd.apple.mpegurl');
+    return await put(
+        masterPath, 'master.m3u8', 'application/vnd.apple.mpegurl');
   } catch (e) {
     console.error('packageTvClipHls error:', clipId, e.message || e);
     return '';
@@ -11420,37 +11397,73 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId)
 // жорийси (ҳужжатда) ва янги ёзилаётгани — ва ҳеч қачон томоша
 // қилинаётган авлод ўчиб кетмайди.
 //
-// Қайси файл эскиргани — соф қарор, `tv_clip_runs.js` да (Storage'сиз
-// тестланади: `test/tv_clip_runs.test.js`). Бу ерда фақат I/O қолади.
-const {tvClipRunId, staleRunFiles} = require('./tv_clip_runs');
+// Қайси файл эскиргани — соф қарор, `tv_clip_runs.js` да. Натижа ҚАЕРГА
+// ёзилиши — `tv_clip_output.js` да (Firebase Storage ёки Cloudflare R2).
+// Иккаласи ҳам Storage'сиз тестланади.
+const {tvClipRunId} = require('./tv_clip_runs');
+const {
+  FirebaseStorageOutput,
+  R2Output,
+  createR2Client,
+} = require('./tv_clip_output');
+
+// ─────────────────────────────────────────────────────────────────────
+// R2 ЧИҚИШИ — 1-ФАЗА (янги клиплар, флаг билан, DEFAULT ЎЧИҚ).
+//
+// Нима учун: Firebase Storage видеони us-central1'дан тўғридан-тўғри
+// беради, edge кэш йўқ — ҳар кўриш тўлиқ egress ($0.12/GB). R2 олдига
+// Cloudflare қўйилганда egress $0 бўлади (қаранг:
+// `docs/video-architecture/cost_model.py`).
+//
+// ЮКЛАШ ва FFMPEG ЎЗГАРМАЙДИ: фойдаланувчи видеони ҳамон Firebase
+// Storage'га юклайди, transcode ҳамон шу функцияда бўлади. Фақат ТАЙЁР
+// натижа қаерга ёзилиши ўзгаради.
+//
+// Махфий калитлар кодда ЙЎҚ — Secret Manager'дан `process.env` орқали
+// келади (қаранг: [TV_CLIP_TRANSCODE_V2_OPTS] даги `secrets`).
+const R2_ACCOUNT_ID = 'f46b55c943977fa00d77da4e103e2dc0';
+const R2_BUCKET = 'ava-video';
 
 /**
- * [keepRun]дан бошқа барча run папкаларини ўчиради. Best-effort:
- * тозалаш йиқилса transcode давом этаверади (фақат сақлаш харажати).
- *
- * [keepRun] БЎШ бўлса — ҳеч нарса ўчирилмайди (қаранг: [staleRunFiles]).
+ * `settings/app.tvR2Output` — эга admin'дан ёқа/ўчира оладиган флаг.
+ * Ўқиш йиқилса `false`: номаълум ҳолатда ҳозирги (ишлаётган) йўл.
+ * @return {Promise<boolean>}
  */
-async function cleanupOldTvClipRuns(bucket, clipId, keepRun) {
-  if (!keepRun) return;
-  for (const root of ['tv_clip_variants', 'tv_clip_hls']) {
-    try {
-      const [files] = await bucket.getFiles({prefix: `${root}/${clipId}/`});
-      const staleNames = new Set(
-          staleRunFiles(files.map((f) => f.name), root, clipId, keepRun));
-      const stale = files.filter((f) => staleNames.has(f.name));
-      for (const f of stale) {
-        try {
-          await f.delete();
-        } catch (_) {}
-      }
-      if (stale.length > 0) {
-        console.log(
-            `tv clip ${clipId}: ${root} — ${stale.length} ta eski fayl tozalandi`);
-      }
-    } catch (e) {
-      console.error(`cleanupOldTvClipRuns ${root} ${clipId}:`, e.message || e);
-    }
+async function tvR2OutputEnabled() {
+  try {
+    const snap = await db.collection('settings').doc('app').get();
+    return snap.exists && (snap.data() || {}).tvR2Output === true;
+  } catch (e) {
+    console.error('tvR2OutputEnabled o\'qilmadi:', e.message || e);
+    return false;
   }
+}
+
+/**
+ * @param {boolean} useR2 флаг ҳолати.
+ * @param {object} bucket Admin SDK bucket (Firebase йўли учун).
+ * @param {string} bucketName bucket номи.
+ * @return {object} StorageOutput.
+ * @throws {Error} флаг ёқиқ, лекин калитлар йўқ бўлса — АТАЙИН:
+ *   Firebase'га жимгина қайтиш клипларни икки жойга сочиб юборарди.
+ */
+function buildTvClipOutput(useR2, bucket, bucketName) {
+  if (!useR2) return new FirebaseStorageOutput(bucket, bucketName);
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+        'tvR2Output yoqilgan, lekin R2_ACCESS_KEY_ID / ' +
+        'R2_SECRET_ACCESS_KEY Secret Manager\'da topilmadi');
+  }
+  return new R2Output({
+    client: createR2Client({
+      accountId: R2_ACCOUNT_ID,
+      accessKeyId,
+      secretAccessKey,
+    }),
+    bucket: R2_BUCKET,
+  });
 }
 
 async function transcodeTvClipVideo(clipId, videoUrl) {
@@ -11480,13 +11493,28 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       os.tmpdir(), `${clipId}_in${path.extname(srcPath) || '.mp4'}`);
   const tmpOutputs = [];
 
+  // Натижа қаерга ёзилади — Firebase Storage (default) ёки R2 (флаг).
+  // Қуриш йиқилса (мас. флаг ёқиқ, калит йўқ) клип `error` бўлади ва
+  // Firebase'га ЖИМГИНА ҚАЙТИЛМАЙДИ.
+  let output;
+  try {
+    output = buildTvClipOutput(await tvR2OutputEnabled(), bucket, bucketName);
+  } catch (e) {
+    console.error('transcodeTvClipVideo chiqish:', clipId, e.message || e);
+    try {
+      await clipRef.update({processingStatus: 'error'});
+    } catch (_) {}
+    return;
+  }
+  console.log(`tv clip ${clipId}: chiqish backend = ${output.backend}`);
+
   // Эски авлодларни тозалаш — ЯНГИСИНИ ЁЗИШДАН ОЛДИН ва ҳужжатдаги
   // ЖОРИЙ run'ни сақлаб қолиб. Шунда ҳозир томоша қилинаётган авлод
   // тегилмайди, ундан олдингилари эса кетади (қаранг: юқоридаги изоҳ).
   try {
     const cur = await clipRef.get();
     const liveRun = (cur.exists ? cur.data() : {}).variantRun || '';
-    await cleanupOldTvClipRuns(bucket, clipId, liveRun);
+    await output.cleanupOldRuns(clipId, liveRun);
   } catch (e) {
     console.error('transcodeTvClipVideo cleanup skip:', clipId, e.message || e);
   }
@@ -11517,8 +11545,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // pass — хато бўлса ҳам асосий pipeline'га таъсир қилмайди (қаранг:
     // [fastTrack360pIfPossible] ҳужжати).
     await fastTrack360pIfPossible(
-        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince,
-        runId);
+        clipId, clipRef, tmpIn, output, ffmpegPath, secsSince, runId);
 
     // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
     // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб
@@ -11656,20 +11683,10 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       if (!fs.existsSync(tmpOut) || fs.statSync(tmpOut).size <= 0) continue;
       readyMp4[spec.key] = tmpOut;
 
-      const destPath = `tv_clip_variants/${clipId}/${runId}/${spec.key}.mp4`;
-      const token = crypto.randomUUID();
-      await bucket.upload(tmpOut, {
-        destination: destPath,
-        metadata: {
-          contentType: 'video/mp4',
-          cacheControl: TV_CLIP_CACHE_CONTROL,
-          metadata: {firebaseStorageDownloadTokens: token},
-        },
-      });
-      const encoded = encodeURIComponent(destPath);
-      variants[spec.key] =
-          `https://firebasestorage.googleapis.com/v0/b/${bucketName}` +
-          `/o/${encoded}?alt=media&token=${token}`;
+      variants[spec.key] = await output.upload(
+          tmpOut,
+          {clipId, runId, kind: 'variant', name: `${spec.key}.mp4`},
+          'video/mp4');
     }
 
     console.log(
@@ -11682,8 +11699,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     let hlsUrl = '';
     if (Object.keys(readyMp4).length > 0) {
       const tHls = Date.now();
-      hlsUrl = await packageTvClipHls(
-          clipId, bucket, bucketName, readyMp4, runId);
+      hlsUrl = await packageTvClipHls(clipId, output, readyMp4, runId);
       console.log(
           `tv clip ${clipId} timing: hls ${secsSince(tHls)}s ` +
           `(${hlsUrl ? 'ok' : 'yoq'})`);
@@ -11697,7 +11713,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
         videoVariants: variants,
         hlsUrl,
         // Кейинги transcode шу run'ни «тирик» деб билади ва ўчирмайди
-        // (қаранг: [cleanupOldTvClipRuns]).
+        // (қаранг: `tv_clip_output.js` даги `cleanupOldRuns`).
         variantRun: runId,
         processingStatus: 'ready',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -11744,6 +11760,13 @@ const TV_CLIP_TRANSCODE_V2_OPTS = {
   memory: '4GiB',
   cpu: 2,
   timeoutSeconds: 540,
+  // R2 калитлари — Secret Manager'да. Кодда ҳам, git'да ҳам ЙЎҚ.
+  // Яратиш:
+  //   firebase functions:secrets:set R2_ACCESS_KEY_ID
+  //   firebase functions:secrets:set R2_SECRET_ACCESS_KEY
+  // ДИҚҚАТ: иккала secret мавжуд бўлмаса deploy ЙИҚИЛАДИ — ҳатто
+  // `tvR2Output` флаги ўчиқ бўлса ҳам (боғлаш deploy вақтида текширилади).
+  secrets: ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
 };
 
 exports.onTvClipCreatedV2 = onDocumentCreated(

@@ -300,7 +300,35 @@ stack.
   unaffected. (A percentage ramp was considered and dropped — a boolean is simpler
   and the blast radius is one clip at a time.)
 
-### 5.2 Priority #2 — view/stats aggregation (Section 3)
+### 5.2 Priority #2 — view/stats aggregation — **variant E implemented 2026-10-02**
+
+Built (commits `606509e`, `5221254`); **server half not yet deployed** — see 11.6.
+
+- **`playbackStats` is sampled** at `kTvPlaybackStatsSampleRate` = 10%
+  (`lib/features/tv_market/utils/tv_playback_sampling.dart`). Every metric it feeds
+  is an *average*, so a uniform sample does not shift it — proven over 200k draws in
+  `test/features/tv_market/tv_playback_sampling_test.dart`.
+- **`tv_public_profiles.totalViewCount` moved to the server.** The third write (and
+  second read) is gone from `recordView`. `reconcileTvProfileViews` recomputes it
+  nightly at 03:30 Tashkent as *live clips' `viewCount` + `deletedViewCount`*.
+- **`deletedViewCount`** is accumulated by `onTvClipDeleted`; without it a profile's
+  total would jump backwards whenever an owner deleted a clip.
+- **First-run seeding:** today's `totalViewCount` was built incrementally by clients
+  and already includes views of clips that have since been deleted. On the first run
+  the field is seeded as `max(0, oldTotal − liveSum)` so no profile's total drops.
+- **Transition is self-healing:** older app versions still increment
+  `totalViewCount` themselves (the rule still allows it); the next nightly pass
+  simply corrects the value.
+- **The audit script was adapted** (`functions/tools/audit_avagram_usage.js`), which
+  mattered because it is the input to the "should we drop video?" decision: averages
+  come from `playbackStats`, absolute counts now come from `viewCount` (exact,
+  deduped), and total watch time and traffic are estimated as *average × viewCount*
+  and labelled as estimates. `PLAYBACK_STATS_SAMPLE_RATE` must match the Dart
+  constant — a test enforces it, same pattern as `TV_CLIP_MAX_SECONDS`.
+
+The client half only takes effect in the next app release.
+
+### 5.2b Why not the queue (Section 3)
 **Why:** removes hot-document contention — the real user-visible win is write latency.
 On cost, see the re-derived table in §3: at 1M DAU the best queue variant is
 $3,834 → $1,233/mo, but at 10k DAU the whole line is $38/mo, so cost is not the
@@ -577,6 +605,29 @@ Note on ordering: `processingStatus: 'ready'` is written by the fast-track 360p 
 (~4–9s) **before** `variantBackend`/`variantRun` land in the final update (~10s).
 `resolveClipBackend` covers that window by falling back to the URL host, and the
 fast-track URL is already the R2 one — verified.
+
+### 11.6 Pending deploy — `reconcileTvProfileViews`, `onTvClipDeleted`
+
+```
+firebase deploy --only functions:reconcileTvProfileViews,functions:onTvClipDeleted
+```
+
+Blocked on 2026-10-02: a parallel session is actively editing `functions/realty.js`.
+`firebase deploy` packages the **working tree, not the commit**, so a deploy during
+that would bundle half-written code into these two functions (one attempt already
+failed on a vanishing `realty.js.tmp.*`). Wait until that file stops changing.
+
+After deploying, prove the seeding worked — the first run must not lower anyone's
+total:
+
+1. Snapshot `tv_public_profiles` (`totalViewCount` per doc) before.
+2. `gcloud scheduler jobs run firebase-schedule-reconcileTvProfileViews-us-central1
+   --location=us-central1`
+3. Re-read and compare: no profile's `totalViewCount` may drop, and every profile
+   should gain a `deletedViewCount` field.
+
+Baseline captured before the attempt: **105 profiles, `totalViewCount` sum = 125,
+0 profiles carrying `deletedViewCount`.**
 
 ### 11.4 Original uploads on clip delete — fixed 2026-10-02
 

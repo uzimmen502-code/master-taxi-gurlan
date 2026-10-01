@@ -12945,10 +12945,31 @@ exports.onTvClipDeleted = functions
     .document('tv_clips/{clipId}')
     .onDelete(async (snap) => {
       const clipId = snap.id;
+      const data = snap.data() || {};
       try {
-        await deleteTvClipMedia(clipId, snap.data() || {});
+        await deleteTvClipMedia(clipId, data);
       } catch (e) {
         console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
+      }
+      // Ўчирилган клипнинг кўришлари профиль жамисидан ТУШИБ
+      // КЕТМАСЛИГИ учун алоҳида жамғармага қўшилади.
+      //
+      // Нима учун керак: `totalViewCount` энди кунда бир марта тирик
+      // клипларнинг `viewCount` йиғиндисидан ҳисобланади
+      // (`reconcileTvProfileViews`). Усиз эга клипини ўчирса, профиль
+      // жамиси ортга сакрарди. Ўчириш камдан-кам бўлгани учун бу
+      // қўшимча ёзув сезиларли эмас.
+      try {
+        const ownerId = canonicalUid(data.ownerPhone);
+        const views = Math.trunc(Number(data.viewCount) || 0);
+        if (ownerId && views > 0) {
+          await db.collection('tv_public_profiles').doc(ownerId).set({
+            deletedViewCount: admin.firestore.FieldValue.increment(views),
+          }, {merge: true});
+        }
+      } catch (e) {
+        console.error('onTvClipDeleted deletedViewCount:', clipId,
+            e.message || e);
       }
     });
 
@@ -13180,6 +13201,80 @@ async function deleteTvClipMedia(clipId, data) {
     console.error('deleteTvClipMedia:', clipId, e.message || e);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// `tv_public_profiles.totalViewCount` — кунда бир марта қайта ҳисоблаш.
+//
+// НИМА УЧУН СЕРВЕРДА. Илгари бу счётчик ҲАР КЎРИШДА, клиент
+// транзакциясида ошириларди — яъни энг кўп такрорланадиган ёзувга
+// учинчи ёзув ва иккинчи ўқиш қўшиларди. Счётчик эса фақат канал
+// сарлавҳасида кўрсатилади, реал вақтда аниқ бўлиши шарт эмас.
+// Ўлчов: `docs/video-architecture/cost_model.py`, E варианти —
+// 10k DAU'да кўриш ёзуви 3 тадан 2 тага тушади.
+//
+// ФОРМУЛА: тирик клипларнинг `viewCount` йиғиндиси + ўчирилганлари
+// (`deletedViewCount`, `onTvClipDeleted` тўплайди). Шунда эга клипини
+// ўчирса ҳам жами ортга сакрамайди.
+//
+// ЎТИШ ДАВРИ: эски илова версиялари ҳамон `totalViewCount`ни ўзи
+// оширади (`firestore.rules` бунга ҳали рухсат беради). Зарари йўқ —
+// кейинги тунги юриш қийматни тўғрисига қайтаради.
+exports.reconcileTvProfileViews = functions
+  .runWith({timeoutSeconds: 540, memory: '512MB'})
+  .pubsub
+  .schedule('every day 03:30')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const PAGE = 1000;
+    const live = new Map();
+    let cursor = null;
+    let clips = 0;
+
+    for (;;) {
+      let q = db.collection('tv_clips')
+          .orderBy(admin.firestore.FieldPath.documentId())
+          .limit(PAGE);
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      if (snap.empty) break;
+      for (const doc of snap.docs) {
+        const d = doc.data() || {};
+        const owner = canonicalUid(d.ownerPhone);
+        if (!owner) continue;
+        const v = Math.trunc(Number(d.viewCount) || 0);
+        if (v > 0) live.set(owner, (live.get(owner) || 0) + v);
+      }
+      clips += snap.size;
+      cursor = snap.docs[snap.docs.length - 1];
+      if (snap.size < PAGE) break;
+    }
+
+    const profiles = await db.collection('tv_public_profiles').get();
+    let batch = db.batch();
+    let pending = 0;
+    let changed = 0;
+
+    for (const doc of profiles.docs) {
+      const d = doc.data() || {};
+      const want = (live.get(doc.id) || 0) +
+          Math.trunc(Number(d.deletedViewCount) || 0);
+      const have = Math.trunc(Number(d.totalViewCount) || 0);
+      if (want === have) continue;
+      batch.update(doc.ref, {totalViewCount: want});
+      changed++;
+      if (++pending >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await batch.commit();
+
+    console.log(
+        `reconcileTvProfileViews: ${clips} klip, ${profiles.size} profil, ` +
+        `${changed} ta yangilandi`);
+    return null;
+  });
 
 exports.expireTvContent = functions
   .runWith({secrets: TV_CLIP_DELETE_SECRETS})

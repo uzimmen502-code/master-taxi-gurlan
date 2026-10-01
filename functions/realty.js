@@ -32,6 +32,20 @@ function attachRealty(exports, deps) {
   const PLAIN_EXPIRY_DAYS = 30;
 
   /**
+   * Профессионал пакетдаги объект ўрнининг юқори чегараси (эга қарори,
+   * 2026-10-02).
+   *
+   * НЕГА ЧЕГАРА БОР: `countActivePlain` банд ўринларни САНАШ учун
+   * ҳужжатларни ўқийди, шунинг учун сўров чексиз бўлмайди. Аввал у 50
+   * та билан чекланган эди ва 50 тадан катта пакетда лимит УМУМАН
+   * ишламасди: `used` 50 дан ошмагани учун «used < limit» доим рост
+   * бўлиб, 150 объектли пакет эгаси чексиз эълон жойлай оларди.
+   * Энди саноқ чегараси пакетнинг юқори чегарасидан битта катта, яъни
+   * «лимит тўлдими?» саволи ҳар доим тўғри жавоб олади.
+   */
+  const MAX_PRO_OBJECTS = 200;
+
+  /**
    * Янги эълон яратишда фақат бепул ОДДИЙ бўлади. РЕКЛАМА ва СРОЧНО —
    * мавжуд объектга `purchaseRealtyTier` орқали сотиб олинади, чунки
    * концепцияда бир уй учта эълон эмас, битта ёзув (6-бўлим).
@@ -176,12 +190,21 @@ function attachRealty(exports, deps) {
     return listing.data() || {};
   }
 
-  /** Эганинг ҳозир кўриниб турган ОДДИЙ объектлари сони. */
+  /**
+   * Эганинг ҳозир кўриниб турган ОДДИЙ объектлари сони.
+   *
+   * Чегара [MAX_PRO_OBJECTS] + 1: аниқ сон иловада «Банд ўрин: 12 / 25»
+   * деб кўрсатилади, шунинг учун агрегат эмас, ҳақиқий саноқ керак.
+   * Битта қўшимча ҳужжат — «лимитдан ошдими?» саволига жавоб беради.
+   *
+   * Блокланган ва муддати тугаганлар саналмайди: улар лентада
+   * кўринмайди, демак ўринни ҳам эгалламайди.
+   */
   async function countActivePlain(ownerKey) {
     const snap = await db.collection('realty_listings')
       .where('ownerKey', '==', ownerKey)
       .where('tier', '==', 'plain')
-      .limit(50)
+      .limit(MAX_PRO_OBJECTS + 1)
       .get();
     const now = Date.now();
     let count = 0;
@@ -243,10 +266,14 @@ function attachRealty(exports, deps) {
       });
     }
 
+    // AVA риэлторлик хизматининг рақами ЁЗУВГА КЎЧИРИЛМАЙДИ (эга
+    // қарори, 2026-10-02). Аввал у ҳар бир эълоннинг ёпиқ ҳужжатига
+    // нусхаланар эди: `settings/app.realtyAgentPhone` ўзгарса, эски
+    // эълонлар эски — балки аллақачон ишламайдиган — рақам билан
+    // қолиб кетарди. Энди ёзувда фақат ТАНЛОВ сақланади
+    // (`contactMode`), рақамнинг ўзи кўрсатиш пайтида созламадан
+    // ўқилади. Шу сабабли бу ерда созламага сўров ҳам кетмайди.
     const contactMode = d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner';
-    const agentPhone = contactMode === 'ava_agent'
-      ? String(await appSetting('realtyAgentPhone', '')).replace(/\D/g, '')
-      : '';
 
     const imageUrls = Array.isArray(d.imageUrls)
       ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
@@ -299,7 +326,7 @@ function attachRealty(exports, deps) {
       areaLng: cell.lng,
       geohash4: geohashEncode(lat, lng, 4),
       contactMode,
-      hasAgent: agentPhone !== '',
+      hasAgent: contactMode === 'ava_agent',
       avagramClipId: '',
       adClipId: '',
       status: autoApprove ? 'active' : 'pending',
@@ -321,7 +348,6 @@ function attachRealty(exports, deps) {
       lat,
       lng,
       ownerPhone: uid,
-      ...(agentPhone ? { agentPhone } : {}),
       updatedAt: ts(),
     });
 
@@ -377,10 +403,9 @@ function attachRealty(exports, deps) {
       throw fail('invalid-argument', 'address_required');
     }
 
+    // Рақам эмас, танловнинг ўзи сақланади (қаранг:
+    // `submitRealtyListing` даги изоҳ).
     const contactMode = d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner';
-    const agentPhone = contactMode === 'ava_agent'
-      ? String(await appSetting('realtyAgentPhone', '')).replace(/\D/g, '')
-      : '';
 
     const imageUrls = Array.isArray(d.imageUrls)
       ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
@@ -431,19 +456,20 @@ function attachRealty(exports, deps) {
       areaLng: cell.lng,
       geohash4: geohashEncode(lat, lng, 4),
       contactMode,
-      hasAgent: agentPhone !== '',
+      hasAgent: contactMode === 'ava_agent',
       searchTokens: buildSearchTokens(title, text),
       status: nextStatus,
       editedAt: ts(),
       updatedAt: ts(),
     });
 
+    // `merge: false` — эски ёзувлардаги `agentPhone` ҳам шу ерда
+    // тозаланади (энди у сақланмайди).
     await ref.collection('private').doc('detail').set({
       ownerId: uid,
       lat,
       lng,
       ownerPhone: uid,
-      ...(agentPhone ? { agentPhone } : {}),
       updatedAt: ts(),
     }, { merge: false });
 
@@ -504,15 +530,20 @@ function attachRealty(exports, deps) {
    * билан бир хил нақш: идемпотентлик калити, баланс текшируви, дебит
    * ва ёзув янгиланиши — ҳаммаси битта транзакцияда.
    *
-   * ⚠️ МУДДАТ ҲИСОБИ — ЭГА ЭЪТИБОРИГА. Концепцияда «муддат тугаса
-   * объектнинг ўзи ўчирилади» дейилган. Уни сўзма-сўз олсак, 28 куни
-   * қолган ОДДИЙ эълонга 3 кунлик СРОЧНО олган одам 25 кунини
-   * йўқотарди — бу шикоят келтирадиган нуқсон. Шунинг учун:
-   *   • `tierUntil` — пуллик даража қанча туриши;
-   *   • `expiresAt` — объектнинг ўзи қачон ўчиши, ҳозиргисидан
-   *     ҚИСҚАРМАЙДИ (`max`).
-   * Даража муддати тугаса объект ўчмайди, ОДДИЙга қайтади
-   * (`realtyExpirySweep`), объектнинг ўзи эса `expiresAt` да ўчади.
+   * МУДДАТ ҲИСОБИ (эга қарори, 2026-10-02): пуллик даража муддати —
+   * объектнинг УМРИ. Муддат тугаса эълон ОДДИЙга ҚАЙТМАЙДИ, бутунлай
+   * ўчади — концепциянинг 9-бўлими сўзма-сўз шундай.
+   *
+   * Шунинг учун `expiresAt` айнан `tierUntil` га тенг қўйилади, яъни
+   * объектда ягона муддат бўлади: иловадаги «Қолди: N кун», муддат
+   * огоҳлантириши ва тозалаш иши — учаласи бир хил санани кўради.
+   *
+   * ⚠️ БУНИНГ НАРХИ: 28 куни қолган ОДДИЙ эълонга 3 кунлик СРОЧНО
+   * олинса, объект 3 кундан кейин ўчади — қолган 28 кун сақланмайди.
+   * Эга буни билиб танлади: ўчишидан бир кун олдин огоҳлантириш
+   * юборилади (`realtyExpiryWarning`) ва у «Менинг объектларим»га
+   * олиб боради, у ердан муддат узайтирилади. Қарор ўзгарса бу
+   * қаторни `Math.max(curExpires, tierUntilMs)` га қайтариш кифоя.
    */
   exports.purchaseRealtyTier = functions.https.onCall(
     async (data, context) => {
@@ -593,16 +624,24 @@ function attachRealty(exports, deps) {
             ? cur.tierUntil.toMillis() : 0;
           const base = (cur.tier === tier && curUntil > Date.now())
             ? curUntil : Date.now();
-          const tierUntilMs = base + durationMs;
+          let tierUntilMs = base + durationMs;
 
-          const curExpires = cur.expiresAt && cur.expiresAt.toMillis
-            ? cur.expiresAt.toMillis() : 0;
-          const expiresMs = Math.max(curExpires, tierUntilMs);
+          // ТЎЛАНГАН кун куймайди. Бепул ОДДИЙ кунлар объект умрини
+          // узайтирмайди (эга қарори — қаранг: юқоридаги МУДДАТ
+          // ҲИСОБИ), лекин пул тўланган кун бошқа гап: СРОЧНО'нинг 10
+          // куни қолганда 7 кунлик РЕКЛАМА олинса, муддат 7 кунга
+          // ҚИСҚАРИБ, 3 кун куйиб кетарди. Шунинг учун амалдаги пуллик
+          // муддат пастки чегара бўлиб қолади.
+          const curPaidUntil =
+            (cur.tier === 'promo' || cur.tier === 'urgent') ? curUntil : 0;
+          if (curPaidUntil > tierUntilMs) tierUntilMs = curPaidUntil;
 
+          // Ягона муддат: пуллик даража тугаган кун — объект ўчадиган
+          // кун (қаранг: юқоридаги МУДДАТ ҲИСОБИ).
           t.update(listingRef, {
             tier,
             tierUntil: admin.firestore.Timestamp.fromMillis(tierUntilMs),
-            expiresAt: admin.firestore.Timestamp.fromMillis(expiresMs),
+            expiresAt: admin.firestore.Timestamp.fromMillis(tierUntilMs),
             expiryWarnedAt: admin.firestore.FieldValue.delete(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
@@ -750,6 +789,14 @@ function attachRealty(exports, deps) {
    * `firestore.rules` айнан шу ҳужжат борлигига қараб ёпиқ
    * `private/detail` ни ўқишга рухсат беради. Такрор очишда ўрин
    * ЕЙИЛМАЙДИ — бир марта тўланган объект доим очиқ қолади.
+   *
+   * ПУЛЛИК ЎРИН БЕҲУДА КЕТМАСЛИГИ УЧУН учта текширув (2026-10-02):
+   *   • блокланган эълон — очилмайди: харидор кўрмайдиган объектга
+   *     тўлаган бўларди;
+   *   • муддати тугаган эълон — очилмайди: у кейинги тозалашда
+   *     базадан ўчади;
+   *   • ўз эълони — ўрин ЕЙИЛМАЙДИ: қоида эгага барибир рухсат
+   *     беради (`realtyListingIsMine`), демак очишнинг ҳожати йўқ.
    */
   exports.unlockRealtyListing = functions.https.onCall(
     async (data, context) => {
@@ -760,9 +807,32 @@ function attachRealty(exports, deps) {
       const listingRef = db.collection('realty_listings').doc(listingId);
       const listingSnap = await listingRef.get();
       if (!listingSnap.exists) throw fail('not-found', 'listing_not_found');
+      const listing = listingSnap.data() || {};
+
+      if (listing.status === 'blocked') {
+        throw fail('failed-precondition', 'listing_blocked');
+      }
+      const expiresMs = listing.expiresAt && listing.expiresAt.toMillis
+        ? listing.expiresAt.toMillis() : 0;
+      if (expiresMs && expiresMs <= Date.now()) {
+        throw fail('failed-precondition', 'listing_expired');
+      }
 
       const userRef = db.collection('users').doc(uid);
       const unlockRef = userRef.collection('realty_unlocked').doc(listingId);
+
+      // Ўз эълони — транзакциядан ташқарида жавоб берамиз, ҳеч нима
+      // ёзилмайди.
+      const myKey = await ensureOwnerKey(uid);
+      if (myKey && String(listing.ownerKey || '') === myKey) {
+        const me = await userRef.get();
+        return {
+          ok: true,
+          alreadyUnlocked: true,
+          own: true,
+          unlocksLeft: Number((me.data() || {}).realtyUnlocksLeft || 0),
+        };
+      }
 
       return db.runTransaction(async (t) => {
         const existing = await t.get(unlockRef);
@@ -821,7 +891,12 @@ function attachRealty(exports, deps) {
         const parsed = raw
           .map((p) => ({
             id: String((p || {}).id || '').trim(),
-            objects: Math.round(Number((p || {}).objects) || 0),
+            // Админ панелдаги хато (масалан иккита ноль) лимитни
+            // ишдан чиқармасин — саноқ чегарасидан ошмайди.
+            objects: Math.min(
+              MAX_PRO_OBJECTS,
+              Math.round(Number((p || {}).objects) || 0),
+            ),
             days: Math.round(Number((p || {}).days) || 0),
             price: Math.round(Number((p || {}).price) || 0),
           }))
@@ -843,7 +918,13 @@ function attachRealty(exports, deps) {
       const until = pro.expiresAt && pro.expiresAt.toMillis
         ? pro.expiresAt.toMillis() : 0;
       if (!until || until < Date.now()) return null;
-      const objects = Math.round(Number(pro.objects) || 0);
+      // Пакет устига пакет олинганда ўринлар қўшилади, шунинг учун
+      // жамғарма саноқ чегарасидан ошиб кетиши мумкин — ўқишда ҳам
+      // чегараланади (эски ёзувлар учун ҳам).
+      const objects = Math.min(
+        MAX_PRO_OBJECTS,
+        Math.round(Number(pro.objects) || 0),
+      );
       if (objects <= 0) return null;
       return { objects, expiresAt: until, planId: String(pro.planId || '') };
     } catch (e) {
@@ -920,8 +1001,11 @@ function attachRealty(exports, deps) {
             ? cur.expiresAt.toMillis() : 0;
           const base = curUntil > Date.now() ? curUntil : Date.now();
           const expiresMs = base + plan.days * 24 * 60 * 60 * 1000;
-          const objects = (curUntil > Date.now()
-            ? Math.round(Number(cur.objects) || 0) : 0) + plan.objects;
+          const objects = Math.min(
+            MAX_PRO_OBJECTS,
+            (curUntil > Date.now()
+              ? Math.round(Number(cur.objects) || 0) : 0) + plan.objects,
+          );
 
           t.set(userRef, {
             realtyPro: {
@@ -1132,6 +1216,18 @@ function attachRealty(exports, deps) {
    *
    * Кунига бир марта; клиент лентада ҳам `expiresAt` ни текширади,
    * шунинг учун бу оралиқ фойдаланувчига кўринмайди.
+   *
+   * Иккинчи ўтиш — ҳимоя тўри ва ЭСКИ ЁЗУВЛАР учун: 2026-10-02 гача
+   * пуллик даража тугаганда объект ўчмай, ОДДИЙга қайтар эди, шунинг
+   * учун базада `tierUntil` ўтган, лекин `expiresAt` узоқ ёзувлар
+   * қолган бўлиши мумкин.
+   *
+   * ⚠️ `tier` бўйича филтр МАЖБУРИЙ. Усиз (`tierUntil <= now` ёлғиз)
+   * сўров ОДДИЙ эълонларни ҳам тортар эди: уларда `tierUntil` —
+   * `null`, Firestore эса `null` ни ҳар қандай `Timestamp` дан кичик
+   * деб ҳисоблайди ва тартибда биринчи қўяди. Натижада саҳифа
+   * тўлалигича ОДДИЙ ёзувлар билан тўлиб, пуллик даражаси тугаганлар
+   * навбатга ҲЕЧ ҚАЧОН етмай қоларди.
    */
   exports.realtyExpirySweep = functions
     .runWith({ timeoutSeconds: 540 })
@@ -1159,34 +1255,29 @@ function attachRealty(exports, deps) {
         if (snap.size < 150) break;
       }
 
-      // 2) Пуллик даража муддати тугаган, лекин объектнинг ўзи ҳали
-      //    яшайдиганлар — ОДДИЙга қайтади (қаранг: `purchaseRealtyTier`
-      //    изоҳидаги муддат ҳисоби).
-      let downgraded = 0;
+      // 2) Пуллик даража муддати тугаганлар — булар ҳам ўчирилади
+      //    (ОДДИЙга қайтиш олиб ташланди, эга қарори 2026-10-02).
+      let tierExpired = 0;
       for (let round = 0; round < 10; round += 1) {
         const snap = await db.collection('realty_listings')
+          .where('tier', 'in', ['promo', 'urgent'])
           .where('tierUntil', '<=', now)
-          .limit(400)
+          .limit(150)
           .get();
         if (snap.empty) break;
-        const batch = db.batch();
-        let writes = 0;
-        snap.docs.forEach((doc) => {
-          if ((doc.data() || {}).tier === 'plain') return;
-          batch.update(doc.ref, {
-            tier: 'plain',
-            tierUntil: null,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-          writes += 1;
-        });
-        if (writes > 0) await batch.commit();
-        downgraded += writes;
-        if (snap.size < 400) break;
+        for (const doc of snap.docs) {
+          try {
+            await deleteListingDeep(doc.ref);
+            tierExpired += 1;
+          } catch (e) {
+            console.error('realtyExpirySweep tier', doc.id, e.message || e);
+          }
+        }
+        if (snap.size < 150) break;
       }
 
       console.log(
-        `realtyExpirySweep deleted=${deleted} downgraded=${downgraded}`,
+        `realtyExpirySweep deleted=${deleted} tierExpired=${tierExpired}`,
       );
       return null;
     });

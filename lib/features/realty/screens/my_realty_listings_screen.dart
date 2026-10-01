@@ -21,7 +21,13 @@ import 'realty_pro_screen.dart';
 /// (текширувда) ва муддати тугаганлари ҳам чиқади, чунки эга улар
 /// қаердалигини билиши керак.
 class MyRealtyListingsScreen extends StatefulWidget {
-  const MyRealtyListingsScreen({super.key});
+  const MyRealtyListingsScreen({super.key, this.highlightListingId});
+
+  /// Муддат огоҳлантиришидан келганда — шу эълон рўйхат бошига
+  /// қўйилади. Пуллик даража тугаса объект ўчади, шунинг учун эга
+  /// хабарни босганда ҲАЙСИ эълон ҳақида кетаётганини дарҳол кўриши
+  /// керак (200 объектли риэлтор рўйхатида бу муҳим).
+  final String? highlightListingId;
 
   @override
   State<MyRealtyListingsScreen> createState() =>
@@ -135,6 +141,16 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
     }
   }
 
+  /// Огоҳлантиришдан келган эълонни рўйхат бошига кўчиради. Қолган
+  /// тартиб (янгиси юқорида) ўзгармайди.
+  List<RealtyListing> _withHighlightFirst(List<RealtyListing> items) {
+    final id = widget.highlightListingId;
+    if (id == null || id.isEmpty) return items;
+    final i = items.indexWhere((r) => r.id == id);
+    if (i <= 0) return items;
+    return [items[i], ...items.where((r) => r.id != id)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ava;
@@ -187,7 +203,9 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
               ),
             );
           }
-          final items = snap.data ?? const <RealtyListing>[];
+          final items = _withHighlightFirst(
+            snap.data ?? const <RealtyListing>[],
+          );
           return Column(
             children: [
               Padding(

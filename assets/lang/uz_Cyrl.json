@@ -2419,6 +2419,8 @@
   "realty_limit_dialog_cta": "Пакетни кўриш",
   "realty_error_location": "Харитада нуқта белгиланмаган.",
   "realty_error_tier_soon": "Бу даража ҳали очилмаган.",
+  "realty_error_listing_blocked": "Бу эълон текширувда блокланган — очиб бўлмайди. Пакет ўрнингиз сарфланмади.",
+  "realty_error_listing_expired": "Бу эълоннинг муддати тугаган. Пакет ўрнингиз сарфланмади.",
   "realty_error_generic": "Хатолик. Кейинроқ уриниб кўринг.",
   "realty_edit_title": "Объектни таҳрирлаш",
   "realty_saved": "Сақланди",

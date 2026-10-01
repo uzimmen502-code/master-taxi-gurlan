@@ -396,13 +396,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
+    // Битта жойда ҳисобланади: қуйида учта турли шохда керак бўлади
+    // (юклаш, эски расмларни ўчириш ва хатода тозалаш).
+    final ownerId = canonicalPhoneId(
+      FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
+    );
+
     var uploaded = const <String>[];
     try {
       final newFiles = _photos.where((p) => p.file != null).toList();
       if (newFiles.isNotEmpty) {
-        final ownerId = canonicalPhoneId(
-          FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
-        );
         uploaded = await _storage.uploadImages(
           ownerId: ownerId,
           images: newFiles.map((p) => p.file!).toList(),
@@ -458,12 +461,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
           ? const <String>[]
           : existing.imageUrls.where((u) => !keptUrls.contains(u)).toList();
       if (removed.isNotEmpty) {
-        await _storage.deleteAdImages(
-          ownerId: canonicalPhoneId(
-            FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
-          ),
-          imageUrls: removed,
-        );
+        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: removed);
       }
       if (!mounted) return;
       // Матн қораламани тозалашдан ОЛДИН олинади: `await` дан кейин
@@ -483,12 +481,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     } on RealtyException catch (e) {
       // Эълон яратилмади — юкланган расмлар Storage'да эгасиз қолмасин.
       if (uploaded.isNotEmpty) {
-        await _storage.deleteAdImages(
-          ownerId: canonicalPhoneId(
-            FirebaseAuth.instance.currentUser?.phoneNumber ?? '',
-          ),
-          imageUrls: uploaded,
-        );
+        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: uploaded);
       }
       if (!mounted) return;
       setState(() => _submitting = false);
@@ -504,6 +497,14 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         behavior: SnackBarBehavior.floating,
       ));
     } catch (e) {
+      // Тармоқ узилиши, таймаут ва бошқа кутилмаган хато — бу шохда
+      // ҳам расмлар эгасиз қолмаслиги керак. Аввал тозалаш фақат
+      // `RealtyException` да бор эди, шунинг учун айнан тармоқ
+      // узилганда (яъни энг эҳтимолли ҳолатда) Storage'да файл
+      // қолиб кетарди.
+      if (uploaded.isNotEmpty) {
+        await _storage.deleteAdImages(ownerId: ownerId, imageUrls: uploaded);
+      }
       if (!mounted) return;
       setState(() => _submitting = false);
       messenger.showSnackBar(SnackBar(

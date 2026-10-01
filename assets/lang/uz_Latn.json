@@ -2419,6 +2419,8 @@
   "realty_limit_dialog_cta": "Paketni ko'rish",
   "realty_error_location": "Xaritada nuqta belgilanmagan.",
   "realty_error_tier_soon": "Bu daraja hali ochilmagan.",
+  "realty_error_listing_blocked": "Bu e'lon tekshiruvda bloklangan — ochib bo'lmaydi. Paket o'rningiz sarflanmadi.",
+  "realty_error_listing_expired": "Bu e'lonning muddati tugagan. Paket o'rningiz sarflanmadi.",
   "realty_error_generic": "Xatolik. Keyinroq urinib ko'ring.",
   "realty_edit_title": "Obyektni tahrirlash",
   "realty_saved": "Saqlandi",

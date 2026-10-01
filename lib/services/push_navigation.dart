@@ -23,6 +23,7 @@ import '../models/active_trip.dart';
 import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
+import '../features/realty/screens/my_realty_listings_screen.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
@@ -235,6 +236,22 @@ class PushNavigation {
         type == 'ad_moderation') {
       await nav.push(
         MaterialPageRoute(builder: (_) => const JobsScreen()),
+      );
+      return;
+    }
+
+    // Кўчмас мулк: муддат огоҳлантириши. Пуллик даража тугаса объект
+    // ўчади, шунинг учун хабар «Менинг объектларим»га олиб боради —
+    // эга у ердан муддатни узайтиради ёки эълонни таҳрирлайди.
+    // Огоҳлантирилган эълон рўйхат бошига қўйилади (`listingId`).
+    if (screen == 'realty_my' || type == 'realty_expiry') {
+      final listingId = (data['listingId'] ?? '').trim();
+      await nav.push(
+        MaterialPageRoute(
+          builder: (_) => MyRealtyListingsScreen(
+            highlightListingId: listingId.isEmpty ? null : listingId,
+          ),
+        ),
       );
       return;
     }

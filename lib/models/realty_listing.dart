@@ -281,16 +281,20 @@ class RealtyDetail {
     required this.lat,
     required this.lng,
     required this.ownerPhone,
-    this.agentPhone = '',
   });
 
   final double lat;
   final double lng;
   final String ownerPhone;
-  final String agentPhone;
 
   /// Харидор босадиган рақам — эга танлаган мурожаат усулига мос.
-  String contactPhone(RealtyContactMode mode) =>
+  ///
+  /// [agentPhone] — AVA риэлторлик хизматининг ЖОРИЙ рақами
+  /// (`settings/app.realtyAgentPhone`). У эълон ёзувида сақланмайди
+  /// (эга қарори, 2026-10-02): аввал ҳар бир эълонга нусхаланар эди ва
+  /// созламадаги рақам ўзгарганда эски эълонлар ишламайдиган рақам
+  /// билан қолиб кетарди. Бўш бўлса — эганинг ўз рақами.
+  String contactPhone(RealtyContactMode mode, {String agentPhone = ''}) =>
       mode == RealtyContactMode.avaAgent && agentPhone.isNotEmpty
           ? agentPhone
           : ownerPhone;
@@ -299,6 +303,5 @@ class RealtyDetail {
         lat: (d['lat'] as num?)?.toDouble() ?? 0,
         lng: (d['lng'] as num?)?.toDouble() ?? 0,
         ownerPhone: (d['ownerPhone'] ?? '') as String,
-        agentPhone: (d['agentPhone'] ?? '') as String,
       );
 }

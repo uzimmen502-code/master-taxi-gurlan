@@ -158,6 +158,31 @@ class RealtyRepository {
     }
   }
 
+  /// AVA риэлторлик хизматининг ЖОРИЙ рақами.
+  ///
+  /// Рақам эълон ёзувида сақланмайди (эга қарори, 2026-10-02) — акс
+  /// ҳолда созламадаги рақам ўзгарганда эски эълонлар эски рақам билан
+  /// қолиб кетарди. `settings/app` клиентга очиқ (`firestore.rules`),
+  /// шунинг учун callable керак эмас.
+  ///
+  /// Бўш қайтса — чақирувчи эганинг ўз рақамини кўрсатади.
+  Future<String> fetchAgentPhone() async {
+    final cached = _agentPhoneCache;
+    if (cached != null) return cached;
+    try {
+      final snap = await _db.collection('settings').doc('app').get();
+      final raw = '${(snap.data() ?? const {})['realtyAgentPhone'] ?? ''}';
+      final phone = raw.replaceAll(RegExp(r'\D'), '');
+      _agentPhoneCache = phone;
+      return phone;
+    } catch (e) {
+      debugPrint('[RealtyRepository] fetchAgentPhone $e');
+      return '';
+    }
+  }
+
+  String? _agentPhoneCache;
+
   /// Шу объект пакетдан очилганми.
   Stream<bool> watchUnlocked(String listingId) {
     final uid = _currentUserId;

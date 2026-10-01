@@ -13254,13 +13254,37 @@ exports.reconcileTvProfileViews = functions
     let pending = 0;
     let changed = 0;
 
+    let seeded = 0;
     for (const doc of profiles.docs) {
       const d = doc.data() || {};
-      const want = (live.get(doc.id) || 0) +
-          Math.trunc(Number(d.deletedViewCount) || 0);
+      const liveSum = live.get(doc.id) || 0;
       const have = Math.trunc(Number(d.totalViewCount) || 0);
-      if (want === have) continue;
-      batch.update(doc.ref, {totalViewCount: want});
+
+      // БИРИНЧИ ЮРИШ — тарихни йўқотмаслик учун уруғлантириш.
+      //
+      // Бугунги `totalViewCount` клиентлар томонидан ошириб борилган ва
+      // унда АЛЛАҚАЧОН ўчирилган/муддати тугаган клипларнинг кўришлари
+      // ҳам бор. Янги формула эса тирик клиплардан ҳисоблайди, яъни
+      // `deletedViewCount` сиз биринчи юришдаёқ жами ТУШИБ КЕТАРДИ.
+      //
+      // Шунинг учун майдон ҳали йўқ бўлса, у эски жамининг тирик
+      // йиғиндидан ортиғи сифатида бир марта уруғлантирилади. Кейин
+      // уни `onTvClipDeleted` одатдагидек тўплайверади.
+      const patch = {};
+      let deleted;
+      if (d.deletedViewCount === undefined || d.deletedViewCount === null) {
+        deleted = Math.max(0, have - liveSum);
+        patch.deletedViewCount = deleted;
+        seeded++;
+      } else {
+        deleted = Math.trunc(Number(d.deletedViewCount) || 0);
+      }
+
+      const want = liveSum + deleted;
+      if (want !== have) patch.totalViewCount = want;
+      if (Object.keys(patch).length === 0) continue;
+
+      batch.update(doc.ref, patch);
       changed++;
       if (++pending >= 400) {
         await batch.commit();
@@ -13272,7 +13296,7 @@ exports.reconcileTvProfileViews = functions
 
     console.log(
         `reconcileTvProfileViews: ${clips} klip, ${profiles.size} profil, ` +
-        `${changed} ta yangilandi`);
+        `${changed} ta yangilandi, ${seeded} ta deletedViewCount urug'landi`);
     return null;
   });
 

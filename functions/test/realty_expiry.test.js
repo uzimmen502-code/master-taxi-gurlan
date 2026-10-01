@@ -390,7 +390,52 @@ async function main() {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // 5) Ахборот пакети ўрни беҳуда сарфланмайди
+  // 5) Бепул лимит: кўтарилган эълон ҳам ўринни эгаллайди
+  //    (2026-10-02 да ёпилган тешикнинг регрессия тести)
+  // ─────────────────────────────────────────────────────────────────
+  {
+    const db = makeDb();
+    const h = {};
+    db._store.set(`users/${OWNER}`, {
+      phone: OWNER, realtyOwnerKey: 'KEY', bonusBalance: 0,
+    });
+    // Иккита бепул объект, лекин биттасига РЕКЛАМА олинган.
+    seedListing(db, 'F1', {});
+    seedListing(db, 'F2', {
+      tier: 'promo',
+      tierUntil: new FakeTs(Date.now() + 7 * DAY),
+      expiresAt: new FakeTs(Date.now() + 7 * DAY),
+    });
+    attachRealty(h, {
+      functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp,
+    });
+
+    const quota = await h.getRealtyQuota({}, ctx(OWNER));
+    assert.strictEqual(quota.used, 2, 'РЕКЛАМА олинган эълон ҳам саналади');
+    assert.strictEqual(quota.limit, 2);
+
+    const err = await expectError(
+      h.submitRealtyListing({
+        deal: 'sale', tier: 'plain', title: 'Учинчи', text: 'Матн',
+        lat: 41.5, lng: 60.6, addressText: 'Гурлан, Навоий 12',
+      }, ctx(OWNER)),
+      'resource-exhausted', 'free_limit_reached',
+    );
+    assert.strictEqual(err.details.limit, 2);
+    assert.strictEqual(err.details.pro, false);
+
+    // Блокланган эълон ўринни эгалламайди — лентада кўринмайди.
+    db._store.set('realty_listings/F2', {
+      ...db._store.get('realty_listings/F2'), status: 'blocked',
+    });
+    const after = await h.getRealtyQuota({}, ctx(OWNER));
+    assert.strictEqual(after.used, 1, 'блокланган эълон ўрин эгалламайди');
+    console.log('✓ 5) Бепул лимит: кўтарилган эълон ҳам ўрин эгаллайди');
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // 6) Ахборот пакети ўрни беҳуда сарфланмайди
   // ─────────────────────────────────────────────────────────────────
   {
     const db = makeDb();
@@ -438,7 +483,7 @@ async function main() {
     const again = await h.unlockRealtyListing({ listingId: 'OK' }, ctx(BUYER));
     assert.strictEqual(again.alreadyUnlocked, true);
     assert.strictEqual(again.unlocksLeft, 1);
-    console.log('✓ 5) Блокланган/тугаган/ўз эълонида пуллик ўрин сарфланмайди');
+    console.log('✓ 6) Блокланган/тугаган/ўз эълонида пуллик ўрин сарфланмайди');
   }
 
   console.log('\nҲаммаси ўтди: realty_expiry.test.js');

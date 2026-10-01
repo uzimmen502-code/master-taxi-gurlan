@@ -35,7 +35,7 @@ function attachRealty(exports, deps) {
    * Профессионал пакетдаги объект ўрнининг юқори чегараси (эга қарори,
    * 2026-10-02).
    *
-   * НЕГА ЧЕГАРА БОР: `countActivePlain` банд ўринларни САНАШ учун
+   * НЕГА ЧЕГАРА БОР: `countActiveListings` банд ўринларни САНАШ учун
    * ҳужжатларни ўқийди, шунинг учун сўров чексиз бўлмайди. Аввал у 50
    * та билан чекланган эди ва 50 тадан катта пакетда лимит УМУМАН
    * ишламасди: `used` 50 дан ошмагани учун «used < limit» доим рост
@@ -191,7 +191,16 @@ function attachRealty(exports, deps) {
   }
 
   /**
-   * Эганинг ҳозир кўриниб турган ОДДИЙ объектлари сони.
+   * Эганинг ҳозир кўриниб турган объектлари сони — ДАРАЖАДАН ҚАТЪИ
+   * НАЗАР (ОДДИЙ, РЕКЛАМА ва СРОЧНО бирга).
+   *
+   * НЕГА ДАРАЖА САНАЛМАЙДИ (эга қарори, 2026-10-02): аввал фақат
+   * `tier == 'plain'` ёзувлар саналар эди ва бу бепул лимитда тешик
+   * қолдирар эди — иккита объекти бор фуқаро биттасига РЕКЛАМА олса,
+   * ОДДИЙ саноғи 1 га тушиб, учинчи объектни қўя олар эди. Натижада
+   * реклама амал қилаётган вақтда бепул 2 та эмас, 3 та объект турар
+   * эди. Лимит объект ЎРНИ ҳақида: кўтарилган эълон ҳам битта
+   * объектнинг ўзи, шунинг учун ўринни барибир эгаллайди.
    *
    * Чегара [MAX_PRO_OBJECTS] + 1: аниқ сон иловада «Банд ўрин: 12 / 25»
    * деб кўрсатилади, шунинг учун агрегат эмас, ҳақиқий саноқ керак.
@@ -200,10 +209,9 @@ function attachRealty(exports, deps) {
    * Блокланган ва муддати тугаганлар саналмайди: улар лентада
    * кўринмайди, демак ўринни ҳам эгалламайди.
    */
-  async function countActivePlain(ownerKey) {
+  async function countActiveListings(ownerKey) {
     const snap = await db.collection('realty_listings')
       .where('ownerKey', '==', ownerKey)
-      .where('tier', '==', 'plain')
       .limit(MAX_PRO_OBJECTS + 1)
       .get();
     const now = Date.now();
@@ -256,7 +264,9 @@ function attachRealty(exports, deps) {
 
     const ownerKey = await ensureOwnerKey(uid);
     const pro = await activeProPlan(uid);
-    const used = await countActivePlain(ownerKey);
+    // Саноқ даражадан қатъи назар — кўтарилган эълон ҳам ўринни
+    // эгаллайди (қаранг: `countActiveListings`).
+    const used = await countActiveListings(ownerKey);
     // Профессионал пакет бор бўлса лимит ўша пакетники, бепул 2 та эмас
     // (концепция, 5-бўлим: риэлтор кўп объект жойлайди).
     const limit = pro ? pro.objects : FREE_PLAIN_LIMIT;
@@ -1042,7 +1052,7 @@ function attachRealty(exports, deps) {
     const uid = requireUid(context);
     const ownerKey = await ensureOwnerKey(uid);
     const pro = await activeProPlan(uid);
-    const used = await countActivePlain(ownerKey);
+    const used = await countActiveListings(ownerKey);
     return {
       used,
       limit: pro ? pro.objects : FREE_PLAIN_LIMIT,

@@ -12924,14 +12924,21 @@ exports.onTvClipRejected = functions.firestore
       return null;
     });
 
-// Klip o'chirilganda transcode natijalarini ham tozalash — aks holda
-// ular Storage'da "yetim" qolib, xarajat oshadi.
+// Клип ўчирилганда унинг БАРЧА файллари кетади: асл юклама, постер,
+// тайёр вариантлар, HLS ва (R2 ҳолатида) edge кэш.
 //
-// `tv_clip_hls/` ilgari BU YERDA YO'Q EDI — faqat `tv_clip_variants/`
-// o'chirilardi, ya'ni har o'chirilgan klipning HLS segmentlari (eng
-// katta fayllar: har variant uchun bitta `single_file` .ts) Storage'da
-// abadiy qolib ketardi. Versiyalangan yo'l (`{clipId}/{runId}/…`)
-// qo'shilgandan keyin bu yanada qimmatga tushardi.
+// ИЛГАРИ АСЛ ЮКЛАМА ҚОЛИБ КЕТАРДИ. Бу ерда фақат тайёр натижалар
+// ўчирилар эди, фойдаланувчи юклаган хом файл эса (`videoUrl`, ўртача
+// 20–80 MB) Storage'да АБАДИЙ қоларди. У фақат «Кун янгиликлари» 48
+// соатда тугаганда (`expireTvContent` → шу функция) ўчарди — яъни
+// фойдаланувчи ўз клипини ўзи ўчирса, файл қоларди.
+//
+// Эга тасдиқлади (2026-10-02): «ўчирилган клипни тиклаш» керак эмас,
+// шунинг учун ўчириш тўлиқ бўлади.
+//
+// `deleteTvClipMedia` — ягона жой: иккала ўчириш йўли ҳам (эга ўчирди /
+// муддати тугади) ўшандан ўтади, шунда улар ҳеч қачон бир-биридан
+// фарқ қилиб кетмайди.
 exports.onTvClipDeleted = functions
     .runWith({secrets: TV_CLIP_DELETE_SECRETS})
     .firestore
@@ -12939,7 +12946,7 @@ exports.onTvClipDeleted = functions
     .onDelete(async (snap) => {
       const clipId = snap.id;
       try {
-        await purgeTvClipOutputs(clipId, snap.data() || {});
+        await deleteTvClipMedia(clipId, snap.data() || {});
       } catch (e) {
         console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
       }
@@ -13139,13 +13146,20 @@ exports.deleteHlsSpike = functions.https.onCall(async (data, context) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// TV Market — «Кун янгиликлари» (48 соат) ва «Реклама» (7/15/30 кун)
-// муддати ўтган клипларни `expired` қилиш. `status='active'` дан бошқа
-// ҳолатларга тегилмайди (pending/blocked hali ko'rib chiqilmagan).
-// News uchun video/poster/variantlar Storage'dan ham o'chiriladi (foydalanuvchi
-// tanlovi — profil/like statistikasi tv_public_profiles'da alohida saqlanadi,
-// yo'qolmaydi); Ad uchun fayllar saqlanadi (kelajakda qayta faollashtirish
-// ehtimoli uchun).
+// Клипнинг БАРЧА файлларини ўчиради — асл юклама, постер, тайёр
+// вариантлар, HLS ва (R2 ҳолатида) edge кэш.
+//
+// Иккита чақирувчи бор ва иккиси ҳам шу ягона йўлдан ўтади:
+//   `onTvClipDeleted`  — ҳужжат ўчирилганда (эга ўчирди, админ ўчирди)
+//   `expireTvContent`  — «Кун янгиликлари» 48 соатда тугаганда
+//
+// Реклама (`category == 'ad'`) муддати тугаганда файллари АТАЙИН
+// сақланади (кейинчалик қайта фаоллаштириш эҳтимоли) — бу қарор
+// `expireTvContent` ичида, шу функцияни чақирмаслик орқали амалга
+// ошади. Ҳужжатнинг ўзи ўчирилса эса реклама ҳам тўлиқ кетади.
+//
+// Профиль/like статистикаси `tv_public_profiles` да алоҳида туради ва
+// бу ердан йўқолмайди.
 // ─────────────────────────────────────────────────────────────────────
 async function deleteTvClipMedia(clipId, data) {
   try {

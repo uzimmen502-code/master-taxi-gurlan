@@ -12307,13 +12307,21 @@ const R2_BUCKET = 'ava-video';
 
 /**
  * R2'га ёзиладими? Иккита мустақил шарт, ИККИСИДАН БИРИ етарли:
- *   `settings/app.tvR2Output`       — умумий флаг (boolean)
- *   `settings/app.tvR2OutputOwners` — синов рўйхати (массив)
+ *   `settings/app.tvR2Output`      — умумий флаг (boolean)
+ *   `server_config/tv_r2.owners`   — синов рўйхати (телефонлар массиви)
  *
- * Рўйхат клип ЭГАСИНИНГ телефони бўйича: клип ҳужжатида `uid` йўқ,
- * эгани фақат `ownerPhone` аниқлайди. Рақамдан бошқа белгилар
- * ташланади, шунда `+998 94 113-33-55` ва `998941133355` бир хил
- * ҳисобланади.
+ * НИМА УЧУН РЎЙХАТ `settings/app` да ЭМАС: у ҳужжатни ҳар қандай
+ * клиент ўқий олади (`firestore.rules`: `match /settings/{docId}` →
+ * `allow read: if docId != 'courier' && docId != 'tv_social'`). Унга
+ * телефон рақамларини ёзиш уларни оммага очиб қўярди.
+ *
+ * `server_config/` эса қоидаларда УМУМАН эсланмаган — Firestore'да
+ * мос қоидаси йўқ йўл автоматик ёпиқ (catch-all `match /{document=**}`
+ * ҳам йўқ, текширилди). Admin SDK қоидалардан ўтади, клиент эса ўқий
+ * олмайди. Шунинг учун `firestore.rules` га ўзгартириш КЕРАК ЭМАС.
+ *
+ * Рўйхат клип ЭГАСИНИНГ телефони бўйича: клип ҳужжатида `uid` йўқ
+ * (қаранг: [r2OwnerAllowed]).
  *
  * Иккови ҳам бўш/false — default: ҳозирги Firebase йўли.
  * Ўқиш йиқилса ҳам false.
@@ -12323,12 +12331,18 @@ const R2_BUCKET = 'ava-video';
 async function tvR2OutputEnabled(ownerPhone) {
   try {
     const snap = await db.collection('settings').doc('app').get();
-    if (!snap.exists) return false;
-    const d = snap.data() || {};
-    if (d.tvR2Output === true) return true;
-    return r2OwnerAllowed(ownerPhone, d.tvR2OutputOwners);
+    if (snap.exists && (snap.data() || {}).tvR2Output === true) return true;
   } catch (e) {
-    console.error('tvR2OutputEnabled o\'qilmadi:', e.message || e);
+    console.error('tvR2Output o\'qilmadi:', e.message || e);
+    return false;
+  }
+  // Умумий флаг ўчиқ — энди синов рўйхати (алоҳида, ёпиқ ҳужжат).
+  try {
+    const snap = await db.collection('server_config').doc('tv_r2').get();
+    if (!snap.exists) return false;
+    return r2OwnerAllowed(ownerPhone, (snap.data() || {}).owners);
+  } catch (e) {
+    console.error('tv_r2 ro\'yxati o\'qilmadi:', e.message || e);
     return false;
   }
 }
@@ -12488,7 +12502,14 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
   try {
     const liveRun = cur.variantRun || '';
     const oldOutput = existingTvClipOutput(cur, bucket, bucketName);
-    if (oldOutput) await oldOutput.cleanupOldRuns(clipId, liveRun);
+    if (oldOutput) {
+      // Ўчирилган эски авлод edge кэшда қолиб кетмасин (R2'да ҳар
+      // объект бир йилга кэшланади). Жорий тирик run тегилмагани учун
+      // бу томошани узмайди — purge фақат аллақачон эскирган
+      // авлодларга тегади.
+      const gone = await oldOutput.cleanupOldRuns(clipId, liveRun);
+      if (gone.length > 0) await purgeCdnUrls(gone);
+    }
   } catch (e) {
     console.error('transcodeTvClipVideo cleanup skip:', clipId, e.message || e);
   }
@@ -12773,21 +12794,30 @@ const TV_CLIP_TRANSCODE_V2_OPTS = {
   // R2 калитлари — Secret Manager'да. Кодда ҳам, git'да ҳам ЙЎҚ.
   //   firebase functions:secrets:set R2_ACCESS_KEY_ID
   //   firebase functions:secrets:set R2_SECRET_ACCESS_KEY
-  // ДИҚҚАТ: иккала secret мавжуд бўлмаса deploy ЙИҚИЛАДИ — ҳатто
-  // флаг ўчиқ бўлса ҳам (боғлаш deploy вақтида текширилади).
-  secrets: ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'],
+  //   firebase functions:secrets:set CLOUDFLARE_API_TOKEN
+  // Purge токени бу ерда ҳам керак: қайта transcode эски авлодни
+  // ўчиради ва уни edge кэшдан ҳам чиқариши керак.
+  // ДИҚҚАТ: учаласи мавжуд бўлмаса deploy ЙИҚИЛАДИ — ҳатто флаг ўчиқ
+  // бўлса ҳам (боғлаш deploy вақтида текширилади).
+  secrets: [
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'CLOUDFLARE_API_TOKEN',
+  ],
 };
 
 // Клип ўчирилганда R2'дан ҳам ўчириш ва Cloudflare edge кэшини тозалаш
 // керак — шунинг учун ўчириш триггерларига ҳам ўша калитлар, устига
-// purge калитлари боғланади.
+// purge токени боғланади.
 //   firebase functions:secrets:set CLOUDFLARE_API_TOKEN
-//   firebase functions:secrets:set CLOUDFLARE_ZONE_ID
+//
+// Zone ID секрет ЭМАС — у `tv_clip_output.js` да оддий константа
+// (`CF_ZONE_ID`): панелда очиқ туради ва ўзи ҳеч нарсага рухсат
+// бермайди, рухсатни фақат токен беради.
 const TV_CLIP_DELETE_SECRETS = [
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
   'CLOUDFLARE_API_TOKEN',
-  'CLOUDFLARE_ZONE_ID',
 ];
 
 exports.onTvClipCreatedV2 = onDocumentCreated(

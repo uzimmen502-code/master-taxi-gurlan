@@ -245,11 +245,14 @@ async function testCleanup() {
     `processed/clipB/r0/720p.mp4`,
   ]});
   const r2 = new R2Output({client, bucket: 'ava-video', sdk: fakeSdk()});
-  await r2.cleanupOldRuns(CLIP, 'r1');
+  const gone = await r2.cleanupOldRuns(CLIP, 'r1');
   const del = client.sent.find((c) => c.type === 'delete');
   const keys = del ? del.input.Delete.Objects.map((o) => o.Key) : [];
   check('[r2] eski run o\'chirildi', keys.length === 2 &&
       keys.every((k) => k.startsWith(`processed/${CLIP}/r0/`)));
+  check('[r2] tozalash purge uchun URL qaytaradi',
+      gone.length === 2 &&
+      gone.every((u) => u.startsWith('https://video.ava-uz.com/processed/')));
   check('[r2] jonli run tegilmadi',
       !keys.includes(`processed/${CLIP}/r1/720p.mp4`));
   check('[r2] boshqa klipga tegilmadi',
@@ -345,17 +348,93 @@ async function testDeleteAllForClip() {
       urls.some((u) => u.endsWith('/720p.ts')));
 }
 
-// ── 9. CDN purge ────────────────────────────────────────────────────
+// ── 9. CDN purge: kalit, retry, to'liqlik ───────────────────────────
 async function testPurge() {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  const zone = process.env.CLOUDFLARE_ZONE_ID;
+  const saved = process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.CLOUDFLARE_API_TOKEN;
-  delete process.env.CLOUDFLARE_ZONE_ID;
-  const n = await purgeCdnUrls(['https://video.ava-uz.com/processed/a/r1/x.mp4']);
-  check('kalit yo\'q — purge o\'tkazib yuboriladi, yiqilmaydi', n === 0);
+  const one = ['https://video.ava-uz.com/processed/a/r1/x.mp4'];
+
+  check('token yo\'q — purge o\'tkazib yuboriladi, yiqilmaydi',
+      (await purgeCdnUrls(one)) === 0);
   check('bo\'sh ro\'yxat — 0', (await purgeCdnUrls([])) === 0);
-  if (token !== undefined) process.env.CLOUDFLARE_API_TOKEN = token;
-  if (zone !== undefined) process.env.CLOUDFLARE_ZONE_ID = zone;
+
+  // Soxta fetch: global'ni vaqtincha almashtiramiz.
+  const realFetch = global.fetch;
+  const noSleep = async () => {};
+  const mkFetch = (replies) => {
+    const calls = [];
+    global.fetch = async (url, init) => {
+      calls.push({url, body: JSON.parse(init.body)});
+      const r = replies[Math.min(calls.length - 1, replies.length - 1)];
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        text: async () => r.body || '',
+      };
+    };
+    return calls;
+  };
+
+  try {
+    // Muvaffaqiyat — bitta urinish.
+    let calls = mkFetch([{status: 200}]);
+    let n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('muvaffaqiyat: 1 ta so\'rov, 1 URL purge qilindi',
+        n === 1 && calls.length === 1);
+    check('so\'rov to\'g\'ri zone\'ga ketdi',
+        calls[0].url.includes('96ca162bdd9bda9caac303197163ef77') &&
+        calls[0].url.endsWith('/purge_cache'));
+    check('body\'da files ro\'yxati bor',
+        Array.isArray(calls[0].body.files) &&
+        calls[0].body.files[0] === one[0]);
+
+    // 500 -> 500 -> 200: qayta urinadi va oxirida muvaffaqiyat.
+    calls = mkFetch([{status: 500}, {status: 500}, {status: 200}]);
+    n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('5xx: qayta urinadi va muvaffaqiyatga erishadi',
+        n === 1 && calls.length === 3);
+
+    // 429 ham qayta uriniladi.
+    calls = mkFetch([{status: 429}, {status: 200}]);
+    n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('429: qayta uriniladi', n === 1 && calls.length === 2);
+
+    // 403 (token/huquq) — qayta urinilmaydi.
+    calls = mkFetch([{status: 403, body: 'forbidden'}]);
+    n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('403: qayta urinilmaydi (tuzatib bo\'lmaydigan xato)',
+        n === 0 && calls.length === 1);
+
+    // Tarmoq uzilishi — qayta uriniladi.
+    let net = 0;
+    global.fetch = async () => {
+      net++;
+      if (net < 3) throw new Error('ECONNRESET');
+      return {ok: true, status: 200, text: async () => ''};
+    };
+    n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('tarmoq xatosi: qayta uriniladi', n === 1 && net === 3);
+
+    // Hammasi yiqilsa — 0 qaytadi, LEKIN xato otilmaydi (o'chirish
+    // baribir bajarilgan bo'ladi).
+    calls = mkFetch([{status: 500}]);
+    n = await purgeCdnUrls(one, {token: 't', sleep: noSleep});
+    check('hammasi yiqildi: 0 qaytadi, xato otilmaydi',
+        n === 0 && calls.length === 3);
+
+    // 30 dan ko'p URL — bir nechta so'rovga bo'linadi.
+    const many = Array.from({length: 65}, (_, i) =>
+      `https://video.ava-uz.com/processed/a/r1/f${i}.ts`);
+    calls = mkFetch([{status: 200}]);
+    n = await purgeCdnUrls(many, {token: 't', sleep: noSleep});
+    check('65 URL -> 3 ta so\'rov (30+30+5), hammasi purge qilindi',
+        n === 65 && calls.length === 3 &&
+        calls[0].body.files.length === 30 &&
+        calls[2].body.files.length === 5);
+  } finally {
+    global.fetch = realFetch;
+    if (saved !== undefined) process.env.CLOUDFLARE_API_TOKEN = saved;
+  }
 }
 
 async function main() {

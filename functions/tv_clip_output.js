@@ -35,6 +35,17 @@ const R2_PREFIX = 'processed';
 /** Cloudflare `purge_cache` бир сўровда шунча URL қабул қилади. */
 const CF_PURGE_BATCH = 30;
 
+/**
+ * `ava-uz.com` зонасининг идентификатори. МАХФИЙ ЭМАС — у Cloudflare
+ * панелида очиқ туради ва ўзи ҳеч нарсага рухсат бермайди; рухсатни
+ * фақат `CLOUDFLARE_API_TOKEN` беради (у Secret Manager'да).
+ */
+const CF_ZONE_ID = '96ca162bdd9bda9caac303197163ef77';
+
+/** Purge уринишлари ва улар орасидаги кутиш (мс). */
+const CF_PURGE_ATTEMPTS = 3;
+const CF_PURGE_BACKOFF_MS = [500, 1500];
+
 const CONTENT_TYPES = {
   '.m3u8': 'application/vnd.apple.mpegurl',
   '.m4s': 'video/mp4',
@@ -119,40 +130,72 @@ function resolveClipBackend(data) {
  * @param {string[]} urls тўлиқ CDN URL'лари.
  * @return {Promise<number>} purge қилинган URL сони.
  */
-async function purgeCdnUrls(urls) {
+async function purgeCdnUrls(urls, opts) {
   const list = (urls || []).filter(Boolean);
   if (list.length === 0) return 0;
-  const token = process.env.CLOUDFLARE_API_TOKEN || '';
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID || '';
-  if (!token || !zoneId) {
+  const token = (opts && opts.token) || process.env.CLOUDFLARE_API_TOKEN || '';
+  const zoneId = (opts && opts.zoneId) || CF_ZONE_ID;
+  const sleep = (opts && opts.sleep) || ((ms) =>
+    new Promise((r) => setTimeout(r, ms)));
+  if (!token) {
     console.warn(
         `CDN purge o'tkazib yuborildi (${list.length} URL): ` +
-        'CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID yo\'q. ' +
-        'Obyektlar R2\'dan o\'chdi, lekin edge keshida qolishi mumkin.');
+        'CLOUDFLARE_API_TOKEN yo\'q. Obyektlar R2\'dan o\'chdi, lekin ' +
+        'edge keshida qolishi mumkin.');
     return 0;
   }
+
   let done = 0;
   for (let i = 0; i < list.length; i += CF_PURGE_BATCH) {
     const files = list.slice(i, i + CF_PURGE_BATCH);
-    try {
-      const res = await fetch(
-          `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({files}),
-          });
-      if (res.ok) {
-        done += files.length;
-      } else {
-        console.error('CDN purge javobi:', res.status, await res.text());
+    for (let attempt = 1; attempt <= CF_PURGE_ATTEMPTS; attempt++) {
+      let retryable = true;
+      try {
+        const res = await fetch(
+            `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({files}),
+            });
+        if (res.ok) {
+          done += files.length;
+          break;
+        }
+        // 4xx (429'дан бошқа) — токен/ҳуқуқ/сўров хатоси. Қайта уриниш
+        // уни тузатмайди, фақат вақт ейди.
+        retryable = res.status === 429 || res.status >= 500;
+        console.error(
+            `CDN purge javobi (${attempt}/${CF_PURGE_ATTEMPTS}):`,
+            res.status, (await res.text()).slice(0, 300));
+      } catch (e) {
+        // Тармоқ узилиши — қайта уриниб кўришга арзийди.
+        console.error(
+            `CDN purge xatosi (${attempt}/${CF_PURGE_ATTEMPTS}):`,
+            e.message || e);
       }
-    } catch (e) {
-      console.error('CDN purge xatosi:', e.message || e);
+      if (!retryable || attempt === CF_PURGE_ATTEMPTS) {
+        if (!retryable) {
+          console.error('CDN purge: qayta urinilmaydi (tuzatib bo\'lmaydigan ' +
+              'xato) — tokenni va uning Zone.Cache Purge huquqini tekshiring');
+        }
+        break;
+      }
+      await sleep(CF_PURGE_BACKOFF_MS[attempt - 1] ||
+          CF_PURGE_BACKOFF_MS[CF_PURGE_BACKOFF_MS.length - 1]);
     }
+  }
+
+  if (done < list.length) {
+    // Ўчириш бажарилган, лекин кэшда қолгани бор — бу жимгина ўтмаслиги
+    // керак: ўчирилган клип CDN'да очиқ қолиши мумкин.
+    console.error(
+        `CDN purge TO'LIQ EMAS: ${done}/${list.length} URL. Qolganlari ` +
+        'edge keshida qolishi mumkin — Cloudflare panelidan qo\'lda ' +
+        'purge qiling.');
   }
   return done;
 }
@@ -208,10 +251,11 @@ class FirebaseStorageOutput {
    * [keepRun]дан бошқа авлодларни ўчиради. Best-effort.
    * @param {string} clipId клип id.
    * @param {string} keepRun сақланадиган run.
-   * @return {Promise<void>}
+   * @return {Promise<string[]>} purge керак URL'лар — Firebase учун
+   *   доим бўш (объектлар CDN'да эмас).
    */
   async cleanupOldRuns(clipId, keepRun) {
-    if (!keepRun) return;
+    if (!keepRun) return [];
     for (const root of ['tv_clip_variants', 'tv_clip_hls']) {
       try {
         const [files] =
@@ -232,6 +276,7 @@ class FirebaseStorageOutput {
         console.error(`cleanupOldRuns ${root} ${clipId}:`, e.message || e);
       }
     }
+    return [];
   }
 
   /**
@@ -328,8 +373,10 @@ class R2Output {
         console.log(
             `tv clip ${clipId}: R2 — ${stale.length} ta eski fayl tozalandi`);
       }
+      return stale.map((k) => `${this.publicBase}/${k}`);
     } catch (e) {
       console.error(`cleanupOldRuns r2 ${clipId}:`, e.message || e);
+      return [];
     }
   }
 

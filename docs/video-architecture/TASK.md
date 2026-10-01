@@ -226,10 +226,17 @@ stack.
   URLs. Implemented as a `StorageOutput` abstraction (`functions/tv_clip_output.js`)
   with two backends: `FirebaseStorageOutput` (current) and `R2Output` (S3 API).
 - **Flag:** R2 is used when **either** holds — `settings/app.tvR2Output` (boolean,
-  default `false`) **or** the clip owner is listed in `settings/app.tvR2OutputOwners`
+  default `false`) **or** the clip owner is listed in `server_config/tv_r2.owners`
   (array). The allowlist matches on `ownerPhone` (clip docs carry no uid) and
   compares digits only, so `+998 94 113-33-55` and `998941133355` are the same
   person. Both empty/false by default; a failed read resolves to `false`.
+- **Why the allowlist is not in `settings/app`:** that document is world-readable
+  (`firestore.rules:1389` — `allow read: if docId != 'courier' && docId !=
+  'tv_social'`), so a list of phone numbers there would be public. `server_config/`
+  is not matched by any rule, and there is no catch-all `match /{document=**}`, so
+  Firestore denies it by default — Admin SDK still reads it. **This needs no
+  `firestore.rules` change**, which matters: rules currently carry the undeployed
+  `districtId` rule (see `docs/vazifalar.md`, В-8), so a rules deploy is not free.
 - **Where the files are** is recorded on the clip as `variantBackend`
   (`'r2'|'firebase'`). Cleanup and deletion follow *that*, not the current flag —
   otherwise flipping the flag off would orphan every R2 clip.
@@ -237,21 +244,25 @@ stack.
   clip becomes `processingStatus: 'error'`. Silently falling back to Firebase would
   leave clips half in R2 and half in Storage — unfixable later. Same if the flag is
   on but the secrets are missing.
-- **Secrets** (Google Secret Manager; never in code or git):
-  `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` on the transcode trigger
-  (`TV_CLIP_TRANSCODE_V2_OPTS.secrets`); those two plus `CLOUDFLARE_API_TOKEN` and
-  `CLOUDFLARE_ZONE_ID` on the delete paths (`onTvClipDeleted`, `expireTvContent`).
-  ⚠️ Deploy fails until **all four** exist — even with the flag off.
+- **Secrets** (Google Secret Manager; never in code or git) — **three**, bound to all
+  five affected functions: `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+  `CLOUDFLARE_API_TOKEN`. The Cloudflare **zone id is not a secret** and lives as a
+  plain constant (`CF_ZONE_ID` in `tv_clip_output.js`) — it is public in the
+  dashboard and grants nothing by itself; only the token does.
+  ⚠️ Deploy fails until all three exist — even with the flag off.
 - **Deleting a clip must also remove it from the CDN.** Objects are served
   `immutable, max-age=31536000`, so deleting from R2 is *not* enough — Cloudflare's
   edge would keep serving a deleted clip for up to a year. On delete the pipeline
   now: resolves the backend → deletes the Firebase prefixes (always, for legacy and
   mixed clips) → lists and deletes `processed/{clipId}/` in R2 → purges those exact
-  URLs via the Cloudflare API. Purge needs `CLOUDFLARE_API_TOKEN` and
-  `CLOUDFLARE_ZONE_ID`; without them the delete still happens and a warning is
-  logged (the clip can linger in edge cache). Purge-by-URL is used, not
-  purge-by-prefix, which is Enterprise-only — the exact key list comes from the R2
-  listing, so it is complete.
+  URLs via the Cloudflare API. Re-transcode does the same for the superseded run
+  (the live run is untouched, so playback is never interrupted).
+- **Purge is retried and never blocks deletion.** Up to 3 attempts per 30-URL batch
+  with backoff; 429 and 5xx are retried, other 4xx are not (a bad token will not fix
+  itself). Deletion is already done by then, so a failed purge only logs — loudly,
+  including a `purge TO'LIQ EMAS: n/m` line, because the consequence is a deleted
+  clip still reachable on the CDN. Purge-by-URL is used, not purge-by-prefix
+  (Enterprise-only); the exact key list comes from the R2 listing, so it is complete.
 - **Cloudflare (one-time, owner/DevOps):** `video.ava-uz.com` → Cloudflare →
   **single R2 origin** (no Storage fallback origin — mixing origins breaks the
   immutable-cache guarantee and complicates invalidation). Cache Rule must include
@@ -434,10 +445,102 @@ Simplest alternative: **do not merge `feat/clip-run-id` at all.** Once
 above, which can be cherry-picked on its own.
 
 **Verification after any such merge:** `npm run test:tv-clip-runs` and
-`npm run test:tv-clip-output` must both pass (25 + 57 assertions). They cover exactly
+`npm run test:tv-clip-output` must both pass (25 + 67 assertions). They cover exactly
 the invariants a bad resolution breaks: old unversioned clips must survive cleanup,
 the flag-off path must produce byte-identical Firebase paths and URLs, and deletion
 must reach whichever backend the clip actually lives on.
+
+---
+
+## 11. Deploy
+
+### 11.1 What is actually running in production
+
+Verified by downloading the deployed source, not by inference:
+
+```
+gcloud functions describe onTvClipCreatedV2 --gen2 --region=us-central1 \
+  --format="value(buildConfig.source.storageSource.bucket,...object,...generation)"
+gsutil cp gs://<bucket>/onTvClipCreatedV2/function-source.zip#<generation> .
+```
+
+Deployed `updateTime`: **2026-09-26T15:41:43Z**. Diffed against
+`feat/home-redesign:functions/index.js`: **6 insertions / 92 deletions**, and *none*
+of it touches the TV pipeline (checked for `tv_clip`, `TV_CLIP`, `transcodeTvClip`,
+`packageTvClipHls`, `fastTrack360`, `variantRun`, `variantLadder`, `onTvClip`,
+`renderShareCopy` — zero hits).
+
+**So production's TV pipeline is already identical to `feat/home-redesign` HEAD.**
+
+What production is **missing** (committed after that deploy, or in the same commit
+but written the next day):
+
+| Undeployed | From |
+|---|---|
+| Realty cluster (`attachRealty`, `realty.js`) | `7e43f82` … `76f52ba` (2026-09-28/29) |
+| Market ad re-post fix (`marketPendingExpiresAt`, `autoExpired` notification) | `19f7d1f` |
+| `marketAdGeoStamp` — ad region from the product, not the seller | `19f7d1f` |
+
+`19f7d1f` was committed 2026-09-27 15:20 — *after* the deploy. The deploy was made
+from the working tree on 2026-09-26, which already had the ladder/runId work but not
+yet that commit's market-ad half. This is why production has `variantLadder: 3` while
+lacking `marketAdGeoStamp` from the same commit.
+
+> Also noted: the branch's `functions/index.js` has a UTF-8 **BOM** that the deployed
+> copy does not. Harmless for Node, but it means the file was rewritten by a tool
+> that adds one. Avoid `Set-Content`/`Out-File` on this file.
+
+### 11.2 Deploy narrowly — a broad deploy is not safe
+
+`firebase deploy --only functions` would also ship the three undeployed items above.
+The `marketAdGeoStamp` one is the В-8 trap: the code expects a `districtId` rule that
+is **not deployed** in `firestore.rules`. So the deploy must name functions explicitly.
+
+```
+firebase deploy --only functions:onTvClipCreatedV2,functions:onTvClipVideoReplacedV2,functions:onTvClipBackfillRequested,functions:onTvClipDeleted,functions:expireTvContent
+```
+
+Why exactly these five, and nothing else — the changed code is reachable only from
+them:
+
+| Function | Why |
+|---|---|
+| `onTvClipCreatedV2` | calls `transcodeTvClipVideo` (new output, flag, cleanup); new `secrets` |
+| `onTvClipVideoReplacedV2` | same code path and same options object |
+| `onTvClipBackfillRequested` | same code path and same options object |
+| `onTvClipDeleted` | now calls `purgeTvClipOutputs` (R2 delete + CDN purge); new `secrets` |
+| `expireTvContent` | calls `deleteTvClipMedia` → `purgeTvClipOutputs`; new `secrets` |
+
+`transcodeEntertainmentVideo`, `hlsSpikeTranscode`, `deleteHlsSpike` and `clipPage`
+are untouched. The only edit near `transcodeEntertainmentVideo` was deleting a
+now-unused `TV_CLIP_CACHE_CONTROL` constant it never referenced.
+
+Verified before deploy: `index.js` loads (242 exports) and all five functions carry
+exactly the three secrets — `CLOUDFLARE_ZONE_ID` is deliberately absent, since it was
+never created in Secret Manager and would otherwise fail the deploy.
+
+**No `firestore.rules` deploy is needed** for this change (see §5.1) — and per the
+В-8 incident, rules always get their own command anyway.
+
+### 11.3 Verification sequence
+
+1. **Flag off** — publish a clip. Expect `chiqish backend = firebase` in the logs,
+   `tv_clip_variants/{clipId}/{runId}/…` URLs, `variantBackend: 'firebase'`, playback
+   normal, old clips unaffected.
+2. **Flag on for one phone** — set `server_config/tv_r2` → `owners: ["99894…"]`
+   (Firebase Console; the doc is server-only by design). Publish from that phone.
+   Expect `chiqish backend = r2`, `hlsUrl` on `https://video.ava-uz.com/processed/…`,
+   `variantBackend: 'r2'`. A clip from any other phone must still go to Firebase.
+3. **Cache** — `curl.exe -sSI` the master playlist twice: `cf-cache-status` `MISS`
+   then `HIT`; `content-type` correct per extension; `cache-control` immutable.
+   Repeat for the `.ts` segment (largest object, and the reason `.ts` is in the Cache
+   Rule).
+4. **Delete** — delete the test clip. Expect in the logs
+   `R2 n obyekt o'chdi, n URL edge keshdan chiqarildi`, then `curl.exe -sSI` the same
+   URLs → **404**. A 200 here means purge did not take effect; check the token's
+   Zone.Cache Purge permission.
+5. **Re-transcode** (optional) — set `backfillVariantsAt` on an R2 clip. The live run
+   must keep playing throughout; the superseded run is deleted and purged afterwards.
 
 ---
 

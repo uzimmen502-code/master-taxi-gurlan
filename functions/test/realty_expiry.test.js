@@ -198,6 +198,24 @@ async function expectError(promise, code, reason) {
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Очиқ ҳужжатдаги нуқта «силкитилган»ми: 3 хонага яхлитланган ва
+ * аниқ нуқтадан ≈1.2 км радиусда.
+ *
+ * НЕГА «тенг эмас» деб текширилмайди: силкитиш тасодифий, шунинг учун
+ * яхлитлангандан кейин аниқ нуқтанинг ўзига тушиши ҲАМ мумкин — ундай
+ * текширув вақти-вақти билан йиқиладиган тест бўлар эди. Муҳими —
+ * қиймат тўрга тушган ва радиусдан чиқмаган.
+ */
+function assertJittered(areaLat, areaLng, lat, lng) {
+  assert.strictEqual(areaLat, Number(areaLat.toFixed(3)), '3 хонага яхлитланган');
+  assert.strictEqual(areaLng, Number(areaLng.toFixed(3)), '3 хонага яхлитланган');
+  const dLat = (areaLat - lat) * 111320;
+  const dLng = (areaLng - lng) * 111320 * Math.cos((lat * Math.PI) / 180);
+  const meters = Math.sqrt(dLat * dLat + dLng * dLng);
+  assert.ok(meters <= 1400, `силкитиш радиуси: ${Math.round(meters)} м`);
+}
+
 /** Тўғридан-тўғри базага эълон ёзади (CF орқали эмас — тез бўлсин). */
 function seedListing(db, id, data) {
   db._store.set(`realty_listings/${id}`, {
@@ -240,8 +258,10 @@ async function main() {
     assert.strictEqual(pub.hasAgent, true, 'hasAgent танловдан олинади');
     assert.ok(!('agentPhone' in priv), 'рақам ёпиқ ҳужжатга ҳам ёзилмайди');
     assert.strictEqual(priv.ownerPhone, OWNER);
-    // Очиқ ҳужжатда аниқ координата турмайди (силкитилган нуқта).
-    assert.notStrictEqual(pub.areaLat, 41.5);
+    // Аниқ координата ФАҚАТ ёпиқ ҳужжатда; очиғида — силкитилган нуқта.
+    assert.strictEqual(priv.lat, 41.5);
+    assert.strictEqual(priv.lng, 60.6);
+    assertJittered(pub.areaLat, pub.areaLng, 41.5, 60.6);
     console.log('✓ 1) AVA риэлтор рақами ёзувга нусхаланмайди');
   }
 
@@ -484,6 +504,78 @@ async function main() {
     assert.strictEqual(again.alreadyUnlocked, true);
     assert.strictEqual(again.unlocksLeft, 1);
     console.log('✓ 6) Блокланган/тугаган/ўз эълонида пуллик ўрин сарфланмайди');
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // 7) Таҳрирлаш: умумий валидация, бўш майдонни ўчириш ва
+  //    силкитилган нуқтанинг сақланиши
+  // ─────────────────────────────────────────────────────────────────
+  {
+    const db = makeDb();
+    const h = {};
+    db._store.set(`users/${OWNER}`, { phone: OWNER, realtyOwnerKey: 'KEY' });
+    seedListing(db, 'E1', {
+      title: 'Эски сарлавҳа',
+      text: 'Эски матн',
+      rooms: 3,
+      areaLat: 41.511,
+      areaLng: 60.611,
+      // Эски ёзувда қолган, ҳеч ким ўқимайдиган майдонлар.
+      searchTokens: ['eski', 'matn'],
+      views: 0,
+    });
+    attachRealty(h, {
+      functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp,
+    });
+
+    const base = {
+      listingId: 'E1', deal: 'rent', title: 'Янги сарлавҳа',
+      text: 'Янги тавсиф матни', lat: 41.5, lng: 60.6,
+      addressText: 'Гурлан, Навоий 12', priceText: '45 000 $',
+      contactMode: 'owner',
+    };
+
+    // Умумий валидация иккала чақирувда бир хил ишлайди.
+    await expectError(
+      h.updateRealtyListing({ ...base, addressText: 'ўй' }, ctx(OWNER)),
+      'invalid-argument', 'address_required',
+    );
+    await expectError(
+      h.updateRealtyListing({ ...base, title: 'ав' }, ctx(OWNER)),
+      'invalid-argument', 'title_required',
+    );
+
+    const res = await h.updateRealtyListing(base, ctx(OWNER));
+    assert.strictEqual(res.status, 'active');
+
+    const doc = db._store.get('realty_listings/E1');
+    assert.strictEqual(doc.title, 'Янги сарлавҳа');
+    assert.strictEqual(doc.deal, 'rent');
+    assert.strictEqual(doc.priceText, '45 000 $');
+    assert.ok(!('rooms' in doc), 'бўш қолдирилган майдон ўчирилади');
+    assert.ok(!('searchTokens' in doc), 'эски searchTokens тозаланади');
+    assert.ok(!('views' in doc), 'эски views тозаланади');
+    // Нуқта ўзгармаган — ЭСКИ силкитиш сақланади, акс ҳолда бир неча
+    // таҳрирнинг ўртачаси аниқ жойни очиб қўярди.
+    assert.strictEqual(doc.areaLat, 41.511);
+    assert.strictEqual(doc.areaLng, 60.611);
+
+    const priv = db._store.get('realty_listings/E1/private/detail');
+    assert.strictEqual(priv.lat, 41.5);
+    assert.ok(!('agentPhone' in priv));
+
+    // Нуқта ўзгарса — янги силкитиш (аниқ координатага тенг эмас).
+    await h.updateRealtyListing(
+      { ...base, lat: 41.7, lng: 60.9 }, ctx(OWNER),
+    );
+    const moved = db._store.get('realty_listings/E1');
+    assertJittered(moved.areaLat, moved.areaLng, 41.7, 60.9);
+    assert.ok(
+      Math.abs(moved.areaLat - 41.511) > 0.05,
+      'нуқта кўчса очиқ ҳужжатдаги тахминий нуқта ҳам кўчади',
+    );
+    console.log('✓ 7) Таҳрирлаш: валидация, майдон ўчириш, силкитиш сақланади');
   }
 
   console.log('\nҲаммаси ўтди: realty_expiry.test.js');

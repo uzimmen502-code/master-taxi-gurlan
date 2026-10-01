@@ -87,16 +87,32 @@ function attachRealty(exports, deps) {
     return uid;
   }
 
-  /** `settings/app` дан битта майдон — ҳужжат бўлмаса `fallback`. */
-  async function appSetting(field, fallback) {
+  /**
+   * `settings/app` — БИТТА ЧАҚИРУВДА БИР МАРТА ўқилади.
+   *
+   * Аввал ҳар бир созлама ўз сўровини юборар эди: `getRealtyPricing`
+   * иккита даража × учта муддат учун ҳужжатни 6 МАРТА ўқир,
+   * `getRealtyPackagePricing` 2 марта ўқир эди. Энди чақирувчи
+   * маълумотни бир марта олиб, ҳелперларга узатади.
+   *
+   * ⚠️ Натижа модул даражасида КЕШЛАНМАЙДИ: Cloud Functions
+   * нусхалари қайта ишлатилади, шунинг учун кеш админ панелдан
+   * ўзгартирилган нархни эскисига қотириб қўйган бўларди.
+   */
+  async function appDoc() {
     try {
       const snap = await db.collection('settings').doc('app').get();
-      const v = (snap.data() || {})[field];
-      return v === undefined || v === null ? fallback : v;
+      return snap.data() || {};
     } catch (e) {
-      console.error('realty.appSetting', field, e.message || e);
-      return fallback;
+      console.error('realty.appDoc', e.message || e);
+      return {};
     }
+  }
+
+  /** `settings/app` дан битта майдон — бўлмаса `fallback`. */
+  function appSetting(app, field, fallback) {
+    const v = (app || {})[field];
+    return v === undefined || v === null ? fallback : v;
   }
 
   /**
@@ -125,16 +141,6 @@ function attachRealty(exports, deps) {
     return { lat: round3(lat + dLat), lng: round3(lng + dLng) };
   }
 
-  /** Қидирув учун оддий токенлар — `ad_search_text.dart` билан бир хил ғоя. */
-  function buildSearchTokens(title, text) {
-    const words = `${title} ${text}`
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .split(' ')
-      .filter((w) => w.length >= 3);
-    return [...new Set(words)].slice(0, 40);
-  }
-
   function optionalInt(v, min, max) {
     if (v === undefined || v === null || v === '') return null;
     const n = Math.round(Number(v));
@@ -160,12 +166,23 @@ function attachRealty(exports, deps) {
    *
    * Калит бир марта яратилади ва `users/{uid}.realtyOwnerKey` да
    * сақланади — эга ўз объектларини шу калит бўйича топади.
+   *
+   * [user] — аллақачон ўқилган `users/{uid}` маълумоти. Берилса
+   * ҳужжат ҚАЙТА ўқилмайди: битта чақирувда калит, профессионал пакет
+   * ва эга исми — учаласи ҳам шу бир ҳужжатда.
    */
-  async function ensureOwnerKey(uid) {
+  async function ensureOwnerKey(uid, user) {
+    const known = user
+      ? String(user.realtyOwnerKey || '').trim()
+      : '';
+    if (known) return known;
+
     const userRef = db.collection('users').doc(uid);
-    const snap = await userRef.get();
-    const existing = String((snap.data() || {}).realtyOwnerKey || '').trim();
-    if (existing) return existing;
+    if (!user) {
+      const snap = await userRef.get();
+      const existing = String((snap.data() || {}).realtyOwnerKey || '').trim();
+      if (existing) return existing;
+    }
     const key = crypto.randomBytes(12).toString('hex');
     await userRef.set({ realtyOwnerKey: key }, { merge: true });
     return key;
@@ -227,19 +244,16 @@ function attachRealty(exports, deps) {
     return count;
   }
 
-  /** Mijoz: янги объект (координата МАЖБУРИЙ). */
-  exports.submitRealtyListing = functions.https.onCall(async (data, context) => {
-    const uid = requireUid(context);
-    const d = data || {};
-
-    const tier = String(d.tier || 'plain');
-    if (!PURCHASABLE_TIERS.includes(tier)) {
-      // РЕКЛАМА/СРОЧНО — 2-босқич (ҳамёндан тўлов билан).
-      throw fail('failed-precondition', 'tier_not_available');
-    }
-
-    const deal = d.deal === 'rent' ? 'rent' : 'sale';
-
+  /**
+   * Эълон майдонларини текшириб, тозалаб қайтаради.
+   *
+   * ЯРАТИШ ва ТАҲРИРЛАШ учун битта жой: аввал бу текширувлар иккита
+   * чақирувда сўзма-сўз такрорланар эди, яъни чегарани (масалан матн
+   * узунлигини) биттасида ўзгартириб, иккинчисини эсдан чиқариш
+   * мумкин эди. Фарқ қиладиган нарсалар — даража, статус, муддат ва
+   * нуқта силкитиши — чақирувчиларнинг ўзида қолади.
+   */
+  function parseListingInput(d) {
     const title = String(d.title || '').trim().slice(0, 120);
     if (title.length < 3) throw fail('invalid-argument', 'title_required');
     const text = String(d.text || '').trim().slice(0, 2000);
@@ -257,13 +271,77 @@ function attachRealty(exports, deps) {
     // ─── Матнли манзил — мажбурий (эга қарори, 2026-09-29) ───
     // Харитадаги нуқта очиқ ҳужжатда ТАХМИНИЙ (≈1.2 км силкитилган),
     // шунинг учун у матнли манзилнинг ўрнини боса олмайди: харидор
-    // пакетни очгач кўча ва уй рақамини кўриши керак.
-    if (String(d.addressText || '').trim().length < 5) {
+    // пакетни очгач кўча ва уй рақамини кўриши керак. Таҳрирда ҳам
+    // талаб қилинади — акс ҳолда эга эълонни жойлагач манзилни
+    // ўчириб, текин «тизер» қилиб қўя оларди.
+    const addressText = String(d.addressText || '').trim();
+    if (addressText.length < 5) {
       throw fail('invalid-argument', 'address_required');
     }
 
-    const ownerKey = await ensureOwnerKey(uid);
-    const pro = await activeProPlan(uid);
+    return {
+      deal: d.deal === 'rent' ? 'rent' : 'sale',
+      title,
+      text,
+      lat,
+      lng,
+      addressText: addressText.slice(0, 300),
+      priceText: String(d.priceText || '').trim().slice(0, 80),
+      // AVA риэлторлик хизматининг рақами ЁЗУВГА КЎЧИРИЛМАЙДИ (эга
+      // қарори, 2026-10-02). Аввал у ҳар бир эълоннинг ёпиқ ҳужжатига
+      // нусхаланар эди: `settings/app.realtyAgentPhone` ўзгарса, эски
+      // эълонлар эски — балки аллақачон ишламайдиган — рақам билан
+      // қолиб кетарди. Энди ёзувда фақат ТАНЛОВ сақланади, рақамнинг
+      // ўзи кўрсатиш пайтида созламадан ўқилади.
+      contactMode: d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner',
+      imageUrls: Array.isArray(d.imageUrls)
+        ? d.imageUrls
+          .filter((u) => typeof u === 'string' && u.startsWith('http'))
+          .slice(0, 5)
+        : [],
+      rooms: optionalInt(d.rooms, 1, 99),
+      floor: optionalInt(d.floor, -5, 200),
+      totalFloors: optionalInt(d.totalFloors, 1, 200),
+      areaM2: optionalNum(d.areaM2, 1, 100000),
+    };
+  }
+
+  /**
+   * ЁПИҚ `private/detail` ҳужжати — аниқ нуқта ва эганинг рақами.
+   *
+   * Яратиш ва таҳрирлашда бир хил бўлиши шарт: бу ҳужжат пейволлнинг
+   * ўзи, шунинг учун иккита жойда алоҳида йиғилса, биттасида майдон
+   * қолиб кетиши хавфи бор.
+   */
+  function detailDoc(uid, lat, lng) {
+    return {
+      ownerId: uid,
+      lat,
+      lng,
+      ownerPhone: uid,
+      updatedAt: ts(),
+    };
+  }
+
+  /** Mijoz: янги объект (координата МАЖБУРИЙ). */
+  exports.submitRealtyListing = functions.https.onCall(async (data, context) => {
+    const uid = requireUid(context);
+    const d = data || {};
+
+    const tier = String(d.tier || 'plain');
+    if (!PURCHASABLE_TIERS.includes(tier)) {
+      // РЕКЛАМА/СРОЧНО — 2-босқич (ҳамёндан тўлов билан).
+      throw fail('failed-precondition', 'tier_not_available');
+    }
+
+    const f = parseListingInput(d);
+
+    // `users/{uid}` БИР МАРТА ўқилади: калит, профессионал пакет ва
+    // эга исми — учаласи шу ҳужжатда. Аввал ҳар бири ўз сўровини
+    // юборар эди.
+    const user = (await db.collection('users').doc(uid).get()).data() || {};
+    const ownerKey = await ensureOwnerKey(uid, user);
+    const pro = activeProPlan(user);
     // Саноқ даражадан қатъи назар — кўтарилган эълон ҳам ўринни
     // эгаллайди (қаранг: `countActiveListings`).
     const used = await countActiveListings(ownerKey);
@@ -276,43 +354,18 @@ function attachRealty(exports, deps) {
       });
     }
 
-    // AVA риэлторлик хизматининг рақами ЁЗУВГА КЎЧИРИЛМАЙДИ (эга
-    // қарори, 2026-10-02). Аввал у ҳар бир эълоннинг ёпиқ ҳужжатига
-    // нусхаланар эди: `settings/app.realtyAgentPhone` ўзгарса, эски
-    // эълонлар эски — балки аллақачон ишламайдиган — рақам билан
-    // қолиб кетарди. Энди ёзувда фақат ТАНЛОВ сақланади
-    // (`contactMode`), рақамнинг ўзи кўрсатиш пайтида созламадан
-    // ўқилади. Шу сабабли бу ерда созламага сўров ҳам кетмайди.
-    const contactMode = d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner';
+    const ownerName = (String(d.ownerName || '').trim()
+      || String(user.name || '').trim()).slice(0, 80);
 
-    const imageUrls = Array.isArray(d.imageUrls)
-      ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
-        .slice(0, 5)
-      : [];
-
-    let ownerName = String(d.ownerName || '').trim().slice(0, 80);
-    if (!ownerName) {
-      try {
-        const u = await db.collection('users').doc(uid).get();
-        ownerName = String((u.data() || {}).name || '').trim().slice(0, 80);
-      } catch (e) {
-        console.error('realty.ownerName', e.message || e);
-      }
-    }
-
-    const autoApprove = (await appSetting('realtyAutoApprove', true)) !== false;
+    const autoApprove =
+      appSetting(await appDoc(), 'realtyAutoApprove', true) !== false;
     const geo = await ownerGeoStamp(uid);
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(Date.now() + PLAIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
     );
 
-    const rooms = optionalInt(d.rooms, 1, 99);
-    const floor = optionalInt(d.floor, -5, 200);
-    const totalFloors = optionalInt(d.totalFloors, 1, 200);
-    const areaM2 = optionalNum(d.areaM2, 1, 100000);
-
     // Аниқ нуқта ўрнига силкитилган нуқта — бу ОЧИҚ ҳужжатга тушади.
-    const cell = jitteredPoint(lat, lng);
+    const cell = jitteredPoint(f.lat, f.lng);
 
     const ref = db.collection('realty_listings').doc();
     const batch = db.batch();
@@ -321,28 +374,32 @@ function attachRealty(exports, deps) {
     batch.set(ref, {
       ownerKey,
       ownerName: ownerName || 'Фойдаланувчи',
-      deal,
+      deal: f.deal,
       tier,
-      title,
-      text,
-      priceText: String(d.priceText || '').trim().slice(0, 80),
-      addressText: String(d.addressText || '').trim().slice(0, 300),
-      ...(rooms === null ? {} : { rooms }),
-      ...(floor === null ? {} : { floor }),
-      ...(totalFloors === null ? {} : { totalFloors }),
-      ...(areaM2 === null ? {} : { areaM2 }),
-      imageUrls,
+      title: f.title,
+      text: f.text,
+      priceText: f.priceText,
+      addressText: f.addressText,
+      ...(f.rooms === null ? {} : { rooms: f.rooms }),
+      ...(f.floor === null ? {} : { floor: f.floor }),
+      ...(f.totalFloors === null ? {} : { totalFloors: f.totalFloors }),
+      ...(f.areaM2 === null ? {} : { areaM2: f.areaM2 }),
+      imageUrls: f.imageUrls,
       areaLat: cell.lat,
       areaLng: cell.lng,
-      geohash4: geohashEncode(lat, lng, 4),
-      contactMode,
-      hasAgent: contactMode === 'ava_agent',
+      geohash4: geohashEncode(f.lat, f.lng, 4),
+      contactMode: f.contactMode,
+      hasAgent: f.contactMode === 'ava_agent',
       avagramClipId: '',
       adClipId: '',
       status: autoApprove ? 'active' : 'pending',
       ...geo,
-      views: 0,
-      searchTokens: buildSearchTokens(title, text),
+      // `views` ва `searchTokens` ЁЗИЛМАЙДИ (2026-10-02): биринчисини
+      // ҳеч ким оширмас ва кўрсатмас эди, иккинчисини эса биронта
+      // сўров ишлатмайди — лентадаги ва харитадаги қидирув юкланган
+      // эълонлар ичидан клиентда филтрлайди, глобал қидирув эса
+      // алоҳида `search_index` коллекциясида. 40 тагача токен ҳар бир
+      // лента ўқишида беҳуда узатилар эди.
       tierUntil: null,
       expiresAt,
       createdAt: ts(),
@@ -353,13 +410,10 @@ function attachRealty(exports, deps) {
     });
 
     // ─── ЁПИҚ ҳужжат: айнан шу иккови пуллик ахборот ───
-    batch.set(ref.collection('private').doc('detail'), {
-      ownerId: uid,
-      lat,
-      lng,
-      ownerPhone: uid,
-      updatedAt: ts(),
-    });
+    batch.set(
+      ref.collection('private').doc('detail'),
+      detailDoc(uid, f.lat, f.lng),
+    );
 
     await batch.commit();
 
@@ -394,42 +448,12 @@ function attachRealty(exports, deps) {
     const current = snap.data() || {};
     await assertOwner(listingId, uid);
 
-    const title = String(d.title || '').trim().slice(0, 120);
-    if (title.length < 3) throw fail('invalid-argument', 'title_required');
-    const text = String(d.text || '').trim().slice(0, 2000);
-    if (text.length < 3) throw fail('invalid-argument', 'text_required');
-
-    const lat = Number(d.lat);
-    const lng = Number(d.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)
-        || lat < -90 || lat > 90 || lng < -180 || lng > 180
-        || (lat === 0 && lng === 0)) {
-      throw fail('invalid-argument', 'location_required');
-    }
-
-    // Таҳрирда ҳам манзил мажбурий — акс ҳолда эга эълонни жойлагач
-    // манзилни ўчириб, текин «тизер» қилиб қўя оларди.
-    if (String(d.addressText || '').trim().length < 5) {
-      throw fail('invalid-argument', 'address_required');
-    }
-
-    // Рақам эмас, танловнинг ўзи сақланади (қаранг:
-    // `submitRealtyListing` даги изоҳ).
-    const contactMode = d.contactMode === 'ava_agent' ? 'ava_agent' : 'owner';
-
-    const imageUrls = Array.isArray(d.imageUrls)
-      ? d.imageUrls.filter((u) => typeof u === 'string' && u.startsWith('http'))
-        .slice(0, 5)
-      : [];
-
-    const rooms = optionalInt(d.rooms, 1, 99);
-    const floor = optionalInt(d.floor, -5, 200);
-    const totalFloors = optionalInt(d.totalFloors, 1, 200);
-    const areaM2 = optionalNum(d.areaM2, 1, 100000);
+    const f = parseListingInput(d);
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
     // акс ҳолда тасдиқдан ўтган матнни кейин алмаштириб юбориш мумкин эди.
-    const autoApprove = (await appSetting('realtyAutoApprove', true)) !== false;
+    const autoApprove =
+      appSetting(await appDoc(), 'realtyAutoApprove', true) !== false;
     const nextStatus = current.status === 'blocked'
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');
@@ -439,35 +463,38 @@ function attachRealty(exports, deps) {
     // қўйган бўларди.
     const prevDetail = await ref.collection('private').doc('detail').get();
     const prev = prevDetail.data() || {};
-    const samePoint = Number(prev.lat) === lat && Number(prev.lng) === lng;
+    const samePoint = Number(prev.lat) === f.lat && Number(prev.lng) === f.lng;
     const cell = (samePoint
         && Number.isFinite(Number(current.areaLat))
         && Number.isFinite(Number(current.areaLng)))
       ? { lat: Number(current.areaLat), lng: Number(current.areaLng) }
-      : jitteredPoint(lat, lng);
+      : jitteredPoint(f.lat, f.lng);
 
+    const del = admin.firestore.FieldValue.delete();
     await ref.update({
-      deal: d.deal === 'rent' ? 'rent' : 'sale',
-      title,
-      text,
-      priceText: String(d.priceText || '').trim().slice(0, 80),
-      addressText: String(d.addressText || '').trim().slice(0, 300),
-      rooms: rooms === null
-        ? admin.firestore.FieldValue.delete() : rooms,
-      floor: floor === null
-        ? admin.firestore.FieldValue.delete() : floor,
-      totalFloors: totalFloors === null
-        ? admin.firestore.FieldValue.delete() : totalFloors,
-      areaM2: areaM2 === null
-        ? admin.firestore.FieldValue.delete() : areaM2,
-      imageUrls,
-      // Очиқ ҳужжатда фақат тахминий марказ (қаранг: `ensureOwnerKey`).
+      deal: f.deal,
+      title: f.title,
+      text: f.text,
+      priceText: f.priceText,
+      addressText: f.addressText,
+      // Бўш қолдирилган майдон ЎЧИРИЛАДИ — акс ҳолда эски қиймат
+      // («3 хона») таҳрирдан кейин ҳам ёзувда қолиб кетарди.
+      rooms: f.rooms === null ? del : f.rooms,
+      floor: f.floor === null ? del : f.floor,
+      totalFloors: f.totalFloors === null ? del : f.totalFloors,
+      areaM2: f.areaM2 === null ? del : f.areaM2,
+      imageUrls: f.imageUrls,
+      // Очиқ ҳужжатда фақат тахминий марказ (қаранг: `jitteredPoint`).
       areaLat: cell.lat,
       areaLng: cell.lng,
-      geohash4: geohashEncode(lat, lng, 4),
-      contactMode,
-      hasAgent: contactMode === 'ava_agent',
-      searchTokens: buildSearchTokens(title, text),
+      geohash4: geohashEncode(f.lat, f.lng, 4),
+      contactMode: f.contactMode,
+      hasAgent: f.contactMode === 'ava_agent',
+      // Эски ёзувлардаги `searchTokens` ва `views` таҳрирда
+      // тозаланади — уларни ҳеч ким ўқимайди (қаранг:
+      // `submitRealtyListing`).
+      searchTokens: admin.firestore.FieldValue.delete(),
+      views: admin.firestore.FieldValue.delete(),
       status: nextStatus,
       editedAt: ts(),
       updatedAt: ts(),
@@ -475,13 +502,8 @@ function attachRealty(exports, deps) {
 
     // `merge: false` — эски ёзувлардаги `agentPhone` ҳам шу ерда
     // тозаланади (энди у сақланмайди).
-    await ref.collection('private').doc('detail').set({
-      ownerId: uid,
-      lat,
-      lng,
-      ownerPhone: uid,
-      updatedAt: ts(),
-    }, { merge: false });
+    await ref.collection('private').doc('detail')
+      .set(detailDoc(uid, f.lat, f.lng), { merge: false });
 
     return { ok: true, listingId, status: nextStatus };
   });
@@ -515,20 +537,18 @@ function attachRealty(exports, deps) {
 
   // ─── 2-босқич: пуллик РЕКЛАМА ва СРОЧНО ───────────────────────
 
-  /** Нарх: `settings/app.realtyPricing.{tier}.{days}`, бўлмаса default. */
-  async function realtyPriceFor(tier, days) {
+  /**
+   * Нарх: `settings/app.realtyPricing.{tier}.{days}`, бўлмаса default.
+   * [app] — `appDoc()` натижаси (сўров юбормайди).
+   */
+  function realtyPriceFor(app, tier, days) {
     const fallback = (REALTY_PRICING_DEFAULT[tier] || {})[days] || 0;
-    try {
-      const snap = await db.collection('settings').doc('app').get();
-      const map = (snap.data() || {}).realtyPricing;
-      const tierMap = map && typeof map === 'object' ? map[tier] : null;
-      if (tierMap && typeof tierMap === 'object'
-          && tierMap[String(days)] != null) {
-        const v = Number(tierMap[String(days)]);
-        if (Number.isFinite(v) && v >= 0) return Math.round(v);
-      }
-    } catch (e) {
-      console.error('realtyPriceFor', e.message || e);
+    const map = (app || {}).realtyPricing;
+    const tierMap = map && typeof map === 'object' ? map[tier] : null;
+    if (tierMap && typeof tierMap === 'object'
+        && tierMap[String(days)] != null) {
+      const v = Number(tierMap[String(days)]);
+      if (Number.isFinite(v) && v >= 0) return Math.round(v);
     }
     return fallback;
   }
@@ -585,7 +605,7 @@ function attachRealty(exports, deps) {
       // ҳужжатда, уни транзакция ичида ўқиш керак эмас.
       await assertOwner(listingId, uid);
 
-      const price = await realtyPriceFor(tier, days);
+      const price = realtyPriceFor(await appDoc(), tier, days);
       const listingRef = db.collection('realty_listings').doc(listingId);
       const userRef = db.collection('users').doc(uid);
       const durationMs = days * 24 * 60 * 60 * 1000;
@@ -678,13 +698,20 @@ function attachRealty(exports, deps) {
       }
     });
 
-  /** Нархлар жадвали — илова тариф варағида кўрсатиш учун. */
+  /**
+   * Нархлар жадвали — илова тариф варағида кўрсатиш учун.
+   *
+   * Созлама БИР МАРТА ўқилади: аввал ҳар бир (даража × муддат) жуфти
+   * учун алоҳида сўров кетиб, битта чақирувда ҳужжат 6 марта ўқилар
+   * эди.
+   */
   exports.getRealtyPricing = functions.https.onCall(async () => {
+    const app = await appDoc();
     const out = {};
     for (const tier of Object.keys(PAID_DURATIONS)) {
       out[tier] = {};
       for (const days of PAID_DURATIONS[tier]) {
-        out[tier][String(days)] = await realtyPriceFor(tier, days);
+        out[tier][String(days)] = realtyPriceFor(app, tier, days);
       }
     }
     return { pricing: out };
@@ -700,17 +727,13 @@ function attachRealty(exports, deps) {
 
   const PACKAGE_PRICING_DEFAULT = { 5: 30000, 10: 50000 };
 
-  async function packagePriceFor(size) {
+  /** [app] — `appDoc()` натижаси (сўров юбормайди). */
+  function packagePriceFor(app, size) {
     const fallback = PACKAGE_PRICING_DEFAULT[size] || 0;
-    try {
-      const snap = await db.collection('settings').doc('app').get();
-      const map = (snap.data() || {}).realtyPackagePricing;
-      if (map && typeof map === 'object' && map[String(size)] != null) {
-        const v = Number(map[String(size)]);
-        if (Number.isFinite(v) && v >= 0) return Math.round(v);
-      }
-    } catch (e) {
-      console.error('packagePriceFor', e.message || e);
+    const map = (app || {}).realtyPackagePricing;
+    if (map && typeof map === 'object' && map[String(size)] != null) {
+      const v = Number(map[String(size)]);
+      if (Number.isFinite(v) && v >= 0) return Math.round(v);
     }
     return fallback;
   }
@@ -734,7 +757,7 @@ function attachRealty(exports, deps) {
       if (!PACKAGE_SIZES.includes(size)) {
         throw fail('invalid-argument', 'bad_package_size');
       }
-      const price = await packagePriceFor(size);
+      const price = packagePriceFor(await appDoc(), size);
       const userRef = db.collection('users').doc(uid);
 
       try {
@@ -871,9 +894,10 @@ function attachRealty(exports, deps) {
 
   /** Пакет нархлари — илова варағида кўрсатиш учун. */
   exports.getRealtyPackagePricing = functions.https.onCall(async () => {
+    const app = await appDoc();
     const out = {};
     for (const size of PACKAGE_SIZES) {
-      out[String(size)] = await packagePriceFor(size);
+      out[String(size)] = packagePriceFor(app, size);
     }
     return { pricing: out };
   });
@@ -893,10 +917,10 @@ function attachRealty(exports, deps) {
     { id: 'pro_150', objects: 150, days: 90, price: 1200000 },
   ];
 
-  async function proPlans() {
+  /** [app] — `appDoc()` натижаси (сўров юбормайди). */
+  function proPlans(app) {
     try {
-      const snap = await db.collection('settings').doc('app').get();
-      const raw = (snap.data() || {}).realtyProPlans;
+      const raw = (app || {}).realtyProPlans;
       if (Array.isArray(raw) && raw.length) {
         const parsed = raw
           .map((p) => ({
@@ -919,32 +943,32 @@ function attachRealty(exports, deps) {
     return PRO_PLANS_DEFAULT;
   }
 
-  /** Фойдаланувчининг амал қилаётган профессионал пакети ёки `null`. */
-  async function activeProPlan(uid) {
-    try {
-      const snap = await db.collection('users').doc(uid).get();
-      const pro = (snap.data() || {}).realtyPro;
-      if (!pro || typeof pro !== 'object') return null;
-      const until = pro.expiresAt && pro.expiresAt.toMillis
-        ? pro.expiresAt.toMillis() : 0;
-      if (!until || until < Date.now()) return null;
-      // Пакет устига пакет олинганда ўринлар қўшилади, шунинг учун
-      // жамғарма саноқ чегарасидан ошиб кетиши мумкин — ўқишда ҳам
-      // чегараланади (эски ёзувлар учун ҳам).
-      const objects = Math.min(
-        MAX_PRO_OBJECTS,
-        Math.round(Number(pro.objects) || 0),
-      );
-      if (objects <= 0) return null;
-      return { objects, expiresAt: until, planId: String(pro.planId || '') };
-    } catch (e) {
-      console.error('activeProPlan', e.message || e);
-      return null;
-    }
+  /**
+   * Фойдаланувчининг амал қилаётган профессионал пакети ёки `null`.
+   *
+   * [user] — аллақачон ўқилган `users/{uid}` маълумоти. Функция
+   * сўров юбормайди: аввал ҳар чақирувда ҳужжатни яна бир марта
+   * ўқир эди, ҳолбуки чақирувчи уни аллақачон ўқиган бўлади.
+   */
+  function activeProPlan(user) {
+    const pro = (user || {}).realtyPro;
+    if (!pro || typeof pro !== 'object') return null;
+    const until = pro.expiresAt && pro.expiresAt.toMillis
+      ? pro.expiresAt.toMillis() : 0;
+    if (!until || until < Date.now()) return null;
+    // Пакет устига пакет олинганда ўринлар қўшилади, шунинг учун
+    // жамғарма саноқ чегарасидан ошиб кетиши мумкин — ўқишда ҳам
+    // чегараланади (эски ёзувлар учун ҳам).
+    const objects = Math.min(
+      MAX_PRO_OBJECTS,
+      Math.round(Number(pro.objects) || 0),
+    );
+    if (objects <= 0) return null;
+    return { objects, expiresAt: until, planId: String(pro.planId || '') };
   }
 
   exports.getRealtyProPlans = functions.https.onCall(async () => {
-    return { plans: await proPlans() };
+    return { plans: proPlans(await appDoc()) };
   });
 
   /**
@@ -969,7 +993,7 @@ function attachRealty(exports, deps) {
       }
 
       const planId = String(d.planId || '').trim();
-      const plan = (await proPlans()).find((p) => p.id === planId);
+      const plan = proPlans(await appDoc()).find((p) => p.id === planId);
       if (!plan) throw fail('invalid-argument', 'bad_plan');
 
       const userRef = db.collection('users').doc(uid);
@@ -1050,8 +1074,10 @@ function attachRealty(exports, deps) {
   /** Пакет ҳисоблагичи — иловада доим кўриниб туриши учун. */
   exports.getRealtyQuota = functions.https.onCall(async (data, context) => {
     const uid = requireUid(context);
-    const ownerKey = await ensureOwnerKey(uid);
-    const pro = await activeProPlan(uid);
+    // Битта ўқиш: калит ҳам, пакет ҳам шу ҳужжатда.
+    const user = (await db.collection('users').doc(uid).get()).data() || {};
+    const ownerKey = await ensureOwnerKey(uid, user);
+    const pro = activeProPlan(user);
     const used = await countActiveListings(ownerKey);
     return {
       used,
@@ -1074,7 +1100,9 @@ function attachRealty(exports, deps) {
   exports.addRealtyTeamMember = functions.https.onCall(
     async (data, context) => {
       const uid = requireUid(context);
-      const pro = await activeProPlan(uid);
+      // Битта ўқиш: пакет ҳам, компания калити ҳам шу ҳужжатда.
+      const user = (await db.collection('users').doc(uid).get()).data() || {};
+      const pro = activeProPlan(user);
       if (!pro) throw fail('failed-precondition', 'pro_required');
 
       const memberPhone = canonicalUid(
@@ -1092,7 +1120,7 @@ function attachRealty(exports, deps) {
 
       // Ходимнинг ўз эълонлари бўлса, уларни компанияга кўчириб
       // юбормаймиз — бу унинг шахсий контенти.
-      const ownerKey = await ensureOwnerKey(uid);
+      const ownerKey = await ensureOwnerKey(uid, user);
       const memberKey = String(member.realtyOwnerKey || '');
       if (memberKey && memberKey !== ownerKey) {
         const own = await db.collection('realty_listings')

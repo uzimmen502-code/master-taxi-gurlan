@@ -168,10 +168,34 @@ This single fact sets the entire priority order (Section 5).
    - Flush per active clip per interval. Writes now scale with **active clips ×
      intervals**, not views.
 
-3. **Cost (from script, 1M DAU):** ingest (1×views) + flush (active clips ×
-   intervals, capped) = **$1,391/mo** vs current **$4,320** → ~68% lower, and the
-   per-document contention disappears (clip counters written by one aggregator,
-   serialized).
+3. **Cost — re-derived 2026-10-02, and it changes the design.** Two facts the first
+   estimate missed:
+   - **A Firestore DELETE is billed as a write.** A Firestore-backed queue therefore
+     costs *two* writes per event (insert + delete) before any aggregation gain.
+   - **The `views/{viewerId}` dedup document cannot be merged** — one doc per viewer
+     per clip. It is the floor under every variant.
+
+   From `cost_model.py` (write cost per month):
+
+   | | 10k DAU | 100k DAU | 1M DAU |
+   |---|--------:|---------:|-------:|
+   | A — today (3× distinct + 1× stats) | $38.34 | $383.40 | $3,834 |
+   | B — Firestore queue + aggregator | $33.89 | $338.90 | $3,389 |
+   | C — Pub/Sub queue + aggregator | $12.33 | $123.34 | $1,233 |
+   | D — sample stats 10% (client only) | $28.62 | $286.20 | $2,862 |
+   | E — D + drop the profile write | $19.44 | $194.40 | $1,944 |
+
+   **B is nearly pointless** (−12%): the queue's own insert+delete eats the gain. If
+   the queue is built it must be **Pub/Sub** (C), where the queue costs no Firestore
+   writes at all (~$5/mo of Pub/Sub traffic at 1M DAU).
+
+   **E needs no queue, no aggregator and no new infrastructure** and still takes half
+   the cost out — `STATS_SAMPLE_RATE` on the client plus deriving
+   `tv_public_profiles.totalViewCount` in the nightly reconciliation.
+
+   At 10k DAU the whole line is $38/mo, so Phase 2 is a **latency and contention**
+   fix, not a cost fix (as §5.2 already said). C only earns its complexity somewhere
+   past ~100k DAU.
 
 4. **Likes:** keep the authoritative `likes/{clipId}_{uid}` doc for correctness
    (needed for "did I like this"); fold the counter delta into the same aggregator
@@ -277,8 +301,11 @@ stack.
   and the blast radius is one clip at a time.)
 
 ### 5.2 Priority #2 — view/stats aggregation (Section 3)
-**Why:** $4,320 → $1,391/mo at 1M, and removes hot-document contention (the real
-user-visible win: write latency). Ship behind a flag, A/B on write latency.
+**Why:** removes hot-document contention — the real user-visible win is write latency.
+On cost, see the re-derived table in §3: at 1M DAU the best queue variant is
+$3,834 → $1,233/mo, but at 10k DAU the whole line is $38/mo, so cost is not the
+reason to do this yet. Start with variant E (client-side, no infrastructure); build
+the Pub/Sub queue (C) only once the DAU justifies it.
 
 ### 5.3 Priority #3 — feed JSON (Section 4)
 **Why:** $1,800 → $0/mo at 1M, feed latency ~200ms → ~50ms. Author-own-clip query

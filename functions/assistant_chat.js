@@ -36,7 +36,10 @@
  *   assistantDeleteConversation, assistantRenameConversation,
  *   assistantDeleteMemory. Trigger: onAssistantMessageCreated.
  *
- * API калити: functions/.env → OPENAI_API_KEY (git'га тушмайди).
+ * API калити: Secret Manager → `OPENAI_API_KEY`, функцияга `runWith({
+ * secrets })` орқали боғланади ва `process.env` дан ўқилади. Илгари у
+ * `functions/.env` да эди — у ердан калит ҳар деплойда ОЧИҚ МАТНДА
+ * функциянинг environment variable'ига ёзиларди.
  */
 
 const {
@@ -300,7 +303,9 @@ function attachAssistant(exportsObj, deps) {
   async function openAiResponses(body, timeoutMs, quiet = false) {
     const apiKey = String(process.env.OPENAI_API_KEY || '').trim();
     if (!apiKey) {
-      console.error('assistant: OPENAI_API_KEY is not set (functions/.env)');
+      console.error(
+          'assistant: OPENAI_API_KEY yo\'q — Secret Manager\'da bormi va ' +
+          'funksiyaga runWith({secrets}) orqali bog\'langanmi tekshiring');
       if (quiet) return null;
       throw new HttpsError('failed-precondition', 'api_key_missing');
     }
@@ -427,7 +432,14 @@ function attachAssistant(exportsObj, deps) {
   // assistantChat — { text, conversationId? } → { reply, conversationId, … }
   // ---------------------------------------------------------------------
   exportsObj.assistantChat = functions
-    .runWith({ timeoutSeconds: 120, memory: '256MB' })
+    // `secrets` — калит Secret Manager'дан келади. Илгари у
+    // `functions/.env` орқали ОЧИҚ МАТНДА environment variable бўлиб
+    // деплой қилинарди (қаранг: [openAiResponses] изоҳи).
+    .runWith({
+      timeoutSeconds: 120,
+      memory: '256MB',
+      secrets: ['OPENAI_API_KEY'],
+    })
     .https.onCall(async (data, context) => {
       const uid = requireUid(context);
       const cfg = await loadConfig();
@@ -602,7 +614,11 @@ function attachAssistant(exportsObj, deps) {
   // хотира (ҳар N-чи фойдаланувчи хабарида). Фойдаланувчи кутмайди.
   // ---------------------------------------------------------------------
   exportsObj.onAssistantMessageCreated = functions
-    .runWith({ timeoutSeconds: 60, memory: '256MB' })
+    .runWith({
+      timeoutSeconds: 60,
+      memory: '256MB',
+      secrets: ['OPENAI_API_KEY'],
+    })
     .firestore
     .document('users/{uid}/assistant_conversations/{convId}/assistant_messages/{msgId}')
     .onCreate(async (snap, ctx) => {

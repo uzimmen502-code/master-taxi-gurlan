@@ -11143,7 +11143,7 @@ const TV_CLIP_FAST_360P_SPEC = {maxHeight: 360, maxrate: '450k', bufsize: '650k'
  * bu ham tozalanadi (qarang: `onTvClipDeleted`).
  */
 async function fastTrack360pIfPossible(
-    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince) {
+    clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11178,7 +11178,7 @@ async function fastTrack360pIfPossible(
       return;
     }
 
-    const destPath = `tv_clip_variants/${clipId}/360p_fast.mp4`;
+    const destPath = `tv_clip_variants/${clipId}/${runId}/360p_fast.mp4`;
     const token = crypto.randomUUID();
     await bucket.upload(tmpOut, {
       destination: destPath,
@@ -11290,7 +11290,7 @@ async function claimTvClipTranscode(clipRef, videoUrl) {
 //
 // Хатолик бўлса '' қайтаради — HLS қўшимча, мажбурий эмас: клип
 // MP4 вариантлари билан барибир чоп этилаверади.
-async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
+async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality, runId) {
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11340,12 +11340,12 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
       let playlist = fs.readFileSync(playlistPath, 'utf8');
       // Playlist'даги нисбий файл номи — абсолют, token'ли URL'га.
       const tsUrl = await uploadWithToken(
-          tsPath, `tv_clip_hls/${clipId}/${tsName}`, 'video/mp2t');
+          tsPath, `tv_clip_hls/${clipId}/${runId}/${tsName}`, 'video/mp2t');
       playlist = playlist.split(tsName).join(tsUrl);
       fs.writeFileSync(playlistPath, playlist, 'utf8');
 
       const variantUrl = await uploadWithToken(
-          playlistPath, `tv_clip_hls/${clipId}/${quality}.m3u8`,
+          playlistPath, `tv_clip_hls/${clipId}/${runId}/${quality}.m3u8`,
           'application/vnd.apple.mpegurl');
 
       // BANDWIDTH — master playlist учун мажбурий. Ҳақиқий ўлчамдан
@@ -11382,7 +11382,7 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     fs.writeFileSync(masterPath, master.join('\n') + '\n', 'utf8');
 
     return await uploadWithToken(
-        masterPath, `tv_clip_hls/${clipId}/master.m3u8`,
+        masterPath, `tv_clip_hls/${clipId}/${runId}/master.m3u8`,
         'application/vnd.apple.mpegurl');
   } catch (e) {
     console.error('packageTvClipHls error:', clipId, e.message || e);
@@ -11391,6 +11391,65 @@ async function packageTvClipHls(clipId, bucket, bucketName, mp4ByQuality) {
     try {
       fs.rmSync(workDir, {recursive: true, force: true});
     } catch (_) {}
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ҚАЙТА TRANSCODE ЭСКИ URL'НИ БЕКОР ҚИЛМАСЛИГИ КЕРАК.
+//
+// Аввал вариантлар ҲАР САФАР бир хил йўлга (`tv_clip_variants/{id}/
+// 720p.mp4`, `tv_clip_hls/{id}/master.m3u8`) янги download token билан
+// қайта юкланарди. Объект алмаштирилганда ЭСКИ TOKEN БЕКОР БЎЛАДИ, яъни
+// ўша пайтда лентани очиб турган ҳар бир фойдаланувчининг URL'и 403
+// бўлиб қоларди. Лента `.get()` билан бир марта юкланади (Firestore'га
+// обуна йўқ), шунинг учун URL ўзи янгиланмайди ҳам — натижада
+// `initialize()` 15 сония кутиб timeout билан тугайди ва экранда видео
+// ўрнига муқова қотиб қолади.
+//
+// Бу backfill'га хос эмас: эга ўз клипининг видеосини алмаштирганда
+// (`onTvClipVideoReplacedV2`) ҳам айни шу содир бўлади.
+//
+// Ечим: ҳар transcode ЎЗ ЙЎЛИГА ёзади (`.../{clipId}/{runId}/...`).
+// Эски URL эски файлга кўрсатиб тураверади ва ишлайверади. Йўл ҳар
+// сафар янги бўлгани учун `immutable` кэш сарлавҳаси ҳам тўғри қолади
+// (қаранг: [TV_CLIP_CACHE_CONTROL]) — барқарор URL'да у, аксинча,
+// клиентга ЭСКИ видеони абадий кўрсатиб турарди.
+//
+// Тозалаш: янги transcode бошланишида, ҳужжатдаги ЖОРИЙ run'дан бошқа
+// ҳамма run'лар ўчирилади. Шунда ҳар доим кўпи билан 2 авлод туради —
+// жорийси (ҳужжатда) ва янги ёзилаётгани — ва ҳеч қачон томоша
+// қилинаётган авлод ўчиб кетмайди.
+//
+// Қайси файл эскиргани — соф қарор, `tv_clip_runs.js` да (Storage'сиз
+// тестланади: `test/tv_clip_runs.test.js`). Бу ерда фақат I/O қолади.
+const {tvClipRunId, staleRunFiles} = require('./tv_clip_runs');
+
+/**
+ * [keepRun]дан бошқа барча run папкаларини ўчиради. Best-effort:
+ * тозалаш йиқилса transcode давом этаверади (фақат сақлаш харажати).
+ *
+ * [keepRun] БЎШ бўлса — ҳеч нарса ўчирилмайди (қаранг: [staleRunFiles]).
+ */
+async function cleanupOldTvClipRuns(bucket, clipId, keepRun) {
+  if (!keepRun) return;
+  for (const root of ['tv_clip_variants', 'tv_clip_hls']) {
+    try {
+      const [files] = await bucket.getFiles({prefix: `${root}/${clipId}/`});
+      const staleNames = new Set(
+          staleRunFiles(files.map((f) => f.name), root, clipId, keepRun));
+      const stale = files.filter((f) => staleNames.has(f.name));
+      for (const f of stale) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+      if (stale.length > 0) {
+        console.log(
+            `tv clip ${clipId}: ${root} — ${stale.length} ta eski fayl tozalandi`);
+      }
+    } catch (e) {
+      console.error(`cleanupOldTvClipRuns ${root} ${clipId}:`, e.message || e);
+    }
   }
 }
 
@@ -11407,6 +11466,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     return;
   }
 
+  const runId = tvClipRunId();
+
   const os = require('os');
   const path = require('path');
   const fs = require('fs');
@@ -11418,6 +11479,17 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
   const tmpIn = path.join(
       os.tmpdir(), `${clipId}_in${path.extname(srcPath) || '.mp4'}`);
   const tmpOutputs = [];
+
+  // Эски авлодларни тозалаш — ЯНГИСИНИ ЁЗИШДАН ОЛДИН ва ҳужжатдаги
+  // ЖОРИЙ run'ни сақлаб қолиб. Шунда ҳозир томоша қилинаётган авлод
+  // тегилмайди, ундан олдингилари эса кетади (қаранг: юқоридаги изоҳ).
+  try {
+    const cur = await clipRef.get();
+    const liveRun = (cur.exists ? cur.data() : {}).variantRun || '';
+    await cleanupOldTvClipRuns(bucket, clipId, liveRun);
+  } catch (e) {
+    console.error('transcodeTvClipVideo cleanup skip:', clipId, e.message || e);
+  }
 
   // Босқичма-босқич вақт ўлчови. Давомийлик чегарасини (ҳозир 180с)
   // тахминдан эмас, ҳақиқий рақамдан белгилаш учун: логда ҳар бир
@@ -11445,7 +11517,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     // pass — хато бўлса ҳам асосий pipeline'га таъсир қилмайди (қаранг:
     // [fastTrack360pIfPossible] ҳужжати).
     await fastTrack360pIfPossible(
-        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince);
+        clipId, clipRef, tmpIn, bucketName, bucket, ffmpegPath, secsSince,
+        runId);
 
     // Барча вариантлар БИТТА ffmpeg pass'да: манба бир марта
     // декодланади (`split`), кейин ҳар бир тармоқ алоҳида масштабланиб
@@ -11583,7 +11656,7 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       if (!fs.existsSync(tmpOut) || fs.statSync(tmpOut).size <= 0) continue;
       readyMp4[spec.key] = tmpOut;
 
-      const destPath = `tv_clip_variants/${clipId}/${spec.key}.mp4`;
+      const destPath = `tv_clip_variants/${clipId}/${runId}/${spec.key}.mp4`;
       const token = crypto.randomUUID();
       await bucket.upload(tmpOut, {
         destination: destPath,
@@ -11609,7 +11682,8 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
     let hlsUrl = '';
     if (Object.keys(readyMp4).length > 0) {
       const tHls = Date.now();
-      hlsUrl = await packageTvClipHls(clipId, bucket, bucketName, readyMp4);
+      hlsUrl = await packageTvClipHls(
+          clipId, bucket, bucketName, readyMp4, runId);
       console.log(
           `tv clip ${clipId} timing: hls ${secsSince(tHls)}s ` +
           `(${hlsUrl ? 'ok' : 'yoq'})`);
@@ -11622,6 +11696,9 @@ async function transcodeTvClipVideo(clipId, videoUrl) {
       await clipRef.update({
         videoVariants: variants,
         hlsUrl,
+        // Кейинги transcode шу run'ни «тирик» деб билади ва ўчирмайди
+        // (қаранг: [cleanupOldTvClipRuns]).
+        variantRun: runId,
         processingStatus: 'ready',
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -11774,6 +11851,12 @@ exports.onTvClipDeleted = functions.firestore
         const bucket = admin.storage().bucket(
             'master-taxi-gurlan.firebasestorage.app');
         await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+        // `tv_clip_hls/` ИЛГАРИ БУ ЕРДА ЙЎҚ ЭДИ — яъни ҳар ўчирилган
+        // клипнинг HLS сегментлари (энг катта файллар: ҳар вариант учун
+        // битта `single_file` .ts) Storage'да абадий қолиб кетарди.
+        // Версияланган йўл (`{clipId}/{runId}/…`) буни яна қиммат
+        // қиларди: энди ҳар transcode ўз папкасини қолдиради.
+        await bucket.deleteFiles({prefix: `tv_clip_hls/${clipId}/`});
       } catch (e) {
         console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
       }
@@ -11992,6 +12075,9 @@ async function deleteTvClipMedia(clipId, data) {
     await Promise.all(paths.map((p) =>
       bucket.file(p).delete().catch(() => {})));
     await bucket.deleteFiles({prefix: `tv_clip_variants/${clipId}/`});
+    // `tv_clip_hls/` илгари бу ерда ҳам йўқ эди — қаранг:
+    // `onTvClipDeleted` изоҳи.
+    await bucket.deleteFiles({prefix: `tv_clip_hls/${clipId}/`});
   } catch (e) {
     console.error('deleteTvClipMedia:', clipId, e.message || e);
   }

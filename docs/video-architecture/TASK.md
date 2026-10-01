@@ -268,10 +268,13 @@ stack.
   immutable-cache guarantee and complicates invalidation). Cache Rule must include
   **`.ts`** — the pipeline emits `single_file` MPEG-TS segments, not `.m4s`, and
   those are the largest objects. Smart Tiered Cache; WAF rate-limit.
-- **Rollout:** flip the flag on, publish one test clip, verify `cf-cache-status: HIT`
-  and the R2 object layout, then leave it on. Old clips stay on Storage until a later
-  backfill. (A percentage-based ramp was considered and dropped for Phase 1 — a
-  boolean is simpler and the blast radius is one clip at a time.)
+- **Rollout — done. `settings/app.tvR2Output = true` since 2026-10-02:** every new
+  clip from every user now goes to R2 + `video.ava-uz.com`. Existing clips stay on
+  Firebase Storage and keep working — their URLs are in Firestore, and cleanup and
+  deletion follow each clip's own `variantBackend`. Reversible at any time by setting
+  the flag back to `false`; no deploy needed and already-migrated clips are
+  unaffected. (A percentage ramp was considered and dropped — a boolean is simpler
+  and the blast radius is one clip at a time.)
 
 ### 5.2 Priority #2 — view/stats aggregation (Section 3)
 **Why:** $4,320 → $1,391/mo at 1M, and removes hot-document contention (the real
@@ -522,7 +525,42 @@ never created in Secret Manager and would otherwise fail the deploy.
 **No `firestore.rules` deploy is needed** for this change (see §5.1) — and per the
 В-8 incident, rules always get their own command anyway.
 
-### 11.3 Verification sequence
+### 11.3 Verification — done 2026-10-01/02, without a device
+
+A clip can be put through the whole pipeline server-side: create a `tv_clips` doc
+with `status: 'pending'` and a `videoUrl` pointing at an uploaded test video. The
+transcode trigger fires, the clip stays out of the feed (feed queries
+`status == 'active'`) and `onTvClipSocialPublish` does **not** fire — it requires the
+status to *become* `active`, so nothing is posted to Instagram or Facebook. Deleting
+the doc exercises the delete + purge path.
+
+| Check | Result |
+|---|---|
+| Flag off | `variantBackend: firebase`, 5/5 outputs on Storage, all under `{runId}` |
+| Firebase delete | both `tv_clip_variants/` and `tv_clip_hls/` prefixes emptied |
+| Allowlist on (one phone) | `variantBackend: r2`, 5/5 on `video.ava-uz.com`, no tokens in URLs |
+| Phone normalization | list held `+998 90 000-00-00`, clip had `998900000000` → matched |
+| **Isolation** | two clips created at once, only the listed owner went to R2; the other stayed on Firebase (5/5 each way) |
+| CDN cache | `.m3u8`, `.ts`, `.mp4`: MISS → **HIT**; correct Content-Type each; `immutable` |
+| Delete + purge | 5 URLs went 200 → **404**; log: `R2 12 obyekt o'chdi, 12 URL edge keshdan chiqarildi` (12 = 12, so purge was complete) |
+| Global flag | list empty, flag true, unlisted phone → `variantBackend: r2` |
+| Transcode time | 10.0s / 540s budget |
+
+Note on ordering: `processingStatus: 'ready'` is written by the fast-track 360p pass
+(~4–9s) **before** `variantBackend`/`variantRun` land in the final update (~10s).
+`resolveClipBackend` covers that window by falling back to the URL host, and the
+fast-track URL is already the R2 one — verified.
+
+### 11.4 Original uploads are never deleted on clip delete (pre-existing)
+
+`onTvClipDeleted` removes only the *processed* outputs. The user's original upload at
+`tv_clips/{phone}/{file}.mp4` (~20–80 MB) is deleted only by `deleteTvClipMedia`,
+which runs on news expiry — not when a user deletes their own clip. So every deleted
+clip leaves its original behind forever. Pre-existing behavior, unchanged here, but it
+feeds the storage line in `cost_model.py` and is worth a separate fix once it is
+confirmed that "restore a deleted clip" is not a wanted feature.
+
+### 11.5 Original verification plan (for reference)
 
 1. **Flag off** — publish a clip. Expect `chiqish backend = firebase` in the logs,
    `tv_clip_variants/{clipId}/{runId}/…` URLs, `variantBackend: 'firebase'`, playback

@@ -20,6 +20,7 @@ import '../repositories/tv_shop_repository.dart';
 import '../services/tv_clip_delete.dart';
 import '../services/tv_clip_share.dart';
 import '../services/tv_clip_view_recorder.dart';
+import '../services/tv_feed_cdn.dart';
 import '../services/tv_network_quality_service.dart';
 import '../services/tv_owner_name.dart';
 import '../services/tv_player_pool.dart';
@@ -71,6 +72,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   DocumentSnapshot<Map<String, dynamic>>? _cursor;
   int _regionPerDistrictLimit = _pageSize;
   bool _hasMore = true;
+
+  /// Лента CDN'даги тайёр JSON'дан ўқиляптими (Phase 3).
+  ///
+  /// Манба ҳар юклаш циклида БИР МАРТА танланади: биринчи саҳифа
+  /// CDN'дан келса, кейингилари ҳам ундан олинади. CDN йиқилса (JSON
+  /// ҳали ёзилмаган, тармоқ, эскирган) — Firestore'га қайтамиз ва
+  /// шу циклда қайта уринмаймиз. Дубликатларни `_loadMoreClips`
+  /// аллақачон фильтрлайди.
+  bool _feedFromCdn = false;
+  int _cdnPage = 1;
   bool _loadingMore = false;
   int _currentIndex = 0;
   late final PageController _pageCtrl;
@@ -261,15 +272,7 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
   }) {
     // Туман аниқроқ — танланган бўлса вилоят фильтри ортиқча.
     if (_filterDistrictId.isNotEmpty) {
-      return _repo.fetchNearby(
-        districtId: _filterDistrictId,
-        limit: _pageSize,
-        categories: categories,
-        regionId: _filterRegionId.isNotEmpty
-            ? _filterRegionId
-            : ServiceConfigHolder.regionId,
-        cursor: cursor,
-      );
+      return _fetchDistrictPage(categories: categories, cursor: cursor);
     }
     if (_filterRegionId.isNotEmpty) {
       // Ҳақиқий cursor emas — [_regionPerDistrictLimit] ошиб боради,
@@ -289,10 +292,70 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
     );
   }
 
+  /// Туман лентаси — аввал CDN'даги тайёр JSON, бўлмаса Firestore.
+  ///
+  /// CDN ИХТИЁРИЙ манба: сервер builder'и деплой қилинмаган бўлса ҳам
+  /// (ёки тармоқ йўқ бўлса) лента аввалгидек ишлайверади.
+  Future<TvClipBatch> _fetchDistrictPage({
+    required List<String>? categories,
+    required DocumentSnapshot<Map<String, dynamic>>? cursor,
+  }) async {
+    final firstPage = cursor == null && _cdnPage == 1;
+    if (firstPage || _feedFromCdn) {
+      final page = await TvFeedCdn.fetchPage(
+        districtId: _filterDistrictId,
+        categories: categories,
+        page: _cdnPage,
+      );
+      if (page != null) {
+        _feedFromCdn = true;
+        _cdnPage = page.page + 1;
+        return TvClipBatch(clips: page.clips, hasMore: page.hasMore);
+      }
+      // CDN бермади — шу циклда бошқа урин ма.
+      _feedFromCdn = false;
+    }
+    return _repo.fetchNearby(
+      districtId: _filterDistrictId,
+      limit: _pageSize,
+      categories: categories,
+      regionId: _filterRegionId.isNotEmpty
+          ? _filterRegionId
+          : ServiceConfigHolder.regionId,
+      cursor: cursor,
+    );
+  }
+
+  /// Муаллиф ўз клипини builder'ни КУТМАСДАН кўриши учун.
+  ///
+  /// CDN'даги JSON ҳар 5 дақиқада янгиланади — усиз одам видео жойлаб,
+  /// уни лентада кўрмай, «йўқолди» деб ўйларди. Шунинг учун CDN'дан
+  /// ўқилганда ўзининг сўнгги клиплари алоҳида, кичик сўров билан
+  /// олиниб, рўйхат бошига қўшилади (1 фойдаланувчи × ≤5 ҳужжат).
+  Future<List<TvClip>> _myFreshClips(List<String>? categories) async {
+    if (_mePhone.isEmpty) return const [];
+    try {
+      final mine = await _repo.fetchByOwner(_mePhone, limit: 5);
+      return mine.where((c) {
+        if (!c.isActive || !c.isPlayable) return false;
+        if (_filterDistrictId.isNotEmpty &&
+            c.districtId != _filterDistrictId) {
+          return false;
+        }
+        return categories == null || categories.contains(c.category);
+      }).toList();
+    } catch (e) {
+      debugPrint('[TvMarketFeed] my fresh clips: $e');
+      return const [];
+    }
+  }
+
   Future<void> _loadClips() async {
     _cursor = null;
     _regionPerDistrictLimit = _pageSize;
     _hasMore = true;
+    _feedFromCdn = false;
+    _cdnPage = 1;
     try {
       final categories = _categoriesForTab(_tabController.index);
       final batch = await _fetchPage(categories: categories, cursor: null);
@@ -303,6 +366,16 @@ class _TvMarketFeedScreenState extends State<TvMarketFeedScreen>
         list.addAll(batch.clips.where((c) => c.id != widget.initialClip!.id));
       } else {
         list.addAll(batch.clips);
+      }
+      // CDN'даги JSON 5 дақиқагача эскирган бўлиши мумкин — ўз янги
+      // клипинг унда ҳали йўқ. Firestore йўлида бунга ҳожат йўқ:
+      // у аллақачон энг сўнгги ҳолатни беради.
+      if (_feedFromCdn) {
+        final mine = await _myFreshClips(categories);
+        if (!mounted) return;
+        final missing =
+            mine.where((m) => list.every((c) => c.id != m.id)).toList();
+        list.insertAll(0, missing);
       }
       _firstLoadDone = true;
       setState(() {

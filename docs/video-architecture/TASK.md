@@ -641,6 +641,33 @@ see 11.9.
 **Scaling limit:** every run reads all active clips. Past roughly 2,000 active clips
 those reads outgrow the savings, and only changed pools should be rebuilt.
 
+### 11.7b Phase 3 — client half, built 2026-10-02 (commit `d567e1c`)
+
+Takes effect only in the next app release; until then the feed behaves exactly as it
+does today.
+
+- **`TvClip.fromMap`** — `fromFirestore` now delegates to it, so both sources share
+  one parser. They differ only in how a date arrives (Firestore `Timestamp` vs the
+  JSON's `createdAtMs`), which `_asDate` absorbs. Adding a field later feeds both
+  sources automatically instead of letting two parsers drift apart.
+- **`TvFeedCdn`** is an *optional* source. It returns `null` — and the caller falls
+  back to Firestore — when the JSON is missing (404), unparseable, on a different
+  schema version, older than 6 hours (builder stopped), or the network fails. One
+  malformed clip is skipped rather than breaking the whole feed. This is what makes
+  the release safe before the builder is deployed.
+- **The feed screen picks the source once per load cycle.** If page 1 came from the
+  CDN, later pages do too; if the CDN fails, it drops to Firestore and does not retry
+  within that cycle. `_loadMoreClips` already de-duplicates, so a mid-cycle switch
+  cannot double up clips. Only the **district** feed uses the CDN — region and
+  unfiltered modes are untouched, since the server builds no pools for them.
+- **The author sees their own clip immediately.** The JSON can be up to 5 minutes
+  stale, so someone could publish and not find their video — and conclude it was
+  lost. When reading from the CDN the screen also pulls that user's latest clips
+  (1 user, ≤5 docs) and puts them at the top.
+
+Tests: `test/features/tv_market/tv_feed_cdn_test.dart` — 17 assertions, half of them
+exercising the fallback path specifically. Full suite: 430 passing, analyzer clean.
+
 ### 11.8 Deploy blocked 2026-10-02 — Secret Manager returns a billing error
 
 `firebase deploy --only functions:buildTvFeedJson` fails at secret validation:

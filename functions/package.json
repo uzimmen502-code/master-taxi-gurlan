@@ -10,6 +10,7 @@
     "test:tv-playback-stats": "node test/tv_clip_playback_stats_rules.test.js",
     "test:tv-clip-runs": "node test/tv_clip_runs.test.js",
     "test:tv-clip-output": "node test/tv_clip_output.test.js",
+    "test:tv-feed": "node test/tv_feed.test.js",
     "test:yuk-cf": "node test/yuk_cf.test.js",
     "test:ev-charging": "node test/ev_charging_rules.test.js",
     "test:ev-charging-paid": "node test/ev_charging_paid.test.js",

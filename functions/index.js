@@ -13203,6 +13203,107 @@ async function deleteTvClipMedia(clipId, data) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// AVAGram лентаси — олдиндан тайёрланган JSON (Phase 3, сервер ярми).
+//
+// Ҳозир лента ҳар очилганда Firestore'дан ўқилади ва сўров қайтарган
+// ҲАР ҲУЖЖАТ учун битта read кетади (саҳифада 20 та). Мазмун эса барча
+// томошабин учун бир хил. Шунинг учун уни даврий равишда тайёрлаб,
+// R2'га қўйиш мантиқлироқ: лента учун Firestore read → 0, кечикиш
+// ~200 мс дан ~50 мс га тушади.
+//
+// Соф қарорлар (ҳовуз, майдонлар, саҳифалаш) `tv_feed.js` да ва
+// алоҳида тестланади (`test/tv_feed.test.js`). Бу ерда фақат I/O.
+//
+// КЛИЕНТ ҲАЛИ БУНИ ЎҚИМАЙДИ — у кейинги илова релизида уланади. Шу
+// сабабли бу функция ҳозир ҳеч нарсани бузмайди: фақат ёзади.
+//
+// ЧЕГАРА: ҳар юришда барча фаол клиплар бир марта ўқилади (ҳозир 228).
+// Каталог ~2000 дан ошса, бу ўқишлар тежамдан ошиб кетади — ўшанда
+// фақат ўзгарган ҳовузларни қайта қуриш керак бўлади.
+const TV_FEED_SECRETS = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+
+exports.buildTvFeedJson = functions
+  .runWith({
+    timeoutSeconds: 300,
+    memory: '512MB',
+    secrets: TV_FEED_SECRETS,
+  })
+  .pubsub
+  .schedule('every 5 minutes')
+  .onRun(async () => {
+    const tvFeed = require('./tv_feed');
+    const bucketName = 'master-taxi-gurlan.firebasestorage.app';
+
+    let out;
+    try {
+      out = buildTvClipOutput(true, admin.storage().bucket(bucketName),
+          bucketName);
+    } catch (e) {
+      console.error('buildTvFeedJson: R2 mijozi yo\'q —', e.message || e);
+      return null;
+    }
+
+    const snap = await db.collection('tv_clips')
+        .where('status', '==', 'active').get();
+
+    // Туман бўйича гуруҳлаш. Клиплар кам (юзлаб), шунинг учун хотирада.
+    const byDistrict = new Map();
+    snap.forEach((doc) => {
+      const d = doc.data() || {};
+      if (!tvFeed.isFeedPlayable(d)) return;
+      const district = String(d.districtId || '').trim();
+      if (!district) return;
+      if (!byDistrict.has(district)) byDistrict.set(district, []);
+      byDistrict.get(district).push({id: doc.id, data: d});
+    });
+
+    const builtAtMs = Date.now();
+    let pools = 0;
+    let written = 0;
+    let removed = 0;
+
+    for (const [districtId, items] of byDistrict) {
+      for (const [tab, categories] of Object.entries(tvFeed.FEED_TABS)) {
+        const picked = items
+            .filter((x) => tvFeed.clipMatchesTab(x.data, categories))
+            .map((x) => tvFeed.clipToFeedJson(x.id, x.data))
+            .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+
+        const pages = tvFeed.buildFeedPages(picked, {
+          districtId, tab, builtAtMs,
+        });
+        const keys = new Set();
+        for (const page of pages) {
+          const key = tvFeed.feedPageKey(districtId, tab, page.page);
+          keys.add(key);
+          await out.putJson(key, page);
+          written++;
+        }
+        pools++;
+
+        // Ҳовуз қисқарган бўлса эски саҳифалар осилиб қолмасин.
+        try {
+          const existing = await out.listKeys(
+              `${tvFeed.feedPoolPrefix(districtId, tab)}/`);
+          const stale = existing.filter((k) => !keys.has(k));
+          if (stale.length > 0) {
+            await out.deleteKeys(stale);
+            removed += stale.length;
+          }
+        } catch (e) {
+          console.error('buildTvFeedJson tozalash:', districtId, tab,
+              e.message || e);
+        }
+      }
+    }
+
+    console.log(
+        `buildTvFeedJson: ${snap.size} faol klip, ${byDistrict.size} tuman, ` +
+        `${pools} hovuz, ${written} sahifa yozildi, ${removed} eski o'chdi`);
+    return null;
+  });
+
+// ─────────────────────────────────────────────────────────────────────
 // `tv_public_profiles.totalViewCount` — кунда бир марта қайта ҳисоблаш.
 //
 // НИМА УЧУН СЕРВЕРДА. Илгари бу счётчик ҲАР КЎРИШДА, клиент

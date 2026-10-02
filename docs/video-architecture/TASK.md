@@ -606,6 +606,82 @@ Note on ordering: `processingStatus: 'ready'` is written by the fast-track 360p 
 `resolveClipBackend` covers that window by falling back to the URL host, and the
 fast-track URL is already the R2 one — verified.
 
+### 11.7 Phase 3 — feed JSON builder (server half) — built 2026-10-02
+
+Commit `52f6ae1`. **Not deployed** (see 11.8). The client does not read this yet, so
+the builder only writes; nothing changes until the next app release.
+
+Sized from real data rather than guessed: **228 active clips, 7 districts, 3 tabs,
+~1787 B per clip** — so at most 21 pools and a 20-clip page is ~35 KB. That is small
+enough that a plain full rebuild every 5 minutes is the right design; no dirty-pool
+tracking needed yet.
+
+- `functions/tv_feed.js` — the **pure** decisions (pool path, which fields, tab
+  matching, pagination). No Firestore, no R2, so it is tested without either:
+  `functions/test/tv_feed.test.js`, 25 assertions.
+- `buildTvFeedJson` (every 5 min) reads active clips once, groups by district, and
+  writes `feed/v1/{districtId}/{tab}/p{n}.json` to R2, deleting pages left over from
+  a shrunken pool.
+- `R2Output.putJson` — unlike clip files this is **not** `immutable`: the feed
+  changes, so it gets a short `max-age` plus `stale-while-revalidate`.
+- Tabs mirror the client's `_categoriesForTab`: `all` / `news` / `market`.
+- Only feed-relevant fields are emitted — `playbackStats`, `socialPost`,
+  `processedVideoUrl`, `variantRun` and friends are dropped. `createdAt` becomes
+  `createdAtMs` because a Firestore Timestamp has no JSON form.
+- An empty pool still gets one empty page, so the client sees `[]` rather than a 404.
+
+**Needed in Cloudflare before the client switches over:** the current Cache Rule
+matches `m3u8 ts m4s mp4 webp` only, so `.json` is not cached at the edge and the
+latency win would not materialise. Add `json` to the extension list (its own short
+TTL comes from the object's own `Cache-Control`).
+
+**Known gap in v1:** region/national-scoped ads (`_fetchScopedAds`) are not included —
+see 11.9.
+
+**Scaling limit:** every run reads all active clips. Past roughly 2,000 active clips
+those reads outgrow the savings, and only changed pools should be rebuilt.
+
+### 11.8 Deploy blocked 2026-10-02 — Secret Manager returns a billing error
+
+`firebase deploy --only functions:buildTvFeedJson` fails at secret validation:
+
+```
+Failed to validate secret versions:
+403 This API method requires billing to be enabled ... projects/master-taxi-gurlan
+```
+
+What was checked:
+
+| Check | Result |
+|---|---|
+| `gcloud billing projects describe` | `billingEnabled: True`, account `0185D6-…` |
+| `gcloud secrets versions list` (R2 keys) | same 403 — so it is the API, not the CLI |
+| `gcloud billing accounts describe` | the signed-in account lacks permission to view it |
+| Firestore read | works |
+| Deployed functions | still running (`expireTvContent` 3 min earlier), no errors in 30 min |
+
+So **production is unaffected**; only APIs that strictly require a chargeable billing
+account are refusing. Earlier deploys today succeeded, so this began within hours.
+Most likely the billing account itself needs attention (closed, payment failed, or a
+verification hold) — only the owner can see that.
+
+Any function declaring `secrets:` is blocked until it clears. Pending:
+`buildTvFeedJson`.
+
+### 11.9 Defect found while measuring — `regionId` is empty on every clip
+
+All 228 active clips have `districtId`, and **none has `regionId`**. Consequences:
+
+- `_fetchScopedAds` (`tv_clips_repository.dart:124`) filters on
+  `adScope in ['region','national']` and then matches `c.regionId == regionId`, so a
+  region-wide paid ad can never appear in another district's feed. Whoever paid for
+  regional reach is not getting it.
+- `fetchByRegion` survives only because it works from the district list rather than
+  the clip's own `regionId` — the repository comment already notes clips may lack it.
+
+Not fixed here (outside this phase). A fix needs a backfill from `districtId` →
+`geo_districts.regionId` plus writing `regionId` at publish time.
+
 ### 11.6 Pending deploy — `reconcileTvProfileViews`, `onTvClipDeleted`
 
 ```

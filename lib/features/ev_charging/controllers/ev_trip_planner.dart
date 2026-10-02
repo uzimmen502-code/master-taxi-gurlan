@@ -1,0 +1,429 @@
+import 'dart:math' as math;
+
+import '../../../models/ev_charging_station.dart';
+import '../models/ev_trip_plan.dart';
+
+/// Маршрут чизиғининг битта нуқтаси. `google_maps_flutter`'нинг `LatLng`
+/// ўрнига ўз типи — планер тоза Dart бўлиб қолиши учун (плагинсиз
+/// `flutter test`да ишлайди).
+class EvRoutePoint {
+  const EvRoutePoint(this.lat, this.lng);
+  final double lat;
+  final double lng;
+}
+
+/// ⚡ EV сафар ёрдамчиси — ҳисоб ядроси.
+///
+/// Иккита алоҳида босқич:
+///   1. [corridor] — 456 та станциядан маршрут яқинидагиларини ажратиш ва
+///      ҳар бирини йўл бўйлаб масофага проекция қилиш. ТАШҚИ СЎРОВ ЙЎҚ:
+///      база аллақачон хотирада (`watchAllActive`), шунинг учун бу ҳисоб
+///      телефонда, бепул ва офлайн бажарилади.
+///   2. [plan] — заряд ҳисоби билан асосий ва заҳира тўхташларни танлаш.
+///
+/// Муҳим қоида: режа ЎЙЛАБ ТОПИЛМАЙДИ. Станция етмаса
+/// [EvTripPlanStatus.gapTooLarge] қайтади ва ҳайдовчига узилиш қаерда
+/// эканлиги кўрсатилади — «режа бор» деб чўлда қолдиришдан кўра яхши.
+class EvTripPlanner {
+  const EvTripPlanner._();
+
+  /// Йўл чизиғидан қанча четдаги станциялар ҳисобга олинади.
+  /// 5 км — overview polyline соддалаштирилганини (вершиналар орасида
+  /// 1–3 км) ҳисобга олган эҳтиёткор қиймат.
+  static const double defaultCorridorKm = 5;
+
+  /// Ҳар тўхташ учун кўрсатиладиган заҳира сони.
+  static const int maxBackupsPerStop = 3;
+
+  /// Чексиз цикл ва маъносиз узун режалардан ҳимоя.
+  static const int maxStops = 12;
+
+  /// Асосий станцияни танлашда «эрта тўхташ»дан қочиш: етиб бориш
+  /// мумкин бўлган масофанинг шу фоизидан кейинги станциялар устун
+  /// кўрилади (яъни имкониятнинг охирги 35%и).
+  static const double _preferTailFraction = 0.65;
+
+  // ---------------------------------------------------------------------
+  // 1-босқич: коридор
+  // ---------------------------------------------------------------------
+
+  /// Маршрут яқинидаги станциялар — йўл бўйлаб масофа бўйича тартибланган.
+  ///
+  /// Такрорлар (бир станция икки марта) бўлмайди: ҳар станция учун энг
+  /// яқин сегмент танланади.
+  static List<EvCorridorStation> corridor({
+    required List<EvRoutePoint> route,
+    required List<EvChargingStation> stations,
+    double corridorKm = defaultCorridorKm,
+  }) {
+    if (route.length < 2 || stations.isEmpty) return const [];
+
+    // Ҳар вершинагача жамланган масофа — проекцияда ишлатилади.
+    final cumKm = List<double>.filled(route.length, 0);
+    for (var i = 1; i < route.length; i++) {
+      cumKm[i] = cumKm[i - 1] + _distanceKm(route[i - 1], route[i]);
+    }
+
+    final result = <EvCorridorStation>[];
+    for (final s in stations) {
+      var bestOffKm = double.infinity;
+      var bestAlongKm = 0.0;
+
+      for (var i = 0; i < route.length - 1; i++) {
+        final seg = _projectOnSegment(
+          lat: s.latitude,
+          lng: s.longitude,
+          a: route[i],
+          b: route[i + 1],
+        );
+        if (seg.offKm < bestOffKm) {
+          bestOffKm = seg.offKm;
+          bestAlongKm = cumKm[i] + seg.alongKm;
+        }
+      }
+
+      if (bestOffKm <= corridorKm) {
+        result.add(EvCorridorStation(
+          station: s,
+          alongKm: bestAlongKm,
+          offRouteKm: bestOffKm,
+        ));
+      }
+    }
+
+    result.sort((a, b) => a.alongKm.compareTo(b.alongKm));
+    return result;
+  }
+
+  /// Маршрут чизиғининг тўлиқ узунлиги (км) — Directions'даги
+  /// `distanceKm` бўлмаса шу ишлатилади.
+  static double routeLengthKm(List<EvRoutePoint> route) {
+    if (route.length < 2) return 0;
+    var total = 0.0;
+    for (var i = 1; i < route.length; i++) {
+      total += _distanceKm(route[i - 1], route[i]);
+    }
+    return total;
+  }
+
+  // ---------------------------------------------------------------------
+  // 2-босқич: режа
+  // ---------------------------------------------------------------------
+
+  /// Асосий + заҳира тўхташлар режаси.
+  ///
+  /// [startSocPercent] — ҳозирги заряд (%). Заряд кутилгандан тез тушса,
+  /// шу метод янги [startSocPercent] ва [fromAlongKm] билан ҚАЙТА
+  /// чақирилади — заҳира ўз-ўзидан асосийга айланади.
+  static EvTripPlan plan({
+    required List<EvCorridorStation> corridorStations,
+    required double totalKm,
+    required EvCarSpec car,
+    required int startSocPercent,
+    double fromAlongKm = 0,
+  }) {
+    if (totalKm <= 0) {
+      return EvTripPlan.empty;
+    }
+    if (!car.isValid) {
+      return EvTripPlan(
+        status: EvTripPlanStatus.invalidCar,
+        stops: const [],
+        totalKm: totalKm,
+        arrivalSocPercent: 0,
+      );
+    }
+
+    final warnings = <String>{};
+    if (car.connectors.isEmpty) warnings.add(EvTripWarning.connectorUnknown);
+    if (startSocPercent <= car.reservePercent) {
+      warnings.add(EvTripWarning.startSocBelowReserve);
+    }
+
+    // Фақат олдинда турган ва фойдали станциялар.
+    final usable = corridorStations
+        .where((c) => c.alongKm > fromAlongKm + 0.5)
+        .where((c) => c.alongKm <= totalKm + 0.5)
+        .where((c) => c.station.status != 'not_working')
+        .where((c) => _connectorOk(c.station, car))
+        .toList();
+
+    final stops = <EvTripStop>[];
+    var position = fromAlongKm;
+    var soc = startSocPercent.toDouble();
+
+    while (stops.length < maxStops) {
+      final reachKm = car.usableRangeKmAt(soc);
+
+      // Манзилга етадими?
+      if (position + reachKm >= totalKm) {
+        final remainingKm = totalKm - position;
+        final arrival = soc - _socForKm(remainingKm, car);
+        return EvTripPlan(
+          status: stops.isEmpty
+              ? EvTripPlanStatus.noChargingNeeded
+              : EvTripPlanStatus.ok,
+          stops: stops,
+          totalKm: totalKm,
+          arrivalSocPercent: arrival.round().clamp(0, 100),
+          warnings: _finalWarnings(warnings, stops),
+        );
+      }
+
+      final limit = position + reachKm;
+      final candidates =
+          usable.where((c) => c.alongKm > position && c.alongKm <= limit).toList();
+
+      if (candidates.isEmpty) {
+        // Узилиш — ўйлаб топмаймиз, очиқ айтамиз.
+        final next = usable.firstWhere(
+          (c) => c.alongKm > limit,
+          orElse: () => const EvCorridorStation(
+            station: _noStation,
+            alongKm: -1,
+            offRouteKm: 0,
+          ),
+        );
+        return EvTripPlan(
+          status: EvTripPlanStatus.gapTooLarge,
+          stops: stops,
+          totalKm: totalKm,
+          arrivalSocPercent: 0,
+          warnings: _finalWarnings(warnings, stops),
+          gapFromKm: position,
+          gapReachKm: limit,
+          gapNextStationKm: next.alongKm < 0 ? null : next.alongKm,
+        );
+      }
+
+      final primary = _pickPrimary(candidates, position, reachKm);
+      final legKm = primary.alongKm - position;
+      final arriveSoc = soc - _socForKm(legKm, car);
+      final departSoc = math.max(car.chargeToPercent.toDouble(), arriveSoc);
+
+      stops.add(EvTripStop(
+        station: primary.station,
+        alongKm: primary.alongKm,
+        offRouteKm: primary.offRouteKm,
+        legKm: legKm,
+        arriveSocPercent: arriveSoc.round().clamp(0, 100),
+        departSocPercent: departSoc.round().clamp(0, 100),
+        backups: _pickBackups(candidates, primary),
+      ));
+
+      position = primary.alongKm;
+      soc = departSoc;
+    }
+
+    // maxStops тугади — бу ҳолатда ҳам «тайёр» деб кўрсатмаймиз.
+    return EvTripPlan(
+      status: EvTripPlanStatus.gapTooLarge,
+      stops: stops,
+      totalKm: totalKm,
+      arrivalSocPercent: 0,
+      warnings: _finalWarnings(warnings, stops),
+      gapFromKm: position,
+      gapReachKm: position + car.usableRangeKmAt(soc),
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Танлаш мантиғи
+  // ---------------------------------------------------------------------
+
+  /// Асосий станция: имкониятнинг охирги қисмидагилар устун (камроқ
+  /// тўхташ), улар орасида эса сифати баландроғи.
+  static EvCorridorStation _pickPrimary(
+    List<EvCorridorStation> candidates,
+    double position,
+    double reachKm,
+  ) {
+    final tailStart = position + reachKm * _preferTailFraction;
+    final tail = candidates.where((c) => c.alongKm >= tailStart).toList();
+    final pool = tail.isNotEmpty ? tail : candidates;
+
+    pool.sort((a, b) {
+      final byScore = _score(b.station).compareTo(_score(a.station));
+      if (byScore != 0) return byScore;
+      // Тенг сифатда — узоқроғи (камроқ тўхташ).
+      return b.alongKm.compareTo(a.alongKm);
+    });
+    return pool.first;
+  }
+
+  /// Заҳиралар — асосийга энг яқинлари. Асосийдан ОЛДИН турганлари устун:
+  /// заряд кутилгандан тез тушса айнан улар керак бўлади.
+  static List<EvTripBackup> _pickBackups(
+    List<EvCorridorStation> candidates,
+    EvCorridorStation primary,
+  ) {
+    final others = candidates
+        .where((c) => c.station.id != primary.station.id)
+        .map((c) => EvTripBackup(
+              station: c.station,
+              alongKm: c.alongKm,
+              offRouteKm: c.offRouteKm,
+              deltaKm: c.alongKm - primary.alongKm,
+            ))
+        .toList();
+
+    others.sort((a, b) {
+      // Олдиндагилар биринчи, кейин асосийга яқинлиги бўйича.
+      if (a.isBefore != b.isBefore) return a.isBefore ? -1 : 1;
+      return a.deltaKm.abs().compareTo(b.deltaKm.abs());
+    });
+
+    return others.take(maxBackupsPerStop).toList();
+  }
+
+  /// Станция сифати — DC, қувват, текширилганлик ва жамоа сигналлари.
+  static int _score(EvChargingStation s) {
+    var score = 0;
+
+    final isDc = s.chargingTypes.contains('DC') || s.chargingTypes.contains('AC+DC');
+    if (isDc) score += 40;
+
+    final power = (s.powerKw ?? s.sitePowerKw ?? 0).toDouble();
+    score += (power.clamp(0, 150) / 150 * 30).round();
+
+    switch (s.verificationStatus) {
+      case 'operator_verified':
+        score += 25;
+      case 'verified':
+        score += 20;
+      case 'community':
+        score += 10;
+      default:
+        break; // imported — қўшимча ишонч йўқ
+    }
+
+    if (s.status == 'working') score += 15;
+    if (s.status == 'partially_working') score += 5;
+
+    switch (s.occupancyState) {
+      case 'free':
+        score += 10;
+      case 'busy':
+        score -= 15;
+      default:
+        break;
+    }
+
+    if (s.confirmationCount > 0) score += 5;
+    if (s.reportCount > 0) score -= 10;
+
+    return score;
+  }
+
+  static bool _connectorOk(EvChargingStation s, EvCarSpec car) {
+    if (car.connectors.isEmpty) return true;
+    // Станцияда разъём ёзилмаган — рад этмаймиз (маълумот тўлиқ эмас),
+    // лекин сифат балли ҳам ошмайди.
+    if (s.connectors.isEmpty) return true;
+    return s.connectors.any(car.connectors.contains);
+  }
+
+  static List<String> _finalWarnings(
+    Set<String> warnings,
+    List<EvTripStop> stops,
+  ) {
+    final out = {...warnings};
+    if (stops.any((s) => s.isUnverifiedImport)) {
+      out.add(EvTripWarning.unverifiedStops);
+    }
+    if (stops.any((s) => !s.hasBackup)) {
+      out.add(EvTripWarning.noBackup);
+    }
+    if (stops.any((s) =>
+        !s.station.chargingTypes.contains('DC') &&
+        !s.station.chargingTypes.contains('AC+DC') &&
+        s.station.chargingTypes.isNotEmpty)) {
+      out.add(EvTripWarning.slowAcOnly);
+    }
+    return out.toList();
+  }
+
+  /// Берилган масофа учун сарфланадиган заряд (%).
+  static double _socForKm(double km, EvCarSpec car) {
+    if (km <= 0) return 0;
+    final kwh = km / 100 * car.consumptionKwhPer100Km;
+    return kwh / car.usableBatteryKwh * 100;
+  }
+
+  // ---------------------------------------------------------------------
+  // Геометрия
+  // ---------------------------------------------------------------------
+
+  static const double _earthRadiusKm = 6371.0088;
+
+  static double _distanceKm(EvRoutePoint a, EvRoutePoint b) =>
+      _haversineKm(a.lat, a.lng, b.lat, b.lng);
+
+  static double _haversineKm(
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
+    final dLat = _rad(lat2 - lat1);
+    final dLng = _rad(lng2 - lng1);
+    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(lat1)) *
+            math.cos(_rad(lat2)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return 2 * _earthRadiusKm * math.asin(math.min(1, math.sqrt(h)));
+  }
+
+  /// Нуқтани [a]–[b] сегментига проекция қилиш. Кичик масофаларда
+  /// эквиректангуляр яқинлаштириш етарли аниқ (бир сегмент 1–3 км).
+  static ({double offKm, double alongKm}) _projectOnSegment({
+    required double lat,
+    required double lng,
+    required EvRoutePoint a,
+    required EvRoutePoint b,
+  }) {
+    final latScale = math.cos(_rad((a.lat + b.lat) / 2));
+    final ax = 0.0;
+    final ay = 0.0;
+    final bx = _rad(b.lng - a.lng) * latScale * _earthRadiusKm;
+    final by = _rad(b.lat - a.lat) * _earthRadiusKm;
+    final px = _rad(lng - a.lng) * latScale * _earthRadiusKm;
+    final py = _rad(lat - a.lat) * _earthRadiusKm;
+
+    final segLenSq = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+    if (segLenSq == 0) {
+      return (offKm: _haversineKm(lat, lng, a.lat, a.lng), alongKm: 0);
+    }
+
+    var t = ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / segLenSq;
+    t = t.clamp(0.0, 1.0);
+
+    final projX = ax + t * (bx - ax);
+    final projY = ay + t * (by - ay);
+    final offKm = math.sqrt(
+        (px - projX) * (px - projX) + (py - projY) * (py - projY));
+    final segLenKm = math.sqrt(segLenSq);
+
+    return (offKm: offKm, alongKm: t * segLenKm);
+  }
+
+  static double _rad(double deg) => deg * math.pi / 180;
+}
+
+/// `orElse` учун сентинел — ҳақиқий станция эмас, фақат «топилмади»
+/// ҳолатини белгилайди.
+const _noStation = EvChargingStation(
+  id: '',
+  latitude: 0,
+  longitude: 0,
+  geohash: '',
+  chargingTypes: [],
+  connectors: [],
+  status: 'unknown',
+  verificationStatus: 'community',
+  confirmationCount: 0,
+  reportCount: 0,
+  createdBy: '',
+  isActive: false,
+);

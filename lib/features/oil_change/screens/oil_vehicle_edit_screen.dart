@@ -146,6 +146,12 @@ class _OilVehicleEditScreenState extends State<OilVehicleEditScreen> {
         year: year,
         engine: widget.vehicle?.engine ?? '',
         fuelType: widget.vehicle?.fuelType ?? '',
+        // ⚡ EV майдонлари бу формада таҳрирланмайди — лекин кўчирилмаса
+        // мой формасидан сақлаш уларни ўчириб юборарди.
+        evBatteryKwh: widget.vehicle?.evBatteryKwh ?? 0,
+        evConsumptionKwhPer100Km:
+            widget.vehicle?.evConsumptionKwhPer100Km ?? 0,
+        evConnectors: widget.vehicle?.evConnectors ?? const [],
         usageTags: widget.vehicle?.usageTags ?? const [],
         seats: seats,
         oilType: oil,

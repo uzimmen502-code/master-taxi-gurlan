@@ -164,6 +164,10 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
         year: _year,
         engine: _engine,
         fuelType: _fuel,
+        // ⚡ EV майдонлари бу созлашда сўралмайди — мавжуд қиймат сақланади.
+        evBatteryKwh: prev?.evBatteryKwh ?? 0,
+        evConsumptionKwhPer100Km: prev?.evConsumptionKwhPer100Km ?? 0,
+        evConnectors: prev?.evConnectors ?? const [],
         usageTags: _usage.toList(),
         seats: _seats,
         oilType: prev?.oilType ?? '',

@@ -1,0 +1,482 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/map_launcher.dart';
+import '../../../models/ev_charging_station.dart';
+import '../../../models/oil_vehicle.dart';
+import '../../../repositories/oil_change_repository.dart';
+import '../controllers/ev_trip_controller.dart';
+import '../data/ev_trip_destinations.dart';
+import '../models/ev_trip_plan.dart';
+import '../widgets/ev_car_sheet.dart';
+import '../widgets/ev_trip_map_view.dart';
+import '../widgets/ev_trip_plan_view.dart';
+
+/// ⚡ «Қаерга борамиз?» — EV сафар ёрдамчиси.
+///
+/// Экран атайин битта саволдан бошланади. Автомобил маълумоти гаражда
+/// бир марта сақланади, шунинг учун бу ерда фақат МАНЗИЛ ва ҲОЗИРГИ
+/// ЗАРЯД сўралади.
+class EvTripScreen extends StatefulWidget {
+  const EvTripScreen({
+    super.key,
+    required this.uid,
+    required this.originLat,
+    required this.originLng,
+    required this.stations,
+  });
+
+  final String uid;
+  final double originLat;
+  final double originLng;
+
+  /// Барча актив станциялар (`watchAllActive`) — экран ўз обунасини
+  /// яратмайди, харита экрани аллақачон тинглаб турган рўйхат узатилади.
+  final List<EvChargingStation> stations;
+
+  @override
+  State<EvTripScreen> createState() => _EvTripScreenState();
+}
+
+class _EvTripScreenState extends State<EvTripScreen> {
+  final _repo = OilChangeRepository();
+  final _controller = EvTripController();
+  final _searchCtrl = TextEditingController();
+
+  OilVehicle? _car;
+  bool _carLoading = true;
+  EvTripDestination? _destination;
+  double _soc = 80;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onControllerChanged);
+    _loadCar();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadCar() async {
+    final list = await _repo.watchVehicles(widget.uid).first;
+    if (!mounted) return;
+    // Гаражда бир нечта машина бўлиши мумкин — EV маълумоти тўлиқ
+    // бўлгани устун (`watchVehicles` асосийни биринчи қайтаради).
+    OilVehicle? withSpec;
+    OilVehicle? electric;
+    for (final v in list) {
+      withSpec ??= v.hasEvSpec ? v : null;
+      electric ??= v.isElectric ? v : null;
+    }
+    setState(() {
+      _car = withSpec ?? electric;
+      _carLoading = false;
+    });
+  }
+
+  Future<void> _editCar() async {
+    final saved = await EvCarSheet.show(
+      context,
+      uid: widget.uid,
+      vehicle: _car,
+    );
+    if (saved != null && mounted) setState(() => _car = saved);
+  }
+
+  String _langCode() {
+    final locale = Localizations.localeOf(context);
+    return switch (locale.languageCode) {
+      'ru' => 'ru',
+      'uz' => locale.scriptCode == 'Latn' ? 'uz_Latn' : 'uz_Cyrl',
+      _ => 'uz_Cyrl',
+    };
+  }
+
+  Future<void> _calculate() async {
+    final car = _car?.evSpec;
+    final dest = _destination;
+    if (car == null || dest == null) return;
+
+    await _controller.planTrip(
+      originLat: widget.originLat,
+      originLng: widget.originLng,
+      destinationLat: dest.lat,
+      destinationLng: dest.lng,
+      car: car,
+      socPercent: _soc.round(),
+      stations: widget.stations,
+    );
+  }
+
+  void _openNavigator() {
+    final dest = _destination;
+    if (dest == null) return;
+    openMapsEvTripRoute(
+      originLat: widget.originLat,
+      originLng: widget.originLng,
+      destinationLat: dest.lat,
+      destinationLng: dest.lng,
+      stops: _controller.navigationStops,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = _controller.plan;
+    return Scaffold(
+      backgroundColor: AppColors.scaffold,
+      appBar: AppBar(title: Text(context.tr('ev_trip_title'))),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _carBlock(),
+          const SizedBox(height: 16),
+          _destinationBlock(),
+          if (_destination != null) ...[
+            const SizedBox(height: 16),
+            _socBlock(),
+            const SizedBox(height: 16),
+            _calculateButton(),
+          ],
+          if (_controller.error != null) ...[
+            const SizedBox(height: 16),
+            _errorBox(_controller.error!),
+          ],
+          if (plan != null) ...[
+            const SizedBox(height: 20),
+            _mapBlock(plan),
+            const SizedBox(height: 16),
+            EvTripPlanView(plan: plan, onOpenNavigator: _openNavigator),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---- Автомобил ----
+
+  Widget _carBlock() {
+    if (_carLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: SizedBox(
+              width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+
+    final car = _car;
+    final ready = car?.hasEvSpec == true;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ready ? Colors.white : const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: ready ? const Color(0xFFE3E7EE) : const Color(0xFFFFE082)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.electric_car_rounded,
+              color: ready ? AppColors.primaryDark : const Color(0xFFE65100)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ready
+                      ? (car!.model.trim().isNotEmpty
+                          ? car.model.trim()
+                          : context.tr('ev_trip_car_title'))
+                      : context.tr('ev_trip_car_missing'),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                if (ready)
+                  Text(
+                    '${_fmt(car!.evBatteryKwh)} kWh · '
+                    '${_fmt(car.evConsumptionKwhPer100Km)} kWh/100${context.tr('ev_trip_km')}'
+                    '${car.evConnectors.isEmpty ? '' : ' · ${car.evConnectors.join(' · ')}'}',
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54),
+                  )
+                else
+                  Text(
+                    context.tr('ev_trip_car_missing_body'),
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _editCar,
+            child: Text(ready
+                ? context.tr('edit')
+                : context.tr('ev_trip_car_fill')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
+
+  // ---- Манзил ----
+
+  Widget _destinationBlock() {
+    final lang = _langCode();
+    final dest = _destination;
+
+    if (dest != null) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE3E7EE)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.place_rounded, color: AppColors.primaryDark),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                dest.nameFor(lang),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                _destination = null;
+                _searchCtrl.clear();
+                _controller.clear();
+              }),
+              child: Text(context.tr('ev_trip_change')),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final matches = EvTripDestination.search(_searchCtrl.text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          context.tr('ev_trip_where'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _searchCtrl,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search_rounded),
+            hintText: context.tr('ev_trip_search_hint'),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (matches.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(context.tr('ev_trip_not_found'),
+                style: const TextStyle(color: Colors.black54)),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE3E7EE)),
+            ),
+            child: Column(
+              children: [
+                for (final d in matches)
+                  ListTile(
+                    dense: true,
+                    title: Text(d.nameFor(lang)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => setState(() {
+                      _destination = d;
+                      _controller.clear();
+                    }),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ---- Заряд ----
+
+  Widget _socBlock() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3E7EE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.battery_charging_full_rounded,
+                  color: AppColors.primaryDark, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.tr('ev_trip_charge_now'),
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Text('${_soc.round()}%',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w800)),
+            ],
+          ),
+          Slider(
+            value: _soc,
+            min: 5,
+            max: 100,
+            divisions: 19,
+            label: '${_soc.round()}%',
+            onChanged: (v) => setState(() => _soc = v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _calculateButton() {
+    final ready = _car?.hasEvSpec == true && _destination != null;
+    return SizedBox(
+      height: 50,
+      child: ElevatedButton(
+        onPressed: ready && !_controller.loading ? _calculate : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryDark,
+          foregroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: _controller.loading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : Text(
+                context.tr('ev_trip_calculate'),
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+      ),
+    );
+  }
+
+  // ---- Харита ----
+
+  /// Маршрут чизиғи + рақамланган тўхташлар + заҳиралар + йўл бўйидаги
+  /// қолган станциялар. Қолганлари ҳам кўрсатилади: ҳайдовчи «яна қаерда
+  /// станция бор» саволига режани очмасдан жавоб топсин.
+  Widget _mapBlock(EvTripPlan plan) {
+    final dest = _destination!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            height: 280,
+            child: EvTripMapView(
+              route: _controller.routePoints,
+              corridorStations: _controller.corridorStations,
+              plan: plan,
+              destinationLat: dest.lat,
+              destinationLng: dest.lng,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 14,
+          runSpacing: 6,
+          children: [
+            _legend(const Color(0xFFD32F2F), context.tr('ev_trip_legend_primary')),
+            _legend(const Color(0xFFF57C00), context.tr('ev_trip_legend_backup')),
+            _legend(const Color(0xFF388E3C), context.tr('ev_trip_legend_other')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _legend(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: Colors.black54)),
+      ],
+    );
+  }
+
+  Widget _errorBox(String code) {
+    final text = switch (code) {
+      'route_geometry_missing' => context.tr('ev_trip_error_geometry'),
+      _ => context.tr('ev_trip_error_route'),
+    };
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEBEE),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off_rounded, color: Color(0xFFC62828)),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+}

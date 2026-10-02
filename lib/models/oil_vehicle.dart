@@ -37,6 +37,9 @@ class OilVehicle {
     this.year = 0,
     this.engine = '',
     this.fuelType = '',
+    this.evBatteryKwh = 0,
+    this.evConsumptionKwhPer100Km = 0,
+    this.evConnectors = const [],
     this.usageTags = const [],
     this.seats = 4,
     this.oilType = '',
@@ -59,8 +62,23 @@ class OilVehicle {
   final int year;
   /// Двигатель ҳажми (1.5, 1.2, …).
   final String engine;
-  /// petrol | cng | lpg
+  /// petrol | cng | lpg | ev
   final String fuelType;
+
+  // ---- ⚡ Электромобил (fuelType == 'ev') — EV сафар ёрдамчиси учун ----
+  //
+  // Шу учта майдон «Менинг автомобилларим»да БИР МАРТА сақланади, кейин
+  // ҳар сафарда қайта сўралмайди. Бензин машиналарда бўш туради.
+
+  /// Фойдаланиладиган батарея сиғими (kWh).
+  final double evBatteryKwh;
+
+  /// Реал сарф (kWh/100 км).
+  final double evConsumptionKwhPer100Km;
+
+  /// `CCS2`, `Type 2`, `GB/T`, `CHAdeMO`.
+  final List<String> evConnectors;
+
   /// personal | taxi | corp | dust | long
   final List<String> usageTags;
   final int seats;
@@ -83,10 +101,17 @@ class OilVehicle {
   bool get isRecommendationReady =>
       model.trim().isNotEmpty && fuelType.trim().isNotEmpty;
 
+  bool get isElectric => fuelType.trim().toLowerCase() == 'ev';
+
+  /// EV сафар режасини ҳисоблаш учун маълумот етарлими.
+  bool get hasEvSpec =>
+      isElectric && evBatteryKwh > 0 && evConsumptionKwhPer100Km > 0;
+
   String get fuelLabelUz => switch (fuelType.trim().toLowerCase()) {
         'petrol' => 'Бензин',
         'cng' => 'Метан',
         'lpg' => 'Пропан',
+        'ev' => 'Электр',
         _ => fuelType.trim().isEmpty ? '' : fuelType.trim(),
       };
 
@@ -180,6 +205,9 @@ class OilVehicle {
       'year': year,
       'engine': engine.trim(),
       'fuelType': fuelType.trim(),
+      'evBatteryKwh': evBatteryKwh,
+      'evConsumptionKwhPer100Km': evConsumptionKwhPer100Km,
+      'evConnectors': evConnectors,
       'usageTags': usageTags,
       'seats': seats,
       'oilType': oilType.trim(),
@@ -213,6 +241,10 @@ class OilVehicle {
       year: (d['year'] as num?)?.toInt() ?? 0,
       engine: (d['engine'] as String?) ?? '',
       fuelType: (d['fuelType'] as String?) ?? '',
+      evBatteryKwh: (d['evBatteryKwh'] as num?)?.toDouble() ?? 0,
+      evConsumptionKwhPer100Km:
+          (d['evConsumptionKwhPer100Km'] as num?)?.toDouble() ?? 0,
+      evConnectors: List<String>.from(d['evConnectors'] as List? ?? const []),
       usageTags: tags,
       seats: (d['seats'] as num?)?.toInt() ?? 4,
       oilType: (d['oilType'] as String?) ?? '',
@@ -236,6 +268,9 @@ class OilVehicle {
     int? year,
     String? engine,
     String? fuelType,
+    double? evBatteryKwh,
+    double? evConsumptionKwhPer100Km,
+    List<String>? evConnectors,
     List<String>? usageTags,
     int? seats,
     String? oilType,
@@ -255,6 +290,10 @@ class OilVehicle {
       year: year ?? this.year,
       engine: engine ?? this.engine,
       fuelType: fuelType ?? this.fuelType,
+      evBatteryKwh: evBatteryKwh ?? this.evBatteryKwh,
+      evConsumptionKwhPer100Km:
+          evConsumptionKwhPer100Km ?? this.evConsumptionKwhPer100Km,
+      evConnectors: evConnectors ?? this.evConnectors,
       usageTags: usageTags ?? this.usageTags,
       seats: seats ?? this.seats,
       oilType: oilType ?? this.oilType,

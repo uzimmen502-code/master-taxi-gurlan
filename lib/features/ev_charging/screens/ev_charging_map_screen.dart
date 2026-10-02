@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/ev_charging_rules_holder.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/map_launcher.dart';
@@ -18,6 +19,7 @@ import '../widgets/ev_map_view.dart';
 import '../widgets/ev_station_card.dart';
 import '../widgets/ev_station_tariff_sheet.dart';
 import 'add_ev_station_screen.dart';
+import 'ev_trip_screen.dart';
 
 /// ⚡ Электромобил зарядлаш нуқталари — асосий xarita ekrani (11-band).
 /// Faqat ro'yxatdan o'tgan (registratsiyadan o'tgan) foydalanuvchilar uchun —
@@ -181,6 +183,34 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
     );
   }
 
+  /// ⚡ Сафар ёрдамчиси. GPS бўлмаса очилмайди — режа бошланғич нуқтасиз
+  /// ҳисобланмайди, шунинг учун ўйлаб топилган координата ишлатилмайди.
+  Future<void> _openTripPlanner(EvChargingMapController controller) async {
+    if (!controller.hasLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('ev_trip_location_missing'))),
+      );
+      return;
+    }
+    final phone =
+        canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
+    if (phone.length < 9) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EvTripScreen(
+          uid: phone,
+          originLat: controller.lat!,
+          originLng: controller.lng!,
+          // Филтрланмаган рўйхат — режа машинанинг разъёмига қараб
+          // ўзи танлайди, AC/DC филтри фақат харита учун.
+          stations: controller.allStations,
+        ),
+      ),
+    );
+  }
+
   /// ⚡ Станция қўшиш — ПУЛЛИК (эга қарори, 2026-09-22): аввал тариф+қадамлар
   /// варақаси, тариф танлангандан кейин форма экранига ўтилади.
   Future<void> _openPaidAddFlow(
@@ -216,6 +246,10 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
+          // ⚡ «Қаерга борамиз?» — EV модули оддий станциялар харитаси
+          // бўлиб қолмаслиги учун сафар ёрдамчиси энг устда.
+          _TripPlannerBar(onTap: () => _openTripPlanner(controller)),
+          const SizedBox(height: 8),
           _PaidAddStationBar(
             onTap: () => _openPaidAddFlow(context, controller),
           ),
@@ -245,6 +279,54 @@ class _EvChargingMapViewState extends State<_EvChargingMapView> {
         label: Text(label),
         selected: isSelected,
         onSelected: (_) => controller.setChargingTypeFilter(value),
+      ),
+    );
+  }
+}
+
+/// ⚡ «Қаерга борамиз?» — сафар ёрдамчисига кириш. `_PaidAddStationBar`
+/// билан бир хил шаклда, лекин тўлдирилган эмас — иккита тўлиқ яшил
+/// панель бир-бири билан рақобатлашиб кетмаслиги учун.
+class _TripPlannerBar extends StatelessWidget {
+  const _TripPlannerBar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 1,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.primaryDark, width: 1.4),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.route_rounded,
+                  color: AppColors.primaryDark, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                context.tr('ev_trip_entry'),
+                style: const TextStyle(
+                  color: AppColors.primaryDark,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

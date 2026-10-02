@@ -39,6 +39,11 @@ class EvChargingMapController extends ChangeNotifier {
     return _stations.where((s) => s.chargingTypes.contains(filter)).toList();
   }
 
+  /// Филтрланмаган тўлиқ рўйхат — сафар режаси учун.
+  /// AC/DC филтри фақат харита кўриниши учун; режа эса машинанинг ўз
+  /// разъёмига қараб танлайди, шунинг учун унга ҳамма нуқта керак.
+  List<EvChargingStation> get allStations => _stations;
+
   Future<void> init() async {
     try {
       final coords = await _locationService.getCurrentCoords();

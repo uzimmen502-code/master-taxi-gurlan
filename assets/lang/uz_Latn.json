@@ -2321,8 +2321,6 @@
   "realty_feed_empty": "Hozircha obyekt yo'q. Birinchi bo'lib qo'shing.",
   "realty_feed_paid_empty": "Hozircha bu darajada obyekt yo'q. O'z e'loningizni shu yerga ko'tarishingiz mumkin.",
   "realty_feed_error": "Ro'yxatni yuklab bo'lmadi. Internetni tekshiring.",
-  "realty_map_guest": "Xarita faqat ro'yxatdan o'tganlar uchun.",
-  "realty_register_cta": "Ro'yxatdan o'tish",
   "realty_pick_point": "Obyekt joyini belgilang",
   "realty_point_required": "Xaritada nuqtani belgilang — majburiy",
   "realty_point_chosen": "Nuqta belgilandi",

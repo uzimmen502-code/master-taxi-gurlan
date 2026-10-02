@@ -17,6 +17,8 @@ import '../../../repositories/realty_repository.dart';
 import '../../ads/services/ads_storage_service.dart';
 import '../../map_picker/screens/map_picker_screen.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_controls.dart';
+import '../widgets/realty_feedback.dart';
 import 'realty_pro_screen.dart';
 
 /// Кўчмас мулк объекти — янгисини қўшиш ва мавжудини таҳрирлаш.
@@ -370,10 +372,10 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     if (label.isEmpty) return;
     await _repo.savePlace(label: label, lat: point.lat, lng: point.lng);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('realty_place_saved')),
-      behavior: SnackBarBehavior.floating,
-    ));
+    showRealtyInfo(
+      ScaffoldMessenger.of(context),
+      context.tr('realty_place_saved'),
+    );
   }
 
   Future<void> _pickImages() async {
@@ -473,11 +475,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       );
       await _clearDraft();
       navigator.pop();
-      messenger.showSnackBar(SnackBar(
-        content: Text(message),
-        backgroundColor: _tierColor,
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(messenger, message, background: _tierColor);
     } on RealtyException catch (e) {
       // Эълон яратилмади — юкланган расмлар Storage'да эгасиз қолмасин.
       if (uploaded.isNotEmpty) {
@@ -491,11 +489,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
         if (mounted) await _offerProPackage();
         return;
       }
-      messenger.showSnackBar(SnackBar(
-        content: Text(_errorText(e)),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, realtyErrorText(context, e));
     } catch (e) {
       // Тармоқ узилиши, таймаут ва бошқа кутилмаган хато — бу шохда
       // ҳам расмлар эгасиз қолмаслиги керак. Аввал тозалаш фақат
@@ -507,25 +501,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       }
       if (!mounted) return;
       setState(() => _submitting = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_error_generic')),
-        behavior: SnackBarBehavior.floating,
-      ));
-    }
-  }
-
-  String _errorText(RealtyException e) {
-    switch (e.code) {
-      case 'free_limit_reached':
-        return context.tr('realty_error_free_limit');
-      case 'location_required':
-        return context.tr('realty_error_location');
-      case 'address_required':
-        return context.tr('realty_error_address');
-      case 'tier_not_available':
-        return context.tr('realty_error_tier_soon');
-      default:
-        return context.tr('realty_error_generic');
+      showRealtyError(messenger, context.tr('realty_error_generic'));
     }
   }
 
@@ -546,45 +522,49 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             _label(context, 'realty_field_deal'),
             Row(
               children: [
-                _choice(
-                  context.tr('realty_deal_sale'),
-                  _deal == RealtyDeal.sale,
-                  () => setState(() => _deal = RealtyDeal.sale),
+                Expanded(
+                  child: RealtyChoice(
+                    label: context.tr('realty_deal_sale'),
+                    selected: _deal == RealtyDeal.sale,
+                    onTap: () => setState(() => _deal = RealtyDeal.sale),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _choice(
-                  context.tr('realty_deal_rent'),
-                  _deal == RealtyDeal.rent,
-                  () => setState(() => _deal = RealtyDeal.rent),
+                Expanded(
+                  child: RealtyChoice(
+                    label: context.tr('realty_deal_rent'),
+                    selected: _deal == RealtyDeal.rent,
+                    onTap: () => setState(() => _deal = RealtyDeal.rent),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
+            // ─── Даража — ЎҚИШ учун ───
+            // Аввал бу ерда учта тугма бор эди, лекин фақат ОДДИЙ
+            // фаол бўлиб, у аллақачон танланган турар эди: яъни
+            // қатор ҳеч қачон ҳеч нимани ўзгартирмасди (2026-10-02).
+            // РЕКЛАМА ва СРОЧНО эълон жойлангач, «Менинг
+            // объектларим»дан сотиб олинади — пастдаги изоҳ шуни
+            // айтади.
             _label(context, 'realty_field_tier'),
             Row(
               children: [
-                for (final tier in RealtyTabs.order) ...[
-                  _choice(
-                    context.tr(RealtyTabs.labelKey(tier)),
-                    _tier == tier,
-                    // Таҳрирлашда даража ўзгармайди: РЕКЛАМА/СРОЧНО
-                    // тўлов иши, уни таҳрир орқали олиб бўлмайди.
-                    (_isEdit || !tier.isPurchasable)
-                        ? null
-                        : () => setState(() => _tier = tier),
-                    color: RealtyTabs.colorFor(tier),
+                RealtyTierBadge(tier: _tier),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    context.tr(
+                      _isEdit
+                          ? 'realty_tier_locked_hint'
+                          : 'realty_tier_paid_soon_hint',
+                    ),
+                    style:
+                        TextStyle(fontSize: AppText.labelSmall, color: c.ink3),
                   ),
-                  const SizedBox(width: 8),
-                ],
+                ),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              context.tr(
-                _isEdit ? 'realty_tier_locked_hint' : 'realty_tier_paid_soon_hint',
-              ),
-              style: TextStyle(fontSize: AppText.labelSmall, color: c.ink3),
             ),
             const SizedBox(height: 16),
 
@@ -679,16 +659,22 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
             _label(context, 'realty_field_contact'),
             Row(
               children: [
-                _choice(
-                  context.tr('realty_contact_owner'),
-                  _contact == RealtyContactMode.owner,
-                  () => setState(() => _contact = RealtyContactMode.owner),
+                Expanded(
+                  child: RealtyChoice(
+                    label: context.tr('realty_contact_owner'),
+                    selected: _contact == RealtyContactMode.owner,
+                    onTap: () =>
+                        setState(() => _contact = RealtyContactMode.owner),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _choice(
-                  context.tr('realty_contact_agent'),
-                  _contact == RealtyContactMode.avaAgent,
-                  () => setState(() => _contact = RealtyContactMode.avaAgent),
+                Expanded(
+                  child: RealtyChoice(
+                    label: context.tr('realty_contact_agent'),
+                    selected: _contact == RealtyContactMode.avaAgent,
+                    onTap: () =>
+                        setState(() => _contact = RealtyContactMode.avaAgent),
+                  ),
                 ),
               ],
             ),
@@ -741,39 +727,6 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
           fontSize: AppText.labelLarge,
           fontWeight: FontWeight.w700,
           color: c.ink2,
-        ),
-      ),
-    );
-  }
-
-  Widget _choice(String label, bool selected, VoidCallback? onTap,
-      {Color? color}) {
-    final c = context.ava;
-    final active = color ?? c.brand;
-    return Expanded(
-      child: Opacity(
-        opacity: onTap == null ? 0.45 : 1,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-            decoration: BoxDecoration(
-              color: selected ? active : c.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: selected ? active : c.line),
-            ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: AppText.bodySmall,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : c.ink2,
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -851,33 +804,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       );
     }
     final full = _quota.isFull;
-    final accent = full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3;
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _quota.isPro
-                  ? Icons.workspace_premium_outlined
-                  : Icons.home_outlined,
-              size: 15,
-              color: accent,
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                '${context.tr(_quota.isPro ? 'realty_pro_quota' : 'realty_my_free_slots')}'
-                ': ${_quota.used} / ${_quota.limit}',
-                style: TextStyle(
-                  fontSize: AppText.labelTiny,
-                  color: accent,
-                  fontWeight: full ? FontWeight.w700 : FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+        RealtyQuotaBar(quota: _quota, compact: true),
         if (full) ...[
           const SizedBox(height: 6),
           Text(

@@ -6,6 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_feedback.dart';
 
 /// 🏢 Риэлторлик компанияси учун (концепция, 5-бўлим).
 ///
@@ -65,23 +66,15 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
       await _load();
       if (!mounted) return;
       setState(() => _busyPlanId = null);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_pro_bought')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.plain),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(
+        messenger,
+        context.tr('realty_pro_bought'),
+        background: RealtyTabs.colorFor(RealtyTier.plain),
+      );
     } on RealtyException catch (e) {
       if (!mounted) return;
       setState(() => _busyPlanId = null);
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          e.code == 'insufficient_balance'
-              ? context.tr('realty_error_balance')
-              : context.tr('realty_error_generic'),
-        ),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 
@@ -90,10 +83,7 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
     await _repo.saveTemplateText(_templateCtrl.text);
     if (!mounted) return;
     setState(() => _savingTemplate = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('realty_saved')),
-      behavior: SnackBarBehavior.floating,
-    ));
+    showRealtyInfo(ScaffoldMessenger.of(context), context.tr('realty_saved'));
   }
 
   Future<void> _addMember() async {
@@ -106,31 +96,11 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
       if (!mounted) return;
       _phoneCtrl.clear();
       setState(() => _addingMember = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_team_added')),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(messenger, context.tr('realty_team_added'));
     } on RealtyException catch (e) {
       if (!mounted) return;
       setState(() => _addingMember = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(_teamError(e)),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
-    }
-  }
-
-  String _teamError(RealtyException e) {
-    switch (e.code) {
-      case 'pro_required':
-        return context.tr('realty_team_needs_pro');
-      case 'member_not_found':
-        return context.tr('realty_team_not_found');
-      case 'member_has_listings':
-        return context.tr('realty_team_has_listings');
-      default:
-        return context.tr('realty_error_generic');
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 
@@ -238,67 +208,6 @@ class _RealtyProScreenState extends State<RealtyProScreen> {
           fontWeight: FontWeight.w800,
           color: c.ink,
         ),
-      ),
-    );
-  }
-}
-
-/// Пакет ҳисоблагичи — «қанча объект ўрни ва муддат қолгани доим
-/// кўриниб туради» (концепция, 5-бўлим).
-class RealtyQuotaBar extends StatelessWidget {
-  const RealtyQuotaBar({super.key, required this.quota});
-
-  final RealtyQuota quota;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ava;
-    final full = quota.isFull;
-    final days = quota.proDaysLeft;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.line,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            quota.isPro ? Icons.workspace_premium_outlined : Icons.home_outlined,
-            size: 20,
-            color: full ? RealtyTabs.colorFor(RealtyTier.urgent) : c.ink3,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${context.tr(quota.isPro ? 'realty_pro_quota' : 'realty_my_free_slots')}'
-                  ': ${quota.used} / ${quota.limit}',
-                  style: TextStyle(
-                    fontSize: AppText.bodyMedium,
-                    fontWeight: FontWeight.w700,
-                    color: c.ink,
-                  ),
-                ),
-                if (quota.isPro && days != null)
-                  Text(
-                    '${context.tr('realty_expires_in')}: $days '
-                    '${context.tr('realty_days_short')}',
-                    style: TextStyle(
-                      fontSize: AppText.labelSmall,
-                      color: c.ink3,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

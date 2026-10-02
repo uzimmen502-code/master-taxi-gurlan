@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_feedback.dart';
 import '../widgets/realty_tier_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
 import 'add_realty_listing_screen.dart';
@@ -133,11 +134,10 @@ class _MyRealtyListingsScreenState extends State<MyRealtyListingsScreen> {
       _bulkBusy = false;
     });
     if (failed > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${context.tr('realty_bulk_failed')}: $failed'),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(
+        ScaffoldMessenger.of(context),
+        '${context.tr('realty_bulk_failed')}: $failed',
+      );
     }
   }
 
@@ -393,18 +393,11 @@ class _MyListingTileState extends State<_MyListingTile> {
       await widget.repo.deleteMine(widget.listing.id);
       if (!mounted) return;
       // Рўйхат stream орқали ўзи янгиланади — қўлда олиб ташлаш керак эмас.
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_deleted')),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyInfo(messenger, context.tr('realty_deleted'));
     } on RealtyException {
       if (!mounted) return;
       setState(() => _deleting = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(context.tr('realty_delete_failed')),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, context.tr('realty_delete_failed'));
     }
   }
 

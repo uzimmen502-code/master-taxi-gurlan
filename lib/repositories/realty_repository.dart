@@ -28,6 +28,99 @@ class RealtyRepository {
   String get _currentUserId =>
       canonicalPhoneId(FirebaseAuth.instance.currentUser?.phoneNumber ?? '');
 
+  /// Пул ишлайдиган чақирувлар учун кутиш вақти — стандарт 10 сония
+  /// транзакция ва ҳамён ёзуви учун қисқа.
+  static const _payTimeout = Duration(seconds: 30);
+
+  /// Callable чақируви ва хатони [RealtyException] га айлантириш.
+  ///
+  /// Бу ҳелпер борлигининг сабаби: сервер хатони `details.reason` да
+  /// қайтаради (`functions/realty.js` даги `fail()`), шунинг учун ҳар
+  /// бир чақирувда бир хил «details'ни очиб, reason'ни олиб, қайта
+  /// отиш» блоки керак бўлади. Аввал у ўн марта сўзма-сўз
+  /// такрорланган эди — янги чақирув қўшганда уни эсдан чиқариш осон,
+  /// ва ўша чақирувда илова хато сабабини кўрмай қоларди.
+  Future<Map<String, dynamic>> _call(
+    String name,
+    Map<String, dynamic> payload, {
+    Duration? timeout,
+  }) async {
+    try {
+      final res = await _functions
+          .httpsCallable(
+            name,
+            options:
+                timeout == null ? null : HttpsCallableOptions(timeout: timeout),
+          )
+          .call(payload);
+      return Map<String, dynamic>.from(res.data as Map? ?? const {});
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details is Map
+          ? Map<String, dynamic>.from(e.details as Map)
+          : const <String, dynamic>{};
+      throw RealtyException(
+        (details['reason'] ?? e.message ?? e.code).toString(),
+        details: details,
+      );
+    }
+  }
+
+  /// Фақат ЎҚИШ учун чақирув: хато бўлса бўш жадвал.
+  ///
+  /// Нархлар ва ҳисоблагичлар шу йўл билан олинади — сервер жавоб
+  /// бермаса, чақирувчи «нарх юкланмади» деб кўрсатсин, ноль нархни
+  /// эмас ва хато экранини ҳам эмас.
+  Future<Map<String, dynamic>> _callOrEmpty(String name) async {
+    try {
+      return await _call(name, const {});
+    } catch (e) {
+      debugPrint('[RealtyRepository] $name $e');
+      return const {};
+    }
+  }
+
+  /// `{"5": 30000}` → `{5: 30000}`. Нотўғри калит/қиймат тушиб қолади.
+  static Map<int, int> _intMap(Object? raw) {
+    final src = Map<String, dynamic>.from(raw as Map? ?? const {});
+    final out = <int, int>{};
+    for (final e in src.entries) {
+      final k = int.tryParse(e.key);
+      final v = (e.value as num?)?.toInt();
+      if (k != null && v != null) out[k] = v;
+    }
+    return out;
+  }
+
+  /// Фаол эълонлар оқими — лента, харита ва бош саҳифа учун битта жой.
+  ///
+  /// Учала жойда сўров шакли бир хил эди: `status == active`, ихтиёрий
+  /// [tier] ёки [districtId], ва `createdAt` бўйича тартиб. Учта нусха
+  /// ўрнига битта метод — чегара ёки тартиб ўзгарса, у ҳамма жойда
+  /// бирга ўзгаради.
+  ///
+  /// `orderBy` МАЖБУРИЙ (2026-09-29): усиз Firestore лимитга тушган
+  /// ҳужжатларни ихтиёрий тартибда танлар эди — 300 тадан ошганда
+  /// харитада «энг янгилари» эмас, тасодифий 300 таси кўринарди.
+  ///
+  /// Керакли композит индекслар мавжуд: `status+createdAt`,
+  /// `status+tier+createdAt` ва `status+districtId+createdAt`.
+  Stream<List<RealtyListing>> _watchActive({
+    RealtyTier? tier,
+    RealtyDeal? deal,
+    String districtId = '',
+    required int limit,
+  }) {
+    final id = districtId.trim();
+    Query<Map<String, dynamic>> q = _col.where('status', isEqualTo: 'active');
+    if (tier != null) q = q.where('tier', isEqualTo: tier.key);
+    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
+    return q
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => _live(snap.docs, deal: deal));
+  }
+
   /// Битта TAB лентаси — ОДДИЙ / РЕКЛАМА / СРОЧНО.
   ///
   /// Муддати тугаганларни сервер ўчиргунча (`realtyExpirySweep`, кунига
@@ -36,44 +129,20 @@ class RealtyRepository {
     RealtyTier tier, {
     RealtyDeal? deal,
     int limit = 50,
-  }) {
-    return _col
-        .where('status', isEqualTo: 'active')
-        .where('tier', isEqualTo: tier.key)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snap) => _live(snap.docs, deal: deal));
-  }
+  }) =>
+      _watchActive(tier: tier, deal: deal, limit: limit);
 
-  /// Харита учун — учала турдаги объект TAB'дан қатъи назар бирга
-  /// кўринади (концепция, 7-бўлим: «Харита тури — умумий»).
+  /// Харита учун — учала даража TAB'дан қатъи назар бирга кўринади
+  /// (концепция, 7-бўлим: «Харита тури — умумий»).
   ///
-  /// ⚠️ 1-босқичда ҲЕЧ КИМ чақирмайди: харита ахборот пакетлари билан
-  /// бирга, 3-босқичда ёқилади (қаранг: `realty_screen.dart` изоҳи).
-  /// Харита учун эълонлар.
-  ///
-  /// `orderBy` МАЖБУРИЙ (2026-09-29): усиз Firestore лимитга тушган
-  /// ҳужжатларни ихтиёрий тартибда танлар эди — 300 тадан ошганда
-  /// харитада «энг янгилари» эмас, тасодифий 300 таси кўринарди.
-  /// [districtId] берилса фақат ўша туман. Иккала сўров учун ҳам
-  /// композит индекслар аллақачон мавжуд (`status+createdAt` ва
-  /// `status+districtId+createdAt`).
+  /// [districtId] берилса фақат ўша туман — бу 300 талик чегарага
+  /// тиқилиб қолишдан ҳам сақлайди.
   Stream<List<RealtyListing>> watchForMap({
     RealtyDeal? deal,
     String districtId = '',
     int limit = 300,
-  }) {
-    final id = districtId.trim();
-    Query<Map<String, dynamic>> q =
-        _col.where('status', isEqualTo: 'active');
-    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
-    return q
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snap) => _live(snap.docs, deal: deal));
-  }
+  }) =>
+      _watchActive(deal: deal, districtId: districtId, limit: limit);
 
   /// Бош саҳифадаги «Кўчмас мулк» бўлими.
   ///
@@ -86,20 +155,8 @@ class RealtyRepository {
   Stream<List<RealtyListing>> watchForHome({
     required String districtId,
     int limit = 10,
-  }) {
-    final id = districtId.trim();
-    Query<Map<String, dynamic>> q =
-        _col.where('status', isEqualTo: 'active');
-    if (id.isNotEmpty) q = q.where('districtId', isEqualTo: id);
-    return q
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map(RealtyListing.fromDoc)
-            .where((r) => !r.isExpired)
-            .toList());
-  }
+  }) =>
+      _watchActive(districtId: districtId, limit: limit);
 
   /// Эганинг очиқ ҳужжатдаги калити (`users/{uid}.realtyOwnerKey`).
   ///
@@ -125,8 +182,9 @@ class RealtyRepository {
   String? _ownerKeyCache;
 
   /// Жорий фойдаланувчининг рақами — AVAGram клиплари шу бўйича
-  /// сақланади (`tv_clips.ownerPhone`).
-  Future<String> myOwnerPhone() async => _currentUserId;
+  /// сақланади (`tv_clips.ownerPhone`). Қиймат аллақачон
+  /// `canonicalPhoneId` дан ўтган.
+  String get myOwnerPhone => _currentUserId;
 
   /// Эганинг ўз объектлари — бепул лимитни кўрсатиш ва таҳрир учун.
   Stream<List<RealtyListing>> watchMine() {
@@ -183,20 +241,6 @@ class RealtyRepository {
 
   String? _agentPhoneCache;
 
-  /// Шу объект пакетдан очилганми.
-  Stream<bool> watchUnlocked(String listingId) {
-    final uid = _currentUserId;
-    if (uid.isEmpty) return Stream.value(false);
-    return _db
-        .collection('users')
-        .doc(uid)
-        .collection('realty_unlocked')
-        .doc(listingId)
-        .snapshots()
-        .map((s) => s.exists)
-        .handleError((Object _) {});
-  }
-
   /// Очилган объектларнинг ID'лари — харитада аниқ пин кўрсатиш учун.
   Stream<Set<String>> watchUnlockedIds() {
     final uid = _currentUserId;
@@ -222,74 +266,29 @@ class RealtyRepository {
 
   /// Объектни очиш — пакетдан 1 ўрин ейди. Такрор очишда ўрин кетмайди.
   ///
-  /// Хатолар: `no_unlocks_left` (пакет тугаган ёки умуман йўқ).
+  /// Хатолар: `no_unlocks_left` (пакет тугаган ёки умуман йўқ),
+  /// `listing_blocked`, `listing_expired` — бу иккисида ўрин ейилмайди.
   Future<int> unlockListing(String listingId) async {
-    try {
-      final res = await _functions
-          .httpsCallable('unlockRealtyListing')
-          .call({'listingId': listingId});
-      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
+    final data = await _call('unlockRealtyListing', {'listingId': listingId});
+    return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
   }
 
   /// Ахборот пакети сотиб олиш (5 ёки 10 объект).
   Future<int> purchasePackage(int size) async {
-    try {
-      final res = await _functions
-          .httpsCallable(
-            'purchaseRealtyPackage',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          )
-          .call({'idempotencyKey': _uuid.v4(), 'size': size});
-      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
+    final data = await _call(
+      'purchaseRealtyPackage',
+      {'idempotencyKey': _uuid.v4(), 'size': size},
+      timeout: _payTimeout,
+    );
+    return (data['unlocksLeft'] as num?)?.toInt() ?? 0;
   }
 
   /// Пакет нархлари: ўлчам → нарх.
   Future<Map<int, int>> loadPackagePricing() async {
-    try {
-      final res =
-          await _functions.httpsCallable('getRealtyPackagePricing').call();
-      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      final pricing = Map<String, dynamic>.from(
-        raw['pricing'] as Map? ?? const {},
-      );
-      final out = <int, int>{};
-      for (final e in pricing.entries) {
-        final k = int.tryParse(e.key);
-        final v = (e.value as num?)?.toInt();
-        if (k != null && v != null) out[k] = v;
-      }
-      return out;
-    } catch (e) {
-      debugPrint('[RealtyRepository] loadPackagePricing $e');
-      return const {};
-    }
+    final data = await _callOrEmpty('getRealtyPackagePricing');
+    return _intMap(data['pricing']);
   }
 
-  /// Админ модерацияси — статус бўйича навбат.
-  ///
-  /// `null` берилса ҳамма ёзув (янгиси юқорида). Фойдаланувчи
-  /// оқимларидан фарқли: муддати тугаганлар ҳам чиқади, чунки админ
-  /// уларни кўра олиши керак.
   /// Бир нечта объектнинг ёпиқ тафсилотини ПАРАЛЛЕЛ ўқийди.
   ///
   /// Аввал харита экрани уларни кетма-кет, битталаб ўқир эди: 10
@@ -314,6 +313,11 @@ class RealtyRepository {
     return out;
   }
 
+  /// Админ модерацияси — статус бўйича навбат.
+  ///
+  /// [status] `null` бўлса ҳамма ёзув (янгиси юқорида). Фойдаланувчи
+  /// оқимларидан фарқли: муддати тугаганлар ҳам чиқади, чунки админ
+  /// уларни кўра олиши керак.
   Stream<List<RealtyListing>> watchForModeration({
     String? status,
     int limit = 200,
@@ -327,30 +331,22 @@ class RealtyRepository {
         .map((snap) => snap.docs.map(RealtyListing.fromDoc).toList());
   }
 
-  Future<RealtyListing?> fetchById(String id) async {
-    final snap = await _col.doc(id).get();
-    if (!snap.exists) return null;
-    return RealtyListing.fromDoc(snap);
-  }
-
+  /// Кўринадиган эълонлар: муддати тугаганлар ва бошқа битим тури
+  /// чиқариб ташланади.
+  ///
+  /// Тартиб серверда `createdAt` бўйича қўйилади ва филтрлаш уни
+  /// бузмайди, шунинг учун бу ерда қайта сортлаш йўқ (аввал бор эди,
+  /// лекин `createdAt` бўш ҳужжатда у 0 қайтариб, ҳеч нарсани
+  /// ўзгартирмас эди).
   List<RealtyListing> _live(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
     RealtyDeal? deal,
   }) {
-    final items = docs
+    return docs
         .map(RealtyListing.fromDoc)
         .where((r) => !r.isExpired)
         .where((r) => deal == null || r.deal == deal)
         .toList();
-    // Сўровлар серверда `createdAt` бўйича тартибланади, лекин муддати
-    // ўтганлар ва бошқа даража мана шу ерда чиқариб ташланади —
-    // натижа барибир янгиси юқорида турсин.
-    items.sort((a, b) {
-      final ax = a.createdAt, bx = b.createdAt;
-      if (ax == null || bx == null) return 0;
-      return bx.compareTo(ax);
-    });
-    return items;
   }
 
   /// Янги объект. Координата мажбурий — чақирувчи уни харитадан олади.
@@ -374,45 +370,73 @@ class RealtyRepository {
     List<String> imageUrls = const [],
     String ownerName = '',
   }) async {
-    try {
-      final res = await _functions
-          .httpsCallable(
-            'submitRealtyListing',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          )
-          .call({
+    final data = await _call(
+      'submitRealtyListing',
+      {
+        ..._listingPayload(
+          deal: deal,
+          title: title,
+          text: text,
+          lat: lat,
+          lng: lng,
+          contactMode: contactMode,
+          priceText: priceText,
+          addressText: addressText,
+          rooms: rooms,
+          floor: floor,
+          totalFloors: totalFloors,
+          areaM2: areaM2,
+          imageUrls: imageUrls,
+        ),
         'idempotencyKey': _uuid.v4(),
-        'deal': deal.key,
         'tier': tier.key,
-        'title': title.trim(),
-        'text': text.trim(),
-        'lat': lat,
-        'lng': lng,
-        'contactMode': contactMode.key,
-        if (priceText.trim().isNotEmpty) 'priceText': priceText.trim(),
-        if (addressText.trim().isNotEmpty) 'addressText': addressText.trim(),
-        if (rooms != null) 'rooms': rooms,
-        if (floor != null) 'floor': floor,
-        if (totalFloors != null) 'totalFloors': totalFloors,
-        if (areaM2 != null) 'areaM2': areaM2,
-        if (imageUrls.isNotEmpty) 'imageUrls': imageUrls,
         if (ownerName.trim().isNotEmpty) 'ownerName': ownerName.trim(),
-      });
-      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      return RealtySubmitResult(
-        listingId: (data['listingId'] ?? '') as String,
-        status: (data['status'] ?? 'pending') as String,
-        freeLeft: (data['freeLeft'] as num?)?.toInt() ?? 0,
-      );
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
+      },
+      timeout: _payTimeout,
+    );
+    return RealtySubmitResult(
+      listingId: (data['listingId'] ?? '') as String,
+      status: (data['status'] ?? 'pending') as String,
+      freeLeft: (data['freeLeft'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Яратиш ва таҳрирлаш учун УМУМИЙ майдонлар.
+  ///
+  /// Иккала чақирув бир хил майдонларни юборади ва серверда ҳам битта
+  /// жойда текширилади (`parseListingInput`). Бўш қиймат `null`
+  /// сифатида кетади: таҳрирда бу «майдонни ўчир» дегани, яратишда эса
+  /// шунчаки ёзилмайди.
+  Map<String, dynamic> _listingPayload({
+    required RealtyDeal deal,
+    required String title,
+    required String text,
+    required double lat,
+    required double lng,
+    required RealtyContactMode contactMode,
+    required String priceText,
+    required String addressText,
+    required int? rooms,
+    required int? floor,
+    required int? totalFloors,
+    required num? areaM2,
+    required List<String> imageUrls,
+  }) {
+    return {
+      'deal': deal.key,
+      'title': title.trim(),
+      'text': text.trim(),
+      'lat': lat,
+      'lng': lng,
+      'contactMode': contactMode.key,
+      'priceText': priceText.trim(),
+      'addressText': addressText.trim(),
+      'rooms': rooms,
+      'floor': floor,
+      'totalFloors': totalFloors,
+      'areaM2': areaM2,
+      'imageUrls': imageUrls,
+    };
   }
 
   /// Мавжуд объектни таҳрирлаш — нарх тушиши кўчмас мулкда одатий ҳол.
@@ -436,43 +460,33 @@ class RealtyRepository {
     num? areaM2,
     List<String> imageUrls = const [],
   }) async {
-    try {
-      final res = await _functions
-          .httpsCallable(
-            'updateRealtyListing',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          )
-          .call({
+    final data = await _call(
+      'updateRealtyListing',
+      {
+        ..._listingPayload(
+          deal: deal,
+          title: title,
+          text: text,
+          lat: lat,
+          lng: lng,
+          contactMode: contactMode,
+          priceText: priceText,
+          addressText: addressText,
+          rooms: rooms,
+          floor: floor,
+          totalFloors: totalFloors,
+          areaM2: areaM2,
+          imageUrls: imageUrls,
+        ),
         'listingId': listingId,
-        'deal': deal.key,
-        'title': title.trim(),
-        'text': text.trim(),
-        'lat': lat,
-        'lng': lng,
-        'contactMode': contactMode.key,
-        'priceText': priceText.trim(),
-        'addressText': addressText.trim(),
-        'rooms': rooms,
-        'floor': floor,
-        'totalFloors': totalFloors,
-        'areaM2': areaM2,
-        'imageUrls': imageUrls,
-      });
-      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      return RealtySubmitResult(
-        listingId: (data['listingId'] ?? listingId) as String,
-        status: (data['status'] ?? 'active') as String,
-        freeLeft: 0,
-      );
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
+      },
+      timeout: _payTimeout,
+    );
+    return RealtySubmitResult(
+      listingId: (data['listingId'] ?? listingId) as String,
+      status: (data['status'] ?? 'active') as String,
+      freeLeft: 0,
+    );
   }
 
   /// РЕКЛАМА ёки СРОЧНО сотиб олиш / узайтириш (AVA ҳамёнидан).
@@ -484,37 +498,25 @@ class RealtyRepository {
     required RealtyTier tier,
     required int durationDays,
   }) async {
-    try {
-      final res = await _functions
-          .httpsCallable(
-            'purchaseRealtyTier',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          )
-          .call({
+    final data = await _call(
+      'purchaseRealtyTier',
+      {
         'idempotencyKey': _uuid.v4(),
         'listingId': listingId,
         'tier': tier.key,
         'durationDays': durationDays,
-      });
-      final data = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      return RealtyPurchaseResult(
-        listingId: (data['listingId'] ?? listingId) as String,
-        tier: RealtyTierX.parse(data['tier']),
-        durationDays: (data['durationDays'] as num?)?.toInt() ?? durationDays,
-        price: (data['price'] as num?)?.toInt() ?? 0,
-        tierUntil: DateTime.fromMillisecondsSinceEpoch(
-          (data['tierUntil'] as num?)?.toInt() ?? 0,
-        ),
-      );
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
+      },
+      timeout: _payTimeout,
+    );
+    return RealtyPurchaseResult(
+      listingId: (data['listingId'] ?? listingId) as String,
+      tier: RealtyTierX.parse(data['tier']),
+      durationDays: (data['durationDays'] as num?)?.toInt() ?? durationDays,
+      price: (data['price'] as num?)?.toInt() ?? 0,
+      tierUntil: DateTime.fromMillisecondsSinceEpoch(
+        (data['tierUntil'] as num?)?.toInt() ?? 0,
+      ),
+    );
   }
 
   /// Тариф жадвали: даража → {кун: нарх}. Админ панелдан таҳрирланади.
@@ -522,29 +524,16 @@ class RealtyRepository {
   /// Сервер жавоб бермаса бўш жадвал қайтади — чақирувчи «нарх
   /// юкланмади» деб кўрсатсин, ноль нархни эмас.
   Future<Map<RealtyTier, Map<int, int>>> loadPricing() async {
-    try {
-      final res = await _functions.httpsCallable('getRealtyPricing').call();
-      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      final pricing = Map<String, dynamic>.from(
-        raw['pricing'] as Map? ?? const {},
-      );
-      final out = <RealtyTier, Map<int, int>>{};
-      for (final entry in pricing.entries) {
-        final tier = RealtyTierX.parse(entry.key);
-        final days = Map<String, dynamic>.from(entry.value as Map? ?? const {});
-        final parsed = <int, int>{};
-        for (final e in days.entries) {
-          final k = int.tryParse(e.key);
-          final v = (e.value as num?)?.toInt();
-          if (k != null && v != null) parsed[k] = v;
-        }
-        if (parsed.isNotEmpty) out[tier] = parsed;
-      }
-      return out;
-    } catch (e) {
-      debugPrint('[RealtyRepository] loadPricing $e');
-      return const {};
+    final data = await _callOrEmpty('getRealtyPricing');
+    final pricing = Map<String, dynamic>.from(
+      data['pricing'] as Map? ?? const {},
+    );
+    final out = <RealtyTier, Map<int, int>>{};
+    for (final entry in pricing.entries) {
+      final days = _intMap(entry.value);
+      if (days.isNotEmpty) out[RealtyTierX.parse(entry.key)] = days;
     }
+    return out;
   }
 
   // ─── Видео боғлаш (концепция, 3-бўлим) ───
@@ -554,93 +543,50 @@ class RealtyRepository {
   Future<void> linkVideo({
     required String listingId,
     required String clipId,
-  }) async {
-    try {
-      await _functions.httpsCallable('linkRealtyVideo').call({
-        'listingId': listingId,
-        'clipId': clipId,
-      });
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
-  }
+  }) =>
+      _call('linkRealtyVideo', {'listingId': listingId, 'clipId': clipId});
 
-  Future<void> unlinkVideo(String listingId) async {
-    try {
-      await _functions
-          .httpsCallable('unlinkRealtyVideo')
-          .call({'listingId': listingId});
-    } on FirebaseFunctionsException catch (e) {
-      throw RealtyException(e.message ?? e.code);
-    }
-  }
+  Future<void> unlinkVideo(String listingId) =>
+      _call('unlinkRealtyVideo', {'listingId': listingId});
 
   // ─── Риэлторлик компанияси воситалари (концепция, 5-бўлим) ───
 
   /// Пакет ҳисоблагичи — банд ўрин, лимит ва муддат.
   Future<RealtyQuota> fetchQuota() async {
-    try {
-      final res = await _functions.httpsCallable('getRealtyQuota').call();
-      final d = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      final until = (d['proExpiresAt'] as num?)?.toInt() ?? 0;
-      return RealtyQuota(
-        used: (d['used'] as num?)?.toInt() ?? 0,
-        limit: (d['limit'] as num?)?.toInt() ?? 0,
-        isPro: d['isPro'] == true,
-        proExpiresAt: until > 0
-            ? DateTime.fromMillisecondsSinceEpoch(until)
-            : null,
-      );
-    } catch (e) {
-      debugPrint('[RealtyRepository] fetchQuota $e');
-      return RealtyQuota.empty;
-    }
+    final d = await _callOrEmpty('getRealtyQuota');
+    if (d.isEmpty) return RealtyQuota.empty;
+    final until = (d['proExpiresAt'] as num?)?.toInt() ?? 0;
+    return RealtyQuota(
+      used: (d['used'] as num?)?.toInt() ?? 0,
+      limit: (d['limit'] as num?)?.toInt() ?? 0,
+      isPro: d['isPro'] == true,
+      proExpiresAt:
+          until > 0 ? DateTime.fromMillisecondsSinceEpoch(until) : null,
+    );
   }
 
   Future<List<RealtyProPlan>> loadProPlans() async {
-    try {
-      final res = await _functions.httpsCallable('getRealtyProPlans').call();
-      final raw = Map<String, dynamic>.from(res.data as Map? ?? const {});
-      final list = raw['plans'] as List? ?? const [];
-      return list.map((e) {
-        final m = Map<String, dynamic>.from(e as Map);
-        return RealtyProPlan(
-          id: (m['id'] ?? '') as String,
-          objects: (m['objects'] as num?)?.toInt() ?? 0,
-          days: (m['days'] as num?)?.toInt() ?? 0,
-          price: (m['price'] as num?)?.toInt() ?? 0,
-        );
-      }).where((p) => p.id.isNotEmpty).toList();
-    } catch (e) {
-      debugPrint('[RealtyRepository] loadProPlans $e');
-      return const [];
-    }
+    final data = await _callOrEmpty('getRealtyProPlans');
+    final list = data['plans'] as List? ?? const [];
+    return list
+        .map((e) {
+          final m = Map<String, dynamic>.from(e as Map);
+          return RealtyProPlan(
+            id: (m['id'] ?? '') as String,
+            objects: (m['objects'] as num?)?.toInt() ?? 0,
+            days: (m['days'] as num?)?.toInt() ?? 0,
+            price: (m['price'] as num?)?.toInt() ?? 0,
+          );
+        })
+        .where((p) => p.id.isNotEmpty)
+        .toList();
   }
 
-  Future<void> purchaseProPackage(String planId) async {
-    try {
-      await _functions
-          .httpsCallable(
-            'purchaseRealtyProPackage',
-            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
-          )
-          .call({'idempotencyKey': _uuid.v4(), 'planId': planId});
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
+  Future<void> purchaseProPackage(String planId) => _call(
+        'purchaseRealtyProPackage',
+        {'idempotencyKey': _uuid.v4(), 'planId': planId},
+        timeout: _payTimeout,
       );
-    }
-  }
 
   /// Сақланган уйлар — янги объектда нуқтани қайта қўйиш ўрнига танлаш.
   Stream<List<RealtySavedPlace>> watchSavedPlaces() {
@@ -718,42 +664,18 @@ class RealtyRepository {
         .set({'text': text.trim()});
   }
 
-  Future<void> addTeamMember(String phone) async {
-    try {
-      await _functions
-          .httpsCallable('addRealtyTeamMember')
-          .call({'phone': phone});
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details is Map
-          ? Map<String, dynamic>.from(e.details as Map)
-          : const <String, dynamic>{};
-      throw RealtyException(
-        (details['reason'] ?? e.message ?? e.code).toString(),
-        details: details,
-      );
-    }
-  }
+  /// Ходимни компания пакетига улаш.
+  ///
+  /// Хатолар: `pro_required`, `member_not_found`, `member_has_listings`.
+  Future<void> addTeamMember(String phone) =>
+      _call('addRealtyTeamMember', {'phone': phone});
 
-  Future<void> removeTeamMember(String phone) async {
-    try {
-      await _functions
-          .httpsCallable('removeRealtyTeamMember')
-          .call({'phone': phone});
-    } on FirebaseFunctionsException catch (e) {
-      throw RealtyException(e.message ?? e.code);
-    }
-  }
+  Future<void> removeTeamMember(String phone) =>
+      _call('removeRealtyTeamMember', {'phone': phone});
 
   /// Эга ўз объектини ўчиради («сотилди» ёки нотўғри киритилди).
-  Future<void> deleteMine(String listingId) async {
-    try {
-      await _functions.httpsCallable('deleteRealtyListing').call({
-        'listingId': listingId,
-      });
-    } on FirebaseFunctionsException catch (e) {
-      throw RealtyException(e.message ?? e.code);
-    }
-  }
+  Future<void> deleteMine(String listingId) =>
+      _call('deleteRealtyListing', {'listingId': listingId});
 }
 
 class RealtySubmitResult {

@@ -7,6 +7,8 @@ import '../../../core/utils/phone_launcher.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import '../widgets/realty_controls.dart';
+import '../widgets/realty_feedback.dart';
 import '../widgets/realty_package_sheet.dart';
 import '../widgets/realty_video_sheet.dart';
 
@@ -82,24 +84,9 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
         if (bought && mounted) await _unlock();
         return;
       }
-      messenger.showSnackBar(SnackBar(
-        // Блокланган ва муддати тугаган эълонда сервер ўринни
-        // ЕМАЙДИ — фойдаланувчи нега очилмаганини билиши керак.
-        content: Text(_unlockErrorText(e)),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
-    }
-  }
-
-  String _unlockErrorText(RealtyException e) {
-    switch (e.code) {
-      case 'listing_blocked':
-        return context.tr('realty_error_listing_blocked');
-      case 'listing_expired':
-        return context.tr('realty_error_listing_expired');
-      default:
-        return context.tr('realty_error_generic');
+      // Блокланган ва муддати тугаган эълонда сервер ўринни ЕМАЙДИ —
+      // фойдаланувчи нега очилмаганини билиши керак.
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 
@@ -153,22 +140,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
 
           Row(
             children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: tierColor,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  context.tr(RealtyTabs.labelKey(r.tier)),
-                  style: const TextStyle(
-                    fontSize: AppText.labelTiny,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              RealtyTierBadge(tier: r.tier),
               const SizedBox(width: 8),
               Text(
                 context.tr(

@@ -13,8 +13,9 @@ extension RealtyDealX on RealtyDeal {
 /// Эълон даражаси — концепциядаги учта TAB.
 ///
 /// [plain] бепул (эгасига 2 тагача объект), [promo] ва [urgent] пуллик.
-/// Пуллик даражалар 2-босқичда очилади — ҳозир фақат модел ва лента
-/// тайёр, сотиб олиш йўли ҳали йўқ (қаранг: `RealtyTier.isPurchasable`).
+/// Янги эълон ДОИМ [plain] бўлиб туғилади; пуллик даража мавжуд
+/// объектга «Менинг объектларим»дан сотиб олинади
+/// (`purchaseRealtyTier`) — бир уй учта эмас, битта ёзув.
 enum RealtyTier { plain, promo, urgent }
 
 extension RealtyTierX on RealtyTier {
@@ -28,13 +29,6 @@ extension RealtyTierX on RealtyTier {
         return 'urgent';
     }
   }
-
-  /// Янги эълон яратишда танланадими.
-  ///
-  /// Фақат ОДДИЙ: бир уй учта эълон эмас, битта ёзув (концепция,
-  /// 6-бўлим). РЕКЛАМА ва СРОЧНО эълон жойлангач, мавжуд объектга
-  /// сотиб олинади (`purchaseRealtyTier`).
-  bool get isPurchasable => this == RealtyTier.plain;
 
   bool get isPaid => this != RealtyTier.plain;
 
@@ -51,11 +45,11 @@ extension RealtyTierX on RealtyTier {
     }
   }
 
-  /// Бепул ОДДИЙ эълон қанча кун кўринади.
-  static const int plainExpiryDays = 30;
-
-  /// Битта фуқарога бепул ОДДИЙ объект лимити (концепция, 2-бўлим).
-  static const int freePlainLimit = 2;
+  // Муддат (30 кун) ва бепул объект лимити (2 та) АТАЙЛАБ бу ерда
+  // ЁЗИЛМАГАН: уларни сервер ҳисоблайди (`functions/realty.js` даги
+  // `PLAIN_EXPIRY_DAYS` ва `FREE_PLAIN_LIMIT`), илова эса ҳақиқий
+  // ҳолатни `getRealtyQuota` ва `expiresAt` дан олади. Иккита нусха
+  // бўлса, биттаси ўзгарганда илова ёлғон сон кўрсатар эди.
 
   static RealtyTier parse(Object? raw) {
     switch ('${raw ?? ''}') {
@@ -118,8 +112,6 @@ class RealtyListing {
     this.adClipId = '',
     this.districtId = '',
     this.regionId = '',
-    this.views = 0,
-    this.searchTokens = const [],
     this.tierUntil,
     this.createdAt,
     this.updatedAt,
@@ -149,7 +141,8 @@ class RealtyListing {
 
   final List<String> imageUrls;
 
-  /// ТАХМИНИЙ ҳудуд маркази — `geohash4` катакчасининг ўртаси (≈20 км).
+  /// ТАХМИНИЙ нуқта — аниқ координата ≈1.2 км радиусда БИР МАРТА
+  /// силкитилган (сервердаги `jitteredPoint`).
   ///
   /// Бу объектнинг аниқ жойи ЭМАС. Аниқ нуқта [RealtyDetail] да ва
   /// фақат эга, админ ёки пакетидан шу объектни очган харидорга
@@ -178,9 +171,6 @@ class RealtyListing {
 
   final String districtId;
   final String regionId;
-
-  final int views;
-  final List<String> searchTokens;
 
   /// РЕКЛАМА/СРОЧНО муддати тугайдиган вақт. [RealtyTier.plain] да null.
   final DateTime? tierUntil;
@@ -252,8 +242,6 @@ class RealtyListing {
       status: (d['status'] ?? 'active') as String,
       districtId: ((d['districtId'] ?? '') as String).trim(),
       regionId: ((d['regionId'] ?? '') as String).trim(),
-      views: (d['views'] as num?)?.toInt() ?? 0,
-      searchTokens: List<String>.from(d['searchTokens'] ?? const <String>[]),
       tierUntil: _parseDate(d['tierUntil']),
       createdAt: _parseDate(d['createdAt']),
       updatedAt: _parseDate(d['updatedAt']),

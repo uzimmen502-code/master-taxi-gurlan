@@ -313,14 +313,30 @@ function attachRealty(exports, deps) {
    * ўзи, шунинг учун иккита жойда алоҳида йиғилса, биттасида майдон
    * қолиб кетиши хавфи бор.
    */
-  function detailDoc(uid, lat, lng) {
+  function detailDoc(uid, lat, lng, { agentPhone = '' } = {}) {
     return {
       ownerId: uid,
       lat,
       lng,
       ownerPhone: uid,
+      // ⚠️ ВАҚТИНЧА (2026-10-02): рақам ёзувда САҚЛАНМАСЛИГИ керак —
+      // эга қарори шу, ва янги илова уни барибир ўқимайди, жорий
+      // рақамни `settings/app` дан олади. Лекин Play'да ТУРГАН илова
+      // версияси уни айнан шу ердан ўқийди: ёзмай қўйсак, «AVA
+      // риэлтор» усули танланган эълонда эски иловадаги харидор
+      // агентлик рақами ўрнига ЭГАНИНГ рақамини терган бўларди —
+      // ҳолбуки эга айнан ўзига қўнғироқ келмасин деб ўша усулни
+      // танлаган. Шунинг учун янги илова версияси Play'да жонли
+      // бўлгунча ёзиб турамиз; кейин шу иккита қатор олиб ташланади.
+      ...(agentPhone ? { agentPhone } : {}),
       updatedAt: ts(),
     };
+  }
+
+  /** `settings/app.realtyAgentPhone` — фақат рақамлар. */
+  function agentPhoneFrom(app, contactMode) {
+    if (contactMode !== 'ava_agent') return '';
+    return String(appSetting(app, 'realtyAgentPhone', '')).replace(/\D/g, '');
   }
 
   /** Mijoz: янги объект (координата МАЖБУРИЙ). */
@@ -357,8 +373,8 @@ function attachRealty(exports, deps) {
     const ownerName = (String(d.ownerName || '').trim()
       || String(user.name || '').trim()).slice(0, 80);
 
-    const autoApprove =
-      appSetting(await appDoc(), 'realtyAutoApprove', true) !== false;
+    const app = await appDoc();
+    const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
     const geo = await ownerGeoStamp(uid);
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(Date.now() + PLAIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
@@ -412,7 +428,9 @@ function attachRealty(exports, deps) {
     // ─── ЁПИҚ ҳужжат: айнан шу иккови пуллик ахборот ───
     batch.set(
       ref.collection('private').doc('detail'),
-      detailDoc(uid, f.lat, f.lng),
+      detailDoc(uid, f.lat, f.lng, {
+        agentPhone: agentPhoneFrom(app, f.contactMode),
+      }),
     );
 
     await batch.commit();
@@ -452,8 +470,8 @@ function attachRealty(exports, deps) {
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
     // акс ҳолда тасдиқдан ўтган матнни кейин алмаштириб юбориш мумкин эди.
-    const autoApprove =
-      appSetting(await appDoc(), 'realtyAutoApprove', true) !== false;
+    const app = await appDoc();
+    const autoApprove = appSetting(app, 'realtyAutoApprove', true) !== false;
     const nextStatus = current.status === 'blocked'
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');
@@ -500,10 +518,14 @@ function attachRealty(exports, deps) {
       updatedAt: ts(),
     });
 
-    // `merge: false` — эски ёзувлардаги `agentPhone` ҳам шу ерда
-    // тозаланади (энди у сақланмайди).
-    await ref.collection('private').doc('detail')
-      .set(detailDoc(uid, f.lat, f.lng), { merge: false });
+    // `merge: false` — мурожаат усули «эга»га ўзгарса, ёпиқ ҳужжатдаги
+    // эски `agentPhone` ҳам шу ерда йўқолади.
+    await ref.collection('private').doc('detail').set(
+      detailDoc(uid, f.lat, f.lng, {
+        agentPhone: agentPhoneFrom(app, f.contactMode),
+      }),
+      { merge: false },
+    );
 
     return { ok: true, listingId, status: nextStatus };
   });

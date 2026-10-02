@@ -256,13 +256,16 @@ async function main() {
     const priv = db._store.get(`realty_listings/${res.listingId}/private/detail`);
     assert.strictEqual(pub.contactMode, 'ava_agent');
     assert.strictEqual(pub.hasAgent, true, 'hasAgent танловдан олинади');
-    assert.ok(!('agentPhone' in priv), 'рақам ёпиқ ҳужжатга ҳам ёзилмайди');
+    assert.strictEqual(
+      priv.agentPhone, '998900000001',
+      'ВАҚТИНЧА: Play\'даги эски илова рақамни ёпиқ ҳужжатдан ўқийди',
+    );
     assert.strictEqual(priv.ownerPhone, OWNER);
     // Аниқ координата ФАҚАТ ёпиқ ҳужжатда; очиғида — силкитилган нуқта.
     assert.strictEqual(priv.lat, 41.5);
     assert.strictEqual(priv.lng, 60.6);
     assertJittered(pub.areaLat, pub.areaLng, 41.5, 60.6);
-    console.log('✓ 1) AVA риэлтор рақами ёзувга нусхаланмайди');
+    console.log('✓ 1) Янги эълон: танлов ёзувда, рақам созламадан');
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -563,6 +566,7 @@ async function main() {
 
     const priv = db._store.get('realty_listings/E1/private/detail');
     assert.strictEqual(priv.lat, 41.5);
+    // Мурожаат усули «эга» — агентлик рақами ёзилмайди.
     assert.ok(!('agentPhone' in priv));
 
     // Нуқта ўзгарса — янги силкитиш (аниқ координатага тенг эмас).

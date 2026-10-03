@@ -36,6 +36,9 @@ import '../controllers/profile_controller.dart';
 import 'address_edit_screen.dart';
 import 'user_info_screen.dart';
 import '../../../core/theme/app_theme.dart';
+// «Талаб ва таклифлар» бўлими (эга қарори, 2026-10-03).
+import '../../demand_offer/domain/canonical_id.dart';
+import '../../demand_offer/presentation/activity/demand_activity_entry.dart';
 
 /// Профил — аватар, манзил, фойдаланувчи маълумотлари, роль панеллари.
 /// Сотиш, хабарлар, чат, кошелёк — бош экран пастида (HomeBottomBar).
@@ -247,6 +250,26 @@ class _ProfileViewState extends State<_ProfileView> {
           _header(c, loc),
           if (!c.hasUsableAddress) _addressWarning(loc),
           _cards(c, loc),
+          // ТАЛАБ ВА ТАКЛИФЛАР (эга қарори, 2026-10-03).
+          //
+          // Пастки навигацияга ЯНГИ ТАБ ҚЎШИЛМАЙДИ — бўлим Профиль
+          // ичида туради. Ҳар бир фойдаланувчига кўринади: сўров
+          // юбориш ҳар кимга тегишли, таклифчи бўлиш эса ихтиёрий
+          // (иккинчи бўлим фақат имконият ёққанларга чиқади).
+          if (canonicalUserId(c.phone).isNotEmpty)
+            _rolePanelButton(
+              label: loc.translate('profile_demand_offer_section'),
+              icon: Icons.swap_horiz_rounded,
+              color: AppColors.primaryMid,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DemandActivityEntry(
+                    userId: canonicalUserId(c.phone),
+                  ),
+                ),
+              ),
+            ),
           if (c.role == 'courier') _rolePanelButton(
             label: loc.translate('profile_courier_panel'),
             icon: Icons.delivery_dining,

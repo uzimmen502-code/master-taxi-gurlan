@@ -27,6 +27,12 @@ import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
 import '../features/onboarding/screens/device_transfer_approve_screen.dart';
+// ТАЛАБ → ТАКЛИФ ядроси (13.4.10).
+import '../features/demand_offer/data/match_repository.dart';
+import '../features/demand_offer/domain/canonical_id.dart';
+import '../features/demand_offer/domain/demand_enums.dart';
+import '../features/demand_offer/presentation/demand_detail/demand_match_detail_screen.dart';
+import '../features/demand_offer/ui_adapters/service_ui_adapter.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
@@ -85,6 +91,40 @@ class PushNavigation {
           ),
         ),
       );
+      return;
+    }
+
+    // ── ТАЛАБ → ТАКЛИФ ядроси (13.4.10) ──────────────────────────────
+    //
+    // Push юкламаси: `type: demand_match`, `demandId`, `module`, `mode`,
+    // `screen: ava://demand/{id}`.
+    //
+    // МАХФИЙЛИК: push'да аниқ манзил ва телефон ЙЎҚ — фақат `demandId`.
+    // Таклифчи экранни очганда маълумот `demand_matches` проекциясидан
+    // келади (Firestore қоидаси уни фақат шу таклифчига беради).
+    if (type == 'demand_match') {
+      final demandId = (data['demandId'] ?? '').trim();
+      if (demandId.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      final uid = canonicalUserId(prefs.getString('user_phone') ?? '');
+      if (uid.isEmpty) return;
+      await nav.push(
+        MaterialPageRoute(
+          builder: (_) => DemandMatchDetailScreen(
+            demandId: demandId,
+            providerId: uid,
+            repository: MatchRepository(),
+            adapters: const {DemandModule.service: ServiceUiAdapter()},
+          ),
+        ),
+      );
+      return;
+    }
+
+    // «Буюртма олинди» — collapse орқали эски push ўрнини олади.
+    // Экран очилмайди: очиладиган нарса қолмаган.
+    if (type == 'demand_taken') {
+      _showPassiveSnack(nav, 'demand_error_taken');
       return;
     }
 

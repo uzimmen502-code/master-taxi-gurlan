@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ava://demand_input/v1",
+  "title": "createDemand callable kirish yuklamasi (v1)",
+  "description": "13.2.1 — VALIDATSIYA CHEGARASI. Bu sxema SAQLANADIGAN hujjatni emas, KLIENT YUBORADIGAN yuklamani tekshiradi: xavfsizlik chegarasi ayni shu yerda. Hujjatning o'zini server yozadi (ownerId, status, matching, createdAt, geohash, regionId — hammasi SERVERDA hisoblanadi, klientdan OLINMAYDI). `additionalProperties: false` quyidagilarni rad etadi: ownerId, status, matching, assignment, createdAt, updatedAt, trustScore, liabilityCap, regionId, districtId, geohash. Masalan `regionId` klientdan olinsa, foydalanuvchi o'z talabini istalgan hududga 'joylashtirib' qo'ya olardi — `functions/index.js`dagi `ownerGeoStamp` ayni shu xatoni oldini olish uchun yozilgan.",
+  "type": "object",
+  "required": ["module", "clientRequestId", "input"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "enum": [1],
+      "default": 1
+    },
+    "module": {
+      "type": "string",
+      "enum": [
+        "service", "courier", "intercity_taxi", "local_taxi", "freight_local",
+        "freight_intercity", "sell", "market", "platform_store", "realty",
+        "food", "oil_change", "carpet_wash", "bread", "agro_pickup"
+      ],
+      "description": "Rejim (`mode`) MODULDAN kelib chiqadi, klient tanlamaydi."
+    },
+    "clientRequestId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Т-12 idempotentlik. Ikki marta tap -> bitta talab."
+    },
+    "categoryId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9_]+$",
+      "description": "`taxonomy` kolleksiyasidagi id. Server mavjudligini tekshiradi."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["search", "module", "avagram", "intent_card", "repeat"],
+      "default": "module"
+    },
+    "input": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["text", "form", "voice", "image"] },
+        "rawText": { "type": "string", "maxLength": 2000 },
+        "voiceUrl": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "location": { "$ref": "#/definitions/pointInput" },
+    "destination": { "$ref": "#/definitions/pointInput" },
+    "timeWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["now", "today", "custom"],
+          "description": "`now`/`today` -> expiresAt'ni SERVER hisoblaydi."
+        },
+        "neededBy": { "type": "string", "format": "date-time" },
+        "ttlMinutes": {
+          "type": "integer",
+          "minimum": 15,
+          "maximum": 20160,
+          "description": "Maksimal 14 kun. expiresAt serverda shundan hisoblanadi."
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": { "type": ["number", "null"], "minimum": 0, "maximum": 10000000000 },
+        "max": { "type": ["number", "null"], "minimum": 0, "maximum": 10000000000 },
+        "currency": { "type": "string", "enum": ["UZS"], "default": "UZS" },
+        "priceType": {
+          "type": "string",
+          "enum": ["fixed", "negotiable", "per_unit", "ava_suggested"],
+          "description": "Konsepsiyada budget `null` edi; Т bo'yicha tuzilma bo'ldi."
+        }
+      }
+    },
+    "quantity": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 1000000,
+      "description": ">=5 bo'lsa server talabni ulgurji deb belgilaydi."
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "images": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "type": "string", "minLength": 5, "maxLength": 500 }
+        }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Qabul qiluvchi (kuryer uchun). Т-9: FAQAT bosqichma-bosqich ochiladi.",
+      "properties": {
+        "recipientName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "recipientPhone": {
+          "type": "string",
+          "pattern": "^(\\+?998)?[0-9]{9}$",
+          "description": "Server kanon shaklga keltiradi (13.1.3)."
+        }
+      }
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Modulga xos maydonlar. ALOHIDA sxema bilan tekshiriladi."
+    },
+    "payerSide": {
+      "type": "string",
+      "enum": ["sender", "recipient"],
+      "description": "Kuryer: kim to'laydi."
+    },
+    "termsAcceptedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Т-10: javobgarlik shifti va oferta tasdig'i (kuryer uchun MAJBURIY)."
+    }
+  },
+  "definitions": {
+    "pointInput": {
+      "type": "object",
+      "required": ["lat", "lng"],
+      "additionalProperties": false,
+      "description": "geohash/regionId/districtId KLIENTDAN OLINMAYDI — server hisoblaydi.",
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lng": { "type": "number", "minimum": -180, "maximum": 180 },
+        "addressText": { "type": "string", "maxLength": 300 }
+      }
+    }
+  }
+}

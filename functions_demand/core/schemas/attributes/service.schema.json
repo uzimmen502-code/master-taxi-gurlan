@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ava://attributes/service/v1",
+  "title": "`service` moduli attributlari (v1) — P0 PILOTI",
+  "description": "Т-17: pilot modul «Xizmat so'rovi» (usta, santexnik, elektrik). Bugun bu oqim UMUMAN YO'Q — odamlar `ads`ga e'lon berib kutadi. Shuning uchun dual-write ham, migratsiya ham, buziladigan production ham yo'q. Maydonlar ataylab kam: har bir qo'shimcha maydon formani uzaytiradi va to'ldirilmay qoladi.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "visitType": {
+      "type": "string",
+      "enum": ["at_my_place", "at_provider", "remote"],
+      "default": "at_my_place",
+      "description": "Usta menga keladimi, men boramanmi, masofadanmi."
+    },
+    "objectType": {
+      "type": "string",
+      "enum": ["apartment", "house", "office", "shop", "car", "other"],
+      "description": "Qayerda ish bajariladi — ustaga ish hajmini tushunish uchun."
+    },
+    "problemAgeHours": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 87600,
+      "description": "Muammo qachondan beri. `urgent` kategoriyalarda prioritetga ta'sir qiladi."
+    },
+    "areaM2": {
+      "type": ["number", "null"],
+      "minimum": 0.5,
+      "maximum": 10000,
+      "description": "`unit: m2` bo'lgan kategoriyalar uchun (kafel, bo'yash, tom)."
+    },
+    "workersNeeded": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 50,
+      "description": "Brigada uchun: nechta odam kerak."
+    },
+    "hasMaterials": {
+      "type": ["boolean", "null"],
+      "description": "Material mijozdami yoki usta olib keladimi — narxga eng ko'p ta'sir qiladigan savol."
+    },
+    "accessNotes": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "«Ikkinchi qavat, lift yo'q», «it bor» — ustaning kelishiga ta'sir qiladi."
+    },
+    "preferredTimeOfDay": {
+      "type": "string",
+      "enum": ["morning", "afternoon", "evening", "any"],
+      "default": "any"
+    }
+  }
+}

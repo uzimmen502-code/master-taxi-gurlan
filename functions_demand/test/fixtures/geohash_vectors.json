@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "13.1.2 — GEOHASH PARITET QULFI.",
+    "Qiymatlar TAXMIN QILINMAGAN: `functions/geo_hash.js` (Wikipedia nazorat",
+    "qiymati bilan allaqachon tasdiqlangan implementatsiya) bilan hisoblangan.",
+    "Ayni shu faylni UCHTA joy tekshiradi:",
+    "  1) functions_demand/test/geo.test.js      (yangi yadro)",
+    "  2) functions/test/geo_hash_parity.test.js (eski codebase)",
+    "  3) test/core/geo_hash_parity_test.dart    (Flutter ilova)",
+    "Biri o'zgarsa test sinadi: server bir katakni, ilova boshqasini",
+    "hisoblashi mumkin bo'lmaydi (matching butunlay buziladi).",
+    "DIQQAT: konsepsiya hujjatida Urganch uchun `tp5q...` deb yozilgan edi —",
+    "u xato. Haqiqiy prefiks `tr7h` (precision 4)."
+  ],
+  "vectors": [
+    { "name": "wikipedia_nazorat", "lat": 57.64911, "lng": 10.40744, "precision": 6, "geohash": "u4pruy" },
+    { "name": "urganch_markaz_p4", "lat": 41.55, "lng": 60.63, "precision": 4, "geohash": "tr7h" },
+    { "name": "urganch_markaz_p5", "lat": 41.55, "lng": 60.63, "precision": 5, "geohash": "tr7h7" },
+    { "name": "urganch_markaz_p6", "lat": 41.55, "lng": 60.63, "precision": 6, "geohash": "tr7h7e" },
+    { "name": "urganch_markaz_p7", "lat": 41.55, "lng": 60.63, "precision": 7, "geohash": "tr7h7ev" },
+    { "name": "xiva", "lat": 41.3783, "lng": 60.3639, "precision": 6, "geohash": "tr6gms" },
+    { "name": "gurlan", "lat": 41.8419, "lng": 60.3889, "precision": 6, "geohash": "tr6yn1" },
+    { "name": "toshkent", "lat": 41.2995, "lng": 69.2401, "precision": 6, "geohash": "tx34zw" },
+    { "name": "nukus", "lat": 42.4531, "lng": 59.6103, "precision": 6, "geohash": "trd3s2" },
+    { "name": "nol_nuqta", "lat": 0, "lng": 0, "precision": 6, "geohash": "s00000" },
+    { "name": "manfiy_kenglik", "lat": -33.8688, "lng": 151.2093, "precision": 6, "geohash": "r3gx2f" },
+    { "name": "manfiy_uzunlik", "lat": 40.7128, "lng": -74.006, "precision": 6, "geohash": "dr5reg" }
+  ]
+}

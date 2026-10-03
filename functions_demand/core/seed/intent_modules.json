@@ -1,0 +1,146 @@
+{
+  "_comment": [
+    "P0.3 — UNIVERSAL SEARCH INTENT: MODUL DARAJASIDA.",
+    "",
+    "Ega spetsifikatsiyasi (2026-10-03): qidiruv quyidagilarni tushunishi kerak:",
+    "  «Курьер керак»              -> courier",
+    "  «Сантехник керак»           -> service  (+ kategoriya)",
+    "  «3 хонали квартира керак»   -> realty   (+ xona soni 3)",
+    "  «Тошкентга такси керак»     -> intercity_taxi (+ manzil Тошкент)",
+    "  «500 дона футболка керак»   -> market   (+ miqdor 500, ulgurji)",
+    "",
+    "Oqim: qidiruv -> intent -> MAVJUD natijalar -> mosi topilmasa",
+    "      «Taklif olish» -> demand yaratish.",
+    "",
+    "MUHIM — HOZIRGI HOLAT:",
+    "Yadroga FAQAT `service` ulangan (P0 piloti, Қ-1). Qolgan modullar",
+    "uchun ilovada ALLAQACHON ishlayotgan ekranlar bor (kuryer, taksi,",
+    "ko'chmas mulk, bozor). Shuning uchun intent topilganda:",
+    "  service      -> YANGI yadro oqimi (demand composer)",
+    "  qolganlari   -> MAVJUD modul ekrani ochiladi",
+    "Shunda foydalanuvchi uchun qidiruv bugundan foydali bo'ladi, va",
+    "modul yadroga ulanganda (P2) faqat shu jadval o'zgaradi.",
+    "",
+    "Kalit so'zlar KANON shaklda EMAS — generator `variants()` orqali",
+    "kirill/lotin shakllarini o'zi yasaydi."
+  ],
+  "version": 1,
+
+  "modules": {
+    "service": {
+      "label": { "uz_Cyrl": "Хизмат", "uz_Latn": "Xizmat", "ru": "Услуга" },
+      "coreReady": true,
+      "existingScreen": null,
+      "_comment": [
+        "P0 PILOTI (Қ-1) — YADROGA ULANGAN YAGONA MODUL.",
+        "Kalit so'zlar BU YERDA YO'Q: ular `taxonomy_services.json` dagi",
+        "40 kategoriyadan keladi (655 sinonim). Bu yozuv faqat",
+        "`coreReady: true` belgisi uchun."
+      ],
+      "keywords": []
+    },
+
+    "courier": {
+      "label": { "uz_Cyrl": "Курьер", "uz_Latn": "Kuryer", "ru": "Курьер" },
+      "coreReady": false,
+      "existingScreen": "courier",
+      "keywords": [
+        "курьер", "kuryer", "курьер керак", "kuryer kerak",
+        "посилка", "posilka", "посилка юбориш", "posilka yuborish",
+        "жўнатиш", "jo'natish", "етказиб бериш", "yetkazib berish",
+        "доставка", "dostavka", "курьер хизмати", "kuryer xizmati",
+        "олиб бориш", "olib borish", "олиб келиш", "olib kelish"
+      ]
+    },
+
+    "intercity_taxi": {
+      "label": { "uz_Cyrl": "Шаҳарлараро такси", "uz_Latn": "Shaharlararo taksi", "ru": "Междугородное такси" },
+      "coreReady": false,
+      "existingScreen": "intercity_taxi",
+      "keywords": [
+        "такси", "taksi", "такси керак", "taksi kerak",
+        "йўловчи", "yo'lovchi", "сафар", "safar",
+        "машина керак", "mashina kerak", "бориш керак", "borish kerak",
+        "олиб кетинг", "olib keting", "жойим бор", "joyim bor"
+      ]
+    },
+
+    "realty": {
+      "label": { "uz_Cyrl": "Кўчмас мулк", "uz_Latn": "Ko'chmas mulk", "ru": "Недвижимость" },
+      "coreReady": false,
+      "existingScreen": "realty",
+      "keywords": [
+        "квартира", "kvartira", "хонали квартира", "xonali kvartira",
+        "уй сотилади", "uy sotiladi", "уй керак", "uy kerak",
+        "ижара", "ijara", "ижарага", "ijaraga", "аренда",
+        "хонадон", "xonadon", "ҳовли уй", "hovli uy",
+        "участка", "ер керак", "yer kerak"
+      ]
+    },
+
+    "market": {
+      "label": { "uz_Cyrl": "Бозор", "uz_Latn": "Bozor", "ru": "Базар" },
+      "coreReady": false,
+      "existingScreen": "market",
+      "keywords": [
+        "дона", "dona", "ulgurji", "улгуржи", "оптом",
+        "партия", "partiya", "кўп миқдорда", "ko'p miqdorda",
+        "сотиб оламан", "sotib olaman", "харид қиламан", "xarid qilaman"
+      ]
+    },
+
+    "freight_local": {
+      "label": { "uz_Cyrl": "Юк ташиш", "uz_Latn": "Yuk tashish", "ru": "Грузоперевозки" },
+      "coreReady": false,
+      "existingScreen": "yuk_local",
+      "keywords": [
+        "юк ташиш", "yuk tashish", "юк машинаси", "yuk mashinasi",
+        "фура", "fura", "газель", "gazel", "исузи", "isuzu",
+        "кран керак", "kran kerak", "манипулятор"
+      ]
+    }
+  },
+
+  "_extract_comment": [
+    "AJRATIB OLINADIGAN MA'LUMOT — formani oldindan to'ldirish uchun.",
+    "",
+    "Konsepsiya: «Matndan tushunilgan ma'lumot formaga oldindan yoziladi.",
+    "«Тошкентга посилка» desa, «Қаерга» maydonida Тошкент turadi.»",
+    "",
+    "`quantity` >= 5 bo'lsa server talabni ULGURJI deb belgilaydi",
+    "(tasdiqlangan chegara) — «500 дона футболка» aynan shunga tushadi."
+  ],
+
+  "_suppress_comment": [
+    "ИШ ҚИДИРИШ — КАРТОЧКА ЧИҚМАЙДИ.",
+    "",
+    "Концепциядаги Intent Router жадвали:",
+    "  «курьер иш», «ҳайдовчи бўлиб ишлаш» -> Иш қидириш",
+    "  -> Хизмат карточкаси ЧИҚМАЙДИ",
+    "",
+    "Сабаб: бу одам КУРЬЕР КЕРАК демаяпти, у ўзи курьер бўлиб ишлашни",
+    "хоҳлаяпти. Агар карточка чиқса, илова унга «курьер топамиз» деб",
+    "таклиф қилади — тескариси.",
+    "",
+    "Тест топган ҳақиқий ҳолат: «курьер иш» матни «kurer» калити",
+    "орқали курьер модулига тушиб кетган эди."
+  ],
+  "suppressWords": [
+    "иш", "ish", "ишлаш", "ishlash", "ишламоқчиман", "ishlamoqchiman",
+    "иш керак", "ish kerak", "иш бор", "ish bor",
+    "вакансия", "vakansiya", "работа", "ищу работу", "резюме", "rezyume",
+    "бўлиб ишлаш", "bo'lib ishlash", "ишга кираман", "ishga kiraman",
+    "ишчи керакми", "ishchi kerakmi"
+  ],
+
+  "extract": {
+    "quantityUnits": ["дона", "dona", "та", "ta", "кг", "kg", "штук", "шт", "литр", "litr"],
+    "roomWords": ["хонали", "xonali", "комнатная", "хона", "xona"],
+    "destinations": [
+      "Тошкент", "Самарқанд", "Бухоро", "Наманган", "Андижон", "Фарғона",
+      "Қарши", "Термиз", "Жиззах", "Гулистон", "Навоий", "Урганч", "Нукус",
+      "Хива", "Гурлан", "Хонқа", "Шовот", "Янгибозор", "Қўшкўпир", "Боғот",
+      "Ҳазорасп", "Питнак", "Беруний", "Тўрткўл", "Хўжайли", "Шуманай"
+    ]
+  }
+}

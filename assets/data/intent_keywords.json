@@ -1,0 +1,1974 @@
+{
+  "_generated": "functions_demand/tools/build_intent_keywords.js — QO'LDA TAHRIRLANMAYDI",
+  "_source": "functions_demand/core/seed/taxonomy_services.json + core/seed/intent_modules.json",
+  "version": 1,
+  "module": "service",
+  "minPrefixLen": 4,
+  "phraseWeight": 3,
+  "categories": {
+    "avto_elektrik": {
+      "group": "avto",
+      "names": {
+        "uz_Cyrl": "Авто электрик",
+        "uz_Latn": "Avto elektrik",
+        "ru": "Автоэлектрик"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "avto_kuzov": {
+      "group": "avto",
+      "names": {
+        "uz_Cyrl": "Кузов ва бўяш",
+        "uz_Latn": "Kuzov va bo'yash",
+        "ru": "Кузовной ремонт"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "avto_yuvish": {
+      "group": "avto",
+      "names": {
+        "uz_Cyrl": "Мошина ювиш",
+        "uz_Latn": "Moshina yuvish",
+        "ru": "Автомойка"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "bogbon": {
+      "group": "hovli",
+      "names": {
+        "uz_Cyrl": "Боғбон ва дарахт",
+        "uz_Latn": "Bog'bon va daraxt",
+        "ru": "Садовник, обрезка"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "duradgor": {
+      "group": "qurilish",
+      "names": {
+        "uz_Cyrl": "Дурадгор",
+        "uz_Latn": "Duradgor",
+        "ru": "Столяр, плотник"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "elektrik": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Электрик",
+        "uz_Latn": "Elektrik",
+        "ru": "Электрик"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "eshik_deraza": {
+      "group": "tamirlash",
+      "names": {
+        "uz_Cyrl": "Эшик ва дераза",
+        "uz_Latn": "Eshik va deraza",
+        "ru": "Двери и окна"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "evakuator": {
+      "group": "avto",
+      "names": {
+        "uz_Cyrl": "Эвакуатор",
+        "uz_Latn": "Evakuator",
+        "ru": "Эвакуатор"
+      },
+      "unit": "job",
+      "urgent": true
+    },
+    "fotograf": {
+      "group": "tadbir",
+      "names": {
+        "uz_Cyrl": "Фотограф ва видео",
+        "uz_Latn": "Fotograf va video",
+        "ru": "Фотограф и видео"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "gaz_ustasi": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Газ ускунаси устаси",
+        "uz_Latn": "Gaz uskunasi ustasi",
+        "ru": "Газовщик"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "gipsokarton": {
+      "group": "tamirlash",
+      "names": {
+        "uz_Cyrl": "Гипсокартон ва шипи",
+        "uz_Latn": "Gipsokarton va ship",
+        "ru": "Гипсокартон и потолки"
+      },
+      "unit": "m2",
+      "urgent": false
+    },
+    "hovli_beton": {
+      "group": "hovli",
+      "names": {
+        "uz_Cyrl": "Ҳовли бетон ва тротуар",
+        "uz_Latn": "Hovli beton va trotuar",
+        "ru": "Бетон и тротуарная плитка"
+      },
+      "unit": "m2",
+      "urgent": false
+    },
+    "internet_usta": {
+      "group": "elektronika",
+      "names": {
+        "uz_Cyrl": "Интернет ва тармоқ",
+        "uz_Latn": "Internet va tarmoq",
+        "ru": "Интернет и сети"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "isitish_tizimi": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Иситиш тизими",
+        "uz_Latn": "Isitish tizimi",
+        "ru": "Отопление"
+      },
+      "unit": "job",
+      "urgent": true
+    },
+    "kafel": {
+      "group": "tamirlash",
+      "names": {
+        "uz_Cyrl": "Кафель ва плитка",
+        "uz_Latn": "Kafel va plitka",
+        "ru": "Кафель и плитка"
+      },
+      "unit": "m2",
+      "urgent": false
+    },
+    "kir_mashina_ustasi": {
+      "group": "maishiy_texnika",
+      "names": {
+        "uz_Cyrl": "Кир ювиш машинаси устаси",
+        "uz_Latn": "Kir yuvish mashinasi ustasi",
+        "ru": "Мастер по стиральным машинам"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "kochish_yuk": {
+      "group": "uy_xizmat",
+      "names": {
+        "uz_Cyrl": "Кўчиш ва юк кўтариш",
+        "uz_Latn": "Ko'chish va yuk ko'tarish",
+        "ru": "Переезд и грузчики"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "kompyuter_ustasi": {
+      "group": "elektronika",
+      "names": {
+        "uz_Cyrl": "Компьютер устаси",
+        "uz_Latn": "Kompyuter ustasi",
+        "ru": "Компьютерный мастер"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "konditsioner": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Кондиционер",
+        "uz_Latn": "Konditsioner",
+        "ru": "Кондиционер"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "mebel_yigish": {
+      "group": "uy_xizmat",
+      "names": {
+        "uz_Cyrl": "Мебель йиғиш",
+        "uz_Latn": "Mebel yig'ish",
+        "ru": "Сборка мебели"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "muzlatgich_ustasi": {
+      "group": "maishiy_texnika",
+      "names": {
+        "uz_Cyrl": "Музлатгич устаси",
+        "uz_Latn": "Muzlatgich ustasi",
+        "ru": "Мастер по холодильникам"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "oshpaz": {
+      "group": "tadbir",
+      "names": {
+        "uz_Cyrl": "Ошпаз (тадбирга)",
+        "uz_Latn": "Oshpaz (tadbirga)",
+        "ru": "Повар на мероприятие"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "parda_karniz": {
+      "group": "uy_xizmat",
+      "names": {
+        "uz_Cyrl": "Парда ва карниз",
+        "uz_Latn": "Parda va karniz",
+        "ru": "Шторы и карнизы"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "payvandchi": {
+      "group": "qurilish",
+      "names": {
+        "uz_Cyrl": "Пайвандчи",
+        "uz_Latn": "Payvandchi",
+        "ru": "Сварщик"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "quduq_nasos": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Қудуқ ва насос",
+        "uz_Latn": "Quduq va nasos",
+        "ru": "Колодец и насос"
+      },
+      "unit": "job",
+      "urgent": true
+    },
+    "qulf_ustasi": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Қулф устаси",
+        "uz_Latn": "Qulf ustasi",
+        "ru": "Вскрытие замков"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "qurilish_brigada": {
+      "group": "qurilish",
+      "names": {
+        "uz_Cyrl": "Қурилиш бригадаси",
+        "uz_Latn": "Qurilish brigadasi",
+        "ru": "Строительная бригада"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "repetitor": {
+      "group": "talim",
+      "names": {
+        "uz_Cyrl": "Репетитор",
+        "uz_Latn": "Repetitor",
+        "ru": "Репетитор"
+      },
+      "unit": "hour",
+      "urgent": false
+    },
+    "santexnik": {
+      "group": "uy_tamir",
+      "names": {
+        "uz_Cyrl": "Сантехник",
+        "uz_Latn": "Santexnik",
+        "ru": "Сантехник"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "shina_montaj": {
+      "group": "avto",
+      "names": {
+        "uz_Cyrl": "Шина монтаж",
+        "uz_Latn": "Shina montaj",
+        "ru": "Шиномонтаж"
+      },
+      "unit": "visit",
+      "urgent": true
+    },
+    "shpatlyovka_boyoq": {
+      "group": "tamirlash",
+      "names": {
+        "uz_Cyrl": "Шпатлёвка ва бўяш",
+        "uz_Latn": "Shpatlyovka va bo'yash",
+        "ru": "Шпатлевка и покраска"
+      },
+      "unit": "m2",
+      "urgent": false
+    },
+    "soch_uyda": {
+      "group": "shaxsiy",
+      "names": {
+        "uz_Cyrl": "Сартарош (уйга)",
+        "uz_Latn": "Sartarosh (uyga)",
+        "ru": "Парикмахер на дом"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "telefon_ustasi": {
+      "group": "elektronika",
+      "names": {
+        "uz_Cyrl": "Телефон устаси",
+        "uz_Latn": "Telefon ustasi",
+        "ru": "Ремонт телефонов"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "televizor_ustasi": {
+      "group": "maishiy_texnika",
+      "names": {
+        "uz_Cyrl": "Телевизор устаси",
+        "uz_Latn": "Televizor ustasi",
+        "ru": "Мастер по телевизорам"
+      },
+      "unit": "visit",
+      "urgent": false
+    },
+    "temir_panjara": {
+      "group": "qurilish",
+      "names": {
+        "uz_Cyrl": "Дарвоза ва панжара",
+        "uz_Latn": "Darvoza va panjara",
+        "ru": "Ворота и решетки"
+      },
+      "unit": "m2",
+      "urgent": false
+    },
+    "tikuvchi": {
+      "group": "shaxsiy",
+      "names": {
+        "uz_Cyrl": "Тикувчи",
+        "uz_Latn": "Tikuvchi",
+        "ru": "Швея, ателье"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "tom_yopish": {
+      "group": "qurilish",
+      "names": {
+        "uz_Cyrl": "Том ёпиш",
+        "uz_Latn": "Tom yopish",
+        "ru": "Кровля"
+      },
+      "unit": "m2",
+      "urgent": true
+    },
+    "toy_ovoz": {
+      "group": "tadbir",
+      "names": {
+        "uz_Cyrl": "Тўй овозлаштириш ва бошловчи",
+        "uz_Latn": "To'y ovozlashtirish va boshlovchi",
+        "ru": "Звук и ведущий"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "uy_tozalash": {
+      "group": "uy_xizmat",
+      "names": {
+        "uz_Cyrl": "Уй тозалаш",
+        "uz_Latn": "Uy tozalash",
+        "ru": "Уборка"
+      },
+      "unit": "job",
+      "urgent": false
+    },
+    "veterinar": {
+      "group": "boshqa",
+      "names": {
+        "uz_Cyrl": "Ветеринар",
+        "uz_Latn": "Veterinar",
+        "ru": "Ветеринар"
+      },
+      "unit": "visit",
+      "urgent": true
+    }
+  },
+  "ambiguous": {
+    "kotel": [
+      "gaz_ustasi",
+      "isitish_tizimi"
+    ],
+    "kotyol": [
+      "gaz_ustasi",
+      "isitish_tizimi"
+    ],
+    "yamoq": [
+      "shina_montaj",
+      "tikuvchi"
+    ]
+  },
+  "generic": [
+    "master",
+    "otremontirovat",
+    "pochinit",
+    "remont",
+    "remontchi",
+    "spetsialist",
+    "ta'mirlash",
+    "tamirlash",
+    "tuzatish",
+    "usluga",
+    "usta",
+    "xizmat"
+  ],
+  "keywords": {
+    "20 kishiga osh": [
+      "oshpaz"
+    ],
+    "abiturient": [
+      "repetitor"
+    ],
+    "abituriyent": [
+      "repetitor"
+    ],
+    "akkumulyator": [
+      "avto_elektrik"
+    ],
+    "angliyskiy": [
+      "repetitor"
+    ],
+    "antenna": [
+      "televizor_ustasi"
+    ],
+    "argon": [
+      "payvandchi"
+    ],
+    "armstrong": [
+      "gipsokarton"
+    ],
+    "atele": [
+      "tikuvchi"
+    ],
+    "atelye": [
+      "tikuvchi"
+    ],
+    "avariya": [
+      "avto_kuzov"
+    ],
+    "avto elektrik": [
+      "avto_elektrik"
+    ],
+    "avtoelektrik": [
+      "avto_elektrik"
+    ],
+    "avtomat": [
+      "elektrik"
+    ],
+    "avtomoyka": [
+      "avto_yuvish"
+    ],
+    "ballon": [
+      "gaz_ustasi"
+    ],
+    "balon": [
+      "shina_montaj"
+    ],
+    "bamper": [
+      "avto_kuzov"
+    ],
+    "batareya": [
+      "isitish_tizimi"
+    ],
+    "beton": [
+      "hovli_beton"
+    ],
+    "beton i trotuarnaya plitka": [
+      "hovli_beton"
+    ],
+    "bo'yash": [
+      "shpatlyovka_boyoq"
+    ],
+    "bog'bon": [
+      "bogbon"
+    ],
+    "bog'bon va daraxt": [
+      "bogbon"
+    ],
+    "boshlovchi": [
+      "toy_ovoz"
+    ],
+    "brigada": [
+      "qurilish_brigada"
+    ],
+    "bruschatka": [
+      "hovli_beton"
+    ],
+    "buksir": [
+      "evakuator"
+    ],
+    "cherepitsa": [
+      "tom_yopish"
+    ],
+    "chiroq": [
+      "elektrik"
+    ],
+    "chistka konditsionera": [
+      "konditsioner"
+    ],
+    "daraxt kesish": [
+      "bogbon"
+    ],
+    "dars berish": [
+      "repetitor"
+    ],
+    "darvoza": [
+      "temir_panjara"
+    ],
+    "darvoza va panjara": [
+      "temir_panjara"
+    ],
+    "deraza o'rnatish": [
+      "eshik_deraza"
+    ],
+    "deraza yuvish": [
+      "uy_tozalash"
+    ],
+    "devor ko'tarish": [
+      "qurilish_brigada"
+    ],
+    "devor tekislash": [
+      "shpatlyovka_boyoq"
+    ],
+    "didjey": [
+      "toy_ovoz"
+    ],
+    "diskoteka": [
+      "toy_ovoz"
+    ],
+    "displey": [
+      "telefon_ustasi"
+    ],
+    "dj": [
+      "toy_ovoz"
+    ],
+    "dron": [
+      "fotograf"
+    ],
+    "duradgor": [
+      "duradgor"
+    ],
+    "dver": [
+      "eshik_deraza"
+    ],
+    "dveri i okna": [
+      "eshik_deraza"
+    ],
+    "ekran": [
+      "televizor_ustasi"
+    ],
+    "ekran sindi": [
+      "telefon_ustasi"
+    ],
+    "elektrik": [
+      "elektrik"
+    ],
+    "emlash": [
+      "veterinar"
+    ],
+    "eshik": [
+      "eshik_deraza"
+    ],
+    "eshik o'rnatish": [
+      "duradgor"
+    ],
+    "eshik ochilmayapti": [
+      "qulf_ustasi"
+    ],
+    "eshik ochish": [
+      "qulf_ustasi"
+    ],
+    "eshik va deraza": [
+      "eshik_deraza"
+    ],
+    "evakuator": [
+      "evakuator"
+    ],
+    "fotograf": [
+      "fotograf"
+    ],
+    "fotograf i video": [
+      "fotograf"
+    ],
+    "fotograf va video": [
+      "fotograf"
+    ],
+    "fotosessiya": [
+      "fotograf"
+    ],
+    "freon": [
+      "konditsioner"
+    ],
+    "fundament": [
+      "hovli_beton"
+    ],
+    "g'isht teruvchi": [
+      "qurilish_brigada"
+    ],
+    "gaz hidi": [
+      "gaz_ustasi"
+    ],
+    "gaz kolonka": [
+      "gaz_ustasi"
+    ],
+    "gaz uskunasi ustasi": [
+      "gaz_ustasi"
+    ],
+    "gaz ustasi": [
+      "gaz_ustasi"
+    ],
+    "gazovaya kolonka": [
+      "gaz_ustasi"
+    ],
+    "gazovshik": [
+      "gaz_ustasi"
+    ],
+    "generalnaya uborka": [
+      "uy_tozalash"
+    ],
+    "generator": [
+      "avto_elektrik"
+    ],
+    "gipsokarton": [
+      "gipsokarton"
+    ],
+    "gipsokarton i potolki": [
+      "gipsokarton"
+    ],
+    "gipsokarton va ship": [
+      "gipsokarton"
+    ],
+    "gipsokarton va shipi": [
+      "gipsokarton"
+    ],
+    "gruzchik": [
+      "kochish_yuk"
+    ],
+    "gruzchiki": [
+      "kochish_yuk"
+    ],
+    "gulzor": [
+      "bogbon"
+    ],
+    "hammom": [
+      "kafel"
+    ],
+    "hovli beton va trotuar": [
+      "hovli_beton"
+    ],
+    "hovli yotqizish": [
+      "hovli_beton"
+    ],
+    "ingliz tili": [
+      "repetitor"
+    ],
+    "internet": [
+      "internet_usta"
+    ],
+    "internet i seti": [
+      "internet_usta"
+    ],
+    "internet va tarmoq": [
+      "internet_usta"
+    ],
+    "isitish": [
+      "isitish_tizimi"
+    ],
+    "isitish tizimi": [
+      "isitish_tizimi"
+    ],
+    "it": [
+      "veterinar"
+    ],
+    "jalyuzi": [
+      "parda_karniz"
+    ],
+    "jeleznaya dver": [
+      "temir_panjara"
+    ],
+    "kabel tortish": [
+      "internet_usta"
+    ],
+    "kafel": [
+      "kafel"
+    ],
+    "kafel i plitka": [
+      "kafel"
+    ],
+    "kafel va plitka": [
+      "kafel"
+    ],
+    "kalit sindi": [
+      "qulf_ustasi"
+    ],
+    "kamenshik": [
+      "qurilish_brigada"
+    ],
+    "kamera o'rnatish": [
+      "internet_usta"
+    ],
+    "kanalizatsiya": [
+      "santexnik"
+    ],
+    "karniz": [
+      "parda_karniz"
+    ],
+    "kelin sochi": [
+      "soch_uyda"
+    ],
+    "keramogranit": [
+      "kafel"
+    ],
+    "kir yuvish mashinasi": [
+      "kir_mashina_ustasi"
+    ],
+    "kir yuvish mashinasi ustasi": [
+      "kir_mashina_ustasi"
+    ],
+    "klining": [
+      "uy_tozalash"
+    ],
+    "ko'chirish": [
+      "kochish_yuk"
+    ],
+    "ko'chish": [
+      "kochish_yuk"
+    ],
+    "ko'chish va yuk ko'tarish": [
+      "kochish_yuk"
+    ],
+    "ko'ylak tikish": [
+      "tikuvchi"
+    ],
+    "koleso": [
+      "shina_montaj"
+    ],
+    "kolodets": [
+      "quduq_nasos"
+    ],
+    "kolodets i nasos": [
+      "quduq_nasos"
+    ],
+    "kompyuter": [
+      "kompyuter_ustasi"
+    ],
+    "kompyuter ustasi": [
+      "kompyuter_ustasi"
+    ],
+    "kompyuterniy master": [
+      "kompyuter_ustasi"
+    ],
+    "konditsioner": [
+      "konditsioner"
+    ],
+    "konditsioner o'rnatish": [
+      "konditsioner"
+    ],
+    "konditsioner tozalash": [
+      "konditsioner"
+    ],
+    "korova": [
+      "veterinar"
+    ],
+    "koshka": [
+      "veterinar"
+    ],
+    "kotel": [
+      "gaz_ustasi",
+      "isitish_tizimi"
+    ],
+    "kotyol": [
+      "gaz_ustasi",
+      "isitish_tizimi"
+    ],
+    "kran": [
+      "santexnik"
+    ],
+    "kran techet": [
+      "santexnik"
+    ],
+    "kraska": [
+      "shpatlyovka_boyoq"
+    ],
+    "krisha techet": [
+      "tom_yopish"
+    ],
+    "krovat yig'ish": [
+      "mebel_yigish"
+    ],
+    "krovlya": [
+      "tom_yopish"
+    ],
+    "kuxnya o'rnatish": [
+      "mebel_yigish"
+    ],
+    "kuzov": [
+      "avto_kuzov"
+    ],
+    "kuzov va bo'yash": [
+      "avto_kuzov"
+    ],
+    "kuzovnoy": [
+      "avto_kuzov"
+    ],
+    "kuzovnoy remont": [
+      "avto_kuzov"
+    ],
+    "makiyaj": [
+      "soch_uyda"
+    ],
+    "mashina bo'yash": [
+      "avto_kuzov"
+    ],
+    "mashina o't olmayapti": [
+      "avto_elektrik"
+    ],
+    "mashina suv olmayapti": [
+      "kir_mashina_ustasi"
+    ],
+    "mashina tortish": [
+      "evakuator"
+    ],
+    "master po stiralnim mashinam": [
+      "kir_mashina_ustasi"
+    ],
+    "master po televizoram": [
+      "televizor_ustasi"
+    ],
+    "master po xolodilnikam": [
+      "muzlatgich_ustasi"
+    ],
+    "matematika": [
+      "repetitor"
+    ],
+    "mebel tashish": [
+      "kochish_yuk"
+    ],
+    "mebel yig'ish": [
+      "mebel_yigish"
+    ],
+    "mol kasal": [
+      "veterinar"
+    ],
+    "molniya almashtirish": [
+      "tikuvchi"
+    ],
+    "morozilnik": [
+      "muzlatgich_ustasi"
+    ],
+    "moshina yuvish": [
+      "avto_yuvish"
+    ],
+    "moskit to'r": [
+      "eshik_deraza"
+    ],
+    "moskitnaya setka": [
+      "eshik_deraza"
+    ],
+    "motor ishlamayapti": [
+      "quduq_nasos"
+    ],
+    "moyka": [
+      "kafel"
+    ],
+    "mushuk": [
+      "veterinar"
+    ],
+    "muzika": [
+      "toy_ovoz"
+    ],
+    "muzlatgich": [
+      "muzlatgich_ustasi"
+    ],
+    "muzlatgich ustasi": [
+      "muzlatgich_ustasi"
+    ],
+    "na dom": [
+      "soch_uyda"
+    ],
+    "nasos": [
+      "quduq_nasos"
+    ],
+    "natyajnoy": [
+      "gipsokarton"
+    ],
+    "natyajnoy potolok": [
+      "gipsokarton"
+    ],
+    "naves": [
+      "temir_panjara"
+    ],
+    "ne kachaet": [
+      "quduq_nasos"
+    ],
+    "ne krutit": [
+      "kir_mashina_ustasi"
+    ],
+    "ne morozit": [
+      "muzlatgich_ustasi"
+    ],
+    "ne otkrivaetsya dver": [
+      "qulf_ustasi"
+    ],
+    "ne slivaet": [
+      "kir_mashina_ustasi"
+    ],
+    "ne zapuskaetsya": [
+      "avto_elektrik"
+    ],
+    "ne zaryajaetsya": [
+      "telefon_ustasi"
+    ],
+    "net sveta": [
+      "elektrik"
+    ],
+    "noutbuk": [
+      "kompyuter_ustasi"
+    ],
+    "o'qituvchi": [
+      "repetitor"
+    ],
+    "o't o'rish": [
+      "bogbon"
+    ],
+    "oboi": [
+      "shpatlyovka_boyoq"
+    ],
+    "obrezka derevev": [
+      "bogbon"
+    ],
+    "okno": [
+      "eshik_deraza"
+    ],
+    "operator": [
+      "fotograf"
+    ],
+    "osh qilish": [
+      "oshpaz"
+    ],
+    "oshpaz": [
+      "oshpaz"
+    ],
+    "oshpaz tadbirga": [
+      "oshpaz"
+    ],
+    "otoplenie": [
+      "isitish_tizimi"
+    ],
+    "otopleniye": [
+      "isitish_tizimi"
+    ],
+    "ottashit mashinu": [
+      "evakuator"
+    ],
+    "ovozlashtirish": [
+      "toy_ovoz"
+    ],
+    "panjara": [
+      "temir_panjara"
+    ],
+    "parda": [
+      "parda_karniz"
+    ],
+    "parda osish": [
+      "parda_karniz"
+    ],
+    "parda tikish": [
+      "tikuvchi"
+    ],
+    "parda va karniz": [
+      "parda_karniz"
+    ],
+    "parikmaxer": [
+      "soch_uyda"
+    ],
+    "parikmaxer na dom": [
+      "soch_uyda"
+    ],
+    "payvandchi": [
+      "payvandchi"
+    ],
+    "pereezd": [
+      "kochish_yuk"
+    ],
+    "pereezd i gruzchiki": [
+      "kochish_yuk"
+    ],
+    "perevezti mebel": [
+      "kochish_yuk"
+    ],
+    "pereyezd": [
+      "kochish_yuk"
+    ],
+    "plastik deraza": [
+      "eshik_deraza"
+    ],
+    "plastikovie okna": [
+      "eshik_deraza"
+    ],
+    "plita": [
+      "gaz_ustasi"
+    ],
+    "plitka": [
+      "kafel"
+    ],
+    "plotnik": [
+      "duradgor"
+    ],
+    "plov na 20 chelovek": [
+      "oshpaz"
+    ],
+    "po derevu": [
+      "duradgor"
+    ],
+    "podgotovka": [
+      "repetitor"
+    ],
+    "podnyat stenu": [
+      "qurilish_brigada"
+    ],
+    "podryad": [
+      "qurilish_brigada"
+    ],
+    "podshit": [
+      "tikuvchi"
+    ],
+    "podstrich gazon": [
+      "bogbon"
+    ],
+    "podvesnoy": [
+      "gipsokarton"
+    ],
+    "podvesnoy potolok": [
+      "gipsokarton"
+    ],
+    "pokraska": [
+      "shpatlyovka_boyoq"
+    ],
+    "pokraska avto": [
+      "avto_kuzov"
+    ],
+    "pol isitish": [
+      "isitish_tizimi"
+    ],
+    "polirovka": [
+      "avto_yuvish"
+    ],
+    "pomit mashinu": [
+      "avto_yuvish"
+    ],
+    "pomit okna": [
+      "uy_tozalash"
+    ],
+    "postroit dom": [
+      "qurilish_brigada"
+    ],
+    "potolok": [
+      "gipsokarton"
+    ],
+    "povar": [
+      "oshpaz"
+    ],
+    "povar na meropriyatie": [
+      "oshpaz"
+    ],
+    "povar na svadbu": [
+      "oshpaz"
+    ],
+    "povesit shtori": [
+      "parda_karniz"
+    ],
+    "pricheska nevesti": [
+      "soch_uyda"
+    ],
+    "prigotovit plov": [
+      "oshpaz"
+    ],
+    "printer": [
+      "kompyuter_ustasi"
+    ],
+    "privivka": [
+      "veterinar"
+    ],
+    "probil koleso": [
+      "shina_montaj"
+    ],
+    "profnastil": [
+      "tom_yopish"
+    ],
+    "programma o'rnatish": [
+      "kompyuter_ustasi"
+    ],
+    "provesti kabel": [
+      "internet_usta"
+    ],
+    "provodka": [
+      "elektrik"
+    ],
+    "qozon": [
+      "oshpaz"
+    ],
+    "quduq": [
+      "quduq_nasos"
+    ],
+    "quduq va nasos": [
+      "quduq_nasos"
+    ],
+    "qulf": [
+      "qulf_ustasi"
+    ],
+    "qulf ustasi": [
+      "qulf_ustasi"
+    ],
+    "qurilish brigadasi": [
+      "qurilish_brigada"
+    ],
+    "radiator": [
+      "isitish_tizimi"
+    ],
+    "razbil ekran": [
+      "telefon_ustasi"
+    ],
+    "razval": [
+      "shina_montaj"
+    ],
+    "remont stiralnoy": [
+      "kir_mashina_ustasi"
+    ],
+    "remont telefona": [
+      "telefon_ustasi"
+    ],
+    "remont telefonov": [
+      "telefon_ustasi"
+    ],
+    "remont xolodilnika": [
+      "muzlatgich_ustasi"
+    ],
+    "repetitor": [
+      "repetitor"
+    ],
+    "reshetki": [
+      "temir_panjara"
+    ],
+    "reshyotka": [
+      "temir_panjara"
+    ],
+    "resiver": [
+      "televizor_ustasi"
+    ],
+    "rixtovka": [
+      "avto_kuzov"
+    ],
+    "router": [
+      "internet_usta"
+    ],
+    "rozetka": [
+      "elektrik"
+    ],
+    "rulonnaya shtora": [
+      "parda_karniz"
+    ],
+    "rulonnie shtori": [
+      "parda_karniz"
+    ],
+    "sadovnik": [
+      "bogbon"
+    ],
+    "sadovnik obrezka": [
+      "bogbon"
+    ],
+    "santexnik": [
+      "santexnik"
+    ],
+    "sanuzel": [
+      "kafel"
+    ],
+    "sartarosh": [
+      "soch_uyda"
+    ],
+    "sartarosh uyga": [
+      "soch_uyda"
+    ],
+    "sborka": [
+      "mebel_yigish"
+    ],
+    "sborka mebeli": [
+      "mebel_yigish"
+    ],
+    "schetchik": [
+      "elektrik"
+    ],
+    "schyotchik": [
+      "elektrik"
+    ],
+    "sdelat shkaf": [
+      "duradgor"
+    ],
+    "sentrifuga": [
+      "kir_mashina_ustasi"
+    ],
+    "shifer": [
+      "tom_yopish"
+    ],
+    "shina almashtirish": [
+      "shina_montaj"
+    ],
+    "shina montaj": [
+      "shina_montaj"
+    ],
+    "shinomontaj": [
+      "shina_montaj"
+    ],
+    "ship": [
+      "gipsokarton"
+    ],
+    "shkaf yasash": [
+      "duradgor"
+    ],
+    "shkaf yig'ish": [
+      "mebel_yigish"
+    ],
+    "shpatlevka": [
+      "shpatlyovka_boyoq"
+    ],
+    "shpatlevka i pokraska": [
+      "shpatlyovka_boyoq"
+    ],
+    "shpatlyovka": [
+      "shpatlyovka_boyoq"
+    ],
+    "shpatlyovka va bo'yash": [
+      "shpatlyovka_boyoq"
+    ],
+    "shtori": [
+      "parda_karniz"
+    ],
+    "shtori i karnizi": [
+      "parda_karniz"
+    ],
+    "shtukaturka": [
+      "shpatlyovka_boyoq"
+    ],
+    "shveya": [
+      "tikuvchi"
+    ],
+    "shveya atele": [
+      "tikuvchi"
+    ],
+    "sigir": [
+      "veterinar"
+    ],
+    "signalizatsiya": [
+      "avto_elektrik"
+    ],
+    "simlar": [
+      "elektrik"
+    ],
+    "skvajina": [
+      "quduq_nasos"
+    ],
+    "slomal klyuch": [
+      "qulf_ustasi"
+    ],
+    "slomalsya v doroge": [
+      "evakuator"
+    ],
+    "smartfon": [
+      "telefon_ustasi"
+    ],
+    "smesitel": [
+      "santexnik"
+    ],
+    "sobaka": [
+      "veterinar"
+    ],
+    "sobrat krovat": [
+      "mebel_yigish"
+    ],
+    "sobrat shkaf": [
+      "mebel_yigish"
+    ],
+    "soch olish": [
+      "soch_uyda"
+    ],
+    "somsa": [
+      "oshpaz"
+    ],
+    "sovutgich qurilma": [
+      "konditsioner"
+    ],
+    "sovutmayapti": [
+      "muzlatgich_ustasi"
+    ],
+    "spilit derevo": [
+      "bogbon"
+    ],
+    "split": [
+      "konditsioner"
+    ],
+    "split sistema": [
+      "konditsioner"
+    ],
+    "sshit plate": [
+      "tikuvchi"
+    ],
+    "starter": [
+      "avto_elektrik"
+    ],
+    "steklopaket": [
+      "eshik_deraza"
+    ],
+    "stiralnaya": [
+      "kir_mashina_ustasi"
+    ],
+    "stiralnaya mashina": [
+      "kir_mashina_ustasi"
+    ],
+    "stolyar": [
+      "duradgor"
+    ],
+    "stolyar plotnik": [
+      "duradgor"
+    ],
+    "strijka": [
+      "soch_uyda"
+    ],
+    "stroitelnaya brigada": [
+      "qurilish_brigada"
+    ],
+    "suratga olish": [
+      "fotograf"
+    ],
+    "suv nasosi": [
+      "quduq_nasos"
+    ],
+    "suv o'tkazish": [
+      "santexnik"
+    ],
+    "suv oqyapti": [
+      "santexnik"
+    ],
+    "svarka": [
+      "payvandchi"
+    ],
+    "svarshchik": [
+      "payvandchi"
+    ],
+    "svarshik": [
+      "payvandchi"
+    ],
+    "svet": [
+      "toy_ovoz"
+    ],
+    "tamada": [
+      "toy_ovoz"
+    ],
+    "tamirdan keyin tozalash": [
+      "uy_tozalash"
+    ],
+    "tarelka": [
+      "televizor_ustasi"
+    ],
+    "telefon": [
+      "telefon_ustasi"
+    ],
+    "telefon ustasi": [
+      "telefon_ustasi"
+    ],
+    "televizor": [
+      "televizor_ustasi"
+    ],
+    "televizor ustasi": [
+      "televizor_ustasi"
+    ],
+    "temir eshik": [
+      "temir_panjara"
+    ],
+    "temir payvand": [
+      "payvandchi"
+    ],
+    "tepliy pol": [
+      "isitish_tizimi"
+    ],
+    "tikuvchi": [
+      "tikuvchi"
+    ],
+    "to'y oshpazi": [
+      "oshpaz"
+    ],
+    "to'y ovozlashtirish va boshlovchi": [
+      "toy_ovoz"
+    ],
+    "to'y video": [
+      "fotograf"
+    ],
+    "tok yo'q": [
+      "elektrik"
+    ],
+    "tokni boylash": [
+      "bogbon"
+    ],
+    "tom": [
+      "tom_yopish"
+    ],
+    "tom oqyapti": [
+      "tom_yopish"
+    ],
+    "tom yopish": [
+      "tom_yopish"
+    ],
+    "trotuar plitka": [
+      "hovli_beton"
+    ],
+    "trotuarnaya plitka": [
+      "hovli_beton"
+    ],
+    "truba": [
+      "santexnik"
+    ],
+    "tsentrifuga": [
+      "kir_mashina_ustasi"
+    ],
+    "tv": [
+      "televizor_ustasi"
+    ],
+    "uborka": [
+      "uy_tozalash"
+    ],
+    "uborka posle remonta": [
+      "uy_tozalash"
+    ],
+    "ulojit plitku": [
+      "kafel"
+    ],
+    "unitaz": [
+      "santexnik"
+    ],
+    "ustalar": [
+      "qurilish_brigada"
+    ],
+    "ustanovit dver": [
+      "duradgor"
+    ],
+    "ustanovit kameru": [
+      "internet_usta"
+    ],
+    "ustanovit kuxnyu": [
+      "mebel_yigish"
+    ],
+    "ustanovit okno": [
+      "eshik_deraza"
+    ],
+    "ustanovit programmu": [
+      "kompyuter_ustasi"
+    ],
+    "ustanovka konditsionera": [
+      "konditsioner"
+    ],
+    "uy qurish": [
+      "qurilish_brigada"
+    ],
+    "uy tozalash": [
+      "uy_tozalash"
+    ],
+    "uyga kelib": [
+      "soch_uyda"
+    ],
+    "uyga kelib yuvish": [
+      "avto_yuvish"
+    ],
+    "vayfay": [
+      "internet_usta"
+    ],
+    "vedushiy": [
+      "toy_ovoz"
+    ],
+    "veterinar": [
+      "veterinar"
+    ],
+    "vetvrach": [
+      "veterinar"
+    ],
+    "video na svadbu": [
+      "fotograf"
+    ],
+    "video olish": [
+      "fotograf"
+    ],
+    "videonablyudenie": [
+      "internet_usta"
+    ],
+    "videosemka": [
+      "fotograf"
+    ],
+    "viklyuchatel": [
+      "elektrik"
+    ],
+    "vindovs": [
+      "kompyuter_ustasi"
+    ],
+    "virovnyat steni": [
+      "shpatlyovka_boyoq"
+    ],
+    "virus": [
+      "kompyuter_ustasi"
+    ],
+    "vivezti musor": [
+      "kochish_yuk"
+    ],
+    "vmyatina": [
+      "avto_kuzov"
+    ],
+    "vodyanoy nasos": [
+      "quduq_nasos"
+    ],
+    "vorota": [
+      "temir_panjara"
+    ],
+    "vorota i reshetki": [
+      "temir_panjara"
+    ],
+    "vskrit dver": [
+      "qulf_ustasi"
+    ],
+    "vskritie zamkov": [
+      "qulf_ustasi"
+    ],
+    "vyklyuchatel": [
+      "elektrik"
+    ],
+    "wifi": [
+      "internet_usta"
+    ],
+    "windows": [
+      "kompyuter_ustasi"
+    ],
+    "xazon": [
+      "bogbon"
+    ],
+    "ximchistka": [
+      "avto_yuvish"
+    ],
+    "ximchistka salona": [
+      "avto_yuvish"
+    ],
+    "xolodilnik": [
+      "muzlatgich_ustasi"
+    ],
+    "yamoq": [
+      "shina_montaj",
+      "tikuvchi"
+    ],
+    "yo'lda qoldim": [
+      "evakuator"
+    ],
+    "yog'och ishi": [
+      "duradgor"
+    ],
+    "yorug'lik": [
+      "toy_ovoz"
+    ],
+    "yuk tashish": [
+      "kochish_yuk"
+    ],
+    "zabor": [
+      "temir_panjara"
+    ],
+    "zalit fundament": [
+      "hovli_beton"
+    ],
+    "zamenit molniyu": [
+      "tikuvchi"
+    ],
+    "zamenit shini": [
+      "shina_montaj"
+    ],
+    "zamok": [
+      "qulf_ustasi"
+    ],
+    "zanyatiya": [
+      "repetitor"
+    ],
+    "zapax gaza": [
+      "gaz_ustasi"
+    ],
+    "zaryadka olmayapti": [
+      "telefon_ustasi"
+    ],
+    "zasor": [
+      "santexnik"
+    ],
+    "zavarit": [
+      "payvandchi"
+    ],
+    "zvuk": [
+      "toy_ovoz"
+    ],
+    "zvuk i vedushiy": [
+      "toy_ovoz"
+    ]
+  },
+  "moduleKeywords": {
+    "arenda": [
+      "realty"
+    ],
+    "borish kerak": [
+      "intercity_taxi"
+    ],
+    "dona": [
+      "market"
+    ],
+    "dostavka": [
+      "courier"
+    ],
+    "er kerak": [
+      "realty"
+    ],
+    "etkazib berish": [
+      "courier"
+    ],
+    "fura": [
+      "freight_local"
+    ],
+    "gazel": [
+      "freight_local"
+    ],
+    "hovli uy": [
+      "realty"
+    ],
+    "ijara": [
+      "realty"
+    ],
+    "ijaraga": [
+      "realty"
+    ],
+    "isuzi": [
+      "freight_local"
+    ],
+    "isuzu": [
+      "freight_local"
+    ],
+    "jo'natish": [
+      "courier"
+    ],
+    "joyim bor": [
+      "intercity_taxi"
+    ],
+    "ko'p miqdorda": [
+      "market"
+    ],
+    "kran kerak": [
+      "freight_local"
+    ],
+    "kurer": [
+      "courier"
+    ],
+    "kurer kerak": [
+      "courier"
+    ],
+    "kurer xizmati": [
+      "courier"
+    ],
+    "kuryer": [
+      "courier"
+    ],
+    "kuryer kerak": [
+      "courier"
+    ],
+    "kuryer xizmati": [
+      "courier"
+    ],
+    "kvartira": [
+      "realty"
+    ],
+    "manipulyator": [
+      "freight_local"
+    ],
+    "mashina kerak": [
+      "intercity_taxi"
+    ],
+    "olib borish": [
+      "courier"
+    ],
+    "olib kelish": [
+      "courier"
+    ],
+    "olib keting": [
+      "intercity_taxi"
+    ],
+    "optom": [
+      "market"
+    ],
+    "partiya": [
+      "market"
+    ],
+    "posilka": [
+      "courier"
+    ],
+    "posilka yuborish": [
+      "courier"
+    ],
+    "safar": [
+      "intercity_taxi"
+    ],
+    "sotib olaman": [
+      "market"
+    ],
+    "taksi": [
+      "intercity_taxi"
+    ],
+    "taksi kerak": [
+      "intercity_taxi"
+    ],
+    "uchastka": [
+      "realty"
+    ],
+    "ulgurji": [
+      "market"
+    ],
+    "uy kerak": [
+      "realty"
+    ],
+    "uy sotiladi": [
+      "realty"
+    ],
+    "xarid qilaman": [
+      "market"
+    ],
+    "xonadon": [
+      "realty"
+    ],
+    "xonali kvartira": [
+      "realty"
+    ],
+    "yer kerak": [
+      "realty"
+    ],
+    "yetkazib berish": [
+      "courier"
+    ],
+    "yo'lovchi": [
+      "intercity_taxi"
+    ],
+    "yuk mashinasi": [
+      "freight_local"
+    ],
+    "yuk tashish": [
+      "freight_local"
+    ]
+  },
+  "modules": {
+    "service": {
+      "label": {
+        "uz_Cyrl": "Хизмат",
+        "uz_Latn": "Xizmat",
+        "ru": "Услуга"
+      },
+      "coreReady": true,
+      "existingScreen": null
+    },
+    "courier": {
+      "label": {
+        "uz_Cyrl": "Курьер",
+        "uz_Latn": "Kuryer",
+        "ru": "Курьер"
+      },
+      "coreReady": false,
+      "existingScreen": "courier"
+    },
+    "intercity_taxi": {
+      "label": {
+        "uz_Cyrl": "Шаҳарлараро такси",
+        "uz_Latn": "Shaharlararo taksi",
+        "ru": "Междугородное такси"
+      },
+      "coreReady": false,
+      "existingScreen": "intercity_taxi"
+    },
+    "realty": {
+      "label": {
+        "uz_Cyrl": "Кўчмас мулк",
+        "uz_Latn": "Ko'chmas mulk",
+        "ru": "Недвижимость"
+      },
+      "coreReady": false,
+      "existingScreen": "realty"
+    },
+    "market": {
+      "label": {
+        "uz_Cyrl": "Бозор",
+        "uz_Latn": "Bozor",
+        "ru": "Базар"
+      },
+      "coreReady": false,
+      "existingScreen": "market"
+    },
+    "freight_local": {
+      "label": {
+        "uz_Cyrl": "Юк ташиш",
+        "uz_Latn": "Yuk tashish",
+        "ru": "Грузоперевозки"
+      },
+      "coreReady": false,
+      "existingScreen": "yuk_local"
+    }
+  },
+  "suppressWords": [
+    "bo'lib ishlash",
+    "ish",
+    "ish bor",
+    "ish kerak",
+    "ishchi kerakmi",
+    "ishga kiraman",
+    "ishlamoqchiman",
+    "ishlash",
+    "ishu rabotu",
+    "rabota",
+    "rezyume",
+    "vakansiya"
+  ],
+  "extract": {
+    "quantityUnits": [
+      "dona",
+      "kg",
+      "litr",
+      "sht",
+      "shtuk",
+      "ta"
+    ],
+    "roomWords": [
+      "komnatnaya",
+      "xona",
+      "xonali"
+    ],
+    "destinations": [
+      {
+        "name": "Андижон",
+        "canon": "andijon"
+      },
+      {
+        "name": "Беруний",
+        "canon": "beruniy"
+      },
+      {
+        "name": "Боғот",
+        "canon": "bog'ot"
+      },
+      {
+        "name": "Бухоро",
+        "canon": "buxoro"
+      },
+      {
+        "name": "Фарғона",
+        "canon": "farg'ona"
+      },
+      {
+        "name": "Гулистон",
+        "canon": "guliston"
+      },
+      {
+        "name": "Гурлан",
+        "canon": "gurlan"
+      },
+      {
+        "name": "Ҳазорасп",
+        "canon": "hazorasp"
+      },
+      {
+        "name": "Жиззах",
+        "canon": "jizzax"
+      },
+      {
+        "name": "Наманган",
+        "canon": "namangan"
+      },
+      {
+        "name": "Навоий",
+        "canon": "navoiy"
+      },
+      {
+        "name": "Нукус",
+        "canon": "nukus"
+      },
+      {
+        "name": "Питнак",
+        "canon": "pitnak"
+      },
+      {
+        "name": "Қарши",
+        "canon": "qarshi"
+      },
+      {
+        "name": "Қўшкўпир",
+        "canon": "qo'shko'pir"
+      },
+      {
+        "name": "Самарқанд",
+        "canon": "samarqand"
+      },
+      {
+        "name": "Шовот",
+        "canon": "shovot"
+      },
+      {
+        "name": "Шуманай",
+        "canon": "shumanay"
+      },
+      {
+        "name": "Термиз",
+        "canon": "termiz"
+      },
+      {
+        "name": "Тўрткўл",
+        "canon": "to'rtko'l"
+      },
+      {
+        "name": "Тошкент",
+        "canon": "toshkent"
+      },
+      {
+        "name": "Урганч",
+        "canon": "urganch"
+      },
+      {
+        "name": "Хива",
+        "canon": "xiva"
+      },
+      {
+        "name": "Хўжайли",
+        "canon": "xo'jayli"
+      },
+      {
+        "name": "Хонқа",
+        "canon": "xonqa"
+      },
+      {
+        "name": "Янгибозор",
+        "canon": "yangibozor"
+      }
+    ]
+  }
+}

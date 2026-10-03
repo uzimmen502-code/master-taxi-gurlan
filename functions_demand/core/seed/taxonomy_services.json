@@ -1,0 +1,432 @@
+{
+  "_comment": [
+    "13.0.4 — P0 PILOTI UCHUN TAKSONOMIYA (Қ-6: <=40 kategoriya, faqat xizmatlar).",
+    "",
+    "Nega faqat xizmatlar: pilot modul «Xizmat so'rovi» (Т-17). Tovar",
+    "kategoriyalari P1 da qo'shiladi va bu fayl o'sha paytda kengayadi.",
+    "",
+    "`names` — UI da ko'rinadigan nom (uchta til MAJBURIY).",
+    "`syn`   — Intent Router va qidiruv uchun kalit so'zlar. Xorazm shevasi va",
+    "          ruscha-o'zbekcha aralash shakllar ataylab kiritilgan: odamlar",
+    "          «кран ломался» yoki «santexnik kerak» deb yozadi, ikkisi ham",
+    "          tushunilishi kerak.",
+    "`unit`  — narx odatda nimaga bog'lanadi: `visit` (chaqiruv), `hour`, `job`, `m2`.",
+    "`urgent`— odatda shoshilinch bo'ladimi (push prioriteti va `defaultTtl` uchun).",
+    "",
+    "DIQQAT: bu fayl `taxonomy` kolleksiyasiga seed qiladi. Admin panelda",
+    "tahrirlangandan keyin bu fayl EMAS, Firestore haqiqat manbai bo'ladi.",
+    "",
+    "ATAYLAB KIRITILMAGAN: `gilam_yuvish` va `avto_moy`. Ikkisining ham to'liq",
+    "oqimi production'da ALLAQACHON ishlaydi (`placeCarpetWashOrder`,",
+    "`oil_change_catalog`). Т-17 bo'yicha ular P1 da o'z adapteri bilan",
+    "ulanadi — pilotga qo'shilsa dual-write va regressiya xavfi paydo bo'ladi."
+  ],
+  "version": 1,
+  "module": "service",
+  "_ambiguous_comment": [
+    "KO'P MA'NOLI KALIT SO'ZLAR — ataylab ikki kategoriyada qoldirilgan.",
+    "Intent Router bu so'zlarni ko'rsa O'ZI TANLAMAYDI: xizmat kartochkasida",
+    "ikkita variantni taklif qiladi («Газ устаси ёки Иситиш тизими?»).",
+    "Sinonimni bitta kategoriyadan olib tashlash recall'ni yo'qotadi:",
+    "«котёл ишламаяпти» deb yozgan odam ikkalasiga ham tushishi mumkin."
+  ],
+  "ambiguous": [
+    { "keywords": ["котёл", "kotyol", "котел"], "categories": ["gaz_ustasi", "isitish_tizimi"] },
+    { "keywords": ["ямоқ", "yamoq"], "categories": ["shina_montaj", "tikuvchi"] }
+  ],
+  "_generic_comment": [
+    "UMUMIY KALITLAR — «xizmat kerak», lekin QAYSI xizmat noma'lum.",
+    "",
+    "Nega kerak (ega qarori, 2026-10-03): «Usta chaqirish» alohida tugma",
+    "EMAS, asosiy kirish nuqtasi — AVA'dan qidirish. Ega uchta misol",
+    "keltirdi: «Сантехник керак», «Электрик керак», «УСТА КЕРАК».",
+    "Uchinchisi hech qanday aniq kategoriyaga tushmaydi, lekin xizmat",
+    "kartochkasi KO'RSATILISHI shart — aks holda foydalanuvchi uchun",
+    "boshqa kirish nuqtasi qolmaydi.",
+    "",
+    "Shuning uchun: umumiy kalit topilsa -> `module: service`,",
+    "`categoryId: null`, `needsChoice: true` -> kategoriya tanlovi.",
+    "",
+    "MUHIM ASIMMETRIYA: bu kalitlar FAQAT TALABNI tushunish uchun.",
+    "Taklifchining e'lon matnidan kategoriya chiqarishda ULAR",
+    "ISHLATILMAYDI — «ustaman» deb yozgan odam 40 ta kategoriyaning",
+    "hammasiga tayinlanib qolardi. Qarang: keywords.js",
+    "`providerCategoriesFromText`.",
+    "",
+    "DIQQAT: ro'yxatda kategoriya sinonimi bo'lgan so'z BO'LMASLIGI kerak.",
+    "«усталар» (ko'plik) avval shu yerda edi va `qurilish_brigada`",
+    "sinonimi bilan to'qnashdi — test topdi. Ko'plik shakli aslida",
+    "brigada belgisi («усталар керак» = brigada kerak), shuning uchun",
+    "u faqat kategoriyada qoldi. Birlik «уста» esa umumiy."
+  ],
+  "generic": [
+    "уста", "usta",
+    "мастер", "master", "специалист", "spetsialist",
+    "хизмат", "xizmat", "услуга",
+    "таъмирлаш", "тамирлаш", "ta'mirlash", "tamirlash",
+    "ремонт", "ремонтчи", "remont", "remontchi",
+    "тузатиш", "tuzatish", "починить", "отремонтировать"
+  ],
+  "categories": [
+    {
+      "id": "santexnik", "group": "uy_tamir", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Сантехник", "uz_Latn": "Santexnik", "ru": "Сантехник" },
+      "syn": {
+        "uz_Cyrl": ["сантехник", "кран", "сув оқяпти", "труба", "унитаз", "смеситель", "канализация", "сув ўтказиш"],
+        "uz_Latn": ["santexnik", "kran", "suv oqyapti", "truba", "unitaz", "smesitel", "kanalizatsiya", "suv o'tkazish"],
+        "ru": ["сантехник", "кран течет", "труба", "унитаз", "смеситель", "канализация", "засор"]
+      }
+    },
+    {
+      "id": "elektrik", "group": "uy_tamir", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Электрик", "uz_Latn": "Elektrik", "ru": "Электрик" },
+      "syn": {
+        "uz_Cyrl": ["электрик", "ток йўқ", "розетка", "выключатель", "счётчик", "симлар", "чироқ", "автомат"],
+        "uz_Latn": ["elektrik", "tok yo'q", "rozetka", "vyklyuchatel", "schyotchik", "simlar", "chiroq", "avtomat"],
+        "ru": ["электрик", "нет света", "розетка", "выключатель", "счетчик", "проводка", "автомат"]
+      }
+    },
+    {
+      "id": "gaz_ustasi", "group": "uy_tamir", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Газ ускунаси устаси", "uz_Latn": "Gaz uskunasi ustasi", "ru": "Газовщик" },
+      "syn": {
+        "uz_Cyrl": ["газ устаси", "плита", "газ колонка", "котёл", "газ ҳиди", "баллон"],
+        "uz_Latn": ["gaz ustasi", "plita", "gaz kolonka", "kotyol", "gaz hidi", "ballon"],
+        "ru": ["газовщик", "плита", "газовая колонка", "котел", "запах газа"]
+      }
+    },
+    {
+      "id": "konditsioner", "group": "uy_tamir", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Кондиционер", "uz_Latn": "Konditsioner", "ru": "Кондиционер" },
+      "syn": {
+        "uz_Cyrl": ["кондиционер", "сплит", "совутгич қурилма", "фреон", "кондиционер ўрнатиш", "кондиционер тозалаш"],
+        "uz_Latn": ["konditsioner", "split", "freon", "konditsioner o'rnatish", "konditsioner tozalash"],
+        "ru": ["кондиционер", "сплит система", "фреон", "установка кондиционера", "чистка кондиционера"]
+      }
+    },
+    {
+      "id": "muzlatgich_ustasi", "group": "maishiy_texnika", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Музлатгич устаси", "uz_Latn": "Muzlatgich ustasi", "ru": "Мастер по холодильникам" },
+      "syn": {
+        "uz_Cyrl": ["музлатгич", "холодильник", "совутмаяпти", "морозильник"],
+        "uz_Latn": ["muzlatgich", "xolodilnik", "sovutmayapti", "morozilnik"],
+        "ru": ["холодильник", "не морозит", "морозильник", "ремонт холодильника"]
+      }
+    },
+    {
+      "id": "kir_mashina_ustasi", "group": "maishiy_texnika", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Кир ювиш машинаси устаси", "uz_Latn": "Kir yuvish mashinasi ustasi", "ru": "Мастер по стиральным машинам" },
+      "syn": {
+        "uz_Cyrl": ["кир ювиш машинаси", "стиральная", "машина сув олмаяпти", "центрифуга"],
+        "uz_Latn": ["kir yuvish mashinasi", "stiralnaya", "mashina suv olmayapti", "sentrifuga"],
+        "ru": ["стиральная машина", "не сливает", "ремонт стиральной", "не крутит"]
+      }
+    },
+    {
+      "id": "televizor_ustasi", "group": "maishiy_texnika", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Телевизор устаси", "uz_Latn": "Televizor ustasi", "ru": "Мастер по телевизорам" },
+      "syn": {
+        "uz_Cyrl": ["телевизор", "тв", "экран", "антенна", "тарелка", "ресивер"],
+        "uz_Latn": ["televizor", "tv", "ekran", "antenna", "tarelka", "resiver"],
+        "ru": ["телевизор", "тв", "экран", "антенна", "тарелка", "ресивер"]
+      }
+    },
+    {
+      "id": "kompyuter_ustasi", "group": "elektronika", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Компьютер устаси", "uz_Latn": "Kompyuter ustasi", "ru": "Компьютерный мастер" },
+      "syn": {
+        "uz_Cyrl": ["компьютер", "ноутбук", "виндовс", "программа ўрнатиш", "вирус", "принтер"],
+        "uz_Latn": ["kompyuter", "noutbuk", "windows", "programma o'rnatish", "virus", "printer"],
+        "ru": ["компьютер", "ноутбук", "windows", "установить программу", "вирус", "принтер"]
+      }
+    },
+    {
+      "id": "telefon_ustasi", "group": "elektronika", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Телефон устаси", "uz_Latn": "Telefon ustasi", "ru": "Ремонт телефонов" },
+      "syn": {
+        "uz_Cyrl": ["телефон", "экран синди", "зарядка олмаяпти", "смартфон", "дисплей"],
+        "uz_Latn": ["telefon", "ekran sindi", "zaryadka olmayapti", "smartfon", "displey"],
+        "ru": ["телефон", "разбил экран", "не заряжается", "ремонт телефона", "дисплей"]
+      }
+    },
+    {
+      "id": "internet_usta", "group": "elektronika", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Интернет ва тармоқ", "uz_Latn": "Internet va tarmoq", "ru": "Интернет и сети" },
+      "syn": {
+        "uz_Cyrl": ["интернет", "wifi", "вайфай", "роутер", "кабель тортиш", "камера ўрнатиш"],
+        "uz_Latn": ["internet", "wifi", "vayfay", "router", "kabel tortish", "kamera o'rnatish"],
+        "ru": ["интернет", "wifi", "роутер", "провести кабель", "установить камеру", "видеонаблюдение"]
+      }
+    },
+    {
+      "id": "qulf_ustasi", "group": "uy_tamir", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Қулф устаси", "uz_Latn": "Qulf ustasi", "ru": "Вскрытие замков" },
+      "syn": {
+        "uz_Cyrl": ["қулф", "эшик очилмаяпти", "калит синди", "замок", "эшик очиш"],
+        "uz_Latn": ["qulf", "eshik ochilmayapti", "kalit sindi", "zamok", "eshik ochish"],
+        "ru": ["замок", "вскрыть дверь", "сломал ключ", "не открывается дверь"]
+      }
+    },
+    {
+      "id": "payvandchi", "group": "qurilish", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Пайвандчи", "uz_Latn": "Payvandchi", "ru": "Сварщик" },
+      "syn": {
+        "uz_Cyrl": ["пайвандчи", "сварка", "сварщик", "темир пайванд", "аргон"],
+        "uz_Latn": ["payvandchi", "svarka", "svarshchik", "temir payvand", "argon"],
+        "ru": ["сварщик", "сварка", "заварить", "аргон"]
+      }
+    },
+    {
+      "id": "temir_panjara", "group": "qurilish", "unit": "m2", "urgent": false,
+      "names": { "uz_Cyrl": "Дарвоза ва панжара", "uz_Latn": "Darvoza va panjara", "ru": "Ворота и решетки" },
+      "syn": {
+        "uz_Cyrl": ["дарвоза", "панжара", "решётка", "ворота", "темир эшик", "навес"],
+        "uz_Latn": ["darvoza", "panjara", "reshyotka", "vorota", "temir eshik", "naves"],
+        "ru": ["ворота", "решетки", "железная дверь", "навес", "забор"]
+      }
+    },
+    {
+      "id": "duradgor", "group": "qurilish", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Дурадгор", "uz_Latn": "Duradgor", "ru": "Столяр, плотник" },
+      "syn": {
+        "uz_Cyrl": ["дурадгор", "ёғоч иши", "столяр", "шкаф ясаш", "эшик ўрнатиш"],
+        "uz_Latn": ["duradgor", "yog'och ishi", "stolyar", "shkaf yasash", "eshik o'rnatish"],
+        "ru": ["столяр", "плотник", "по дереву", "сделать шкаф", "установить дверь"]
+      }
+    },
+    {
+      "id": "gipsokarton", "group": "tamirlash", "unit": "m2", "urgent": false,
+      "names": { "uz_Cyrl": "Гипсокартон ва шипи", "uz_Latn": "Gipsokarton va ship", "ru": "Гипсокартон и потолки" },
+      "syn": {
+        "uz_Cyrl": ["гипсокартон", "шип", "потолок", "подвесной", "армстронг", "натяжной"],
+        "uz_Latn": ["gipsokarton", "ship", "potolok", "podvesnoy", "armstrong", "natyajnoy"],
+        "ru": ["гипсокартон", "потолок", "подвесной потолок", "натяжной потолок"]
+      }
+    },
+    {
+      "id": "shpatlyovka_boyoq", "group": "tamirlash", "unit": "m2", "urgent": false,
+      "names": { "uz_Cyrl": "Шпатлёвка ва бўяш", "uz_Latn": "Shpatlyovka va bo'yash", "ru": "Шпатлевка и покраска" },
+      "syn": {
+        "uz_Cyrl": ["шпатлёвка", "бўяш", "обои", "девор текислаш", "штукатурка", "краска"],
+        "uz_Latn": ["shpatlyovka", "bo'yash", "oboi", "devor tekislash", "shtukaturka", "kraska"],
+        "ru": ["шпатлевка", "покраска", "обои", "выровнять стены", "штукатурка"]
+      }
+    },
+    {
+      "id": "kafel", "group": "tamirlash", "unit": "m2", "urgent": false,
+      "names": { "uz_Cyrl": "Кафель ва плитка", "uz_Latn": "Kafel va plitka", "ru": "Кафель и плитка" },
+      "syn": {
+        "uz_Cyrl": ["кафель", "плитка", "ҳаммом", "мойка", "керамогранит"],
+        "uz_Latn": ["kafel", "plitka", "hammom", "moyka", "keramogranit"],
+        "ru": ["кафель", "плитка", "санузел", "керамогранит", "уложить плитку"]
+      }
+    },
+    {
+      "id": "tom_yopish", "group": "qurilish", "unit": "m2", "urgent": true,
+      "names": { "uz_Cyrl": "Том ёпиш", "uz_Latn": "Tom yopish", "ru": "Кровля" },
+      "syn": {
+        "uz_Cyrl": ["том", "шифер", "профнастил", "том оқяпти", "кровля", "черепица"],
+        "uz_Latn": ["tom", "shifer", "profnastil", "tom oqyapti", "krovlya", "cherepitsa"],
+        "ru": ["кровля", "крыша течет", "шифер", "профнастил", "черепица"]
+      }
+    },
+    {
+      "id": "quduq_nasos", "group": "uy_tamir", "unit": "job", "urgent": true,
+      "names": { "uz_Cyrl": "Қудуқ ва насос", "uz_Latn": "Quduq va nasos", "ru": "Колодец и насос" },
+      "syn": {
+        "uz_Cyrl": ["қудуқ", "насос", "скважина", "сув насоси", "мотор ишламаяпти"],
+        "uz_Latn": ["quduq", "nasos", "skvajina", "suv nasosi", "motor ishlamayapti"],
+        "ru": ["колодец", "насос", "скважина", "водяной насос", "не качает"]
+      }
+    },
+    {
+      "id": "isitish_tizimi", "group": "uy_tamir", "unit": "job", "urgent": true,
+      "names": { "uz_Cyrl": "Иситиш тизими", "uz_Latn": "Isitish tizimi", "ru": "Отопление" },
+      "syn": {
+        "uz_Cyrl": ["иситиш", "радиатор", "батарея", "котёл", "отопление", "пол иситиш"],
+        "uz_Latn": ["isitish", "radiator", "batareya", "kotyol", "otopleniye", "pol isitish"],
+        "ru": ["отопление", "радиатор", "батарея", "котел", "теплый пол"]
+      }
+    },
+    {
+      "id": "eshik_deraza", "group": "tamirlash", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Эшик ва дераза", "uz_Latn": "Eshik va deraza", "ru": "Двери и окна" },
+      "syn": {
+        "uz_Cyrl": ["пластик дераза", "эшик", "окно", "стеклопакет", "дераза ўрнатиш", "москит тўр"],
+        "uz_Latn": ["plastik deraza", "eshik", "okno", "steklopaket", "deraza o'rnatish", "moskit to'r"],
+        "ru": ["пластиковые окна", "дверь", "стеклопакет", "установить окно", "москитная сетка"]
+      }
+    },
+    {
+      "id": "mebel_yigish", "group": "uy_xizmat", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Мебель йиғиш", "uz_Latn": "Mebel yig'ish", "ru": "Сборка мебели" },
+      "syn": {
+        "uz_Cyrl": ["мебель йиғиш", "шкаф йиғиш", "кухня ўрнатиш", "сборка", "кроват йиғиш"],
+        "uz_Latn": ["mebel yig'ish", "shkaf yig'ish", "kuxnya o'rnatish", "sborka", "krovat yig'ish"],
+        "ru": ["сборка мебели", "собрать шкаф", "установить кухню", "собрать кровать"]
+      }
+    },
+    {
+      "id": "parda_karniz", "group": "uy_xizmat", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Парда ва карниз", "uz_Latn": "Parda va karniz", "ru": "Шторы и карнизы" },
+      "syn": {
+        "uz_Cyrl": ["парда", "карниз", "жалюзи", "парда осиш", "рулонная штора"],
+        "uz_Latn": ["parda", "karniz", "jalyuzi", "parda osish", "rulonnaya shtora"],
+        "ru": ["шторы", "карниз", "жалюзи", "повесить шторы", "рулонные шторы"]
+      }
+    },
+    {
+      "id": "uy_tozalash", "group": "uy_xizmat", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Уй тозалаш", "uz_Latn": "Uy tozalash", "ru": "Уборка" },
+      "syn": {
+        "uz_Cyrl": ["уй тозалаш", "уборка", "клининг", "дераза ювиш", "тамирдан кейин тозалаш"],
+        "uz_Latn": ["uy tozalash", "uborka", "klining", "deraza yuvish", "tamirdan keyin tozalash"],
+        "ru": ["уборка", "клининг", "помыть окна", "уборка после ремонта", "генеральная уборка"]
+      }
+    },
+    {
+      "id": "bogbon", "group": "hovli", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Боғбон ва дарахт", "uz_Latn": "Bog'bon va daraxt", "ru": "Садовник, обрезка" },
+      "syn": {
+        "uz_Cyrl": ["боғбон", "дарахт кесиш", "хазон", "ўт ўриш", "токни бойлаш", "гулзор"],
+        "uz_Latn": ["bog'bon", "daraxt kesish", "xazon", "o't o'rish", "tokni boylash", "gulzor"],
+        "ru": ["садовник", "обрезка деревьев", "спилить дерево", "подстричь газон"]
+      }
+    },
+    {
+      "id": "hovli_beton", "group": "hovli", "unit": "m2", "urgent": false,
+      "names": { "uz_Cyrl": "Ҳовли бетон ва тротуар", "uz_Latn": "Hovli beton va trotuar", "ru": "Бетон и тротуарная плитка" },
+      "syn": {
+        "uz_Cyrl": ["бетон", "тротуар плитка", "ҳовли ётқизиш", "брусчатка", "фундамент"],
+        "uz_Latn": ["beton", "trotuar plitka", "hovli yotqizish", "bruschatka", "fundament"],
+        "ru": ["бетон", "тротуарная плитка", "брусчатка", "залить фундамент"]
+      }
+    },
+    {
+      "id": "qurilish_brigada", "group": "qurilish", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Қурилиш бригадаси", "uz_Latn": "Qurilish brigadasi", "ru": "Строительная бригада" },
+      "syn": {
+        "uz_Cyrl": ["бригада", "усталар", "уй қуриш", "девор кўтариш", "ғишт терувчи", "подряд"],
+        "uz_Latn": ["brigada", "ustalar", "uy qurish", "devor ko'tarish", "g'isht teruvchi", "podryad"],
+        "ru": ["бригада", "построить дом", "каменщик", "поднять стену", "подряд"]
+      }
+    },
+    {
+      "id": "kochish_yuk", "group": "uy_xizmat", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Кўчиш ва юк кўтариш", "uz_Latn": "Ko'chish va yuk ko'tarish", "ru": "Переезд и грузчики" },
+      "syn": {
+        "uz_Cyrl": ["кўчиш", "юк ташиш", "грузчик", "мебель ташиш", "кўчириш", "переезд"],
+        "uz_Latn": ["ko'chish", "yuk tashish", "gruzchik", "mebel tashish", "ko'chirish", "pereyezd"],
+        "ru": ["переезд", "грузчики", "перевезти мебель", "вывезти мусор"]
+      }
+    },
+    {
+      "id": "avto_elektrik", "group": "avto", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Авто электрик", "uz_Latn": "Avto elektrik", "ru": "Автоэлектрик" },
+      "syn": {
+        "uz_Cyrl": ["авто электрик", "машина ўт олмаяпти", "аккумулятор", "стартер", "генератор", "сигнализация"],
+        "uz_Latn": ["avto elektrik", "mashina o't olmayapti", "akkumulyator", "starter", "generator", "signalizatsiya"],
+        "ru": ["автоэлектрик", "не запускается", "аккумулятор", "стартер", "генератор", "сигнализация"]
+      }
+    },
+    {
+      "id": "shina_montaj", "group": "avto", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Шина монтаж", "uz_Latn": "Shina montaj", "ru": "Шиномонтаж" },
+      "syn": {
+        "uz_Cyrl": ["шина монтаж", "балон", "колесо", "ямоқ", "развал", "шина алмаштириш"],
+        "uz_Latn": ["shina montaj", "balon", "koleso", "yamoq", "razval", "shina almashtirish"],
+        "ru": ["шиномонтаж", "колесо", "пробил колесо", "развал", "заменить шины"]
+      }
+    },
+    {
+      "id": "avto_kuzov", "group": "avto", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Кузов ва бўяш", "uz_Latn": "Kuzov va bo'yash", "ru": "Кузовной ремонт" },
+      "syn": {
+        "uz_Cyrl": ["кузов", "машина бўяш", "вмятина", "рихтовка", "авария", "бампер"],
+        "uz_Latn": ["kuzov", "mashina bo'yash", "vmyatina", "rixtovka", "avariya", "bamper"],
+        "ru": ["кузовной", "покраска авто", "вмятина", "рихтовка", "бампер"]
+      }
+    },
+    {
+      "id": "avto_yuvish", "group": "avto", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Мошина ювиш", "uz_Latn": "Moshina yuvish", "ru": "Автомойка" },
+      "syn": {
+        "uz_Cyrl": ["мошина ювиш", "автомойка", "химчистка", "полировка", "уйга келиб ювиш"],
+        "uz_Latn": ["moshina yuvish", "avtomoyka", "ximchistka", "polirovka", "uyga kelib yuvish"],
+        "ru": ["автомойка", "помыть машину", "химчистка салона", "полировка"]
+      }
+    },
+    {
+      "id": "evakuator", "group": "avto", "unit": "job", "urgent": true,
+      "names": { "uz_Cyrl": "Эвакуатор", "uz_Latn": "Evakuator", "ru": "Эвакуатор" },
+      "syn": {
+        "uz_Cyrl": ["эвакуатор", "машина тортиш", "буксир", "йўлда қолдим"],
+        "uz_Latn": ["evakuator", "mashina tortish", "buksir", "yo'lda qoldim"],
+        "ru": ["эвакуатор", "оттащить машину", "буксир", "сломался в дороге"]
+      }
+    },
+    {
+      "id": "tikuvchi", "group": "shaxsiy", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Тикувчи", "uz_Latn": "Tikuvchi", "ru": "Швея, ателье" },
+      "syn": {
+        "uz_Cyrl": ["тикувчи", "ателье", "кўйлак тикиш", "ямоқ", "молния алмаштириш", "парда тикиш"],
+        "uz_Latn": ["tikuvchi", "atelye", "ko'ylak tikish", "yamoq", "molniya almashtirish", "parda tikish"],
+        "ru": ["швея", "ателье", "сшить платье", "подшить", "заменить молнию"]
+      }
+    },
+    {
+      "id": "soch_uyda", "group": "shaxsiy", "unit": "visit", "urgent": false,
+      "names": { "uz_Cyrl": "Сартарош (уйга)", "uz_Latn": "Sartarosh (uyga)", "ru": "Парикмахер на дом" },
+      "syn": {
+        "uz_Cyrl": ["сартарош", "соч олиш", "парикмахер", "уйга келиб", "келин сочи", "макияж"],
+        "uz_Latn": ["sartarosh", "soch olish", "parikmaxer", "uyga kelib", "kelin sochi", "makiyaj"],
+        "ru": ["парикмахер", "стрижка", "на дом", "прическа невесты", "макияж"]
+      }
+    },
+    {
+      "id": "fotograf", "group": "tadbir", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Фотограф ва видео", "uz_Latn": "Fotograf va video", "ru": "Фотограф и видео" },
+      "syn": {
+        "uz_Cyrl": ["фотограф", "видео олиш", "суратга олиш", "тўй видео", "оператор", "дрон"],
+        "uz_Latn": ["fotograf", "video olish", "suratga olish", "to'y video", "operator", "dron"],
+        "ru": ["фотограф", "видеосъемка", "фотосессия", "видео на свадьбу", "дрон"]
+      }
+    },
+    {
+      "id": "toy_ovoz", "group": "tadbir", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Тўй овозлаштириш ва бошловчи", "uz_Latn": "To'y ovozlashtirish va boshlovchi", "ru": "Звук и ведущий" },
+      "syn": {
+        "uz_Cyrl": ["овозлаштириш", "бошловчи", "тамада", "дискотека", "дж", "музика", "ёруғлик"],
+        "uz_Latn": ["ovozlashtirish", "boshlovchi", "tamada", "diskoteka", "dj", "muzika", "yorug'lik"],
+        "ru": ["звук", "ведущий", "тамада", "дискотека", "диджей", "свет"]
+      }
+    },
+    {
+      "id": "oshpaz", "group": "tadbir", "unit": "job", "urgent": false,
+      "names": { "uz_Cyrl": "Ошпаз (тадбирга)", "uz_Latn": "Oshpaz (tadbirga)", "ru": "Повар на мероприятие" },
+      "syn": {
+        "uz_Cyrl": ["ошпаз", "ош қилиш", "20 кишига ош", "тўй ошпази", "қозон", "сомса"],
+        "uz_Latn": ["oshpaz", "osh qilish", "20 kishiga osh", "to'y oshpazi", "qozon", "somsa"],
+        "ru": ["повар", "приготовить плов", "плов на 20 человек", "повар на свадьбу"]
+      }
+    },
+    {
+      "id": "repetitor", "group": "talim", "unit": "hour", "urgent": false,
+      "names": { "uz_Cyrl": "Репетитор", "uz_Latn": "Repetitor", "ru": "Репетитор" },
+      "syn": {
+        "uz_Cyrl": ["репетитор", "математика", "инглиз тили", "ўқитувчи", "дарс бериш", "абитуриент"],
+        "uz_Latn": ["repetitor", "matematika", "ingliz tili", "o'qituvchi", "dars berish", "abituriyent"],
+        "ru": ["репетитор", "математика", "английский", "подготовка", "занятия"]
+      }
+    },
+    {
+      "id": "veterinar", "group": "boshqa", "unit": "visit", "urgent": true,
+      "names": { "uz_Cyrl": "Ветеринар", "uz_Latn": "Veterinar", "ru": "Ветеринар" },
+      "syn": {
+        "uz_Cyrl": ["ветеринар", "мол касал", "сигир", "ит", "мушук", "эмлаш", "ветврач"],
+        "uz_Latn": ["veterinar", "mol kasal", "sigir", "it", "mushuk", "emlash", "vetvrach"],
+        "ru": ["ветеринар", "ветврач", "корова", "собака", "кошка", "прививка"]
+      }
+    }
+  ]
+}

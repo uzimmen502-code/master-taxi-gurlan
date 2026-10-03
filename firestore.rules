@@ -2953,5 +2953,226 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ТАЛАБ → ТАКЛИФ ЯДРОСИ (13.3.1, 13.3.2)
+    // Ҳужжат: docs/talab_taklif_yadrosi_uz.md
+    //
+    // АСОСИЙ ҚОИДА: клиент `demands`, `provider_stats`, `demand_matches`
+    // ва `trust_events`га ҲЕЧ ҚАЧОН тўғридан-тўғри ёзмайди. Барча муҳим
+    // амаллар callable функциялар орқали (`functions_demand/api/*`).
+    //
+    // ДИҚҚАТ — Т-2: концепциядаги қоидалар `request.auth.uid`ни
+    // ишлатган. Бу лойиҳада фойдаланувчи ID = телефон рақами
+    // (`token.phone_number`), шунинг учун ҳамма жойда мавжуд `isOwner()`
+    // ва `phoneDocIdsMatch()` ёрдамчилари ишлатилади.
+    // ═══════════════════════════════════════════════════════════════════
+
+    // Талабнинг тўлиқ нусхаси — аниқ манзил ва контакт билан.
+    // Фақат эгаси ўқийди. Таклифчи буни ҲЕЧ ҚАЧОН кўрмайди — у
+    // `demand_matches` проекциясини ўқийди.
+    match /demands/{demandId} {
+      allow read: if isOwner(resource.data.ownerId) || isAdmin();
+      allow write: if false; // createDemand, cancelDemand, acceptOffer
+
+      // Т-8: аниқ `matchedCount` МИЖОЗГА ҲАМ кўринмайди.
+      // Сабаб: харидорнинг ўзи рақобатчи бўлиши мумкин ва мос
+      // сотувчилар сонини йиғиши мумкин. Шунинг учун ҳужжатда фақат
+      // `matching.matchedBucket` («30+»), аниқ рақам эса шу ерда.
+      match /private/{docId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+
+      // Битта таклифчидан битта таклиф. ID = providerId.
+      //
+      // `ownerId` ҳужжатга денормаллаштирилган (Т-2.2): акс ҳолда ҳар
+      // бир таклифни ўқишда ота `demands` ҳужжатига `get()` керак
+      // бўларди — бу ҳар рўйхат учун қўшимча ўқиш ва секинлик.
+      //
+      // Таклифчилар бир-бирининг нархини КЎРМАЙДИ (тасдиқланган қарор).
+      match /offers/{providerId} {
+        allow read: if isOwner(providerId)
+                    || isOwner(resource.data.ownerId)
+                    || isAdmin();
+        allow write: if false; // submitOffer, withdrawOffer, acceptOffer
+      }
+    }
+
+    // ТАКЛИФЧИ УЧУН ПРОЕКЦИЯ — у кўрадиган ЯГОНА манба.
+    //
+    // Калит `{demandId}_{providerId}`, лекин қоида КАЛИТГА ТАЯНМАЙДИ:
+    // `providerId` ҳужжат ичида майдон сифатида ҳам сақланади ва
+    // текширув айни шу майдон бўйича кетади (Т-2.1). Сабаб: 9/12 хонали
+    // телефон шакллари сабабли калитни бўлиб таққослаш ишончсиз.
+    //
+    // Клиент ҳар доим `where('providerId','==', <ўз ID>)` фильтри билан
+    // сўров беради — фильтрсиз сўров rules томонидан рад этилади.
+    match /demand_matches/{matchKey} {
+      allow read: if isOwner(resource.data.providerId) || isAdmin();
+      allow write: if false; // runMatching
+
+      // Таклифчи «кўрдим» белгисини қўйиши — ягона рухсат этилган ёзув.
+      // Фақат `status` ва `seenAt` майдонлари, бошқа ҳеч нарса.
+      allow update: if isOwner(resource.data.providerId)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'seenAt'])
+                    && request.resource.data.status in ['new', 'seen', 'skipped'];
+    }
+
+    // Таклифчи ЎЗИ белгилайдиган имкониятлар: йўналиш, ҳудуд, транспорт.
+    //
+    // Калит: `{uid}_{module}`. Фойдаланувчи trust, rating ва stats
+    // майдонларига ёза олмайди — улар фақат серверда.
+    match /provider_capabilities/{key} {
+      allow read: if isAuth() && (
+                    phoneDocIdsMatch(userDocIdFromPhoneToken(), key.split('_')[0])
+                    || isAdmin()
+                  );
+      allow create, update: if isAuth()
+                    && phoneDocIdsMatch(
+                         userDocIdFromPhoneToken(), key.split('_')[0])
+                    && request.resource.data.providerId == userDocIdFromPhoneToken()
+                    && !request.resource.data.keys().hasAny([
+                         'trustScore', 'rating', 'stats', 'completedCount',
+                         'todayOrders', 'matchingBlocked', 'debtBlocked'
+                       ]);
+      allow delete: if isAuth()
+                    && phoneDocIdsMatch(
+                         userDocIdFromPhoneToken(), key.split('_')[0]);
+    }
+
+    // Trust, public rating, бугунги буюртма ва даромад.
+    // Эгаси ўқийди, ҲЕЧ КИМ ёзмайди (фақат `recomputeTrust`).
+    match /provider_stats/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // Онлайн ҳолати ва GPS. Фақат ўзи ёзади.
+    //
+    // Концепция `allow read: if false` деган эди, лекин курьернинг ўзи
+    // ва админ панели ўз ҳолатини кўриши керак (Т-2.3).
+    match /provider_presence/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid)
+                   && !request.resource.data.keys().hasAny([
+                        'trustScore', 'rating', 'matchingBlocked'
+                      ]);
+    }
+
+    // Шаҳарлараро сафар — «Йўлим устида» модели (P2).
+    //
+    // ДИҚҚАТ: `trips` НОМИ ИШЛАТИЛМАЙДИ — у production'да маҳаллий
+    // такси сафарлари учун банд (`taxiType`, `fromLat`, `driverId`).
+    // 2026-10-03 аудитида тасдиқланган.
+    match /provider_trips/{tripId} {
+      allow read: if isAuth();
+      allow create, update: if isOwner(request.resource.data.driverId)
+                    && !request.resource.data.keys().hasAny([
+                         'assignedParcelIds', 'trustScore'
+                       ]);
+      allow delete: if isOwner(resource.data.driverId) || isAdmin();
+    }
+
+    // Trust'га таъсир қилувчи воқеалар журнали — ЎЗГАРМАС.
+    // Клиент ўқиёлмайди ҳам: воқеа матни модерация изоҳини ўз ичига
+    // олиши мумкин.
+    match /trust_events/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Баҳолар. Фақат бажарилган талаб бўйича, callable орқали.
+    // Агрегат ҳамма учун очиқ (`provider_stats.rating`).
+    match /demand_ratings/{ratingId} {
+      allow read: if isAuth();
+      allow write: if false; // submitRating
+    }
+
+    // Push idempotency журнали — фақат сервер.
+    match /demand_push_log/{key} {
+      allow read, write: if false;
+    }
+
+    // Idempotency калитлари (Т-12) — фақат сервер.
+    match /demand_idempotency/{key} {
+      allow read, write: if false;
+    }
+
+    // Ягона категория дарахти. Ҳамма ўқийди, админ ёзади.
+    match /taxonomy/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Модул созламалари: тўлқинлар, score чегараси, push лимитлари.
+    //
+    // Клиент ЎҚИЙДИ (форма чегаралари ва «Intent Router» луғати учун),
+    // лекин ёзмайди. `enabled`/`pushEnabled` kill switch'лари ҳам шу ерда.
+    match /module_config/{key} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Жарима ва қарз ҲОЛАТИ. Пулнинг ўзи `wallet_ledger`да (Т-11).
+    match /demand_penalties/{penaltyId} {
+      allow read: if isOwner(resource.data.providerId) || isAdmin();
+      allow write: if false; // applyPenalty
+    }
+
+    // Курьер ҳужжатлари: паспорт ва ўзини ўзи банд қилиш ҳужжати.
+    //
+    // Фақат эгаси юклайди, фақат модератор кўради. Файлларнинг ўзи
+    // ёпиқ Storage папкасида (`storage.rules`).
+    match /courier_documents/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isOwner(uid)
+                    && !request.resource.data.keys().hasAny([
+                         'verified', 'verifiedAt', 'verifiedBy', 'rejectReason'
+                       ]);
+      allow delete: if isAdmin();
+    }
+
+    // Жонли кузатув (P2).
+    //
+    // Т-3: Realtime Database ЖОРИЙ ЭТИЛМАЙДИ — Урганч ҳажмида Firestore
+    // кунига ~$0,13, RTDB эса янги инстанс + SDK + rules файли талаб
+    // қилади. Кунлик фаол кузатув 2000'дан ошса қайта кўрилади.
+    //
+    // Ёзишни фақат тайинланган курьер қилади, ўқишни юборувчи ва
+    // қабул қилувчи. Иловасиз қабул қилувчи `getTracking(token)` орқали.
+    match /demand_tracking/{demandId} {
+      allow read: if isAuth() && (
+                    isOwner(resource.data.senderId)
+                    || isOwner(resource.data.recipientId)
+                    || isOwner(resource.data.courierId)
+                    || isAdmin()
+                  );
+      allow write: if isAuth()
+                   && isOwner(resource.data.courierId)
+                   && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['lat', 'lng', 'heading', 'speed', 'updatedAt', 'etaMinutes']);
+    }
+
+    // Сийраклаштирилган маршрут тарихи — 30 кун, низо учун далил.
+    // Фақат модератор кўради.
+    match /demand_tracking_history/{demandId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Тариф формуласи ва комиссия — версия ва тарих билан.
+    // Клиент ўқийди (нарх тавсиясини кўрсатиш учун), админ ёзади.
+    match /module_tariffs/{key} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Кунлик аналитика агрегати (Т-22) — фақат админ.
+    match /analytics_demand_daily/{key} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
   }
 }

@@ -1,0 +1,33 @@
+{
+  "name": "ava-demand-core",
+  "description": "AVA: TALAB -> TAKLIF yadrosi (alohida codebase, europe-west1)",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node test/run_all.js",
+    "test:geo": "node test/geo.test.js",
+    "test:ids": "node test/ids.test.js",
+    "test:config": "node test/config.test.js",
+    "test:schema": "node test/schema.test.js",
+    "test:scoring": "node test/scoring.test.js",
+    "test:policy": "node test/notify_policy.test.js",
+    "test:state": "node test/state_machine.test.js",
+    "test:trust": "node test/trust.test.js",
+    "test:keywords": "node test/keywords.test.js",
+    "test:rules": "node test/rules.test.js",
+    "test:matching": "node test/matching.test.js",
+    "test:offers": "node test/offers.test.js"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2"
+  }
+}

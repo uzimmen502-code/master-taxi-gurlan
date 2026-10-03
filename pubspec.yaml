@@ -126,6 +126,10 @@ flutter:
     - assets/lang/uz_Latn.json
     - assets/lang/uz_Cyrl.json
     - assets/lang/ru.json
+    # Intent Router луғати — `taxonomy_services.json`дан генерация
+    # қилинади (`functions_demand/tools/build_intent_keywords.js`).
+    # Қўлда таҳрирланмайди.
+    - assets/data/intent_keywords.json
     - assets/book/ava_imkoniyatlar_kitobi.json
     - assets/images/
     - assets/images/services/

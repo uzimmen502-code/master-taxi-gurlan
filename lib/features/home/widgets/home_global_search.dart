@@ -9,6 +9,9 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/search_index_entry.dart';
 import '../../../repositories/search_index_repository.dart';
+import '../../demand_offer/intent/intent_router.dart';
+import '../../demand_offer/presentation/service_intent_card/service_intent_card.dart';
+import '../../demand_offer/ui_adapters/demand_ui_adapter.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/repositories/tv_clips_repository.dart';
 import 'ava_chip.dart';
@@ -55,10 +58,20 @@ class HomeGlobalSearchBar extends StatefulWidget {
     super.key,
     required this.onOpenEntry,
     required this.onOpenClip,
+    this.onIntent,
   });
 
   final Future<void> Function(SearchIndexEntry entry) onOpenEntry;
   final Future<void> Function(TvClip clip) onOpenClip;
+
+  /// P0.3 — INTENT ТАСДИҚЛАНГАНДА.
+  ///
+  /// Эга қарори (2026-10-03): «Уста чақириш» алоҳида тугма эмас,
+  /// АСОСИЙ кириш нуқтаси — айни шу қидирув майдони.
+  ///
+  /// `null` бўлса карточка УМУМАН кўрсатилмайди — шунда бу виджет
+  /// эски ҳолида ишлашда давом этади (ядро ўчирилган бўлса ҳам).
+  final Future<void> Function(IntentResult intent)? onIntent;
 
   @override
   State<HomeGlobalSearchBar> createState() => _HomeGlobalSearchBarState();
@@ -75,10 +88,21 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
   List<HomeSearchHit> _results = const [];
   String _query = '';
 
+  /// P0.3 — қурилмадаги intent натижаси.
+  IntentRouter? _intentRouter;
+  IntentResult? _intent;
+
   @override
   void initState() {
     super.initState();
     unawaited(_repo.fetchActiveCached());
+    // Луғат фонда юкланади (~35 КБ). Юкланмаса Intent Router жим
+    // туради ва қидирув эски ҳолида ишлайди.
+    if (widget.onIntent != null) {
+      unawaited(IntentRouter.instance().then((r) {
+        if (mounted) setState(() => _intentRouter = r);
+      }));
+    }
   }
 
   @override
@@ -104,12 +128,20 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
       setState(() {
         _query = q;
         _results = const [];
+        _intent = null;
         _loading = false;
       });
       return;
     }
+
+    // P0.3 — INTENT АНИҚЛАШ: қурилмада, тармоқсиз, дарҳол.
+    //
+    // Натижалар кутилмайди: карточка ва натижалар мустақил чиқади.
+    final intent = _intentRouter?.detect(q);
+
     setState(() {
       _query = q;
+      _intent = (intent != null && intent.showsServiceCard) ? intent : null;
       _loading = true;
     });
     try {
@@ -147,8 +179,22 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
     setState(() {
       _query = '';
       _results = const [];
+      _intent = null;
       _loading = false;
     });
+  }
+
+  /// Категория номи — луғатдан, фойдаланувчи тилида эмас (луғат учта
+  /// тилни сақлайди, бу ерда кирилл олинади; тўлиқ локализация
+  /// `taxonomy` коллекцияси уланганда қўшилади — 13.6.1).
+  String _categoryName(String categoryId) =>
+      _intentRouter?.categoryName(categoryId, 'uz_Cyrl') ?? categoryId;
+
+  Future<void> _openIntent(IntentResult intent) async {
+    final cb = widget.onIntent;
+    if (cb == null) return;
+    await cb(intent);
+    if (mounted) _clear();
   }
 
   Future<void> _open(HomeSearchHit hit) async {
@@ -245,26 +291,58 @@ class _HomeGlobalSearchBarState extends State<HomeGlobalSearchBar> {
                     ),
                   )
                 : _results.isEmpty
+                    // НАТИЖА ЙЎҚ — эга оқимининг охирги қадами:
+                    // «моси топилмаса → Таклиф олиш».
                     ? Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text(
-                          context
-                              .tr('home_search_empty')
-                              .replaceAll('{query}', _query),
-                          textAlign: TextAlign.center,
-                          style: AvaText.caption.copyWith(color: c.ink2),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              context
+                                  .tr('home_search_empty')
+                                  .replaceAll('{query}', _query),
+                              textAlign: TextAlign.center,
+                              style: AvaText.caption.copyWith(color: c.ink2),
+                            ),
+                            if (_intent != null) ...[
+                              const SizedBox(height: 12),
+                              ServiceIntentCard(
+                                intent: _intent!,
+                                placement: IntentCardPlacement.noResults,
+                                onContinue: _openIntent,
+                                categoryNameResolver: _categoryName,
+                              ),
+                            ],
+                          ],
                         ),
                       )
+                    // НАТИЖА БОР — аввал натижалар (эга оқими:
+                    // «мавжуд натижаларни кўрсатиш»), охирида камтарона
+                    // «Моси топилмадими?» таклифи.
                     : ListView.separated(
                         shrinkWrap: true,
                         padding: EdgeInsets.zero,
-                        itemCount: _results.length,
+                        itemCount: _results.length + (_intent != null ? 1 : 0),
                         separatorBuilder: (_, __) =>
                             Divider(height: 1, color: c.line),
-                        itemBuilder: (context, i) => _ResultRow(
-                          hit: _results[i],
-                          onTap: () => _open(_results[i]),
-                        ),
+                        itemBuilder: (context, i) {
+                          if (i >= _results.length) {
+                            return Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: ServiceIntentCard(
+                                intent: _intent!,
+                                placement: IntentCardPlacement.belowResults,
+                                onContinue: _openIntent,
+                                categoryNameResolver: _categoryName,
+                              ),
+                            );
+                          }
+                          return _ResultRow(
+                            hit: _results[i],
+                            onTap: () => _open(_results[i]),
+                          );
+                        },
                       ),
           ),
         ],

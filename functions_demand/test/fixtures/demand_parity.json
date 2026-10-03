@@ -1,0 +1,330 @@
+{
+  "_comment": [
+    "13.4.2 — SERVER <-> DART PARITET FIXTURASI (Т-16).",
+    "",
+    "Konsepsiya `attributes` modellarini JSON Schema'dan GENERATSIYA",
+    "qilishni taklif qilgan. Lekin repoda `build_runner`/`json_serializable`",
+    "YO'Q va 1.0.32 versiyadagi production ilovaga codegen quvurini",
+    "kiritish alohida katta ish. Shuning uchun modellar QO'LDA yozildi va",
+    "ayni shu fayl bilan qulflandi:",
+    "",
+    "  1) `functions_demand/test/parity.test.js`  — `input` bloklari sxemadan",
+    "     o'tadi, `invalidInput` bloklari o'tmaydi.",
+    "  2) `test/features/demand_offer/demand_parity_test.dart` — `doc`",
+    "     bloklari Dart modeliga parse bo'ladi va maydonlar kutilganiga teng.",
+    "",
+    "Sxema yoki model o'zgarsa, ikkala test SINADI. Shunda server bir",
+    "shaklni, ilova boshqasini kutishi mumkin bo'lmaydi."
+  ],
+
+  "validInputs": [
+    {
+      "name": "minimal_service",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-minimal-001",
+        "input": { "type": "form" }
+      }
+    },
+    {
+      "name": "toliq_service",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-toliq-0001",
+        "categoryId": "santexnik",
+        "source": "search",
+        "input": { "type": "text", "rawText": "кран оқяпти" },
+        "title": "Kran oqyapti",
+        "description": "Hammomdagi smesitel tomchilaydi",
+        "location": { "lat": 41.55, "lng": 60.63, "addressText": "Al-Xorazmiy 15-uy" },
+        "timeWindow": { "mode": "today", "ttlMinutes": 480 },
+        "budget": { "max": 200000, "currency": "UZS", "priceType": "negotiable" },
+        "media": { "images": ["gs://bucket/kran.jpg"] },
+        "attributes": {
+          "visitType": "at_my_place",
+          "objectType": "apartment",
+          "hasMaterials": false,
+          "accessNotes": "Ikkinchi qavat, lift yo'q",
+          "preferredTimeOfDay": "morning"
+        }
+      }
+    },
+    {
+      "name": "ulgurji_quantity",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-ulgurji-01",
+        "input": { "type": "form" },
+        "quantity": 20
+      }
+    }
+  ],
+
+  "invalidInputs": [
+    {
+      "name": "ownerId_klientdan",
+      "why": "Foydalanuvchi boshqa odam nomidan talab yaratishi mumkin bo'lardi",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-hack-0001",
+        "input": { "type": "form" },
+        "ownerId": "998909999999"
+      }
+    },
+    {
+      "name": "regionId_klientdan",
+      "why": "Talabni istalgan hududga 'joylashtirib' qo'ya olardi",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-hack-0002",
+        "input": { "type": "form" },
+        "location": { "lat": 41.55, "lng": 60.63, "regionId": "toshkent_shahri" }
+      }
+    },
+    {
+      "name": "mode_klientdan",
+      "why": "Rejimni modul e'lon qiladi, foydalanuvchi tanlamaydi",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-hack-0003",
+        "input": { "type": "form" },
+        "mode": "dispatch"
+      }
+    },
+    {
+      "name": "clientRequestId_yoq",
+      "why": "Idempotentlik buziladi — ikki marta tap ikki talab yasardi",
+      "payload": {
+        "module": "service",
+        "input": { "type": "form" }
+      }
+    },
+    {
+      "name": "notanish_attribut",
+      "why": "Tekshirilmagan ma'lumot bazaga tushardi",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-bad-attr1",
+        "input": { "type": "form" },
+        "attributes": { "xayoliy_maydon": 1 }
+      }
+    },
+    {
+      "name": "ttl_14_kundan_ortiq",
+      "why": "Abadiy ochiq talab taklifchilar ro'yxatini axlatga aylantiradi",
+      "payload": {
+        "module": "service",
+        "clientRequestId": "req-bad-ttl01",
+        "input": { "type": "form" },
+        "timeWindow": { "ttlMinutes": 99999 }
+      }
+    }
+  ],
+
+  "docs": {
+    "demand": {
+      "id": "demParityAbc123",
+      "data": {
+        "schemaVersion": 1,
+        "ownerId": "998901110001",
+        "module": "service",
+        "mode": "quote",
+        "categoryId": "santexnik",
+        "categoryGroup": "uy_tamir",
+        "status": "active",
+        "matching": { "state": "done", "matchedBucket": "6-10", "wave": 0 },
+        "source": "search",
+        "input": { "type": "text", "rawText": "кран оқяпти" },
+        "title": "Kran oqyapti",
+        "description": "Hammomdagi smesitel tomchilaydi",
+        "location": {
+          "lat": 41.55, "lng": 60.63, "geohash": "tr7h7ev",
+          "regionId": "xorazm", "districtId": "urganch_sh",
+          "addressText": "Al-Xorazmiy 15-uy, 3-xonadon"
+        },
+        "destination": null,
+        "timeWindow": {
+          "neededBy": "2026-10-03T18:00:00.000Z",
+          "expiresAt": "2026-10-04T10:00:00.000Z"
+        },
+        "budget": { "min": null, "max": 200000, "currency": "UZS", "priceType": "negotiable" },
+        "quantity": null,
+        "wholesale": false,
+        "media": { "images": ["gs://bucket/kran.jpg"], "imageEmbedding": null },
+        "contact": { "recipientName": "", "recipientPhone": null },
+        "attributes": { "visitType": "at_my_place", "objectType": "apartment" },
+        "assignment": { "providerId": null, "offerId": null, "acceptedAt": null },
+        "createdAt": "2026-10-03T10:00:00.000Z",
+        "updatedAt": "2026-10-03T10:00:02.000Z"
+      },
+      "expect": {
+        "ownerId": "998901110001",
+        "module": "service",
+        "mode": "quote",
+        "status": "active",
+        "matchingState": "done",
+        "matchedBucket": "6-10",
+        "title": "Kran oqyapti",
+        "locationRegionId": "xorazm",
+        "locationDistrictId": "urganch_sh",
+        "budgetMax": 200000,
+        "imageCount": 1,
+        "wholesale": false,
+        "isAssigned": false,
+        "attributeVisitType": "at_my_place"
+      }
+    },
+
+    "demand_in_progress": {
+      "id": "demParityInProg",
+      "data": {
+        "ownerId": "998901110001",
+        "module": "service",
+        "mode": "quote",
+        "status": "in_progress",
+        "matching": { "state": "done", "matchedBucket": "1-2" },
+        "assignment": {
+          "providerId": "998902220002",
+          "offerId": "998902220002",
+          "acceptedAt": "2026-10-03T11:00:00.000Z"
+        },
+        "timeWindow": { "expiresAt": "2026-10-04T10:00:00.000Z" }
+      },
+      "expect": {
+        "status": "in_progress",
+        "isAssigned": true,
+        "assignedProviderId": "998902220002"
+      }
+    },
+
+    "offer": {
+      "id": "998902220002",
+      "data": {
+        "providerId": "998902220002",
+        "ownerId": "998901110001",
+        "demandId": "demParityAbc123",
+        "module": "service",
+        "price": 150000,
+        "priceType": "fixed",
+        "quantity": null,
+        "message": "18:00 gacha boraman",
+        "etaMinutes": 40,
+        "delivery": false,
+        "media": [],
+        "status": "active",
+        "revision": 1,
+        "createdAt": "2026-10-03T10:05:00.000Z",
+        "updatedAt": "2026-10-03T10:07:00.000Z"
+      },
+      "expect": {
+        "providerId": "998902220002",
+        "ownerId": "998901110001",
+        "status": "active",
+        "price": 150000,
+        "etaMinutes": 40,
+        "revision": 1,
+        "isActive": true
+      }
+    },
+
+    "match": {
+      "id": "demParityAbc123_998902220002",
+      "data": {
+        "demandId": "demParityAbc123",
+        "providerId": "998902220002",
+        "module": "service",
+        "mode": "quote",
+        "status": "new",
+        "score": 0.7612,
+        "rank": 1,
+        "sources": ["capabilities", "active_listings"],
+        "consentGiven": true,
+        "metrics": { "distanceKm": 1.4, "etaMinutes": 6, "detourKm": null },
+        "projection": {
+          "title": "Kran oqyapti",
+          "description": "Hammomdagi smesitel tomchilaydi",
+          "categoryId": "santexnik",
+          "districtId": "urganch_sh",
+          "regionId": "xorazm",
+          "approxLat": 41.5538,
+          "approxLng": 60.6271,
+          "geohash": "tr7h7",
+          "budget": { "max": 200000, "currency": "UZS", "priceType": "negotiable" },
+          "quantity": null,
+          "images": ["gs://bucket/kran.jpg"],
+          "neededBy": "2026-10-03T18:00:00.000Z",
+          "attributes": { "visitType": "at_my_place", "objectType": "apartment" }
+        },
+        "expiresAt": "2026-10-04T10:00:00.000Z",
+        "createdAt": "2026-10-03T10:00:02.000Z"
+      },
+      "expect": {
+        "demandId": "demParityAbc123",
+        "providerId": "998902220002",
+        "status": "new",
+        "isNew": true,
+        "canOffer": true,
+        "score": 0.7612,
+        "sourceCount": 2,
+        "consentGiven": true,
+        "distanceKm": 1.4,
+        "projectionGeohashLength": 5,
+        "hasApproxPoint": true,
+        "needsConsentPrompt": false,
+        "contactIsNull": true
+      }
+    },
+
+    "match_cold_start_no_consent": {
+      "id": "demParityAbc123_998941110504",
+      "data": {
+        "demandId": "demParityAbc123",
+        "providerId": "998941110504",
+        "module": "service",
+        "mode": "quote",
+        "status": "new",
+        "score": 0.68,
+        "rank": 2,
+        "sources": ["active_listings"],
+        "consentGiven": false,
+        "metrics": {},
+        "projection": { "title": "Kran oqyapti", "districtId": "urganch_sh", "geohash": "tr7h7" },
+        "expiresAt": "2026-10-04T10:00:00.000Z"
+      },
+      "expect": {
+        "consentGiven": false,
+        "needsConsentPrompt": true,
+        "sourceCount": 1
+      }
+    },
+
+    "match_accepted_stage1": {
+      "id": "demParityAbc123_998902220002",
+      "data": {
+        "demandId": "demParityAbc123",
+        "providerId": "998902220002",
+        "module": "service",
+        "mode": "quote",
+        "status": "accepted",
+        "score": 0.76,
+        "consentGiven": true,
+        "projection": { "title": "Kran oqyapti", "geohash": "tr7h7" },
+        "contactUnlocked": {
+          "stage": 1,
+          "ownerPhone": "998901110001",
+          "pickupAddress": "Al-Xorazmiy 15-uy, 3-xonadon",
+          "pickupLat": 41.55,
+          "pickupLng": 60.63
+        },
+        "expiresAt": "2026-10-04T10:00:00.000Z"
+      },
+      "expect": {
+        "status": "accepted",
+        "contactStage": 1,
+        "contactOwnerPhone": "998901110001",
+        "contactHasRecipient": false,
+        "canOffer": false
+      }
+    }
+  }
+}

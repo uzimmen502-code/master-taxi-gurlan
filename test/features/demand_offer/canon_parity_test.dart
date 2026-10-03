@@ -31,12 +31,12 @@ void main() {
     'Сантехник керак': 'santexnik kerak',
     'Электрик керак': 'elektrik kerak',
     'кран оқяпти': 'kran oqyapti',
-    'ток йўқ': "tok yo'q",
+    'ток йўқ': 'tok yoq',
     'уй тозалаш керак': 'uy tozalash kerak',
     'қудуқ насос': 'quduq nasos',
-    'ғишт терувчи': "g'isht teruvchi",
+    'ғишт терувчи': 'gisht teruvchi',
     'ҳаммом': 'hammom',
-    'ўзбек': "o'zbek",
+    'ўзбек': 'ozbek',
     'котёл ишламайди': 'kotyol ishlamaydi',
   };
 
@@ -69,10 +69,24 @@ void main() {
     expect(IntentRouter.canonForTest('посилка'), 'posilka');
   });
 
-  test('апостроф шакллари бир хил канонга тушади', () {
-    const forms = ["o'zbek", 'oʻzbek', 'oʼzbek', 'o’zbek'];
+  test('апостроф БУТУНЛАЙ тушириб юборилади', () {
+    // Ўлчов (2026-10-03): одамлар телефонда апостроф ёзмайди. Аввал
+    // канон шакл уни сақларди ва «gisht teruvchi» (апострофсиз) ҲЕЧ
+    // ҚАНДАЙ натижа бермасди, «g'isht teruvchi» эса берарди.
+    //
+    // Энди бешта апостроф шакли ҲАМ, апострофсиз шакл ҲАМ битта
+    // канонга тушади.
+    const forms = ["o'zbek", 'oʻzbek', 'oʼzbek', 'o’zbek', 'ozbek', 'ўзбек'];
     final out = forms.map(IntentRouter.canonForTest).toSet();
     expect(out.length, 1, reason: 'турли натижа: $out');
+    expect(out.first, 'ozbek');
+  });
+
+  test('апострофсиз ёзилган сўров ҳам топилади', () {
+    expect(IntentRouter.canonForTest('gisht teruvchi'),
+        IntentRouter.canonForTest("g'isht teruvchi"));
+    expect(IntentRouter.canonForTest('tok yoq'),
+        IntentRouter.canonForTest('ток йўқ'));
   });
 
   test('тинish белгилари ва кўп бўшлиқ тозаланади', () {

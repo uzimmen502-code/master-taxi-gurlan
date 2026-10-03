@@ -24,6 +24,7 @@ const SUITES = [
   'matching.test.js',
   'offers.test.js',
   'parity.test.js',
+  'dictionary_fresh.test.js',
 ];
 
 let failed = 0;

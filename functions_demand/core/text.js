@@ -123,10 +123,27 @@ function variants(word) {
 /**
  * Normallashtirilgan, bitta bo'shliqli matn — taqqoslash uchun.
  * Har doim LOTIN shaklga keltiriladi: bitta kanon yozuv bo'lsin.
+ *
+ * APOSTROF BUTUNLAY TUSHIRIB YUBORILADI.
+ *
+ * Sabab (o'lchov, 2026-10-03): odamlar telefonda apostrof yozmaydi.
+ * Avval kanon shakl apostrofni saqlardi va natijada:
+ *   «g'isht teruvchi»  -> topiladi
+ *   «gisht teruvchi»   -> TOPILMAYDI   <- real yo'qotish
+ * Endi uchalasi ham bitta kanonga tushadi: «ғишт», «g'isht», «gisht».
+ *
+ * Narxi: `o'` va `o` farqi yo'qoladi (masalan «ўт» va «от» ikkisi ham
+ * «ot»). Qisqa so'zlarda nazariy to'qnashuv bor, lekin QIDIRUVDA
+ * RECALL aniqlikdan muhimroq: foydalanuvchi kartochkani ko'rib
+ * o'zi tasdiqlaydi, noto'g'ri taklif esa shunchaki o'tkazib yuboriladi.
+ *
+ * Dart tomondagi jufti: `IntentRouter._canon`. Ikkisi
+ * `canon_parity_test.dart` bilan qulflangan.
  */
 function canonText(s) {
   return toLatin(unifyApostrophes(String(s || '')).toLowerCase())
-    .replace(/[^0-9a-z' ]+/g, ' ')
+    .replace(/'/g, '')
+    .replace(/[^0-9a-z ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

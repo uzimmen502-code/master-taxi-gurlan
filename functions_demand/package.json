@@ -19,7 +19,8 @@
     "test:keywords": "node test/keywords.test.js",
     "test:rules": "node test/rules.test.js",
     "test:matching": "node test/matching.test.js",
-    "test:offers": "node test/offers.test.js"
+    "test:offers": "node test/offers.test.js",
+    "test:dict": "node test/dictionary_fresh.test.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",

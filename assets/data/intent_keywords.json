@@ -428,7 +428,6 @@
     "remont",
     "remontchi",
     "spetsialist",
-    "ta'mirlash",
     "tamirlash",
     "tuzatish",
     "usluga",
@@ -499,17 +498,17 @@
     "beton i trotuarnaya plitka": [
       "hovli_beton"
     ],
-    "bo'yash": [
-      "shpatlyovka_boyoq"
-    ],
-    "bog'bon": [
+    "bogbon": [
       "bogbon"
     ],
-    "bog'bon va daraxt": [
+    "bogbon va daraxt": [
       "bogbon"
     ],
     "boshlovchi": [
       "toy_ovoz"
+    ],
+    "boyash": [
+      "shpatlyovka_boyoq"
     ],
     "brigada": [
       "qurilish_brigada"
@@ -541,13 +540,13 @@
     "darvoza va panjara": [
       "temir_panjara"
     ],
-    "deraza o'rnatish": [
+    "deraza ornatish": [
       "eshik_deraza"
     ],
     "deraza yuvish": [
       "uy_tozalash"
     ],
-    "devor ko'tarish": [
+    "devor kotarish": [
       "qurilish_brigada"
     ],
     "devor tekislash": [
@@ -592,14 +591,14 @@
     "eshik": [
       "eshik_deraza"
     ],
-    "eshik o'rnatish": [
-      "duradgor"
-    ],
     "eshik ochilmayapti": [
       "qulf_ustasi"
     ],
     "eshik ochish": [
       "qulf_ustasi"
+    ],
+    "eshik ornatish": [
+      "duradgor"
     ],
     "eshik va deraza": [
       "eshik_deraza"
@@ -624,9 +623,6 @@
     ],
     "fundament": [
       "hovli_beton"
-    ],
-    "g'isht teruvchi": [
-      "qurilish_brigada"
     ],
     "gaz hidi": [
       "gaz_ustasi"
@@ -663,6 +659,9 @@
     ],
     "gipsokarton va shipi": [
       "gipsokarton"
+    ],
+    "gisht teruvchi": [
+      "qurilish_brigada"
     ],
     "gruzchik": [
       "kochish_yuk"
@@ -727,7 +726,7 @@
     "kamenshik": [
       "qurilish_brigada"
     ],
-    "kamera o'rnatish": [
+    "kamera ornatish": [
       "internet_usta"
     ],
     "kanalizatsiya": [
@@ -751,17 +750,14 @@
     "klining": [
       "uy_tozalash"
     ],
-    "ko'chirish": [
+    "kochirish": [
       "kochish_yuk"
     ],
-    "ko'chish": [
+    "kochish": [
       "kochish_yuk"
     ],
-    "ko'chish va yuk ko'tarish": [
+    "kochish va yuk kotarish": [
       "kochish_yuk"
-    ],
-    "ko'ylak tikish": [
-      "tikuvchi"
     ],
     "koleso": [
       "shina_montaj"
@@ -784,7 +780,7 @@
     "konditsioner": [
       "konditsioner"
     ],
-    "konditsioner o'rnatish": [
+    "konditsioner ornatish": [
       "konditsioner"
     ],
     "konditsioner tozalash": [
@@ -804,6 +800,9 @@
       "gaz_ustasi",
       "isitish_tizimi"
     ],
+    "koylak tikish": [
+      "tikuvchi"
+    ],
     "kran": [
       "santexnik"
     ],
@@ -816,19 +815,19 @@
     "krisha techet": [
       "tom_yopish"
     ],
-    "krovat yig'ish": [
+    "krovat yigish": [
       "mebel_yigish"
     ],
     "krovlya": [
       "tom_yopish"
     ],
-    "kuxnya o'rnatish": [
+    "kuxnya ornatish": [
       "mebel_yigish"
     ],
     "kuzov": [
       "avto_kuzov"
     ],
-    "kuzov va bo'yash": [
+    "kuzov va boyash": [
       "avto_kuzov"
     ],
     "kuzovnoy": [
@@ -840,10 +839,10 @@
     "makiyaj": [
       "soch_uyda"
     ],
-    "mashina bo'yash": [
+    "mashina boyash": [
       "avto_kuzov"
     ],
-    "mashina o't olmayapti": [
+    "mashina ot olmayapti": [
       "avto_elektrik"
     ],
     "mashina suv olmayapti": [
@@ -867,7 +866,7 @@
     "mebel tashish": [
       "kochish_yuk"
     ],
-    "mebel yig'ish": [
+    "mebel yigish": [
       "mebel_yigish"
     ],
     "mol kasal": [
@@ -882,7 +881,7 @@
     "moshina yuvish": [
       "avto_yuvish"
     ],
-    "moskit to'r": [
+    "moskit tor": [
       "eshik_deraza"
     ],
     "moskitnaya setka": [
@@ -948,12 +947,6 @@
     "noutbuk": [
       "kompyuter_ustasi"
     ],
-    "o'qituvchi": [
-      "repetitor"
-    ],
-    "o't o'rish": [
-      "bogbon"
-    ],
     "oboi": [
       "shpatlyovka_boyoq"
     ],
@@ -966,6 +959,9 @@
     "operator": [
       "fotograf"
     ],
+    "oqituvchi": [
+      "repetitor"
+    ],
     "osh qilish": [
       "oshpaz"
     ],
@@ -974,6 +970,9 @@
     ],
     "oshpaz tadbirga": [
       "oshpaz"
+    ],
+    "ot orish": [
+      "bogbon"
     ],
     "otoplenie": [
       "isitish_tizimi"
@@ -1119,7 +1118,7 @@
     "profnastil": [
       "tom_yopish"
     ],
-    "programma o'rnatish": [
+    "programma ornatish": [
       "kompyuter_ustasi"
     ],
     "provesti kabel": [
@@ -1248,7 +1247,7 @@
     "shkaf yasash": [
       "duradgor"
     ],
-    "shkaf yig'ish": [
+    "shkaf yigish": [
       "mebel_yigish"
     ],
     "shpatlevka": [
@@ -1260,7 +1259,7 @@
     "shpatlyovka": [
       "shpatlyovka_boyoq"
     ],
-    "shpatlyovka va bo'yash": [
+    "shpatlyovka va boyash": [
       "shpatlyovka_boyoq"
     ],
     "shtori": [
@@ -1365,10 +1364,10 @@
     "suv nasosi": [
       "quduq_nasos"
     ],
-    "suv o'tkazish": [
+    "suv oqyapti": [
       "santexnik"
     ],
-    "suv oqyapti": [
+    "suv otkazish": [
       "santexnik"
     ],
     "svarka": [
@@ -1416,16 +1415,7 @@
     "tikuvchi": [
       "tikuvchi"
     ],
-    "to'y oshpazi": [
-      "oshpaz"
-    ],
-    "to'y ovozlashtirish va boshlovchi": [
-      "toy_ovoz"
-    ],
-    "to'y video": [
-      "fotograf"
-    ],
-    "tok yo'q": [
+    "tok yoq": [
       "elektrik"
     ],
     "tokni boylash": [
@@ -1439,6 +1429,15 @@
     ],
     "tom yopish": [
       "tom_yopish"
+    ],
+    "toy oshpazi": [
+      "oshpaz"
+    ],
+    "toy ovozlashtirish va boshlovchi": [
+      "toy_ovoz"
+    ],
+    "toy video": [
+      "fotograf"
     ],
     "trotuar plitka": [
       "hovli_beton"
@@ -1582,13 +1581,13 @@
       "shina_montaj",
       "tikuvchi"
     ],
-    "yo'lda qoldim": [
-      "evakuator"
-    ],
-    "yog'och ishi": [
+    "yogoch ishi": [
       "duradgor"
     ],
-    "yorug'lik": [
+    "yolda qoldim": [
+      "evakuator"
+    ],
+    "yoruglik": [
       "toy_ovoz"
     ],
     "yuk tashish": [
@@ -1671,13 +1670,13 @@
     "isuzu": [
       "freight_local"
     ],
-    "jo'natish": [
+    "jonatish": [
       "courier"
     ],
     "joyim bor": [
       "intercity_taxi"
     ],
-    "ko'p miqdorda": [
+    "kop miqdorda": [
       "market"
     ],
     "kran kerak": [
@@ -1770,7 +1769,7 @@
     "yetkazib berish": [
       "courier"
     ],
-    "yo'lovchi": [
+    "yolovchi": [
       "intercity_taxi"
     ],
     "yuk mashinasi": [
@@ -1837,7 +1836,7 @@
     }
   },
   "suppressWords": [
-    "bo'lib ishlash",
+    "bolib ishlash",
     "ish",
     "ish bor",
     "ish kerak",
@@ -1875,7 +1874,7 @@
       },
       {
         "name": "Боғот",
-        "canon": "bog'ot"
+        "canon": "bogot"
       },
       {
         "name": "Бухоро",
@@ -1883,7 +1882,7 @@
       },
       {
         "name": "Фарғона",
-        "canon": "farg'ona"
+        "canon": "fargona"
       },
       {
         "name": "Гулистон",
@@ -1923,7 +1922,7 @@
       },
       {
         "name": "Қўшкўпир",
-        "canon": "qo'shko'pir"
+        "canon": "qoshkopir"
       },
       {
         "name": "Самарқанд",
@@ -1943,7 +1942,7 @@
       },
       {
         "name": "Тўрткўл",
-        "canon": "to'rtko'l"
+        "canon": "tortkol"
       },
       {
         "name": "Тошкент",
@@ -1959,7 +1958,7 @@
       },
       {
         "name": "Хўжайли",
-        "canon": "xo'jayli"
+        "canon": "xojayli"
       },
       {
         "name": "Хонқа",

@@ -406,11 +406,21 @@ class IntentRouter {
 
   /// Канон шакл — сервердаги `canonText` билан бир хил натижа бериши
   /// ШАРТ (паритет тести текширади).
+  /// АПОСТРОФ БУТУНЛАЙ ТУШИРИБ ЮБОРИЛАДИ.
+  ///
+  /// Сабаб (ўлчов, 2026-10-03): одамлар телефонда апостроф ёзмайди.
+  /// Аввал канон шакл уни сақларди ва натижада:
+  ///   «g'isht teruvchi»  → топилади
+  ///   «gisht teruvchi»   → ТОПИЛМАЙДИ   ← реал йўқотиш
+  /// Энди учаласи ҳам битта канонга тушади.
+  ///
+  /// Сервердаги жуфти: `core/text.js` → `canonText`.
   static String _canon(String s) {
     final folded = AdSearchText.foldMarks(s).toLowerCase();
     final latin = AdSearchText.toLatin(folded);
     return latin
-        .replaceAll(RegExp(r"[^0-9a-z' ]+"), ' ')
+        .replaceAll("'", '')
+        .replaceAll(RegExp(r'[^0-9a-z ]+'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }

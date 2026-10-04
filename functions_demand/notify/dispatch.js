@@ -13,6 +13,7 @@
 
 const policy = require('./policy');
 const fcm = require('./fcm');
+const { recordPushSummary } = require('../analytics/aggregate');
 
 const PUSH_LOG = 'demand_push_log';
 
@@ -150,6 +151,11 @@ function makeDispatchNotifications(deps) {
       );
       if (res.sent) summary.sent += 1; else summary.skipped += 1;
     }
+
+    // 13.5.3 — shadow mode'да ҳам «push юборилиши керак эди» сони
+    // ёзилади, акс ҳолда «push спам бўляптими?» саволига жавоб
+    // бериб бўлмасди (ҳамма нол бўлиб кўринарди).
+    await recordPushSummary(db, demand.id, summary);
 
     console.log(`dispatchNotifications ${demand.id}: ${JSON.stringify(summary)}`);
     return summary;

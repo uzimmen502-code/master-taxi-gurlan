@@ -25,6 +25,7 @@ const SUITES = [
   'offers.test.js',
   'parity.test.js',
   'dictionary_fresh.test.js',
+  'analytics.test.js',
 ];
 
 let failed = 0;

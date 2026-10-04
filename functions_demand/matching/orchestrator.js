@@ -319,6 +319,28 @@ async function writeMatches(db, demand, ranked, config, adapter) {
         mode: demand.mode,
         status: 'new',
         score: Number(s.finalScore.toFixed(4)),
+        /**
+         * 13.5.4 — «НЕГА МОС?» САВОЛИГА ЖАВОБ.
+         *
+         * Эга саволи: «номос provider чиқяптими?». Унга жавоб бериш
+         * учун 50 тасодифий match'ни қўлда текшириш керак, лекин
+         * `score: 0.76` рақами ҳеч нарса тушунтирмайди.
+         *
+         * Шунинг учун score таркиби ҳам сақланади. Қўшимча ўқиш йўқ:
+         * бу маълумот `scoreCandidate` да аллақачон ҳисобланган.
+         *
+         * Бу майдон ТАКЛИФЧИГА кўринади (match ҳужжати унинг учун),
+         * лекин у махфий эмас: фақат «қанча мос» деган ўз баҳоси.
+         */
+        scoreParts: {
+          base: Number(s.base.toFixed(4)),
+          categoryMatch: Number(s.parts.categoryMatch.toFixed(3)),
+          proximity: Number(s.parts.proximity.toFixed(3)),
+          sourceStrength: Number(s.parts.sourceStrength.toFixed(3)),
+          newProviderBoost: Number((s.boost || 0).toFixed(3)),
+          adapterBonus: Number((s.adapterBonus || 0).toFixed(3)),
+          equalizer: Number(s.equalizer.toFixed(3)),
+        },
         rank: i + rank + 1,
         sources: s.candidate.sources,
         consentGiven: s.candidate.consentGiven !== false,

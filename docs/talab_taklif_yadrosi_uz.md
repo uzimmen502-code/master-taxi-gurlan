@@ -787,13 +787,56 @@ P1'дан P2'га**. Қуйидаги жадваллар эга хабарига
 **Эга қўйган тўртта савол** — аналитика шу тўрттасига жавоб бериши керак:
 matching тўғрими · номос provider чиқяптими · provider сони кам/кўпми · push спам бўляптими.
 
-| № | Вазифа |
+| № | Вазифа | Ҳолат |
+|---|---|---|
+| 13.5.1 | `[srv]` Shadow mode: `matchingEnabled: true` + `pushEnabled: false` | ✅ `tools/seed_module_config.js` |
+| 13.5.2 | `[srv]` `analytics_demand_daily` — **9 кўрсаткич**, модул × ҳудуд кесимида | ✅ `analytics/metrics.js` + `aggregate.js` |
+| 13.5.3 | `[srv]` `pushEligible` алоҳида ҳисобланади (shadow'да ҳам) | ✅ `recordPushSummary` |
+| 13.5.4 | `[ops]` 50 тасодифий match — «нега мос?» изоҳи билан | ✅ `tools/review_matches.js` + `scoreParts` |
+| 13.5.5 | `[ops]` Дарвоза: 6-бўлимдаги рақамлар бажарилса `pushEnabled: true` | ⏳ эга қарори |
+
+### ✅ 13.5.x — КОДДА ТАЙЁР (2026-10-04)
+
+| Файл | Нима қилади |
 |---|---|
-| 13.5.1 | `[srv]` Shadow mode: `matchingEnabled: true` + `pushEnabled: false` (кодда тайёр) — Урганч, хизмат модули, 1–2 ҳафта |
-| 13.5.2 | `[srv]` `analytics_demand_daily` — **юқоридаги 9 кўрсаткич**, модул × ҳудуд кесимида |
-| 13.5.3 | `[srv]` `pushEligible` алоҳида ҳисобланади: policy «юборилади» деган, лекин shadow'да юборилмаган ҳолатлар (Т-7 лимитлари кўринсин) |
-| 13.5.4 | `[ops]` 50 тасодифий match — «нега мос?» изоҳи билан қўлда текширув (номос provider саволига жавоб) |
-| 13.5.5 | `[ops]` Дарвоза: 6-бўлимдаги рақамлар бажарилса `pushEnabled: true` |
+| `analytics/metrics.js` | Тўққиз кўрсаткич + эга тўртта саволига жавоб берадиган нисбатлар |
+| `analytics/aggregate.js` | Кунлик агрегация (скан, янги коллекция/BigQuery керак эмас) |
+| `analytics/access.js` | Фақат админ (`users.role`, Т-2 модели бўйича) |
+| `index.js` | `aggregateDemandAnalytics` (кунлик 02:30) + `runDemandAnalytics` (қўлда, `dryRun`) |
+| `tools/seed_module_config.js` | `--status` / `--shadow` / `--push` / `--kill` |
+| `tools/review_matches.js` | 50 тасодифий match, score таркиби билан |
+| `test/analytics.test.js` | **26 тест** |
+
+**Қўшилган майдонлар** (булар бўлмаса кўрсаткичлар ҳисобланмайди):
+
+| Майдон | Қаерда | Нима учун |
+|---|---|---|
+| `demands.offerCount` | `submitOffer` | `offersReceived`, `fillRate` |
+| `demands.firstOfferAt` | `submitOffer` | `timeToFirstOffer` — акс ҳолда ҳар талабнинг субколлекциясини ўқиш керак бўларди |
+| `demand_matches.scoreParts` | `runMatching` | 13.5.4 «нега мос?» — `score: 0.76` рақами ҳеч нарса тушунтирмайди |
+| `private/stats.push` | `dispatchNotifications` | `pushEligible` — shadow mode'да ҳам |
+
+**Муҳим қарорлар:**
+
+- **`timeToFirstOffer` — медиана, ўртача эмас.** Битта узоқ таклиф натижани бузмаслиги керак.
+  `p90` ҳам ёзилади.
+- **`acceptedOffer` тайинловдан ҳисобланади, статусдан эмас.** Талаб `accepted` → `in_progress`
+  → `completed` ўтади, шунинг учун статус бўйича санаш «қабул қилинган» сонини йўқотиб юборарди.
+- **Кун кесими Asia/Tashkent бўйича.** Сервер UTC'да ишлайди; маҳаллий вақт олинмаса «кечаги кун»
+  05:00да тугаб, ҳисоб аралашарди.
+- **Кечаги кун ҳисобланади, бугунги эмас.** Бугунги кун ҳали тугамаган, унинг ҳисоби чала бўлади.
+- **`pushEligible`да лимит ва тинч соат ҲИСОБГА КИРМАЙДИ.** Улар policy'нинг атайин қарори,
+  shadow mode таъсири эмас. Акс ҳолда «push спам бўляптими?» саволи бузилган жавоб берарди.
+
+**Production'да ҳозирча ҳеч нарса ёқилмаган** (текширилди: `module_config` ҳужжатлари йўқ,
+яъни `enabled: false`). Shadow mode'ни ёқиш — **эга қарори**:
+
+```bash
+node functions_demand/tools/seed_module_config.js --shadow
+```
+
+⚠️ Бу буйруқ хизматни **ҳақиқий фойдаланувчилар учун** ёқади, шунинг учун ўзим ишга туширмадим.
+Ундан олдин `firebase deploy --only functions:demand` ва қоидалар деплойи керак.
 
 ### 13.P1 — КУРЬЕР
 

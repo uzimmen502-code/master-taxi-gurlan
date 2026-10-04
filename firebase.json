@@ -156,6 +156,7 @@
         "node_modules",
         ".git",
         "test",
+        "tools",
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"

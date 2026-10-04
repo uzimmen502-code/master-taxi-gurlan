@@ -131,6 +131,25 @@ function makeSubmitOffer(deps) {
         ownerId: providerId, offerId: providerId, demandId: input.demandId, createdAt: now,
       });
 
+      /**
+       * 13.5.2 — АНАЛИТИКА HISOBLAGICHLARI.
+       *
+       * `offerCount` ва `firstOfferAt` талаб ҳужжатига ёзилади.
+       *
+       * Нега: кунлик агрегация `timeToFirstOffer`ни скандан ҳисоблаб
+       * бўлмайди — ҳар талабнинг таклифлар субколлекциясини ўқиш
+       * керак бўларди (200 талаб = 200 қўшимча сўров). Иккита майдон
+       * эса нол қўшимча ўқиш.
+       *
+       * ДИҚҚАТ: `revision > 0` бўлса бу ЯНГИ таклиф эмас, таҳрир —
+       * шунинг учун ҳисоб оширилмайди.
+       */
+      if (!prev.exists) {
+        const patch = { offerCount: Number(demand.offerCount || 0) + 1 };
+        if (!demand.firstOfferAt) patch.firstOfferAt = now;
+        tx.update(demandRef, patch);
+      }
+
       // Taklifchi ko'rganini belgilaymiz (takroriy push ketmasligi uchun).
       tx.set(
         db.collection(MATCHES).doc(`${input.demandId}_${providerId}`),

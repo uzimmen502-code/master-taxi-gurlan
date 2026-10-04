@@ -149,6 +149,46 @@ exports.reopenStaleAssignments = fn.pubsub
     return run();
   });
 
+/**
+ * 13.5.2 — SHADOW MODE ANALITIKASI (kunlik).
+ *
+ * Ega ro'yxatidagi 9 ko'rsatkich, modul x hudud kesimida.
+ * KECHAGI kun hisoblanadi: bugungi kun hali tugamagan va uning hisobi
+ * chala bo'lardi.
+ *
+ * 02:30 — kechasi, Asia/Tashkent. Tinch soat ichida, ya'ni hisob
+ * foydalanuvchi faolligi bilan to'qnashmaydi.
+ */
+exports.aggregateDemandAnalytics = fn
+  .runWith({ timeoutSeconds: 540, memory: '512MB' })
+  .pubsub
+  .schedule('30 2 * * *')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const { aggregateDay } = require('./analytics/aggregate');
+    return aggregateDay({ db });
+  });
+
+/**
+ * Qo'lda chaqirish — shadow mode kuzatuvi uchun.
+ *
+ * Kunlik ish 02:30 da ishlaydi, lekin shadow mode davomida natijani
+ * KUN ICHIDA ko'rish kerak bo'ladi. `dryRun: true` bilan hech narsa
+ * yozilmaydi — faqat hisob qaytariladi.
+ */
+exports.runDemandAnalytics = fn
+  .runWith({ timeoutSeconds: 540, memory: '512MB' })
+  .https.onCall(wrapCallable(async (data, context) => {
+    const { assertAnalyticsAdmin } = require('./analytics/access');
+    await assertAnalyticsAdmin(db, context);
+    const { aggregateDay } = require('./analytics/aggregate');
+    return aggregateDay({
+      db,
+      dateStr: data && data.date ? String(data.date) : undefined,
+      dryRun: data ? data.dryRun === true : false,
+    });
+  }));
+
 // ═══════════════════════════════════════════════════════════════════════
 // TRIGGERLAR
 // ═══════════════════════════════════════════════════════════════════════

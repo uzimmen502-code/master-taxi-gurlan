@@ -22,6 +22,20 @@ const { attachAssistant } = require('./assistant_chat');
 attachAssistant(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger,
 });
+// Kuryerga push — token va «kim onlayn» manbalari (13.6.4).
+// `canonicalUid` — hoisted function declaration (pastda).
+const { createCourierPush } = require('./courier_push');
+const courierPush = createCourierPush({ db, canonicalUid });
+// Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
+// paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
+const capabilitiesModel = require('./capabilities_model');
+// Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
+// `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
+// nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
+const { attachTaxiBilling } = require('./taxi_billing');
+attachTaxiBilling(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {
@@ -1404,12 +1418,9 @@ exports.onDeliveryRouteCreate = functions.firestore
     const ordersCount = (route.orders || route.orderIds || []).length;
 
     if (!courierId) {
-      const onlineSnap = await db.collection('couriers')
-        .where('isOnline', '==', true)
-        .get();
-      const tokens = onlineSnap.docs
-        .map((d) => d.data().fcmToken)
-        .filter((t) => typeof t === 'string' && t.length > 10);
+      // 13.6.4 — ikkita manba: `provider_presence` (yangi yadro) va
+      // `couriers` (ilovani yangilamagan kuryerlar). Token `users`dan.
+      const tokens = await courierPush.onlineCourierTokens();
 
       if (tokens.length === 0) return null;
       const messages = tokens.map((token) => ({
@@ -1427,8 +1438,10 @@ exports.onDeliveryRouteCreate = functions.firestore
       return null;
     }
 
-    const courierDoc = await db.collection('couriers').doc(courierId).get();
-    const token = courierDoc.data()?.fcmToken;
+    // 13.6.4 — `users.fcmToken` birinchi: `couriers.fcmToken` faqat
+    // kuryer onlayn bo'lganda yoziladi, ya'ni admin yaratgan va hali
+    // hech qachon onlayn bo'lmagan kuryer push OLMAY qolardi.
+    const token = await courierPush.resolveToken(courierId);
     if (!token) return null;
 
     try {
@@ -1458,9 +1471,8 @@ exports.onDeliveryRouteAssign = functions.firestore
 
     const ordersCount = (after.orders || after.orderIds || []).length;
 
-    const courierDoc = await db.collection('couriers')
-        .doc(newCourier).get();
-    const token = courierDoc.data()?.fcmToken;
+    // 13.6.4 — bitta manba (`courier_push.js`), uchta joyda takrorlanmaydi.
+    const token = await courierPush.resolveToken(newCourier);
     if (!token) return null;
 
     try {
@@ -2393,23 +2405,34 @@ function assertCourierPhone(courierPhone) {
   return uid;
 }
 
-/** Kuryer telefoni: `couriers/{uid}` yoki `users/{uid}.role === 'courier'`. */
+/**
+ * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1).
+ *
+ * `users/{uid}.accountId` → `provider_capabilities/{accountId}` →
+ * `courier` statusi ishlaydigan holatda (`trial`, `trial_expired`,
+ * `document_submitted`, `under_review`, `approved`). Statusni faqat
+ * server/admin yozadi, shuning uchun bu tekshiruvga ishonish mumkin.
+ *
+ * OLIB TASHLANDI (D-CLEAN-1): `couriers/{uid}` mavjudligi va
+ * `users.role === 'courier'` zahiralari — ikkalasi ham klient o'ziga
+ * yozishi mumkin bo'lgan manbalar edi (self_approval_rules.test.js).
+ */
 async function resolveAuthorizedCourierUid(courierPhone) {
   const uid9 = userUid(courierPhone);
   const uid12 = canonicalUid(courierPhone);
   const ids = uid9 === uid12 ? [uid12] : [uid12, uid9];
 
   for (let i = 0; i < ids.length; i += 1) {
-    const uid = ids[i];
-    const courierDoc = await db.collection('couriers').doc(uid).get();
-    if (courierDoc.exists) return uid;
-  }
-
-  for (let i = 0; i < ids.length; i += 1) {
-    const uid = ids[i];
-    const userDoc = await db.collection('users').doc(uid).get();
-    const role = (userDoc.data() || {}).role || '';
-    if (userDoc.exists && role === 'courier') return uid;
+    const userDoc = await db.collection('users').doc(ids[i]).get();
+    if (!userDoc.exists) continue;
+    const accountId = String((userDoc.data() || {}).accountId || '');
+    if (!accountId) break;
+    const cap = await db.collection('provider_capabilities').doc(accountId).get();
+    const doc = cap.exists ? (cap.data() || {}) : {};
+    if (capabilitiesModel.isWorking('courier', capabilitiesModel.statusOf(doc, 'courier'))) {
+      return uid12;
+    }
+    break;
   }
 
   throw new functions.https.HttpsError('permission-denied', 'Courier not authorized');

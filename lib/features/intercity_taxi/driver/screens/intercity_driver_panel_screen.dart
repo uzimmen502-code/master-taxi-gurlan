@@ -390,6 +390,16 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
               ),
             ),
           const SizedBox(height: 8),
+          // D-TAXI-CANCEL-3: kechiktirish — bekor EMAS, komissiya saqlanadi.
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _rescheduleTrip(context, c),
+              icon: const Icon(Icons.event_repeat, size: 18),
+              label: Text(context.tr('reschedule_trip_btn')),
+            ),
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -422,6 +432,49 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         ],
       ]),
     );
+  }
+
+  /// D-TAXI-CANCEL-3 — sana/vaqtni o'zgartirish. Bekor emas: `tripId` va
+  /// komissiya saqlanadi (server kafolatlaydi).
+  Future<void> _rescheduleTrip(
+    BuildContext context,
+    IntercityDriverPanelController c,
+  ) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 30)),
+    );
+    if (date == null || !context.mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: 8, minute: 0),
+    );
+    if (time == null || !context.mounted) return;
+    final departureAt =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final startTime =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    try {
+      await c.rescheduleTrip(
+        departureAt: departureAt,
+        scheduleDate: dateStr,
+        startTime: startTime,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('reschedule_trip_done'))),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('reschedule_trip_failed'))),
+      );
+    }
   }
 
   Future<void> _confirmLeavePanel(

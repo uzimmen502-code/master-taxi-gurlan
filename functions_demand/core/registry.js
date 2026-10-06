@@ -12,10 +12,14 @@
  */
 
 const serviceAdapter = require('../adapters/service');
+const courierAdapter = require('../adapters/courier');
 
 /** @type {Map<string, object>} */
 const adapters = new Map([
   [serviceAdapter.module, serviceAdapter],
+  // 13.6.3 — shahar ichi kuryer, `dispatch` rejimi. `provider_presence`
+  // manbasini ishlatadigan birinchi modul.
+  [courierAdapter.module, courierAdapter],
 ]);
 
 /** Modul adapteri. Topilmasa `null` — chaqiruvchi xato qaytaradi. */

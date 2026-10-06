@@ -2089,64 +2089,6 @@
       ]
     },
     {
-      "collectionGroup": "provider_capabilities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "module",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "regionIds",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "provider_capabilities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "module",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "categoryIds",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "provider_capabilities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "module",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "wholesale",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "regionIds",
-          "arrayConfig": "CONTAINS"
-        }
-      ]
-    },
-    {
       "collectionGroup": "ads",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2288,6 +2230,70 @@
         },
         {
           "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "provider_capabilities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "courier.active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "courier.regionIds",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "provider_capabilities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "service.active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "service.regionIds",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reservedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "taxi_trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driverUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fraudReviewed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cancelledAt",
           "order": "DESCENDING"
         }
       ]

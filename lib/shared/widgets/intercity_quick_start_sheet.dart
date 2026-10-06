@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/l10n/l10n_extension.dart';
 import '../../core/utils/formatters.dart';
 import '../../repositories/schedules_repository.dart';
+import '../../repositories/taxi_billing_repository.dart';
+import 'taxi_agreement_sheet.dart';
 import '../../utils/intercity_places.dart';
 
 /// Shaharlararo haydovchi uchun tez ishga chiqish bottom sheet.
@@ -111,6 +115,162 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
     ));
   }
 
+  final TaxiBillingRepository _billing = TaxiBillingRepository();
+
+  String _fmtSum(int v) {
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  /// Oxirgi ma'lum joylashuv — tez, ruxsat so'ramaydi. Bo'lmasa `null`:
+  /// server mismatch'ni «signal» deb oladi, reysni to'xtatmaydi (D-TAXI-14).
+  Future<Position?> _lastKnownPosition() async {
+    try {
+      return await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Komissiya → kelishuv → tasdiq → to'lov. `published` bo'lsa tripId,
+  /// aks holda `null` (xabar allaqachon ko'rsatilgan).
+  Future<String?> _publishWithBilling({
+    required int farePerSeat,
+    required String from,
+    required String to,
+    required String scheduleDate,
+    required String startTime,
+    required DateTime departureAt,
+  }) async {
+    TaxiFeeQuote quote;
+    try {
+      quote = await _billing.quote(farePerSeat: farePerSeat);
+    } on TaxiBillingException catch (e) {
+      _snack(_billingMessage(e.reason));
+      return null;
+    }
+    if (!mounted) return null;
+
+    // D-TAXI-24: kelishuv — versiyani server aytadi.
+    if (!quote.allowed && quote.reason == 'agreement_required') {
+      final ok = await showTaxiAgreementSheet(
+        context,
+        version: quote.agreementVersion ?? 1,
+        primaryColor: widget.primaryColor,
+        repository: _billing,
+      );
+      if (!ok || !mounted) return null;
+      try {
+        quote = await _billing.quote(farePerSeat: farePerSeat);
+      } on TaxiBillingException catch (e) {
+        _snack(_billingMessage(e.reason));
+        return null;
+      }
+    }
+    if (!mounted) return null;
+    if (!quote.allowed) {
+      _snack(_billingMessage(quote.reason));
+      return null;
+    }
+    if (quote.feeAmount > 0 && !quote.sufficient) {
+      _snack(context.tr('taxi_fee_insufficient'));
+      return null;
+    }
+
+    // D-TAXI-22: haydovchi summani OLDINDAN ko'radi va tasdiqlaydi.
+    final confirmed = await _confirmFee(quote);
+    if (!confirmed || !mounted) return null;
+
+    final pos = await _lastKnownPosition();
+    try {
+      final res = await _billing.publish(
+        farePerSeat: farePerSeat,
+        from: from,
+        to: to,
+        scheduleDate: scheduleDate,
+        startTime: startTime,
+        seats: _seats,
+        departureAt: departureAt,
+        driverLat: pos?.latitude,
+        driverLng: pos?.longitude,
+        locationAccuracy: pos?.accuracy,
+      );
+      if (res.published) return res.tripId;
+      // D-TAXI-23: wallet yetmadi — e'lon chiqmaydi.
+      if (!mounted) return null;
+      _snack(context.tr('taxi_fee_insufficient'));
+      return null;
+    } on TaxiBillingException catch (e) {
+      _snack(_billingMessage(e.reason));
+      return null;
+    }
+  }
+
+  String _billingMessage(String reason) {
+    switch (reason) {
+      case 'taxi_verification_required':
+        return context.tr('taxi_verification_required');
+      case 'taxi_not_allowed':
+      case 'no_capability':
+      case 'no_user':
+        return context.tr('taxi_not_allowed');
+      case 'agreement_required':
+        return context.tr('taxi_agreement_title');
+      default:
+        return context.tr('taxi_publish_failed');
+    }
+  }
+
+  Future<bool> _confirmFee(TaxiFeeQuote quote) async {
+    final fee = quote.feeAmount;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.tr('taxi_fee_title')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              fee > 0
+                  ? '${_fmtSum(fee)} сўм'
+                  : ctx.tr('taxi_fee_free_starter'),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(ctx.tr('taxi_fee_formula_note'),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+            if (fee > 0 && quote.walletBalance != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${ctx.tr('taxi_fee_wallet_balance')}: ${_fmtSum(quote.walletBalance!)} сўм',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.tr('cancel'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: widget.primaryColor),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(fee > 0
+                ? ctx.tr('taxi_fee_pay_publish').replaceAll('{fee}', _fmtSum(fee))
+                : ctx.tr('confirm')),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -157,6 +317,25 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
       final midnight = DateTime(day.year, day.month, day.day, 23, 59, 59);
       final price = int.tryParse(priceText) ?? 0;
 
+      // D-TAXI-13: komissiya → to'lov → publish → shundan KEYIN ro'yxat.
+      // Server `published` qaytarmasa reys yaratilmaydi. Sabablar
+      // (`agreement_required`, `taxi_verification_required`,
+      // `payment_required`) foydalanuvchiga sodda matn bilan ko'rsatiladi.
+      final departureAt = DateTime(
+          day.year, day.month, day.day, _departure.hour, _departure.minute);
+      final billingTripId = await _publishWithBilling(
+        farePerSeat: price,
+        from: fromText,
+        to: toText,
+        scheduleDate: dateStr,
+        startTime: _fmtTime(_departure),
+        departureAt: departureAt,
+      );
+      if (billingTripId == null) {
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+
       await _repo.registerDriverSchedule(
         driverId: uid,
         taxiType: 'intercity',
@@ -173,6 +352,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
         direction: '',
         startTime: _fmtTime(_departure),
         price: price,
+        billingTripId: billingTripId,
       );
 
       // Keyingi safar prefill uchun — DriverScheduleController bilan mos.

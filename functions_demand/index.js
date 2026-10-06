@@ -39,9 +39,15 @@ const { makeModeration } = require('./core/moderation');
 const { makeCreateDemand } = require('./api/create_demand');
 const offersApi = require('./api/offers');
 const maintenance = require('./api/maintenance');
+const capabilitiesApi = require('./api/capabilities');
+const agreementsApi = require('./api/agreements');
+const adminCapsApi = require('./api/admin_capabilities');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
+const caps = require('./core/capabilities');
+const { toCanonicalId } = require('./core/ids');
+const { enabledModules } = require('./core/registry');
 
 /**
  * Kalit so'z indeksi — sovuq startda BIR MARTA quriladi.
@@ -71,7 +77,9 @@ function wrapCallable(handler) {
         'resource-exhausted', 'unavailable', 'unimplemented',
       ]);
       if (known.has(e.code)) {
-        throw new functions.https.HttpsError(e.code, e.message);
+        // `details` (masalan `{reason: 'agreement_required'}`) klientga
+        // yetib boradi — UI sabab bo'yicha matn tanlaydi (25-qoida).
+        throw new functions.https.HttpsError(e.code, e.message, e.details);
       }
       // Kutilmagan xato: foydalanuvchiga tafsilot BERILMAYDI, logga tushadi.
       console.error(`kutilmagan xato: ${e.stack || e.message}`);
@@ -122,6 +130,38 @@ exports.submitRating = fn.https.onCall(wrapCallable(
   maintenance.makeSubmitRating({ db }),
 ));
 
+/**
+ * D-12…D-16 — «men shu xizmatni ko'rsatmoqchiman».
+ *
+ * Natija: `status.<xizmat> = 'trial'` + 3 kunlik oyna. Odam O'ZIGA
+ * faqat SINOV so'rashi mumkin; `approved` ni faqat admin beradi (D-14),
+ * shuning uchun `status` ni klient qoidasi umuman yozolmaydi.
+ */
+exports.requestCapability = fn.https.onCall(wrapCallable(
+  capabilitiesApi.makeRequestCapability({ db }),
+));
+
+/** D-SERVICE-2, D-TAXI-24 — xizmat kelishuvini qabul qilish (faqat joriy versiya). */
+exports.acceptServiceAgreement = fn.https.onCall(wrapCallable(
+  agreementsApi.makeAcceptServiceAgreement({ db }),
+));
+
+/**
+ * ADMIN — capability statusi (D-TAXI-4: `verified` faqat admin) + audit
+ * (41-qoida). O'tish `canTransition(..., 'admin')` bilan tekshiriladi.
+ */
+exports.adminSetCapabilityStatus = fn.https.onCall(wrapCallable(
+  adminCapsApi.makeAdminSetCapabilityStatus({ db }),
+));
+
+/**
+ * ADMIN — T-6 migratsiyasi: `drivers.approved` → taxi `verified` +
+ * 4 oylik billing grace. `dryRun` standart TRUE; `{dryRun:false}` yozadi.
+ */
+exports.adminMigrateTaxiDrivers = fn
+  .runWith({ timeoutSeconds: 540 })
+  .https.onCall(wrapCallable(adminCapsApi.makeAdminMigrateTaxiDrivers({ db })));
+
 // ═══════════════════════════════════════════════════════════════════════
 // REJALI ISHLAR (Т-5: Cloud Tasks o'rniga sweeper)
 // ═══════════════════════════════════════════════════════════════════════
@@ -146,6 +186,41 @@ exports.reopenStaleAssignments = fn.pubsub
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
     const run = maintenance.makeReopenStaleAssignments({ db });
+    return run();
+  });
+
+/**
+ * 13.6.3 — eskirgan `provider_presence` yozuvlari.
+ *
+ * Har 2 daqiqada: chegara `maxLocationAgeSec` (120 s), ya'ni sweep undan
+ * tez-tez ishlashi kerak, aks holda yolg'on «onlayn» oynasi chegaradan
+ * kattaroq bo'ladi. Eski `cleanupStaleDrivers` ham aynan shu qadamda
+ * ishlaydi (`functions/index.js:9564`) — bir xil naqsh.
+ */
+exports.presenceSweeper = fn.pubsub
+  .schedule('every 2 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const run = maintenance.makePresenceSweeper({ db });
+    return run();
+  });
+
+/**
+ * D-15.1 — SINOV MUDDATI.
+ *
+ *   trial         --3 kun-->  trial_expired (BIR MARTALIK 5 kun grace)
+ *   trial_expired --5 kun-->  suspended
+ *
+ * Har SOATDA: muddat kunlar bilan o'lchanadi, ya'ni daqiqalik aniqlik
+ * kerak emas va soatlik qadam 24x arzonroq. Eng yomon holatda odam
+ * muddat tugagach 1 soat ko'proq ishlaydi — bu ataylab: chegara
+ * «yumshoq» bo'lishi ega qarori (D-15.1).
+ */
+exports.capabilitySweeper = fn.pubsub
+  .schedule('every 60 minutes')
+  .timeZone('Asia/Tashkent')
+  .onRun(async () => {
+    const run = capabilitiesApi.makeCapabilitySweeper({ db });
     return run();
   });
 
@@ -222,30 +297,64 @@ exports.recomputeTrust = fn.firestore
  * (`demand_push_log` idempotentligi).
  */
 exports.onProviderAvailable = fn.firestore
-  .document('provider_capabilities/{key}')
+  .document('provider_capabilities/{accountId}')
   .onWrite(async (change) => {
     const after = change.after.exists ? (change.after.data() || {}) : null;
-    if (!after || after.active !== true) return null;
-
+    if (!after) return null;
     const before = change.before.exists ? (change.before.data() || {}) : null;
-    // Faqat haqiqiy o'zgarishda: `updatedAt` yangilanishi yetarli emas.
-    if (before) {
-      const same = JSON.stringify(before.categoryIds || []) === JSON.stringify(after.categoryIds || [])
-        && JSON.stringify(before.regionIds || []) === JSON.stringify(after.regionIds || [])
-        && before.active === after.active;
-      if (same) return null;
-    }
 
+    /**
+     * KIMLIK — server yozgan `identity.primaryUid` (18-qoida). Kalit
+     * endi barqaror `accountId` (T-1a), matching esa kanon telefon bilan
+     * ishlaydi; `identity` SERVER_KEYS ichida, klient unga tegolmaydi.
+     */
+    const providerId = toCanonicalId(caps.identityOf(after).primaryUid);
+    if (!providerId) return null;
+
+    /**
+     * D-13: bitta hujjatda bir nechta capability. Shuning uchun QAYSI
+     * xizmat o'zgarganini aniqlash kerak — aks holda `taxi` ni
+     * yangilash `courier` matching'ini ham bekorga qayta ishga
+     * tushirardi.
+     *
+     * Faqat adapteri BOR xizmatlar qaraladi: qolganlari uchun yadro
+     * hali nomzod izlamaydi.
+     */
     const run = maintenance.makeOnProviderAvailable({
       db, keywordIndex, notify: dispatchNotifications,
     });
-    try {
-      await run(after.providerId, after.module);
-    } catch (e) {
-      console.error(`onProviderAvailable xatosi: ${e.message}`);
+    const live = new Set(enabledModules());
+
+    for (const service of caps.SERVICES) {
+      if (!live.has(service)) continue;
+      // Huquq + xohish: ikkisi ham bo'lmasa teskari matching yo'q.
+      if (!caps.isEligible(after, service)) continue;
+      // Haqiqiy o'zgarish shart: `updatedAt` yangilanishi yetarli emas.
+      if (before && !capabilityChangedFor(before, after, service)) continue;
+
+      try {
+        await run(providerId, service);
+      } catch (e) {
+        console.error(`onProviderAvailable xatosi (${providerId}/${service}): ${e.message}`);
+      }
     }
     return null;
   });
+
+/** Shu xizmat uchun MA'NOLI o'zgarish bo'ldimi. */
+function capabilityChangedFor(before, after, service) {
+  const b = before[service] || {};
+  const a = after[service] || {};
+  const list = (v) => JSON.stringify(Array.isArray(v) ? v : []);
+  return b.active !== a.active
+    || list(b.categoryIds) !== list(a.categoryIds)
+    || list(b.categoryGroups) !== list(a.categoryGroups)
+    || list(b.regionIds) !== list(a.regionIds)
+    || list(b.districtIds) !== list(a.districtIds)
+    // Status o'zgarishi ham ma'noli: `trial` -> `approved` bo'lgan odam
+    // aktiv talablarni DARHOL ko'rishi kerak.
+    || caps.statusOf(before, service) !== caps.statusOf(after, service);
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // DIAGNOSTIKA
@@ -256,7 +365,7 @@ exports.onProviderAvailable = fn.firestore
  * Hech qanday maxfiy ma'lumot qaytarmaydi.
  */
 exports.demandCoreStatus = fn.https.onCall(wrapCallable(async () => {
-  const { enabledModules } = require('./core/registry');
+  // `enabledModules` modul boshida import qilingan (47-qator).
   return {
     region: REGION,
     modules: enabledModules(),

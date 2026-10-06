@@ -10,7 +10,9 @@
     "Biri o'zgarsa test sinadi: server bir katakni, ilova boshqasini",
     "hisoblashi mumkin bo'lmaydi (matching butunlay buziladi).",
     "DIQQAT: konsepsiya hujjatida Urganch uchun `tp5q...` deb yozilgan edi —",
-    "u xato. Haqiqiy prefiks `tr7h` (precision 4)."
+    "u xato. Haqiqiy prefiks `tr7h` (precision 4).",
+    "13.6.3: `_p9_presence` vektorlari — `provider_presence.geohash` AYNAN",
+    "shu aniqlikda yoziladi (ProviderPresence.geohashPrecision = 9)."
   ],
   "vectors": [
     { "name": "wikipedia_nazorat", "lat": 57.64911, "lng": 10.40744, "precision": 6, "geohash": "u4pruy" },
@@ -18,6 +20,8 @@
     { "name": "urganch_markaz_p5", "lat": 41.55, "lng": 60.63, "precision": 5, "geohash": "tr7h7" },
     { "name": "urganch_markaz_p6", "lat": 41.55, "lng": 60.63, "precision": 6, "geohash": "tr7h7e" },
     { "name": "urganch_markaz_p7", "lat": 41.55, "lng": 60.63, "precision": 7, "geohash": "tr7h7ev" },
+    { "name": "urganch_markaz_p9_presence", "lat": 41.55, "lng": 60.63, "precision": 9, "geohash": "tr7h7evqm" },
+    { "name": "gurlan_p9_presence", "lat": 41.8419, "lng": 60.3889, "precision": 9, "geohash": "tr6yn1jfe" },
     { "name": "xiva", "lat": 41.3783, "lng": 60.3639, "precision": 6, "geohash": "tr6gms" },
     { "name": "gurlan", "lat": 41.8419, "lng": 60.3889, "precision": 6, "geohash": "tr6yn1" },
     { "name": "toshkent", "lat": 41.2995, "lng": 69.2401, "precision": 6, "geohash": "tx34zw" },

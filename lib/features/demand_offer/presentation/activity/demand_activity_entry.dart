@@ -66,16 +66,34 @@ class _DemandActivityEntryState extends State<DemandActivityEntry> {
   }
 
   /// Фойдаланувчи камида битта актив имкониятга эгами.
+  ///
+  /// ШАКЛ ЎЗГАРДИ (D-12…D-16): аввал `provider_capabilities` да ҳар бир
+  /// (uid, модул) жуфти учун алоҳида ҳужжат бор эди ва бу ерда
+  /// `where('providerId', ...)` сўрови ишлатиларди. Энди битта uid =
+  /// битта ҳужжат, шунинг учун ҚЎШИМЧА ФОЙДА ҳам бор: сўров эмас,
+  /// битта `get` — арзонроқ ва янги қоидага мос (`isOwner(uid)` сўров
+  /// билан қондирилмайди, яъни эски код `permission-denied` оларди ва
+  /// таклифчи бўлими ЖИМГИНА йўқоларди).
   Future<void> _checkProvider() async {
     final db = widget.firestore ?? FirebaseFirestore.instance;
     try {
-      final snap = await db
-          .collection('provider_capabilities')
-          .where('providerId', isEqualTo: widget.userId)
-          .where('active', isEqualTo: true)
-          .limit(1)
-          .get();
-      if (mounted) setState(() => _isProvider = snap.docs.isNotEmpty);
+      // T-1a: capability калити — `users/{uid}.accountId` (сервер
+      // беради). accountId йўқ = ҳали бирорта хизмат ёқилмаган.
+      final user = await db.collection('users').doc(widget.userId).get();
+      final accountId = user.data()?['accountId']?.toString() ?? '';
+      if (accountId.isEmpty) {
+        if (mounted) setState(() => _isProvider = false);
+        return;
+      }
+      final snap =
+          await db.collection('provider_capabilities').doc(accountId).get();
+      final data = snap.data() ?? const <String, dynamic>{};
+      // Хизмат рўйхати `DemandModule` дан олинади — такрорланмасин.
+      final hasActive = DemandModule.values.any((m) {
+        final svc = data[m.wire];
+        return svc is Map && svc['active'] == true;
+      });
+      if (mounted) setState(() => _isProvider = hasActive);
     } catch (_) {
       // Текширув йиқилса таклифчи бўлими кўрсатилмайди — харидор
       // бўлими барибир ишлайди, экран бўш қолмайди.

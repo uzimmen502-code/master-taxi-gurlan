@@ -9,6 +9,7 @@ import '../../../../models/intercity_pickup_route.dart';
 import '../../../../repositories/intercity_bookings_repository.dart';
 import '../../../../repositories/intercity_rides_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
+import '../../../../repositories/taxi_billing_repository.dart';
 import '../../../../services/intercity_pickup_route_service.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../services/trip_change_settlement.dart';
@@ -168,6 +169,28 @@ class IntercityDriverPanelController extends ChangeNotifier {
 
   /// Рейсни тўлиқ тугатиш — актив бронлар бекор, қидирувдан чиқади.
   Future<void> endTripListing() async {
+    // D-TAXI-15/16: billing рейси бор бўлса серверга айтилади. Сервер
+    // ўзи ҳал қилади — жўнашдан олдин бўлса `cancelled` + refund,
+    // жўнашдан анча кейин бўлса `completed` (refund йўқ). Ёлғон отмена
+    // кейинги рейс эълонида қайта баҳоланади. Хато бўлса ҳам рўйхатни
+    // ёпиш давом этади — пул масаласи сервер томонида idempotent.
+    final billingTripId = (tripData?['billingTripId'] as String?)?.trim();
+    if (billingTripId != null && billingTripId.isNotEmpty) {
+      final hadBooking = confirmedBookings.isNotEmpty;
+      Position? pos;
+      try {
+        pos = await Geolocator.getLastKnownPosition();
+      } catch (_) {}
+      try {
+        await TaxiBillingRepository().cancel(
+          tripId: billingTripId,
+          hadAvaBooking: hadBooking,
+          driverLat: pos?.latitude,
+          driverLng: pos?.longitude,
+        );
+      } catch (_) {}
+    }
+
     await _bookingsRepo.cancelActiveBookingsForDriver(
       driverId,
       reason: 'Ҳайдовчи рейсни бекор қилди',
@@ -185,6 +208,36 @@ class IntercityDriverPanelController extends ChangeNotifier {
       {
         'isActive': false,
         'isOnPanel': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  /// D-TAXI-CANCEL-3 — рейсни КЕЙИНГА СУРИШ: бекор ЭМАС. `tripId` ва
+  /// комиссия сақланади, фақат сана/вақт ўзгаради (сервер шуни
+  /// кафолатлайди). Эълон (`intercity_drivers`) ҳам янги санага ўтади.
+  ///
+  /// `billingTripId` бўлмаса (эски эълон) фақат эълон санаси ўзгаради.
+  Future<void> rescheduleTrip({
+    required DateTime departureAt,
+    required String scheduleDate,
+    required String startTime,
+  }) async {
+    final billingTripId = (tripData?['billingTripId'] as String?)?.trim();
+    if (billingTripId != null && billingTripId.isNotEmpty) {
+      await TaxiBillingRepository().reschedule(
+        tripId: billingTripId,
+        departureAt: departureAt,
+        scheduleDate: scheduleDate,
+        startTime: startTime,
+      );
+    }
+    final hour = int.tryParse(startTime.split(':').first) ?? 8;
+    await _db.collection('intercity_drivers').doc(driverId).set(
+      {
+        'scheduleDate': scheduleDate,
+        'hour': hour,
         'updatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),

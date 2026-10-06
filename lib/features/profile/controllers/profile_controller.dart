@@ -20,6 +20,7 @@ import '../../../repositories/marshrut_driver_repository.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../repositories/trips_repository.dart';
 import '../../../repositories/couriers_repository.dart';
+import '../../../repositories/provider_presence_repository.dart';
 import '../../../repositories/device_binding_repository.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/device_fingerprint_service.dart';
@@ -801,6 +802,13 @@ class ProfileController extends ChangeNotifier {
     if (role == 'courier' && userId.isNotEmpty) {
       try {
         await CouriersRepository().goOffline(userId);
+      } catch (_) {}
+      // 13.6.3 — ўтиш даври: янги ядро `provider_presence`ни ўқийди,
+      // шунинг учун чиқишда у ҳам offline қилинади. Акс ҳолда одам
+      // тизимдан чиққандан кейин ҳам 2 дақиқа (sweep қадами) «онлайн»
+      // бўлиб турарди ва унга сўров келарди.
+      try {
+        await ProviderPresenceRepository().goOffline(userId);
       } catch (_) {}
     }
     await FirebaseAuth.instance.signOut();

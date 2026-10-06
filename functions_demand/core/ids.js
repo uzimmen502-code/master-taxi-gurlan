@@ -110,16 +110,17 @@ function pushLogKey(demandId, providerId) {
   return matchKey(demandId, providerId);
 }
 
-/** `provider_capabilities/{uid}_{module}` kaliti. */
-function capabilityKey(uid, module) {
-  const id = requireCanonicalId(uid, 'uid');
-  if (!isSafeForCompositeKey(module)) {
-    const err = new Error(`module composite kalit uchun xavfsiz emas: «${module}»`);
-    err.code = 'invalid-argument';
-    throw err;
-  }
-  return `${id}_${module}`;
-}
+/**
+ * `capabilityKey` OLIB TASHLANDI (D-12…D-16, 2026-10-06).
+ *
+ * Avval `provider_capabilities` kaliti `{uid}_{module}` edi. Ega
+ * qarori bo'yicha endi BITTA uid = BITTA hujjat, xizmatlar ichida —
+ * ya'ni kalit shunchaki kanon uid (`toCanonicalId`).
+ *
+ * Funksiya qayta qo'shilmasin: eski shaklda kalit yasagan kod yangi
+ * qoida (`provider_capabilities/{uid}` + `isOwner`) tomonidan rad
+ * etiladi va buni topish qiyin bo'ladi.
+ */
 
 /** `module_config/{module}_{regionId}` va `module_tariffs/{module}_{regionId}` kaliti. */
 function moduleRegionKey(module, regionId) {
@@ -158,7 +159,6 @@ module.exports = {
   isSafeForCompositeKey,
   matchKey,
   pushLogKey,
-  capabilityKey,
   moduleRegionKey,
   callerIdFrom,
 };

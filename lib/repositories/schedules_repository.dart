@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/service_config_holder.dart';
 import '../core/utils/formatters.dart';
+import 'driver_repository.dart';
 import 'intercity_bookings_repository.dart';
 import '../models/schedule.dart';
 import '../utils/intercity_places.dart';
@@ -241,6 +242,11 @@ class SchedulesRepository {
     String? startTime,
     String? endTime,
     int? price,
+    /// Taxi billing (D-TAXI-13): `publishTaxiTrip` берган `taxi_trips` id.
+    /// Эълон фақат тўловдан КЕЙИН рўйхатга тушади — id шу ерда
+    /// `intercity_drivers.billingTripId` га ёзилади, бекор/тугатишда
+    /// шу id билан сервер чақирилади.
+    String? billingTripId,
   }) async {
     if (taxiType == 'marshrut') {
       throw UnsupportedError(
@@ -258,9 +264,13 @@ class SchedulesRepository {
     final resolvedPlate = driverPlate.trim().isNotEmpty
         ? driverPlate.trim()
         : ((driverData['plate'] ?? '') as String).trim();
-    if (!_isApprovedForTaxi(driverData, taxiType)) {
+    // R-7: ҳуқуқ — capability (`starter`/`verified`…), `drivers.approved` эмас.
+    // Қоида ҳам шуни текширади; бу ерда фақат тушунарли хабар учун.
+    final allowed = await DriverRepository(db: _db)
+        .isApprovedForTaxi(uid: canonId, taxiType: taxiType);
+    if (!allowed) {
       throw const DriverScheduleApprovalException(
-        'Ҳайдовчи сифатида ишга чиқиш учун Admin тасдиғи керак',
+        'Такси хизмати ҳали ёқилмаган ёки янги рейс учун текширув керак',
       );
     }
 
@@ -388,6 +398,8 @@ class SchedulesRepository {
             'scheduleDate': date,
             'isActive': true,
             'isOnPanel': true,
+            if (billingTripId != null && billingTripId.isNotEmpty)
+              'billingTripId': billingTripId,
             'rating': 4.5,
             'from': fromNormalized,
             'to': toNormalized,
@@ -405,21 +417,5 @@ class SchedulesRepository {
 
     await batch.commit();
     return schedRef.id;
-  }
-
-  bool _isApprovedForTaxi(Map<String, dynamic> data, String taxiType) {
-    final approved = data['approved'] == true ||
-        (data['approvalStatus'] as String?) == 'approved';
-    if (!approved) return false;
-
-    final rawTaxiTypes = data['taxiTypes'];
-    if (rawTaxiTypes is List && rawTaxiTypes.contains(taxiType)) return true;
-
-    final primaryTaxiType = (data['taxiType'] ?? '') as String;
-    if (primaryTaxiType == taxiType || primaryTaxiType == 'both') return true;
-    if (taxiType == 'alone' && primaryTaxiType == 'local') return true;
-    if (taxiType == 'local' && primaryTaxiType == 'alone') return true;
-    if (taxiType == 'intercity' && primaryTaxiType == 'intercity') return true;
-    return false;
   }
 }

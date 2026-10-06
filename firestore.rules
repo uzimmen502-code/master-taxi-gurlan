@@ -25,13 +25,39 @@ service cloud.firestore {
     // Cloud Function (Admin SDK) томонидан ёзилади: клиент ўзига
     // текинга пакет ёзиб қўймасин ёки бошқанинг эълонини ўзиники
     // қилиб олмасин.
+    // `accountId` — барқарор провайдер кимлиги (T-1a, D-TAXI-2): фақат
+    // сервер беради (`requestCapability` → `ensureAccountId`), клиент
+    // ҳеч қачон ўзгартирмайди — акс ҳолда бошқанинг starter даврини
+    // ўзига олиш мумкин бўларди.
     function walletFieldsUntouched() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny([
             'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
             'realtyUnlocksLeft', 'realtyOwnerKey',
-            'realtyPro', 'realtyTeamOwner'
+            'realtyPro', 'realtyTeamOwner', 'accountId'
           ]);
+    }
+
+    // Токен телефони → `users` ҳужжати → `accountId`. 9/12 хонали икки
+    // калит шакли ҳам қаралади (`isAdmin` билан бир хил наqш).
+    function callerAccountId() {
+      let uid = userDocIdFromPhoneToken();
+      return uid == '' ? ''
+          : exists(/databases/$(database)/documents/users/$(uid))
+            ? string(get(/databases/$(database)/documents/users/$(uid)).data.get('accountId', ''))
+          : (uid.size() == 12 && uid[0:3] == '998'
+              && exists(/databases/$(database)/documents/users/$(uid[3:12])))
+            ? string(get(/databases/$(database)/documents/users/$(uid[3:12])).data.get('accountId', ''))
+          : (uid.size() == 9
+              && exists(/databases/$(database)/documents/users/$('998' + uid)))
+            ? string(get(/databases/$(database)/documents/users/$('998' + uid)).data.get('accountId', ''))
+          : '';
+    }
+
+    // `provider_capabilities/{accountId}` эгасими.
+    function isCapabilityOwner(accountId) {
+      let mine = callerAccountId();
+      return mine != '' && mine == accountId;
     }
 
     // Firebase Phone Auth
@@ -91,12 +117,16 @@ service cloud.firestore {
           );
     }
 
+    // D-SERVICE-4 / D-CLEAN-1: `courier` ва `seller` бу ерда ЙЎҚ — улар
+    // хизмат capability'лари (`provider_capabilities`), platform-level
+    // роль эмас. Аввал рўйхатда эди ва ўзига ўзи бериладиган `role`
+    // орқали staff ҳуқуқи олинарди.
     function isStaff() {
       let uid = userDocIdFromPhoneToken();
       return uid != ''
           && exists(/databases/$(database)/documents/users/$(uid))
           && get(/databases/$(database)/documents/users/$(uid)).data.role
-              in ['admin', 'superadmin', 'dispatcher', 'courier', 'seller'];
+              in ['admin', 'superadmin', 'dispatcher', 'staff'];
     }
 
     // Settlement Ledger / Finance Center o'qish huquqi (SoD).
@@ -146,22 +176,9 @@ service cloud.firestore {
     }
 
     // Profil PIN — foydalanuvchi ↔ kuryer (faqat o'z hujjati).
-    function usersCourierRolePromotion(userId) {
-      return isOwner(userId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['role', 'updatedAt'])
-          && request.resource.data.role == 'courier'
-          && (!('role' in resource.data)
-              || resource.data.role in ['user', '']);
-    }
-
-    function usersLeaveCourierDemotion(userId) {
-      return isOwner(userId)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['role', 'updatedAt'])
-          && request.resource.data.role == 'user'
-          && resource.data.role == 'courier';
-    }
+    // `usersCourierRolePromotion` / `usersLeaveCourierDemotion` O'CHIRILDI
+    // (D-SERVICE-4, D-CLEAN-1) — `role: 'courier'` endi ma'noga ega emas,
+    // kuryerlik huquqi `provider_capabilities.courier` da.
 
     function usersCarInfoPatch() {
       return request.resource.data.diff(resource.data)
@@ -350,36 +367,62 @@ service cloud.firestore {
     // `intercityCreateBooking` / `intercityCancelBooking` /
     // `intercityCompleteBooking` callable'lari va `expirePendingTrips`.
 
+    // ══════════════════════════════════════
+    // TAKSI HUQUQI — CAPABILITY (R-7, D-TAXI-1…5, D-CLEAN-1, 2026-10-06)
+    // ══════════════════════════════════════
+    // Avval `drivers/{id}.approved` (admin tasdig'i) edi. Endi huquq
+    // `provider_capabilities/{accountId}.status.taxi` da:
+    //   starter | verification_required | verified  → ISHLAYDI (operate)
+    //   starter | verified                          → YANGI PULLIK E'LON (publish)
+    // `drivers/{id}` — faqat PROFIL (ism, mashina, raqam), huquq emas.
+    //
+    // Taksi turi — haydovchining o'z deklaratsiyasi:
+    // `provider_capabilities.taxi.taxiTypes` (klient yozadi; ruxsat
+    // emas, filtr). `alone` ↔ `local` — eski sinonim, saqlanadi.
+    //
+    // Narx: har tekshiruvda 2 ta hujjat (users + capability); rules bitta
+    // baholashda bir hujjatni qayta o'qishni sanamaydi.
+    function accountIdOfUid(uid) {
+      return uid == '' ? ''
+          : exists(/databases/$(database)/documents/users/$(uid))
+            ? string(get(/databases/$(database)/documents/users/$(uid)).data.get('accountId', ''))
+          : (uid.size() == 12 && uid[0:3] == '998'
+              && exists(/databases/$(database)/documents/users/$(uid[3:12])))
+            ? string(get(/databases/$(database)/documents/users/$(uid[3:12])).data.get('accountId', ''))
+          : (uid.size() == 9
+              && exists(/databases/$(database)/documents/users/$('998' + uid)))
+            ? string(get(/databases/$(database)/documents/users/$('998' + uid)).data.get('accountId', ''))
+          : '';
+    }
+
+    function taxiCapOf(uid) {
+      let acc = accountIdOfUid(uid);
+      return acc != '' && exists(/databases/$(database)/documents/provider_capabilities/$(acc))
+          ? get(/databases/$(database)/documents/provider_capabilities/$(acc)).data
+          : {};
+    }
+
+    function taxiStatusOf(uid) {
+      return string(taxiCapOf(uid).get('status', {}).get('taxi', ''));
+    }
+
+    function taxiTypeDeclared(uid, taxiType) {
+      let types = taxiCapOf(uid).get('taxi', {}).get('taxiTypes', []);
+      return taxiType in types
+          || (taxiType == 'alone' && 'local' in types)
+          || (taxiType == 'local' && 'alone' in types);
+    }
+
+    // OPERATE: mavjud ishni davom ettirish (D-TAXI-5: verification_required ham).
     function approvedDriverForTaxi(driverId, taxiType) {
-      return exists(/databases/$(database)/documents/drivers/$(driverId))
-          && (
-            get(/databases/$(database)/documents/drivers/$(driverId)).data.approved == true
-            || get(/databases/$(database)/documents/drivers/$(driverId)).data.approvalStatus == 'approved'
-          )
-          && (
-            (
-              'taxiTypes' in get(/databases/$(database)/documents/drivers/$(driverId)).data
-              && taxiType in get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiTypes
-            )
-            || get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == taxiType
-            || get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'both'
-            || (
-              taxiType == 'alone'
-              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'local'
-            )
-            || (
-              taxiType == 'local'
-              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'alone'
-            )
-            || (
-              taxiType == 'local'
-              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'local'
-            )
-            || (
-              taxiType == 'intercity'
-              && get(/databases/$(database)/documents/drivers/$(driverId)).data.taxiType == 'intercity'
-            )
-          );
+      return taxiStatusOf(driverId) in ['starter', 'verification_required', 'verified']
+          && taxiTypeDeclared(driverId, taxiType);
+    }
+
+    // PUBLISH: yangi pullik e'lon — verification_required YO'Q (D-TAXI-5).
+    function taxiCanPublish(driverId, taxiType) {
+      return taxiStatusOf(driverId) in ['starter', 'verified']
+          && taxiTypeDeclared(driverId, taxiType);
     }
 
     function driverWorkPatchOnly(driverId) {
@@ -423,19 +466,49 @@ service cloud.firestore {
           );
     }
 
-    // Admin web PIN/session билан ишлаётгани учун request.auth йўқ.
-    // Ҳайдовчи аризасини тасдиқлашда drivers/{phone} ҳужжатига фақат
-    // approval/profile майдонларини ёзишга рухсат берамиз.
-    function driverApprovalPatchOnly() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly([
-                'name', 'phone', 'car', 'plate',
-                'taxiType', 'taxiTypes',
-                'approved', 'approvalStatus', 'approvedAt', 'approvedBy',
-                'updatedAt'
-              ])
-          && request.resource.data.approved == true
-          && request.resource.data.approvalStatus == 'approved';
+    // 13.6.4 (0b) — `driverApprovalPatchOnly()` ОЛИБ ТАШЛАНДИ.
+    //
+    // У нима қиларди: ўзгарган майдонлар рўйхатдан чиқмаса ва натижада
+    // `approved: true` бўлса — рухсат. ИЧИДА auth текшируви ЙЎҚ эди,
+    // яъни ИСТАЛГАН киши (аутентификациясиз ҳам) `drivers/{ҳар қандай
+    // id}` ҳужжатини `approved: true` қилиб қўйиши мумкин эди. Шундан
+    // кейин `approvedDriverForTaxi()` (353-қатор) ўтади ва навбат,
+    // жадвал, сафар оқимлари очилади.
+    //
+    // Нега олиб ташлаш ХАВФСИЗ — учта далил:
+    //   1. Изоҳи эскирган эди: «Admin web PIN/session билан ишлаётгани
+    //      учун request.auth йўқ» деб ёзилган, лекин админ панели
+    //      аллақачон custom token билан Firebase Auth'га киради ва
+    //      `phone_number` доимий claim сифатида қўйилади
+    //      (`functions/index.js` → `adminWebSignIn`; ўша кодда айнан
+    //      «isOwner()/isAdmin() token.phone_number'га таянади» деб
+    //      ёзилган).
+    //   2. Тасдиқлашни СЕРВЕР қилади: `functions/index.js:8431` да
+    //      `drivers/{phone}` ҳужжатига `approved: true` Admin SDK билан
+    //      ёзилади — Admin SDK қоидалардан ўтмайди.
+    //   3. Иловада `approved`/`approvalStatus` ни ЁЗАДИГАН бирорта жой
+    //      йўқ (lib бўйича текширилди — фақат ўқиш).
+    //
+    // Қайта қўшилмасин: бу функция ҳуқуқни клиентга беради (18 ва
+    // 19-қоида). Тасдиқлаш фақат CF ёки админ орқали.
+    // Тест: functions/test/self_approval_rules.test.js
+
+    /**
+     * Тасдиқлаш майдонларига ТЕГИЛДИМИ.
+     *
+     * Биринчи уриниш тестда қулади: `create`да фақат `phone`/`name`
+     * борлиги текширилганди, яъни курьер ўз ҳужжатини ДАРҲОЛ
+     * `approved: true` билан ЯРАТИБ қўя оларди. `update`да эса
+     * `isOwner(driverId)` чекланмаган эди — эгаси ўзини кейин ҳам
+     * тасдиқлаши мумкин эди.
+     *
+     * Иловада бу майдонларни ёзадиган жой ЙЎҚ (lib бўйича текширилди),
+     * серверда эса Admin SDK ёзади — шунинг учун клиентга умуман
+     * керак эмас.
+     */
+    function driverApprovalFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['approved', 'approvalStatus', 'approvedAt', 'approvedBy']);
     }
 
     function scheduleLifecyclePatchOnly() {
@@ -681,7 +754,7 @@ service cloud.firestore {
           && !request.resource.data.keys().hasAny([
                'bonusBalance', 'balanceUpdatedAt', 'assistantPaidUntil',
                'realtyUnlocksLeft', 'realtyOwnerKey',
-               'realtyPro', 'realtyTeamOwner'
+               'realtyPro', 'realtyTeamOwner', 'accountId'
              ])
           && (!('role' in request.resource.data) || request.resource.data.role == 'user');
 
@@ -690,8 +763,10 @@ service cloud.firestore {
           && (
             usersWebLooseDriverPromotion()
             || usersLeaveDriverDemotion()
-            || usersCourierRolePromotion(userId)
-            || usersLeaveCourierDemotion(userId)
+            // `usersCourierRolePromotion`/`usersLeaveCourierDemotion` ОЛИБ
+            // ТАШЛАНДИ (D-SERVICE-4, D-CLEAN-1): курьерлик — `role` эмас,
+            // `provider_capabilities.courier`. Ўзига `role: 'courier'`
+            // ёзиш 14 та callable'ни очарди (self_approval_rules.test.js).
             || (isOwner(userId) && usersCarInfoPatch())
             || (
               (notChanged('role') || isAdmin())
@@ -713,7 +788,13 @@ service cloud.firestore {
       }
 
       match /marshrut_state/{docId} {
-        allow read: if true;
+        // Эгаликка боғлаб бўлмайди: ҲАЙДОВЧИ ЙЎЛОВЧИнинг ҳолатини
+        // синхронлайди (пастдаги `marshrutStateDriverSyncOk` ва
+        // `rides_repository.dart:1274`). Ўқиш ҳам шу сабабли кесишган.
+        // Шунинг учун фақат `isAuth()`.
+        //
+        // Тест: functions/test/marshrut_misc_rules.test.js
+        allow read: if isAuth();
         allow create: if (isOwner(userId) && marshrutStateCreateOk())
             || marshrutStateDriverSyncOk(userId);
         allow update: if (isOwner(userId) && marshrutStatePatchOnly())
@@ -766,19 +847,40 @@ service cloud.firestore {
 
     // USERS / driverProfiles — маршрут рўйхатдан ўтиш (подколлекция)
     match /users/{userId}/driverProfiles/{profileId} {
-      allow read: if true;
+      // Фақат эгаси ўқийди: `getProfile(uid)` доим `prefs['user_phone']`
+      // билан чақирилади (`push_navigation.dart:186, :338`). Йўловчига
+      // кўринадиган ҳайдовчи маълумоти `drivers/{id}` да, бу ерда эмас.
+      //
+      // Тест: functions/test/marshrut_misc_rules.test.js
+      allow read: if isOwner(userId) || isAdmin();
       allow create, update: if isOwner(userId) || isAdmin()
           || marshrutDriverProfileGuestWriteOk(userId, profileId);
       allow delete: if false;
     }
 
-    // Birth date ўзгартириш сўровлари. User create қилади; тасдиқлашни кейин
-    // admin/Cloud Function орқали қаттиқлаштирамиз.
+    // Birth date ўзгартириш сўровлари.
+    //
+    // Аввал `create`, `read` ва `update` — учаласи ҳам `if true` эди, яъни
+    // ҳар ким барча сўровларни ўқий, бошқа фойдаланувчи номидан сўров
+    // ярата ва сўровни ўзи «approved» деб белгилай оларди.
+    //
+    // Эски изоҳ «Admin web hozir PIN session bilan ishlaydi; Phone Auth
+    // admin bo'lgach `isAdmin()`ga qaytaramiz» деган эди. Админ панел
+    // аллақачон Phone Auth'да (`admin_auth_service.dart:114–122`), демак
+    // шарт бажарилган ва изоҳ эскирган.
+    //
+    // Оқим (`lib/repositories/user_repository.dart`): :289 фойдаланувчи
+    // ўзи учун яратади · :310 админ `status == 'pending'` кузатади ·
+    // :325 админ тасдиқлайди (транзакция) · :348 админ рад этади
+    // (`set(merge)`). Тасдиқлаш клиентдан бажарилади, CF эмас.
+    //
+    // Тест: functions/test/birthdate_requests_rules.test.js
     match /birthdate_change_requests/{id} {
-      allow create: if true;
-      // Admin web hozir PIN session bilan ishlaydi; Phone Auth admin bo'lgach
-      // `isAdmin()`ga qaytaramiz.
-      allow read, update: if true;
+      allow create: if isAdmin()
+          || (isOwner(request.resource.data.userId)
+              && request.resource.data.status == 'pending');
+      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -793,7 +895,24 @@ service cloud.firestore {
     }
 
     match /device_bindings/{hash} {
-      allow read: if true;
+      // Аввал `read: if true` эди — яъни 557 та қурилма ↔ телефон
+      // боғланишининг бутун рўйхатини ҳар ким юклаб ола оларди.
+      //
+      // `get` очиқ қолади: илова қурилма боғланганми йўқми деб ЎЗ hash'и
+      // бўйича битта ҳужжатни ўқийди, ва буни AUTH'ДАН ОЛДИН қилади
+      // (`device_binding_repository.dart:90, :105` — телефон тасдиқлашдан
+      // олдинги қадам). `isAuth()` талаб қилинса onboarding бузилади.
+      //
+      // `list` эса фақат админга — энумерация ёпилади
+      // (`users_devices_screen.dart:405`).
+      //
+      // Қоладиган хавф: кимдир бирор қурилманинг hash'ини билса, ўша
+      // битта боғланишни ўқийди. Hash узун ва таxмин билан топилмайди,
+      // ва қурилманинг ўзи уни калит сифатида ишлатади.
+      //
+      // Тест: functions/test/device_bindings_rules.test.js
+      allow get: if true;
+      allow list: if isAdmin();
       allow create, update, delete: if false;
     }
 
@@ -825,7 +944,10 @@ service cloud.firestore {
     }
 
     match /device_bindings_legacy/{legacyId} {
-      allow read: if true;
+      // Клиент буни УМУМАН ўқимайди — фақат бир марталик миграция CF
+      // тегади (`functions/index.js:6475, :6492`). Шунинг учун тўлиқ
+      // админгa ёпилди. Тест: functions/test/device_bindings_rules.test.js
+      allow read: if isAdmin();
       allow create, update, delete: if false;
     }
 
@@ -871,19 +993,50 @@ service cloud.firestore {
     // DRIVERS — ҳайдовчилар
     // ══════════════════════════════════════
     match /drivers/{driverId} {
-      // Ўқиш — барча (фойдаланувчилар ҳайдовчиларни кўради)
-      allow read: if true;
+      // Аввал `read: if true` эди — яъни 16 ҳайдовчининг телефони ва
+      // жонли GPS'и очиқ рўйхат сифатида юклаб олинарди. `couriers` билан
+      // бир хил шакл, 5 баравар каттароқ.
+      //
+      // Йўловчи ўз ҳайдовчисини кўриши керак, лекин репо бўйича бу ДОИМ
+      // битта ҳужжат, ID бўйича: `local_taxi_active_trip_screen.dart:109`,
+      // `marshrut_taxi_screen.dart:217`. Рўйхатни эса фақат админ олади:
+      // `marshrut_admin_screen.dart:88`. Шунинг учун get/list ажратилди.
+      //
+      // Эслатма: `create` да ҳамон auth йўқ — у алоҳида ўрганилади,
+      // чунки update'даги уч ёрдамчи билан боғлиқ.
+      //
+      // Тест: functions/test/drivers_read_rules.test.js
+      allow get: if isAuth();
+      allow list: if isAdmin();
 
-      // Яратиш — телефон рақами бўлса
-      allow create: if request.resource.data.keys().hasAll(['phone', 'name']);
+      // Яратиш — 13.6.4 (0b): аввал AUTH УМУМАН ЙЎҚ эди, яъни
+      // аутентификациясиз ҳар ким исталган рақамга ҳайдовчи ҳужжати
+      // ясаши мумкин эди. Ҳужжатни асосан CF яратади
+      // (`index.js:8431`, Admin SDK — қоидалардан ўтмайди), шунинг
+      // учун клиентга фақат ЎЗ ҳужжати қолдирилади.
+      // `approved` ни ЯРАТИШ пайтида ҳам бериб бўлмайди: аввалги
+      // уриниш айнан шу жойда тешик қолдирган эди.
+      allow create: if (isOwner(driverId) || isAdmin())
+          && request.resource.data.keys().hasAll(['phone', 'name'])
+          && (
+            isAdmin()
+            || !request.resource.data.keys().hasAny([
+                 'approved', 'approvalStatus', 'approvedAt', 'approvedBy'
+               ])
+          );
 
       // Ўз маълумотларини ёки admin ўзгартира олади.
       // Phone Auth тўлиқ жорий қилинмагунча, тасдиқланган ҳайдовчига фақат
       // ишга чиқиш/онлайн ҳолати майдонларини ўзгартиришга рухсат.
-      allow update: if isOwner(driverId) || isAdmin()
+      //
+      // `driverApprovalPatchOnly()` ОЛИБ ТАШЛАНДИ — 429-қатордаги
+      // изоҳга қаранг. Қолган иккита ёрдамчи `approvedDriverForTaxi()`
+      // ни талаб қилади, яъни ҳужжат АЛЛАҚАЧОН тасдиқланган бўлиши
+      // керак — улар ҳуқуқ бермайди, фақат иш ҳолатини ўзгартиради.
+      allow update: if isAdmin()
+          || (isOwner(driverId) && driverApprovalFieldsUntouched())
           || driverWorkPatchOnly(driverId)
-          || marshrutDriverRegisterPatch(driverId)
-          || driverApprovalPatchOnly();
+          || marshrutDriverRegisterPatch(driverId);
 
       // Ўчириш — йўқ
       allow delete: if false;
@@ -1150,8 +1303,12 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /schedules/{scheduleId} {
       allow read: if true;
+      // R-7: yangi ish kuni = PUBLISH → `taxiCanPublish` (verification_required
+      // da yo'q). Egalik ham tekshiriladi — avval yo'q edi: tasdiqlangan
+      // haydovchi BOSHQA haydovchi nomidan jadval yaratishi mumkin edi.
       allow create: if request.resource.data.keys().hasAll(['driverId', 'taxiType', 'date', 'seats', 'isActive'])
-          && approvedDriverForTaxi(request.resource.data.driverId, request.resource.data.taxiType);
+          && (isOwner(request.resource.data.driverId) || isAdmin())
+          && taxiCanPublish(request.resource.data.driverId, request.resource.data.taxiType);
       allow update: if isAdmin() || isOwner(resource.data.driverId) || scheduleLifecyclePatchOnly();
       allow delete: if false;
     }
@@ -1224,28 +1381,47 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // SUPPORT CHAT
     // ══════════════════════════════════════
+    // chatId == userPhone digits.
+    //
+    // ИЛДИЗ САБАБ: аввал бу ерда `request.auth.uid == chatId` ёзилган эди.
+    // Лекин `chatId` — телефон рақами, `request.auth.uid` эса Phone Auth'да
+    // Firebase берган тасодифий сатр. Яъни шарт оддий фойдаланувчи учун
+    // ҳеч қачон бажарилмасди: у ўз чатининг ота ҳужжатини ўқий ҳам,
+    // ёза ҳам олмасди (`sendMessage` → PERMISSION_DENIED). Шу сабабли
+    // `messages` субколлекцияси бутунлай очиб қўйилган эди:
+    // `read: if true` ва `update: if true` — яъни 18 та шахсий ёрдам
+    // суҳбати ҳар кимга очиқ, ва ҳар ким исталган хабарни қайта ёза оларди.
+    //
+    // Тузатиш: `isOwner(chatId)` қўшилди. Эски `auth.uid == chatId` йўли
+    // САҚЛАНДИ — агар бирор клиент шу шаклда ишлаётган бўлса, бузилмасин
+    // (орқага мослик). Субколлекция ҳам шу эгаликка боғланди.
+    //
+    // Тест: functions/test/support_chat_rules.test.js
     match /support_chats/{chatId} {
-      // chatId == userPhone digits (uid format)
-      allow read: if request.auth != null
-          && (request.auth.uid == chatId || isAdmin());
-      allow create: if request.auth != null
-          && request.auth.uid == chatId;
-      allow update: if request.auth != null
-          && (request.auth.uid == chatId || isAdmin());
+      allow read: if isAuth()
+          && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
+      allow create: if isAuth()
+          && (isOwner(chatId) || request.auth.uid == chatId);
+      allow update: if isAuth()
+          && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
       allow delete: if false;
 
       match /messages/{messageId} {
-        allow read: if true;
+        allow read: if isAuth()
+            && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
         // Клиент fromAdmin: true ёза олмайди (faqat Admin SDK / CF).
         // fromAdmin майдони йўқ ёки false — рухсат (веб admin.html ҳам шу форматда ёзади).
-        allow create: if request.resource.data.text is string
+        allow create: if isAuth()
+            && (isOwner(chatId) || request.auth.uid == chatId || isAdmin())
+            && request.resource.data.text is string
             && request.resource.data.text.size() > 0
             && request.resource.data.text.size() <= 4000
             && (
               !request.resource.data.keys().hasAny(['fromAdmin'])
               || request.resource.data.fromAdmin == false
             );
-        allow update: if true;
+        allow update: if isAuth()
+            && (isOwner(chatId) || request.auth.uid == chatId || isAdmin());
         allow delete: if false;
       }
     }
@@ -1301,8 +1477,21 @@ service cloud.firestore {
     // NOTIFICATIONS — FCM орқали хабар (илова listener + update sent)
     // ══════════════════════════════════════
     match /intercity_booking_locks/{lockId} {
-      allow read: if true;
-      allow create, update: if true;
+      // Аввал `read: if true` ва `create, update: if true` эди — яъни ҳар
+      // ким янги қулф яратиб ҳайдовчининг ўриндиқларини банд қила оларди
+      // ёки бошқа йўловчининг қулфини ўзгартира оларди.
+      //
+      // Репо бўйича текширилди: Flutter иловаси бу коллекцияга УМУМАН
+      // тегмайди (`lib/` да битта ҳам ҳавола йўқ). Ёзувчи — Cloud
+      // Functions (`functions/index.js:9920, :10120`), Admin SDK орқали,
+      // яъни қоидалардан ўтмайди.
+      //
+      // `delete` ўзгартирилмади — у аллақачон auth ва эгалик билан
+      // ҳимояланган.
+      //
+      // Тест: functions/test/booking_locks_rules.test.js
+      allow read: if isAdmin();
+      allow create, update: if false;
       // cancelBooking — mijoz yoki haydovchi o'z qulfini ochadi (delete CF/admin);
       // mijoz cancel: bookingId tozalash (update if true) — delete auth talab qiladi
       allow delete: if isAuth() && (
@@ -1330,12 +1519,32 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if true;
+      // Аввал `read: if true` ва `create` да auth умуман йўқ эди.
+      // Иккинчиси жиддийроқ: `onNotificationCreate` бу ёзувни кўриб
+      // ҳақиқий push юборади, яъни ташқаридан ҳар ким исталган рақамга
+      // ихтиёрий матнли push жўната оларди (спам/фишинг йўли).
+      //
+      // `create` бутунлай ёпилмайди: клиентнинг БОШҚА фойдаланувчига
+      // хабар ёзиши — маҳсулот оқими (`NotificationDelivery.write()`,
+      // lib/services/notification_delivery.dart:181). Шунинг учун
+      // минимал қаттиқлаштириш: `isAuth()`. Тезлик чегараси қоидада
+      // ифодаланмайди — у CF вазифаси.
+      //
+      // Ўқиш/янгилаш эгасига боғланади. Клиент айнан шундай сўрайди:
+      //   fcm_service.dart:92 · driver_force_leave_service.dart:82
+      //   where targetPhone == alias && sent == false
+      // `phoneAliases()` 9 ва 12 хонали шаклни беради, `isOwner()`
+      // иккаласини ҳам қабул қилади.
+      //
+      // Тест: functions/test/notifications_rules.test.js
+      allow read: if isAdmin() || isOwner(resource.data.targetPhone);
       // Яратишда: барча майдонлар бўлсин + sent мажбурий false
-      allow create: if request.resource.data.keys().hasAll(['targetPhone', 'title', 'body', 'sent'])
+      allow create: if isAuth()
+          && request.resource.data.keys().hasAll(['targetPhone', 'title', 'body', 'sent'])
           && request.resource.data.sent == false;
-      // Янгилашда: фақат sent maydonini true qilish mumkin (FCMService tomonidan)
-      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sent'])
+      // Янгилашда: фақат qabul qiluvchi (yoki admin) `sent`ни true qiladi.
+      allow update: if (isAdmin() || isOwner(resource.data.targetPhone))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sent'])
           && request.resource.data.sent == true;
       allow delete: if false;
     }
@@ -1551,7 +1760,26 @@ service cloud.firestore {
     // DRIVER_REQUESTS / QUEUE — админ ва ҳайдовчи панели
     // ══════════════════════════════════════
     match /driver_requests/{id} {
-      allow read: if isAdmin() || true;
+      // 13.6.4 (0c) — аввал `isAdmin() || true` эди, яъни АМАЛДА
+      // ҲАММАГА ОЧИҚ: ҳар ким барча аризачиларнинг исми, телефони ва
+      // такси турини рўйхат сифатида юклаб олиши мумкин эди (40-қоида).
+      //
+      // `get` очиқ қолдирилади: аризачи ўз ҳолатини Phone Auth'дан
+      // ОЛДИН ҳам текширади (`driver_repository.dart:227`,
+      // `marshrut_driver_repository.dart:176`) — иккаласи ҳам ID
+      // бўйича, `where` сўрови эмас. Рақамни билган одам фақат ўша
+      // битта ҳужжатни кўради, рўйхатни эса — йўқ.
+      //
+      // `list` фақат админда: рўйхат сўровлари фақат админ
+      // экранларида (`admin_shell.dart:955`,
+      // `driver_applications_screen.dart:172`) ва аналитикада.
+      // `isStaff()` ишлатилмайди — унинг рўйхатида `courier` ва
+      // `seller` бор, улар эса ҳозир ўзига ўзи берилиши мумкин
+      // (D-12 дан кейин бу ҳам тозаланади).
+      //
+      // Тест: functions/test/self_approval_rules.test.js
+      allow get: if true;
+      allow list: if isAdmin();
       allow create: if isAdmin()
           || (
             isAuth()
@@ -1568,11 +1796,26 @@ service cloud.firestore {
     }
 
     match /queue/{driverId} {
-      allow read: if true;
-      allow create: if isOwner(driverId) || isAdmin()
+      // Эгаликка боғлаб бўлмайди: ЙЎЛОВЧИ рўйхат сўрайди
+      // (`marshrut_search_controller.dart:366` — `where taxiType == 'marshrut'`)
+      // ва бошқа ҳайдовчининг ҳужжатини ўқийди
+      // (`rides_repository.dart:580`). Шунинг учун фақат `isAuth()` —
+      // авторизациясиз скрейпинг ёпилади.
+      //
+      // ⚠️ ОЧИҚ ҚОЛДИ: ҳужжатда `driverPhone` бор ва у ҳар бир йўловчига
+      // кўринади. Буни қоида ҳал қилмайди — маълумот модели ўзгариши
+      // керак (телефон алоҳида, фақат фаол сафарда очиладиган жойга).
+      //
+      // Тест: functions/test/marshrut_misc_rules.test.js
+      allow read: if isAuth();
+      // R-7: navbatga kirish = PUBLISH (`taxiCanPublish`). `isOwner` yo'li
+      // ham capability talab qiladi — aks holda huquqsiz odam o'z nomiga
+      // navbat hujjati yaratib qo'yardi.
+      allow create: if isAdmin()
           || (
-            request.resource.data.driverId == driverId
-            && approvedDriverForTaxi(driverId, request.resource.data.taxiType)
+            isOwner(driverId)
+            && request.resource.data.driverId == driverId
+            && taxiCanPublish(driverId, request.resource.data.taxiType)
           );
       allow update: if isOwner(driverId) || isAdmin()
           || queueGuestDispatchPatchOnly()
@@ -1586,6 +1829,15 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // INTERCITY / LOCAL TAXI / JOB
     // ══════════════════════════════════════
+    // E'lon yoqilayotgan bo'lsa (`isActive: true`) `billingTripId` shart.
+    function intercityPublishGateOk() {
+      return request.resource.data.get('isActive', false) != true
+          || (
+            request.resource.data.get('billingTripId', '') is string
+            && request.resource.data.get('billingTripId', '') != ''
+          );
+    }
+
     match /intercity_drivers/{id} {
       allow read: if true;
       // Haydovchi profili — admin / Phone Auth owner; anonim: schedule sync yoki seat patch
@@ -1605,9 +1857,16 @@ service cloud.firestore {
       // Faqat kino (entertainment) yo'llari qoldi: ular admin-web PIN
       // sirtidan keladi va `entertainmentAllowed`/`entertainmentIds` dan
       // boshqasiga tegmaydi.
-      allow create: if isAdmin() || isOwner(id)
+      // D-TAXI-13 + D-CLEAN-1 (R-1 hard gate): egasi e'lonni (`isActive:
+      // true`) FAQAT server bergan `billingTripId` bilan yoqadi — ya'ni
+      // komissiya to'langan/`published` reys. Eski client-side publish
+      // flow saqlanmaydi (ega qarori). `isActive: false` (yopish) va
+      // boshqa maydonlar — erkin. Admin SDK (CF) qoidadan o'tmaydi.
+      allow create: if isAdmin()
+          || (isOwner(id) && intercityPublishGateOk())
           || intercityDriverEntertainmentAllowedCreate();
-      allow update: if isAdmin() || isOwner(id)
+      allow update: if isAdmin()
+          || (isOwner(id) && intercityPublishGateOk())
           || intercityDriverEntertainmentAllowedPatch()
           || intercityDriverEntertainmentPatch();
       allow delete: if false;
@@ -1699,7 +1958,13 @@ service cloud.firestore {
     }
 
     match /marshrut_dispatch_events/{id} {
-      allow read: if true;
+      // Клиент бу коллекцияни фақат ЯРАТАДИ (`rides_repository.dart:619`).
+      // Ягона ўқиш йўли — `watchRecentMarshrutDispatchEvents()` (:175),
+      // лекин уни ҳеч ким чақирмайди: ўлик код. Шунинг учун ўқиш
+      // админгa ёпилди. `create` қоидасига тегилмади.
+      //
+      // Тест: functions/test/marshrut_misc_rules.test.js
+      allow read: if isAdmin();
       allow create: if marshrutDispatchEventCreateOk();
       allow update, delete: if false;
     }
@@ -2448,20 +2713,83 @@ service cloud.firestore {
     }
 
     match /delivery_routes/{id} {
-      allow read: if true;
+      // S1: аввал `update` шарти `request.resource.data.keys().hasAny([...])`
+      // эди. `request.resource.data` — ёзишдан КЕЙИНГИ тўлиқ ҳужжат, рейсда
+      // бу майдонлар доим мавжуд, яъни шарт ҲАР ДОИМ `true` бўларди.
+      // Амалда тизимга кирмаган одам ҳам исталган рейсни ўзгартира оларди:
+      // тугатилган деб белгилаш, бошқа курьерга ўтказиш, ҳатто `orders`ни
+      // алмаштириш. Тўғри шакл — `hasAny` эмас, ўзгарган майдонлар бўйича
+      // `diff(resource.data).affectedKeys().hasOnly([...])`.
+      //
+      // Курьер оқими (`delivery_routes_repository.dart`):
+      //   startRoute ready→active · advanceIndex · completeRoute
+      // Курьер эгасиз рейсни эгалламайди — `courier_controller.dart:168`
+      // аввал `getActiveForCourier(uid)` чақиради, яъни рейс унга
+      // аллақачон тайинланган бўлади.
+      //
+      // Тест: functions/test/delivery_routes_rules.test.js
+      allow read: if isAdmin() || isOwner(resource.data.get('courierId', ''));
       // Reys yaratish — admin / dispatcher
       allow create: if isAdmin();
-      // Reys yangilash — admin yoki kuryer (status, index, vaqt, courierId)
       allow update: if isAdmin()
-          // Kuryer startRoute / advanceIndex / completeRoute uchun
-          || request.resource.data.keys().hasAny(['status', 'currentIndex', 'startedAt', 'completedAt', 'courierId']);
+          || (
+               isOwner(resource.data.get('courierId', ''))
+               && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['status', 'currentIndex', 'startedAt',
+                             'completedAt', 'courierId'])
+               // Курьер рейсни ўзгача бировга ўтказа олмайди.
+               && request.resource.data.get('courierId', '')
+                  == resource.data.get('courierId', '')
+             );
       allow delete: if false;
     }
 
     match /couriers/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['isOnline', 'name', 'phone']);
-      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+      // S2 — учта тешик бир жойда эди:
+      //   1. `read: if true` — ҳар ким ҳар бир курьернинг телефони ва
+      //      ЖОНЛИ координатасини ўқий оларди (ЗРУ-547);
+      //   2. `create` фақат майдон борлигини текширарди, auth йўқ;
+      //   3. `update` да майдон рўйхати тўғри эди, лекин ЭГАЛИК йўқ —
+      //      исталган одам бировнинг `fcmToken`ини алмаштириб, push'ини
+      //      ўғирлаши мумкин эди.
+      //
+      // Ҳужжат ID — телефон рақами, 9 ва 12 хонали икки шаклда учрайди.
+      // `isOwner()` → `phoneDocIdsMatch()` иккаласини ҳам тўғри
+      // таққослайди, шунинг учун ID миграцияси кутилмайди.
+      //
+      // Клиент оқимлари: `couriers_repository.dart` (GPS heartbeat,
+      // goOffline), админ панел (яратиш/ўчириш/рўйхат). CF admin SDK
+      // орқали ёзади — қоидалардан ўтмайди.
+      //
+      // 13.6.4 (0a) — ЯРАТИШ ФАҚАТ АДМИНДА.
+      //
+      // Сабаб S2 да эътибордан четда қолган: `couriers` ҳужжатининг
+      // МАВЖУДЛИГИ `functions/index.js:2399` →
+      // `resolveAuthorizedCourierUid` да ҲУҚУҚ сифатида ишлатилади ва у
+      // 14 та callable'ни очади (`courierCreateRoute`,
+      // `courierGetCustomerWalletBalance` ва бошқалар). Яъни «ўзига
+      // ҳужжат яратиш» = «ўзига курьерлик ҳуқуқини бериш» (19-қоида:
+      // authentication ≠ authorization).
+      //
+      // S2 да қоида «аутентификациясиз ҳар ким» дан «ўзи ёки админ»га
+      // торайтирилган эди — яхшиланиш, лекин етарли эмас.
+      //
+      // Реестрни админ яратади (`courier_management_screen.dart:47`),
+      // админ панели эса custom token билан Firebase Auth'га киради ва
+      // токенида `phone_number` доимий claim бор
+      // (`functions/index.js` → `adminWebSignIn`), шунинг учун
+      // `isAdmin()` у ерда ИШЛАЙДИ.
+      //
+      // Жонли ҳолат (`isOnline`/GPS) эгаси томонидан МАВЖУД ҳужжатда
+      // янгиланади — пастдаги `update` да, ва у ҳуқуқ бермайди.
+      //
+      // Тест: functions/test/couriers_rules.test.js
+      //       functions/test/self_approval_rules.test.js
+      allow read: if isAdmin() || isOwner(id);
+      allow create: if isAdmin()
+          && request.resource.data.keys().hasAll(['isOnline', 'name', 'phone']);
+      allow update: if (isAdmin() || isOwner(id))
+          && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly([
             'isOnline', 'lat', 'lng', 'name', 'phone', 'fcmToken',
             'updatedAt', 'lastSeen'
@@ -2473,7 +2801,20 @@ service cloud.firestore {
     // PAYOUT REQUESTS — мижоз нақд чиқариш (ёзувлар асосан Functions)
     // ══════════════════════════════════════
     match /payout_requests/{id} {
-      allow read: if true;
+      // S3: аввал `read: if true` эди — ҳар ким, ҳатто тизимга кирмаган
+      // одам ҳам барча пул чиқариш сўровларини (`userPhone` + `amount`)
+      // ўқий оларди. Ҳужжат CF (`requestPayout`) томонидан яратилади,
+      // шакли: userPhone · amount · status · createdAt.
+      //
+      // Ўқийдиганлар (репо бўйича текширилган):
+      //   admin_web/payout_management_screen.dart, admin_shell.dart
+      //   analytics_repository.dart (pending саноғи)
+      //   сўров эгаси — ўзиникини
+      //
+      // Тест: functions/test/payout_requests_rules.test.js
+      allow read: if isFinanceReader()
+          || isAdmin()
+          || isOwner(resource.data.userPhone);
       allow create: if false;
       allow update: if false;
       allow delete: if false;
@@ -3019,26 +3360,110 @@ service cloud.firestore {
                     && request.resource.data.status in ['new', 'seen', 'skipped'];
     }
 
-    // Таклифчи ЎЗИ белгилайдиган имкониятлар: йўналиш, ҳудуд, транспорт.
+    // ══════════════════════════════════════
+    // CAPABILITY — «нимага рухсати бор» (D-12…D-16, 2026-10-06)
+    // ══════════════════════════════════════
     //
-    // Калит: `{uid}_{module}`. Фойдаланувчи trust, rating ва stats
-    // майдонларига ёза олмайди — улар фақат серверда.
-    match /provider_capabilities/{key} {
-      allow read: if isAuth() && (
-                    phoneDocIdsMatch(userDocIdFromPhoneToken(), key.split('_')[0])
-                    || isAdmin()
-                  );
-      allow create, update: if isAuth()
-                    && phoneDocIdsMatch(
-                         userDocIdFromPhoneToken(), key.split('_')[0])
-                    && request.resource.data.providerId == userDocIdFromPhoneToken()
-                    && !request.resource.data.keys().hasAny([
-                         'trustScore', 'rating', 'stats', 'completedCount',
-                         'todayOrders', 'matchingBlocked', 'debtBlocked'
-                       ]);
-      allow delete: if isAuth()
-                    && phoneDocIdsMatch(
-                         userDocIdFromPhoneToken(), key.split('_')[0]);
+    // Шакл (эга қарори): БИТТА uid = БИТТА ҳужжат, ичида хизматлар.
+    //
+    //   provider_capabilities/{uid}
+    //     courier: { active: true, regionIds: [...] }   ← КЛИЕНТ
+    //     taxi:    { active: true, ... }                ← КЛИЕНТ
+    //     status:  { courier: 'trial', taxi: 'approved' } ← ФАҚАТ СЕРВЕР
+    //     trial:   { courier: { endsAt, graceEndsAt } }   ← ФАҚАТ СЕРВЕР
+    //     review:  { courier: { submittedAt, reviewedBy } } ← ФАҚАТ СЕРВЕР
+    //
+    // Capability'лар бир-бирини ИСТИСНО ҚИЛМАЙДИ: бир одам ҳам курьер,
+    // ҳам ҳайдовчи, ҳам сотувчи бўлиши мумкин (D-13). Шунинг учун
+    // `users.role` эмас — у аккаунтнинг тизим роли (D-12).
+    //
+    // ── D-14 ИККИ ҚАТОРДА ──────────────────────────────────────────────
+    // «Фойдаланувчи ўзига ўзи `approved` беролмасин.» `status` хизмат
+    // map'и ИЧИДА эмас, АЛОҲИДА юқори даражадаги калитда — чунки
+    // `affectedKeys()` фақат юқори даражадаги калитларни қайтаради.
+    // Ички map бўлганда «клиент `courier.regionIds`ни ўзгартирдими ёки
+    // `courier.status`ни?» деган саволга қоида жавоб бера олмасди ва
+    // ҳар бир хизматни қўлда санаш керак бўларди — янги хизмат
+    // қўшилганда тешик ЖИМГИНА очиларди.
+    //
+    // Рўйхат `functions_demand/core/capabilities.js` → `SERVER_KEYS`
+    // билан бир хил бўлиши ШАРТ (тест билан қулфланган).
+    //
+    // Статусни фақат callable'лар ўзгартиради (Admin SDK):
+    //   `requestCapability` · `submitCapabilityDocument` ·
+    //   `approveCapability` · `rejectCapability` · `suspendCapability`.
+    //
+    // Тест: functions/test/provider_capabilities_rules.test.js
+    function capabilityServerKeysUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['identity', 'status', 'window', 'review', 'suspend', 'debt']);
+    }
+
+    // КАЛИТ — барқарор `accountId` (T-1a), телефон эмас. Эгалик
+    // `users/{токен телефони}.accountId` орқали текширилади
+    // (`isCapabilityOwner`, 1 ўқиш). `identity.primaryUid` — сервер
+    // ёзган канон телефон; matching шу билан ишлайди.
+    //
+    // ЯРАТИШ — фақат сервер (`requestCapability`): ҳужжат `identity` ва
+    // `status` билан бирга туғилади, клиент ярата олмайди. Клиент фақат
+    // МАВЖУД ҳужжатда ўз хизмат map'ини янгилайди.
+    match /provider_capabilities/{accountId} {
+      allow read: if isCapabilityOwner(accountId) || isAdmin();
+
+      allow create: if isAdmin();
+
+      allow update: if isAdmin()
+                    || (
+                      isCapabilityOwner(accountId)
+                      && capabilityServerKeysUntouched()
+                      // Статистика ва trust — `provider_stats` да.
+                      // `affectedKeys` ишлатилади: `keys()` билан
+                      // ёзилса, сервер бир марта ёзгандан кейин
+                      // клиентнинг ҲАР БИР ёзуви рад этиларди.
+                      && !request.resource.data.diff(resource.data)
+                           .affectedKeys().hasAny([
+                             'trustScore', 'rating', 'stats',
+                             'completedCount', 'todayOrders',
+                             'matchingBlocked', 'debtBlocked'
+                           ])
+                    );
+
+      // Ўчириш — фақат админ: `suspended` ёзувини ўчириб ташлаб
+      // тарихни йўқотиш мумкин бўлмасин (16-қоида).
+      allow delete: if isAdmin();
+    }
+
+    // Хизмат келишувлари (D-SERVICE-2, D-TAXI-24) — фақат сервер ёзади
+    // (`acceptServiceAgreement`), эгаси ва админ ўқийди.
+    match /service_agreements/{accountId} {
+      allow read: if isCapabilityOwner(accountId) || isAdmin();
+      allow write: if false;
+    }
+
+    // Admin capability амаллари журнали — append-only, фақат админ ўқийди
+    // (41-қоида).
+    match /capability_audit/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ══════════════════════════════════════
+    // TAXI BILLING (D-TAXI-13…23) — ҳаммасини ФАҚАТ сервер ёзади
+    // ══════════════════════════════════════
+    // Рейс billing snapshot'и (D-TAXI-21): ҳайдовчи ўзиникини ўқийди.
+    match /taxi_trips/{tripId} {
+      allow read: if isAdmin() || isOwner(resource.data.driverUid);
+      allow write: if false;
+    }
+    // Нарх ўзгаришлари audit'и (D-TAXI-12).
+    match /taxi_price_changes/{id} {
+      allow read: if isAdmin() || isOwner(resource.data.uid);
+      allow write: if false;
+    }
+    // Anti-fraud ҳолатлари (D-TAXI-16…19) — фақат админ.
+    match /taxi_fraud_cases/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // Trust, public rating, бугунги буюртма ва даромад.
@@ -3052,12 +3477,61 @@ service cloud.firestore {
     //
     // Концепция `allow read: if false` деган эди, лекин курьернинг ўзи
     // ва админ панели ўз ҳолатини кўриши керак (Т-2.3).
+    //
+    // 13.6.3 — ЁЗУВЧИ ва SWEEP ШАРТНОМАСИ. Коллекция янги (продакшнда 0
+    // ҳужжат), шунинг учун чекловлар дарҳол қўйилади — эски ёзувларни
+    // бузиш хавфи йўқ.
+    function presenceClientFieldsOk(uid) {
+      return
+        // 1. ВАҚТНИ СЕРВЕР ҚЎЯДИ. Акс ҳолда курьер КЕЛАЖАК вақтни ёзиб
+        //    доимо «ҳозир шу ерда» бўлиб туради: sweep уни ҳеч қачон
+        //    offline қилмайди (`maintenance.makePresenceSweeper`),
+        //    matching фильтри ҳам тутмайди (`sources/presence_geo.js`),
+        //    ва GPS янгилиги бонусини доимо тўлиқ олади
+        //    (`adapters/courier.js` → `score`). Клиент
+        //    `FieldValue.serverTimestamp()` ишлатиши ШАРТ.
+        // `in` текшируви: rules мавжуд бўлмаган калитга мурожаатни
+        // evaluation error деб ҳисоблайди. Rules ифодани ТЎЛИҚ
+        // ҳисоблайди (short-circuit йўқ), шунинг учун `in` хатонинг
+        // ЛОГга тушишини тўхтатмайди — лекин натижа аниқ `false`
+        // бўлишини кафолатлайди (`false && <error>` = `false`).
+        // Текширилган: 29/29, `provider_presence_rules.test.js`.
+        'updatedAt' in request.resource.data
+        && request.resource.data.updatedAt == request.time
+        // 2. КИМЛИК — калит билан мос ва МАЖБУРИЙ. Сервер таклифчи
+        //    кимлигини КАЛИТдан олади (`sources/presence_geo.js`),
+        //    лекин ҳужжат ичидаги ёлғон майдон админ панелини
+        //    чалғитмаслиги керак. Намуна: `provider_capabilities`
+        //    (3216-қатор).
+        && 'providerId' in request.resource.data
+        && request.resource.data.providerId is string
+        && phoneDocIdsMatch(request.resource.data.providerId, uid)
+        && !request.resource.data.keys().hasAny([
+             'trustScore', 'rating', 'matchingBlocked'
+           ]);
+    }
+
     match /provider_presence/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid)
-                   && !request.resource.data.keys().hasAny([
-                        'trustScore', 'rating', 'matchingBlocked'
-                      ]);
+
+      allow create: if isOwner(uid) && presenceClientFieldsOk(uid);
+
+      // 3. `offlineAt`/`offlineReason` — ФАҚАТ sweep ёзади (Admin SDK
+      //    қоидаларни четлаб ўтади). Бу текширув `affectedKeys()`
+      //    бўйича: `keys().hasAny()` билан ёзилганда, sweep бир марта
+      //    ёзгандан кейин курьернинг ҲАР БИР heartbeat'и рад этиларди —
+      //    чунки `request.resource.data` ўзгармаган майдонларни ҳам
+      //    ўз ичига олади.
+      allow update: if isOwner(uid) && presenceClientFieldsOk(uid)
+                    && !request.resource.data.diff(resource.data)
+                         .affectedKeys().hasAny(['offlineAt', 'offlineReason']);
+
+      // Оффлайн бўлиш = `isOnline: false`, ўчириш ЭМАС. Лекин ўз
+      // жойлашув маълумотини бутунлай ўчириш ҳуқуқи қолдирилади
+      // (40-қоида: PII минимал сақланади). Аввал `allow write` ичида
+      // эди, яъни delete'да `request.resource` бўлмагани учун
+      // амалда ишламай турган эди.
+      allow delete: if isOwner(uid) || isAdmin();
     }
 
     // Шаҳарлараро сафар — «Йўлим устида» модели (P2).

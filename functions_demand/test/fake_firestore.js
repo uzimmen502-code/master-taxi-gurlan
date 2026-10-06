@@ -34,6 +34,41 @@ function autoId() {
   return `${s}${String(autoIdSeq).padStart(4, '0')}`;
 }
 
+/** Oddiy obyekt (map) mi — Date va massiv EMAS. */
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object'
+    && !Array.isArray(v) && !(v instanceof Date)
+    && typeof v.toMillis !== 'function';
+}
+
+/**
+ * `set(..., { merge: true })` — ICHKI MAP'LARNI HAM birlashtiradi.
+ *
+ * DIQQAT: bu ahamiyatsiz tafsilot EMAS. Avval fake sayoz spread
+ * (`{...prev, ...next}`) qilardi, ya'ni
+ * `set({status: {courier: 'trial'}}, {merge: true})` butun `status`
+ * map'ini ALMASHTIRARDI va `status.taxi` yo'qolardi. Haqiqiy Firestore
+ * esa map'larni rekursiv birlashtiradi.
+ *
+ * Capability modeli (D-13) aynan shunga tayanadi: bitta hujjatda bir
+ * nechta xizmat yonma-yon yashaydi va bittasini yozish qolganlarini
+ * o'chirmasligi kerak. Sayoz fake bilan test «o'tib» ketardi, lekin
+ * production'da kuryerni yozish taksi capability'sini yo'q qilardi.
+ *
+ * Massiv va Date — Firestore'da ham BUTUNLAY almashtiriladi.
+ */
+function deepMergeInto(prev, next) {
+  const out = deepClone(prev);
+  for (const [k, v] of Object.entries(next)) {
+    if (isPlainObject(v) && isPlainObject(out[k])) {
+      out[k] = deepMergeInto(out[k], v);
+    } else {
+      out[k] = deepClone(v);
+    }
+  }
+  return out;
+}
+
 function deepClone(v) {
   if (v === null || typeof v !== 'object') return v;
   if (v instanceof Date) return new Date(v.getTime());
@@ -249,7 +284,7 @@ class FakeDoc {
     this.store.writes += 1;
     if (opts && opts.merge) {
       const prev = this.store.docs.get(this.path) || {};
-      this.store.docs.set(this.path, { ...prev, ...deepClone(data) });
+      this.store.docs.set(this.path, deepMergeInto(prev, data));
     } else {
       this.store.docs.set(this.path, deepClone(data));
     }
@@ -276,4 +311,6 @@ class FakeDoc {
   }
 }
 
-module.exports = { FakeFirestore, deepClone, getPath, compare, autoId };
+module.exports = {
+  FakeFirestore, deepClone, deepMergeInto, getPath, compare, autoId,
+};

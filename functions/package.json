@@ -18,7 +18,25 @@
     "test:intercity": "node test/intercity_rules.test.js",
     "test:assistant": "node test/assistant_chat.test.js",
     "test:ev-static-map": "node test/ev_static_map.test.js",
-    "test:geo-parity": "node test/geo_hash_parity.test.js"
+    "test:geo-parity": "node test/geo_hash_parity.test.js",
+    "test:payout-rules": "node test/payout_requests_rules.test.js",
+    "test:couriers-rules": "node test/couriers_rules.test.js",
+    "test:routes-rules": "node test/delivery_routes_rules.test.js",
+    "test:notifications-rules": "node test/notifications_rules.test.js",
+    "test:birthdate-rules": "node test/birthdate_requests_rules.test.js",
+    "test:device-bindings-rules": "node test/device_bindings_rules.test.js",
+    "test:drivers-read-rules": "node test/drivers_read_rules.test.js",
+    "test:support-chat-rules": "node test/support_chat_rules.test.js",
+    "test:booking-locks-rules": "node test/booking_locks_rules.test.js",
+    "test:marshrut-misc-rules": "node test/marshrut_misc_rules.test.js",
+    "test:presence-rules": "node test/provider_presence_rules.test.js",
+    "test:courier-push": "node test/courier_push.test.js",
+    "test:self-approval": "node test/self_approval_rules.test.js",
+    "test:caps-rules": "node test/provider_capabilities_rules.test.js",
+    "test:taxi-billing": "node test/taxi_billing_pure.test.js",
+    "test:taxi-billing-rules": "node test/taxi_billing_rules.test.js",
+    "test:caps-parity": "node test/capabilities_model_parity.test.js",
+    "test:taxi-cap-rules": "node test/taxi_capability_rules.test.js"
   },
   "engines": {
     "node": "20"

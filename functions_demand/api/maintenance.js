@@ -16,10 +16,11 @@
  */
 
 const { callerIdFrom, requireCanonicalId } = require('../core/ids');
-const { resolveFlags, getModuleConfig } = require('../core/config');
+const { resolveFlags, getModuleConfig, DEFAULTS } = require('../core/config');
 const sm = require('../core/state_machine');
 const trustEvents = require('../trust/events');
 const { getAdapter } = require('../core/registry');
+const caps = require('../core/capabilities');
 const { runMatching } = require('../matching/orchestrator');
 const capabilities = require('../sources/capabilities');
 
@@ -144,6 +145,77 @@ function makeReopenStaleAssignments(deps) {
 
     if (reopened) console.log(`reopenStaleAssignments: ${reopened} ta talab qayta ochildi`);
     return { reopened };
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 13.6.3 — PRESENCE GIGIYENASI
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Eskirgan `provider_presence` yozuvlarini offline qiladi.
+ *
+ * Nega kerak: kuryer ilovani yopsa, tarmoq uzilsa yoki telefon o'chsa,
+ * `isOnline: true` hujjatda QOLIB KETADI. Matching buni allaqachon
+ * hisobga oladi (`sources/presence_geo.js` `maxLocationAgeSec`dan eski
+ * yozuvni chiqarib tashlaydi), lekin hujjatning O'ZI yolg'on holatda
+ * turaveradi — admin panelida «onlayn» bo'lib ko'rinadi va har qanday
+ * yangi o'quvchi shu yolg'onni meros qilib oladi.
+ *
+ * ── Ikkita shartnoma qarori ─────────────────────────────────────────────
+ *
+ * 1. CHEGARA matching bilan BIR XIL (`maxLocationAgeSec`). Ikki xil raqam
+ *    bo'lsa, «matching ko'rmayapti, lekin admin onlayn deb turibdi»
+ *    oralig'i paydo bo'ladi. Bitta raqam — bitta ma'no.
+ *
+ * 2. `updatedAt` GA TEGILMAYDI. U faqat «qurilmadan kelgan oxirgi
+ *    heartbeat» degani; sweep uni yangilasa, yozuv «yangi» bo'lib
+ *    ko'rinardi va eskilik mezoni o'z-o'zini yo'q qilardi. Offline
+ *    vaqti alohida `offlineAt` ga yoziladi.
+ *
+ * ── Shundan kelib chiqadigan KLIENT SHARTNOMASI ────────────────────────
+ * Har bir heartbeat `isOnline: true` ni ham yozishi SHART. Aks holda
+ * sweep bir marta offline qilgandan keyin kuryer hech qachon qaytib
+ * onlayn bo'lmaydi (3-qadam shu shartnomaga ko'ra yoziladi).
+ */
+function makePresenceSweeper(deps) {
+  const { db, now: nowFn, batchSize = 200, collection = 'provider_presence' } = deps;
+
+  return async function presenceSweeper() {
+    const now = nowFn ? nowFn() : new Date();
+    // Presence eskirishi MODULGA bog'liq emas — bu yadro konstantasi.
+    // `getModuleConfig(db, null, null)` soxta kalit yasab, keraksiz
+    // Firestore o'qishi qilardi va keshni iflos qilardi.
+    const maxAgeSec = Number(deps.maxLocationAgeSec || DEFAULTS.maxLocationAgeSec) || 120;
+    const cutoffMs = now.getTime() - maxAgeSec * 1000;
+
+    const snap = await db.collection(collection)
+      .where('isOnline', '==', true)
+      .limit(batchSize)
+      .get();
+
+    let offlined = 0;
+    for (const d of snap.docs) {
+      const p = d.data() || {};
+      const ms = sm.toMillis(p.updatedAt);
+      // `updatedAt` umuman yo'q bo'lsa — yozuv noto'g'ri shaklda, uni ham
+      // offline qilamiz: aks holda u abadiy «onlayn» bo'lib qoladi.
+      if (ms && ms >= cutoffMs) continue;
+
+      try {
+        await d.ref.update({
+          isOnline: false,
+          offlineAt: now,
+          offlineReason: 'stale_heartbeat',
+        });
+        offlined += 1;
+      } catch (e) {
+        console.error(`presence offline qilinmadi (${d.id}): ${e.message}`);
+      }
+    }
+
+    if (offlined) console.log(`presenceSweeper: ${offlined} ta yozuv offline qilindi`);
+    return { offlined };
   };
 }
 
@@ -278,8 +350,17 @@ function makeOnProviderAvailable(deps) {
     const now = nowFn ? nowFn() : new Date();
     const id = requireCanonicalId(providerId, 'providerId');
 
-    const cap = await capabilities.fetchForProvider(db, id, module);
-    if (!cap || cap.active !== true) return { matched: 0, reason: 'no_capability' };
+    /**
+     * D-12…D-16: hujjat shakli o'zgardi — bitta uid, xizmatlar ichida.
+     * `isEligible` IKKI shartni ham ko'radi: `status` (HUQUQ) va
+     * `active` (XOHISH). Avval faqat `active` tekshirilardi, ya'ni
+     * ruxsati bo'lmagan odam ham teskari matching olardi.
+     */
+    const capDoc = await capabilities.fetchForProvider(db, id);
+    if (!capDoc || !caps.isEligible(capDoc, module)) {
+      return { matched: 0, reason: 'no_capability' };
+    }
+    const cap = capDoc[module] || {};
 
     const adapter = getAdapter(module);
     if (!adapter) return { matched: 0, reason: 'no_adapter' };
@@ -348,6 +429,7 @@ function makeOnProviderAvailable(deps) {
 module.exports = {
   makeExpireSweeper,
   makeReopenStaleAssignments,
+  makePresenceSweeper,
   makeSubmitRating,
   makeOnProviderAvailable,
   recomputeAggregate,

@@ -11,6 +11,7 @@
     "test:geo": "node test/geo.test.js",
     "test:ids": "node test/ids.test.js",
     "test:config": "node test/config.test.js",
+    "test:caps": "node test/capabilities_model.test.js",
     "test:schema": "node test/schema.test.js",
     "test:scoring": "node test/scoring.test.js",
     "test:policy": "node test/notify_policy.test.js",
@@ -19,6 +20,9 @@
     "test:keywords": "node test/keywords.test.js",
     "test:rules": "node test/rules.test.js",
     "test:matching": "node test/matching.test.js",
+    "test:presence": "node test/presence_geo.test.js",
+    "test:presence-sweep": "node test/presence_sweeper.test.js",
+    "test:courier-adapter": "node test/courier_adapter.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
     "test:analytics": "node test/analytics.test.js"

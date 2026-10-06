@@ -193,18 +193,32 @@ async function main() {
     ));
 
   // ─── Регрессия: ҳайдовчининг ўз «ишга чиқиш» оқими бузилмаслиги ──────
-  await check('REGRESSION: driver (owner) can create own listing', () =>
-    assertSucceeds(
+  // D-TAXI-13 / D-CLEAN-1 (R-1 hard gate): `isActive: true` FAQAT server
+  // bergan `billingTripId` bilan — komissiya to'langan `published` reys.
+  await check('HARD GATE: owner CANNOT publish listing WITHOUT billingTripId', () =>
+    assertFails(
       dbD.collection('intercity_drivers').doc(DRIVER)
         .set(driverDoc(), {merge: true}),
     ));
-  await check('REGRESSION: driver can set own seats/price/route (go online)', () =>
+  await check('REGRESSION: driver (owner) can create own listing WITH billingTripId', () =>
+    assertSucceeds(
+      dbD.collection('intercity_drivers').doc(DRIVER)
+        .set(driverDoc({billingTripId: 'trip_test_01'}), {merge: true}),
+    ));
+  await check('REGRESSION: driver can set own seats/price/route (go online, with billingTripId)', () =>
     assertSucceeds(
       dbD.collection('intercity_drivers').doc(DRIVER).update({
         seats: 4, seatCapacity: 4, price: 70000,
         from: 'Xorazm', to: 'Toshkent', stops: ['Xorazm', 'Toshkent'],
         routeLabel: 'Xorazm → Toshkent', hour: 7, scheduleDate: '2026-09-24',
-        isActive: true, isOnPanel: true, updatedAt: new Date(),
+        isActive: true, isOnPanel: true, billingTripId: 'trip_test_01',
+        updatedAt: new Date(),
+      }),
+    ));
+  await check('REGRESSION: driver can close own listing (isActive false) without billing', () =>
+    assertSucceeds(
+      dbD.collection('intercity_drivers').doc(DRIVER).update({
+        isActive: false, isOnPanel: false, updatedAt: new Date(),
       }),
     ));
   await check('REGRESSION: driver can toggle own autoAccept', () =>

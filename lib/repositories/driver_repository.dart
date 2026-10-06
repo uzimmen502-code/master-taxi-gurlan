@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../core/utils/formatters.dart';
+import '../features/demand_offer/data/demand_repository.dart'
+    show kDemandCoreRegion;
 import '../models/driver_model.dart';
 import '../models/driver_stats.dart';
 import 'user_repository.dart';
@@ -11,10 +13,17 @@ class DriverApplicationSubmitResult {
   const DriverApplicationSubmitResult({
     required this.autoApproved,
     required this.isFirstSubmission,
+    this.agreementRequired = false,
+    this.agreementVersion,
   });
 
   final bool autoApproved;
   final bool isFirstSubmission;
+
+  /// D-TAXI-24: Taxi Service Agreement ҳали қабул қилинмаган — UI
+  /// варақни кўрсатиб, кейин қайта чақиради.
+  final bool agreementRequired;
+  final int? agreementVersion;
 }
 
 /// `drivers` collection.
@@ -112,7 +121,44 @@ class DriverRepository {
         .toList(growable: false);
   }
 
-  /// Mobil: `driverApprovalMode` bo'yicha ariza yoki avto-tasdiq.
+  /// Taxi capability'ни сўраш (D-TAXI-1): сервер `starter` беради — админ
+  /// тасдиғи КУТИЛМАЙДИ. Келишув қабул қилинмаган бўлса
+  /// `agreementRequired: true` қайтади (D-TAXI-24), UI варақни кўрсатади.
+  ///
+  /// `{accountId, status, agreementRequired, agreementVersion}`.
+  Future<Map<String, dynamic>> requestTaxiCapability() async {
+    try {
+      final res = await FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
+          .httpsCallable('requestCapability')
+          .call<Object?>({'service': 'taxi'});
+      final d = res.data is Map ? (res.data as Map) : const {};
+      return {
+        'accountId': (d['accountId'] ?? '').toString(),
+        'status': (d['status'] ?? '').toString(),
+        'agreementRequired': false,
+      };
+    } on FirebaseFunctionsException catch (e) {
+      final details = e.details;
+      final reason = details is Map ? (details['reason'] ?? '').toString() : '';
+      if (reason == 'agreement_required') {
+        return {
+          'agreementRequired': true,
+          'agreementVersion': details is Map
+              ? (details['agreementVersion'] as num?)?.toInt() ?? 1
+              : 1,
+        };
+      }
+      rethrow;
+    }
+  }
+
+  /// D-CLEAN-1 / D-TAXI-1: ҳайдовчи ЎЗИ ёқади, дарҳол `starter`.
+  ///
+  /// Эски оқим (`driver_requests` → админ тасдиғи → `drivers.approved`)
+  /// ИШЛАТИЛМАЙДИ. Ҳуқуқ — `provider_capabilities.status.taxi`,
+  /// `drivers/{uid}` эса фақат ПРОФИЛ (исм, машина, рақам). Такси турлари
+  /// ҳайдовчининг ўз декларатсияси: `provider_capabilities.taxi.taxiTypes`
+  /// (қоида шу бўйича филтрлайди, ҳуқуқ эмас).
   Future<DriverApplicationSubmitResult> submitDriverApplication({
     required String uid,
     required String name,
@@ -124,100 +170,88 @@ class DriverRepository {
     String routeTo = '',
     List<String> routeStops = const [],
   }) async {
-    final docId = _driverDocId(uid);
-    final mode = await getDriverApprovalMode();
-    if (mode == 'auto') {
-      await _autoApproveViaCloudFunction(
-        docId: docId,
-        name: name,
-        phone: phone,
-        car: car,
-        plate: plate,
-        taxiType: taxiType,
-        routeFrom: routeFrom,
-        routeTo: routeTo,
-        routeStops: routeStops,
-      );
-      return const DriverApplicationSubmitResult(
-        autoApproved: true,
+    final cap = await requestTaxiCapability();
+    if (cap['agreementRequired'] == true) {
+      return DriverApplicationSubmitResult(
+        autoApproved: false,
         isFirstSubmission: false,
+        agreementRequired: true,
+        agreementVersion: cap['agreementVersion'] as int?,
       );
     }
-    final isFirst = await submitDriverRequest(
-      uid: docId,
-      name: name,
-      phone: phone,
-      car: car,
-      plate: plate,
-      taxiType: taxiType,
-      routeFrom: routeFrom,
-      routeTo: routeTo,
-      routeStops: routeStops,
-    );
-    return DriverApplicationSubmitResult(
-      autoApproved: false,
-      isFirstSubmission: isFirst,
-    );
-  }
+    final accountId = (cap['accountId'] ?? '').toString();
+    if (accountId.isEmpty) {
+      throw StateError('accountId qaytmadi');
+    }
 
-  Future<void> _autoApproveViaCloudFunction({
-    required String docId,
-    required String name,
-    required String phone,
-    required String car,
-    required String plate,
-    required String taxiType,
-    String routeFrom = '',
-    String routeTo = '',
-    List<String> routeStops = const [],
-  }) async {
-    final callable =
-        FirebaseFunctions.instance.httpsCallable('autoApproveDriverApplication');
-    await callable.call<Map<String, dynamic>>({
-      'uid': docId,
+    final docId = _driverDocId(uid);
+    // Профил — тасдиқ майдонларисиз (қоида рад этади, керак ҳам эмас).
+    await _col.doc(docId).set({
       'name': name,
       'phone': phone,
       'car': car,
       'plate': plate,
       'taxiType': taxiType,
-      'routeFrom': routeFrom,
-      'routeTo': routeTo,
-      'routeStops': routeStops,
-    });
+      'taxiTypes': FieldValue.arrayUnion([taxiType]),
+      if (routeFrom.isNotEmpty) 'routeFrom': routeFrom,
+      if (routeTo.isNotEmpty) 'routeTo': routeTo,
+      if (routeStops.isNotEmpty) 'routeStops': routeStops,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Такси тури декларатсияси — capability ичида (клиент майдони).
+    await _db.collection('provider_capabilities').doc(accountId).set({
+      'taxi': {
+        'active': true,
+        'taxiTypes': FieldValue.arrayUnion([taxiType]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // `starter` — реал ишлаш ҳуқуқи (D-TAXI-1), шунинг учун «тасдиқланди».
+    return const DriverApplicationSubmitResult(
+      autoApproved: true,
+      isFirstSubmission: false,
+    );
   }
 
+  /// R-7: ҳуқуқ — `provider_capabilities.status.taxi` (capability), `drivers.approved`
+  /// ЭМАС. Ишлайдиган ҳолатлар: `starter` `verification_required` `verified`
+  /// (`functions_demand/core/capabilities.js` → `LIFECYCLES.taxi.working`
+  /// билан бир хил). Тур — `taxi.taxiTypes` декларатсияси (`alone`↔`local`
+  /// синоним).
   Future<bool> isApprovedForTaxi({
     required String uid,
     required String taxiType,
   }) async {
     if (uid.isEmpty) return false;
-    for (final docId in _driverDocIds(uid)) {
-      final snap = await _col.doc(docId).get();
-      final data = snap.data();
-      if (data == null) continue;
-      if (_isApprovedForTaxiType(data, taxiType)) return true;
+    final cap = await _taxiCapability(uid);
+    if (cap == null) return false;
+    final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
+    if (!const {'starter', 'verification_required', 'verified'}.contains(status)) {
+      return false;
     }
+    final types = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
+            ?.map((e) => e.toString())
+            .toSet() ??
+        const <String>{};
+    if (types.contains(taxiType)) return true;
+    if (taxiType == 'alone' && types.contains('local')) return true;
+    if (taxiType == 'local' && types.contains('alone')) return true;
     return false;
   }
 
-  bool _isApprovedForTaxiType(Map<String, dynamic> data, String taxiType) {
-    final approved =
-        data['approved'] == true || data['approvalStatus'] == 'approved';
-    if (!approved) return false;
-
-    final rawTaxiTypes = data['taxiTypes'];
-    if (rawTaxiTypes is List && rawTaxiTypes.contains(taxiType)) return true;
-
-    final primaryTaxiType = (data['taxiType'] ?? '') as String;
-    if (primaryTaxiType == taxiType || primaryTaxiType == 'both') return true;
-    if (taxiType == 'alone' && primaryTaxiType == 'local') return true;
-    if (taxiType == 'local' &&
-        (primaryTaxiType == 'alone' || primaryTaxiType == 'local')) {
-      return true;
+  /// `users/{uid}.accountId` → `provider_capabilities/{accountId}` (9/12 хонали).
+  Future<Map<String, dynamic>?> _taxiCapability(String uid) async {
+    for (final id in _driverDocIds(uid)) {
+      final u = await _db.collection('users').doc(id).get();
+      final accountId = u.data()?['accountId']?.toString() ?? '';
+      if (accountId.isEmpty) continue;
+      final cap = await _db.collection('provider_capabilities').doc(accountId).get();
+      return cap.data();
     }
-    if (taxiType == 'marshrut' && primaryTaxiType == 'marshrut') return true;
-    if (taxiType == 'intercity' && primaryTaxiType == 'intercity') return true;
-    return false;
+    return null;
   }
 
   /// Фойдаланувчининг ҳайдовчи аризаси (doc id = телефон).
@@ -325,21 +359,10 @@ class DriverRepository {
     String routeTo = '',
     List<String> routeStops = const [],
   }) async {
-    final docId = _driverDocId(uid);
-    final mode = await getDriverApprovalMode();
-    if (mode != 'auto') {
-      await upsertProfile(
-        uid: docId,
-        name: name,
-        phone: phone,
-        car: car,
-        plate: plate,
-        taxiType: taxiType,
-      );
-      return;
-    }
-    await _autoApproveViaCloudFunction(
-      docId: docId,
+    // D-CLEAN-1: `driverApprovalMode` va `autoApproveDriverApplication` CF
+    // ISHLATILMAYDI — bitta yo'l: capability (`submitDriverApplication`).
+    await submitDriverApplication(
+      uid: uid,
       name: name,
       phone: phone,
       car: car,

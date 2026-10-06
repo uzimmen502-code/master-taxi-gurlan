@@ -65,6 +65,14 @@ function dedupe(lists) {
         for (const v of (c[f] || [])) if (!prev[f].includes(v)) prev[f].push(v);
       }
       prev.consentGiven = prev.consentGiven || c.consentGiven;
+      /**
+       * `presence` FAQAT `presence_geo` manbasidan keladi. Uni birinchi
+       * kelgan nusxa saqlab qolmasa (masalan taklifchi avval
+       * `capabilities`dan tushgan bo'lsa), `metricsFor()` masofa va ETA'ni
+       * umuman hisoblay olmaydi — bu esa `dispatch` rejimida to'lqin
+       * tartibini buzadi.
+       */
+      if (c.presence && !prev.presence) prev.presence = c.presence;
       // `capabilities` manbasi ishonchliroq — uning maydonlari ustun.
       if (c.source === 'capabilities') {
         prev.vehicle = c.vehicle || prev.vehicle;

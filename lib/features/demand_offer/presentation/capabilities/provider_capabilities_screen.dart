@@ -3,9 +3,14 @@
 // Экраннинг иккита вазифаси бор:
 //
 // 1) ИМКОНИЯТ: «мен нима қиламан, қайси ҳудудда». Шу ёзув
-//    `provider_capabilities/{uid}_{module}`га тушади ва ўша заҳоти
-//    тескари matching ишга тушади (`onProviderAvailable`) — яъни одам
-//    мос АКТИВ талабларни дарҳол кўради, янги талаб кутмайди.
+//    `provider_capabilities/{uid}` ҳужжатининг ХИЗМАТ МAP'ига тушади ва
+//    ўша заҳоти тескари matching ишга тушади (`onProviderAvailable`) —
+//    яъни одам мос АКТИВ талабларни дарҳол кўради, янги талаб кутмайди.
+//
+//    ШАКЛ (D-12…D-16, 2026-10-06): битта uid = битта ҳужжат, ичида
+//    хизматлар. Аввал калит `{uid}_{module}` эди. Capability'лар
+//    бир-бирини истисно қилмайди — бир одам ҳам курьер, ҳам ҳайдовчи
+//    бўлиши мумкин (D-13).
 //
 // 2) РОЗИЛИК: cold start'да одам `ads` эълонидан номзод бўлиб тушган
 //    (`consentGiven: false`) ва PUSH ОЛМАГАН. Шу экранда у «ҳа, оламан»
@@ -17,12 +22,20 @@
 // МАХФИЙЛИК ВА ХАВФСИЗЛИК: Firestore қоидаси бу ҳужжатга `trustScore`,
 // `rating`, `completedCount` каби майдонларни ёзишга РУХСАТ БЕРМАЙДИ.
 // Шунинг учун экран уларга умуман тегмайди.
+//
+// ҲУҚУҚНИ ЭКРАН БЕРМАЙДИ (D-14): `status` `trial` `review` калитларига
+// клиент умуман ёзолмайди. Экран фақат «мен нима қиламан» маълумотини
+// ёзади, ҳуқуқни эса `requestCapability` callable'и беради — у серверда
+// 3 кунлик синов муддатини очади. Шунинг учун бу ерда иккита амал бор:
+// аввал имконият ёзилади, кейин ариза юборилади.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/ava_tokens.dart';
+import '../../data/demand_repository.dart' show kDemandCoreRegion;
 import '../../domain/demand_enums.dart';
 
 /// Push созламаси — концепция: «ёқиш, ўчириш ёки фақат кечки дайжест».
@@ -98,20 +111,38 @@ class _ProviderCapabilitiesScreenState
     });
 
     try {
-      final key = '${widget.userId}_${widget.module.wire}';
-      // Клиент ЎЗИ ёзади — бу ҳужжат фойдаланувчининг ўз қарори.
-      // Қоида `trustScore`/`rating`/`stats` майдонларини рад этади,
-      // шунинг учун улар бу ерда УМУМАН йўқ.
-      await _db.collection('provider_capabilities').doc(key).set({
-        'providerId': widget.userId,
-        'module': widget.module.wire,
-        'active': true,
-        'categoryIds': _categories.toList()..sort(),
-        'categoryGroups': <String>[],
-        'regionIds': _regions.toList()..sort(),
-        'districtIds': widget.initialDistrictIds,
-        'pushOptOut': _pushMode == ProviderPushMode.off,
-        'digestOnly': _pushMode == ProviderPushMode.digestOnly,
+      // 1-АМАЛ — АРИЗА. Ҳуқуқни фақат сервер беради (D-14) ва ҳужжатни
+      // ҳам фақат сервер яратади: калит — барқарор `accountId` (T-1a),
+      // телефон эмас. Callable идемпотент: аллақачон ишлаётган одамнинг
+      // муддати қайта бошланмайди, тасдиқланган статус пастга тушмайди,
+      // таксининг 4 ойлик starter ойнаси қайта очилмайди (D-TAXI-2).
+      final res = await FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
+          .httpsCallable('requestCapability')
+          .call<Object?>({'service': widget.module.wire});
+      final accountId = (res.data is Map
+              ? (res.data as Map)['accountId']?.toString()
+              : null) ??
+          '';
+      if (accountId.isEmpty) {
+        throw StateError('accountId qaytmadi');
+      }
+
+      // 2-АМАЛ — ИМКОНИЯТ. Клиент ЎЗИ ёзади: «мен нима қиламан, қайси
+      // ҳудудда» — бу унинг ўз қарори. Қоида сервер калитларига
+      // (`identity`/`status`/`window`/…) тегишни рад этади, шунинг учун
+      // улар бу ерда УМУМАН йўқ. `merge: true` ички map'ларни
+      // бирлаштиради — `taxi` ёзилса `courier` йўқолмайди.
+      await _db.collection('provider_capabilities').doc(accountId).set({
+        widget.module.wire: {
+          'active': true,
+          'categoryIds': _categories.toList()..sort(),
+          'categoryGroups': <String>[],
+          'regionIds': _regions.toList()..sort(),
+          'districtIds': widget.initialDistrictIds,
+          'pushOptOut': _pushMode == ProviderPushMode.off,
+          'digestOnly': _pushMode == ProviderPushMode.digestOnly,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -132,13 +163,22 @@ class _ProviderCapabilitiesScreenState
     // бу безовта қилади. `active: false` — «сўраманг» белгиси.
     setState(() => _saving = true);
     try {
-      final key = '${widget.userId}_${widget.module.wire}';
-      await _db.collection('provider_capabilities').doc(key).set({
-        'providerId': widget.userId,
-        'module': widget.module.wire,
-        'active': false,
-        'declinedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // Калит — `users/{uid}.accountId` (T-1a). Ҳали accountId йўқ
+      // бўлса, capability ҳужжати ҳам йўқ — рад этадиган нарса йўқ.
+      final user = await _db.collection('users').doc(widget.userId).get();
+      final accountId = user.data()?['accountId']?.toString() ?? '';
+      if (accountId.isNotEmpty) {
+        // ХИЗМАТ МАP'и ичига ёзилади — бошқа capability'ларга тегилмайди.
+        // `status` га тегилмайди: рад этиш ҲУҚУҚНИ олиб ташламайди,
+        // фақат «ҳозир сўров олмайман» дейди (`active` = ХОҲИШ, T-3).
+        await _db.collection('provider_capabilities').doc(accountId).set({
+          widget.module.wire: {
+            'active': false,
+            'declinedAt': FieldValue.serverTimestamp(),
+          },
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
       if (mounted) Navigator.of(context).pop(false);
     } catch (_) {
       if (mounted) setState(() => _saving = false);

@@ -6,6 +6,15 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "emulators": {
+    "_comment": "Standart 8080 Windows'da Hyper-V rezerv diapazoniga (8075-8174) tushadi va band bo'lmasa ham ochilmaydi. `emulators:exec` FIRESTORE_EMULATOR_HOST'ni bola jarayonga o'zi uzatadi, shuning uchun test fayllaridagi standart qiymat o'zgarmaydi.",
+    "firestore": {
+      "port": 9500
+    },
+    "ui": {
+      "enabled": false
+    }
+  },
   "hosting": [
     {
       "site": "master-taxi-gurlan",

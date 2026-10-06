@@ -147,9 +147,12 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
+                    // D-CLEAN-1 / 13.6.3: онлайн манба — `provider_presence`
+                    // (legacy `couriers` эмас). Ҳужжат калити = канон телефон.
                     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: FirebaseFirestore.instance
-                          .collection('couriers')
+                          .collection('provider_presence')
+                          .where('module', isEqualTo: 'courier')
                           .where('isOnline', isEqualTo: true)
                           .snapshots(),
                       builder: (context, courierSnap) {
@@ -565,7 +568,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
                 ? mapBody(null)
                 : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                     stream: FirebaseFirestore.instance
-                        .collection('couriers')
+                        .collection('provider_presence')
                         .doc(courierId)
                         .snapshots(),
                     builder: (context, snap) {
@@ -941,6 +944,9 @@ class _CourierList extends StatelessWidget {
       itemBuilder: (_, i) {
         final d = docs[i].data();
         final updatedAt = d['updatedAt'] as Timestamp?;
+        // `provider_presence`da исм/телефон ЙЎҚ (40-қоида: PII минимал) —
+        // калит = телефон, исм `users/{id}`дан (админ ўқий олади).
+        final phone = docs[i].id;
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
@@ -949,9 +955,14 @@ class _CourierList extends StatelessWidget {
               backgroundColor: Color(0xFFE3F2FD),
               child: Icon(Icons.sensors, color: Colors.blue),
             ),
-            title: Text('${d['name'] ?? '—'}'),
+            title: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              future: FirebaseFirestore.instance.collection('users').doc(phone).get(),
+              builder: (_, s) => Text(
+                '${s.data?.data()?['name'] ?? s.data?.data()?['fullName'] ?? '—'}',
+              ),
+            ),
             subtitle: Text(
-              '📞 ${d['phone'] ?? '—'}'
+              '📞 +$phone'
               '${updatedAt != null ? ' · ${time.format(updatedAt.toDate())}' : ''}',
             ),
             trailing: d['lat'] != null && d['lng'] != null

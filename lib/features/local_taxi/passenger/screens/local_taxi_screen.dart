@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../shared/widgets/become_driver_button.dart';
+import '../../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../models/map_picker_result.dart';
 import '../../../../models/saved_place.dart';
@@ -507,6 +508,13 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       try {
         if (!mounted) return;
         if (!approved) {
+          // D-TAXI-24 → D-TAXI-1: avval kelishuv, keyin `starter`.
+          final capOk = await ensureTaxiCapability(
+            context,
+            requestCapability: driverRepo.requestTaxiCapability,
+            primaryColor: LocalTaxiColors.primary,
+          );
+          if (!capOk || !mounted) return;
           final submitResult = await driverRepo.submitDriverApplication(
             uid: uid,
             name: name,

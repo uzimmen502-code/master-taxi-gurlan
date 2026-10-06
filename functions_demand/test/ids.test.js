@@ -131,9 +131,12 @@ ok('pushLogKey matchKey bilan bir xil', () => {
   assert.strictEqual(ids.pushLogKey('dem1', '901234567'), ids.matchKey('dem1', '901234567'));
 });
 
-console.log('capabilityKey / moduleRegionKey');
-ok('capabilityKey uid_module', () => {
-  assert.strictEqual(ids.capabilityKey('901234567', 'service'), '998901234567_service');
+console.log('moduleRegionKey');
+ok('`capabilityKey` OLIB TASHLANDI (D-12…D-16)', () => {
+  // `provider_capabilities` kaliti endi `{uid}_{module}` emas, balki
+  // shunchaki kanon uid. Funksiya qayta qo'shilsa, eski shaklda
+  // yozilgan hujjat yangi qoida tomonidan rad etiladi.
+  assert.strictEqual(ids.capabilityKey, undefined);
 });
 ok('moduleRegionKey module_region', () => {
   assert.strictEqual(ids.moduleRegionKey('service', 'xorazm'), 'service_xorazm');

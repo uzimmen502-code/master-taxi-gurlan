@@ -5,12 +5,18 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
+// `canonicalUserId` ва `DemandModule` — ядронинг иловадаги жуфти.
+// Такрорланмасин (4-қоида): шу иккиси ядро билан бир хил бўлиши шарт.
+import '../../demand_offer/domain/canonical_id.dart';
+import '../../demand_offer/domain/demand_enums.dart';
 import '../../../models/courier_status.dart';
 import '../../../models/delivery_route.dart';
 import '../../../models/order_model.dart';
+import '../../../models/provider_presence.dart';
 import '../../../repositories/couriers_repository.dart';
 import '../../../repositories/delivery_routes_repository.dart';
 import '../../../repositories/orders_repository.dart';
+import '../../../repositories/provider_presence_repository.dart';
 import '../../../services/courier_route_service.dart';
 import '../../../services/order_payment_service.dart';
 
@@ -23,13 +29,27 @@ class CourierController extends ChangeNotifier {
     required DeliveryRoutesRepository routesRepo,
     required OrdersRepository ordersRepo,
     required CouriersRepository couriersRepo,
+    ProviderPresenceRepository? presenceRepo,
   })  : _routes = routesRepo,
         _orders = ordersRepo,
-        _couriers = couriersRepo;
+        _couriers = couriersRepo,
+        _presence = presenceRepo ?? ProviderPresenceRepository();
 
   final DeliveryRoutesRepository _routes;
   final OrdersRepository _orders;
   final CouriersRepository _couriers;
+
+  /// 13.6.3 — ЎТИШ ДАВРИ: `couriers` ва `provider_presence` ИККАЛАСИГА
+  /// ҳам ёзилади.
+  ///
+  /// Нега иккаласига: `couriers`ни ҳозир админ панели ва иккита Cloud
+  /// Function ўқияпти (push токен), `provider_presence`ни эса янги
+  /// matching ядроси (`sources/presence_geo.js`). Бирини ўчириб
+  /// иккинчисига ўтиш — иловани янгилаган ва янгиламаган курьерлар
+  /// бир вақтда ишлаётган пайтда кимнинг онлайн экани ЙЎҚОЛИШИ
+  /// демакдир (15-қоида руҳи). Шунинг учун аввал иккаласи, кейин
+  /// (4-босқич) ўқувчилар кўчирилади, сўнг `couriers` чиқарилади.
+  final ProviderPresenceRepository _presence;
   final CourierRouteService _routeService = CourierRouteService();
 
   String _courierPhone = '';
@@ -54,7 +74,14 @@ class CourierController extends ChangeNotifier {
   String? get info => _info;
   bool get hasRoute => _activeRoute != null;
 
+  /// `couriers/{uid}` калити — ХОМ рақамлар (эски ёзувлар шундай).
   String get courierUid => phoneDigits(_courierPhone);
+
+  /// `provider_presence/{uid}` калити — КАНОН 12 хонали шакл.
+  ///
+  /// Ядро фақат шу шаклни ёзади ва ўқийди. Телефон нотўғри бўлса бўш
+  /// сатр қайтади ва presence ёзуви умуман қилинмайди.
+  String get presenceUid => canonicalUserId(_courierPhone);
 
   StreamSubscription<Position>? _gpsSub;
   StreamSubscription<DeliveryRoute?>? _routeSub;
@@ -194,6 +221,9 @@ class CourierController extends ChangeNotifier {
       try {
         await _couriers.goOffline(courierUid);
       } catch (_) {}
+      try {
+        await _presence.goOffline(presenceUid);
+      } catch (_) {}
     }
   }
 
@@ -217,6 +247,23 @@ class CourierController extends ChangeNotifier {
           lat: pos.latitude,
           lng: pos.longitude,
           fcmToken: _fcmToken,
+        ));
+      } catch (_) {}
+      // Иккинчи ёзув — ЯНГИ ядро учун. Биринчиси хато бўлса ҳам бу
+      // уриниб кўрилади ва тескариси ҳам: битта коллекция ишламаётгани
+      // иккинчисини тўхтатмайди.
+      //
+      // ДИҚҚАТ: `isOnline: true` ҳар heartbeat'да келади — sweep
+      // эскирган ёзувни offline қилиб қўйган бўлиши мумкин
+      // (`presenceSweeper`, ҳар 2 дақиқада) ва фақат координата
+      // янгиланса курьер қайтиб онлайн бўлмайди.
+      try {
+        await _presence.upsert(ProviderPresence(
+          providerId: presenceUid,
+          module: DemandModule.courier.wire,
+          isOnline: true,
+          lat: pos.latitude,
+          lng: pos.longitude,
         ));
       } catch (_) {}
     });

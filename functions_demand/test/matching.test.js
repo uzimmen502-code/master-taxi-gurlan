@@ -16,6 +16,7 @@ const kw = require('../core/keywords');
 const taxonomy = require('../core/seed/taxonomy_services.json');
 const config = require('../core/config');
 const serviceAdapter = require('../adapters/service');
+const caps = require('../core/capabilities');
 
 let passed = 0;
 const tests = [];
@@ -38,16 +39,34 @@ function seed(extra = {}) {
   };
 }
 
+/**
+ * Capability hujjati — D-12…D-16 shakli: BITTA uid, xizmatlar ichida.
+ *
+ * `over` XIZMAT MAP'iga qo'shiladi (`categoryIds`, `active`, …), chunki
+ * testlar aynan shu maydonlarni o'zgartiradi. `status` esa ALOHIDA
+ * top-level kalitda va uni faqat server yozadi (D-14) — shuning uchun
+ * fixture uni ham qo'shadi, aks holda `isEligible` rad etadi va
+ * matching hech kimni topmaydi.
+ */
 function capability(uid, over = {}) {
+  // `service` moduli oddiy lifecycle (D-SERVICE-1): huquqiy holat `enabled`.
+  const status = over.status || caps.SIMPLE.enabled;
+  const svc = { ...over };
+  delete svc.status;
   return {
-    providerId: uid,
-    module: 'service',
-    active: true,
-    categoryIds: ['santexnik'],
-    categoryGroups: ['uy_tamir'],
-    regionIds: ['xorazm'],
-    districtIds: ['urganch_sh'],
-    ...over,
+    // T-1a: kalit accountId, kimlik esa server yozgan `identity`.
+    // Testda kalit sifatida telefon ishlatilsa ham manba KALITGA
+    // qaramaydi — faqat `identity.primaryUid` ga.
+    identity: { accountId: `acc${uid}`, primaryUid: uid },
+    service: {
+      active: true,
+      categoryIds: ['santexnik'],
+      categoryGroups: ['uy_tamir'],
+      regionIds: ['xorazm'],
+      districtIds: ['urganch_sh'],
+      ...svc,
+    },
+    status: { service: status },
   };
 }
 
@@ -76,7 +95,7 @@ function build(db, opts = {}) {
 // ─────────────────────────────────────────────────────────────────────
 ok('talab yaratiladi va matching ishlaydi', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
     [`provider_stats/${USTA_A}`]: { trustScore: 60, completedCount: 10, rating: 4.5 },
   }));
   const createDemand = build(db);
@@ -102,7 +121,7 @@ ok('talab yaratiladi va matching ishlaydi', async () => {
 
 ok('QABUL MEZONI 13.2.2: ikki marta tap -> bitta talab', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r1 = await createDemand(payload(), ctx);
@@ -115,7 +134,7 @@ ok('QABUL MEZONI 13.2.2: ikki marta tap -> bitta talab', async () => {
 
 ok('boshqa clientRequestId -> yangi talab', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   await createDemand(payload({ clientRequestId: 'req-test-0001' }), ctx);
@@ -126,8 +145,8 @@ ok('boshqa clientRequestId -> yangi talab', async () => {
 ok('QABUL MEZONI 13.2.3: egasi o`zi nomzod bo`lmaydi', async () => {
   const db = new FakeFirestore(seed({
     // Egasining o'zi ham santexnik bo'lib ro'yxatdan o'tgan.
-    [`provider_capabilities/${OWNER}_service`]: capability(OWNER),
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${OWNER}`]: capability(OWNER),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r = await createDemand(payload(), ctx);
@@ -138,7 +157,7 @@ ok('QABUL MEZONI 13.2.3: egasi o`zi nomzod bo`lmaydi', async () => {
 
 ok('MAXFIYLIK: proyeksiyada aniq manzil va telefon YO`Q', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r = await createDemand(payload({
@@ -159,7 +178,7 @@ ok('MAXFIYLIK: proyeksiyada aniq manzil va telefon YO`Q', async () => {
 
 ok('MAXFIYLIK: taxminiy nuqta aniq nuqtadan 300-600 m uzoqda', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r = await createDemand(payload(), ctx);
@@ -174,7 +193,7 @@ ok('MAXFIYLIK: taxminiy nuqta aniq nuqtadan 300-600 m uzoqda', async () => {
 
 ok('MAXFIYLIK: proyeksiyadagi geohash qisqartirilgan (5 belgi)', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r = await createDemand(payload(), ctx);
@@ -188,7 +207,7 @@ ok('Т-8: aniq matchedCount hujjatda YO`Q, faqat bucket', async () => {
   const extra = {};
   for (let i = 0; i < 7; i += 1) {
     const uid = `99890444${String(i).padStart(4, '0')}`;
-    extra[`provider_capabilities/${uid}_service`] = capability(uid);
+    extra[`provider_capabilities/${uid}`] = capability(uid);
   }
   const db = new FakeFirestore(seed(extra));
   const createDemand = build(db);
@@ -280,7 +299,7 @@ ok('SHADOW MODE: matching ishlaydi, push chaqirilmaydi', async () => {
     'module_config/service_xorazm': {
       enabled: true, matchingEnabled: true, pushEnabled: false,
     },
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   let notifyCalled = 0;
   const createDemand = build(db, {
@@ -299,7 +318,7 @@ ok('SHADOW MODE: matching ishlaydi, push chaqirilmaydi', async () => {
 ok('matchingEnabled: false -> talab yaratiladi, nomzod izlanmaydi', async () => {
   const db = new FakeFirestore(seed({
     'module_config/service_xorazm': { enabled: true, matchingEnabled: false },
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   const createDemand = build(db);
   const r = await createDemand(payload(), ctx);
@@ -334,9 +353,14 @@ ok('ulanmagan modul -> unimplemented', async () => {
   const db = new FakeFirestore(seed());
   const createDemand = build(db);
   await assert.rejects(
-    // `attributes` bo'sh: `courier` uchun attribut sxemasi hali yo'q va
+    // `attributes` bo'sh: bu modul uchun attribut sxemasi hali yo'q va
     // sxema tekshiruvi adapter tekshiruvidan OLDIN ishlaydi.
-    () => createDemand(payload({ module: 'courier', attributes: {}, categoryId: undefined }), ctx),
+    //
+    // Avval bu yerda `courier` turardi. 13.6.3 da u REESTRGA ULANDI
+    // (`adapters/courier.js`), shuning uchun endi u «ulanmagan» misoli
+    // bo'la olmaydi. `carpet_wash` sxema enum'ida bor, lekin adapteri
+    // yo'q — test mohiyati o'zgarmadi.
+    () => createDemand(payload({ module: 'carpet_wash', attributes: {}, categoryId: undefined }), ctx),
     (e) => e.code === 'unimplemented',
   );
 });
@@ -410,7 +434,7 @@ ok('MODERATSIYA: taqiqlangan so`z -> rad etiladi va shikoyat yoziladi', async ()
 
 ok('matching yiqilsa TALAB SAQLANIB QOLADI', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   // Manbani ataylab buzamiz.
   const broken = {
@@ -442,7 +466,7 @@ ok('ulgurji: quantity >= 5 -> wholesale: true', async () => {
 
 ok('dedupe: ikki manbadan kelgan bir odam -> sourceCount 2', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A, {
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A, {
       categoryIds: ['elektrik'], categoryGroups: ['uy_tamir'],
     }),
     'ads/ad1': {
@@ -461,9 +485,9 @@ ok('dedupe: ikki manbadan kelgan bir odam -> sourceCount 2', async () => {
 
 ok('trust juda past -> matching`dan chiqariladi', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
     [`provider_stats/${USTA_A}`]: { trustScore: 10 },
-    [`provider_capabilities/${USTA_B}_service`]: capability(USTA_B),
+    [`provider_capabilities/${USTA_B}`]: capability(USTA_B),
     [`provider_stats/${USTA_B}`]: { trustScore: 60 },
   }));
   const createDemand = build(db);
@@ -475,7 +499,7 @@ ok('trust juda past -> matching`dan chiqariladi', async () => {
 
 ok('qarzdor taklifchi nomzod bo`lmaydi', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
     [`provider_stats/${USTA_A}`]: { trustScore: 60, debtBlocked: true },
   }));
   const createDemand = build(db);
@@ -487,8 +511,8 @@ ok('qarzdor taklifchi nomzod bo`lmaydi', async () => {
 
 ok('rejectReasons analitika uchun yoziladi', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${OWNER}_service`]: capability(OWNER),
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${OWNER}`]: capability(OWNER),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
     [`provider_stats/${USTA_A}`]: { trustScore: 5 },
   }));
   const createDemand = build(db);
@@ -502,7 +526,7 @@ ok('batch 500 cheklovi: 600 nomzod ikki batch`da yoziladi', async () => {
   const extra = {};
   for (let i = 0; i < 600; i += 1) {
     const uid = `9989055${String(i).padStart(5, '0')}`;
-    extra[`provider_capabilities/${uid}_service`] = capability(uid);
+    extra[`provider_capabilities/${uid}`] = capability(uid);
   }
   const db = new FakeFirestore(seed(extra));
   const createDemand = build(db);
@@ -537,7 +561,7 @@ ok('qabul qiluvchi telefoni kanon shaklga keltiriladi', async () => {
 
 ok('hudud mos kelmasa nomzod bo`lmaydi (adapter qoidasi)', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A, {
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A, {
       regionIds: ['toshkent_shahri'], districtIds: ['yashnobod'],
     }),
   }));
@@ -549,7 +573,7 @@ ok('hudud mos kelmasa nomzod bo`lmaydi (adapter qoidasi)', async () => {
 
 ok('dryRun (shadow): hisoblaydi, YOZMAYDI', async () => {
   const db = new FakeFirestore(seed({
-    [`provider_capabilities/${USTA_A}_service`]: capability(USTA_A),
+    [`provider_capabilities/${USTA_A}`]: capability(USTA_A),
   }));
   config.clearCache();
   const cfg = await config.getModuleConfig(db, 'service', 'xorazm');

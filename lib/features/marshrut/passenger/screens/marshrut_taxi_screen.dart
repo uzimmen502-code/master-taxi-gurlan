@@ -16,6 +16,7 @@ import '../../../../repositories/queue_repository.dart';
 import '../../../../repositories/schedules_repository.dart';
 import '../../../../shared/navigation/ensure_car_info_via_profile.dart';
 import '../../../../shared/widgets/driver_route_application_dialog.dart';
+import '../../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../../../shared/widgets/driver_application_feedback.dart';
 import '../../driver/screens/driver_panel_marshrut_screen.dart';
 import '../../driver/screens/driver_register_marshrut_screen.dart';
@@ -451,6 +452,14 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     if (!mounted) return;
 
     if (!approved) {
+      // D-TAXI-24 → D-TAXI-1: avval kelishuv, keyin `starter` (admin kutilmaydi).
+      final capOk = await ensureTaxiCapability(
+        context,
+        requestCapability: driverRepo.requestTaxiCapability,
+        primaryColor: Theme.of(context).colorScheme.primary,
+      );
+      if (!capOk || !mounted) return;
+
       final route = await showDriverRouteApplicationDialog(
         context,
         taxiType: 'marshrut',

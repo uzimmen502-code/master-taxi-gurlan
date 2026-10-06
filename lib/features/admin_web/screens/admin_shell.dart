@@ -36,6 +36,7 @@ import 'carpet_wash_admin_screen.dart';
 import 'agro_pickup_admin_screen.dart';
 import 'courier_admin_screen.dart';
 import 'courier_management_screen.dart';
+import 'taxi_verification_screen.dart';
 import 'driver_applications_screen.dart';
 import 'finance_center_screen.dart';
 import 'payout_management_screen.dart';
@@ -122,6 +123,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Курьерлар',
       icon: Icons.people_alt_outlined,
       description: 'Курьерларни бошқариш',
+    ),
+    _AdminSection(
+      label: 'Такси верификацияси',
+      icon: Icons.verified_user_outlined,
+      description: 'Starter → verification_required → verified (D-TAXI-4)',
     ),
     _AdminSection(
       label: 'ИШ ЭЪЛОН',
@@ -510,6 +516,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Курьерлар') {
       return const CourierManagementScreen();
+    }
+    if (section.label == 'Такси верификацияси') {
+      return const TaxiVerificationScreen();
     }
     if (section.label == 'Буюртмалар') {
       return const AdminOrdersScreen(embedded: true);

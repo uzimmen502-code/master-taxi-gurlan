@@ -10,6 +10,7 @@ import '../../../../core/l10n/locale_notifier.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../shared/widgets/become_driver_button.dart';
+import '../../../../shared/widgets/taxi_agreement_sheet.dart';
 import '../../../../models/intercity_ride.dart';
 import '../../../../repositories/driver_repository.dart';
 import '../../../../repositories/user_repository.dart';
@@ -561,6 +562,15 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       );
       return;
     }
+
+    // D-TAXI-24 → D-TAXI-1: avval Taxi Service Agreement, keyin `starter`
+    // (admin tasdig'i kutilmaydi).
+    final capOk = await ensureTaxiCapability(
+      context,
+      requestCapability: driverRepo.requestTaxiCapability,
+      primaryColor: IntercityColors.primary,
+    );
+    if (!capOk || !mounted) return;
 
     final result = await showDriverRouteApplicationDialog(
       context,

@@ -118,6 +118,29 @@ void main() {
     expect(p.hasDerivedTiers, isFalse);
   });
 
+  group('collectStandardTiers — бирданига қўшиш формаси (1–9 / 10–50 / 50+)', () {
+    test('учаласи тўлдирилган', () {
+      final t = collectStandardTiers(['10500', '10000', '9500']);
+      expect(t.map((e) => (e.minQty, e.price)).toList(),
+          [(1, 10500), (10, 10000), (50, 9500)]);
+    });
+
+    test('бўш ва нотўғри майдон ўтказиб юборилади', () {
+      final t = collectStandardTiers(['', '10 000', '0']);
+      expect(t.map((e) => (e.minQty, e.price)).toList(), [(10, 10000)]);
+    });
+
+    test('ҳеч бири тўлдирилмаса — бўш (форма сақлашни блоклайди)', () {
+      expect(collectStandardTiers(['', ' ', 'abc']), isEmpty);
+    });
+
+    test('оралиқлар Улгуржи сотувчи формаси билан бир хил', () {
+      expect(kStandardTierBrackets.map((b) => b.$1).toList(), [1, 10, 50]);
+      expect(kStandardTierBrackets.map((b) => b.$2).toList(),
+          ['1–9', '10–50', '50+']);
+    });
+  });
+
   test('версия сервер билан бир хил', () {
     expect(kPlatformPricingVersion, 2);
   });

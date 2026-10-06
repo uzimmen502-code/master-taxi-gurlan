@@ -1706,17 +1706,31 @@ class _BulkRow {
     required this.mime,
     required String name,
   }) : nameCtrl = TextEditingController(text: name),
-       priceCtrl = TextEditingController();
+       priceCtrl = TextEditingController(),
+       tierCtrls = List.generate(
+         kStandardTierBrackets.length,
+         (_) => TextEditingController(),
+       );
 
   final Uint8List bytes;
   final String mime;
   final TextEditingController nameCtrl;
   final TextEditingController priceCtrl;
+
+  /// Эга қарори (2026-10-06): янги товарда поғонани қўшувчи ЎЗИ қўяди —
+  /// тайёр оралиқлар (1–9 / 10–50 / 50+), камида биттаси мажбурий.
+  final List<TextEditingController> tierCtrls;
   String goodsKind = '';
+
+  List<PriceTier> tiers() =>
+      collectStandardTiers(tierCtrls.map((c) => c.text).toList());
 
   void dispose() {
     nameCtrl.dispose();
     priceCtrl.dispose();
+    for (final c in tierCtrls) {
+      c.dispose();
+    }
   }
 }
 
@@ -1804,6 +1818,12 @@ class _BulkAddDialogState extends State<_BulkAddDialog> {
         });
         return;
       }
+      if (r.tiers().isEmpty) {
+        setState(() {
+          _error = 'Қатор ${i + 1}: камида битта поғона нархини киритинг';
+        });
+        return;
+      }
     }
     setState(() {
       _saving = true;
@@ -1845,6 +1865,7 @@ class _BulkAddDialogState extends State<_BulkAddDialog> {
           goodsKind: r.goodsKind.isEmpty
               ? PlatformProduct.kindFood
               : r.goodsKind,
+          priceTiers: r.tiers(),
         );
         // create() ҳам nextSortOrder қилади — бажаришдан олдин force қиламиз.
         await widget.repo.createAppended(product, sortOrder: nextOrder);
@@ -2149,6 +2170,33 @@ class _BulkAddDialogState extends State<_BulkAddDialog> {
                                                 );
                                               },
                                       ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  // Улгуржи нарх поғоналари — камида биттаси.
+                                  Row(
+                                    children: [
+                                      for (var t = 0;
+                                          t < kStandardTierBrackets.length;
+                                          t++) ...[
+                                        if (t > 0) const SizedBox(width: 6),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: r.tierCtrls[t],
+                                            enabled: !_saving,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  '${kStandardTierBrackets[t].$2} дона',
+                                              isDense: true,
+                                            ),
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ],

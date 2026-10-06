@@ -77,6 +77,26 @@ List<PriceTier> derivedPriceTiers(int midPrice) {
   ];
 }
 
+/// Тайёр поғона оралиқлари — Улгуржи сотувчи формаси билан бир хил
+/// (1–9 / 10–50 / 50+). Янги товарда қўшувчи ўзи нарх киритади.
+const List<(int, String)> kStandardTierBrackets = [
+  (1, '1–9'),
+  (kPlatformMidMinQty, '10–50'),
+  (kPlatformHighMinQty, '50+'),
+];
+
+/// Тайёр оралиқлар бўйича киритилган нархлардан поғоналар: бўш ёки
+/// нотўғри майдон ўтказиб юборилади (тартиб [kStandardTierBrackets] га мос).
+List<PriceTier> collectStandardTiers(List<String> rawPrices) {
+  final out = <PriceTier>[];
+  for (var i = 0; i < kStandardTierBrackets.length && i < rawPrices.length; i++) {
+    final p = int.tryParse(rawPrices[i].trim().replaceAll(' ', ''));
+    if (p == null || p <= 0) continue;
+    out.add(PriceTier(minQty: kStandardTierBrackets[i].$1, price: p));
+  }
+  return sortPriceTiers(out);
+}
+
 /// Firestore'даги `priceTiers` рўйхатини ўқийди.
 List<PriceTier> parsePriceTiers(dynamic raw) {
   if (raw is! List) return const [];

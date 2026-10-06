@@ -1,0 +1,30 @@
+{
+  "_comment": "AVA Logistics tarifi — QORALAMA (status: draft). Zona matritsasi pilot yo'nalishlari uchun INFERRED (hujjat §10: Xorazm ichi → Urganch ↔ Toshkent). NARXLAR ATAYLAB YO'Q — ular ega qarori (CLAUDE.md 1-band): `prices` to'ldirilmaguncha `validateTariff(forActivation)` faol qilishga yo'l bermaydi. volumetricDivisor 6000 — BTS benchmark (BTS_CONFIRMED), AVA qarori emas. `node functions_demand/tools/seed_logistics_tariff.js --write` bilan yoziladi (standart: dry-run).",
+  "module": "logistics",
+  "version": 1,
+  "status": "draft",
+  "currency": "UZS",
+  "weightUnit": "g",
+  "dimUnit": "cm",
+  "volumetricDivisor": 6000,
+  "zones": ["ZONE_0", "ZONE_1", "ZONE_2", "ZONE_3", "ZONE_4", "ZONE_5"],
+  "matrix": {
+    "symmetric": true,
+    "regions": {
+      "xorazm": { "xorazm": "ZONE_1", "toshkent_shahri": "ZONE_4" }
+    },
+    "districts": {
+      "gurlan": { "gurlan": "ZONE_0" },
+      "urganch_shahri": { "urganch_shahri": "ZONE_0" }
+    }
+  },
+  "weightBrackets": [1000, 3000, 5000, 10000, 20000],
+  "prices": {},
+  "declaredValue": { "feeBps": 100, "maxValue": 50000000 },
+  "limits": { "maxWeightG": 30000, "maxDimCm": 150, "maxSumDimCm": 300 },
+  "internal": {
+    "platformMarginBps": null,
+    "legShareBps": null
+  },
+  "notes": "Zona ma'nosi kodga yozilmaydi — matritsa yagona manba (D-2). declaredValue.feeBps=100 (1%) — BTS_CONFIRMED (L15), AVA qarori kutiladi."
+}

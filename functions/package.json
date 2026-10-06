@@ -37,7 +37,9 @@
     "test:taxi-billing-rules": "node test/taxi_billing_rules.test.js",
     "test:caps-parity": "node test/capabilities_model_parity.test.js",
     "test:taxi-cap-rules": "node test/taxi_capability_rules.test.js",
-    "test:platform-pricing": "node test/platform_pricing.test.js"
+    "test:logistics-rules": "node test/logistics_rules.test.js",
+    "test:platform-pricing": "node test/platform_pricing.test.js",
+    "test:relay-escrow": "firebase emulators:exec --only firestore --project demo-relay-escrow \"node test/relay_escrow_cf.test.js\""
   },
   "engines": {
     "node": "20"

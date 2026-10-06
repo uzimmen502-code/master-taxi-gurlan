@@ -167,6 +167,19 @@ const DEFAULTS = {
     geohashPrecision: 5,
   },
 
+  // ─── AVA Logistics (Relay) — LEG sozlamalari ─────────────────────────
+  logistics: {
+    /** LEG taklif kutish muddati: 3 kun (shaharlararo yo'nalish). */
+    legTtlMinutes: 3 * 24 * 60,
+    /**
+     * Keyingi LEG qachon ochiladi: `in_progress` — oldingi ijrochi
+     * posilkani OLGANDA (hujjat 7.3 «completed» degan edi — u DEADLOCK:
+     * LEG(n) faqat LEG(n+1) ijrochisi olganda tugaydi, LEG(n+1) esa
+     * LEG(n) tugamaguncha ochilmasdi).
+     */
+    openNextLegOn: 'in_progress',
+  },
+
   // ─── Javobgarlik shifti (Т-10, Қ-2) ─────────────────────────────────
   liabilityCaps: {
     unverified: 300000,

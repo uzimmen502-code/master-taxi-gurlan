@@ -7,9 +7,9 @@
     "rules": "storage.rules"
   },
   "emulators": {
-    "_comment": "Standart 8080 Windows'da Hyper-V rezerv diapazoniga (8075-8174) tushadi va band bo'lmasa ham ochilmaydi. `emulators:exec` FIRESTORE_EMULATOR_HOST'ni bola jarayonga o'zi uzatadi, shuning uchun test fayllaridagi standart qiymat o'zgarmaydi.",
+    "_comment": "Windows'da TCP dinamik diapazon 1024-15000 (`netsh int ipv4 show dynamicport tcp`) va Hyper-V/WinNAT har yuklanishda shu ichidan ~100 portlik bloklarni band qiladi (`netsh interface ipv4 show excludedportrange protocol=tcp`): avval 8080 (8075-8174), 2026-10-07 da 9500 (9440-9539) — port bo'sh ko'rinsa ham ochilmaydi. Shuning uchun port dinamik diapazondan TASHQARIDA (>15000). `emulators:exec` FIRESTORE_EMULATOR_HOST'ni bola jarayonga o'zi uzatadi, shuning uchun test fayllaridagi standart qiymat o'zgarmaydi.",
     "firestore": {
-      "port": 9500
+      "port": 18080
     },
     "ui": {
       "enabled": false

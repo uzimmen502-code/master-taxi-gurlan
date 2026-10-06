@@ -31,6 +31,14 @@ const ACCOUNT_TYPES = {
   passenger_credit: 'liability',
   supplier_payable: 'liability',
   earnings: 'liability',
+  /**
+   * AVA Logistics eskrou (D-11, relay hujjati 7.6): `escrow:{shipmentId}` —
+   * mijozning DEPONENTLANGAN puli, AVA mulki EMAS (O'RQ-1173, 24-modda).
+   * DELIVERED'gacha to'liq turadi; EARNED yozuvi uni kamaytirmaydi.
+   */
+  escrow: 'liability',
+  /** EARNED ≠ PAID: LEG bajarilganda hisoblanadi, eskrou yechilganda yopiladi. */
+  platform_accrual: 'liability',
 };
 
 function accountTypeOf(accountId) {

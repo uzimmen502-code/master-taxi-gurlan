@@ -38,6 +38,12 @@ const { attachTaxiBilling } = require('./taxi_billing');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
+// AVA Logistics eskrou (D-11): pul faqat ledger orqali — u shu yerda;
+// ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
+const { attachRelayEscrow } = require('./relay_escrow');
+attachRelayEscrow(exports, {
+  functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+});
 // Кўчмас мулк Кластери — `ownerGeoStamp` пастдаги hoisted declaration.
 const { attachRealty } = require('./realty');
 attachRealty(exports, {

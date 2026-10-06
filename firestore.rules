@@ -3466,6 +3466,65 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ══════════════════════════════════════
+    // AVA LOGISTICS (RELAY) — D-3…D-11 (relay hujjati 7.7)
+    // ══════════════════════════════════════
+    // ҲАММАСИНИ ФАҚАТ СЕРВЕР ЁЗАДИ (`createLogisticsOrder`, `acceptLeg`,
+    // `scanHandover`, `confirmDelivery`, eskrou triggerlari). `delivery_routes`
+    // ва `couriers` намунаси ТАКРОРЛАНМАЙДИ. LEG'лар — `demands`да (юқорида).
+    //
+    // ORDER — мижознинг буюртмаси: қабул қилувчи телефони ФАҚАТ шу ерда,
+    // фақат эгаси ўқийди (40-банд).
+    match /logistics_orders/{orderId} {
+      allow read: if isAdmin() || isOwner(resource.data.ownerId);
+      allow write: if false;
+    }
+    // SHIPMENT — эгаси, админ ва шу жўнатмага тайинланган ижрочилар
+    // (`assignedProviderIds` — сервер ёзади, канон 12 хонали). Ижрочи
+    // чекланган маълумотни кўради: телефон йўқ, ички нарх қатлами йўқ.
+    match /shipments/{shipmentId} {
+      allow read: if isAdmin()
+                  || isOwner(resource.data.ownerId)
+                  || (isAuth()
+                      && 'assignedProviderIds' in resource.data
+                      && userDocIdFromPhoneToken() in resource.data.assignedProviderIds);
+      allow write: if false;
+      // Сирлар (QR, кодлар — D-6) ва ИЧКИ нарх қатлами (14-банд):
+      // клиент ҲЕЧ ҚАЧОН ўқимайди, фақат callable беради.
+      match /private/{docId} {
+        allow read, write: if false;
+      }
+    }
+    // CUSTODY — ўзгармас тарих (15, 16-банд): эгаси, админ, икки томон.
+    match /custody_events/{eventId} {
+      allow read: if isAdmin()
+                  || isOwner(resource.data.ownerId)
+                  || (isAuth()
+                      && (resource.data.from.id == userDocIdFromPhoneToken()
+                          || resource.data.to.id == userDocIdFromPhoneToken()));
+      allow write: if false;
+    }
+    // Маршрут режалари (D-9, версияланган) — ички, фақат админ.
+    match /route_plans/{shipmentId} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /versions/{version} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    // Тариф (версияли, D-2/D-8) — `module_tariffs/logistics*` қоидаси
+    // умумий `module_tariffs` блокида (пастда): бир йўлга иккита `match`
+    // тушса ҳар қандай `allow` етарли бўлгани учун истисно ўша ерда.
+    // Тариф/маршрут admin амаллари журнали (41-банд) ва tracking ҳисоблагичи.
+    match /logistics_audit/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /logistics_counters/{id} {
+      allow read, write: if false;
+    }
+
     // Trust, public rating, бугунги буюртма ва даромад.
     // Эгаси ўқийди, ҲЕЧ КИМ ёзмайди (фақат `recomputeTrust`).
     match /provider_stats/{uid} {
@@ -3637,9 +3696,17 @@ service cloud.firestore {
 
     // Тариф формуласи ва комиссия — версия ва тарих билан.
     // Клиент ўқийди (нарх тавсиясини кўрсатиш учун), админ ёзади.
+    //
+    // ИСТИСНО — AVA Logistics тарифи (`logistics`, `logistics_v{N}`):
+    // ичида ички ҳақ тақсимоти бор (14-банд) — фақат админ ўқийди, мижоз
+    // нархни callable орқали олади; ёзиш ФАҚАТ callable орқали
+    // (`adminUpsertLogisticsTariff` — валидация + audit, 41-банд).
     match /module_tariffs/{key} {
-      allow read: if isAuth();
-      allow write: if isAdmin();
+      function isLogisticsTariff() {
+        return key == 'logistics' || key.matches('logistics_v[0-9]+');
+      }
+      allow read: if isAdmin() || (isAuth() && !isLogisticsTariff());
+      allow write: if isAdmin() && !isLogisticsTariff();
     }
 
     // Кунлик аналитика агрегати (Т-22) — фақат админ.

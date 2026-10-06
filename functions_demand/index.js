@@ -42,6 +42,7 @@ const maintenance = require('./api/maintenance');
 const capabilitiesApi = require('./api/capabilities');
 const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
+const logisticsApi = require('./api/logistics');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -161,6 +162,72 @@ exports.adminSetCapabilityStatus = fn.https.onCall(wrapCallable(
 exports.adminMigrateTaxiDrivers = fn
   .runWith({ timeoutSeconds: 540 })
   .https.onCall(wrapCallable(adminCapsApi.makeAdminMigrateTaxiDrivers({ db })));
+
+// ═══════════════════════════════════════════════════════════════════════
+// AVA LOGISTICS (RELAY) — D-2…D-11 (docs/relay_delivery_architecture_uz.md)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// LEG = mavjud `demands` hujjati; ORDER/SHIPMENT/custody shu yerda. PUL
+// (eskrou) — `functions/relay_escrow.js` (default codebase, ledger o'sha
+// yerda); ikkisi `shipments.paymentStatus` orqali bog'lanadi.
+
+const logisticsDeps = { db, keywordIndex, notify: dispatchNotifications };
+
+/** Narx — pulsiz, faol tarif bo'yicha (D-8). */
+exports.quoteLogisticsOrder = fn.https.onCall(wrapCallable(
+  logisticsApi.makeQuoteLogisticsOrder({ db }),
+));
+
+/** ORDER + SHIPMENT'lar + sirlar + marshrut v1 + LEG(draft). To'lovsiz LEG ochilmaydi. */
+exports.createLogisticsOrder = fn.https.onCall(wrapCallable(
+  logisticsApi.makeCreateLogisticsOrder({ db }),
+));
+
+/** Ijrochi LEG'ni oladi — birinchi qabul g'olib (taklif yo'q, narx tarifdan). */
+exports.acceptLeg = fn.https.onCall(wrapCallable(logisticsApi.makeAcceptLeg({ db })));
+
+/** Custody: oldi (QR/kod + rasm) — bitta tranzaksiya (7.4). Keyingi LEG ochiladi. */
+exports.scanHandover = fn.https.onCall(wrapCallable(logisticsApi.makeScanHandover(logisticsDeps)));
+
+/** Oxirgi LEG → qabul qiluvchi (yetkazish kodi). */
+exports.confirmDelivery = fn.https.onCall(wrapCallable(logisticsApi.makeConfirmDelivery({ db })));
+
+/** Custody boshlanmagan bo'lsa — bekor; eskrou → refund_pending. */
+exports.cancelLogisticsOrder = fn.https.onCall(wrapCallable(logisticsApi.makeCancelLogisticsOrder({ db })));
+
+/** QR payload va kodlar — egasi (hammasi) / joriy custodian (yetkazish kodisiz). */
+exports.getShipmentSecrets = fn.https.onCall(wrapCallable(logisticsApi.makeGetShipmentSecrets({ db })));
+
+/** ADMIN — tarif qoralamasi; faol/eski versiya o'zgarmas (9-band). */
+exports.adminUpsertLogisticsTariff = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminUpsertLogisticsTariff({ db }),
+));
+
+/** ADMIN — tarifni faol qilish: narxlar TO'LIQ bo'lishi shart. */
+exports.adminActivateLogisticsTariff = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminActivateLogisticsTariff({ db }),
+));
+
+/** ADMIN — marshrutni qayta rejalash (D-9 versiyalar, D-10 bosqichlar). */
+exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminPlanShipmentRoute(logisticsDeps),
+));
+
+/**
+ * Eskrou tushdi (default codebase yozadi) → LEG-1 ochiladi + matching.
+ * Idempotent: faqat `pending → escrow_funded` o'tishida, LEG draft bo'lsa.
+ */
+exports.onShipmentFunded = fn.firestore
+  .document('shipments/{shipmentId}')
+  .onUpdate(async (change, context) => {
+    const run = logisticsApi.makeOnShipmentFunded(logisticsDeps);
+    try {
+      await run(change.before.data() || {}, change.after.data() || {}, context.params.shipmentId);
+    } catch (e) {
+      console.error(`onShipmentFunded xatosi (${context.params.shipmentId}): ${e.message}`);
+    }
+    return null;
+  });
 
 // ═══════════════════════════════════════════════════════════════════════
 // REJALI ISHLAR (Т-5: Cloud Tasks o'rniga sweeper)

@@ -1036,6 +1036,76 @@ firebase deploy --only "functions:demand" --project master-taxi-gurlan
 тўхтайди — бу ЁЛҒОН хато: `index.js` тўғридан-тўғри 353 ms да 15
 экспорт билан юкланади, тўсиқ CLI'нинг localhost handshake'и.
 
+### 10.2 Relay — код ҳолати, 2026-10-07 (implementation completed, deploy pending)
+
+Эга қарори (2026-10-05/06, D-1…D-11) **кодга киритилди**, лекин
+**production'га ЧИҚАРИЛМАГАН** (29-банд). Ҳаммаси `feat/ev-trip-planner`
+ветвида, иккита commit: сервер/қоида ва Flutter/admin.
+
+| Қатлам | Файл(лар) | Ҳолат |
+|---|---|---|
+| Тариф engine (D-2, D-8) | `functions_demand/core/tariff.js` | версияли `module_tariffs/logistics` + `logistics_v{N}` (draft/active/retired); 6 зона matrix (region→district override); `chargeableWeight = max(actual, ceil(L×W×H×1000/divisor))` грамм; `PriceSnapshot` ҳар жўнатмада; ички тақсимот `internal.platformMarginBps`/`legShareBps` — null бўлса фаоллашмайди |
+| Қоралама тариф | `core/seed/logistics_tariff_draft.json`, `tools/seed_logistics_tariff.js` | `prices: {}` — **НАРХЛАР ЙЎҚ, эга беради** (UNKNOWN); dry-run стандарт, `--write` билан `logistics_v1` draft |
+| ORDER / SHIPMENT / LEG (D-3, D-4, D-10) | `core/logistics.js`, `api/logistics.js` | `logistics_orders` 1:N `shipments` 1:N LEG = мавжуд `demands` ҳужжати (`module: logistics`); status machine сервер томонда; `route_plans/{shipmentId}/versions/{n}` |
+| Custody (D-5, D-6, D-7) | `api/logistics.js` → `custody_events` | `scanHandover` (код **ёки** QR + расм мажбурий + ҳолат белгиси, БИТТА транзакция), `confirmDelivery` (алоҳида 6 хонали код), idempotency `{ship}_{leg}_{kind}`; тарих immutable (rules `write: false`) |
+| Занжир (6.1) | `api/logistics.js` `activateLeg` | кейинги LEG олдингиси **`in_progress`** бўлганда очилади (`openNextLegOn`, конфиг) — ҳужжат 7.3 даги «completed» deadlock бўлгани учун ўзгартирилди (INFERRED, эга тасдиғи кутилади) |
+| Matching | `adapters/logistics.js`, `sources/logistics_candidates.js` | courier (`acceptsParcels: true`) + freight; проекцияда `shipmentId`, tracking, LEG k/n, ўлчам, **payout** (ижрочига очиқ), мижоз нархи ЙЎҚ (14-банд) |
+| Конфиг | `core/config.js` → `module_config/logistics_all` | `CONFIG_REGION = 'all'` (PROPOSED): ядро `moduleRegionKey` `_`ли ҳудуд ID'ни олмайди; логистика ҳудудлараро |
+| Пул (D-11, 7.6) | `functions/relay_escrow.js`, `settlement_ledger.js` | default codebase: `fundShipmentEscrow` (ҳамён → `escrow:{shipmentId}`), `onLogisticsCustodyEvent` (EARNED → `supplier_payable:{provider}`), RELEASE (эскроу → accrual + `earnings:ava_logistics_fee`), REFUND (`refund_pending` → ҳамён); ҳаммаси idempotent калит билан; frozen'да RELEASE йўқ, EARNED бор |
+| Rules / indexes / storage | `firestore.rules`, `firestore.indexes.json`, `storage.rules` | мижоз ҳеч нарса ёзмайди; `shipments/private/*` ҳеч ким ўқимайди; `module_tariffs/logistics*` фақат admin ўқийди (умумий блокда истисно); сўровлар `ownerId` филтри билан (қоида исботи); `logistics/{uploader}/…` расм йўли |
+| Flutter — мижоз | `lib/features/logistics/` | «Жўнатма» плиткаси (`kKnownModuleIds` → admin ёқади), форма (вилоят/туман/манзил, посилка ×5, қабул қилувчи), `quote` → `create`, буюртма экрани: ҳамёндан тўлаш, кодлар + QR (`qr_flutter`), кузатув тасмаси, бекор |
+| Flutter — ижрочи | `ui/logistics_ui_adapter.dart`, `ui/leg_actions.dart` | ядро `DemandUiAdapter.buildMatchActions` (янги hook): «олиш» → «посилкани олдим» (код + расм + ҳолат) → охирги LEG «топширдим» (код) / ўрта LEG «код ва QR кўрсатиш»; `MatchStatus` + `in_progress`/`completed`; `MatchContact` + 2-поғона майдонлари |
+| Admin web | `admin_web/screens/logistics_admin_screen.dart` | тариф версиялари (JSON қоралама → фаоллаштириш), жўнатмалар рўйхати, custody тарихи, маршрутни LEG'ларга бўлиш — ҳаммаси callable орқали, audit билан |
+| Capability | `provider_capabilities_screen.dart` | курьер учун «Посилка ҳам оламан» (`courier.acceptsParcels`, стандарт ЎЧИҚ — opt-in) |
+
+**Паритет қулфи.** `functions_demand/test/fixtures/logistics_parity.json`
+— `docs` бўлими серверни FakeFirestore'да ҳақиқий оқимда юритиб ёзилади
+(`node functions_demand/test/logistics_parity.test.js --update`); Dart
+тести (`test/features/logistics/logistics_parity_test.dart`) айни шу
+ҳужжатларни ўқийди. `reason` кодлари манбадан (api + tariff + escrow)
+икки томонлама солиштирилади; `logistics_err_*` матн калитлари фақат
+мавжуд кодлар учун.
+
+**Тестлар (2026-10-07, ҳақиқий натижа):** `functions_demand` run_all —
+614 ўтди, 0 хато (tariff 18, logistics_core 13, logistics_api 11,
+logistics_parity 7 шу ичида); emulator: `logistics_rules` 18/18,
+`taxi_billing_rules` 13/13, `relay_escrow_cf` 10/10, `taxi_billing_cf`
+26/26; Flutter: logistics + demand parity + locale sync + tile тестлари
+77 ўтди; `flutter analyze` ўзгарган файлларда 0 муаммо.
+
+**Emulator — Windows огоҳлиги.** TCP динамик диапазон 1024–15000;
+Hyper-V ҳар юкланишда шу ичидан блоклар банд қилади (2026-10-07 да 9500
+→ 9440–9539 ичида қолди). Порт энди **18080** (диапазондан ташқари).
+`emulators:exec` тугагач JVM (`cloud-firestore-emulator`) ўчмай қолади —
+кейинги run'дан олдин ўша `java.exe` тўхтатилади, акс ҳолда «port taken».
+
+**Деплой тартиби (эга буйруғи билан, ҳар бири алоҳида):**
+
+```powershell
+# 1) functions default — relay_escrow (fundShipmentEscrow + 2 trigger)
+firebase deploy --only "functions:default" --project master-taxi-gurlan
+# 2) functions demand — 10 callable + onShipmentFunded
+$env:FUNCTIONS_DISCOVERY_TIMEOUT=90
+firebase deploy --only "functions:demand" --project master-taxi-gurlan
+# 3) indexlar — --force ЙЎҚ, «Deleting N» қаторини қўлда кўриш
+firebase deploy --only firestore:indexes --project master-taxi-gurlan
+# 4) rules — ФАҚАТ ўзи
+firebase deploy --only firestore:rules --project master-taxi-gurlan
+# 5) storage rules
+firebase deploy --only storage --project master-taxi-gurlan
+```
+
+Деплойдан кейин ҳам хизмат **OFF**: `module_config/logistics_all` йўқ
+(`enabled: false`), фаол тариф йўқ (`module_tariffs/logistics` йўқ),
+admin панелда `logistics` модули ёқилмаган. Ёқиш — учта алоҳида эга
+қарори: тариф рақамлари → `adminActivateLogisticsTariff`; конфиг;
+«Ҳудудлар ва хизматлар».
+
+**Кейинга қолган (эга билан):** L6a–L6c, L13 (камера сканери — ҳозир
+код қўлда киритилади, QR кўрсатилади), L14 (шартлар матни —
+`termsAcceptedAt` юборилмайди), L15; GPS нуқтаси handover'да
+(ихтиёрий майдон бор, илова ҳали юбормайди); офлайн навбат (6.2).
+
 ---
 
 ## 11. Очиқ саволлар

@@ -1,0 +1,84 @@
+{
+  "_comment": "FAQAT TEST uchun tarif — raqamlar o'ylab topilgan, ishlab chiqarish qiymati EMAS. Dart paritet testi (test/features/logistics/logistics_parity_test.dart) `vectors` ni ishlatadi: ilova narxni HISOBLAMAYDI, faqat server snapshot'ini o'qiydi — vektorlar snapshot maydonlarini qulflaydi.",
+  "tariff": {
+    "module": "logistics",
+    "version": 7,
+    "status": "active",
+    "currency": "UZS",
+    "volumetricDivisor": 6000,
+    "zones": ["ZONE_0", "ZONE_1", "ZONE_2", "ZONE_3", "ZONE_4", "ZONE_5"],
+    "matrix": {
+      "symmetric": true,
+      "regions": {
+        "xorazm": { "xorazm": "ZONE_1", "toshkent_shahri": "ZONE_4", "buxoro": "ZONE_3" },
+        "toshkent_shahri": { "toshkent_shahri": "ZONE_1" }
+      },
+      "districts": {
+        "gurlan": { "gurlan": "ZONE_0", "urganch_shahri": "ZONE_1" }
+      }
+    },
+    "weightBrackets": [1000, 3000, 5000, 10000, 20000],
+    "prices": {
+      "ZONE_0": { "brackets": [10000, 14000, 18000, 25000, 40000], "extraPerKg": 2000 },
+      "ZONE_1": { "brackets": [15000, 20000, 26000, 36000, 56000], "extraPerKg": 2500 },
+      "ZONE_3": { "brackets": [40000, 55000, 70000, 100000, 160000], "extraPerKg": 6000 },
+      "ZONE_4": { "brackets": [60000, 80000, 100000, 150000, 240000], "extraPerKg": 9000 }
+    },
+    "declaredValue": { "feeBps": 100, "maxValue": 50000000 },
+    "limits": { "maxWeightG": 30000, "maxDimCm": 150, "maxSumDimCm": 300 },
+    "internal": {
+      "platformMarginBps": 2000,
+      "legShareBps": { "first_mile": 2500, "line_haul": 5000, "last_mile": 2500 }
+    }
+  },
+  "vectors": [
+    {
+      "name": "gurlan_ichi_1kg",
+      "parcel": { "actualWeightG": 800, "lengthCm": 20, "widthCm": 15, "heightCm": 10, "declaredValue": 0 },
+      "origin": { "regionId": "xorazm", "districtId": "gurlan" },
+      "dest": { "regionId": "xorazm", "districtId": "gurlan" },
+      "expect": { "zone": "ZONE_0", "volumetricWeightG": 500, "chargeableWeightG": 800, "bracketIndex": 0, "basePrice": 10000, "declaredValueFee": 0, "customerPrice": 10000 }
+    },
+    {
+      "name": "gurlan_urganch_tuman_juftligi_ustun",
+      "parcel": { "actualWeightG": 2500, "lengthCm": 30, "widthCm": 20, "heightCm": 20, "declaredValue": 0 },
+      "origin": { "regionId": "xorazm", "districtId": "gurlan" },
+      "dest": { "regionId": "xorazm", "districtId": "urganch_shahri" },
+      "expect": { "zone": "ZONE_1", "volumetricWeightG": 2000, "chargeableWeightG": 2500, "bracketIndex": 1, "basePrice": 20000, "declaredValueFee": 0, "customerPrice": 20000 }
+    },
+    {
+      "name": "gurlan_toshkent_5kg_hajmiy_ustun",
+      "parcel": { "actualWeightG": 5000, "lengthCm": 50, "widthCm": 40, "heightCm": 40, "declaredValue": 0 },
+      "origin": { "regionId": "xorazm", "districtId": "gurlan" },
+      "dest": { "regionId": "toshkent_shahri", "districtId": "chilonzor" },
+      "expect": { "zone": "ZONE_4", "volumetricWeightG": 13334, "chargeableWeightG": 13334, "bracketIndex": 4, "basePrice": 240000, "declaredValueFee": 0, "customerPrice": 240000 }
+    },
+    {
+      "name": "teskari_yonalish_simmetrik",
+      "parcel": { "actualWeightG": 1000, "lengthCm": 10, "widthCm": 10, "heightCm": 10, "declaredValue": 0 },
+      "origin": { "regionId": "toshkent_shahri", "districtId": "yashnobod" },
+      "dest": { "regionId": "xorazm", "districtId": "xiva" },
+      "expect": { "zone": "ZONE_4", "volumetricWeightG": 167, "chargeableWeightG": 1000, "bracketIndex": 0, "basePrice": 60000, "declaredValueFee": 0, "customerPrice": 60000 }
+    },
+    {
+      "name": "pogonadan_ogir_qoshimcha_kg",
+      "parcel": { "actualWeightG": 23500, "lengthCm": 10, "widthCm": 10, "heightCm": 10, "declaredValue": 0 },
+      "origin": { "regionId": "xorazm", "districtId": "xonqa" },
+      "dest": { "regionId": "xorazm", "districtId": "shovot" },
+      "expect": { "zone": "ZONE_1", "volumetricWeightG": 167, "chargeableWeightG": 23500, "bracketIndex": -1, "basePrice": 66000, "declaredValueFee": 0, "customerPrice": 66000 }
+    },
+    {
+      "name": "elon_qilingan_qiymat_1_foiz_yuqoriga",
+      "parcel": { "actualWeightG": 1000, "lengthCm": 10, "widthCm": 10, "heightCm": 10, "declaredValue": 1234567 },
+      "origin": { "regionId": "xorazm", "districtId": "gurlan" },
+      "dest": { "regionId": "xorazm", "districtId": "gurlan" },
+      "expect": { "zone": "ZONE_0", "volumetricWeightG": 167, "chargeableWeightG": 1000, "bracketIndex": 0, "basePrice": 10000, "declaredValueFee": 12346, "customerPrice": 22346 }
+    }
+  ],
+  "splitVectors": [
+    { "customerPrice": 240000, "legs": 1, "expect": { "platformShare": 48000, "providerPool": 192000, "legPayouts": [192000] } },
+    { "customerPrice": 240000, "legs": 3, "expect": { "platformShare": 48000, "providerPool": 192000, "legPayouts": [48000, 96000, 48000] } },
+    { "customerPrice": 100001, "legs": 2, "expect": { "platformShare": 20001, "providerPool": 80000, "legPayouts": [40000, 40000] } },
+    { "customerPrice": 10003, "legs": 3, "expect": { "platformShare": 2001, "providerPool": 8002, "legPayouts": [2000, 4001, 2001] } }
+  ]
+}

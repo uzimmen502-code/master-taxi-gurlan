@@ -23,6 +23,10 @@
     "test:presence": "node test/presence_geo.test.js",
     "test:presence-sweep": "node test/presence_sweeper.test.js",
     "test:courier-adapter": "node test/courier_adapter.test.js",
+    "test:tariff": "node test/tariff.test.js",
+    "test:logistics-core": "node test/logistics_core.test.js",
+    "test:logistics-api": "node test/logistics_api.test.js",
+    "test:logistics-parity": "node test/logistics_parity.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
     "test:analytics": "node test/analytics.test.js"

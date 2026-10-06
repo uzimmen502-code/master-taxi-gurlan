@@ -46,6 +46,31 @@ service firebase.storage {
       allow delete: if request.auth != null && adsOwnerPathOk();
     }
 
+    // AVA Logistics — handover dalil rasmlari (relay 7.4, 3-qadam):
+    // `ads/` bilan bir xil qoida — faqat o'z telefon papkasi, ≤8MB, rasm.
+    // O'qish auth bilan: custody dalili ommaviy emas, lekin egasi va
+    // ikkala ijrochi URL orqali ko'radi (Storage qoidasi Firestore'ni
+    // tekshira olmaydi).
+    match /logistics/{uploaderId}/{fileName} {
+      function lgPhone() {
+        return request.auth.token.phone_number.replace('\\+', '');
+      }
+      function lgOwnerPathOk() {
+        let p = lgPhone();
+        return p == uploaderId
+            || (uploaderId.size() == 12 && uploaderId.matches('998[0-9]{9}')
+                && p == uploaderId[3:12])
+            || (p.size() == 12 && p.matches('998[0-9]{9}')
+                && uploaderId == p[3:12]);
+      }
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+          && lgOwnerPathOk()
+          && request.resource.size < 8 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+
     // Ulgurji bozor mahsulot rasmlari — `ads/` bilan bir xil qoida:
     // faqat o'z telefon papkasiga (9 / 998-prefiks alias), ≤8MB, faqat rasm.
     match /wholesale_products/{sellerId}/{fileName} {

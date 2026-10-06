@@ -1,0 +1,642 @@
+{
+  "_comment": "AVA Logistics — SERVER ↔ ILOVA paritet. Manba: functions_demand/core/logistics.js, api/logistics.js, core/tariff.js, functions/relay_escrow.js (Node: logistics_parity.test.js) va lib/features/logistics/domain/logistics_models.dart (Dart: test/features/logistics/logistics_parity_test.dart). `docs` bo'limini QO'LDA YOZMANG — `node functions_demand/test/logistics_parity.test.js --update` serverning haqiqiy chiqishidan yozadi (sanalar ISO satr, sirlar niqoblangan).",
+  "shipmentStatuses": [
+    "awaiting_payment",
+    "ready",
+    "in_transit",
+    "delivered",
+    "closed",
+    "cancelled",
+    "disputed",
+    "lost"
+  ],
+  "paymentStatuses": [
+    "pending",
+    "escrow_funded",
+    "release_approved",
+    "settled",
+    "escrow_frozen",
+    "refund_pending",
+    "refunded"
+  ],
+  "orderStatuses": [
+    "empty",
+    "awaiting_payment",
+    "ready",
+    "in_transit",
+    "delivered",
+    "closed",
+    "cancelled",
+    "disputed",
+    "problem"
+  ],
+  "custodianKinds": [
+    "sender",
+    "provider",
+    "recipient"
+  ],
+  "conditionFlags": [
+    "intact",
+    "package_damaged",
+    "opened",
+    "wet",
+    "other"
+  ],
+  "custodyEventKinds": [
+    "pickup",
+    "delivery"
+  ],
+  "legKinds": [
+    "direct",
+    "first_mile",
+    "line_haul",
+    "last_mile"
+  ],
+  "trackingPattern": "^AVA-\\d{2}-\\d{4}-\\d{6}$",
+  "qrPrefix": "AVA1|",
+  "callableReasons": [
+    "point_region_required",
+    "point_district_invalid",
+    "geo_region_unknown",
+    "geo_district_unknown",
+    "point_coords",
+    "parcel_invalid",
+    "parcels_count",
+    "recipient_name",
+    "recipient_phone",
+    "tariff_not_active",
+    "module_disabled",
+    "client_request_id",
+    "not_logistics",
+    "not_matched",
+    "self",
+    "expired",
+    "shipment_missing",
+    "shipment_not_ready",
+    "proof_required",
+    "photo_required",
+    "not_assigned",
+    "leg_not_accepted",
+    "not_funded",
+    "bad_proof",
+    "prev_leg_missing",
+    "prev_leg_not_in_progress",
+    "custody_mismatch",
+    "delivery_code_format",
+    "not_last_leg",
+    "leg_not_in_progress",
+    "bad_delivery_code",
+    "in_transit",
+    "shipment_closed",
+    "tariff_invalid",
+    "tariff_immutable",
+    "tariff_incomplete",
+    "legs_count",
+    "shipment_not_replannable",
+    "legs_discontinuous",
+    "tariff_missing",
+    "leg_assigned",
+    "tariff_zone_price_missing",
+    "bad_weight",
+    "bad_dimensions",
+    "bad_declared_value",
+    "over_weight",
+    "over_dimension",
+    "over_dimension_sum",
+    "over_declared_value",
+    "zone_not_found",
+    "no_user",
+    "no_price",
+    "not_owner",
+    "not_payable",
+    "insufficient",
+    "not_pending"
+  ],
+  "docs": {
+    "createResult": {
+      "currency": "UZS",
+      "duplicate": false,
+      "orderId": "ORDER1",
+      "paymentStatus": "pending",
+      "shipmentIds": [
+        "SHIP1"
+      ],
+      "total": 10000,
+      "trackingNumbers": [
+        "AVA-26-1007-000001"
+      ]
+    },
+    "deliveryEvent": {
+      "completedLegPayout": 8000,
+      "completedLegProviderId": "998902220002",
+      "completesLegId": "LEG1",
+      "createdBy": "998902220002",
+      "deliversShipment": true,
+      "from": {
+        "id": "998902220002",
+        "kind": "provider"
+      },
+      "idempotencyKey": "SHIP1_LEG1_delivery",
+      "kind": "delivery",
+      "legCount": 1,
+      "legId": "LEG1",
+      "legIndex": 0,
+      "location": null,
+      "orderId": "ORDER1",
+      "ownerId": "998901110001",
+      "proof": {
+        "codeVerified": true,
+        "conditionFlags": [
+          "intact"
+        ],
+        "photoUrls": [
+          "https://r2.example/handover1.jpg"
+        ],
+        "qrVerified": false
+      },
+      "shipmentId": "SHIP1",
+      "timestamp": "2026-10-06T21:30:00.000Z",
+      "to": {
+        "id": null,
+        "kind": "recipient"
+      },
+      "trackingNumber": "AVA-26-1007-000001"
+    },
+    "leg": {
+      "activatedAt": "2026-10-06T21:30:00.000Z",
+      "assignment": {
+        "acceptedAt": "2026-10-06T21:30:00.000Z",
+        "offerId": null,
+        "providerId": "998902220002"
+      },
+      "attributes": {
+        "dependsOnLegId": null,
+        "handoverFromKind": "sender",
+        "handoverToKind": "recipient",
+        "legCount": 1,
+        "legIndex": 0,
+        "legKind": "direct",
+        "nextLegId": null,
+        "orderId": "ORDER1",
+        "parcel": {
+          "actualWeightG": 800,
+          "chargeableWeightG": 800,
+          "fragile": false,
+          "heightCm": 10,
+          "lengthCm": 20,
+          "widthCm": 15
+        },
+        "payout": 8000,
+        "shipmentId": "SHIP1",
+        "trackingNumber": "AVA-26-1007-000001"
+      },
+      "budget": null,
+      "categoryGroup": null,
+      "categoryId": null,
+      "completedAt": "2026-10-06T21:30:00.000Z",
+      "contact": null,
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "description": "Kitoblar",
+      "destination": {
+        "addressText": "Gurlan, Bog'cha 5",
+        "districtId": "gurlan",
+        "geohash": "tr6yn6t",
+        "lat": 41.85,
+        "lng": 60.4,
+        "regionId": "xorazm"
+      },
+      "input": {
+        "type": "form"
+      },
+      "location": {
+        "addressText": "Gurlan, Markaz 1",
+        "districtId": "gurlan",
+        "geohash": "tr6yn0w",
+        "lat": 41.84,
+        "lng": 60.39,
+        "regionId": "xorazm"
+      },
+      "matching": {
+        "matchedBucket": "1-2",
+        "state": "done",
+        "wave": 0
+      },
+      "media": {
+        "images": []
+      },
+      "mode": "quote",
+      "module": "logistics",
+      "ownerId": "998901110001",
+      "payerSide": "sender",
+      "payment": {
+        "currency": "UZS",
+        "kind": "escrow",
+        "legPayout": 8000
+      },
+      "pickedUpAt": "2026-10-06T21:30:00.000Z",
+      "quantity": null,
+      "schemaVersion": 1,
+      "source": "module",
+      "status": "completed",
+      "tariffVersion": 7,
+      "termsAcceptedAt": "2026-10-06T21:00:00.000Z",
+      "timeWindow": {
+        "expiresAt": "2026-10-09T21:30:00.000Z",
+        "neededBy": null
+      },
+      "title": "Jo'natma AVA-26-1007-000001: gurlan → gurlan",
+      "updatedAt": "2026-10-06T21:30:00.000Z",
+      "wholesale": false
+    },
+    "matchAccepted": {
+      "acceptedAt": "2026-10-06T21:30:00.000Z",
+      "consentGiven": true,
+      "contactUnlocked": {
+        "handoverFromKind": "sender",
+        "ownerPhone": "998901110001",
+        "pickupAddress": "Gurlan, Markaz 1",
+        "pickupLat": 41.84,
+        "pickupLng": 60.39,
+        "stage": 1
+      },
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "demandId": "LEG1",
+      "expiresAt": "2026-10-09T21:30:00.000Z",
+      "metrics": {},
+      "mode": "quote",
+      "module": "logistics",
+      "projection": {
+        "approxLat": 41.84477,
+        "approxLng": 60.39331,
+        "attributes": {
+          "chargeableWeightG": 800,
+          "fragile": false,
+          "fromDistrictId": "gurlan",
+          "heightCm": 10,
+          "legCount": 1,
+          "legIndex": 0,
+          "legKind": "direct",
+          "lengthCm": 20,
+          "payout": 8000,
+          "shipmentId": "SHIP1",
+          "toDistrictId": "gurlan",
+          "toRegionId": "xorazm",
+          "trackingNumber": "AVA-26-1007-000001",
+          "widthCm": 15
+        },
+        "budget": null,
+        "categoryId": null,
+        "description": "Kitoblar",
+        "districtId": "gurlan",
+        "geohash": "tr6yn",
+        "images": [],
+        "neededBy": null,
+        "quantity": null,
+        "regionId": "xorazm",
+        "title": "Jo'natma AVA-26-1007-000001: gurlan → gurlan"
+      },
+      "providerId": "998902220002",
+      "rank": 1,
+      "score": 0.51,
+      "scoreParts": {
+        "adapterBonus": 0.04,
+        "base": 0.44,
+        "categoryMatch": 0.4,
+        "equalizer": 0.77,
+        "newProviderBoost": 0.03,
+        "proximity": 0.5,
+        "sourceStrength": 0.4
+      },
+      "sources": [
+        "capabilities"
+      ],
+      "status": "accepted"
+    },
+    "matchInProgress": {
+      "acceptedAt": "2026-10-06T21:30:00.000Z",
+      "consentGiven": true,
+      "contactUnlocked": {
+        "deliveryCodeRequired": true,
+        "dropoffAddress": "Gurlan, Bog'cha 5",
+        "dropoffLat": 41.85,
+        "dropoffLng": 60.4,
+        "handoverFromKind": "sender",
+        "handoverToKind": "recipient",
+        "ownerPhone": "998901110001",
+        "pickupAddress": "Gurlan, Markaz 1",
+        "pickupLat": 41.84,
+        "pickupLng": 60.39,
+        "recipientName": "Olim aka",
+        "recipientPhone": "998905556677",
+        "stage": 2
+      },
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "demandId": "LEG1",
+      "expiresAt": "2026-10-09T21:30:00.000Z",
+      "metrics": {},
+      "mode": "quote",
+      "module": "logistics",
+      "projection": {
+        "approxLat": 41.84477,
+        "approxLng": 60.39331,
+        "attributes": {
+          "chargeableWeightG": 800,
+          "fragile": false,
+          "fromDistrictId": "gurlan",
+          "heightCm": 10,
+          "legCount": 1,
+          "legIndex": 0,
+          "legKind": "direct",
+          "lengthCm": 20,
+          "payout": 8000,
+          "shipmentId": "SHIP1",
+          "toDistrictId": "gurlan",
+          "toRegionId": "xorazm",
+          "trackingNumber": "AVA-26-1007-000001",
+          "widthCm": 15
+        },
+        "budget": null,
+        "categoryId": null,
+        "description": "Kitoblar",
+        "districtId": "gurlan",
+        "geohash": "tr6yn",
+        "images": [],
+        "neededBy": null,
+        "quantity": null,
+        "regionId": "xorazm",
+        "title": "Jo'natma AVA-26-1007-000001: gurlan → gurlan"
+      },
+      "providerId": "998902220002",
+      "rank": 1,
+      "score": 0.51,
+      "scoreParts": {
+        "adapterBonus": 0.04,
+        "base": 0.44,
+        "categoryMatch": 0.4,
+        "equalizer": 0.77,
+        "newProviderBoost": 0.03,
+        "proximity": 0.5,
+        "sourceStrength": 0.4
+      },
+      "sources": [
+        "capabilities"
+      ],
+      "status": "in_progress"
+    },
+    "order": {
+      "consolidation": {
+        "count": 1,
+        "discountApplied": false,
+        "tariffVersion": 7
+      },
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "currency": "UZS",
+      "customerPriceTotal": 10000,
+      "destination": {
+        "addressText": "Gurlan, Bog'cha 5",
+        "districtId": "gurlan",
+        "geohash": "tr6yn6t",
+        "lat": 41.85,
+        "lng": 60.4,
+        "regionId": "xorazm"
+      },
+      "note": "",
+      "origin": {
+        "addressText": "Gurlan, Markaz 1",
+        "districtId": "gurlan",
+        "geohash": "tr6yn0w",
+        "lat": 41.84,
+        "lng": 60.39,
+        "regionId": "xorazm"
+      },
+      "ownerId": "998901110001",
+      "recipient": {
+        "name": "Olim aka",
+        "phone": "998905556677"
+      },
+      "shipmentIds": [
+        "SHIP1"
+      ],
+      "status": "delivered",
+      "tariffVersion": 7,
+      "termsAcceptedAt": "2026-10-06T21:00:00.000Z",
+      "trackingNumbers": [
+        "AVA-26-1007-000001"
+      ],
+      "updatedAt": "2026-10-06T21:30:00.000Z"
+    },
+    "pickupEvent": {
+      "completedLegPayout": null,
+      "completedLegProviderId": null,
+      "completesLegId": null,
+      "createdBy": "998902220002",
+      "deliversShipment": false,
+      "from": {
+        "id": "998901110001",
+        "kind": "sender"
+      },
+      "idempotencyKey": "SHIP1_LEG1_pickup",
+      "kind": "pickup",
+      "legCount": 1,
+      "legId": "LEG1",
+      "legIndex": 0,
+      "location": {
+        "accuracy": 12,
+        "lat": 41.84,
+        "lng": 60.39
+      },
+      "orderId": "ORDER1",
+      "ownerId": "998901110001",
+      "proof": {
+        "codeVerified": true,
+        "conditionFlags": [
+          "intact"
+        ],
+        "photoUrls": [
+          "https://r2.example/handover1.jpg"
+        ],
+        "qrVerified": false
+      },
+      "shipmentId": "SHIP1",
+      "timestamp": "2026-10-06T21:30:00.000Z",
+      "to": {
+        "id": "998902220002",
+        "kind": "provider"
+      },
+      "trackingNumber": "AVA-26-1007-000001"
+    },
+    "quoteResult": {
+      "currency": "UZS",
+      "parcels": [
+        {
+          "basePrice": 10000,
+          "chargeableWeightG": 800,
+          "customerPrice": 10000,
+          "declaredValueFee": 0,
+          "volumetricWeightG": 500,
+          "zone": "ZONE_0"
+        }
+      ],
+      "tariffVersion": 7,
+      "total": 10000
+    },
+    "secretsResult": {
+      "deliveryCode": "654321",
+      "handoverCode": "123456",
+      "qrPayload": "AVA1|SHIP1|<hmac>",
+      "shipmentId": "SHIP1",
+      "trackingNumber": "AVA-26-1007-000001"
+    },
+    "shipment": {
+      "assignedProviderIds": [
+        "998902220002"
+      ],
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "currentCustodian": {
+        "id": "998902220002",
+        "kind": "provider",
+        "since": "2026-10-06T21:30:00.000Z"
+      },
+      "currentLegId": "LEG1",
+      "custodyCount": 1,
+      "destination": {
+        "addressText": "Gurlan, Bog'cha 5",
+        "districtId": "gurlan",
+        "geohash": "tr6yn6t",
+        "lat": 41.85,
+        "lng": 60.4,
+        "regionId": "xorazm"
+      },
+      "fundedAt": "2026-10-06T21:30:00.000Z",
+      "inTransitAt": "2026-10-06T21:30:00.000Z",
+      "lastCustodyEventId": "SHIP1_LEG1_pickup",
+      "legAssignments": {
+        "LEG1": "998902220002"
+      },
+      "legCount": 1,
+      "legIds": [
+        "LEG1"
+      ],
+      "orderId": "ORDER1",
+      "origin": {
+        "addressText": "Gurlan, Markaz 1",
+        "districtId": "gurlan",
+        "geohash": "tr6yn0w",
+        "lat": 41.84,
+        "lng": 60.39,
+        "regionId": "xorazm"
+      },
+      "ownerId": "998901110001",
+      "parcel": {
+        "actualWeightG": 800,
+        "declaredValue": 0,
+        "description": "Kitoblar",
+        "fragile": false,
+        "heightCm": 10,
+        "lengthCm": 20,
+        "widthCm": 15
+      },
+      "paymentStatus": "escrow_funded",
+      "priceSnapshot": {
+        "actualWeightG": 800,
+        "basePrice": 10000,
+        "bracketIndex": 0,
+        "calculatedAt": "2026-10-06T21:30:00.000Z",
+        "chargeableWeightG": 800,
+        "currency": "UZS",
+        "customerPrice": 10000,
+        "declaredValue": 0,
+        "declaredValueFee": 0,
+        "extras": [],
+        "heightCm": 10,
+        "lengthCm": 20,
+        "tariffVersion": 7,
+        "volumetricDivisor": 6000,
+        "volumetricWeightG": 500,
+        "widthCm": 15,
+        "zone": "ZONE_0"
+      },
+      "recipientName": "Olim aka",
+      "routePlanVersion": 1,
+      "status": "in_transit",
+      "trackingNumber": "AVA-26-1007-000001",
+      "updatedAt": "2026-10-06T21:30:00.000Z"
+    },
+    "shipmentDelivered": {
+      "assignedProviderIds": [
+        "998902220002"
+      ],
+      "createdAt": "2026-10-06T21:30:00.000Z",
+      "currentCustodian": {
+        "id": null,
+        "kind": "recipient",
+        "since": "2026-10-06T21:30:00.000Z"
+      },
+      "currentLegId": "LEG1",
+      "custodyCount": 2,
+      "deliveredAt": "2026-10-06T21:30:00.000Z",
+      "destination": {
+        "addressText": "Gurlan, Bog'cha 5",
+        "districtId": "gurlan",
+        "geohash": "tr6yn6t",
+        "lat": 41.85,
+        "lng": 60.4,
+        "regionId": "xorazm"
+      },
+      "fundedAt": "2026-10-06T21:30:00.000Z",
+      "inTransitAt": "2026-10-06T21:30:00.000Z",
+      "lastCustodyEventId": "SHIP1_LEG1_delivery",
+      "legAssignments": {
+        "LEG1": "998902220002"
+      },
+      "legCount": 1,
+      "legIds": [
+        "LEG1"
+      ],
+      "orderId": "ORDER1",
+      "origin": {
+        "addressText": "Gurlan, Markaz 1",
+        "districtId": "gurlan",
+        "geohash": "tr6yn0w",
+        "lat": 41.84,
+        "lng": 60.39,
+        "regionId": "xorazm"
+      },
+      "ownerId": "998901110001",
+      "parcel": {
+        "actualWeightG": 800,
+        "declaredValue": 0,
+        "description": "Kitoblar",
+        "fragile": false,
+        "heightCm": 10,
+        "lengthCm": 20,
+        "widthCm": 15
+      },
+      "paymentStatus": "escrow_funded",
+      "priceSnapshot": {
+        "actualWeightG": 800,
+        "basePrice": 10000,
+        "bracketIndex": 0,
+        "calculatedAt": "2026-10-06T21:30:00.000Z",
+        "chargeableWeightG": 800,
+        "currency": "UZS",
+        "customerPrice": 10000,
+        "declaredValue": 0,
+        "declaredValueFee": 0,
+        "extras": [],
+        "heightCm": 10,
+        "lengthCm": 20,
+        "tariffVersion": 7,
+        "volumetricDivisor": 6000,
+        "volumetricWeightG": 500,
+        "widthCm": 15,
+        "zone": "ZONE_0"
+      },
+      "recipientName": "Olim aka",
+      "routePlanVersion": 1,
+      "status": "delivered",
+      "trackingNumber": "AVA-26-1007-000001",
+      "updatedAt": "2026-10-06T21:30:00.000Z"
+    }
+  }
+}

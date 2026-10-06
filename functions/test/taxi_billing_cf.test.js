@@ -8,8 +8,10 @@
  *   - to'lovsiz `published` YO'Q; wallet yetmasa `payment_required`
  *   - komissiya BIR MARTA (idempotent), ledger Σdr == Σcr
  *   - narx oshsa farq, pasaysa bir martalik refund
- *   - bekor → wallet'ga refund; jo'nashdan keyin «bekor» → refund yo'q
- *   - starter/grace/shadow → fee 0; verification_required → yopiq
+ *   - bekor → wallet'ga refund; jo'nashdan KEYIN ham bekor + refund (CANCEL-9)
+ *   - starter/grace → fee 0; verification_required → yopiq
+ *   - global `taxiBillingEnabled` flag YO'Q — faqat `isTaxiBillable` (D-TAXI-6.1)
+ *   - kelishuv starter'da shart emas; verification_required/verified'da shart (D-TAXI-24.1)
  *   - yolg'on otmena `confirmed` → reclaim + xabar
  */
 'use strict';
@@ -53,7 +55,7 @@ async function wipe(col) {
   const s = await db.collection(col).get();
   await Promise.all(s.docs.map((d) => d.ref.delete()));
 }
-async function reset({ status = 'verified', graceUntil = null, flag = true, agreement = true, wallet = 100000 } = {}) {
+async function reset({ status = 'verified', graceUntil = null, agreement = true, wallet = 100000 } = {}) {
   clock = NOW0;
   notified.length = 0;
   await Promise.all(['users', 'provider_capabilities', 'service_agreements', 'module_config',
@@ -69,7 +71,6 @@ async function reset({ status = 'verified', graceUntil = null, flag = true, agre
   if (agreement) {
     await db.collection('service_agreements').doc(ACC).set({ taxi: { version: caps.AGREEMENT_VERSIONS.taxi, acceptedAt: NOW0 } });
   }
-  await db.collection('module_config').doc('global').set({ taxiBillingEnabled: flag });
   if (wallet > 0) {
     await settlementLedger.postEntry(db, {
       idempotencyKey: `topup:${DRIVER}:test`, kind: 'test_topup',
@@ -83,8 +84,10 @@ const trip = async (id) => (await db.collection('taxi_trips').doc(id).get()).dat
 const pub = (over = {}) => api.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', scheduleDate: '2026-10-07', startTime: '08:00',
   departureAt: '2026-10-07T03:00:00Z', originLat: 41.55, originLng: 60.63, driverLat: 41.55, driverLng: 60.63, ...over }, ctx);
 
+const setGrace = (until) => db.collection('provider_capabilities').doc(ACC)
+  .set({ window: { taxi: { billingGraceUntil: until } } }, { merge: true });
+
 async function main() {
-  // Flag keshini har resetda yangilash uchun: 60 s kesh — testlar bir xil flag bilan guruhlanadi.
   await reset();
   await check('quote: 350 000 → 28 000, wallet 100 000, sufficient', async () => {
     const q = await api.quote({ farePerSeat: 350000 }, ctx);
@@ -160,14 +163,28 @@ async function main() {
     assert.ok(notified[0].body.includes('qayta hisobdan yechildi'));
   });
   await reset(); // oldingi holatdagi qarz bu tekshiruvga aloqador emas
-  await check('jo\'nashdan 2 soat keyin «bekor» → completed, refund YO\'Q', async () => {
+  await check('CANCEL-9: jo\'nashdan 3 soat KEYIN bekor → cancelled + REFUND (yo\'lovchi topilmadi)', async () => {
     clock = new Date('2026-10-06T06:00:00Z');
-    const r = await pub({ farePerSeat: 100000, departureAt: '2026-10-06T07:00:00Z' });
+    const r = await pub({ farePerSeat: 100000, departureAt: '2026-10-06T07:00:00Z' }); // fee 8 000
+    assert.strictEqual(await balance(), 92000);
     clock = new Date('2026-10-06T10:00:00Z');
-    const b = await balance();
     const c = await api.cancel({ tripId: r.tripId }, ctx);
-    assert.strictEqual(c.status, 'completed'); assert.strictEqual(c.refunded, false);
-    assert.strictEqual(await balance(), b);
+    assert.strictEqual(c.status, 'cancelled', 'avval bu yerda `completed` qaytardi');
+    assert.strictEqual(c.refunded, true);
+    assert.strictEqual(await balance(), 100000, 'komissiya to\'liq qaytdi');
+    const t = await trip(r.tripId);
+    assert.strictEqual(t.status, 'cancelled'); assert.strictEqual(t.completedReason, undefined);
+    assert.strictEqual(t.fraudReviewed, false, 'soxta otmena keyingi e\'londa dalil bilan baholanadi');
+    const c2 = await api.cancel({ tripId: r.tripId }, ctx);
+    assert.strictEqual(c2.idempotent, true); assert.strictEqual(await balance(), 100000, 'ikki marta refund yo\'q');
+  });
+  await check('CANCEL-9: jo\'nashdan keyingi bekor + dalil YO\'Q (bron yo\'q) → keyingi e\'londa NORMAL, pul tegilmaydi', async () => {
+    const before = await balance();
+    clock = new Date('2026-10-06T20:00:00Z');
+    await pub({ from: 'Toshkent', to: 'Urganch', farePerSeat: 100000, driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-07T03:00:00Z' });
+    const prev = (await db.collection('taxi_trips').where('status', '==', 'cancelled').get()).docs[0].data();
+    assert.strictEqual(prev.fraudReviewed, true); assert.strictEqual(prev.fraudVerdict, 'normal');
+    assert.strictEqual(await balance(), before - 8000, 'faqat yangi reys komissiyasi');
   });
 
   // ── D-TAXI-CANCEL-3: RESCHEDULE ──────────────────────────────────────
@@ -200,9 +217,12 @@ async function main() {
     });
     await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
     clock = new Date('2026-10-07T15:00:00Z');
-    await db.collection('module_config').doc('global').set({ taxiBillingEnabled: false }); // yangi reys fee 0 (faqat reclaim ko'rinsin)
+    // Yangi reys fee 0 bo'lsin (faqat reclaim ko'rinsin) — global flag YO'Q,
+    // shuning uchun haydovchining o'z billing grace'i bilan (D-TAXI-6.1).
+    await setGrace(new Date('2027-01-01T00:00:00Z'));
     const freshApi = attachTaxiBilling({}, { functions, db, admin, callerPhone: (c) => digits(c.auth.token.phone_number), canonicalUid: (v) => digits(v), settlementLedger, notifyUserInApp: async () => {}, now: () => clock });
-    await freshApi.publish({ farePerSeat: 100000, from: 'Toshkent', to: 'Urganch', driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' }, ctx);
+    const nr = await freshApi.publish({ farePerSeat: 100000, from: 'Toshkent', to: 'Urganch', driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' }, ctx);
+    assert.strictEqual(nr.feeAmount, 0, 'grace ichida fee 0');
     const t = await trip(r.tripId);
     assert.strictEqual(t.fraudVerdict, 'confirmed');
     assert.strictEqual(t.reclaimedAmount, 3000); assert.strictEqual(t.outstandingTaxiFee, 25000);
@@ -211,7 +231,7 @@ async function main() {
     assert.strictEqual(cap.debt.taxi, 25000, 'qarz capability\'da, ikkinchi ledger yo\'q');
   });
   await check('qarz bor + wallet yetmasa → yangi reys YOPIQ (outstanding_debt)', async () => {
-    await db.collection('module_config').doc('global').set({ taxiBillingEnabled: true });
+    await setGrace(null);
     const liveApi = attachTaxiBilling({}, { functions, db, admin, callerPhone: (c) => digits(c.auth.token.phone_number), canonicalUid: (v) => digits(v), settlementLedger, now: () => clock });
     await assert.rejects(() => liveApi.publish({ farePerSeat: 100000, from: 'Urganch', to: 'Xiva' }, ctx),
       (e) => e.details && e.details.reason === 'outstanding_debt' && e.details.outstanding === 25000);
@@ -245,31 +265,61 @@ async function main() {
     const q = await api.quote({ farePerSeat: 350000 }, ctx);
     assert.strictEqual(q.billable, false); assert.strictEqual(q.feeAmount, 0); assert.strictEqual(q.quotedFee, 28000);
   });
+  // ── D-TAXI-24.1: kelishuv starter'da EMAS, 4 oydan keyin ─────────────
+  await reset({ status: 'starter', agreement: false });
+  await check('D-TAXI-24.1: STARTER kelishuvsiz e\'lon qiladi (fee 0)', async () => {
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.allowed, true); assert.strictEqual(q.reason, 'ok');
+    assert.strictEqual(q.agreementRequired, false);
+    const r = await pub();
+    assert.strictEqual(r.status, 'published'); assert.strictEqual(r.feeAmount, 0);
+  });
+  await reset({ status: 'verification_required', agreement: false });
+  await check('D-TAXI-24.1: verification_required → kelishuv TAQDIM qilinadi (agreementRequired), e\'lon yopiq', async () => {
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.allowed, false); assert.strictEqual(q.reason, 'taxi_verification_required');
+    assert.strictEqual(q.agreementRequired, true); assert.strictEqual(q.agreementVersion, caps.AGREEMENT_VERSIONS.taxi);
+  });
+  await reset({ status: 'verification_required', agreement: true });
+  await check('verification_required + kelishuv qabul qilingan → agreementRequired false, faqat admin kutiladi', async () => {
+    const q = await api.quote({ farePerSeat: 350000 }, ctx);
+    assert.strictEqual(q.reason, 'taxi_verification_required'); assert.strictEqual(q.agreementRequired, false);
+  });
   await reset({ agreement: false });
-  await check('kelishuvsiz e\'lon yo\'q (D-TAXI-24)', async () => {
+  await check('VERIFIED kelishuvsiz pullik e\'lon YO\'Q (publish oldidan tekshiruv qoladi)', async () => {
     const q = await api.quote({ farePerSeat: 350000 }, ctx);
     assert.strictEqual(q.allowed, false); assert.strictEqual(q.reason, 'agreement_required');
     await assert.rejects(() => pub(), (e) => e.details.reason === 'agreement_required');
+    assert.strictEqual(await balance(), 100000);
   });
-  // Flag keshi 60 s — shadow testi uchun yangi API nusxasi.
-  const shadowApi = attachTaxiBilling({}, { functions, db, admin, callerPhone: (c) => digits(c.auth.token.phone_number), canonicalUid: (v) => digits(v), settlementLedger, now: () => clock });
-  await reset({ flag: false });
-  await check('SHADOW MODE: flag o\'chiq → snapshot yoziladi, pul olinmaydi (42-qoida)', async () => {
-    const r = await shadowApi.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent' }, ctx);
-    assert.strictEqual(r.status, 'published'); assert.strictEqual(r.feeAmount, 0); assert.strictEqual(r.billingMode, 'shadow');
+
+  // ── D-TAXI-6.1: global flag YO'Q ─────────────────────────────────────
+  await reset();
+  await check('D-TAXI-6.1: `taxiBillingEnabled: false` HISOBGA OLINMAYDI — verified dan 2% olinadi', async () => {
+    await db.collection('module_config').doc('global').set({ taxiBillingEnabled: false });
+    const freshApi = attachTaxiBilling({}, { functions, db, admin, callerPhone: (c) => digits(c.auth.token.phone_number), canonicalUid: (v) => digits(v), settlementLedger, now: () => clock });
+    const r = await freshApi.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent' }, ctx);
+    assert.strictEqual(r.status, 'published'); assert.strictEqual(r.feeAmount, 28000); assert.strictEqual(r.billable, true);
+    assert.strictEqual(r.billingMode, undefined, '`shadow` rejimi yo\'q');
+    assert.strictEqual(await balance(), 72000);
+  });
+  await reset({ status: 'starter' });
+  await check('STARTER: snapshot yoziladi (quotedFee 28 000), pul olinmaydi', async () => {
+    const r = await pub({ farePerSeat: 350000 });
+    assert.strictEqual(r.status, 'published'); assert.strictEqual(r.feeAmount, 0); assert.strictEqual(r.billable, false);
     assert.strictEqual((await trip(r.tripId)).quotedFee, 28000, 'hisob ko\'rinadi, pul yo\'q');
     assert.strictEqual(await balance(), 100000);
   });
-  await check('FRAUD SHADOW: fee\'siz bekor ham BAHOLANADI — verdict yoziladi, pul harakatlanmaydi', async () => {
+  await check('FRAUD (starter): fee\'siz bekor ham BAHOLANADI — verdict yoziladi, pul harakatlanmaydi', async () => {
     clock = new Date('2026-10-06T06:00:00Z');
-    const r = await shadowApi.publish({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', departureAt: '2026-10-07T03:00:00Z' }, ctx);
-    await shadowApi.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
+    const r = await pub({ farePerSeat: 350000, from: 'Urganch', to: 'Toshkent', departureAt: '2026-10-07T03:00:00Z' });
+    await api.cancel({ tripId: r.tripId, hadAvaBooking: true }, ctx);
     await db.collection('taxi_trips').doc(r.tripId).update({ 'location.destLat': 41.3111, 'location.destLng': 69.2797, cancelledAt: new Date('2026-10-07T02:00:00Z') });
     clock = new Date('2026-10-07T15:00:00Z');
-    await shadowApi.publish({ farePerSeat: 100000, from: 'Toshkent', to: 'Urganch', driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' }, ctx);
+    await pub({ farePerSeat: 100000, from: 'Toshkent', to: 'Urganch', driverLat: 41.3111, driverLng: 69.2797, departureAt: '2026-10-08T03:00:00Z' });
     const t = await trip(r.tripId);
     assert.strictEqual(t.fraudReviewed, true);
-    assert.strictEqual(t.fraudVerdict, 'confirmed', 'shadow davrida ham verdict chiqadi');
+    assert.strictEqual(t.fraudVerdict, 'confirmed', 'starter davrida ham verdict chiqadi');
     assert.strictEqual(t.reclaimed, undefined, 'fee 0 edi — qaytarib oladigan narsa yo\'q');
     assert.strictEqual(await balance(), 100000);
     assert.strictEqual((await db.collection('taxi_fraud_cases').where('tripId', '==', r.tripId).get()).size, 1);

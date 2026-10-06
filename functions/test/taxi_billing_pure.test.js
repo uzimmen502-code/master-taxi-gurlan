@@ -139,6 +139,27 @@ ok('CANCEL-7: boshqa transportda ketgan haqiqiy bekor — bron yo\'q, yo\'nalish
   });
   assert.strictEqual(r.verdict, 'normal');
 });
+ok('CANCEL-9: `late_cancel` + teskari reys (vaqt oynasi yo\'q) → MANUAL_REVIEW, confirmed EMAS', () => {
+  // Jo'nashdan keyin bekor (yo'lovchi topilmadi) + GPS + bron + teskari reys,
+  // lekin vaqt oynasidan tashqarida. Avval late_cancel ikkinchi «extra»
+  // bo'lib pulni avtomatik yechardi; endi faqat admin ko'rigi.
+  const r = fraud.evaluateCancelFraud({
+    prev: prevTrip({ cancelledAt: h(3) }), // departure h(2) — jo'nashdan 1 soat keyin bekor
+    next: { from: 'Toshkent', to: 'Urganch', publishedAt: h(80), driverLat: TSH.lat, driverLng: TSH.lng },
+  });
+  assert.ok(r.signals.includes('late_cancel'));
+  assert.ok(r.signals.includes('route_reversed'));
+  assert.ok(!r.signals.includes('time_window'));
+  assert.strictEqual(r.verdict, 'manual_review');
+});
+ok('CANCEL-9: `late_cancel` ustiga 2 ta MUSTAQIL dalil bo\'lsa — baribir CONFIRMED (signal yo\'qolmagan)', () => {
+  const r = fraud.evaluateCancelFraud({
+    prev: prevTrip({ cancelledAt: h(3), originLat: URG.lat, originLng: URG.lng, cancelLat: URG.lat, cancelLng: URG.lng }),
+    next: { from: 'Toshkent', to: 'Urganch', publishedAt: h(15), driverLat: TSH.lat, driverLng: TSH.lng },
+  });
+  assert.ok(r.signals.includes('late_cancel'));
+  assert.strictEqual(r.verdict, 'confirmed'); // route_reversed + time_window + movement_to_dest
+});
 ok('chegaralar KONFIGDAN: confirmedExtra oshirilsa confirmed chiqmaydi', () => {
   const r = fraud.evaluateCancelFraud({
     prev: prevTrip(),

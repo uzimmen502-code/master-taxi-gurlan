@@ -19,6 +19,7 @@
  */
 
 const caps = require('../core/capabilities');
+const fcm = require('../notify/fcm');
 const { callerIdFrom, requireCanonicalId, candidateIdsFor } = require('../core/ids');
 
 const COLLECTION = 'provider_capabilities';
@@ -108,14 +109,28 @@ function makeRequestCapability(deps) {
       const current = caps.statusOf(doc, service);
 
       if (caps.isWorking(service, current)) {
-        return { accountId, status: current, changed: false };
+        const out = { accountId, status: current, changed: false };
+        /**
+         * D-TAXI-24.1: kelishuv starter'da EMAS — 4 oy o'tib
+         * `verification_required` (va `verified`) bo'lganda tizim taqdim
+         * qiladi. Bu INFORMATSION javob: ishlash huquqi o'zgarmaydi,
+         * ilova varaqni ko'rsatadi. Versiyani server aytadi.
+         */
+        if (caps.agreementDue(service, current)) {
+          const agr = await tx.get(db.collection('service_agreements').doc(accountId));
+          if (!caps.hasCurrentAgreement(agr.exists ? agr.data() : null, service)) {
+            out.agreementRequired = true;
+            out.agreementVersion = caps.AGREEMENT_VERSIONS[service];
+          }
+        }
+        return out;
       }
 
       /**
-       * D-TAXI-24 / D-SERVICE-2: xizmatni BIRINCHI MARTA yoqishdan oldin
-       * shu xizmat kelishuvi qabul qilingan bo'lishi SHART. Avval bu
-       * faqat publish'da tekshirilardi — ya'ni odam `starter` olib, lekin
-       * shartlarni ko'rmagan bo'lardi. Endi huquq kelishuvsiz berilmaydi.
+       * D-SERVICE-2: `AGREEMENT_GATED[service]` bo'lsa xizmatni BIRINCHI
+       * MARTA yoqishdan oldin kelishuv SHART. Taksi uchun bu darvoza
+       * YO'Q (D-TAXI-24.1) — starter kelishuvsiz beriladi; hozircha
+       * hech bir xizmat gated emas, matnlar egadan kutilmoqda (2-bis).
        */
       const agrSnap = caps.AGREEMENT_GATED[service]
         ? await tx.get(db.collection('service_agreements').doc(accountId))
@@ -166,12 +181,35 @@ function makeRequestCapability(deps) {
  * `suspended`/`verification_required` AKKAUNTNI YOPMAYDI — faqat shu
  * xizmat, boshqa capability'lar va `users` tegilmaydi (D-13, D-TAXI-5).
  */
+/**
+ * D-TAXI-24.1 — starter tugaganda haydovchiga ilova ichidagi xabar.
+ *
+ * `admin_news` — mavjud shaxsiy inbox (`notifyUserInApp` bilan bir xil
+ * shakl, `targetUserId` = kanon telefon). Hujjat ID DETERMINISTIK:
+ * sweeper qayta ishlasa ham ikkinchi xabar yozilmaydi (21-qoida).
+ * Matn — PROPOSED (D-TAXI-5 va D-TAXI-24.1 dan), ega tahrirlashi mumkin.
+ */
+const TAXI_DUE_NEWS = {
+  title: 'Taksi: 4 oylik starter davri tugadi',
+  bodyAgreement: 'Yangi pullik reys e\'lon qilish uchun Taksi xizmati kelishuvini qabul qiling '
+    + 'va admin tekshiruvidan o\'ting. Mavjud reyslaringiz va boshqa xizmatlaringiz ishlashda davom etadi.',
+  bodyVerification: 'Yangi pullik reys e\'lon qilish uchun admin tekshiruvidan o\'ting. '
+    + 'Mavjud reyslaringiz va boshqa xizmatlaringiz ishlashda davom etadi.',
+};
+
+function taxiDueNewsId(accountId) {
+  return `taxiVerificationDue_${accountId}`;
+}
+
 function makeCapabilitySweeper(deps) {
-  const { db, now: nowFn, batchSize = 200, services = caps.SERVICES } = deps;
+  const {
+    db, messaging = null, now: nowFn, batchSize = 200, services = caps.SERVICES,
+  } = deps;
 
   return async function capabilitySweeper() {
     const now = nowFn ? nowFn() : new Date();
     const out = { graceGranted: 0, suspended: 0, verificationRequired: 0 };
+    const pushes = [];
 
     for (const service of services) {
       const statuses = caps.sweepableStatuses(service);
@@ -199,6 +237,13 @@ function makeCapabilitySweeper(deps) {
             const step = caps.nextStep(fresh.data() || {}, service, now);
             if (step.action === 'none') return null;
 
+            // D-TAXI-24.1: tranzaksiyadagi BARCHA o'qishlar yozuvdan oldin.
+            let agreementPending = false;
+            if (step.action === 'require_verification') {
+              const agr = await tx.get(db.collection('service_agreements').doc(d.id));
+              agreementPending = !caps.hasCurrentAgreement(agr.exists ? agr.data() : null, service);
+            }
+
             const patch = { status: { [service]: step.patch.status }, updatedAt: now };
             if (step.action === 'grant_grace') {
               patch.window = {
@@ -209,16 +254,64 @@ function makeCapabilitySweeper(deps) {
               };
             } else if (step.action === 'suspend') {
               patch.suspend = { [service]: { at: now, reason: step.patch.reason, by: 'system' } };
+            } else if (step.action === 'require_verification') {
+              // Server kaliti (`window`) — klient o'chira olmaydi, qoida
+              // o'zgarmaydi. Kelishuv qabul qilinganini `service_agreements`
+              // ko'rsatadi; bu yerda faqat «tizim taqdim qildi» vaqti.
+              if (agreementPending) patch.window = { [service]: { agreementRequestedAt: now } };
             }
             tx.set(d.ref, patch, { merge: true });
-            return step.action;
+
+            let uid = '';
+            if (step.action === 'require_verification') {
+              uid = caps.identityOf(fresh.data() || {}).primaryUid;
+              if (uid) {
+                tx.set(db.collection('admin_news').doc(taxiDueNewsId(d.id)), {
+                  title: TAXI_DUE_NEWS.title,
+                  body: agreementPending ? TAXI_DUE_NEWS.bodyAgreement : TAXI_DUE_NEWS.bodyVerification,
+                  category: 'warning',
+                  audience: 'user',
+                  targetUserId: uid,
+                  source: 'taxi_capability',
+                  dataType: 'taxi_verification_due',
+                  priority: 7,
+                  createdAt: now,
+                });
+              }
+            }
+            return { action: step.action, uid, agreementPending };
           });
 
-          if (applied === 'grant_grace') out.graceGranted += 1;
-          else if (applied === 'suspend') out.suspended += 1;
-          else if (applied === 'require_verification') out.verificationRequired += 1;
+          const action = applied && applied.action;
+          if (action === 'grant_grace') out.graceGranted += 1;
+          else if (action === 'suspend') out.suspended += 1;
+          else if (action === 'require_verification') {
+            out.verificationRequired += 1;
+            if (applied.uid) pushes.push(applied);
+          }
         } catch (e) {
           console.error(`capabilitySweeper xato (${d.id}/${service}): ${e.message}`);
+        }
+      }
+    }
+
+    // Push — tranzaksiyadan TASHQARIDA va «best effort»: xabar inbox'da
+    // allaqachon bor, push yetmasa ham haydovchi ilovada ko'radi.
+    if (messaging) {
+      for (const p of pushes) {
+        try {
+          const tokens = await fcm.tokensFor(db, p.uid);
+          if (tokens.length === 0) continue;
+          await messaging.sendEach(tokens.map((token) => ({
+            token,
+            notification: {
+              title: TAXI_DUE_NEWS.title,
+              body: (p.agreementPending ? TAXI_DUE_NEWS.bodyAgreement : TAXI_DUE_NEWS.bodyVerification).slice(0, 120),
+            },
+            data: { type: 'taxi_verification_due', screen: 'news' },
+          })));
+        } catch (e) {
+          console.error(`capabilitySweeper push xato (taxi_verification_due): ${e.message}`);
         }
       }
     }
@@ -252,6 +345,8 @@ async function fetchByPhone(db, phoneId) {
 
 module.exports = {
   COLLECTION,
+  TAXI_DUE_NEWS,
+  taxiDueNewsId,
   newAccountId,
   ensureAccountId,
   makeRequestCapability,

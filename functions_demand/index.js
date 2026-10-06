@@ -220,7 +220,8 @@ exports.capabilitySweeper = fn.pubsub
   .schedule('every 60 minutes')
   .timeZone('Asia/Tashkent')
   .onRun(async () => {
-    const run = capabilitiesApi.makeCapabilitySweeper({ db });
+    // D-TAXI-24.1: starter tugaganda inbox xabari + push (kelishuv taqdimi).
+    const run = capabilitiesApi.makeCapabilitySweeper({ db, messaging });
     return run();
   });
 

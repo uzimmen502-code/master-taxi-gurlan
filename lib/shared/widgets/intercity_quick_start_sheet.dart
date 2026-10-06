@@ -156,8 +156,10 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
     }
     if (!mounted) return null;
 
-    // D-TAXI-24: kelishuv — versiyani server aytadi.
-    if (!quote.allowed && quote.reason == 'agreement_required') {
+    // D-TAXI-24.1: kelishuv starter tugagach — tizim o'zi taqdim qiladi.
+    // `verification_required` da ham (keyin admin kutiladi). Versiyani
+    // server aytadi.
+    if (quote.agreementRequired) {
       final ok = await showTaxiAgreementSheet(
         context,
         version: quote.agreementVersion ?? 1,

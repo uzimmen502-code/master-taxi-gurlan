@@ -14,8 +14,9 @@
  *
  * Kalit `accountId` (T-1a): kelishuv AKKAUNTGA tegishli, telefon
  * almashsa ham saqlanadi. accountId bo'lmasa shu yerda yaratiladi
- * (`ensureAccountId`) — chunki D-TAXI-24 bo'yicha kelishuv xizmat
- * yoqilishidan OLDIN qabul qilinadi.
+ * (`ensureAccountId`) — `AGREEMENT_GATED` xizmatlarda kelishuv xizmat
+ * yoqilishidan OLDIN qabul qilinadi. Taksida (D-TAXI-24.1) esa 4 oy
+ * o'tib `verification_required` bo'lganda taqdim qilinadi.
  */
 
 const caps = require('../core/capabilities');

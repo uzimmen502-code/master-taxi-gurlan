@@ -107,13 +107,36 @@ const BILLING_GRACE_MONTHS = 4;
 const AGREEMENT_VERSIONS = { taxi: 1, courier: 1, seller: 1, freight: 1, service: 1 };
 
 /**
- * Kelishuv xizmatni YOQISHDAN OLDIN shartmi (D-TAXI-24: taksi — ha).
+ * Kelishuv xizmatni YOQISHDAN OLDIN shartmi.
+ *
+ * Taksi — YO'Q (D-TAXI-24.1, ega qarori 2026-10-06): starter uchun
+ * kelishuv shart emas, u 4 oy o'tib `verification_required` bo'lganda
+ * tizim tomonidan taqdim qilinadi (`AGREEMENT_DUE_STATUSES`).
+ *
  * Boshqa xizmatlar uchun kelishuv MATNI hali ega tomonidan berilmagan —
  * matnsiz «qabul qildim» tugmasi yuridik jihatdan bo'sh bo'lardi (1-qoida:
  * biznes qoidani o'ylab topma). Matn kelganda `true` qilinadi; o'sha
  * paytgacha ularda kelishuv ixtiyoriy.
  */
-const AGREEMENT_GATED = { taxi: true, courier: false, seller: false, freight: false, service: false };
+const AGREEMENT_GATED = { taxi: false, courier: false, seller: false, freight: false, service: false };
+
+/**
+ * Kelishuv lifecycle'ning QAYSI holatlarida TALAB qilinadi (D-TAXI-24.1).
+ *
+ * Taksi: `verification_required` (tizim taqdim qiladi) va `verified`
+ * (pullik e'lon oldidan tekshiriladi; admin `verified` berishdan oldin
+ * ham). `starter` — YO'Q. Boshqa xizmatlar: ro'yxatda yo'q = hech qachon
+ * (gate orqali yoqilganda `AGREEMENT_GATED` ishlaydi).
+ */
+const AGREEMENT_DUE_STATUSES = {
+  taxi: [TAXI.verificationRequired, TAXI.verified],
+};
+
+/** Shu xizmat shu holatda kelishuvsiz davom eta olmaydimi. */
+function agreementDue(service, status) {
+  const list = AGREEMENT_DUE_STATUSES[service];
+  return Array.isArray(list) && list.includes(normalizeStatus(service, status));
+}
 
 /** `service_agreements/{accountId}` da shu xizmat uchun joriy versiya qabul qilinganmi. */
 function hasCurrentAgreement(agreementDoc, service) {
@@ -397,12 +420,15 @@ function nextStep(doc, service, now) {
 }
 
 /**
- * TAKSI BILLING ruxsati (D-TAXI-6, T-6).
+ * TAKSI BILLING ruxsati (D-TAXI-6, D-TAXI-6.1, T-6) — YAGONA mezon.
  *
  * 2% faqat: `verified` **va** billing grace tugagan bo'lsa. Grace —
  * mavjud tasdiqlangan haydovchilar uchun (migratsiya + 4 oy); yangi
  * haydovchi `starter` davrida umuman billing ko'rmaydi (`starter`
  * `paidPublish`da bor, lekin `isBillable` false).
+ *
+ * D-TAXI-6.1: global flag YO'Q — billing har haydovchi uchun shu
+ * funksiya `true` bo'lishi bilan avtomatik ochiladi.
  */
 function isTaxiBillable(doc, now) {
   if (statusOf(doc, 'taxi') !== TAXI.verified) return false;
@@ -443,6 +469,8 @@ module.exports = {
   BILLING_GRACE_MONTHS,
   AGREEMENT_VERSIONS,
   AGREEMENT_GATED,
+  AGREEMENT_DUE_STATUSES,
+  agreementDue,
   hasCurrentAgreement,
   DAY_MS,
   addMonths,

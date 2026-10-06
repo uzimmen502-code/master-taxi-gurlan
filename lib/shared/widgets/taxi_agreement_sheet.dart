@@ -1,11 +1,13 @@
-// TAXI SERVICE AGREEMENT — D-TAXI-24.
+// TAXI SERVICE AGREEMENT — D-TAXI-24 / D-TAXI-24.1.
 //
-// Ҳайдовчи таксини биринчи марта ёққанда (ёки келишув версияси
-// янгиланганда) шу варақни кўради. Қабул қилиш СЕРВЕРДА қайд этилади
+// Ҳайдовчи таксини ёққанда ЭМАС — 4 ойлик starter тугаб
+// `verification_required` бўлганда (ва келишув версияси янгиланганда)
+// тизим шу варақни ўзи тақдим қилади (D-TAXI-24.1, эга қарори
+// 2026-10-06). Қабул қилиш СЕРВЕРДА қайд этилади
 // (`acceptServiceAgreement` → `service_agreements/{accountId}`), илова
-// фақат чақиради. Версияни сервер айтади (`quoteTaxiFee.agreementVersion`),
-// илова ўзича рақам ўйлаб топмайди — эски матнни «қабул қилдим» деб
-// юбориш сервер томонидан рад этилади.
+// фақат чақиради. Версияни сервер айтади (`requestCapability` /
+// `quoteTaxiFee` → `agreementVersion`), илова ўзича рақам ўйлаб
+// топмайди — эски матнни «қабул қилдим» деб юбориш рад этилади.
 //
 // Матн уч тилда (`taxi_agreement_p1…p8`) — uz_Cyrl, uz_Latn, ru.
 
@@ -36,32 +38,31 @@ Future<bool> showTaxiAgreementSheet(
   return ok == true;
 }
 
-/// D-TAXI-1 + D-TAXI-24: таксини ёқиш — келишув → `starter`.
+/// D-TAXI-1 + D-TAXI-24.1: таксини ёқиш — дарҳол `starter`, келишувсиз.
 ///
-/// `requestCapability` чақирилади; сервер «келишув керак» деса варақ
-/// кўрсатилади, қабул қилингач қайта чақирилади. `true` — capability бор
-/// (`starter`/`verified`…), ҳайдовчи ишлаши мумкин. Админ тасдиғи
-/// КУТИЛМАЙДИ.
+/// `requestCapability` чақирилади. Сервер `agreementRequired: true` деса
+/// (starter тугаган: `verification_required`/`verified`, келишув ҳали
+/// қабул қилинмаган) варақ АВТОМАТИК тақдим қилинади. Рад этилса ҳам
+/// ҳайдовчи ишлашда давом этади (D-TAXI-5) — фақат янги пуллик рейс
+/// олдидан сервер яна сўрайди. `true` — capability бор, ҳайдовчи
+/// ишлаши мумкин. Админ тасдиғи КУТИЛМАЙДИ.
 Future<bool> ensureTaxiCapability(
   BuildContext context, {
   required Future<Map<String, dynamic>> Function() requestCapability,
   required Color primaryColor,
   TaxiBillingRepository? repository,
 }) async {
-  var res = await requestCapability();
-  if (res['agreementRequired'] == true) {
-    if (!context.mounted) return false;
-    final ok = await showTaxiAgreementSheet(
+  final res = await requestCapability();
+  final hasCapability = (res['accountId'] ?? '').toString().isNotEmpty;
+  if (hasCapability && res['agreementRequired'] == true && context.mounted) {
+    await showTaxiAgreementSheet(
       context,
       version: (res['agreementVersion'] as int?) ?? 1,
       primaryColor: primaryColor,
       repository: repository,
     );
-    if (!ok) return false;
-    res = await requestCapability();
-    if (res['agreementRequired'] == true) return false;
   }
-  return (res['accountId'] ?? '').toString().isNotEmpty;
+  return hasCapability;
 }
 
 class _TaxiAgreementSheet extends StatefulWidget {

@@ -60,6 +60,19 @@ function makeAdminSetCapabilityStatus(deps) {
       if (!caps.canTransition(service, from, to, 'admin')) {
         throw httpError('failed-precondition', `${service}: «${from}» → «${to}» o'tishi admin uchun yopiq`);
       }
+      // D-TAXI-24.1: `verified` (pullik e'lon huquqi) faqat joriy kelishuv
+      // qabul qilingandan keyin. Kelishuvni haydovchi O'ZI qabul qiladi —
+      // admin uning o'rniga belgilay olmaydi.
+      // Faqat PULLIK huquq beradigan holatga o'tishda (taksi: `verified`);
+      // `verification_required`/`suspended` ga qaytarish kelishuvsiz ham mumkin.
+      if (caps.agreementDue(service, to) && caps.lifecycleOf(service).paidPublish.includes(to)) {
+        const agr = await tx.get(db.collection('service_agreements').doc(accountId));
+        if (!caps.hasCurrentAgreement(agr.exists ? agr.data() : null, service)) {
+          const e = httpError('failed-precondition', `${service} kelishuvi haydovchi tomonidan hali qabul qilinmagan`);
+          e.details = { reason: 'agreement_required', agreementVersion: caps.AGREEMENT_VERSIONS[service] };
+          throw e;
+        }
+      }
 
       const patch = { status: { [service]: to }, updatedAt: now };
       if (to === caps.COMMON.suspended) {

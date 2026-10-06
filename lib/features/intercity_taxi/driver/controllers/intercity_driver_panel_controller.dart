@@ -169,9 +169,9 @@ class IntercityDriverPanelController extends ChangeNotifier {
 
   /// Рейсни тўлиқ тугатиш — актив бронлар бекор, қидирувдан чиқади.
   Future<void> endTripListing() async {
-    // D-TAXI-15/16: billing рейси бор бўлса серверга айтилади. Сервер
-    // ўзи ҳал қилади — жўнашдан олдин бўлса `cancelled` + refund,
-    // жўнашдан анча кейин бўлса `completed` (refund йўқ). Ёлғон отмена
+    // D-TAXI-15/16, D-TAXI-CANCEL-9: billing рейси бор бўлса серверга
+    // айтилади — `cancelled` + refund, жўнашдан КЕЙИН ҳам (йўловчи ўз
+    // вақтида топилмаслиги мумкин). Ёлғон отмена фақат далил билан,
     // кейинги рейс эълонида қайта баҳоланади. Хато бўлса ҳам рўйхатни
     // ёпиш давом этади — пул масаласи сервер томонида idempotent.
     final billingTripId = (tripData?['billingTripId'] as String?)?.trim();

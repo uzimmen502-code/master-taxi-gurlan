@@ -1,8 +1,10 @@
 # AVA TAXI — БИЗНЕС-ҚОИДАЛАР РЕЕСТРИ ВА ЖОРИЙ ЭТИШ РЕЖАСИ
 
 > **Манба:** лойиҳа эгаси, 2026-10-06. Барча қарорлар `AVA_DECIDED`.
-> **Ҳолат:** реестрга киритилди. КОД ЁЗИЛМАГАН — режа 3-бўлимда,
-> ҳал қилиниши керак бўлган саволлар 2-бўлимда.
+> **Ҳолат:** 3-бўлимдаги режа бажарилган ва деплой қилинган (2026-10-06
+> кечки). Эга тузатишлари N-1…N-3 (1.6-quater) коди ёзилди ва тестланди
+> (2026-10-06 кечқурун, 3.2-бўлим) — **деплой кутилмоқда**. N-4 (бошқа
+> хизматлар келишув матни) — эга таҳрири кутилмоқда (2-bis).
 >
 > Capability модели (`provider_capabilities`, `provider_presence`,
 > `provider_stats`) — [relay_delivery_architecture_uz.md](relay_delivery_architecture_uz.md)
@@ -109,7 +111,7 @@ actual AVA passengers  !=  commission basis
 |---|---|---|
 | **D-CLEAN-1** | Эски илова версиялари ва мавжуд ҳайдовчилар — ТЕСТ маълумотлари. Backward compatibility ва migration ТАЛАБ ҚИЛИНМАЙДИ. Зарур бўлса эски test driver/user/provider маълумотларини тозалаш мумкин. Янги taxi/provider архитектураси тоза ҳолатдан ишга тушади; янги ҳайдовчилар фақат янги lifecycle, agreement, verification ва billing билан. Legacy `couriers`, `users.role == courier/taxi`, эски client-side publish flow ва шунга ўхшаш fallback'лар сақланмайди | AVA_DECIDED |
 
-### 1.6-quater Эга тузатишлари (2026-10-06, кечқурун) — КЕЙИНГИ СЕССИЯ БАЖАРАДИ
+### 1.6-quater Эга тузатишлари (2026-10-06, кечқурун) — ✅ КОД ЁЗИЛДИ (деплой кутилмоқда, 3.2)
 
 | # | Қарор | Кодда нима ўзгаради | Белги |
 |---|---|---|---|
@@ -117,6 +119,14 @@ actual AVA passengers  !=  commission basis
 | **D-TAXI-6.1** | Billing **глобал флаг билан эмас**, ҳар бир ҳайдовчи учун 4 ой ўтиши билан (verified бўлгач) **автоматик очилади** | `module_config/global.taxiBillingEnabled` флаги ОЛИБ ТАШЛАНАДИ (ёки доим `true`); `billable = isTaxiBillable(cap, now)` ягона мезон (verified + grace). `billingMode: 'shadow'` йўқолади — fee'сиз starter бекорлари fraud shadow маълумотини беришда давом этади | AVA_DECIDED |
 | **D-TAXI-CANCEL-9** | «Жўнашдан 2 соат кейин бекор = тугаган, refund йўқ» қоидаси **БЕКОР**. Жўнашдан кейин ҳам бекор қилиш мумкин ва refund берилади — йўловчи ўз вақтида топилмай қолиши мумкин. Сохта отмена фақат fraud далиллари билан (CANCEL-4…7) | `cancelTaxiTrip`да `CANCEL_AFTER_DEPARTURE_GRACE_H` блоки ва `late_cancel` сигналининг оғирлиги қайта кўрилади (late_cancel — тасдиқловчи сигнал сифатида қолиши мумкин, лекин бекорни тақиқламайди); CF тести «jo'nashdan 2 soat keyin → completed» ТЕСКАРИСИГА ёзилади | AVA_DECIDED |
 | **D-SERVICE-2.1** | Бошқа хизматлар учун келишув матнлари — таклиф киритилсин (2-bis бўлим) | Матн тасдиқлангач `AGREEMENT_GATED[service]` ва локал калитлар | PROPOSED |
+
+**Бажарилгани (2026-10-06 кечқурун, кейинги сессия):**
+
+| Қарор | Код |
+|---|---|
+| D-TAXI-24.1 | `core/capabilities.js`: `AGREEMENT_GATED.taxi = false`; янги `AGREEMENT_DUE_STATUSES.taxi = [verification_required, verified]` + `agreementDue(service, status)`. `requestCapability`: starter келишувсиз; ишлаётган ҳолатда `agreementDue` бўлса ва келишув йўқ бўлса жавобда `agreementRequired: true, agreementVersion` (информацион, ҳуқуқ ўзгармайди). `capabilitySweeper`: starter→verification_required'да келишув йўқ бўлса `window.taxi.agreementRequestedAt` (сервер калити, қоида ўзгармади) + `admin_news` inbox хабари (детерминистик ID `taxiVerificationDue_{accountId}` — дубликат йўқ) + FCM push (`users/{id}/fcm_tokens`, fallback `fcmToken`). `adminSetCapabilityStatus`: `verified` (пуллик ҳуқуқ) фақат келишув қабул қилингандан кейин, акс ҳолда `agreement_required`; `suspended`/`verification_required` келишувсиз ҳам. `quoteTaxiFee`/`publishTaxiTrip`: starter — келишув текширилмайди; `verification_required` жавобида `agreementRequired` ҳам келади (илова варақни тақдим қилади, кейин админ кутилади); `verified` — келишувсиз пуллик эълон йўқ (аввалги текширув қолди). Flutter: `ensureTaxiCapability` дарвозасиз, сервер `agreementRequired` деса варақни тақдим қилади (рад этилса ҳам ишлайди); `intercity_taxi_screen` approved йўлда `verification_required` бўлса варақ (`DriverRepository.taxiAccess`, қўшимча ўқишсиз); quick start quote'да `agreementRequired` бўйича. `admin_news` матни — PROPOSED, uz_Latn (сервер матнлари шундай) |
+| D-TAXI-6.1 | `taxi_billing.js`: `billingEnabled()`/`module_config/global.taxiBillingEnabled` ва `billingMode` ОЛИБ ТАШЛАНДИ; `billable = caps.isTaxiBillable(cap, now)` ягона мезон. Starter/grace'да fee 0, snapshot (`quotedFee`) ва fraud баҳолаш ишлайди. Dart `TaxiFeeQuote.billingMode` → йўқ, `agreementRequired` қўшилди. `module_config/global.taxiBillingEnabled` ҳужжати продакшнда қолса ҳам ЎҚИЛМАЙДИ |
+| D-TAXI-CANCEL-9 | `cancelTaxiTrip`: `CANCEL_AFTER_DEPARTURE_GRACE_H` блоки ўчирилди — жўнашдан кейин ҳам `cancelled` + refund (idempotent). CF тести тескарисига: «3 соат кейин бекор → cancelled + refund» + «далилсиз → keyingi e'londa normal». `taxi_fraud.js`: `late_cancel` сигнал сифатида ҚОЛАДИ, лекин `confirmed` (автоматик пул ечиш) учун САНАЛМАЙДИ — фақат `manual_review`га олиб келади (**INFERRED** — CANCEL-9 «late_cancel оғирлиги қайта кўрилади»дан; эга бошқача хоҳласа `strong` ҳисобидан `late_cancel` истисноси олиб ташланади) |
 
 ### 1.7 Якуний архитектура принципи
 
@@ -393,10 +403,10 @@ D-TAXI-13: тўловсиз рейс `published` бўлмасин. `intercity_tr
 | **4** | ✅ `requestCapability` taxi учун `starter` + `window.taxi.startedAt/verificationDueAt` (4 ой, бир марта); `capabilitySweeper` → `verification_required`, grace йўқ | — |
 | **5** | ✅ `adminSetCapabilityStatus` (`canTransition(..., 'admin')`, `capability_audit` append-only) + `adminMigrateTaxiDrivers` (T-6, `dryRun` стандарт true). **Продакшнда ҳали ИШГА ТУШИРИЛМАГАН** — эга буйруғи билан аввал dryRun | эга |
 | **6** | ✅ `functions/taxi_billing.js` → `calculateTaxiFee`: `ceil(farePerSeat × 4 × 200 / 10000)`, фақат `number`, snapshot (D-TAXI-21), `taxiFee:{tripId}:v{n}` идемпотентлик, пул `settlement_ledger.postEntry` орқали (`passenger_credit:{uid}` → `earnings:ava_taxi_fee`) | — |
-| **7** | ✅ `quoteTaxiFee` + `publishTaxiTrip`: ҳуқуқ (`canPublishPaid`) → келишув → фи → wallet `assert` → `published`; етмаса `payment_required`. `module_config/global.taxiBillingEnabled` флаги: **ҳозир OFF = shadow** (snapshot ёзилади, пул олинмайди) | — |
+| **7** | ✅ `quoteTaxiFee` + `publishTaxiTrip`: ҳуқуқ (`canPublishPaid`) → келишув (фақат `agreementDue` ҳолатларда, D-TAXI-24.1) → фи → wallet `assert` → `published`; етмаса `payment_required`. ~~`module_config/global.taxiBillingEnabled` флаги~~ — **ОЛИБ ТАШЛАНДИ (D-TAXI-6.1)**: billing ҳар ҳайдовчи учун `isTaxiBillable` билан автоматик | — |
 | **8** | ✅ `repriceTaxiTrip`: ошса фарқ, тўламаса `repriceStatus: payment_required`; пасайса **бир марта** refund (`MAX_DOWNWARD_REFUNDS = 1`), ҳар ўзгариш `taxi_price_changes`да | — |
 | **9** | ✅ Location snapshot'да; `evaluateOriginMismatch` — узоқ **ва** жўнаш яқин бўлсагина `taxi_fraud_cases` (signal, hukm emas) | — |
-| **10** | ✅ `cancelTaxiTrip`: refund `taxiRefund:{tripId}:v{n}`; жўнашдан 2 соатдан кейин «бекор» = `completed`, refund йўқ (PROPOSED, 11-бандга қаранг) | — |
+| **10** | ✅ `cancelTaxiTrip`: refund `taxiRefund:{tripId}:v{n}`; ~~жўнашдан 2 соатдан кейин «бекор» = `completed`, refund йўқ~~ — **БЕКОР (D-TAXI-CANCEL-9)**: жўнашдан кейин ҳам `cancelled` + refund | — |
 | **11** | ✅ `taxi_fraud.js` — 5 сигнал, конфиг чегаралар (`module_config/taxi_fraud`), `confirmed` учун ≥3 мустақил сигнал **ва** joylashuv; faqat `confirmed`да reclaim (`taxiReclaim:{tripId}`) + `notifyUserInApp` xabari; `suspicious`/`manual_review` — фақат ёзув | — |
 | **12** | ✅ `intercity_quick_start_sheet`: quote → келишув варағи (`TaxiAgreementSheet`) → «N сўм тўлаб рейсни эълон қилиш» → publish → шундан кейин `registerDriverSchedule(billingTripId)`. `endTripListing` → `cancelTaxiTrip`. 19 калит × 3 тил | — |
 
@@ -420,7 +430,7 @@ F админ couriers→presence · G test data cleanup · H деплой.
 
 | Босқич | Ҳолат |
 |---|---|
-| **A** | ✅ `requestCapability` taxi учун келишувни ТАЛАБ қилади (`AGREEMENT_GATED.taxi = true`; бошқа хизматлар учун матн кутилмоқда → `false`). Fraud review энди fee'сиз бекорларни ҳам баҳолайди (verdict ёзилади, пул фақат refund бўлганда) — shadow даврида pipeline маълумот беради |
+| **A** | ✅ ~~`requestCapability` taxi учун келишувни ТАЛАБ қилади (`AGREEMENT_GATED.taxi = true`)~~ — **D-TAXI-24.1 билан ўзгарди**: `AGREEMENT_GATED.taxi = false`, келишув 4 ой ўтгач тақдим қилинади (1.6-quater). Fraud review fee'сиз бекорларни ҳам баҳолайди (verdict ёзилади, пул фақат refund бўлганда) — starter даврида pipeline маълумот беради |
 | **B R-7** | ✅ `approvedDriverForTaxi()` → capability (`starter`/`verification_required`/`verified` + `taxi.taxiTypes` декларатсияси); `taxiCanPublish()` (`starter`/`verified`) — `schedules` ва `queue` create. Эгалик текшируви қўшилди (аввал тасдиқланган ҳайдовчи бошқа номидан жадвал яратарди). `drivers.approved` энди ҳеч нарса бермайди. Тест: `taxi_capability_rules.test.js` 13/13 — бу йўллар аввал ҳеч қаерда ижобий ҳолат билан синалмаган экан |
 | **C** | ✅ `DriverRepository.submitDriverApplication` → `requestCapability(taxi)` + ўз профили (`drivers/{uid}`, тасдиқ майдонларисиз) + `provider_capabilities.taxi.taxiTypes`; `isApprovedForTaxi` → capability; 3 экран (`intercity`, `local`, `marshrut`) `ensureTaxiCapability` орқали: келишув варағи → `starter`. `driver_requests`/`autoApproveDriverApplication`/`driverApprovalMode` — legacy, ишлатилмайди |
 | **D** | ✅ `TaxiVerificationScreen` (admin web, «Такси верификацияси»): фильтр `verification_required`/`starter`/`verified`/`suspended`, амаллар `adminSetCapabilityStatus` орқали (сабаб → audit) |
@@ -433,9 +443,9 @@ F админ couriers→presence · G test data cleanup · H деплой.
 
 | # | Нима | Нега ҳали |
 |---|---|---|
-| **N-1** | **КЕЙИНГИ СЕССИЯ:** D-TAXI-24.1 — келишув дарвозасини starter'дан олиб, 4 ой ўтганда (verification_required) тақдим қилиш | эга қарори бор |
-| **N-2** | **КЕЙИНГИ СЕССИЯ:** D-TAXI-6.1 — `taxiBillingEnabled` глобал флагини олиб ташлаш; billing ҳар ҳайдовчи учун `isTaxiBillable` билан автоматик | эга қарори бор |
-| **N-3** | **КЕЙИНГИ СЕССИЯ:** D-TAXI-CANCEL-9 — «2 соат» қоидасини `cancelTaxiTrip`дан олиб ташлаш, тестни тескарисига ёзиш | эга қарори бор |
+| ~~N-1~~ | ✅ D-TAXI-24.1 — келишув дарвозаси starter'дан олинди, 4 ой ўтганда (verification_required) тизим тақдим қилади (1.6-quater «Бажарилгани») | деплой кутилмоқда |
+| ~~N-2~~ | ✅ D-TAXI-6.1 — `taxiBillingEnabled` глобал флаги олиб ташланди; billing ҳар ҳайдовчи учун `isTaxiBillable` билан автоматик | деплой кутилмоқда |
+| ~~N-3~~ | ✅ D-TAXI-CANCEL-9 — «2 соат» қоидаси `cancelTaxiTrip`дан олинди, CF тести тескарисига ёзилди; `late_cancel` фақат `manual_review` учун | деплой кутилмоқда |
 | **N-4** | Бошқа хизматлар келишув матнлари — таклиф 2-bis бўлимда, эга таҳрири кутилмоқда | PROPOSED |
 | ~~R-1~~ | ✅ hard gate жонли | — |
 | ~~R-2~~ | ❌ КЕРАК ЭМАС — D-CLEAN-1: мавжуд ҳайдовчилар тест маълумоти, миграция йўқ. `adminMigrateTaxiDrivers` коди қолади, ишлатилмайди | — |
@@ -456,6 +466,18 @@ F админ couriers→presence · G test data cleanup · H деплой.
 | `functions` (default) | ✅ `quoteTaxiFee` `publishTaxiTrip` `repriceTaxiTrip` `cancelTaxiTrip` `completeTaxiTrip` — us-central1, фақат шу бештаси деплой қилинди |
 | `functions:demand` | ✅ `acceptServiceAgreement` `adminSetCapabilityStatus` `adminMigrateTaxiDrivers` |
 | Тестлар | demand 557 · rules 309 (19 to'plam) · taxi CF (haqiqiy ledger) 15/15 · taxi pure 17 · paritet 1 · Flutter 620 |
+
+### 3.3 N-1…N-3 ҳолати — 2026-10-06 кечқурун (кейинги сессия)
+
+| | |
+|---|---|
+| Git | 83 файл (аввалги сессия иши) `b06325f` да commit қилинди; N-1…N-3 алоҳида commit |
+| `firestore.rules` / `firestore.indexes.json` | **ЎЗГАРМАДИ** — деплой керак эмас (`agreementRequestedAt` мавжуд `window` сервер калити ичида) |
+| `functions` (default) | ⏳ **ДЕПЛОЙ КУТИЛМОҚДА**: `quoteTaxiFee` `publishTaxiTrip` `repriceTaxiTrip` `rescheduleTaxiTrip` `cancelTaxiTrip` `completeTaxiTrip` (`taxi_billing.js`, `taxi_fraud.js`, `capabilities_model.js` нусхаси) |
+| `functions:demand` | ⏳ **ДЕПЛОЙ КУТИЛМОҚДА**: `requestCapability` `capabilitySweeper` `adminSetCapabilityStatus` (ва `acceptServiceAgreement` — фақат изоҳ) |
+| Flutter | янги илова версияси керак: `TaxiFeeQuote.billingMode` йўқ, `agreementRequired`; эски илова `billingMode` йўқлигини `''` деб ўқийди — бузилмайди |
+| Тестлар | demand **565** (20 тўплам, +8) · taxi CF (haqiqiy ledger) **26/26** (+6) · taxi pure **23** (+2) · паритет 1 · Flutter analyze/test — 3.3-жадвал остига қаранг |
+| Продакшн маълумот | `module_config/global.taxiBillingEnabled` ҳужжати қолади, энди ўқилмайди — ўчириш шарт эмас |
 
 **Инцидент (менинг эмас, лекин мен топдим ва тузатдим):**
 `releaseStaleReservations` (ҳар дақиқа, `trips` коллекцияси) 2026-10-06

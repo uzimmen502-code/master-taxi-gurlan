@@ -67,24 +67,46 @@ ok('kelishuv va capability bir xil accountId ga tushadi', async () => {
   assert.strictEqual(a.accountId, c.accountId);
 });
 
-// ─── kelishuv darvozasi (D-TAXI-24): Agreement → Starter ─────────────
-ok('TAXI: kelishuvsiz `starter` BERILMAYDI (D-TAXI-24)', async () => {
+// ─── kelishuv (D-TAXI-24.1): starter kelishuvsiz, 4 oydan keyin taqdim ──
+ok('TAXI: kelishuvsiz ham `starter` BERILADI (D-TAXI-24.1, ega qarori)', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
-  await assert.rejects(
-    () => makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A)),
-    (e) => e.code === 'failed-precondition' && e.details && e.details.reason === 'agreement_required'
-      && e.details.agreementVersion === caps.AGREEMENT_VERSIONS.taxi);
-  assert.deepStrictEqual(db.dump('provider_capabilities'), {}, 'hujjat yaratilmasligi kerak');
+  const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A));
+  assert.strictEqual(r.status, caps.TAXI.starter);
+  assert.strictEqual(r.agreementRequired, undefined, 'starter da kelishuv taqdim qilinmaydi');
+  assert.deepStrictEqual(db.dump('service_agreements'), {}, 'kelishuv hujjati yo\'q');
+  assert.strictEqual(caps.AGREEMENT_GATED.taxi, false);
 });
-ok('TAXI: kelishuvdan KEYIN `starter` beriladi', async () => {
+ok('TAXI: kelishuvdan KEYIN ham `starter` o\'sha-o\'sha', async () => {
   const db = makeDb({ [`users/${A}`]: {} });
   await makeAcceptServiceAgreement({ db, now: () => NOW })({ service: 'taxi', version: caps.AGREEMENT_VERSIONS.taxi }, ctx(A));
   const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A));
   assert.strictEqual(r.status, caps.TAXI.starter);
 });
-ok('kelishuv darvozasi faqat belgilangan xizmatlarda (courier hozircha yo\'q — matn kutilmoqda)', async () => {
-  assert.strictEqual(caps.AGREEMENT_GATED.taxi, true);
-  assert.strictEqual(caps.AGREEMENT_GATED.courier, false);
+ok('D-TAXI-24.1: `verification_required` da requestCapability kelishuvni TAQDIM qiladi; qabul qilgach — yo\'q', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const req = makeRequestCapability({ db, now: () => NOW });
+  const first = await req({ service: 'taxi' }, ctx(A));
+  await db.collection('provider_capabilities').doc(first.accountId)
+    .set({ status: { taxi: caps.TAXI.verificationRequired } }, { merge: true });
+  const due = await req({ service: 'taxi' }, ctx(A));
+  assert.strictEqual(due.changed, false, 'ishlash huquqi o\'zgarmaydi (D-TAXI-5)');
+  assert.strictEqual(due.status, caps.TAXI.verificationRequired);
+  assert.strictEqual(due.agreementRequired, true);
+  assert.strictEqual(due.agreementVersion, caps.AGREEMENT_VERSIONS.taxi);
+  await makeAcceptServiceAgreement({ db, now: () => NOW })({ service: 'taxi', version: caps.AGREEMENT_VERSIONS.taxi }, ctx(A));
+  const after = await req({ service: 'taxi' }, ctx(A));
+  assert.strictEqual(after.agreementRequired, undefined);
+});
+ok('agreementDue: taksi — verification_required/verified HA, starter YO\'Q; boshqa xizmatlar YO\'Q', () => {
+  assert.strictEqual(caps.agreementDue('taxi', 'starter'), false);
+  assert.strictEqual(caps.agreementDue('taxi', 'verification_required'), true);
+  assert.strictEqual(caps.agreementDue('taxi', 'verified'), true);
+  assert.strictEqual(caps.agreementDue('taxi', 'suspended'), false);
+  assert.strictEqual(caps.agreementDue('courier', 'approved'), false);
+  assert.strictEqual(caps.agreementDue('seller', 'enabled'), false);
+});
+ok('kelishuv darvozasi hozir hech bir xizmatda yo\'q (matnlar kutilmoqda, 2-bis)', async () => {
+  for (const s of caps.SERVICES) assert.strictEqual(caps.AGREEMENT_GATED[s], false, s);
   const db = makeDb({ [`users/${A}`]: {} });
   const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
   assert.strictEqual(r.status, caps.COURIER.trial);
@@ -108,6 +130,24 @@ ok('admin taksini `verified` qiladi + audit yoziladi (D-TAXI-4, 41-qoida)', asyn
   assert.strictEqual(audit.length, 1);
   assert.strictEqual(audit[0].by, ADMIN);
   assert.strictEqual(audit[0].from, 'starter');
+});
+ok('D-TAXI-24.1: admin `verified` — haydovchi kelishuvni qabul qilmagan bo\'lsa RAD (agreement_required)', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r0 = await makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A)); // kelishuvsiz starter
+  const set = admin.makeAdminSetCapabilityStatus({ db, now: () => NOW });
+  await assert.rejects(
+    () => set({ accountId: r0.accountId, service: 'taxi', status: 'verified', reason: 'ok' }, ctx(ADMIN)),
+    (e) => e.code === 'failed-precondition' && e.details && e.details.reason === 'agreement_required'
+      && e.details.agreementVersion === caps.AGREEMENT_VERSIONS.taxi);
+  assert.strictEqual(capOf(db, r0.accountId).status.taxi, 'starter', 'o\'zgarmagan');
+  assert.deepStrictEqual(db.dump('capability_audit'), {}, 'rad etilgan amal auditga tushmaydi');
+  // Kelishuvsiz `suspended` / `verification_required` — mumkin (pullik huquq emas).
+  const s = await set({ accountId: r0.accountId, service: 'taxi', status: 'suspended', reason: 'shikoyat' }, ctx(ADMIN));
+  assert.strictEqual(s.to, 'suspended');
+  // Haydovchi qabul qildi → endi verified mumkin.
+  await makeAcceptServiceAgreement({ db, now: () => NOW })({ service: 'taxi', version: caps.AGREEMENT_VERSIONS.taxi }, ctx(A));
+  const v = await set({ accountId: r0.accountId, service: 'taxi', status: 'verified', reason: 'hujjatlar' }, ctx(ADMIN));
+  assert.strictEqual(v.to, 'verified');
 });
 ok('telefon bo\'yicha ham topadi', async () => {
   const db = makeDb({ [`users/${A}`]: {} });

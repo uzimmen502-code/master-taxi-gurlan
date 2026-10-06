@@ -508,7 +508,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       try {
         if (!mounted) return;
         if (!approved) {
-          // D-TAXI-24 → D-TAXI-1: avval kelishuv, keyin `starter`.
+          // D-TAXI-1 / D-TAXI-24.1: darhol `starter` — kelishuvsiz.
           final capOk = await ensureTaxiCapability(
             context,
             requestCapability: driverRepo.requestTaxiCapability,

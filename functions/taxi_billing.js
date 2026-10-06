@@ -28,11 +28,17 @@
  * `published` faqat to'lovdan KEYIN (D-TAXI-13). Reys hujjatini FAQAT
  * server yozadi (qoida: write false).
  *
- * ── BOSQICHMA-BOSQICH (42-qoida) ───────────────────────────────────────
- * `module_config/global.taxiBillingEnabled` (standart: false). O'chiq
- * bo'lsa: snapshot yoziladi, fee = 0, `billingMode: 'shadow'` — oqim
- * haqiqiy trafikda sinaladi, pul olinmaydi. Yoqilganda: faqat
- * `isTaxiBillable` (verified + grace tugagan) haydovchilardan olinadi.
+ * ── BILLING KIMDAN (D-TAXI-6.1, 2026-10-06) ────────────────────────────
+ * GLOBAL FLAG YO'Q. Yagona mezon — `caps.isTaxiBillable(cap, now)`
+ * (verified + billing grace tugagan). Bosqichma-bosqichlik har
+ * haydovchining o'z lifecycle'ida: 4 oy starter (fee 0) → admin
+ * tekshiruvi → verified → 2%. Fee'siz reyslarda ham snapshot yoziladi
+ * (`quotedFee`) va fraud baholash ishlaydi.
+ *
+ * ── KELISHUV (D-TAXI-24.1) ─────────────────────────────────────────────
+ * Starter uchun kelishuv SHART EMAS. `caps.agreementDue(taxi, status)`
+ * (verification_required, verified) bo'lsa — pullik e'londan oldin
+ * joriy versiya qabul qilingan bo'lishi shart.
  */
 
 const caps = require('./capabilities_model');
@@ -53,8 +59,6 @@ const RATE_BPS = 200;
 const BILLING_VERSION = 1;
 /** Pasaytirishda refund — reys davomida nechta marta (D-TAXI-12 abuse). */
 const MAX_DOWNWARD_REFUNDS = 1;
-/** Jo'nashdan shuncha soat keyin "bekor" = aslida tugagan (refund yo'q). */
-const CANCEL_AFTER_DEPARTURE_GRACE_H = 2;
 
 /**
  * Komissiya — SOF, DETERMINISTIK, BUTUN SO'M (T-4, 8-qoida).
@@ -92,22 +96,6 @@ function attachTaxiBilling(exports, deps) {
     const e = new functions.https.HttpsError(code, msg, extra);
     return e;
   };
-
-  // ── flag (60 s kesh) ───────────────────────────────────────────────
-  let flagCache = { at: 0, value: false };
-  async function billingEnabled() {
-    const t = Date.now();
-    if (t - flagCache.at < 60000) return flagCache.value;
-    try {
-      const s = await db.collection('module_config').doc('global').get();
-      flagCache = { at: t, value: !!(s.exists && s.data().taxiBillingEnabled === true) };
-    } catch (e) {
-      // Flag o'qilmasa — pul OLINMAYDI (xavfsiz tomon).
-      console.error(`taxiBillingEnabled o'qilmadi: ${e.message}`);
-      flagCache = { at: t, value: false };
-    }
-    return flagCache.value;
-  }
 
   // ── kimlik ─────────────────────────────────────────────────────────
   /** Token telefoni → users hujjati (9/12) → accountId + capability. */
@@ -150,27 +138,39 @@ function attachTaxiBilling(exports, deps) {
     const when = now();
 
     const status = caps.statusOf(me.cap, 'taxi');
+
+    // D-TAXI-24.1: kelishuv faqat starter TUGAGANDAN keyin (verification_required,
+    // verified). Starter — kelishuvsiz ishlaydi.
+    let agreementMissing = false;
+    if (caps.agreementDue('taxi', status)) {
+      const agr = await db.collection(AGREEMENTS).doc(me.accountId).get();
+      agreementMissing = !caps.hasCurrentAgreement(agr.exists ? agr.data() : null, 'taxi');
+    }
+    const agreementInfo = agreementMissing
+      ? { agreementRequired: true, agreementVersion: caps.AGREEMENT_VERSIONS.taxi }
+      : { agreementRequired: false };
+
     if (!caps.canPublishPaid(me.cap, 'taxi')) {
+      // `verification_required`: ilova shu javobda kelishuvni ham taqdim
+      // qiladi (agreementRequired), keyin admin tekshiruvi kutiladi.
       return {
         allowed: false,
         reason: status === caps.TAXI.verificationRequired ? 'taxi_verification_required' : 'taxi_not_allowed',
-        taxiStatus: status, ...fee, feeAmount: 0,
+        taxiStatus: status, ...agreementInfo, ...fee, feeAmount: 0,
       };
     }
-    const agr = await db.collection(AGREEMENTS).doc(me.accountId).get();
-    if (!caps.hasCurrentAgreement(agr.exists ? agr.data() : null, 'taxi')) {
+    if (agreementMissing) {
       return {
         allowed: false, reason: 'agreement_required',
-        agreementVersion: caps.AGREEMENT_VERSIONS.taxi, taxiStatus: status, ...fee, feeAmount: 0,
+        taxiStatus: status, ...agreementInfo, ...fee, feeAmount: 0,
       };
     }
-    const enabled = await billingEnabled();
-    const billable = enabled && caps.isTaxiBillable(me.cap, when);
+    // D-TAXI-6.1: yagona mezon, global flag yo'q.
+    const billable = caps.isTaxiBillable(me.cap, when);
     const feeAmount = billable ? fee.feeAmount : 0;
     const balance = billable ? await walletBalance(me.usersDocId) : null;
     return {
-      allowed: true, reason: 'ok', taxiStatus: status, billable,
-      billingMode: enabled ? 'live' : 'shadow',
+      allowed: true, reason: 'ok', taxiStatus: status, billable, ...agreementInfo,
       ...fee, feeAmount, quotedFee: fee.feeAmount,
       walletBalance: balance,
       sufficient: billable ? balance >= feeAmount : true,
@@ -267,7 +267,6 @@ function attachTaxiBilling(exports, deps) {
       grossBasis: q.grossBasis,
       feeAmount: q.feeAmount,
       quotedFee: q.quotedFee,
-      billingMode: q.billingMode,
       billable: q.billable,
       billingVersion: BILLING_VERSION,
       chargedAt: null,
@@ -322,13 +321,13 @@ function attachTaxiBilling(exports, deps) {
       console.error(`fraud review xato (${tripRef.id}): ${e.message}`);
     }
 
-    return { tripId: tripRef.id, status: 'published', feeAmount: q.feeAmount, billingMode: q.billingMode };
+    return { tripId: tripRef.id, status: 'published', feeAmount: q.feeAmount, billable: q.billable };
   }
 
   async function reviewLastCancelled(me, nextSnap, when) {
-    // Fee'siz (shadow/starter) bekorlar ham BAHOLANADI — verdict yoziladi,
+    // Fee'siz (starter/grace) bekorlar ham BAHOLANADI — verdict yoziladi,
     // pul esa faqat refund bo'lgan reysda harakatlanadi. Shunday qilib
-    // shadow davrida fraud pipeline ma'lumot beradi, sukut saqlamaydi.
+    // starter davrida ham fraud pipeline ma'lumot beradi (D-TAXI-6.1).
     const prevSnap = await db.collection(TRIPS)
       .where('driverUid', '==', me.phone)
       .where('status', '==', 'cancelled')
@@ -369,7 +368,7 @@ function attachTaxiBilling(exports, deps) {
     if (res.verdict !== 'confirmed') return;
 
     // D-TAXI-CANCEL-5/6: refund qaytarib olinadi; wallet yetmasa QARZ.
-    // Faqat HAQIQATAN refund bo'lgan reysda (shadow/starter'da fee 0 edi —
+    // Faqat HAQIQATAN refund bo'lgan reysda (starter/grace'da fee 0 edi —
     // qaytarib oladigan narsa yo'q, verdict esa yozildi).
     const amount = prev.refunded === true ? (Number(prev.feeAmount) || 0) : 0;
     if (amount > 0) await reclaimWithDebt({ me, usersDocId: prev.usersDocId, tripRef: prevDoc.ref, tripId: prevDoc.id, amount, when, signals: res.signals });
@@ -500,7 +499,15 @@ function attachTaxiBilling(exports, deps) {
     return { status: 'ok', delta: -refunded, feeAmount: refunded ? newFee : oldFee, refundLimited: newFee < oldFee && !refunded };
   }
 
-  /** D-TAXI-15: bekor → komissiya wallet'ga `refund`. */
+  /**
+   * D-TAXI-15: bekor → komissiya wallet'ga `refund`.
+   *
+   * D-TAXI-CANCEL-9 (2026-10-06): jo'nash vaqtidan KEYIN ham bekor qilish
+   * mumkin va refund beriladi — yo'lovchi o'z vaqtida topilmay qolishi
+   * mumkin. «Jo'nashdan 2 soat keyin = completed, refund yo'q» qoidasi
+   * BEKOR. Soxta otmena faqat fraud dalillari bilan (CANCEL-4…7):
+   * `late_cancel` — tasdiqlovchi SIGNAL, bekorni taqiqlamaydi.
+   */
   async function cancel(data, context) {
     const me = await resolveCaller(context);
     const tripRef = db.collection(TRIPS).doc(String(data.tripId || ''));
@@ -512,16 +519,6 @@ function attachTaxiBilling(exports, deps) {
       return { status: trip.status, refunded: trip.refunded === true, idempotent: true };
     }
     const when = now();
-
-    // Jo'nashdan ancha keyin «bekor» = aslida tugagan reys: refund yo'q
-    // (PROPOSED, egaga ko'rsatilgan). Fraud baholash baribir ishlaydi.
-    const depMs = trip.departureAt && trip.departureAt.toMillis ? trip.departureAt.toMillis() : 0;
-    const afterDeparture = depMs && when.getTime() > depMs + CANCEL_AFTER_DEPARTURE_GRACE_H * 3600000;
-    if (afterDeparture) {
-      await tripRef.update({ status: 'completed', completedAt: when, completedReason: 'cancel_after_departure', updatedAt: when });
-      return { status: 'completed', refunded: false, reason: 'after_departure' };
-    }
-
     const amount = Number(trip.feeAmount) || 0;
     let refundedNow = false;
     if (trip.status === 'published' && amount > 0 && trip.chargedAt) {
@@ -598,7 +595,7 @@ function attachTaxiBilling(exports, deps) {
 
   return {
     quote, publish, reprice, reschedule, cancel, complete, charge, refund,
-    billingEnabled, resolveCaller, settleOutstanding,
+    resolveCaller, settleOutstanding,
   };
 }
 

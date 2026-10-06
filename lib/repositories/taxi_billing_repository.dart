@@ -26,7 +26,7 @@ class TaxiFeeQuote {
     required this.quotedFee,
     required this.billable,
     required this.sufficient,
-    required this.billingMode,
+    required this.agreementRequired,
     this.walletBalance,
     this.agreementVersion,
     this.taxiStatus = '',
@@ -38,14 +38,21 @@ class TaxiFeeQuote {
   /// `ok` · `agreement_required` · `taxi_verification_required` · `taxi_not_allowed`.
   final String reason;
 
-  /// Ҳозир ечиладиган сумма (starter/grace/shadow'да 0).
+  /// Ҳозир ечиладиган сумма (starter/grace'да 0).
   final int feeAmount;
 
   /// Формула бўйича ҳисоб — ечилмаса ҳам кўрсатиш учун.
   final int quotedFee;
+
+  /// D-TAXI-6.1: сервер `isTaxiBillable` (verified + grace тугаган);
+  /// глобал флаг йўқ.
   final bool billable;
   final bool sufficient;
-  final String billingMode;
+
+  /// D-TAXI-24.1: келишув ҳали қабул қилинмаган (starter тугаган
+  /// ҳолатларда) — UI варақни тақдим қилади. `reason` нима бўлишидан
+  /// қатъи назар келади (масалан `taxi_verification_required` билан бирга).
+  final bool agreementRequired;
   final int? walletBalance;
   final int? agreementVersion;
   final String taxiStatus;
@@ -59,7 +66,7 @@ class TaxiFeeQuote {
             0,
         billable: m['billable'] == true,
         sufficient: m['sufficient'] != false,
-        billingMode: (m['billingMode'] ?? '').toString(),
+        agreementRequired: m['agreementRequired'] == true,
         walletBalance: (m['walletBalance'] as num?)?.toInt(),
         agreementVersion: (m['agreementVersion'] as num?)?.toInt(),
         taxiStatus: (m['taxiStatus'] ?? '').toString(),

@@ -13,17 +13,10 @@ class DriverApplicationSubmitResult {
   const DriverApplicationSubmitResult({
     required this.autoApproved,
     required this.isFirstSubmission,
-    this.agreementRequired = false,
-    this.agreementVersion,
   });
 
   final bool autoApproved;
   final bool isFirstSubmission;
-
-  /// D-TAXI-24: Taxi Service Agreement ҳали қабул қилинмаган — UI
-  /// варақни кўрсатиб, кейин қайта чақиради.
-  final bool agreementRequired;
-  final int? agreementVersion;
 }
 
 /// `drivers` collection.
@@ -122,34 +115,22 @@ class DriverRepository {
   }
 
   /// Taxi capability'ни сўраш (D-TAXI-1): сервер `starter` беради — админ
-  /// тасдиғи КУТИЛМАЙДИ. Келишув қабул қилинмаган бўлса
-  /// `agreementRequired: true` қайтади (D-TAXI-24), UI варақни кўрсатади.
+  /// тасдиғи КУТИЛМАЙДИ, келишув ҳам шарт эмас (D-TAXI-24.1). Starter
+  /// тугаган бўлса ва келишув ҳали қабул қилинмаган бўлса сервер
+  /// `agreementRequired: true` қайтаради — UI варақни тақдим қилади.
   ///
   /// `{accountId, status, agreementRequired, agreementVersion}`.
   Future<Map<String, dynamic>> requestTaxiCapability() async {
-    try {
-      final res = await FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
-          .httpsCallable('requestCapability')
-          .call<Object?>({'service': 'taxi'});
-      final d = res.data is Map ? (res.data as Map) : const {};
-      return {
-        'accountId': (d['accountId'] ?? '').toString(),
-        'status': (d['status'] ?? '').toString(),
-        'agreementRequired': false,
-      };
-    } on FirebaseFunctionsException catch (e) {
-      final details = e.details;
-      final reason = details is Map ? (details['reason'] ?? '').toString() : '';
-      if (reason == 'agreement_required') {
-        return {
-          'agreementRequired': true,
-          'agreementVersion': details is Map
-              ? (details['agreementVersion'] as num?)?.toInt() ?? 1
-              : 1,
-        };
-      }
-      rethrow;
-    }
+    final res = await FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
+        .httpsCallable('requestCapability')
+        .call<Object?>({'service': 'taxi'});
+    final d = res.data is Map ? (res.data as Map) : const {};
+    return {
+      'accountId': (d['accountId'] ?? '').toString(),
+      'status': (d['status'] ?? '').toString(),
+      'agreementRequired': d['agreementRequired'] == true,
+      'agreementVersion': (d['agreementVersion'] as num?)?.toInt(),
+    };
   }
 
   /// D-CLEAN-1 / D-TAXI-1: ҳайдовчи ЎЗИ ёқади, дарҳол `starter`.
@@ -170,15 +151,8 @@ class DriverRepository {
     String routeTo = '',
     List<String> routeStops = const [],
   }) async {
+    // D-TAXI-24.1: келишув бу ерда ТАЛАБ ҚИЛИНМАЙДИ — starter дарҳол.
     final cap = await requestTaxiCapability();
-    if (cap['agreementRequired'] == true) {
-      return DriverApplicationSubmitResult(
-        autoApproved: false,
-        isFirstSubmission: false,
-        agreementRequired: true,
-        agreementVersion: cap['agreementVersion'] as int?,
-      );
-    }
     final accountId = (cap['accountId'] ?? '').toString();
     if (accountId.isEmpty) {
       throw StateError('accountId qaytmadi');
@@ -224,22 +198,30 @@ class DriverRepository {
   Future<bool> isApprovedForTaxi({
     required String uid,
     required String taxiType,
+  }) async =>
+      (await taxiAccess(uid: uid, taxiType: taxiType)).approved;
+
+  /// `isApprovedForTaxi` + capability статуси — битта ўқиш билан
+  /// (`verification_required` бўлса UI келишувни тақдим қилади, D-TAXI-24.1).
+  Future<({bool approved, String status})> taxiAccess({
+    required String uid,
+    required String taxiType,
   }) async {
-    if (uid.isEmpty) return false;
+    if (uid.isEmpty) return (approved: false, status: '');
     final cap = await _taxiCapability(uid);
-    if (cap == null) return false;
+    if (cap == null) return (approved: false, status: '');
     final status = ((cap['status'] as Map?)?['taxi'] ?? '').toString();
     if (!const {'starter', 'verification_required', 'verified'}.contains(status)) {
-      return false;
+      return (approved: false, status: status);
     }
     final types = ((cap['taxi'] as Map?)?['taxiTypes'] as List?)
             ?.map((e) => e.toString())
             .toSet() ??
         const <String>{};
-    if (types.contains(taxiType)) return true;
-    if (taxiType == 'alone' && types.contains('local')) return true;
-    if (taxiType == 'local' && types.contains('alone')) return true;
-    return false;
+    final typeOk = types.contains(taxiType) ||
+        (taxiType == 'alone' && types.contains('local')) ||
+        (taxiType == 'local' && types.contains('alone'));
+    return (approved: typeOk, status: status);
   }
 
   /// `users/{uid}.accountId` → `provider_capabilities/{accountId}` (9/12 хонали).

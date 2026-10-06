@@ -32,7 +32,9 @@
  *   had_ava_booking    oldingi reysda AVA orqali tasdiqlangan bron
  *   route_reversed     keyingi reys origin == oldingi reys destination
  *   time_window        bekor → keyingi e'lon yo'l vaqtiga mos (2–36 soat)
- *   late_cancel        jo'nashga yaqin yoki undan keyin bekor
+ *   late_cancel        jo'nashga yaqin yoki undan keyin bekor — CANCEL-9:
+ *                      bekorni TAQIQLAMAYDI va `confirmed` uchun sanalmaydi
+ *                      (faqat `manual_review` ga olib keladi)
  */
 
 const DEFAULT_THRESHOLDS = {
@@ -119,9 +121,15 @@ function evaluateCancelFraud({ prev, next, thresholds }) {
     // deb belgilash ham qonuniy haydovchini tamg'alash bo'lardi (CANCEL-7).
     return { verdict: 'normal', signals, reason: 'no_ava_booking' };
   }
-  const extra = signals.filter((s) => s !== 'location_at_dest' && s !== 'had_ava_booking').length;
+  const BASE = new Set(['location_at_dest', 'had_ava_booking']);
+  const extra = signals.filter((s) => !BASE.has(s)).length;
+  // D-TAXI-CANCEL-9: jo'nashdan keyin bekor qilish QONUNIY (yo'lovchi o'z
+  // vaqtida topilmasligi mumkin). Shuning uchun `late_cancel` avtomatik pul
+  // yechish (`confirmed`) uchun SANALMAYDI — faqat admin ko'rigiga
+  // (`manual_review`) olib keladigan tasdiqlovchi signal bo'lib qoladi.
+  const strong = signals.filter((s) => !BASE.has(s) && s !== 'late_cancel').length;
 
-  if (extra >= t.confirmedExtra) return { verdict: 'confirmed', signals, reason: 'sufficient_evidence' };
+  if (strong >= t.confirmedExtra) return { verdict: 'confirmed', signals, reason: 'sufficient_evidence' };
   if (extra >= t.reviewExtra) return { verdict: 'manual_review', signals, reason: 'needs_admin' };
   // Joylashuv + bron, boshqa hech narsa — faqat yoziladi (CANCEL-7).
   return { verdict: 'suspicious', signals, reason: 'recorded_only' };

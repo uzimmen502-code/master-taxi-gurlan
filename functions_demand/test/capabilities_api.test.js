@@ -17,10 +17,9 @@ const { FakeFirestore } = require('./fake_firestore');
 const api = require('../api/capabilities');
 const caps = require('../core/capabilities');
 
-// Kelishuv darvozasi (D-TAXI-24) ALOHIDA testda (`agreements_admin.test.js`).
-// Bu yerda lifecycle/idempotentlik sinaladi — darvoza o'chiriladi, aks holda
-// har bir taksi holati uchun kelishuv seed qilish kerak bo'lardi.
-caps.AGREEMENT_GATED.taxi = false;
+// Kelishuv (D-TAXI-24.1) ALOHIDA testda (`agreements_admin.test.js`).
+// Taksida darvoza YO'Q — starter kelishuvsiz beriladi; bu yerda
+// lifecycle/idempotentlik sinaladi.
 
 let passed = 0;
 const tests = [];
@@ -211,6 +210,47 @@ ok('taksi sweeper: 4 oydan keyin verification_required, GRACE YO\'Q (D-TAXI-4)',
   assert.strictEqual(caps.isEligible(t.data(), 'taxi'), true, 'mavjud ish davom etadi (D-TAXI-5)');
   assert.strictEqual(caps.canPublishPaid(t.data(), 'taxi'), false);
   assert.deepStrictEqual(await sw(200), { graceGranted: 0, suspended: 0, verificationRequired: 0 }, 'idempotent');
+});
+
+ok('D-TAXI-24.1 sweeper: starter tugadi → kelishuv TAQDIM (agreementRequestedAt + inbox xabari + push, BIR MARTA)', async () => {
+  const db = makeDb({ [`users/${A}`]: { fcmToken: 'tok-A' } });
+  const res = await api.makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A));
+  const sent = [];
+  const messaging = { sendEach: async (msgs) => { sent.push(...msgs); return { responses: msgs.map(() => ({ success: true })) }; } };
+  const sw = (n) => silent(() => api.makeCapabilitySweeper({ db, messaging, now: () => day(n) })());
+  assert.strictEqual((await sw(124)).verificationRequired, 1);
+  const d = capsDump(db)[res.accountId];
+  assert.strictEqual(d.status.taxi, caps.TAXI.verificationRequired);
+  assert.strictEqual(d.window.taxi.agreementRequestedAt.getTime(), day(124).getTime(), 'tizim taqdim qilgan vaqt (server kaliti)');
+  assert.strictEqual(d.window.taxi.verificationDueAt.toISOString(), '2027-02-06T10:00:00.000Z', 'oyna buzilmagan');
+  const news = db.dump('admin_news');
+  const ids = Object.keys(news);
+  assert.strictEqual(ids.length, 1);
+  assert.strictEqual(ids[0], api.taxiDueNewsId(res.accountId), 'deterministik ID — qayta ishlasa dublikat yo\'q');
+  assert.strictEqual(news[ids[0]].targetUserId, A);
+  assert.strictEqual(news[ids[0]].audience, 'user');
+  assert.ok(news[ids[0]].body.includes('kelishuv'), 'kelishuv so\'raladi');
+  assert.strictEqual(sent.length, 1); assert.strictEqual(sent[0].token, 'tok-A');
+  assert.strictEqual(sent[0].data.type, 'taxi_verification_due');
+  // Qayta sweep: hech narsa yo'q (idempotent).
+  assert.deepStrictEqual(await sw(130), { graceGranted: 0, suspended: 0, verificationRequired: 0 });
+  assert.strictEqual(Object.keys(db.dump('admin_news')).length, 1);
+  assert.strictEqual(sent.length, 1);
+});
+
+ok('D-TAXI-24.1 sweeper: kelishuv ALLAQACHON qabul qilingan → marker yo\'q, xabar faqat tekshiruv haqida', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const res = await api.makeRequestCapability({ db, now: () => NOW })({ service: 'taxi' }, ctx(A));
+  await db.collection('service_agreements').doc(res.accountId)
+    .set({ taxi: { version: caps.AGREEMENT_VERSIONS.taxi, acceptedAt: NOW, acceptedByUid: A } });
+  await silent(() => api.makeCapabilitySweeper({ db, now: () => day(124) })());
+  const d = capsDump(db)[res.accountId];
+  assert.strictEqual(d.status.taxi, caps.TAXI.verificationRequired);
+  assert.strictEqual(d.window.taxi.agreementRequestedAt, undefined);
+  const news = Object.values(db.dump('admin_news'));
+  assert.strictEqual(news.length, 1);
+  assert.ok(!news[0].body.includes('kelishuv'));
+  assert.ok(news[0].body.includes('admin tekshiruvi'));
 });
 
 ok('taksi chekloviga courier TEGILMAYDI (D-TAXI-5, D-13)', async () => {

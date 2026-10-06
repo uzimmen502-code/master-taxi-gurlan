@@ -529,13 +529,25 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
     if (!mounted) return;
 
     final driverRepo = context.read<DriverRepository>();
-    final approved = await driverRepo.isApprovedForTaxi(
+    final access = await driverRepo.taxiAccess(
       uid: uid,
       taxiType: 'intercity',
     );
+    final approved = access.approved;
     if (!mounted) return;
 
     if (approved) {
+      // D-TAXI-24.1: starter tugagan (`verification_required`) — kelishuvni
+      // tizim o'zi taqdim qiladi; rad etilsa ham mavjud ish davom etadi
+      // (D-TAXI-5), yangi pullik reys oldidan server yana so'raydi.
+      if (access.status == 'verification_required') {
+        await ensureTaxiCapability(
+          context,
+          requestCapability: driverRepo.requestTaxiCapability,
+          primaryColor: IntercityColors.primary,
+        );
+        if (!mounted) return;
+      }
       if (await IntercityDriverResume.openPanelIfActive(context, driverId: uid)) {
         return;
       }
@@ -563,8 +575,8 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       return;
     }
 
-    // D-TAXI-24 → D-TAXI-1: avval Taxi Service Agreement, keyin `starter`
-    // (admin tasdig'i kutilmaydi).
+    // D-TAXI-1 / D-TAXI-24.1: darhol `starter` — kelishuvsiz, admin
+    // tasdig'isiz. Kelishuv 4 oy o'tib tizim tomonidan taqdim qilinadi.
     final capOk = await ensureTaxiCapability(
       context,
       requestCapability: driverRepo.requestTaxiCapability,

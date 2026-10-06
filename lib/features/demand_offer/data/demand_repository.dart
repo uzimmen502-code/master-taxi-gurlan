@@ -176,6 +176,10 @@ class DemandRepository {
       return snap.docs
           .map((d) => Demand.fromMap(d.id, d.data()))
           .where((d) => d.isVisibleAt(now))
+          // Сервер яратадиган техник талаблар (AVA Logistics LEG'лари —
+          // эгаси жўнатувчи) мижозга «сўров» сифатида КЎРСАТИЛМАЙДИ
+          // (45-банд): у жўнатмани «Жўнатма» бўлимида кузатади.
+          .where((d) => !d.module.isServerOnly)
           .toList();
     });
   }

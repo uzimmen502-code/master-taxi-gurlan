@@ -34,6 +34,9 @@ const List<String> kKnownModuleIds = [
   'china_market',
   // «Кўчмас мулк Кластери» — 1-босқич (лента + харита + бепул ОДДИЙ эълон).
   'realty',
+  // AVA Logistics (Relay) — посилка жўнатиш: ORDER → SHIPMENT → LEG.
+  // Admin «Ҳудудлар ва хизматлар»да ёқилмагунча яширин (runtime gate).
+  'logistics',
 ];
 
 /// Modul mavjudlik holati — Home ekran dinamik qurishi uchun.

@@ -13,6 +13,7 @@ import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../../models/job_ad.dart';
 import '../jobs/jobs_sections.dart';
 import '../jobs/screens/jobs_screen.dart';
+import '../logistics/screens/logistics_home_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
@@ -222,6 +223,26 @@ List<ServiceSpotlightItem> buildHomeServices(
           return;
         }
         await a.push(const CourierServicesHubScreen());
+      },
+    ),
+    // AVA Logistics (Relay) — посилка жўнатиш. Admin «Ҳудудлар ва
+    // хизматлар»да `logistics` ёқилмагунча гридда кўринмайди.
+    ServiceSpotlightItem(
+      moduleId: 'logistics',
+      label: context.tr('home_module_logistics'),
+      icon: Icons.local_post_office_rounded,
+      iconColor: Colors.white,
+      onTap: () async {
+        if (!ServiceConfigHolder.isOpenable('logistics')) {
+          a.showComingSoon();
+          return;
+        }
+        final phone = phoneDigits(context.read<HomeController>().phone);
+        if (phone.length < 9) {
+          needPhoneForAction(context);
+          return;
+        }
+        await a.push(LogisticsHomeScreen(ownerId: canonicalPhoneId(phone)));
       },
     ),
     ServiceSpotlightItem(

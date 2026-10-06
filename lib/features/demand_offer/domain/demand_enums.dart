@@ -153,7 +153,15 @@ enum DemandModule {
   oilChange,
   carpetWash,
   bread,
-  agroPickup;
+  agroPickup,
+
+  /// AVA Logistics (Relay) — LEG = `demands` ҳужжати. ФАҚАТ сервер
+  /// яратади (`createLogisticsOrder`); `createDemand` схемасида АТАЙЛАБ
+  /// йўқ — мижоз жўнатмани буюртма/тўлов орқали беради, талаб орқали эмас.
+  logistics;
+
+  /// Сервер томонидан яратиладиган модул — мижоз «сўров» сифатида кўрмайди.
+  bool get isServerOnly => this == DemandModule.logistics;
 
   String get wire {
     switch (this) {

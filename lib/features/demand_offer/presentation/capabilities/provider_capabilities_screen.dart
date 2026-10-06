@@ -85,6 +85,11 @@ class _ProviderCapabilitiesScreenState
   late Set<String> _categories;
   late Set<String> _regions;
   late ProviderPushMode _pushMode;
+
+  /// Курьер учун: «посилка ҳам оламан» (13.6.5, AVA Logistics manbasi
+  /// `courier.acceptsParcels === true` бўлганларнигина олади). Стандарт —
+  /// ЎЧИҚ: жўнатма оқими курьернинг ўз розилиги билан очилади.
+  bool _acceptsParcels = false;
   bool _saving = false;
   String? _error;
 
@@ -141,6 +146,8 @@ class _ProviderCapabilitiesScreenState
           'districtIds': widget.initialDistrictIds,
           'pushOptOut': _pushMode == ProviderPushMode.off,
           'digestOnly': _pushMode == ProviderPushMode.digestOnly,
+          if (widget.module == DemandModule.courier)
+            'acceptsParcels': _acceptsParcels,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         'updatedAt': FieldValue.serverTimestamp(),
@@ -266,6 +273,30 @@ class _ProviderCapabilitiesScreenState
               ],
             ),
             const SizedBox(height: 20),
+
+            if (widget.module == DemandModule.courier) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: c.line),
+                ),
+                child: SwitchListTile.adaptive(
+                  value: _acceptsParcels,
+                  activeThumbColor: c.brand,
+                  title: Text(
+                    context.tr('capabilities_accepts_parcels'),
+                    style: TextStyle(fontSize: 13, color: c.ink),
+                  ),
+                  subtitle: Text(
+                    context.tr('capabilities_accepts_parcels_hint'),
+                    style: TextStyle(fontSize: 11, color: c.ink3),
+                  ),
+                  onChanged: (v) => setState(() => _acceptsParcels = v),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
             _sectionLabel(context, 'capabilities_push'),
             const SizedBox(height: 8),

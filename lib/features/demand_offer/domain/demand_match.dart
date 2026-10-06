@@ -33,7 +33,13 @@ enum MatchStatus {
   expired,
   cancelled,
   cancelledByProvider,
-  deadlineMissed;
+  deadlineMissed,
+
+  /// AVA Logistics: ижрочи посилкани ОЛДИ (`scanHandover`) — иш кетмоқда.
+  inProgress,
+
+  /// AVA Logistics: топширди/етказди — LEG ёпилди, ҳақ ҳисобланди.
+  completed;
 
   String get wire {
     switch (this) {
@@ -43,6 +49,8 @@ enum MatchStatus {
         return 'cancelled_by_provider';
       case MatchStatus.deadlineMissed:
         return 'deadline_missed';
+      case MatchStatus.inProgress:
+        return 'in_progress';
       default:
         return name;
     }
@@ -66,7 +74,8 @@ enum MatchStatus {
   bool get isClosed =>
       this == MatchStatus.taken
       || this == MatchStatus.expired
-      || this == MatchStatus.cancelled;
+      || this == MatchStatus.cancelled
+      || this == MatchStatus.completed;
 }
 
 /// Босқичма-босқич очилган контакт (Т-9).
@@ -78,7 +87,12 @@ class MatchContact {
     this.pickupLat,
     this.pickupLng,
     this.recipientPhone,
+    this.recipientName = '',
     this.dropoffAddress = '',
+    this.dropoffLat,
+    this.dropoffLng,
+    this.nextProviderPhone,
+    this.deliveryCodeRequired = false,
   });
 
   /// 1 — юборувчи; 2 — қабул қилувчи ҳам.
@@ -91,7 +105,19 @@ class MatchContact {
 
   /// ФАҚАТ 2-поғонада тўлади (посилка олингандан кейин).
   final String? recipientPhone;
+
+  /// AVA Logistics, 2-поғона, фақат охирги LEG: қабул қилувчи исми.
+  final String recipientName;
   final String dropoffAddress;
+  final double? dropoffLat;
+  final double? dropoffLng;
+
+  /// AVA Logistics: кейинги ижрочи LEG'ни олганда — унинг телефони
+  /// (топшириш нуқтасини келишиш учун). Сервер `acceptLeg`да ёзади.
+  final String? nextProviderPhone;
+
+  /// AVA Logistics: бу LEG охиргиси — етказиш 6 хонали код билан ёпилади.
+  final bool deliveryCodeRequired;
 
   bool get hasRecipient => stage >= 2 && (recipientPhone?.isNotEmpty ?? false);
 
@@ -104,7 +130,12 @@ class MatchContact {
       pickupLat: toDemandDouble(m['pickupLat']),
       pickupLng: toDemandDouble(m['pickupLng']),
       recipientPhone: demandEmptyToNull(m['recipientPhone']),
+      recipientName: (m['recipientName'] ?? '').toString(),
       dropoffAddress: (m['dropoffAddress'] ?? '').toString(),
+      dropoffLat: toDemandDouble(m['dropoffLat']),
+      dropoffLng: toDemandDouble(m['dropoffLng']),
+      nextProviderPhone: demandEmptyToNull(m['nextProviderPhone']),
+      deliveryCodeRequired: m['deliveryCodeRequired'] == true,
     );
   }
 }

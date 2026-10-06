@@ -33,6 +33,7 @@ import '../features/demand_offer/domain/canonical_id.dart';
 import '../features/demand_offer/domain/demand_enums.dart';
 import '../features/demand_offer/presentation/demand_detail/demand_match_detail_screen.dart';
 import '../features/demand_offer/ui_adapters/service_ui_adapter.dart';
+import '../features/logistics/ui/logistics_ui_adapter.dart';
 import '../main.dart';
 
 /// FCM / local push босилганда тегишли экранга ўтиш.
@@ -114,7 +115,10 @@ class PushNavigation {
             demandId: demandId,
             providerId: uid,
             repository: MatchRepository(),
-            adapters: const {DemandModule.service: ServiceUiAdapter()},
+            adapters: const {
+              DemandModule.service: ServiceUiAdapter(),
+              DemandModule.logistics: LogisticsUiAdapter(),
+            },
           ),
         ),
       );

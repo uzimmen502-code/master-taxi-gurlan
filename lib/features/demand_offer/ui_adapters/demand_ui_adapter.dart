@@ -156,6 +156,18 @@ abstract class DemandUiAdapter {
 
   /// Харидор кўрадиган таклиф карточкаси.
   Widget buildOfferCard(BuildContext context, Offer offer, VoidCallback? onChoose);
+
+  /// Сўров тафсилотидаги амаллар блоки — модулга ХОС бўлса.
+  ///
+  /// `null` → ядронинг умумий амаллари (таклиф бериш / қайтариб олиш /
+  /// бекор қилиш). AVA Logistics каби таклифсиз оқимда (нарх тарифдан,
+  /// ижрочи «олиш» билан қабул қилади, кейин custody кодлари) модул ўз
+  /// блокини беради ва умумий тугмалар кўрсатилмайди.
+  Widget? buildMatchActions(
+    BuildContext context,
+    DemandMatch match, {
+    required String providerId,
+  });
 }
 
 /// Тасдиқлаш экранидаги битта қатор.

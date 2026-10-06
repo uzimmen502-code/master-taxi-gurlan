@@ -332,6 +332,7 @@ const _kServiceIcons = <String, IconData>{
   'wholesale_market': Icons.warehouse_outlined,
   'china_market': Icons.local_shipping_outlined,
   'realty': Icons.apartment_rounded,
+  'logistics': Icons.local_post_office_rounded,
 };
 
 /// PNG расм йўли — бўлмаса `null`.
@@ -373,6 +374,11 @@ Color olxTintFor(String moduleId) {
       return const Color(0xFFF4693B);
     case 'courier':
       return const Color(0xFFFFB020);
+    // AVA Logistics (посилка) — тўқ индиго: «ишончли етказиш». Курьер
+    // (сариқ) ва юк (тўқ сариқ) билан бир қаторда туради, уларга
+    // ўхшамаслиги керак; AVA дўкони (ёрқин кўк)дан тўқлиги билан фарқ қилади.
+    case 'logistics':
+      return const Color(0xFF3949AB);
     // ── Овқат ва маҳсулот ───────────────────────────────────────
     case 'food':
       return const Color(0xFFFF6B5A);

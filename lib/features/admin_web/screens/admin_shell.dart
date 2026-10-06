@@ -24,6 +24,7 @@ import 'intercity_admin_screen.dart';
 import 'ev_station_moderation_screen.dart';
 import 'realty_moderation_screen.dart';
 import 'jobs_moderation_screen.dart';
+import 'logistics_admin_screen.dart';
 import 'market_moderation_screen.dart';
 import 'wholesale_moderation_screen.dart';
 import 'marshrut_admin_screen.dart';
@@ -148,6 +149,11 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Кўчмас мулк',
       icon: Icons.apartment_outlined,
       description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
+    ),
+    _AdminSection(
+      label: 'AVA Logistics',
+      icon: Icons.local_post_office_outlined,
+      description: 'Жўнатма тарифи (версияли) ва маршрутлар',
     ),
     _AdminSection(
       label: 'AVA дўкони',
@@ -435,6 +441,9 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'Кўчмас мулк') {
       return const RealtyModerationScreen();
+    }
+    if (section.label == 'AVA Logistics') {
+      return const LogisticsAdminScreen();
     }
     if (section.label == 'AVA дўкони') {
       return const PlatformProductsAdminScreen();

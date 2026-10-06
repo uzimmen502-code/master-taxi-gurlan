@@ -19,6 +19,7 @@ import '../../data/match_repository.dart';
 import '../../domain/demand.dart';
 import '../../domain/demand_enums.dart';
 import '../../domain/demand_match.dart';
+import '../../../logistics/ui/logistics_ui_adapter.dart';
 import '../../ui_adapters/demand_ui_adapter.dart';
 import '../../ui_adapters/service_ui_adapter.dart';
 import '../demand_detail/demand_detail_screen.dart';
@@ -30,6 +31,9 @@ import 'activity_screen.dart';
 /// P0'да биттаси (Қ-1). Янги модул қўшилганда фақат шу жадвал ўсади.
 const Map<DemandModule, DemandUiAdapter> kDemandUiAdapters = {
   DemandModule.service: ServiceUiAdapter(),
+  // AVA Logistics — ижрочи томони (LEG карточкаси + custody амаллари).
+  // Мижоз оқими ядродан ташқарида («Жўнатма» бўлими).
+  DemandModule.logistics: LogisticsUiAdapter(),
 };
 
 class DemandActivityEntry extends StatefulWidget {

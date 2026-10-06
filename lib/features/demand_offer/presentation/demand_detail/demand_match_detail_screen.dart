@@ -105,6 +105,8 @@ class DemandMatchDetailScreen extends StatelessWidget {
   Widget _body(BuildContext context, DemandMatch match) {
     final c = context.ava;
     final adapter = adapters[match.module];
+    final moduleActions =
+        adapter?.buildMatchActions(context, match, providerId: providerId);
 
     return ListView(
       padding: const EdgeInsets.all(12),
@@ -129,7 +131,11 @@ class DemandMatchDetailScreen extends StatelessWidget {
           const SizedBox(height: 12),
         ],
 
-        // Амаллар.
+        // Амаллар — модул ўзиники бўлса (AVA Logistics: олиш → custody
+        // кодлари), акс ҳолда ядронинг умумий таклиф тугмалари.
+        if (moduleActions != null)
+          moduleActions
+        else ...[
         if (match.status.canOffer)
           FilledButton(
             onPressed: () => _makeOffer(context, match),
@@ -209,6 +215,7 @@ class DemandMatchDetailScreen extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: c.ok),
           ),
+        ],
         ],
       ],
     );

@@ -242,10 +242,13 @@ void main() {
 
     test('MatchStatus сервер ёзадиган ҳамма қийматни тушунади', () {
       // `orchestrator.js` ва `offers.js` ёзадиган статуслар.
+      // + `api/logistics.js` (AVA Logistics LEG'лари): `in_progress`,
+      // `completed`.
       const serverMatchStatuses = [
         'new', 'seen', 'skipped', 'offered', 'accepted',
         'taken', 'expired', 'cancelled',
         'cancelled_by_provider', 'deadline_missed',
+        'in_progress', 'completed',
       ];
       for (final s in serverMatchStatuses) {
         expect(MatchStatus.tryParse(s), isNotNull,
@@ -260,10 +263,22 @@ void main() {
         'freight_intercity', 'sell', 'market', 'platform_store', 'realty',
         'food', 'oil_change', 'carpet_wash', 'bread', 'agro_pickup',
       ];
+      // ФАҚАТ сервер яратадиган модуллар — `createDemand` схемасида АТАЙЛАБ
+      // йўқ (мижоз уларни «сўров» сифатида юбора олмайди), лекин илова
+      // `demand_matches`дан ўқиши учун enum'да бор.
+      const serverOnlyModules = ['logistics'];
       for (final m in serverModules) {
         expect(DemandModule.tryParse(m), isNotNull, reason: m);
+        expect(DemandModule.tryParse(m)!.isServerOnly, isFalse, reason: m);
       }
-      expect(DemandModule.values.length, serverModules.length);
+      for (final m in serverOnlyModules) {
+        expect(DemandModule.tryParse(m), isNotNull, reason: m);
+        expect(DemandModule.tryParse(m)!.isServerOnly, isTrue, reason: m);
+      }
+      expect(
+        DemandModule.values.length,
+        serverModules.length + serverOnlyModules.length,
+      );
     });
 
     test('MatchedBucket сервер панжараси билан бир хил', () {

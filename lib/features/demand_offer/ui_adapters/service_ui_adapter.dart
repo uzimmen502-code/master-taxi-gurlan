@@ -182,6 +182,15 @@ class ServiceUiAdapter implements DemandUiAdapter {
     return ServiceOfferCard(offer: offer, onChoose: onChoose);
   }
 
+  /// Хизмат модули ядронинг умумий амалларини ишлатади (таклиф бериш).
+  @override
+  Widget? buildMatchActions(
+    BuildContext context,
+    DemandMatch match, {
+    required String providerId,
+  }) =>
+      null;
+
   // ── Ёрдамчилар ──────────────────────────────────────────────────────
 
   String _categoryLabel(BuildContext context, String? categoryId) {

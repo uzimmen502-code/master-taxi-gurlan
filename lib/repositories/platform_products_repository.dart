@@ -132,17 +132,26 @@ class PlatformProductsRepository {
 
   /// Улгуржи бозор лентаси учун — AVA дўкони товарлари.
   ///
-  /// Эга қарори (2026-09-29): «АВА дўкони бундан кейин Улгуржи бозор
-  /// мақомида». Лентага фақат НАРХ ПОҒОНАСИ қўйилган товар чиқади:
-  /// поғонасиз товар улгуржи эмас, у дўконнинг одатдаги чакана товари.
-  /// Шу қоида туфайли эски ёзувларни миграция қилиш керак бўлмади.
-  Future<List<PlatformProduct>> fetchForWholesale({int limit = 40}) async {
+  /// Эга қарори (2026-10-06): «AVA дўкони тўлиқ Улгуржига ўтади. Ҳамма
+  /// фаол AVA товари Улгуржи лентасида». Аввал (2026-09-29) фақат нарх
+  /// поғонаси қўйилган товар чиқарди — продакшнда поғонали товар 0 та
+  /// эди, яъни лентада AVA товари умуман кўринмасди.
+  Future<List<PlatformProduct>> fetchForWholesale({
+    int limit = catalogLimit,
+  }) async {
     final all = await fetchCatalog(limit: catalogLimit);
-    return all
-        .where((p) => p.active && p.hasPriceTiers)
-        .take(limit)
-        .toList(growable: false);
+    return wholesaleEligible(all).take(limit).toList(growable: false);
   }
+
+  /// Улгуржи лентасига чиқадиган AVA товарлари: ФАОЛ ва сотиладиган
+  /// (нархи ёки поғонаси бор — «0 сўм» карточка чиқмасин). Поғона шарт
+  /// ЭМАС. Тартиб сақланади.
+  static List<PlatformProduct> wholesaleEligible(
+    Iterable<PlatformProduct> all,
+  ) =>
+      all
+          .where((p) => p.active && (p.price > 0 || p.hasPriceTiers))
+          .toList(growable: false);
 
   Future<PlatformProduct?> getById(String id) async {
     final doc = await _col.doc(id).get();

@@ -14,7 +14,6 @@ import '../../models/job_ad.dart';
 import '../jobs/jobs_sections.dart';
 import '../jobs/screens/jobs_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
-import '../platform_store/screens/platform_store_screen.dart';
 import '../realty/screens/realty_screen.dart';
 import '../relatives/screens/relatives_screen.dart';
 import '../tv_market/screens/tv_market_feed_screen.dart';
@@ -147,19 +146,10 @@ List<ServiceSpotlightItem> buildHomeServices(
         HomeModulesCatalog.byId('cheap_products_home'),
       ),
     ),
-    ServiceSpotlightItem(
-      moduleId: 'platform_store',
-      label: context.tr('home_module_platform_store'),
-      icon: Icons.storefront_rounded,
-      iconColor: const Color(0xFF00BCD4),
-      onTap: () {
-        if (!ServiceConfigHolder.isOpenable('platform_store')) {
-          a.showComingSoon();
-          return;
-        }
-        a.push(const PlatformStoreScreen());
-      },
-    ),
+    // «AVA ДЎКОНИ» плиткаси ОЛИБ ТАШЛАНДИ (эга қарори, 2026-10-06): AVA
+    // дўкони тўлиқ Улгуржига ўтди — ҳамма фаол AVA товари «Улгуржи бозор»
+    // лентасида, сават/ҳамён/етказиб бериш оқими ўзгармаган (товар
+    // босилганда AVA дўкони тафсилоти очилади).
     ServiceSpotlightItem(
       moduleId: 'tv_market',
       label: context.tr('home_module_tv_market'),

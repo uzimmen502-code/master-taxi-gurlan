@@ -1,0 +1,22 @@
+{
+  "_comment": "AVA do'koni narx pog'onalari — Node (functions/platform_pricing.js) va Dart (lib/models/price_tier.dart) BIR XIL natija berishi shart. Ega qarori 2026-10-06: bazadagi narx = 10–50 dona; 1–9 +5%, 50+ −5%; yuqoriga butun so'mgacha.",
+  "vectors": [
+    { "price": 10000, "tiers": [], "qty": 1, "v2": 10500, "v1": 10000 },
+    { "price": 10000, "tiers": [], "qty": 9, "v2": 10500, "v1": 10000 },
+    { "price": 10000, "tiers": [], "qty": 10, "v2": 10000, "v1": 10000 },
+    { "price": 10000, "tiers": [], "qty": 49, "v2": 10000, "v1": 10000 },
+    { "price": 10000, "tiers": [], "qty": 50, "v2": 9500, "v1": 10000 },
+    { "price": 10000, "tiers": [], "qty": 500, "v2": 9500, "v1": 10000 },
+    { "price": 1700, "tiers": [], "qty": 1, "v2": 1785, "v1": 1700 },
+    { "price": 1700, "tiers": [], "qty": 60, "v2": 1615, "v1": 1700 },
+    { "price": 1, "tiers": [], "qty": 1, "v2": 2, "v1": 1 },
+    { "price": 1, "tiers": [], "qty": 50, "v2": 1, "v1": 1 },
+    { "price": 12345, "tiers": [], "qty": 3, "v2": 12963, "v1": 12345 },
+    { "price": 12345, "tiers": [], "qty": 70, "v2": 11728, "v1": 12345 },
+    { "price": 110000, "tiers": [], "qty": 1, "v2": 115500, "v1": 110000 },
+    { "price": 110000, "tiers": [], "qty": 50, "v2": 104500, "v1": 110000 },
+    { "price": 8000, "tiers": [{ "minQty": 1, "price": 9000 }, { "minQty": 20, "price": 7000 }], "qty": 5, "v2": 9000, "v1": 8000 },
+    { "price": 8000, "tiers": [{ "minQty": 20, "price": 7000 }, { "minQty": 1, "price": 9000 }], "qty": 25, "v2": 7000, "v1": 8000 },
+    { "price": 0, "tiers": [], "qty": 1, "v2": 0, "v1": 0 }
+  ]
+}

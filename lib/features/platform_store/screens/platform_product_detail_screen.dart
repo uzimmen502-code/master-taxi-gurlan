@@ -396,7 +396,7 @@ class _ProductPageState extends State<_ProductPage>
                       ),
                       // Улгуржи поғоналари (2026-09-29) — жорий миқдорга
                       // мос поғона ажратиб кўрсатилади.
-                      if (product.hasPriceTiers) ...[
+                      if (product.effectiveTiers.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         _PriceTiers(product: product, qty: qty),
                       ],
@@ -958,7 +958,9 @@ class _PriceTiers extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tiers = product.priceTiers;
+    // Амалдаги поғоналар: админ қўймаган бўлса — базадаги нархдан
+    // ҳисобланган (2026-10-06).
+    final tiers = product.effectiveTiers;
     if (tiers.isEmpty) return const SizedBox.shrink();
     final activePrice = product.priceForQty(qty <= 0 ? product.minQty : qty);
     return Container(
@@ -979,7 +981,7 @@ class _PriceTiers extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          for (final t in tiers)
+          for (final (i, t) in tiers.indexed)
             Padding(
               padding: const EdgeInsets.only(bottom: 3),
               child: Row(
@@ -996,7 +998,8 @@ class _PriceTiers extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      t.label(product.unit),
+                      '${product.tierRangeLabel(i)} ${product.unit}: '
+                      '${formatPrice(t.price)} $kCurrencySum',
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: t.price == activePrice

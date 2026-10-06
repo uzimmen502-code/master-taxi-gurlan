@@ -36,7 +36,8 @@
     "test:taxi-billing": "node test/taxi_billing_pure.test.js",
     "test:taxi-billing-rules": "node test/taxi_billing_rules.test.js",
     "test:caps-parity": "node test/capabilities_model_parity.test.js",
-    "test:taxi-cap-rules": "node test/taxi_capability_rules.test.js"
+    "test:taxi-cap-rules": "node test/taxi_capability_rules.test.js",
+    "test:platform-pricing": "node test/platform_pricing.test.js"
   },
   "engines": {
     "node": "20"

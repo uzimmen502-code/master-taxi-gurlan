@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
+import '../../../models/price_tier.dart';
 import '../../../repositories/platform_products_repository.dart';
 import '../../../services/order_payment_service.dart';
 
@@ -324,6 +325,9 @@ class PlatformStoreController extends ChangeNotifier {
       final apply = walletApplyAmount;
       final orderData = <String, dynamic>{
         'type': 'platform',
+        // Сервер шу версия бўйича нархни ҳисоблайди (улгуржи поғоналари,
+        // 2026-10-06). Версиясиз буюртма — эски ягона нарх (эски илова).
+        'pricingVersion': kPlatformPricingVersion,
         'userName': userName,
         'userPhone': userPhone,
         'address': address,

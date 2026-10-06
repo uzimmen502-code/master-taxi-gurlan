@@ -35,6 +35,42 @@ List<PriceTier> sortPriceTiers(List<PriceTier> tiers) {
   return clean;
 }
 
+/// AVA дўкони — нарх қоидаси версияси (`orderBase.pricingVersion`).
+///
+/// 2 — улгуржи поғоналари (1.0.33+). Сервер версиясиз буюртмага (эски
+/// илова) эски ягона нархни қўллайди. Қоида:
+/// `functions/platform_pricing.js` билан АЙНАН бир хил (паритет тести:
+/// `functions/test/fixtures/platform_price_vectors.json`).
+const int kPlatformPricingVersion = 2;
+
+/// Ўрта поғона (10–50 дона) бошланиши ва юқори поғона (50+).
+const int kPlatformMidMinQty = 10;
+const int kPlatformHighMinQty = 50;
+
+/// 1–9 дона: +5%, 50+ дона: −5% (эга қарори, 2026-10-06).
+const int kPlatformLowMarkupPct = 5;
+const int kPlatformHighDiscountPct = 5;
+
+/// ceil(a × num / den) — фақат бутун сонлар.
+int _ceilMulDiv(int a, int num, int den) => (a * num + den - 1) ~/ den;
+
+/// Базадаги нарх — ЎРТА поғона (10–50 дона) нархи; қолган иккаласи
+/// ундан ҳисобланади, юқорига бутун сўмгача. Нарх йўқ бўлса — бўш.
+List<PriceTier> derivedPriceTiers(int midPrice) {
+  if (midPrice <= 0) return const [];
+  return [
+    PriceTier(
+      minQty: 1,
+      price: _ceilMulDiv(midPrice, 100 + kPlatformLowMarkupPct, 100),
+    ),
+    PriceTier(minQty: kPlatformMidMinQty, price: midPrice),
+    PriceTier(
+      minQty: kPlatformHighMinQty,
+      price: _ceilMulDiv(midPrice, 100 - kPlatformHighDiscountPct, 100),
+    ),
+  ];
+}
+
 /// Firestore'даги `priceTiers` рўйхатини ўқийди.
 List<PriceTier> parsePriceTiers(dynamic raw) {
   if (raw is! List) return const [];

@@ -60,26 +60,54 @@ class PlatformProduct {
   /// эски ёзувларга миграция керак эмас — дўкон ўз ҳолича ишлайверади.
   final List<PriceTier> priceTiers;
 
+  /// Админ ўзи поғона қўйганми (базада `priceTiers` бор).
   bool get hasPriceTiers => priceTiers.isNotEmpty;
 
-  /// Экранда кўрсатиладиган нарх. Админ фақат поғона қўйиб, [price] ни
-  /// бўш қолдирса карталарда «0 сўм» чиқиб қолмасин.
-  int get displayPrice => price > 0 ? price : wholesaleBasePrice;
+  /// АМАЛДАГИ поғоналар (эга қарори, 2026-10-06): админ қўйгани, бўлмаса
+  /// базадаги [price] ЎРТА поғона (10–50 дона) деб олиниб, 1–9 (+5%) ва
+  /// 50+ (−5%) ҳисобланади. Сервер ҳам айнан шундай ҳисоблайди
+  /// (`functions/platform_pricing.js`).
+  List<PriceTier> get effectiveTiers =>
+      hasPriceTiers ? priceTiers : derivedPriceTiers(price);
+
+  /// Поғоналар [price] дан ҳисобланганми (админ қўймаган).
+  bool get hasDerivedTiers => !hasPriceTiers && price > 0;
+
+  /// Ўрта поғона — «10–50 дона: 10 000 сўм» (ҳисобланган поғоналарда).
+  PriceTier? get midTier {
+    final t = effectiveTiers;
+    return t.length >= 2 ? t[1] : (t.isEmpty ? null : t.first);
+  }
+
+  /// Поғона оралиғи ёрлиғи: ҳисобланган поғоналарда Улгуржи формасидаги
+  /// тайёр оралиқлар («1–9», «10–50», «50+»), админ поғонасида «10+».
+  String tierRangeLabel(int index) {
+    final t = effectiveTiers;
+    if (index < 0 || index >= t.length) return '';
+    if (hasDerivedTiers) return const ['1–9', '10–50', '50+'][index];
+    return '${t[index].minQty}+';
+  }
+
+  /// Экранда кўрсатиладиган нарх — ЭНГ КАМ харидда ҳақиқатда тўланадиган
+  /// бир дона нархи ([minQty] учун поғона нархи). Карточкада бир нарх,
+  /// саватда бошқа нарх чиқиб қолмасин.
+  int get displayPrice => priceForQty(minQty);
 
   /// Минимал улгуржи буюртма — энг паст поғона.
   int get wholesaleMinQty =>
-      priceTiers.isEmpty ? minQty : priceTiers.first.minQty;
+      effectiveTiers.isEmpty ? minQty : effectiveTiers.first.minQty;
 
   /// «дан 9 000 сўм» — лентада кўрсатиладиган бошланғич нарх.
   int get wholesaleBasePrice =>
-      priceTiers.isEmpty ? price : priceTiers.first.price;
+      effectiveTiers.isEmpty ? price : effectiveTiers.first.price;
 
   /// Берилган миқдорга тўғри келадиган нарх: [qty] дан кичик ёки тенг
-  /// энг юқори поғона. Поғона йўқ бўлса — одатдаги [price].
+  /// энг юқори поғона. Поғона бўлмаса — одатдаги [price].
   int priceForQty(int qty) {
-    if (priceTiers.isEmpty) return price;
-    var result = priceTiers.first.price;
-    for (final t in priceTiers) {
+    final tiers = effectiveTiers;
+    if (tiers.isEmpty) return price;
+    var result = tiers.first.price;
+    for (final t in tiers) {
       if (qty >= t.minQty) {
         result = t.price;
       } else {

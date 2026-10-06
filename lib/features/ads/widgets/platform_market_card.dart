@@ -119,9 +119,7 @@ class PlatformMarketCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       wholesale
-                          ? '${product.priceTiers.length > 1 ? 'дан ' : ''}'
-                              '${formatMoney(product.wholesaleBasePrice)}'
-                              ' / ${product.unit}'
+                          ? _wholesalePriceLine(product)
                           : formatMoney(product.displayPrice),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -133,7 +131,7 @@ class PlatformMarketCard extends StatelessWidget {
                     ),
                     if (wholesale)
                       Text(
-                        'МОҚ ${product.wholesaleMinQty} ${product.unit}',
+                        _wholesaleSubLine(product),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -161,6 +159,33 @@ class PlatformMarketCard extends StatelessWidget {
     );
   }
 }
+
+/// Улгуржи лентасидаги асосий нарх қатори.
+///
+/// Эга қарори (2026-10-06): поғонаси қўйилмаган товарда базадаги нарх —
+/// ўрта поғона, карточкада «10–50 дона: 10 000 сўм». Админ поғона қўйган
+/// товар — аввалгидек «дан 9 000 сўм / дона».
+String platformWholesalePriceLine(PlatformProduct p) {
+  final mid = p.midTier;
+  if (p.hasDerivedTiers && mid != null) {
+    return '${p.tierRangeLabel(1)} ${p.unit}: ${formatMoney(mid.price)}';
+  }
+  return '${p.effectiveTiers.length > 1 ? 'дан ' : ''}'
+      '${formatMoney(p.wholesaleBasePrice)} / ${p.unit}';
+}
+
+/// Иккинчи қатор: ҳисобланган поғонада кам миқдор нархи («1–9 дона:
+/// 10 500 сўм» — харидор 1 дона олса қанча тўлашини кўрсин), акс ҳолда МОҚ.
+String platformWholesaleSubLine(PlatformProduct p) {
+  final t = p.effectiveTiers;
+  if (p.hasDerivedTiers && t.isNotEmpty) {
+    return '${p.tierRangeLabel(0)} ${p.unit}: ${formatMoney(t.first.price)}';
+  }
+  return 'МОҚ ${p.wholesaleMinQty} ${p.unit}';
+}
+
+String _wholesalePriceLine(PlatformProduct p) => platformWholesalePriceLine(p);
+String _wholesaleSubLine(PlatformProduct p) => platformWholesaleSubLine(p);
 
 class _Image extends StatelessWidget {
   const _Image({required this.url});

@@ -29,6 +29,8 @@ const courierPush = createCourierPush({ db, canonicalUid });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');
+// AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
+const platformPricing = require('./platform_pricing');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
 // `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
@@ -2547,8 +2549,15 @@ async function repriceFoodOrderFromCatalog(itemsIn) {
   return { items, total, decrements };
 }
 
-/** Платформа дўкони: нарх `platform_products` дан. */
-async function repricePlatformOrderFromCatalog(itemsIn) {
+/**
+ * Платформа дўкони: нарх `platform_products` дан (клиент нархи эътиборсиз).
+ *
+ * `pricingVersion` 2 (1.0.33+ илова) — улгуржи поғоналари
+ * (`platform_pricing.js`, эга қарори 2026-10-06): базадаги нарх 10–50
+ * дона, 1–9 +5%, 50+ −5%. Версиясиз (эски илова) — эски ягона `price`,
+ * чунки эски илова фойдаланувчига шу нархни кўрсатади.
+ */
+async function repricePlatformOrderFromCatalog(itemsIn, pricingVersion) {
   const raw = Array.isArray(itemsIn) ? itemsIn : [];
   if (raw.length < 1 || raw.length > 40) {
     throw new functions.https.HttpsError('invalid-argument', 'items 1..40');
@@ -2575,7 +2584,7 @@ async function repricePlatformOrderFromCatalog(itemsIn) {
     }
     const d = snap.data() || {};
     // Каталогдаги барча маҳсулотлар буюртма қилиниши мумкин (active чекловсиз).
-    const unitPrice = Math.trunc(Number(d.price || 0));
+    const unitPrice = platformPricing.unitPriceForQty(d, qty, pricingVersion);
     if (!Number.isInteger(unitPrice) || unitPrice <= 0) {
       throw new functions.https.HttpsError(
           'failed-precondition', `Нарх йўқ: ${productId}`);
@@ -2891,7 +2900,8 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
   } else if (orderType === 'platform') {
-    const priced = await repricePlatformOrderFromCatalog(orderBase.items);
+    const priced = await repricePlatformOrderFromCatalog(
+        orderBase.items, orderBase.pricingVersion);
     pricedItems = priced.items;
     serverTotal = priced.total;
     catalogDecs = priced.decrements;
@@ -3088,6 +3098,14 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
       }
       if (platformDeliveryFeePercent != null) {
         orderPayload.deliveryFeePercent = platformDeliveryFeePercent;
+      }
+      // 9-қоида: буюртма қайси нарх қоидаси билан ҳисобланганини сақлайди —
+      // қоида кейин ўзгарса, эски буюртма нархи «кўчиб» кетмасин.
+      if (orderType === 'platform') {
+        orderPayload.pricingVersion =
+            Number(orderBase.pricingVersion) >= platformPricing.PRICING_VERSION_TIERED
+              ? platformPricing.PRICING_VERSION_TIERED
+              : platformPricing.PRICING_VERSION_LEGACY;
       }
     }
     Object.assign(orderPayload, geoReportStamp(userData));

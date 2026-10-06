@@ -47,6 +47,12 @@ const int kPlatformPricingVersion = 2;
 const int kPlatformMidMinQty = 10;
 const int kPlatformHighMinQty = 50;
 
+/// Ҳисобланган поғоналар ФАҚАТ ЭСКИ товарларга: `createdAt` шу вақтдан
+/// ОЛДИН (2026-10-07 00:00 Тошкент) ёки йўқ. Янги товарда поғонани
+/// қўшаётган одамнинг ЎЗИ белгилайди (эга қарори, 2026-10-06). Сервер:
+/// `DERIVED_TIERS_CUTOFF_MS` (`functions/platform_pricing.js`).
+final DateTime kPlatformDerivedTiersCutoff = DateTime.utc(2026, 10, 6, 19);
+
 /// 1–9 дона: +5%, 50+ дона: −5% (эга қарори, 2026-10-06).
 const int kPlatformLowMarkupPct = 5;
 const int kPlatformHighDiscountPct = 5;

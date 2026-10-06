@@ -18,7 +18,7 @@ function ok(name, fn) { tests.push({ name, fn }); }
 
 ok('paritet vektorlari: v2 (pog\'onali) va v1 (eski yagona narx)', () => {
   for (const v of vectors) {
-    const p = { price: v.price, priceTiers: v.tiers };
+    const p = { price: v.price, priceTiers: v.tiers, createdAt: v.createdAt };
     assert.strictEqual(pricing.unitPriceForQty(p, v.qty, 2), v.v2, `v2 ${JSON.stringify(v)}`);
     assert.strictEqual(pricing.unitPriceForQty(p, v.qty, 1), v.v1, `v1 ${JSON.stringify(v)}`);
   }
@@ -45,6 +45,16 @@ ok('noto\'g\'ri pog\'ona yozuvlari tashlab yuboriladi, narx yo\'q → bo\'sh', (
   assert.deepStrictEqual(pricing.cleanTiers([{ minQty: 0, price: 5 }, { minQty: 2, price: -1 }, null]), []);
   assert.deepStrictEqual(pricing.derivedTiers(0), []);
   assert.deepStrictEqual(pricing.derivedTiers('abc'), []);
+});
+
+ok('YANGI tovar (2026-10-07 dan): pog\'ona hisoblanmaydi — qo\'shuvchi o\'zi qo\'yadi', () => {
+  const fresh = { price: 10000, createdAt: { toMillis: () => Date.parse('2026-10-07T09:00:00Z') } };
+  assert.deepStrictEqual(pricing.effectiveTiers(fresh), []);
+  assert.strictEqual(pricing.unitPriceForQty(fresh, 1, 2), 10000);
+  assert.strictEqual(pricing.isLegacyProduct(fresh), false);
+  // Firestore Timestamp shakli bilan eski tovar — hisoblanadi.
+  const old = { price: 10000, createdAt: { toMillis: () => Date.parse('2026-08-01T00:00:00Z') } };
+  assert.strictEqual(pricing.unitPriceForQty(old, 1, 2), 10500);
 });
 
 ok('pricingVersion berilmasa (eski ilova) — eski yagona narx', () => {

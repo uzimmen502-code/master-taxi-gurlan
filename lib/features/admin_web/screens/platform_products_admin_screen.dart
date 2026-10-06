@@ -1295,6 +1295,19 @@ class _EditDialogState extends State<_EditDialog> {
       return;
     }
     final existing = widget.existing;
+    // Эга қарори (2026-10-06): ЯНГИ товарда нарх поғонасини қўшаётган
+    // одамнинг ЎЗИ белгилайди — нархдан ҳисобланадиган +5%/−5% қоидаси
+    // фақат эски товарларга. Улгуржи сотувчи формаси билан бир хил талаб.
+    final tiers = _collectTiers();
+    final isNew = existing == null || !existing.isLegacyPricing;
+    if (isNew && tiers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Янги товар: камида битта поғона нархини киритинг'),
+        ),
+      );
+      return;
+    }
     final urls = _imageUrls
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
@@ -1319,7 +1332,8 @@ class _EditDialogState extends State<_EditDialog> {
         showInMarket: _inMarket,
         sortOrder: int.tryParse(_sort.text.trim()) ?? 0,
         goodsKind: _goodsKind,
-        priceTiers: _collectTiers(),
+        priceTiers: tiers,
+        createdAt: existing?.createdAt,
       ),
     );
   }
@@ -1596,8 +1610,12 @@ class _EditDialogState extends State<_EditDialog> {
         ),
         const SizedBox(height: 2),
         Text(
-          'Поғона қўйилса товар УЛГУРЖИ БОЗОР лентасига ҳам чиқади. '
-          'Бўш қолдирилса — товар фақат AVA дўконида, битта нарх билан.',
+          widget.existing == null || !widget.existing!.isLegacyPricing
+              // Эга қарори 2026-10-06: янги товарда поғона мажбурий.
+              ? 'Янги товар: камида битта поғона нархини киритинг '
+                  '(масалан 1+ дона, 10+ дона, 50+ дона).'
+              : 'Эски товар: поғона бўш бўлса нарх 10–50 дона деб олинади, '
+                  '1–9 дона +5%, 50+ дона −5% ҳисобланади.',
           style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
         ),
         const SizedBox(height: 8),

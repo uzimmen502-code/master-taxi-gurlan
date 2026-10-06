@@ -11,6 +11,8 @@
  *   50+ dona   : price × 95%    (−5%)
  *
  * Admin `priceTiers` qo'ygan bo'lsa — o'shalar ishlatiladi, hisoblanmaydi.
+ * Hisoblash FAQAT ESKI tovarlarga (`DERIVED_TIERS_CUTOFF_MS`); yangi
+ * tovarda pog'onani qo'shuvchining o'zi belgilaydi.
  *
  * PUL — BUTUN SO'M (8-qoida). Yaxlitlash: yuqoriga, butun so'mgacha
  * (taksi T-4 bilan bir xil: AVA o'ziga zarar qilmaydi, farq ≤ 1 so'm).
@@ -30,6 +32,31 @@
 
 const PRICING_VERSION_LEGACY = 1;
 const PRICING_VERSION_TIERED = 2;
+
+/**
+ * Hisoblangan (+5% / −5%) pog'onalar FAQAT ESKI tovarlarga (ega qarori,
+ * 2026-10-06): `createdAt` shu vaqtdan OLDIN (2026-10-07 00:00 Toshkent).
+ * Yangi tovarda pog'onani qo'shayotgan odamning O'ZI belgilaydi (admin
+ * formasi / Ulgurji sotuvchi formasi) — hisoblanmaydi. `createdAt` yo'q
+ * yozuv — eski deb olinadi (eng eski hujjatlarda bo'lmasligi mumkin).
+ * Prodakshn 2026-10-06: 59 ta tovar, hammasi 2026-07-27…08-06 da yaratilgan.
+ */
+const DERIVED_TIERS_CUTOFF_MS = Date.parse('2026-10-06T19:00:00Z');
+
+function toMillis(v) {
+  if (v == null || v === '') return null;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'string') { const t = Date.parse(v); return Number.isFinite(t) ? t : null; }
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Eski tovarmi — hisoblangan pog'onalar faqat shunga. */
+function isLegacyProduct(product) {
+  const ms = toMillis((product || {}).createdAt);
+  return ms == null || ms < DERIVED_TIERS_CUTOFF_MS;
+}
 
 const MID_MIN_QTY = 10;
 const HIGH_MIN_QTY = 50;
@@ -65,11 +92,15 @@ function cleanTiers(raw) {
     .sort((a, b) => a.minQty - b.minQty);
 }
 
-/** Amaldagi pog'onalar: admin qo'ygani, bo'lmasa `price` dan hisoblangan. */
+/**
+ * Amaldagi pog'onalar: qo'yilgani; bo'lmasa ESKI tovarda `price` dan
+ * hisoblangan; yangi tovarda — bo'sh (yagona `price` ishlatiladi).
+ */
 function effectiveTiers(product) {
   const d = product || {};
   const explicit = cleanTiers(d.priceTiers);
-  return explicit.length ? explicit : derivedTiers(d.price);
+  if (explicit.length) return explicit;
+  return isLegacyProduct(d) ? derivedTiers(d.price) : [];
 }
 
 /**
@@ -86,7 +117,8 @@ function unitPriceForQty(product, qty, pricingVersion) {
     return Math.trunc(Number(d.price || 0));
   }
   const tiers = effectiveTiers(d);
-  if (!tiers.length) return 0;
+  // Pog'onasiz (yangi) tovar — yagona narx; ilova ham shunday ko'rsatadi.
+  if (!tiers.length) return Math.trunc(Number(d.price || 0));
   let result = tiers[0].price;
   for (const t of tiers) {
     if (qty >= t.minQty) result = t.price;
@@ -102,6 +134,8 @@ module.exports = {
   HIGH_MIN_QTY,
   LOW_MARKUP_PCT,
   HIGH_DISCOUNT_PCT,
+  DERIVED_TIERS_CUTOFF_MS,
+  isLegacyProduct,
   derivedTiers,
   cleanTiers,
   effectiveTiers,

@@ -63,15 +63,25 @@ class PlatformProduct {
   /// Админ ўзи поғона қўйганми (базада `priceTiers` бор).
   bool get hasPriceTiers => priceTiers.isNotEmpty;
 
-  /// АМАЛДАГИ поғоналар (эга қарори, 2026-10-06): админ қўйгани, бўлмаса
-  /// базадаги [price] ЎРТА поғона (10–50 дона) деб олиниб, 1–9 (+5%) ва
-  /// 50+ (−5%) ҳисобланади. Сервер ҳам айнан шундай ҳисоблайди
-  /// (`functions/platform_pricing.js`).
-  List<PriceTier> get effectiveTiers =>
-      hasPriceTiers ? priceTiers : derivedPriceTiers(price);
+  /// ЭСКИ товарми (2026-10-07 гача яратилган ёки санаси йўқ) — фақат
+  /// шуларда поғона нархдан ҳисобланади.
+  bool get isLegacyPricing =>
+      createdAt == null || createdAt!.isBefore(kPlatformDerivedTiersCutoff);
 
-  /// Поғоналар [price] дан ҳисобланганми (админ қўймаган).
-  bool get hasDerivedTiers => !hasPriceTiers && price > 0;
+  /// АМАЛДАГИ поғоналар (эга қарорлари, 2026-10-06):
+  /// - қўйилган поғоналар бўлса — ўшалар;
+  /// - ЭСКИ товарда — базадаги [price] ЎРТА поғона (10–50 дона), 1–9 (+5%)
+  ///   ва 50+ (−5%) ҳисобланади;
+  /// - ЯНГИ товарда — ҳисобланмайди (поғонани қўшувчининг ўзи қўяди),
+  ///   қўйилмаган бўлса ягона [price].
+  /// Сервер ҳам айнан шундай (`functions/platform_pricing.js`).
+  List<PriceTier> get effectiveTiers {
+    if (hasPriceTiers) return priceTiers;
+    return isLegacyPricing ? derivedPriceTiers(price) : const [];
+  }
+
+  /// Поғоналар [price] дан ҳисобланганми.
+  bool get hasDerivedTiers => !hasPriceTiers && price > 0 && isLegacyPricing;
 
   /// Ўрта поғона — «10–50 дона: 10 000 сўм» (ҳисобланган поғоналарда).
   PriceTier? get midTier {

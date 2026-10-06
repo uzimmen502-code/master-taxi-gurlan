@@ -25,11 +25,13 @@ void main() {
     for (final v in vectors) {
       test('price=${v['price']} tiers=${v['tiers']} qty=${v['qty']} → ${v['v2']}',
           () {
+        final created = v['createdAt'] as String?;
         final p = PlatformProduct(
           id: 'x',
           name: 'x',
           price: v['price'] as int,
           priceTiers: parsePriceTiers(v['tiers']),
+          createdAt: created == null ? null : DateTime.parse(created),
         );
         expect(p.priceForQty(v['qty'] as int), v['v2']);
       });
@@ -77,6 +79,35 @@ void main() {
       expect(p.priceForQty(1), 8000);
       expect(platformWholesaleSubLine(p), 'МОҚ 5 дона');
       expect(p.tierRangeLabel(0), '5+');
+    });
+  });
+
+  group('ЯНГИ товар (2026-10-07 дан) — поғонани қўшувчи ўзи қўяди', () {
+    final fresh = PlatformProduct(
+      id: 'n',
+      name: 'n',
+      price: 10000,
+      createdAt: DateTime.utc(2026, 10, 7, 9),
+    );
+
+    test('ҳисобланмайди: ягона нарх, «10–50» ёрлиғи йўқ', () {
+      expect(fresh.isLegacyPricing, isFalse);
+      expect(fresh.effectiveTiers, isEmpty);
+      expect(fresh.priceForQty(1), 10000);
+      expect(fresh.priceForQty(60), 10000);
+      expect(fresh.displayPrice, 10000);
+      expect(platformWholesalePriceLine(fresh), '10 000 сўм / дона');
+    });
+
+    test('чегара: 18:59:59Z — эски, 19:00:00Z — янги', () {
+      final before = PlatformProduct(
+          id: 'b', name: 'b', price: 10000,
+          createdAt: DateTime.utc(2026, 10, 6, 18, 59, 59));
+      final at = PlatformProduct(
+          id: 'a', name: 'a', price: 10000,
+          createdAt: DateTime.utc(2026, 10, 6, 19));
+      expect(before.priceForQty(1), 10500);
+      expect(at.priceForQty(1), 10000);
     });
   });
 

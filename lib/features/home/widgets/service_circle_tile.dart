@@ -109,7 +109,7 @@ class _ServiceCircleTileState extends State<ServiceCircleTile> {
     _setPressed(true);
     await Future<void>.delayed(const Duration(milliseconds: 80));
     if (!mounted) return;
-    HomeModuleGate.gatedTap(context, widget.item.moduleId, widget.item.onTap)();
+    HomeModuleGate.gatedTap(context, widget.item.gate, widget.item.onTap)();
     await Future<void>.delayed(const Duration(milliseconds: 70));
     if (mounted) _setPressed(false);
     _busy = false;
@@ -323,6 +323,8 @@ const _kServiceSvgs = <String, String>{
 };
 
 const _kServiceIcons = <String, IconData>{
+  // «Хизматлар» — `jobs` модулининг иккинчи плиткаси (дарвоза `jobs`).
+  'jobs_services': Icons.handyman_rounded,
   'platform_store': Icons.storefront_rounded,
   'tv_market': Icons.play_circle_filled_rounded,
   'dating': Icons.favorite_rounded,
@@ -379,8 +381,13 @@ Color olxTintFor(String moduleId) {
     case 'milk':
       return const Color(0xFFBFD8F0);
     // ── Бозор ва эълон ──────────────────────────────────────────
+    // «Эълонлар» — яшил; «Хизматлар» — жигарранг (уста, асбоб). Битта
+    // `jobs` модули, лекин иккита плитка — эга қарори 2026-10-06:
+    // иккаласи бир хил рангда бўлмасин.
     case 'jobs':
       return const Color(0xFF6FBF3B);
+    case 'jobs_services':
+      return const Color(0xFFB07A4A);
     case 'cheap_products_home':
       return const Color(0xFF8E7BF0);
     case 'wholesale_market':

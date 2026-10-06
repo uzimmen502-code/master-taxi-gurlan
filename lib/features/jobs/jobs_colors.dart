@@ -42,11 +42,16 @@ abstract final class JobsColors {
   /// Қидирув fill.
   static const fieldFill = AvaLight.surface2;
 
-  /// «Эълон» акценти.
-  static const kindAd = accentBlue;
+  /// «Эълонлар» бўлими ранги — яшил оила (бош саҳифадаги плитка
+  /// `olxTintFor('jobs')` ҳам яшил). Оқ матн учун етарли тўқ.
+  ///
+  /// Эга қарори (2026-10-06): «Эълонлар» ва «Хизматлар» бўлимлари
+  /// рангда фарқ қилсин, иккаласи бир хил бўлмасин.
+  static const kindAd = Color(0xFF2E7D32);
 
-  /// «Хизмат таклифи» акценти.
-  static const kindService = accentBlue;
+  /// «Хизматлар» бўлими ранги — жигарранг оила (уста, асбоб; плитка
+  /// `olxTintFor('jobs_services')`). Оқ матн учун етарли тўқ.
+  static const kindService = Color(0xFF6D4C41);
 
   /// Legacy «Иш» (work) — бренддан ажралиб турсин, огоҳлантириш туси.
   static const kindWork = AvaLight.warn;

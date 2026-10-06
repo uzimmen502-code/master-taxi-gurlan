@@ -9,6 +9,7 @@ import '../../../core/theme/ava_tokens.dart';
 import '../../../core/utils/session_shuffle.dart';
 import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
+import '../../jobs/jobs_sections.dart';
 import '../home_demo_feed.dart';
 import 'ava_section.dart';
 
@@ -103,7 +104,9 @@ class _HomeAdsSectionState extends State<HomeAdsSection> {
       random: _rnd,
     );
     return AvaSection(
-      moduleId: 'jobs',
+      // Сарлавҳа доираси бўлим рангида: «Эълонлар» — яшил, «Хизматлар» —
+      // жигарранг (эга қарори 2026-10-06).
+      moduleId: JobsSections.tileIdFor(AdKindX.parse(widget.adType)),
       title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,

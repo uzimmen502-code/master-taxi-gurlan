@@ -10,7 +10,8 @@ import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../assistant/assistant_entry.dart';
 import '../carpet_wash/screens/carpet_wash_screen.dart';
 import '../ev_charging/screens/ev_charging_map_screen.dart';
-import '../jobs/jobs_tabs.dart';
+import '../../models/job_ad.dart';
+import '../jobs/jobs_sections.dart';
 import '../jobs/screens/jobs_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../platform_store/screens/platform_store_screen.dart';
@@ -108,20 +109,34 @@ List<ServiceSpotlightItem> buildHomeServices(
         HomeModulesCatalog.byId('food'),
       ),
     ),
+    // `jobs` модули — иккита алоҳида плитка (эга қарори, 2026-10-06):
+    // «Эълонлар» ва «Хизматлар», ҳар бирининг ўз ранги. Админ дарвозаси
+    // иккаласи учун битта — `jobs` (`gateId`).
     ServiceSpotlightItem(
-      moduleId: 'jobs',
-      label: context.tr('home_module_jobs'),
+      moduleId: JobsSections.adsTileId,
+      gateId: JobsSections.gateId,
+      label: context.tr(JobsSections.titleKeyFor(AdKind.ad)),
       imagePath: 'assets/images/services/service_jobs.png',
       onTap: () {
-        if (!ServiceConfigHolder.isOpenable('jobs')) {
+        if (!ServiceConfigHolder.isOpenable(JobsSections.gateId)) {
           a.showComingSoon();
           return;
         }
-        a.push(
-          const JobsScreen(
-            initialTabIndex: JobsTabs.ad,
-          ),
-        );
+        a.push(const JobsScreen(kind: AdKind.ad));
+      },
+    ),
+    ServiceSpotlightItem(
+      moduleId: JobsSections.servicesTileId,
+      gateId: JobsSections.gateId,
+      label: context.tr(JobsSections.titleKeyFor(AdKind.service)),
+      icon: Icons.handyman_rounded,
+      iconColor: Colors.white,
+      onTap: () {
+        if (!ServiceConfigHolder.isOpenable(JobsSections.gateId)) {
+          a.showComingSoon();
+          return;
+        }
+        a.push(const JobsScreen(kind: AdKind.service));
       },
     ),
     ServiceSpotlightItem(

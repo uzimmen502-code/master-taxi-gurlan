@@ -8,7 +8,21 @@ import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../services/user_role_sync.dart';
 
-/// ИШ ЭЪЛОН экранининг controller'и.
+/// Бўлим рўйхати — [sorted] тартибини сақлаб, шу [kind] даги ҲАММА
+/// эълон; шошилинчлари ТЕПАДА.
+///
+/// Bug fix (2026-10-06). Symptom: «Шошилинч» белгиси қўйилган эълон
+/// модул экранида умуман кўринмасди. Root cause: таб филтри шошилинчларни
+/// чиқариб ташларди, уларни кўрсатадиган «Шошилинч» таби эса йўқ эди
+/// (белги изоҳи «алоҳида бўлимда кўринади» дерди). Fix: шошилинчлар ўз
+/// бўлимининг тепасида. Тест: `test/features/jobs/jobs_section_feed_test.dart`.
+List<JobAd> jobsSectionFeed(List<JobAd> sorted, AdKind kind) {
+  bool urgent(JobAd a) => a.supportsUrgent && a.isUrgent;
+  final ofKind = sorted.where((a) => a.kind == kind);
+  return [...ofKind.where(urgent), ...ofKind.where((a) => !urgent(a))];
+}
+
+/// «Эълонлар» / «Хизматлар» бўлимлари экранининг controller'и.
 class JobsController extends ChangeNotifier {
   JobsController({required JobsRepository repo}) : _repo = repo {
     _ready = _init();
@@ -100,21 +114,19 @@ class JobsController extends ChangeNotifier {
     return [...p.urgent, ...p.regular];
   }
 
-  /// Таб бўйича рўйхат: шошилинч алоҳида таб; «Иш» таби йўқ.
+  /// Бўлим бўйича рўйхат (муддати ўтганлар ва қидирув филтрланган):
+  /// шу турдаги ҲАММА эълон, шошилинчлари тепада.
   List<JobAd> feedForTab(
     List<JobAd> source, {
     AdKind? kind,
     bool urgentOnly = false,
   }) {
-    Iterable<JobAd> list = source;
+    final sorted = _filterExpiredAndSearch(source);
     if (urgentOnly) {
-      list = list.where((a) => a.supportsUrgent && a.isUrgent);
-    } else if (kind != null) {
-      list = list.where(
-        (a) => a.kind == kind && !(a.supportsUrgent && a.isUrgent),
-      );
+      return sorted.where((a) => a.supportsUrgent && a.isUrgent).toList();
     }
-    return _filterExpiredAndSearch(list.toList(growable: false));
+    if (kind == null) return sorted;
+    return jobsSectionFeed(sorted, kind);
   }
 
   String _cfError(Object e) {

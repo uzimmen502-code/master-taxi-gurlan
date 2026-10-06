@@ -6,22 +6,27 @@ import '../../../models/job_ad.dart';
 import '../../../repositories/jobs_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../jobs_colors.dart';
-import '../jobs_tabs.dart';
+import '../jobs_sections.dart';
 import '../controllers/jobs_controller.dart';
 import '../widgets/ad_card.dart';
 import '../widgets/add_ad_sheet.dart';
 
-/// ИШ ЭЪЛОН — 2 таб: Иш бор, Хизмат таклифи.
+/// `jobs` модулининг БИТТА бўлими — «Эълонлар» ёки «Хизматлар».
+///
+/// Аввал битта экранда 2 таб эди; эга қарори (2026-10-06) бўйича энди
+/// ҳар бўлим ўз плиткасидан табсиз очилади ва ўз рангига эга
+/// (қаранг: [JobsSections]).
 class JobsScreen extends StatelessWidget {
   const JobsScreen({
     super.key,
-    this.initialTabIndex = JobsTabs.ad,
+    this.kind = AdKind.ad,
     this.openAddSheet = false,
     this.highlightAdId = '',
   });
 
-  /// [JobsTabs.ad], [JobsTabs.service].
-  final int initialTabIndex;
+  /// [AdKind.ad] — «Эълонлар», [AdKind.service] — «Хизматлар».
+  /// Эски [AdKind.work] «Эълонлар»га тушади.
+  final AdKind kind;
 
   /// Экран очилиши билан «янги эълон» варақасини очиш — бош саҳифадаги
   /// «＋» менюсидан келганда, фойдаланувчи яна бир марта босмаслиги учун.
@@ -42,7 +47,7 @@ class JobsScreen extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (ctx) => JobsController(repo: ctx.read<JobsRepository>()),
       child: _JobsView(
-        initialTabIndex: initialTabIndex,
+        kind: JobsSections.sectionOf(kind),
         openAddSheet: openAddSheet,
         highlightAdId: highlightAdId,
       ),
@@ -63,12 +68,12 @@ List<JobAd> jobsFeedWithHighlightFirst(List<JobAd> feed, String highlightId) {
 
 class _JobsView extends StatefulWidget {
   const _JobsView({
-    required this.initialTabIndex,
+    required this.kind,
     this.openAddSheet = false,
     this.highlightAdId = '',
   });
 
-  final int initialTabIndex;
+  final AdKind kind;
   final bool openAddSheet;
   final String highlightAdId;
 
@@ -76,19 +81,16 @@ class _JobsView extends StatefulWidget {
   State<_JobsView> createState() => _JobsViewState();
 }
 
-class _JobsViewState extends State<_JobsView>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
+class _JobsViewState extends State<_JobsView> {
   final _searchCtrl = TextEditingController();
+
+  /// Бўлим ранги — AppBar, қидирув, юкланиш (эга қарори: бўлимлар рангда
+  /// фарқ қилсин).
+  Color get _color => JobsColors.accentFor(widget.kind);
 
   @override
   void initState() {
     super.initState();
-    final start = JobsTabs.clampIndex(widget.initialTabIndex);
-    _tabCtrl = TabController(length: JobsTabs.count, vsync: this, initialIndex: start);
-    _tabCtrl.addListener(() {
-      if (mounted) setState(() {});
-    });
     if (widget.openAddSheet) {
       // `JobsController` provider'и тайёр бўлгач — биринчи frame'дан кейин.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,7 +101,6 @@ class _JobsViewState extends State<_JobsView>
 
   @override
   void dispose() {
-    _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -108,34 +109,26 @@ class _JobsViewState extends State<_JobsView>
     context.read<JobsController>().setSearch(v);
   }
 
-  AdKind? _kindForCurrentTab() {
-    // Свайп анимацияси давомида эски индекс қолмасин.
-    if (_tabCtrl.indexIsChanging) {
-      return JobsTabs.kindForIndex(_tabCtrl.animation?.value.round()
-              ?? _tabCtrl.index);
-    }
-    return JobsTabs.kindForIndex(_tabCtrl.index);
-  }
-
   void _openAddAdSheet() {
     showAddAdSheet(
       context: context,
       controller: context.read<JobsController>(),
-      presetKind: _kindForCurrentTab(),
+      presetKind: widget.kind,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.watch<JobsController>();
+    final color = _color;
     return Scaffold(
       backgroundColor: JobsColors.scaffold,
       appBar: AppBar(
         title: Text(
-          context.tr('home_module_jobs'),
+          context.tr(JobsSections.titleKeyFor(widget.kind)),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: JobsColors.bar,
+        backgroundColor: color,
         foregroundColor: JobsColors.onBar,
         elevation: 0,
         actions: [
@@ -147,17 +140,17 @@ class _JobsViewState extends State<_JobsView>
                 child: ElevatedButton.icon(
                   onPressed: _openAddAdSheet,
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text(
-                    'Эълон қўшиш',
-                    style: TextStyle(
+                  label: Text(
+                    context.tr(JobsSections.addKeyFor(widget.kind)),
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  // Оқ фон + кўк матн; контур — дизайнга мос қизил.
+                  // Оқ фон + бўлим рангидаги матн; контур — дизайнга мос қизил.
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: JobsColors.accentBlue,
+                    foregroundColor: color,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: Size.zero,
@@ -175,29 +168,6 @@ class _JobsViewState extends State<_JobsView>
             ),
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: Container(
-            color: JobsColors.bar,
-            child: TabBar(
-              controller: _tabCtrl,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-              indicatorColor: JobsColors.onBar,
-              indicatorWeight: 3,
-              labelColor: JobsColors.onBar,
-              unselectedLabelColor: JobsColors.tabUnselected,
-              labelStyle: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: AppText.bodyLarge),
-              unselectedLabelStyle: const TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: AppText.bodyLarge),
-              tabs: JobsTabs.labels
-                  .map((label) => Tab(text: label))
-                  .toList(growable: false),
-            ),
-          ),
-        ),
       ),
       body: Column(children: [
         Container(
@@ -214,9 +184,9 @@ class _JobsViewState extends State<_JobsView>
               hintText: 'Қидириш... (масалан: ҳайдовчи, тозалаш)',
               hintStyle: const TextStyle(
                   color: JobsColors.hint, fontSize: AppText.bodyMedium),
-              prefixIcon: const Icon(
+              prefixIcon: Icon(
                 Icons.search,
-                color: JobsColors.bar,
+                color: color,
                 size: 20,
               ),
               suffixIcon: c.searchQuery.isNotEmpty
@@ -238,26 +208,17 @@ class _JobsViewState extends State<_JobsView>
                   borderSide: const BorderSide(color: JobsColors.border)),
               focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: JobsColors.bar, width: 1.5)),
+                  borderSide: BorderSide(color: color, width: 1.5)),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
           ),
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabCtrl,
-            children: [
-              _Feed(
-                kindFilter: AdKind.ad,
-                highlightAdId: widget.highlightAdId,
-              ),
-              _Feed(
-                kindFilter: AdKind.service,
-                highlightAdId: widget.highlightAdId,
-              ),
-            ],
+          child: _Feed(
+            kindFilter: widget.kind,
+            highlightAdId: widget.highlightAdId,
+            color: color,
           ),
         ),
       ]),
@@ -265,11 +226,16 @@ class _JobsViewState extends State<_JobsView>
   }
 }
 
-/// Битта таб контенти.
+/// Бўлим рўйхати.
 class _Feed extends StatelessWidget {
-  const _Feed({this.kindFilter, this.highlightAdId = ''});
+  const _Feed({
+    required this.kindFilter,
+    required this.color,
+    this.highlightAdId = '',
+  });
 
-  final AdKind? kindFilter;
+  final AdKind kindFilter;
+  final Color color;
   final String highlightAdId;
 
   @override
@@ -280,8 +246,7 @@ class _Feed extends StatelessWidget {
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting &&
             !snap.hasData) {
-          return const Center(
-              child: CircularProgressIndicator(color: JobsColors.bar));
+          return Center(child: CircularProgressIndicator(color: color));
         }
         if (snap.hasError) {
           return Center(

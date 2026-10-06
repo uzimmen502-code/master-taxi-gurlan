@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../jobs_colors.dart';
 
@@ -43,8 +44,10 @@ class UrgentToggle extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: isUrgent ? JobsColors.urgent : JobsColors.muted)),
             if (showHint)
-              const Text('Алоҳида «Шошилинч» бўлимида кўринади',
-                  style: TextStyle(
+              // Аввал «Алоҳида «Шошилинч» бўлимида кўринади» дерди — бундай
+              // бўлим йўқ эди ва эълон кўринмай қоларди (bug fix 2026-10-06).
+              Text(context.tr('jobs_urgent_hint'),
+                  style: const TextStyle(
                       fontSize: AppText.labelTiny,
                       color: JobsColors.hint)),
           ]),

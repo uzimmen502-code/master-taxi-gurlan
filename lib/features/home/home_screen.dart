@@ -44,7 +44,7 @@ import '../yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../yuk_local/screens/yuk_local_screen.dart';
 import '../intercity_taxi/driver/intercity_driver_resume.dart';
 import '../intercity_taxi/passenger/screens/intercity_taxi_screen.dart';
-import '../jobs/jobs_tabs.dart';
+import '../../models/job_ad.dart';
 import '../jobs/screens/jobs_screen.dart';
 import '../local_taxi/passenger/screens/local_taxi_active_trip_screen.dart';
 import '../local_taxi/passenger/screens/local_taxi_screen.dart';
@@ -473,9 +473,9 @@ class _HomeViewState extends State<_HomeView> {
       case 'jobs':
         await _push(
           JobsScreen(
-            initialTabIndex: e.type == SearchIndexEntry.typeService
-                ? JobsTabs.service
-                : JobsTabs.ad,
+            kind: e.type == SearchIndexEntry.typeService
+                ? AdKind.service
+                : AdKind.ad,
           ),
         );
         return;
@@ -537,12 +537,12 @@ class _HomeViewState extends State<_HomeView> {
         await _push(const TvPublishScreen());
       case AvaCreateAction.ad:
         await _push(
-          const JobsScreen(initialTabIndex: JobsTabs.ad, openAddSheet: true),
+          const JobsScreen(kind: AdKind.ad, openAddSheet: true),
         );
       case AvaCreateAction.service:
         await _push(
           const JobsScreen(
-            initialTabIndex: JobsTabs.service,
+            kind: AdKind.service,
             openAddSheet: true,
           ),
         );
@@ -775,15 +775,13 @@ class _HomeViewState extends State<_HomeView> {
                                 adType: 'ad',
                                 titleKey: 'home_section_ads',
                                 onOpenAll: () => _push(
-                                  const JobsScreen(
-                                    initialTabIndex: JobsTabs.ad,
-                                  ),
+                                  const JobsScreen(kind: AdKind.ad),
                                 ),
                                 // АЙНАН босилган эълон тепага чиқади ва
                                 // ажратиб кўрсатилади.
                                 onOpenAd: (ad) => _push(
                                   JobsScreen(
-                                    initialTabIndex: JobsTabs.ad,
+                                    kind: AdKind.ad,
                                     highlightAdId: ad.id,
                                   ),
                                 ),
@@ -793,13 +791,11 @@ class _HomeViewState extends State<_HomeView> {
                                 adType: 'service',
                                 titleKey: 'home_section_services',
                                 onOpenAll: () => _push(
-                                  const JobsScreen(
-                                    initialTabIndex: JobsTabs.service,
-                                  ),
+                                  const JobsScreen(kind: AdKind.service),
                                 ),
                                 onOpenAd: (ad) => _push(
                                   JobsScreen(
-                                    initialTabIndex: JobsTabs.service,
+                                    kind: AdKind.service,
                                     highlightAdId: ad.id,
                                   ),
                                 ),

@@ -85,7 +85,7 @@ class _HomeServicesOlxRowState extends State<HomeServicesOlxRow> {
   Widget build(BuildContext context) {
     final c = context.ava;
     final visible = widget.items
-        .where((e) => HomeModuleGate.showInGrid(e.moduleId))
+        .where((e) => HomeModuleGate.showInGrid(e.gate))
         .toList(growable: false);
     if (visible.isEmpty) return const SizedBox.shrink();
 

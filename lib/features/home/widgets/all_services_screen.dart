@@ -21,7 +21,7 @@ class AllServicesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ava;
     final visible = items
-        .where((e) => HomeModuleGate.showInGrid(e.moduleId))
+        .where((e) => HomeModuleGate.showInGrid(e.gate))
         .toList(growable: false);
 
     return Scaffold(

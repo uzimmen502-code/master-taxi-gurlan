@@ -19,9 +19,19 @@ class ServiceSpotlightItem {
     this.icon,
     this.iconColor,
     this.iconScale = 1.0,
+    this.gateId,
   });
 
+  /// Ранг ва расм калити (`olxTintFor`, `serviceImageFor`).
   final String moduleId;
+
+  /// Админ дарвозаси калити (кўриниш / очилиш). Бўш бўлса — [moduleId].
+  ///
+  /// Битта модул бир неча плиткага бўлинганда керак: масалан «Эълонлар»
+  /// ва «Хизматлар» — иккита плитка, ҳар бирининг ўз ранги, лекин админ
+  /// панелда битта `jobs` калити билан ёқилади (эга қарори, 2026-10-06).
+  final String? gateId;
+  String get gate => gateId ?? moduleId;
   final String label;
   final VoidCallback onTap;
   final String? imagePath;
@@ -108,7 +118,7 @@ class _ServicesSpotlightCarouselState extends State<ServicesSpotlightCarousel> {
 
   void _refreshVisible() {
     _visible = widget.items
-        .where((e) => HomeModuleGate.showInGrid(e.moduleId))
+        .where((e) => HomeModuleGate.showInGrid(e.gate))
         .toList(growable: false);
   }
 
@@ -249,7 +259,7 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
     _setPressed(true);
     await Future<void>.delayed(const Duration(milliseconds: 90));
     if (!mounted) return;
-    HomeModuleGate.gatedTap(context, widget.item.moduleId, widget.item.onTap)();
+    HomeModuleGate.gatedTap(context, widget.item.gate, widget.item.onTap)();
     await Future<void>.delayed(const Duration(milliseconds: 80));
     if (mounted) _setPressed(false);
     _busy = false;

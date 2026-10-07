@@ -147,14 +147,34 @@ async function rejects(promise, code) {
   });
 
   await reset();
-  await check('B4 eski 9 xonali users hujjati: token 12 xonali bo\'lsa ham shu hamyon', async () => {
+  await check('B4 eski 9 xonali hujjat + o\'z raqami 9 xonali yuborilsa: shu hamyon (avvalgidek)', async () => {
     await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
     const caller = `998${LEGACY9}`;
     const r = await place(caller, {
-      userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+      userPhone: LEGACY9, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
     });
     assert.strictEqual(r.walletDebit, PLOV_PRICE);
     assert.strictEqual(await bal(LEGACY9), 40000 - PLOV_PRICE);
+  });
+
+  await reset();
+  await check('B4b eski 9 xonali hujjat + 12 xonali userPhone: not-found (kengaytirilmadi)', async () => {
+    await db.collection('users').doc(LEGACY9).set({ role: 'user', phone: LEGACY9, bonusBalance: 40000 });
+    const caller = `998${LEGACY9}`;
+    await rejects(place(caller, {
+      userPhone: caller, idempotencyKey: key(), orderBase: foodOrder({ phone: caller }),
+    }), 'not-found');
+    assert.strictEqual(await bal(LEGACY9), 40000);
+  });
+
+  await reset();
+  await check('B4c begona raqamning 9 xonali shakli: begona hamyonga o\'tilmaydi', async () => {
+    const r = await place(BUYER, {
+      userPhone: VICTIM.slice(3), idempotencyKey: key(), orderBase: foodOrder({ phone: BUYER }),
+    });
+    assert.strictEqual(await bal(VICTIM), 200000);
+    assert.strictEqual(await bal(BUYER), 50000 - PLOV_PRICE);
+    assert.strictEqual(r.walletDebit, PLOV_PRICE);
   });
 
   await reset();

@@ -2913,7 +2913,13 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
     }));
   }
   const uid12 = callerUid;
-  const uid9 = uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : uid12;
+  // Эски 9 хонали `users` ҳужжати — аввалгидек фақат клиент ЎЗ рақамини 9
+  // хонали шаклда юборганда. Кенгайтирилмади: бекор қилишдаги ҳамён қайтими
+  // (`od.userPhone` = 12 хона) 9 хонали ҳужжатни топмайди.
+  const sentDigits = digits(userPhone);
+  const uid9 = (sentDigits.length === 9 && canonicalUid(sentDigits) === callerUid)
+    ? sentDigits
+    : uid12;
   let userRef = db.collection('users').doc(uid12);
   let userCheck = await userRef.get();
   if (!userCheck.exists && uid9 !== uid12) {

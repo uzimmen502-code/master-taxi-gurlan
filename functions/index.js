@@ -1995,9 +1995,13 @@ function geoReportStamp(userData) {
 
 /** Нақд қайтим → Balance (credit) */
 exports.creditChange = functions.https.onCall(async (data, context) => {
+  // `driver` ЙЎҚ: `role: 'driver'`ни ҳар қандай фойдаланувчи ўзига ёза олади
+  // (rules `usersWebLooseDriverPromotion`), сумма эса клиентдан — бу ҳар
+  // кимга чексиз кредит берарди (ҳамён аудити 2026-10-07, K-6). Ҳайдовчи
+  // қайтими 2026-07-09 дан бери Settlement Ledger орқали (йўловчи тасдиғи).
   const operatorUid = await requireCallerRoles(
     context,
-    ['admin', 'superadmin', 'dispatcher', 'driver'],
+    ['admin', 'superadmin', 'dispatcher'],
     'Operator role required',
   );
 
@@ -2011,6 +2015,12 @@ exports.creditChange = functions.https.onCall(async (data, context) => {
 
   if (!idempotencyKey) {
     throw new functions.https.HttpsError('invalid-argument', 'idempotencyKey required');
+  }
+  // Манфий `orderTotal` қайтимни сунъий оширарди; NaN — ички хато эди.
+  if (!Number.isSafeInteger(orderTotal) || orderTotal < 0
+      || !Number.isSafeInteger(cashPaid) || cashPaid < 0) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'orderTotal/cashPaid: manfiy bo\'lmagan butun son');
   }
 
   const uid = userUid(userPhone);
@@ -2890,8 +2900,20 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
         'invalid-argument', 'orderBase.type must be bread, food or platform');
   }
 
-  const uid9 = userUid(userPhone);
-  const uid12 = canonicalUid(userPhone);
+  // Ҳамён эгаси — ФАҚАТ token телефони (callerUid). Аввал ҳамён клиент
+  // юборган `userPhone` бўйича ечиларди, текширув эса `phone` бўйича эди —
+  // бегона рақам юбориб бировнинг ҳамёнидан тўлаш мумкин эди (ҳамён
+  // аудити 2026-10-07, K-1). `userPhone` энди эгани белгиламайди.
+  if (userPhone && canonicalUid(userPhone) !== callerUid) {
+    console.warn(JSON.stringify({
+      action: 'placeOrderPostPaid',
+      errorCode: 'USER_PHONE_MISMATCH_IGNORED',
+      callerTail: callerUid.slice(-4),
+      sentTail: digits(userPhone).slice(-4),
+    }));
+  }
+  const uid12 = callerUid;
+  const uid9 = uid12.length === 12 && uid12.startsWith('998') ? uid12.slice(3) : uid12;
   let userRef = db.collection('users').doc(uid12);
   let userCheck = await userRef.get();
   if (!userCheck.exists && uid9 !== uid12) {

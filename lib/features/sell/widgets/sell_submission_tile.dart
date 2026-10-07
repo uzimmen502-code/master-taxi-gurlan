@@ -103,7 +103,7 @@ class SellSubmissionTile extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppColors.primaryDark,
+                color: AppColors.primaryText,
               ),
             ),
           ],

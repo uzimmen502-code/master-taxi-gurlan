@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/l10n/language_picker_sheet.dart';
 import '../../../../core/l10n/locale_notifier.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
 import '../../../../shared/widgets/become_driver_button.dart';
@@ -420,7 +421,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       content: Row(children: [
         Icon(
           isNoDriver ? Icons.info_outline : Icons.warning_amber,
-          color: isNoDriver ? IntercityColors.primary : IntercityColors.onPrimary,
+          color: isNoDriver ? AppColors.primaryText : IntercityColors.onPrimary,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -648,7 +649,12 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      content: Text(message),
+      content: Text(
+        message,
+        style: color == IntercityColors.primary
+            ? const TextStyle(color: IntercityColors.onPrimary)
+            : null,
+      ),
     ));
   }
 
@@ -695,7 +701,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
                 BecomeDriverButton(
                   onTap: _onIntercityDriverTap,
                   loading: _isSubmitting,
-                  color: IntercityColors.primary,
+                  color: AppColors.primaryText,
                 ),
               ],
             ),
@@ -783,7 +789,7 @@ class _IntercityTaxiViewState extends State<_IntercityTaxiView> {
           child: c.isSearching
               ? const Center(
                   child: CircularProgressIndicator(
-                    color: IntercityColors.primary,
+                    color: AppColors.primaryText,
                   ),
                 )
               : c.rides.isEmpty
@@ -1126,7 +1132,7 @@ class _RouteCard extends StatelessWidget {
                     ),
                     child: const Icon(
                       Icons.swap_vert,
-                      color: IntercityColors.primary,
+                      color: AppColors.primaryText,
                       size: 18,
                     ),
                   ),

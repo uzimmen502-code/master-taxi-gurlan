@@ -104,7 +104,7 @@ class _DashboardTabState extends State<DashboardTab>
             subtitle: 'Ролик, дўкон, платформа, эълон',
             child: KpiGrid(
               aspectRatio: 1.55,
-              accent: AppColors.primaryDark,
+              accent: AppColors.primaryText,
               kpis: [
                 period?.newClipsKpi ??
                     const KpiValue(label: 'Янги роликлар', value: 0, unit: 'та'),
@@ -133,7 +133,7 @@ class _DashboardTabState extends State<DashboardTab>
             icon: '👥',
             child: KpiGrid(
               aspectRatio: 1.55,
-              accent: AppColors.primary,
+              accent: AppColors.primaryText,
               kpis: [
                 period?.totalUsersKpi ?? kpi.usersKpi,
                 period?.uniqueActiveKpi ?? kpi.activeUsersKpi,
@@ -156,7 +156,7 @@ class _DashboardTabState extends State<DashboardTab>
             icon: '🚖',
             child: KpiGrid(
               aspectRatio: 1.55,
-              accent: AppColors.primaryDark,
+              accent: AppColors.primaryText,
               kpis: [
                 kpi.driversKpi,
                 kpi.onlineDriversKpi,
@@ -188,7 +188,7 @@ class _DashboardTabState extends State<DashboardTab>
             labelStyle: TextStyle(
               fontWeight: FontWeight.w600,
               color: c.dashboardPeriod == p
-                  ? AppColors.primaryDark
+                  ? AppColors.primaryText
                   : Colors.grey.shade700,
             ),
           ),
@@ -274,11 +274,11 @@ class _DashboardTabState extends State<DashboardTab>
       ),
       child: Row(children: [
         const Icon(Icons.radio_button_checked,
-            color: Colors.white, size: 16),
+            color: AppColors.onPrimary, size: 16),
         const SizedBox(width: 8),
         const Text('LIVE',
             style: TextStyle(
-                color: Colors.white,
+                color: AppColors.onPrimary,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2)),
@@ -301,14 +301,14 @@ class _DashboardTabState extends State<DashboardTab>
       Text(
         '$value',
         style: const TextStyle(
-            color: Colors.white,
+            color: AppColors.onPrimary,
             fontSize: AppText.bodyLarge,
             fontWeight: FontWeight.bold),
       ),
       const SizedBox(width: 4),
       Text(label,
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85), fontSize: 11)),
+              color: AppColors.onPrimary.withValues(alpha: 0.85), fontSize: 11)),
     ]);
   }
 
@@ -324,10 +324,10 @@ class _DashboardTabState extends State<DashboardTab>
           ? 'analytics_daily · аниқ сумма'
           : 'Тирик сўров · сўнгги юклаш',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _pulseLine('📦 Тушум', rev, AppColors.primary),
-        _pulseLine('🛒 Буюртмалар', '$orders та', AppColors.primary),
-        _pulseLine('🛣 Якунланган сафарлар', '$trips та', AppColors.primary),
-        _pulseLine('🆕 Янги фойдаланувчи', '$users та', AppColors.primary),
+        _pulseLine('📦 Тушум', rev, AppColors.primaryText),
+        _pulseLine('🛒 Буюртмалар', '$orders та', AppColors.primaryText),
+        _pulseLine('🛣 Якунланган сафарлар', '$trips та', AppColors.primaryText),
+        _pulseLine('🆕 Янги фойдаланувчи', '$users та', AppColors.primaryText),
       ]),
     );
   }

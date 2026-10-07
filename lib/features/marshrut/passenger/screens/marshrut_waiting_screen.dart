@@ -162,7 +162,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
               Navigator.pop(ctx);
               Navigator.pop(context);
             },
-            child: Text(ctx.tr('ok'), style: const TextStyle(color: _color)),
+            child: Text(ctx.tr('ok'), style: const TextStyle(color: AppColors.primaryText)),
           ),
           FilledButton(
             onPressed: () {
@@ -199,13 +199,13 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(children: [
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
+                  icon: const Icon(Icons.close, color: AppColors.onPrimary),
                   onPressed: _onCancel,
                 ),
                 Expanded(
                     child: Text(context.tr('marshrut_offer_pending_title'),
                         style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.onPrimary,
                             fontSize: AppText.titleMedium,
                             fontWeight: FontWeight.bold))),
               ]),
@@ -225,7 +225,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                         value: c.secondsLeft / c.timeoutSec,
                         strokeWidth: 8,
                         backgroundColor: _color.withValues(alpha: 0.2),
-                        valueColor: AlwaysStoppedAnimation(_color),
+                        valueColor: AlwaysStoppedAnimation(AppColors.primaryText),
                       ),
                     ),
                     Column(mainAxisSize: MainAxisSize.min, children: [
@@ -233,7 +233,7 @@ class _MarshrutWaitingViewState extends State<_MarshrutWaitingView> {
                           style: TextStyle(
                               fontSize: 48,
                               fontWeight: FontWeight.bold,
-                              color: _color)),
+                              color: AppColors.primaryText)),
                       Text(context.tr('sec_short'),
                           style: const TextStyle(
                               fontSize: AppText.bodySmall,
@@ -343,7 +343,7 @@ class _DriverCard extends StatelessWidget {
               context.tr('driver_n_of_m').replaceAll('{current}', '${currentIndex + 1}').replaceAll('{total}', '$totalDrivers'),
               style: TextStyle(
                   fontSize: AppText.bodySmall,
-                  color: color,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.bold)),
         ),
       ]),

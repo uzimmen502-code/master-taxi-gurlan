@@ -377,7 +377,7 @@ class _AdminShellState extends State<AdminShell> {
           ? null
           : AppBar(
               backgroundColor: AvaLight.brand,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               title: Text(
                 visible[safeIndex].label,
                 style: const TextStyle(fontWeight: FontWeight.w500),
@@ -598,10 +598,13 @@ class _Sidebar extends StatelessWidget {
   /// Қоронғи яшил — оқ матн контрасти (ёруғ limeEdge устида ўқиш қийин эди).
   static const _sidebarBg = AvaLight.brand;
   static const _sidebarBgTop = AvaLight.brand;
-  static const _labelIdle = Color(0xF0FFFFFF); // ~94% white
-  static const _labelSelected = Colors.white;
-  static const _iconIdle = Color(0xD9FFFFFF); // ~85% white
-  static const _muted = Color(0xCCFFFFFF); // ~80% white
+  // Brand (#FFA500) fill устида матн/иконка — AppColors.onPrimary (#171717)
+  // alpha билан (const бўлиши учун ARGB литерал).
+  static const _labelIdle = Color(0xF0171717); // ~94% onPrimary
+  static const _labelSelected = AppColors.onPrimary;
+  static const _iconIdle = Color(0xD9171717); // ~85% onPrimary
+  static const _muted = Color(0xCC171717); // ~80% onPrimary
+  static const _divider = Color(0x3D171717); // ~24% onPrimary
 
   /// Sidebar матн — стандарт (семиз w700/w800 эмас).
   static const _labelSize = 14.0;
@@ -626,7 +629,7 @@ class _Sidebar extends StatelessWidget {
       ),
       child: Column(children: [
         _header(compact),
-        const Divider(color: Colors.white24, height: 1),
+        const Divider(color: _divider, height: 1),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -652,7 +655,7 @@ class _Sidebar extends StatelessWidget {
               child: const PendingCodeAutoModeSwitch(compact: true),
             ),
           ),
-        const Divider(color: Colors.white24, height: 1),
+        const Divider(color: _divider, height: 1),
         if (kIsWeb) _publicAppLinkTile(context, compact),
         _userTile(auth),
       ]),
@@ -663,7 +666,8 @@ class _Sidebar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       child: Row(children: [
-        const Icon(Icons.admin_panel_settings, color: Colors.white, size: 28),
+        const Icon(Icons.admin_panel_settings,
+            color: AppColors.onPrimary, size: 28),
         if (!compact) ...[
           const SizedBox(width: 10),
           const Expanded(
@@ -672,12 +676,12 @@ class _Sidebar extends StatelessWidget {
               children: [
                 Text('AVA',
                     style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.onPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w500)),
                 Text('Admin Panel',
                     style: TextStyle(
-                        color: Colors.white70,
+                        color: Color(0xB3171717), // ~70% onPrimary
                         fontSize: 11,
                         fontWeight: FontWeight.w400)),
               ],
@@ -1080,7 +1084,7 @@ class _Sidebar extends StatelessWidget {
                         : '👤')
                     .toUpperCase(),
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w500)),
+                    color: AppColors.onPrimary, fontWeight: FontWeight.w500)),
           ),
           if (!compact) ...[
             const SizedBox(width: 10),
@@ -1093,7 +1097,7 @@ class _Sidebar extends StatelessWidget {
                           ? auth.displayName!
                           : 'Админ',
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                           fontSize: _metaSize,
                           fontWeight: _labelWeightSelected),
                       maxLines: 1,
@@ -1150,7 +1154,7 @@ class _Sidebar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.home_outlined,
-                      color: Colors.white70, size: 22),
+                      color: Color(0xB3171717), size: 22), // ~70% onPrimary
                   const SizedBox(height: 4),
                   Text(
                     'Фойдалан.',
@@ -1158,7 +1162,7 @@ class _Sidebar extends StatelessWidget {
                     overflow: TextOverflow.clip,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: AppColors.onPrimary.withValues(alpha: 0.85),
                       fontSize: 9,
                       fontWeight: _labelWeight,
                       height: 1.05,
@@ -1168,19 +1172,20 @@ class _Sidebar extends StatelessWidget {
               )
             : const Row(children: [
                 Icon(Icons.home_outlined,
-                    color: Colors.white70, size: 20),
+                    color: Color(0xB3171717), size: 20), // ~70% onPrimary
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     'Фойдаланувчи иловаси',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: Color(0xB3171717), // ~70% onPrimary
                       fontSize: _metaSize,
                       fontWeight: _labelWeight,
                     ),
                   ),
                 ),
-                Icon(Icons.open_in_new, color: Colors.white38, size: 14),
+                Icon(Icons.open_in_new,
+                    color: Color(0x61171717), size: 14), // ~38% onPrimary
               ]),
       ),
     );
@@ -1233,7 +1238,7 @@ class _PlaceholderTab extends StatelessWidget {
             child: const Text(
               '🚧 Кейинги Phase\'дa ясaймиз',
               style: TextStyle(
-                  color: AppColors.primary, fontWeight: FontWeight.bold),
+                  color: AppColors.primaryText, fontWeight: FontWeight.bold),
             ),
           ),
         ],

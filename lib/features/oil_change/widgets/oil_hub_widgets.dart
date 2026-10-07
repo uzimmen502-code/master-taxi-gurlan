@@ -661,7 +661,7 @@ void showOilProductSheet(BuildContext context, OilProduct p) {
                     formatPrice(p.price),
                   ),
               style: const TextStyle(
-                color: oilHubViolet,
+                color: AppColors.primaryText,
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
                 shadows: [Shadow(color: Colors.white, blurRadius: 6)],
@@ -803,7 +803,7 @@ class OilProductCard extends StatelessWidget {
                               height: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: AppColors.primary.withValues(alpha: 0.6),
+                                color: AppColors.primaryText.withValues(alpha: 0.6),
                               ),
                             ),
                           ),
@@ -813,7 +813,7 @@ class OilProductCard extends StatelessWidget {
                                   ? Icons.opacity
                                   : Icons.filter_alt_outlined,
                               size: 40,
-                              color: AppColors.primary.withValues(alpha: 0.7),
+                              color: AppColors.primaryText.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
@@ -825,7 +825,7 @@ class OilProductCard extends StatelessWidget {
                               ? Icons.opacity
                               : Icons.filter_alt_outlined,
                           size: 40,
-                          color: AppColors.primary.withValues(alpha: 0.7),
+                          color: AppColors.primaryText.withValues(alpha: 0.7),
                         ),
                       ),
                     Positioned(
@@ -838,7 +838,7 @@ class OilProductCard extends StatelessWidget {
                             .replaceAll('{price}', formatPrice(product.price)),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color: oilHubViolet,
+                          color: AppColors.primaryText,
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                           height: 1.15,
@@ -907,7 +907,7 @@ class OilRankCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: L.$3 ? AppColors.primary : oilHubLine,
+              color: L.$3 ? AppColors.primaryText : oilHubLine,
               width: L.$3 ? 1.6 : 1,
             ),
           ),
@@ -951,7 +951,7 @@ class OilRankCard extends StatelessWidget {
                       formatPrice(product.price),
                     ),
                 style: const TextStyle(
-                  color: oilHubViolet,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.w800,
                 ),
               ),

@@ -151,7 +151,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
       appBar: AppBar(
         title: Text(context.tr('intercity_taxi')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.home_outlined),
@@ -290,7 +290,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: listed ? AppColors.primaryMid : Colors.grey.shade300),
+            color: listed ? AppColors.primaryText : Colors.grey.shade300),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
@@ -301,7 +301,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 : context.tr('trip_finished'),
             style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: listed ? AppColors.primaryDark : Colors.grey)),
+                color: listed ? AppColors.primaryText : Colors.grey)),
         if (scheduleDate.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
@@ -350,7 +350,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
             icon: const Icon(Icons.swap_horiz, size: 18),
             label: Text(context.tr('return_route')),
             style: OutlinedButton.styleFrom(
-              foregroundColor: IntercityDriverPanelScreen._primary,
+              foregroundColor: AppColors.primaryText,
               side: BorderSide(color: Colors.blue.shade200),
             ),
           ),
@@ -385,7 +385,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
                 label: Text(context.tr('intercity_open_panel_btn')),
                 style: FilledButton.styleFrom(
                   backgroundColor: IntercityDriverPanelScreen._primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                 ),
               ),
             ),
@@ -652,7 +652,7 @@ class _IntercityDriverPanelViewState extends State<_IntercityDriverPanelView>
           IconButton(
             visualDensity: VisualDensity.compact,
             onPressed: () => callPhone(b.userPhone),
-            icon: const Icon(Icons.call, color: IntercityDriverPanelScreen._primary),
+            icon: const Icon(Icons.call, color: AppColors.primaryText),
           ),
           if (b.hasPickupGps)
             TextButton.icon(

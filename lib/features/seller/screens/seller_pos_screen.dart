@@ -36,7 +36,7 @@ class _SellerPosView extends StatelessWidget {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         title: const Text('Sotuv'),
         actions: [
           Padding(
@@ -288,7 +288,7 @@ class _TabBtn extends StatelessWidget {
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : Colors.black87,
+                color: selected ? AppColors.onPrimary : Colors.black87,
               ),
             ),
             if (badge > 0) ...[
@@ -304,7 +304,7 @@ class _TabBtn extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: selected ? AppColors.primaryDark : Colors.white,
+                    color: selected ? AppColors.primaryText : AppColors.onPrimary,
                   ),
                 ),
               ),
@@ -481,7 +481,7 @@ class _FilterChip extends StatelessWidget {
             color: selected ? AppColors.primarySoft : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: selected ? AppColors.primary : Colors.grey.shade300,
+              color: selected ? AppColors.primaryText : Colors.grey.shade300,
             ),
           ),
           child: Text(
@@ -489,7 +489,7 @@ class _FilterChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : Colors.black87,
+              color: selected ? AppColors.primaryText : Colors.black87,
             ),
           ),
         ),
@@ -515,7 +515,7 @@ class _OrderCard extends StatelessWidget {
       chipColor = Colors.grey;
       chipLabel = 'To\'landi';
     } else if (ready) {
-      chipColor = AppColors.primary;
+      chipColor = AppColors.primaryText;
       chipLabel = 'Tayyor';
     } else {
       chipColor = Colors.orange;
@@ -594,7 +594,7 @@ class _OrderCard extends StatelessWidget {
             '${formatMoney(order.total)}',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
               fontSize: 16,
             ),
           ),
@@ -770,7 +770,7 @@ class _ProductCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: cartQty > 0 ? AppColors.primary : AppColors.cardBorderMuted,
+              color: cartQty > 0 ? AppColors.primaryText : AppColors.cardBorderMuted,
               width: cartQty > 0 ? 1.5 : 1,
             ),
           ),
@@ -806,7 +806,7 @@ class _ProductCard extends StatelessWidget {
                           child: Text(
                             '×${_fmtQty(cartQty)}',
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.onPrimary,
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -833,7 +833,7 @@ class _ProductCard extends StatelessWidget {
                 '${formatMoney(price)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: soldOut ? Colors.grey : AppColors.primaryDark,
+                  color: soldOut ? Colors.grey : AppColors.primaryText,
                   fontSize: AppText.titleSmall,
                 ),
               ),
@@ -970,7 +970,7 @@ class _PhoneCartBar extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primaryDark,
+                color: AppColors.primaryText,
               ),
             ),
             const SizedBox(height: 8),
@@ -1266,7 +1266,7 @@ class _PayExpandSheetState extends State<_PayExpandSheet> {
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: AppColors.onPrimary),
                         )
                       : Text('Tasdiqlash · ${formatPrice(total)}'),
                 ),
@@ -1450,7 +1450,7 @@ class _CartPanelState extends State<_CartPanel> {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1582,7 +1582,7 @@ class _CartPanelState extends State<_CartPanel> {
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: AppColors.onPrimary),
                         )
                       : Text('To\'lov · ${formatPrice(total)}'),
                 ),
@@ -1629,7 +1629,7 @@ class _PayChip extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 13,
-              color: selected ? Colors.white : Colors.black87,
+              color: selected ? AppColors.onPrimary : Colors.black87,
             ),
           ),
         ),

@@ -215,7 +215,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
       appBar: AppBar(
         title: Text(context.tr('oil_setup_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
@@ -406,7 +406,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
                 height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: AppColors.onPrimary,
                 ),
               )
             : Text(context.tr('oil_save')),
@@ -421,7 +421,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
       selected: on,
       selectedColor: AppColors.primary,
       labelStyle: TextStyle(
-        color: on ? Colors.white : oilHubInk,
+        color: on ? AppColors.onPrimary : oilHubInk,
         fontWeight: FontWeight.w700,
       ),
       onSelected: (_) => setState(() => _fuel = key),
@@ -434,7 +434,7 @@ class _OilCarSetupScreenState extends State<OilCarSetupScreen> {
       label: Text(label),
       selected: on,
       selectedColor: AppColors.primary.withValues(alpha: 0.2),
-      checkmarkColor: AppColors.primary,
+      checkmarkColor: AppColors.primaryText,
       onSelected: (v) {
         setState(() {
           if (v) {
@@ -509,12 +509,12 @@ class _OilGalleryScreenState extends State<OilGalleryScreen>
       appBar: AppBar(
         title: Text(context.tr('oil_gallery_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: AppColors.onPrimary,
+          labelColor: AppColors.onPrimary,
+          unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
           labelStyle:
               const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           tabs: [
@@ -591,7 +591,7 @@ class OilTypesScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.tr('oil_types_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
@@ -685,7 +685,7 @@ class _OilTypeCard extends StatelessWidget {
                 child: Text(
                   '${context.tr('oil_tap_read')} →',
                   style: const TextStyle(
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),

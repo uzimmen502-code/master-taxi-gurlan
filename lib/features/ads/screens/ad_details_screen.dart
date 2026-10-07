@@ -207,7 +207,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             label: const Text('Қўнғироқ қилиш'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               minimumSize: const Size.fromHeight(48),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -222,7 +222,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
             expandedHeight: 300,
             pinned: true,
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
             actions: [
               IconButton(
                 tooltip: 'Шикоят',
@@ -260,7 +260,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                         formatMoney(ad.price),
                         style: const TextStyle(
                           fontSize: AppText.titleMedium,
-                          color: AppColors.primary,
+                          color: AppColors.primaryText,
                           fontWeight: FontWeight.w700,
                           height: 1.2,
                         ),
@@ -463,7 +463,7 @@ class _SimilarAdTile extends StatelessWidget {
                       Text(
                         formatMoney(ad.price),
                         style: const TextStyle(
-                          color: AppColors.primary,
+                          color: AppColors.primaryText,
                           fontWeight: FontWeight.w700,
                           fontSize: AppText.bodySmall,
                         ),

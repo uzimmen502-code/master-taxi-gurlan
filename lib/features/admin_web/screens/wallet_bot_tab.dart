@@ -117,7 +117,8 @@ class _WalletBotTabState extends State<WalletBotTab>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Сақланди'),
+          content: Text('Сақланди',
+              style: TextStyle(color: AppColors.onPrimary)),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -214,7 +215,7 @@ class _WalletBotTabState extends State<WalletBotTab>
       children: [
         TabBar(
           controller: _inner,
-          labelColor: AppColors.primaryDark,
+          labelColor: AppColors.primaryText,
           tabs: const [
             Tab(text: 'Тўлдириш навбати'),
             Tab(text: 'Ечиш навбати'),

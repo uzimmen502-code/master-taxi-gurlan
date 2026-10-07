@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../intercity_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_booking.dart';
@@ -41,7 +42,7 @@ class IntercityPickupSheet extends StatefulWidget {
 }
 
 class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
-  static const _green = IntercityColors.primary;
+  static const _green = AppColors.primaryText;
 
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
@@ -333,7 +334,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                     '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: IntercityColors.primary,
+                      color: AppColors.primaryText,
                     ),
                   ),
                 ],
@@ -397,7 +398,7 @@ class _IntercityPickupSheetState extends State<IntercityPickupSheet> {
                           width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: IntercityColors.surface,
+                            color: IntercityColors.onPrimary,
                           ),
                         )
                       : Text(context.tr('save_pickup_address')),

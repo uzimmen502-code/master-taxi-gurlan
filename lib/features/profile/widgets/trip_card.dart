@@ -15,8 +15,8 @@ class TripCard extends StatelessWidget {
   final TripModel trip;
   final bool isDriver;
 
-  static const _green = AppColors.primaryDark;
-  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryText;
+  static const _blue = AppColors.primaryText;
 
   String _emojiFor(String taxiType) {
     switch (taxiType) {

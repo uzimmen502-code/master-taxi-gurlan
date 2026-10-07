@@ -313,11 +313,11 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Colors.white),
+                const CircularProgressIndicator(color: AppColors.onPrimary),
                 const SizedBox(height: 12),
                 Text(
                   context.tr('loading'),
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: AppColors.onPrimary),
                 ),
               ],
             ),
@@ -388,7 +388,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
               child: Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 15),
+                style: const TextStyle(color: AppColors.onPrimary, fontSize: 15),
               ),
             ),
           ),
@@ -409,8 +409,8 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
               height: 4,
               decoration: BoxDecoration(
                 color: i <= _step
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.3),
+                    ? AppColors.onPrimary
+                    : AppColors.onPrimary.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -433,7 +433,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.onPrimary,
             ),
           ),
           const SizedBox(height: 8),
@@ -442,7 +442,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: TextStyle(
               fontSize: 14,
               height: 1.4,
-              color: Colors.white.withValues(alpha: 0.85),
+              color: AppColors.onPrimary.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 24),
@@ -469,7 +469,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.onPrimary,
             ),
           ),
           const SizedBox(height: 8),
@@ -478,7 +478,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: TextStyle(
               fontSize: 14,
               height: 1.4,
-              color: Colors.white.withValues(alpha: 0.85),
+              color: AppColors.onPrimary.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 24),
@@ -490,14 +490,14 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
           if (_signingIn) ...[
             const SizedBox(height: 28),
             const Center(
-              child: CircularProgressIndicator(color: Colors.white),
+              child: CircularProgressIndicator(color: AppColors.onPrimary),
             ),
             const SizedBox(height: 12),
             Center(
               child: Text(
                 context.tr('ob_otp_verifying'),
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onPrimary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -521,7 +521,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.onPrimary,
             ),
           ),
           const SizedBox(height: 8),
@@ -530,7 +530,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
             style: TextStyle(
               fontSize: 14,
               height: 1.4,
-              color: Colors.white.withValues(alpha: 0.85),
+              color: AppColors.onPrimary.withValues(alpha: 0.85),
             ),
           ),
           const SizedBox(height: 24),
@@ -571,7 +571,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white70, size: 22),
+          Icon(icon, color: AppColors.onPrimary.withValues(alpha: 0.7), size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -580,7 +580,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: AppColors.onPrimary.withValues(alpha: 0.7),
                     fontSize: 12,
                   ),
                 ),
@@ -588,7 +588,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                 Text(
                   value,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -641,7 +641,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
+                child: const Icon(Icons.arrow_back, color: AppColors.onPrimary),
               ),
             ),
           Expanded(
@@ -651,7 +651,7 @@ class _PhoneReverifyScreenState extends State<PhoneReverifyScreen> {
                 onPressed: _primaryEnabled() ? _onPrimaryAction : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
+                  foregroundColor: AppColors.primaryText,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),

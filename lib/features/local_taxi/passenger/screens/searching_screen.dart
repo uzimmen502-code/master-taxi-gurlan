@@ -9,6 +9,7 @@ import '../controllers/searching_controller.dart';
 import '../widgets/passenger_search_map_view.dart';
 import 'local_taxi_active_trip_screen.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../local_taxi_colors.dart';
 
 class SearchingScreen extends StatelessWidget {
@@ -152,7 +153,7 @@ class _SearchingViewState extends State<_SearchingView> {
         shape: const CircleBorder(),
         elevation: 3,
         child: IconButton(
-          icon: Icon(icon, color: _blue),
+          icon: Icon(icon, color: AppColors.primaryText),
           onPressed: onPressed,
         ),
       );
@@ -174,7 +175,7 @@ class _SearchingViewState extends State<_SearchingView> {
             width: 18,
             height: 18,
             child: CircularProgressIndicator(
-                color: Colors.white, strokeWidth: 2),
+                color: LocalTaxiColors.onPrimary, strokeWidth: 2),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -187,7 +188,7 @@ class _SearchingViewState extends State<_SearchingView> {
                     'sec': c.seconds.toString(),
                   }),
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: LocalTaxiColors.onPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w600),
                 ),
@@ -196,7 +197,9 @@ class _SearchingViewState extends State<_SearchingView> {
                     'current': '${c.cycle + 1}',
                     'total': '3',
                   }),
-                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  style: TextStyle(
+                      color: LocalTaxiColors.onPrimary.withValues(alpha: 0.7),
+                      fontSize: 11),
                 ),
               ],
             ),
@@ -239,7 +242,7 @@ class _SearchingViewState extends State<_SearchingView> {
           children: [
             _addressRow(
               icon: Icons.circle,
-              color: LocalTaxiColors.primary,
+              color: AppColors.primaryText,
               text: c.from,
             ),
             if (c.to.isNotEmpty) ...[
@@ -263,7 +266,7 @@ class _SearchingViewState extends State<_SearchingView> {
                   _fmt('nearby_drivers_count', {'n': '${c.drivers.length}'}),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: LocalTaxiColors.primary,
+                    color: AppColors.primaryText,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),

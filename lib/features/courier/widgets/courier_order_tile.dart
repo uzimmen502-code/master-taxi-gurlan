@@ -34,7 +34,6 @@ class CourierOrderTile extends StatelessWidget {
       onPayment;
   final Future<void> Function() onFinalizeRoute;
 
-  static const Color _blue = AppColors.primary;
   static const Color _green = AppColors.primaryDark;
 
   Future<void> _call() async {
@@ -100,7 +99,7 @@ class CourierOrderTile extends StatelessWidget {
           color: isDone
               ? Colors.grey.shade200
               : isCurrent
-                  ? _green
+                  ? AppColors.primaryText
                   : Colors.grey.shade200,
           width: isCurrent ? 2 : 1,
         ),
@@ -147,7 +146,7 @@ class CourierOrderTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: isDone ? Colors.grey : _green,
+                    color: isDone ? Colors.grey : AppColors.primaryText,
                   ),
                 ),
               ],
@@ -172,7 +171,7 @@ class CourierOrderTile extends StatelessWidget {
                   ),
                   style: FilledButton.styleFrom(
                     backgroundColor: _green,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
@@ -185,7 +184,7 @@ class CourierOrderTile extends StatelessWidget {
                     child: _smallButton(
                       icon: Icons.call,
                       label: context.tr('courier_call'),
-                      color: _blue,
+                      color: AppColors.primaryText,
                       onTap: _call,
                     ),
                   ),
@@ -194,7 +193,7 @@ class CourierOrderTile extends StatelessWidget {
                     child: _smallButton(
                       icon: Icons.navigation,
                       label: context.tr('courier_navigate'),
-                      color: _blue,
+                      color: AppColors.primaryText,
                       onTap: _navigate,
                     ),
                   ),
@@ -275,8 +274,8 @@ class CourierOrderTile extends StatelessWidget {
             color: isDone
                 ? Colors.grey
                 : isCurrent
-                    ? Colors.white
-                    : _blue,
+                    ? AppColors.onPrimary
+                    : AppColors.primaryText,
           ),
         ),
       ),

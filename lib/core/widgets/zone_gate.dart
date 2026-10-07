@@ -181,7 +181,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
         appBar: widget.allowCancel
             ? AppBar(
                 backgroundColor: Colors.transparent,
-                foregroundColor: AppColors.primaryDark,
+                foregroundColor: AppColors.primaryText,
                 elevation: 0,
               )
             : null,
@@ -194,7 +194,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(Icons.holiday_village,
-                      size: 56, color: AppColors.primaryDark),
+                      size: 56, color: AppColors.primaryText),
                   const SizedBox(height: 16),
                   const Text(
                     'Xizmat zonangizni tanlang',
@@ -234,7 +234,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                       onPressed: _valid && !_saving ? _save : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryDark,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -244,7 +244,7 @@ class _ZoneSelectScreenState extends State<ZoneSelectScreen> {
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
+                                  strokeWidth: 2, color: AppColors.onPrimary),
                             )
                           : const Text('Davom etish',
                               style: TextStyle(

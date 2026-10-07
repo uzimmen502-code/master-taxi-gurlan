@@ -23,7 +23,12 @@ Future<void> showDriverApplicationPendingFeedback(
         behavior: SnackBarBehavior.floating,
         duration: duration ?? const Duration(seconds: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        content: Text(message),
+        content: Text(
+          message,
+          style: color == AppColors.button
+              ? const TextStyle(color: AppColors.onPrimary)
+              : null,
+        ),
       ),
     );
   }

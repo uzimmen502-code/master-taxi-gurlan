@@ -146,7 +146,7 @@ class _EditAdViewState extends State<_EditAdView> {
         child: Text(label,
             style: TextStyle(
                 fontSize: AppText.labelSmall,
-                color: selected ? Colors.white : Colors.grey.shade600,
+                color: selected ? AppColors.onPrimary : Colors.grey.shade600,
                 fontWeight: FontWeight.w600)),
       ),
     );
@@ -187,7 +187,7 @@ class _EditAdViewState extends State<_EditAdView> {
                       ),
                       const SizedBox(height: 16),
                       const Row(children: [
-                        Icon(Icons.edit, color: _blue, size: 24),
+                        Icon(Icons.edit, color: AppColors.primaryText, size: 24),
                         SizedBox(width: 8),
                         Text('Эълонни таҳрирлаш',
                             style: TextStyle(
@@ -285,14 +285,14 @@ class _EditAdViewState extends State<_EditAdView> {
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
+                                    strokeWidth: 2, color: AppColors.onPrimary))
                             : const Icon(Icons.save, size: 18),
                         label: Text(_isSaving ? '...' : 'САҚЛАШ',
                             style:
                                 const TextStyle(fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _blue,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.onPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),

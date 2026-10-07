@@ -105,7 +105,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
           Row(
             children: [
               Icon(Icons.account_balance_wallet_outlined,
-                  color: LocalTaxiColors.primary, size: 20),
+                  color: AppColors.primaryText, size: 20),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -144,7 +144,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: LocalTaxiColors.primary,
+                color: AppColors.primaryText,
               ),
             ),
             Slider(

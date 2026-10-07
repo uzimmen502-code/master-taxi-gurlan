@@ -21,7 +21,7 @@ class LanguageSettingsTile extends StatelessWidget {
             : '${context.tr('lang_follow_device')} · ${_labelFor(current, context)}';
 
         return ListTile(
-          leading: const Icon(Icons.language, color: AppColors.primary),
+          leading: const Icon(Icons.language, color: AppColors.primaryText),
           title: Text(context.tr('language')),
           subtitle: Text(
             '${context.tr('language_subtitle')}\n$subtitle',

@@ -175,7 +175,7 @@ class _MarshrutMfyPickerSheetState extends State<_MarshrutMfyPickerSheet> {
                             isRecent ? Icons.history : Icons.location_on,
                             color: isRecent
                                 ? Colors.grey.shade600
-                                : AppColors.primary,
+                                : AppColors.primaryText,
                           ),
                           title: Text(place),
                           onTap: () => _pick(place),

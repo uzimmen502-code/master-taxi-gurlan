@@ -35,7 +35,7 @@ class OrderReceiptView extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.receipt_long, color: _border, size: 22),
+              const Icon(Icons.receipt_long, color: AppColors.primaryText, size: 22),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

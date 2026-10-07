@@ -126,7 +126,7 @@ class _TvMarketTabState extends State<TvMarketTab>
               icon: '🏆',
               child: TopList(
                 items: t.topViewed,
-                color: AppColors.primary,
+                color: AppColors.primaryText,
                 maxItems: 10,
                 formatValue: (v) => '${v.toInt()}',
               ),
@@ -143,7 +143,7 @@ class _TvMarketTabState extends State<TvMarketTab>
       icon: '🎬',
       child: KpiGrid(
         aspectRatio: 1.45,
-        accent: AppColors.primary,
+        accent: AppColors.primaryText,
         kpis: [
           KpiValue(label: 'Жами кўриш', value: t.totalViews, unit: 'та', icon: '👁'),
           KpiValue(

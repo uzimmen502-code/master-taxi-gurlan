@@ -136,7 +136,7 @@ class _EntertainmentCatalogTabState extends State<EntertainmentCatalogTab> {
                     child: ListTile(
                       leading: Icon(
                         v.active ? Icons.movie : Icons.movie_outlined,
-                        color: v.active ? AppColors.primary : Colors.grey,
+                        color: v.active ? AppColors.primaryText : Colors.grey,
                       ),
                       title: Text(v.title),
                       subtitle: Text(

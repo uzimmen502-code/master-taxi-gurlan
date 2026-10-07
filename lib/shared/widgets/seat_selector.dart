@@ -40,7 +40,7 @@ class SeatSelector extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: sel ? Colors.white : Colors.grey.shade600))),
+                        color: sel ? AppColors.onPrimary : Colors.grey.shade600))),
           ),
         );
       }).toList(),

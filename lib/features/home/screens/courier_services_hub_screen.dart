@@ -7,7 +7,7 @@ import '../../carpet_wash/screens/carpet_wash_screen.dart';
 import '../../food/screens/food_screen.dart';
 
 const _bg = AppColors.lime;
-const _titleDark = AppColors.limeDeep;
+const _titleDark = AppColors.primaryText;
 const _brandGreen = AppColors.limeDeep;
 const _cardBorder = AppColors.cardBorderMuted;
 
@@ -22,7 +22,7 @@ class CourierServicesHubScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.tr('courier_hub_title')),
         backgroundColor: _brandGreen,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: ListView(

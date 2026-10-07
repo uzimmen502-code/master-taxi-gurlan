@@ -40,13 +40,13 @@ class MainActionButtons extends StatelessWidget {
           ),
           child: Column(children: [
             Icon(isOnline ? Icons.check_circle : Icons.play_circle_fill,
-                color: Colors.white, size: 28),
+                color: AppColors.onPrimary, size: 28),
             const SizedBox(height: 6),
             Text(isOnline ? 'ИШ БОШЛАНДИ' : 'ИШНИ БОШЛАШ',
                 style: const TextStyle(
                     fontSize: AppText.bodyMedium,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white)),
+                    color: AppColors.onPrimary)),
           ]),
         ),
       )),

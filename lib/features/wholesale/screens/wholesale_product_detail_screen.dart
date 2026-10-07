@@ -80,7 +80,7 @@ class _WholesaleProductDetailScreenState
                     style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primaryDark)),
+                        color: AppColors.primaryText)),
                 const SizedBox(height: 4),
                 Text(
                     context

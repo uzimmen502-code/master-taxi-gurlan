@@ -42,7 +42,7 @@ class EvTripPlanView extends StatelessWidget {
               icon: const Icon(Icons.navigation_rounded, size: 20),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryDark,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
               ),
@@ -74,7 +74,7 @@ class EvTripPlanView extends StatelessWidget {
                     ? Icons.check_circle_rounded
                     : Icons.ev_station_rounded,
                 size: 20,
-                color: AppColors.primaryDark,
+                color: AppColors.primaryText,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -221,7 +221,7 @@ class _StopCard extends StatelessWidget {
                 ),
                 child: Text('$index',
                     style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.onPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.w700)),
               ),

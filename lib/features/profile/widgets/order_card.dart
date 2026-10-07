@@ -26,7 +26,7 @@ class OrderCard extends StatelessWidget {
     final title = isPlatform
         ? '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}'
         : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
-    final color = AppColors.primary;
+    final color = AppColors.primaryText;
 
     final dt = order.createdAt;
     final dateStr =
@@ -75,7 +75,7 @@ class OrderCard extends StatelessWidget {
         if (order.deliveryTime.isNotEmpty)
           _BadgeBox(
             text: '🕐 Тахминий вақт: ${order.deliveryTime}',
-            color: AppColors.primary,
+            color: AppColors.primaryText,
           ),
         if (order.rejectReason.isNotEmpty)
           _BadgeBox(
@@ -128,10 +128,10 @@ class _StatusChip extends StatelessWidget {
   final String fulfillment;
 
   static const _map = <String, ({String label, Color color})>{
-    'new': (label: '🔵 Янги', color: AppColors.primary),
-    'accepted': (label: '🟡 Қабул', color: AppColors.primaryMid),
+    'new': (label: '🔵 Янги', color: AppColors.primaryText),
+    'accepted': (label: '🟡 Қабул', color: AppColors.primaryText),
     'ready': (label: '🟠 Тайёр', color: AppColors.warning),
-    'delivered': (label: '🟢 Етказилди', color: AppColors.primary),
+    'delivered': (label: '🟢 Етказилди', color: AppColors.primaryText),
     'cancelled': (label: 'Бекор', color: Colors.red),
     'rejected': (label: 'Бекор', color: Colors.red),
   };

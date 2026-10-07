@@ -48,7 +48,7 @@ class SeatsCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: AppText.bodyMedium,
                   fontWeight: FontWeight.bold,
-                  color: isFull ? _red : _green,
+                  color: isFull ? _red : AppColors.primaryText,
                 ),
               ),
               Text('Жами: $totalSeats та ўрин',
@@ -90,13 +90,13 @@ class SeatsCard extends StatelessWidget {
                 ],
               ),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.person_add, size: 16, color: Colors.white),
+                Icon(Icons.person_add, size: 16, color: AppColors.onPrimary),
                 SizedBox(width: 4),
                 Text('+1',
                     style: TextStyle(
                         fontSize: AppText.bodyMedium,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white)),
+                        color: AppColors.onPrimary)),
               ]),
             ),
           ),

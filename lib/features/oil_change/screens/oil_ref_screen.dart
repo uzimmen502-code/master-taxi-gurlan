@@ -144,7 +144,7 @@ class _OilRefScreenState extends State<OilRefScreen>
         appBar: AppBar(
           title: Text(context.tr('oil_ref_guide')),
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
         ),
         body: Center(child: Text(context.tr('oil_fill_phone_first'))),
       );
@@ -159,7 +159,7 @@ class _OilRefScreenState extends State<OilRefScreen>
             appBar: AppBar(
               title: Text(context.tr('oil_ref_guide')),
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -173,7 +173,7 @@ class _OilRefScreenState extends State<OilRefScreen>
             appBar: AppBar(
               title: Text(context.tr('oil_ref_guide')),
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -188,13 +188,13 @@ class _OilRefScreenState extends State<OilRefScreen>
           appBar: AppBar(
             title: Text(context.tr('oil_ref_guide')),
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
             bottom: TabBar(
               controller: _tabs,
               isScrollable: true,
-              indicatorColor: Colors.white,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
+              indicatorColor: AppColors.onPrimary,
+              labelColor: AppColors.onPrimary,
+              unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
               labelStyle:
                   const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               tabs: [
@@ -319,7 +319,7 @@ class _RecoTab extends StatelessWidget {
                         ? v.plate
                         : (v.model.isNotEmpty ? v.model : v.id),
                     style: TextStyle(
-                      color: on ? Colors.white : oilHubInk,
+                      color: on ? AppColors.onPrimary : oilHubInk,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

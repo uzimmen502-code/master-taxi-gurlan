@@ -22,13 +22,13 @@ class IntercityAdminScreen extends StatelessWidget {
         backgroundColor: AppColors.scaffold,
         appBar: AppBar(
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           title: const Text('Shaharlararo taksi'),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: Colors.white,
-            tabs: [
+          bottom: TabBar(
+            labelColor: AppColors.onPrimary,
+            unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.6),
+            indicatorColor: AppColors.onPrimary,
+            tabs: const [
               Tab(text: 'Haydovchilar'),
               Tab(text: 'Bronlar'),
               Tab(text: 'Kino'),
@@ -341,7 +341,7 @@ class _DriversTabState extends State<_DriversTab> {
                             : Colors.grey.shade200,
                         child: Icon(
                           Icons.directions_car,
-                          color: active ? AppColors.primary : Colors.grey,
+                          color: active ? AppColors.primaryText : Colors.grey,
                         ),
                       ),
                       title: Text(
@@ -417,7 +417,7 @@ class _BookingsTab extends StatelessWidget {
   Color _color(String s) {
     switch (s) {
       case 'confirmed':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'pending':
         return Colors.orange;
       case 'completed':

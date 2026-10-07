@@ -162,7 +162,10 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
           ));
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(
-        content: Text('✅ Хабар юборилди'),
+        content: Text(
+          '✅ Хабар юборилди',
+          style: TextStyle(color: AppColors.onPrimary),
+        ),
         backgroundColor: AppColors.button,
       ));
       Navigator.pop(context);
@@ -185,7 +188,7 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
       appBar: AppBar(
         title: const Text('Янги хабар'),
         backgroundColor: _blue,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -248,13 +251,13 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(a.$3,
                         size: 14,
-                        color: selected ? Colors.white : Colors.grey.shade700),
+                        color: selected ? AppColors.onPrimary : Colors.grey.shade700),
                     const SizedBox(width: 6),
                     Text(a.$2,
                         style: TextStyle(
                             fontSize: 12,
                             color:
-                                selected ? Colors.white : Colors.grey.shade700,
+                                selected ? AppColors.onPrimary : Colors.grey.shade700,
                             fontWeight: selected
                                 ? FontWeight.bold
                                 : FontWeight.normal)),
@@ -358,12 +361,12 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onPrimary))
                   : const Icon(Icons.send, size: 18),
               label: const Text('Хабарни юбориш'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.button,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
@@ -393,6 +396,6 @@ class _AdminNewsComposeScreenState extends State<AdminNewsComposeScreen> {
             borderSide: BorderSide(color: Colors.grey.shade300)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _blue, width: 1.5)),
+            borderSide: const BorderSide(color: AppColors.primaryText, width: 1.5)),
       );
 }

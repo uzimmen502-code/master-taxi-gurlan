@@ -43,7 +43,7 @@ class _OnboardingView extends StatefulWidget {
 class _OnboardingViewState extends State<_OnboardingView> {
   static const _ink = AvaLight.ink;
   static const _muted = AvaLight.ink2;
-  static const _green = AppColors.primary;
+  static const _green = AppColors.primaryText;
   static const _greenDark = AppColors.primaryDark;
 
   final _nameCtrl = TextEditingController();
@@ -179,7 +179,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: _greenDark,
+                    color: AppColors.primaryText,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -205,7 +205,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
               : _next,
           style: ElevatedButton.styleFrom(
             backgroundColor: _greenDark,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -217,7 +217,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                   ),
                 )
               : Text(
@@ -261,7 +261,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: _greenDark.withValues(alpha: 0.9),
+                    color: AppColors.primaryText.withValues(alpha: 0.9),
                     letterSpacing: 0.2,
                     height: 1.35,
                   ),
@@ -469,7 +469,7 @@ class _OnboardingViewState extends State<_OnboardingView> {
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: on ? _greenDark : _ink,
+                  color: on ? AppColors.primaryText : _ink,
                   fontSize: 13,
                 ),
               ),

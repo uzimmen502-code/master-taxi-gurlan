@@ -241,7 +241,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
               color: _blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.storefront_outlined, color: _blue),
+            child: const Icon(Icons.storefront_outlined, color: AppColors.primaryText),
           ),
           const SizedBox(width: 14),
           const Expanded(
@@ -626,7 +626,7 @@ class _AdsTable extends StatelessWidget {
               style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: AppColors.primary,
+                color: AppColors.primaryText,
               ),
             ),
           ),
@@ -809,7 +809,7 @@ class _MarketAdDetailDialog extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
+                                color: AppColors.primaryText,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -1236,7 +1236,7 @@ class _MarketAutoApproveBarState extends State<_MarketAutoApproveBar> {
                   label: const Text('АВТО', style: TextStyle(fontSize: 12)),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 36),
                   ),

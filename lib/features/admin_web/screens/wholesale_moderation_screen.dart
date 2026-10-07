@@ -217,9 +217,9 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               label: const Text('Тасдиқлаш'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.button,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 disabledBackgroundColor: AppColors.tickerShell,
-                disabledForegroundColor: AppColors.primaryDark,
+                disabledForegroundColor: AppColors.primaryText,
               ),
             ),
             OutlinedButton.icon(
@@ -417,9 +417,9 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               label: const Text('Фаоллаштириш'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.button,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 disabledBackgroundColor: AppColors.tickerShell,
-                disabledForegroundColor: AppColors.primaryDark,
+                disabledForegroundColor: AppColors.primaryText,
               ),
             ),
             OutlinedButton.icon(
@@ -452,8 +452,8 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         color: Colors.white,
         child: TabBar(
           controller: _tabCtrl,
-          labelColor: _blue,
-          indicatorColor: _blue,
+          labelColor: AppColors.primaryText,
+          indicatorColor: AppColors.primaryText,
           tabs: const [
             Tab(text: '🧾 Сотувчилар'),
             Tab(text: '📦 Маҳсулотлар'),
@@ -481,7 +481,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.warehouse_outlined, color: _blue),
+          child: const Icon(Icons.warehouse_outlined, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -559,7 +559,7 @@ Color _sellerStatusColor(String status) {
     case WholesaleSeller.statusPending:
       return Colors.orange;
     case WholesaleSeller.statusApproved:
-      return AppColors.primary;
+      return AppColors.primaryText;
     case WholesaleSeller.statusRejected:
       return Colors.red;
     default:
@@ -585,7 +585,7 @@ Color _productStatusColor(String status) {
     case WholesaleProduct.statusPending:
       return Colors.orange;
     case WholesaleProduct.statusActive:
-      return AppColors.primary;
+      return AppColors.primaryText;
     case WholesaleProduct.statusInactive:
       return Colors.blueGrey;
     default:
@@ -702,7 +702,7 @@ class _AutoApproveBarState extends State<_AutoApproveBar> {
                 label: const Text('АВТО', style: TextStyle(fontSize: 12)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.button,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   minimumSize: const Size(0, 36),
                 ),

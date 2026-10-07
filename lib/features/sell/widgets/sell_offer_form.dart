@@ -144,7 +144,10 @@ class _SellOfferFormState extends State<SellOfferForm> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: error ? Colors.red.shade700 : _green,
-        content: Text(msg),
+        content: Text(
+          msg,
+          style: TextStyle(color: error ? null : AppColors.onPrimary),
+        ),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -162,11 +165,11 @@ class _SellOfferFormState extends State<SellOfferForm> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _green.withValues(alpha: 0.35)),
+            border: Border.all(color: AppColors.primaryText.withValues(alpha: 0.35)),
           ),
           child: const ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.storefront_outlined, color: _green),
+            leading: Icon(Icons.storefront_outlined, color: AppColors.primaryText),
             title: Text(
               'Платформага таклиф',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -183,7 +186,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: AppColors.primaryDark,
+            color: AppColors.primaryText,
           ),
         ),
         const SizedBox(height: 6),
@@ -226,7 +229,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                     ),
                   )
                 : const Icon(Icons.send_outlined),
@@ -244,7 +247,7 @@ class _SellOfferFormState extends State<SellOfferForm> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
             ),
           ),
           const SizedBox(height: 8),

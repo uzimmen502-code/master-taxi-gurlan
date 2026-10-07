@@ -59,7 +59,7 @@ class _DriversTabState extends State<DriversTab>
             icon: '🚖',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: AppColors.primaryDark,
+              accent: AppColors.primaryText,
               kpis: [
                 KpiValue(
                     label: 'Жами',
@@ -138,14 +138,14 @@ class _DriversTabState extends State<DriversTab>
                   icon: '💰',
                   label: 'Ўртача даромад / ҳайдовчи (7 кун)',
                   value: formatMoney(d.avgEarningsPerDriver),
-                  valueColor: AppColors.primary),
+                  valueColor: AppColors.primaryText),
               MetricRow(
                   icon: '📊',
                   label: 'Онлайн ulushi',
                   value: d.totalDrivers > 0
                       ? '${(100 * d.onlineDrivers / d.totalDrivers).toStringAsFixed(0)}%'
                       : '0%',
-                  valueColor: AppColors.primaryDark),
+                  valueColor: AppColors.primaryText),
             ]),
           ),
           const SizedBox(height: 12),
@@ -153,21 +153,21 @@ class _DriversTabState extends State<DriversTab>
             title: 'Топ — сафарлар бўйича (7 кун)',
             icon: '🏆',
             child: TopList(
-                items: d.topByTrips, color: AppColors.primary),
+                items: d.topByTrips, color: AppColors.primaryText),
           ),
           const SizedBox(height: 12),
           SectionCard(
             title: 'Топ — даромад бўйича (7 кун)',
             icon: '💎',
             child: TopList(
-                items: d.topByEarnings, color: AppColors.primary),
+                items: d.topByEarnings, color: AppColors.primaryText),
           ),
           const SizedBox(height: 12),
           SectionCard(
             title: 'Топ — рейтинг бўйича',
             icon: '⭐',
             child: TopList(
-                items: d.topByRating, color: AppColors.primary),
+                items: d.topByRating, color: AppColors.primaryText),
           ),
         ],
       ),

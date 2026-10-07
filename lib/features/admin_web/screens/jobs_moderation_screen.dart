@@ -157,8 +157,8 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
         color: Colors.white,
         child: TabBar(
           controller: _tabCtrl,
-          labelColor: _blue,
-          indicatorColor: _blue,
+          labelColor: AppColors.primaryText,
+          indicatorColor: AppColors.primaryText,
           tabs: const [
             Tab(text: '📋 Эълонлар'),
             Tab(text: '⚠️ Шикоятлар'),
@@ -220,7 +220,7 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.work_history, color: _blue),
+          child: const Icon(Icons.work_history, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -467,9 +467,9 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.button,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 disabledBackgroundColor: AppColors.tickerShell,
-                disabledForegroundColor: AppColors.primaryDark,
+                disabledForegroundColor: AppColors.primaryText,
               ),
             ),
             OutlinedButton.icon(
@@ -538,9 +538,9 @@ Color _kindColor(AdKind kind) {
     case AdKind.work:
       return const Color(0xFFD84315);
     case AdKind.service:
-      return AppColors.primary;
+      return AppColors.primaryText;
     case AdKind.ad:
-      return AppColors.primary;
+      return AppColors.primaryText;
   }
 }
 
@@ -549,7 +549,7 @@ Color _statusColor(String status) {
     case 'pending':
       return Colors.orange;
     case 'active':
-      return AppColors.primary;
+      return AppColors.primaryText;
     case 'completed':
       return Colors.blue;
     case 'blocked':
@@ -682,7 +682,7 @@ class _JobsAutoApproveBarState extends State<_JobsAutoApproveBar> {
                   label: const Text('АВТО', style: TextStyle(fontSize: 12)),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 36),
                   ),

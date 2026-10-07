@@ -344,6 +344,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
         'Eski zona override tozalandi ($n) — endi Baseline barcha tumanga tatbiq',
+        style: const TextStyle(color: AppColors.onPrimary),
       ),
       backgroundColor: AppColors.button,
     ));
@@ -569,7 +570,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
       if (mounted) setState(() {});
       messenger.showSnackBar(const SnackBar(
-        content: Text('Global baseline saqlandi'),
+        content: Text('Global baseline saqlandi',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -689,7 +691,8 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         saved++;
       }
       messenger.showSnackBar(SnackBar(
-        content: Text('$saved ta tuman/zona saqlandi'),
+        content: Text('$saved ta tuman/zona saqlandi',
+            style: const TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -1013,7 +1016,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
               ? AppColors.primary.withValues(alpha: 0.1)
               : Colors.grey.shade50,
           titleColor:
-              canExpand ? AppColors.primaryDark : Colors.black87,
+              canExpand ? AppColors.primaryText : Colors.black87,
           underline: canExpand,
           fillWidth: fillWidth,
           cellW: cellW,
@@ -1163,7 +1166,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
             for (final r in _regions)
               Row(
                 children: [
-                  const Icon(Icons.public, size: 15, color: AppColors.primaryDark),
+                  const Icon(Icons.public, size: 15, color: AppColors.primaryText),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -1381,7 +1384,7 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
         bg: expanded
             ? AppColors.primary.withValues(alpha: 0.12)
             : Colors.transparent,
-        titleColor: canExpand ? AppColors.primaryDark : Colors.black87,
+        titleColor: canExpand ? AppColors.primaryText : Colors.black87,
         underline: canExpand,
         fillWidth: fillWidth,
         cellW: cellW,

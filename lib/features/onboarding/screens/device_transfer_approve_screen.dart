@@ -49,6 +49,7 @@ class _DeviceTransferApproveScreenState
             approve
                 ? 'Yangi qurilmaga ruxsat berildi. 24 soat pul yechish cheklanadi.'
                 : 'So‘rov rad etildi.',
+            style: TextStyle(color: approve ? AppColors.onPrimary : null),
           ),
           backgroundColor: approve ? AppColors.primary : Colors.red.shade700,
         ),
@@ -76,7 +77,7 @@ class _DeviceTransferApproveScreenState
       appBar: AppBar(
         title: const Text('Qurilma almashtirish'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -84,7 +85,7 @@ class _DeviceTransferApproveScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 16),
-            const Icon(Icons.devices_other, size: 56, color: AppColors.primary),
+            const Icon(Icons.devices_other, size: 56, color: AppColors.primaryText),
             const SizedBox(height: 20),
             Text(
               label.isEmpty
@@ -121,7 +122,7 @@ class _DeviceTransferApproveScreenState
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: AppColors.onPrimary,
                       ),
                     )
                   : const Text('Ruxsat berish'),

@@ -83,7 +83,7 @@ class ForceUpdateScreen extends StatelessWidget {
                   child: Icon(
                     Icons.system_update_rounded,
                     size: 44,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                   ),
                 ),
                 const SizedBox(height: 24),

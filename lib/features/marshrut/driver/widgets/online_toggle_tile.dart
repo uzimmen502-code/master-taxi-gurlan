@@ -41,7 +41,7 @@ class OnlineToggleTile extends StatelessWidget {
                 shape: BoxShape.circle),
             child: Icon(
                 isOnline ? Icons.wifi : Icons.wifi_off,
-                color: isOnline ? color : Colors.grey,
+                color: isOnline ? AppColors.primaryText : Colors.grey,
                 size: 18),
           ),
           const SizedBox(width: 12),
@@ -54,7 +54,9 @@ class OnlineToggleTile extends StatelessWidget {
                 style: TextStyle(
                     fontSize: AppText.bodyLarge,
                     fontWeight: FontWeight.bold,
-                    color: isOnline ? color : Colors.grey.shade600)),
+                    color: isOnline
+                        ? AppColors.primaryText
+                        : Colors.grey.shade600)),
             Text(
               isOnline
                   ? 'Навбат: $queuePosition-ўрин'

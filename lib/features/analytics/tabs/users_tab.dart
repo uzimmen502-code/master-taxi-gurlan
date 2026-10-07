@@ -63,7 +63,7 @@ class _UsersTabState extends State<UsersTab>
             icon: '👥',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: AppColors.primary,
+              accent: AppColors.primaryText,
               kpis: [
                 KpiValue(
                     label: 'Жами',
@@ -192,7 +192,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '🔁',
                   label: 'Такрорий буюртма даражаси',
                   value: '${u.repeatRate.toStringAsFixed(1)}%',
-                  valueColor: AppColors.primary),
+                  valueColor: AppColors.primaryText),
               MetricRow(
                   icon: '📊',
                   label: 'Ўртача буюртма / фойдаланувчи',
@@ -209,7 +209,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '🏆',
                   child: TopList(
                     items: u.topUsersByOrders,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     maxItems: 5,
                   ),
                 ),
@@ -221,7 +221,7 @@ class _UsersTabState extends State<UsersTab>
                   icon: '💎',
                   child: TopList(
                     items: u.topUsersByRevenue,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     maxItems: 5,
                   ),
                 ),

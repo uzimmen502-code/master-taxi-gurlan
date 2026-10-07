@@ -460,14 +460,14 @@ class _ServiceSpotlightTileState extends State<ServiceSpotlightTile> {
                                                       Icon(
                                                     Icons.apps_rounded,
                                                     color:
-                                                        AppColors.primaryDark,
+                                                        AppColors.primaryText,
                                                     size: glyphSize,
                                                   ),
                                                 ),
                                               )
                                             : Icon(
                                                 Icons.apps_rounded,
-                                                color: AppColors.primaryDark,
+                                                color: AppColors.primaryText,
                                                 size: glyphSize,
                                               ),
                               ),

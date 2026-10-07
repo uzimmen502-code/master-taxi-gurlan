@@ -19,7 +19,7 @@ class KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clr = accent ?? AppColors.primary;
+    final clr = accent ?? AppColors.primaryText;
     final delta = kpi.deltaPercent;
     final isUp = kpi.isPositive;
     final hasDelta = delta != null && delta.isFinite;
@@ -80,7 +80,7 @@ class KpiCard extends StatelessWidget {
                           : Icons.trending_down),
                   size: 14,
                   color: isUp
-                      ? AppColors.primary
+                      ? AppColors.primaryText
                       : (delta == 0
                           ? Colors.grey
                           : const Color(0xFFB71C1C))),
@@ -91,7 +91,7 @@ class KpiCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: isUp
-                      ? AppColors.primary
+                      ? AppColors.primaryText
                       : (delta == 0
                           ? Colors.grey
                           : const Color(0xFFB71C1C)),

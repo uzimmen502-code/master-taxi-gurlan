@@ -9,7 +9,7 @@ class TopList extends StatelessWidget {
   const TopList({
     super.key,
     required this.items,
-    this.color = AppColors.primary,
+    this.color = AppColors.primaryText,
     this.maxItems = 10,
     this.formatValue,
   });

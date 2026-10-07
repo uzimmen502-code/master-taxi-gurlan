@@ -63,7 +63,8 @@ class RouteCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8)),
                           child: Text(s,
                               style: TextStyle(
-                                  fontSize: AppText.labelTiny, color: color)),
+                                  fontSize: AppText.labelTiny,
+                                  color: AppColors.primaryText)),
                         ))
                     .toList(),
               ),
@@ -79,7 +80,9 @@ class RouteCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: AppText.bodyMedium,
                           fontWeight: FontWeight.bold,
-                          color: seatsLeft == 0 ? errorColor : color),
+                          color: seatsLeft == 0
+                              ? errorColor
+                              : AppColors.primaryText),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -207,7 +210,7 @@ class _RouteHeadlineBannerState extends State<_RouteHeadlineBanner>
         : Colors.grey.shade200;
 
     final textColor = online
-        ? Color.lerp(widget.color, AppColors.primary, 0.35 + wave * 0.35)!
+        ? AppColors.primaryText
         : Colors.grey.shade600;
 
     final barColor =

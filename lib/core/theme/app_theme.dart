@@ -48,14 +48,20 @@ abstract final class AppColors {
   static const moduleBg = AvaLight.bg;
   static const surface = AvaLight.surface;
 
-  // ─── Бренд ───
-  // Эски палитрада уччала «primary» тус иерархия учун эди; янги тизимда
-  // битта бренд ранги бор, шунинг учун учаласи ҳам `brand`.
+  // ─── Бренд (2026-10-07: #FFA500) ───
+  // `primary` / `primaryMid` / `button` — бренд ФОНИ. Уларнинг устидаги
+  // матн [onPrimary] (тўқ), оқ ЭМАС. Оч фондаги бренд МАТНИ — [primaryText].
   static const primary = AvaLight.brand;
-  static const primaryDark = AvaLight.brand;
+  static const primaryDark = AvaLight.brandPressed;
   static const primaryMid = AvaLight.brand;
   static const primarySoft = AvaLight.brandSoft;
   static const button = AvaLight.brand;
+
+  /// Бренд фони устидаги матн/иконка (`Colors.white` ўрнига).
+  static const onPrimary = AvaLight.brandInk;
+
+  /// Оч фондаги бренд матни, иконкаси, ингичка чизиғи.
+  static const primaryText = AvaLight.brandText;
 
   // ─── Усти ва контур ───
   static const cardImageBg = AvaLight.surface2;
@@ -67,7 +73,7 @@ abstract final class AppColors {
   static const success = AvaLight.ok;
   static const error = AvaLight.danger;
   static const warning = AvaLight.warn;
-  static const info = AvaLight.brand;
+  static const info = AvaLight.brandText;
   static const accentGold = AvaLight.warn;
 }
 
@@ -90,6 +96,18 @@ abstract final class AppTheme {
 
   static ThemeData get adminWeb => light;
 
+  /// Тўлдирилган бренд тугмаси фони: босилган/hover — Primary dark,
+  /// ўчирилган — Material стандарти (null), қолган ҳолат — Primary.
+  static WidgetStateProperty<Color?> _brandFill(AvaColors c) =>
+      WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return null;
+        if (states.contains(WidgetState.pressed) ||
+            states.contains(WidgetState.hovered)) {
+          return c.brandPressed;
+        }
+        return c.brand;
+      });
+
   static ThemeData _build({
     required Brightness brightness,
     required AvaColors c,
@@ -104,7 +122,7 @@ abstract final class AppTheme {
         primary: c.brand,
         onPrimary: c.brandInk,
         primaryContainer: c.brandSoft,
-        onPrimaryContainer: c.brand,
+        onPrimaryContainer: c.brandText,
         secondary: c.brand,
         onSecondary: c.brandInk,
         surface: c.surface,
@@ -114,7 +132,8 @@ abstract final class AppTheme {
         outline: c.line,
         outlineVariant: c.line,
         error: c.danger,
-        onError: c.brandInk,
+        // brandInk энди тўқ; қизил устида оқ/усти ранги керак.
+        onError: c.surface,
         errorContainer: c.dangerSoft,
         onErrorContainer: c.danger,
       ),
@@ -152,7 +171,7 @@ abstract final class AppTheme {
           final selected = states.contains(WidgetState.selected);
           return AvaText.navLabel.copyWith(
             fontFamily: AvaFont.family,
-            color: selected ? c.brand : c.ink3,
+            color: selected ? c.brandText : c.ink3,
           );
         }),
       ),
@@ -165,7 +184,7 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AvaRadius.card),
           ),
-        ),
+        ).copyWith(backgroundColor: _brandFill(c)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -175,11 +194,11 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AvaRadius.card),
           ),
-        ),
+        ).copyWith(backgroundColor: _brandFill(c)),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: c.brand,
+          foregroundColor: c.brandText,
           side: BorderSide(color: c.line),
           minimumSize: const Size(0, AvaTap.minSize),
           shape: RoundedRectangleBorder(
@@ -188,7 +207,7 @@ abstract final class AppTheme {
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: c.brand),
+        style: TextButton.styleFrom(foregroundColor: c.brandText),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: c.brand,
@@ -222,7 +241,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AvaRadius.search),
-          borderSide: BorderSide(color: c.brand, width: 1.6),
+          borderSide: BorderSide(color: c.brandText, width: 1.6),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -250,7 +269,8 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(AvaRadius.sheet),
         ),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.brand),
+      // Спиннер асосан оқ/оч фонда — `brand` (1.97) кўринмайди.
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.brandText),
     );
   }
 }

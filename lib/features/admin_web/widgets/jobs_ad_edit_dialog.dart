@@ -117,7 +117,8 @@ class _JobsAdEditDialogState extends State<_JobsAdEditDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Эълон янгиланди'),
+          content: Text('Эълон янгиланди',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {

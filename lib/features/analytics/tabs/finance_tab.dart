@@ -69,7 +69,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '💰',
             child: KpiGrid(
               aspectRatio: 1.45,
-              accent: AppColors.primary,
+              accent: AppColors.primaryText,
               kpis: [
                 KpiValue(
                     label: 'Бугунги тушум',
@@ -157,7 +157,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '🥇',
             child: TopList(
               items: f.topProducts,
-              color: AppColors.primary,
+              color: AppColors.primaryText,
               formatValue: (v) => '${_money(v)} сўм',
             ),
           ),
@@ -167,7 +167,7 @@ class _FinanceTabState extends State<FinanceTab>
             icon: '🛣',
             child: TopList(
               items: f.topRoutes,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
               formatValue: (v) => '${_money(v)} сўм',
             ),
           ),

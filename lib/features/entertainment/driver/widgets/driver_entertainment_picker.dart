@@ -170,13 +170,16 @@ class _DriverEntertainmentPickerState extends State<DriverEntertainmentPicker> {
           width: double.infinity,
           child: FilledButton(
             onPressed: _saving ? null : _save,
-            style: FilledButton.styleFrom(backgroundColor: widget.primaryColor),
+            style: FilledButton.styleFrom(
+              backgroundColor: widget.primaryColor,
+              foregroundColor: AppColors.onPrimary,
+            ),
             child: _saving
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2, color: AppColors.onPrimary),
                   )
                 : const Text('ФИЛМЛАРНИ САҚЛАШ'),
           ),

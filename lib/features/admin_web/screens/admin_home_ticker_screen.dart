@@ -126,7 +126,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
         SnackBar(
           backgroundColor: AppColors.button,
           content: Text(
-              '✅ $count та матн "${HomeTickerAnimationStyle.label(value)}" услубига ўрнатилди'),
+              '✅ $count та матн "${HomeTickerAnimationStyle.label(value)}" услубига ўрнатилди',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -207,7 +208,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('✅ $count та матн $value сонияга ўрнатилди'),
+          content: Text('✅ $count та матн $value сонияга ўрнатилди',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -232,6 +234,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
           backgroundColor: AppColors.button,
           content: Text(
             existing == null ? '✅ Матн қўшилди' : '✅ Созламалар сақланди',
+            style: const TextStyle(color: AppColors.onPrimary),
           ),
         ),
       );
@@ -266,7 +269,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🗑 Ўчирилди'),
+          content: Text('🗑 Ўчирилди',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -312,22 +316,22 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
             padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Бегущая строка',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Бош экран — маълумот майдони (сариқ панел)',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        style: TextStyle(color: AppColors.onPrimary.withValues(alpha: 0.7), fontSize: 12),
                       ),
                     ],
                   ),
@@ -336,7 +340,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                   onPressed: () => _openEditor(),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: _blue,
+                    foregroundColor: AppColors.primaryText,
                   ),
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Янги матн'),
@@ -345,8 +349,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                 OutlinedButton.icon(
                   onPressed: _openBulkDuration,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white70),
+                    foregroundColor: AppColors.onPrimary,
+                    side: BorderSide(color: AppColors.onPrimary.withValues(alpha: 0.7)),
                   ),
                   icon: const Icon(Icons.timer_outlined, size: 18),
                   label: const Text('Давомийлик'),
@@ -355,8 +359,8 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                 OutlinedButton.icon(
                   onPressed: _openBulkAnimation,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white70),
+                    foregroundColor: AppColors.onPrimary,
+                    side: BorderSide(color: AppColors.onPrimary.withValues(alpha: 0.7)),
                   ),
                   icon: const Icon(Icons.animation, size: 18),
                   label: const Text('Анимация'),
@@ -784,7 +788,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: selected
-                              ? AppColors.primary
+                              ? AppColors.primaryText
                               : Colors.grey.shade300,
                           width: selected ? 2 : 1,
                         ),
@@ -797,7 +801,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                                 : Icons.radio_button_off,
                             size: 18,
                             color: selected
-                                ? AppColors.primary
+                                ? AppColors.primaryText
                                 : Colors.grey,
                           ),
                           const SizedBox(width: 10),
@@ -811,7 +815,7 @@ class _TickerEditorDialogState extends State<_TickerEditorDialog> {
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13,
                                     color: selected
-                                        ? AppColors.primary
+                                        ? AppColors.primaryText
                                         : Colors.black87,
                                   ),
                                 ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
@@ -59,7 +60,10 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
     if (c.cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.tr('platform_store_cart_empty')),
+          content: Text(
+            context.tr('platform_store_cart_empty'),
+            style: const TextStyle(color: AppColors.onPrimary),
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: AvaStoreColors.deep,
         ),
@@ -136,7 +140,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
       ),
       body: c.loading
           ? const Center(
-              child: CircularProgressIndicator(color: AvaStoreColors.deep),
+              child: CircularProgressIndicator(color: AppColors.primaryText),
             )
           : c.products.isEmpty
               ? Column(
@@ -152,7 +156,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                         Icon(
                           Icons.storefront_outlined,
                           size: 48,
-                          color: AvaStoreColors.deep.withValues(alpha: 0.55),
+                          color: AppColors.primaryText.withValues(alpha: 0.55),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -190,7 +194,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                           ),
                           prefixIcon: const Icon(
                             Icons.search_rounded,
-                            color: AvaStoreColors.deep,
+                            color: AppColors.primaryText,
                           ),
                           suffixIcon: _query.trim().isEmpty
                               ? null
@@ -225,7 +229,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: const BorderSide(
-                              color: AvaStoreColors.deep,
+                              color: AppColors.primaryText,
                               width: 1.5,
                             ),
                           ),
@@ -288,7 +292,7 @@ class _PlatformStoreViewState extends State<_PlatformStoreView> {
                               ),
                               Expanded(
                                 child: RefreshIndicator(
-                                  color: AvaStoreColors.deep,
+                                  color: AppColors.primaryText,
                                   onRefresh: c.refresh,
                                   child: GridView.builder(
                                     padding: EdgeInsets.fromLTRB(

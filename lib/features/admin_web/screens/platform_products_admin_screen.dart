@@ -48,7 +48,8 @@ class _PlatformProductsAdminScreenState
   void _toast(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg,
+            style: TextStyle(color: error ? null : AppColors.onPrimary)),
         backgroundColor: error ? Colors.red : AppColors.button,
       ),
     );
@@ -410,7 +411,7 @@ class _PlatformProductsAdminScreenState
                     onPressed: () => _openEdit(_latestCatalog),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.button,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 14,
@@ -701,7 +702,7 @@ class _PlatformFeaturedAutoBarState extends State<_PlatformFeaturedAutoBar> {
                   label: const Text('АВТО', style: TextStyle(fontSize: 12)),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 36),
                   ),
@@ -766,7 +767,8 @@ class _PlatformDeliveryFeeBarState extends State<_PlatformDeliveryFeeBar> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Етказиб бериш ҳақи: $pct% сақланди'),
+          content: Text('Етказиб бериш ҳақи: $pct% сақланди',
+              style: const TextStyle(color: AppColors.onPrimary)),
           backgroundColor: AppColors.button,
         ),
       );
@@ -875,7 +877,7 @@ class _PlatformDeliveryFeeBarState extends State<_PlatformDeliveryFeeBar> {
                   onPressed: _save,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     minimumSize: const Size(0, 36),
                   ),
@@ -1038,7 +1040,7 @@ class _Thumb extends StatelessWidget {
     final u = url.trim();
     Widget child = const ColoredBox(
       color: AvaLight.okSoft,
-      child: Icon(Icons.storefront, color: AppColors.button),
+      child: Icon(Icons.storefront, color: AppColors.primaryText),
     );
     if (u.isNotEmpty && isHttpImageUrl(u)) {
       child = CachedNetworkImage(imageUrl: u, fit: BoxFit.cover);
@@ -1200,7 +1202,8 @@ class _EditDialogState extends State<_EditDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text(note),
+          content: Text(note,
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -1415,7 +1418,7 @@ class _EditDialogState extends State<_EditDialog> {
                                   child: const Text(
                                     'Асосий',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: AppColors.onPrimary,
                                       fontSize: 9,
                                       fontWeight: FontWeight.w700,
                                     ),

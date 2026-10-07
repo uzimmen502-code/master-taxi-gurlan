@@ -14,7 +14,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
 
   final OrderNewsGroup group;
 
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
 
   String _statusLabel(String s) {
     switch (s) {
@@ -38,7 +38,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
       case 'new':
         return Colors.blue;
       case 'accepted':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'ready':
         return Colors.deepOrange;
       case 'delivered':
@@ -59,7 +59,7 @@ class OrderNewsDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(group.moduleLabel),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: FutureBuilder<OrderModel?>(
         future: ordersRepo.getById(group.orderId),

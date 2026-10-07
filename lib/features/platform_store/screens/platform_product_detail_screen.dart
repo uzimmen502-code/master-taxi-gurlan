@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
@@ -82,7 +83,10 @@ class _PlatformProductDetailScreenState
     if (c.cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.tr('platform_store_cart_empty')),
+          content: Text(
+            context.tr('platform_store_cart_empty'),
+            style: const TextStyle(color: AppColors.onPrimary),
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: AvaStoreColors.deep,
         ),
@@ -390,7 +394,7 @@ class _ProductPageState extends State<_ProductPage>
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          color: AvaStoreColors.deep,
+                          color: AppColors.primaryText,
                           height: 1,
                         ),
                       ),
@@ -455,7 +459,7 @@ class _ProductPageState extends State<_ProductPage>
                                 children: [
                                   Icon(
                                     Icons.keyboard_double_arrow_down_rounded,
-                                    color: AvaStoreColors.deep
+                                    color: AppColors.primaryText
                                         .withValues(alpha: 0.8),
                                     size: 18,
                                   ),
@@ -465,7 +469,7 @@ class _ProductPageState extends State<_ProductPage>
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       fontWeight: FontWeight.w600,
-                                      color: AvaStoreColors.deep
+                                      color: AppColors.primaryText
                                           .withValues(alpha: 0.9),
                                     ),
                                   ),
@@ -590,7 +594,7 @@ class _BottomActionBar extends StatelessWidget {
                             color: AvaStoreColors.soft,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: AvaStoreColors.brand,
+                              color: AppColors.primaryText,
                               width: 1.5,
                             ),
                           ),
@@ -805,7 +809,7 @@ class _SimilarStripState extends State<_SimilarStrip> {
                       ),
                       child: Icon(
                         Icons.chevron_right_rounded,
-                        color: AvaStoreColors.deep.withValues(alpha: 0.85),
+                        color: AppColors.primaryText.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -885,7 +889,7 @@ class _SimilarCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: AvaStoreColors.deep,
+                          color: AppColors.primaryText,
                         ),
                       ),
                     ],
@@ -922,7 +926,7 @@ class _Thumb extends StatelessWidget {
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AvaStoreColors.deep,
+              color: AppColors.primaryText,
             ),
           ),
         ),
@@ -977,7 +981,7 @@ class _PriceTiers extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AvaStoreColors.deep.withValues(alpha: 0.9),
+              color: AppColors.primaryText.withValues(alpha: 0.9),
             ),
           ),
           const SizedBox(height: 6),
@@ -992,8 +996,8 @@ class _PriceTiers extends StatelessWidget {
                         : Icons.circle_outlined,
                     size: 14,
                     color: t.price == activePrice
-                        ? AvaStoreColors.deep
-                        : AvaStoreColors.deep.withValues(alpha: 0.35),
+                        ? AppColors.primaryText
+                        : AppColors.primaryText.withValues(alpha: 0.35),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -1005,7 +1009,7 @@ class _PriceTiers extends StatelessWidget {
                         fontWeight: t.price == activePrice
                             ? FontWeight.w800
                             : FontWeight.w500,
-                        color: AvaStoreColors.deep,
+                        color: AppColors.primaryText,
                       ),
                     ),
                   ),

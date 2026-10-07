@@ -72,9 +72,9 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
         color: Colors.white,
         child: TabBar(
           controller: _tabCtrl,
-          indicatorColor: AppColors.primary,
+          indicatorColor: AppColors.primaryText,
           indicatorWeight: 3,
-          labelColor: AppColors.primary,
+          labelColor: AppColors.primaryText,
           unselectedLabelColor: Colors.grey.shade600,
           labelStyle:
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -119,7 +119,7 @@ class _ProductsManagerScreenState extends State<ProductsManagerScreen>
             label: const Text('Янги мaҳсулoт'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
@@ -222,7 +222,8 @@ class _BreadCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: AppColors.button,
-            content: Text('🗑 "${item.name}" ўчирилди')),
+            content: Text('🗑 "${item.name}" ўчирилди',
+                style: const TextStyle(color: AppColors.onPrimary))),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -254,10 +255,10 @@ class _BreadCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final typeColor = item.isYopish
-        ? AppColors.primary
+        ? AppColors.primaryText
         : item.isToy
-            ? AppColors.primary
-            : AppColors.primary;
+            ? AppColors.primaryText
+            : AppColors.primaryText;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -312,7 +313,7 @@ class _BreadCard extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary)),
+                        color: AppColors.primaryText)),
               const SizedBox(height: 4),
               _stockBar(),
               const Spacer(),
@@ -330,7 +331,7 @@ class _BreadCard extends StatelessWidget {
                   icon: const Icon(Icons.edit, size: 16),
                   label: const Text('Tahrir'),
                   style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary),
+                      foregroundColor: AppColors.primaryText),
                 ),
                 IconButton(
                   onPressed: () => _delete(context),
@@ -595,7 +596,8 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
+          content: Text('Расм юкланди',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -621,7 +623,8 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Нарх сақланди'),
+          content: Text('Нарх сақланди',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -718,7 +721,8 @@ class _FoodProductCardState extends State<_FoodProductCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🗑 "${widget.product.name}" ўчирилди'),
+          content: Text('🗑 "${widget.product.name}" ўчирилди',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -1076,7 +1080,8 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🍽 "$name" сақланди'),
+          content: Text('🍽 "$name" сақланди',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -1197,7 +1202,7 @@ class _FoodProductEditorDialogState extends State<_FoodProductEditorDialog> {
           label: const Text('Сақлаш'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
         ),
       ],
@@ -1315,7 +1320,8 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🍱 "${widget.product.name}" захираси сақланди'),
+          content: Text('🍱 "${widget.product.name}" захираси сақланди',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -1357,7 +1363,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
                   style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary)),
+                      color: AppColors.primaryText)),
               const SizedBox(height: 14),
               _field(
                 _totalStock,
@@ -1388,7 +1394,7 @@ class _FoodStockEditorDialogState extends State<_FoodStockEditorDialog> {
           label: const Text('Сaқлaш'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
         ),
       ],
@@ -1476,7 +1482,8 @@ class _ExtraCard extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: AppColors.button,
-            content: Text('🗑 "${item.name}" ўчирилди')),
+            content: Text('🗑 "${item.name}" ўчирилди',
+                style: const TextStyle(color: AppColors.onPrimary))),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -1566,7 +1573,7 @@ class _ExtraCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
+                    color: AppColors.primaryText)),
             const SizedBox(width: 8),
             Text('/ ${item.unitRu}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
@@ -1588,7 +1595,7 @@ class _ExtraCard extends StatelessWidget {
               icon: const Icon(Icons.edit, size: 16),
               label: const Text('Tahrir'),
               style: TextButton.styleFrom(
-                  foregroundColor: AppColors.primary),
+                  foregroundColor: AppColors.primaryText),
             ),
             IconButton(
               onPressed: () => _delete(context),
@@ -1883,7 +1890,8 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
               const SnackBar(
                 backgroundColor: AppColors.button,
                 content:
-                    Text('Расм сақланди — фойдаланувчи иловасида кўринади'),
+                    Text('Расм сақланди — фойдаланувчи иловасида кўринади',
+                        style: TextStyle(color: AppColors.onPrimary)),
               ),
             );
           }
@@ -1977,7 +1985,8 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
         SnackBar(
             backgroundColor: AppColors.button,
             content: Text(
-                '${widget.existing == null ? "Янги нoн" : "Нoн янгилaнди"}: ${_name.text}')),
+                '${widget.existing == null ? "Янги нoн" : "Нoн янгилaнди"}: ${_name.text}',
+                style: const TextStyle(color: AppColors.onPrimary))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -2110,7 +2119,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
+                                strokeWidth: 2, color: AppColors.onPrimary))
                         : const Icon(Icons.photo_library_outlined, size: 20),
                     label: Text(
                       _pickImageInProgress
@@ -2120,7 +2129,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -2153,7 +2162,7 @@ class _BreadEditorDialogState extends State<_BreadEditorDialog> {
           label: const Text('Сaқлaш'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
         ),
       ],
@@ -2436,7 +2445,8 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('Расм юкланди'),
+          content: Text('Расм юкланди',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {
@@ -2480,7 +2490,8 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
         SnackBar(
             backgroundColor: AppColors.button,
             content: Text(
-                '${widget.existing == null ? "Янги мaҳсулoт" : "Янгилaнди"}: ${_name.text}')),
+                '${widget.existing == null ? "Янги мaҳсулoт" : "Янгилaнди"}: ${_name.text}',
+                style: const TextStyle(color: AppColors.onPrimary))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -2646,7 +2657,7 @@ class _ExtraEditorDialogState extends State<_ExtraEditorDialog> {
           label: const Text('Сaқлaш'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
         ),
       ],

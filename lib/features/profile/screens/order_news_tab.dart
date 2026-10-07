@@ -126,7 +126,7 @@ class _OrderNewsTabState extends State<OrderNewsTab> {
                 ),
                 child: Icon(
                   g.orderType == 'food' ? Icons.restaurant : Icons.bakery_dining,
-                  color: _orange,
+                  color: AppColors.primaryText,
                 ),
               ),
               const SizedBox(width: 12),

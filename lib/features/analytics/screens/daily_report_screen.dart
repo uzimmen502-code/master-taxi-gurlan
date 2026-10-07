@@ -34,7 +34,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       appBar: AppBar(
         title: const Text('📊 Кундалик ҳисобот'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -123,7 +123,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             child: Text(n,
                                 style: const TextStyle(
                                     fontSize: 12,
-                                    color: AppColors.primary,
+                                    color: AppColors.primaryText,
                                     fontWeight: FontWeight.w600)),
                           ))
                       .toList()),
@@ -179,7 +179,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 icon: '💵',
                 label: 'Бугунги тушум',
                 value: '${formatMoney(r.todayRevenue)}',
-                valueColor: AppColors.primary),
+                valueColor: AppColors.primaryText),
             MetricRow(
                 label: 'Ҳафталик тушум',
                 value: '${formatMoney(r.weekRevenue)}'),
@@ -203,7 +203,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 value:
                     '${r.pendingPayouts} та · ${formatMoney(r.pendingPayoutsAmount)}',
                 valueColor: r.pendingPayouts > 0
-                    ? AppColors.primary
+                    ? AppColors.primaryText
                     : null),
           ]),
           _section('⚙️ Эффективлик', [
@@ -280,7 +280,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               borderRadius: BorderRadius.circular(10)),
           child: const Center(
               child: Icon(Icons.calendar_today,
-                  color: AppColors.primary, size: 18)),
+                  color: AppColors.primaryText, size: 18)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -299,7 +299,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         ),
         if (r.notes.isNotEmpty)
           const Icon(Icons.warning_amber_rounded,
-              color: AppColors.primary, size: 18),
+              color: AppColors.primaryText, size: 18),
       ]),
     );
   }

@@ -139,7 +139,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(Icons.route, color: color, size: 40),
+            const Icon(Icons.route, color: AppColors.primaryText, size: 40),
             const SizedBox(height: 10),
             Text(
               title,
@@ -157,7 +157,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               MfyField(
                 ctrl: _fromCtrl,
                 hint: 'Қаердан (МФЙ)',
-                iconColor: color,
+                iconColor: AppColors.primaryText,
                 showSug: _showFromSug,
                 query: _fromQuery,
                 onChanged: _onFromChanged,
@@ -176,7 +176,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               MfyField(
                 ctrl: _toCtrl,
                 hint: 'Қаерга (МФЙ)',
-                iconColor: color,
+                iconColor: AppColors.primaryText,
                 showSug: _showToSug,
                 query: _toQuery,
                 onChanged: _onToChanged,
@@ -195,7 +195,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               _intercityField(
                 ctrl: _fromCtrl,
                 hint: 'Қаердан (шаҳар)',
-                color: color,
+                color: AppColors.primaryText,
                 showSug: _showFromSug,
                 query: _fromQuery,
                 onChanged: _onFromChanged,
@@ -209,7 +209,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
               _intercityField(
                 ctrl: _toCtrl,
                 hint: 'Қаерга (шаҳар)',
-                color: color,
+                color: AppColors.primaryText,
                 showSug: _showToSug,
                 query: _toQuery,
                 onChanged: _onToChanged,
@@ -229,7 +229,7 @@ class _DriverRouteDialogState extends State<_DriverRouteDialog> {
                 label: const Text('Давом этиш'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   disabledBackgroundColor: Colors.grey.shade300,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

@@ -136,7 +136,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
       appBar: AppBar(
         title: const Text('🎬 Сафар кинотеатри'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -181,7 +181,7 @@ class _EntertainmentListScreenState extends State<EntertainmentListScreen> {
                                   cached
                                       ? Icons.download_done
                                       : Icons.movie_outlined,
-                                  color: widget.primaryColor,
+                                  color: AppColors.primaryText,
                                 ),
                               ),
                               title: Text(v.title,

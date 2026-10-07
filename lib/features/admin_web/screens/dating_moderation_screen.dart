@@ -162,7 +162,7 @@ class _DatingAutoApproveBarState extends State<_DatingAutoApproveBar> {
                   label: const Text('АВТО', style: TextStyle(fontSize: 12)),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     minimumSize: const Size(0, 36),
                   ),

@@ -48,7 +48,7 @@ class TripRequestCard extends StatelessWidget {
     final secs = ride.secsLeft;
     final m = secs ~/ 60;
     final s = secs % 60;
-    final timerColor = secs > 60 ? _green : secs > 30 ? AppColors.primary : _red;
+    final timerColor = secs > 60 ? AppColors.primaryText : secs > 30 ? AppColors.primaryText : _red;
 
     final name = ride.userName.trim().isNotEmpty
         ? ride.userName.trim()
@@ -72,7 +72,7 @@ class TripRequestCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: mode == TripCardMode.reserving
-              ? Border.all(color: _green, width: 1.5)
+              ? Border.all(color: AppColors.primaryText, width: 1.5)
               : secs <= 30
                   ? Border.all(color: _red.withValues(alpha: 0.4), width: 1.5)
                   : Border.all(color: Colors.grey.shade200),
@@ -121,7 +121,7 @@ class TripRequestCard extends StatelessWidget {
                           style: const TextStyle(
                               fontSize: AppText.bodyMedium,
                               fontWeight: FontWeight.bold,
-                              color: _green)),
+                              color: AppColors.primaryText)),
                     Container(
                       margin: const EdgeInsets.only(top: 4),
                       padding: const EdgeInsets.symmetric(
@@ -205,7 +205,7 @@ class TripRequestCard extends StatelessWidget {
               style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w600,
-                  color: _green),
+                  color: AppColors.primaryText),
             ),
           ),
           Row(children: [
@@ -266,7 +266,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? Colors.white : color;
+    final fg = filled ? AppColors.onPrimary : color;
     return GestureDetector(
       onTap: onTap,
       child: Opacity(

@@ -42,7 +42,7 @@ class DriverHeroCard extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white),
+                color: AppColors.onPrimary),
           ),
         ),
         const SizedBox(width: 12),
@@ -51,18 +51,19 @@ class DriverHeroCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${session.greeting},',
-                  style: const TextStyle(
-                      fontSize: AppText.labelSmall, color: Colors.white70)),
+                  style: TextStyle(
+                      fontSize: AppText.labelSmall,
+                      color: AppColors.onPrimary.withValues(alpha: 0.7))),
               Text(session.honorificName,
                   style: const TextStyle(
                       fontSize: AppText.titleMedium,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white)),
+                      color: AppColors.onPrimary)),
               if (session.carModel.isNotEmpty)
                 Text('🚗 ${session.carModel} · ${session.carPlate}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: AppText.labelSmall,
-                        color: Colors.white70)),
+                        color: AppColors.onPrimary.withValues(alpha: 0.7))),
             ],
           ),
         ),
@@ -73,7 +74,7 @@ class DriverHeroCard extends StatelessWidget {
             decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.person, color: Colors.white, size: 20),
+            child: const Icon(Icons.person, color: AppColors.onPrimary, size: 20),
           ),
         ),
       ]),

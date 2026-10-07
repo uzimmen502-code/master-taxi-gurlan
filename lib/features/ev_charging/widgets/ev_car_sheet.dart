@@ -141,7 +141,7 @@ class _EvCarSheetState extends State<EvCarSheet> {
             Row(
               children: [
                 const Icon(Icons.electric_car_rounded,
-                    color: AppColors.primaryDark),
+                    color: AppColors.primaryText),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -232,7 +232,7 @@ class _EvCarSheetState extends State<EvCarSheet> {
                 onPressed: _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryDark,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
@@ -241,7 +241,7 @@ class _EvCarSheetState extends State<EvCarSheet> {
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2, color: AppColors.onPrimary),
                       )
                     : Text(context.tr('save')),
               ),

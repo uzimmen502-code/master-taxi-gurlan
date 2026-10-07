@@ -56,7 +56,7 @@ class MessageBubble extends StatelessWidget {
             child: Text(
               message.text,
               style: TextStyle(
-                color: isMine ? Colors.white : Colors.black87,
+                color: isMine ? AppColors.onPrimary : Colors.black87,
                 fontSize: 14,
               ),
             ),

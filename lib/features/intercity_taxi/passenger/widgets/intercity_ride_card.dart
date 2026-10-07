@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/intercity_ride.dart';
 import '../intercity_colors.dart';
@@ -85,7 +86,7 @@ class IntercityRideCard extends StatelessWidget {
                 ? ride.driverName[0].toUpperCase()
                 : '?',
             style: const TextStyle(
-              color: IntercityColors.primary,
+              color: AppColors.primaryText,
               fontWeight: FontWeight.bold,
               fontSize: 15,
             ),
@@ -170,7 +171,7 @@ class IntercityRideCard extends StatelessWidget {
       children: [
         const Icon(
           Icons.location_on_outlined,
-          color: IntercityColors.primaryMid,
+          color: AppColors.primaryText,
           size: 16,
         ),
         const SizedBox(width: 4),
@@ -278,7 +279,7 @@ class IntercityRideCard extends StatelessWidget {
               child: const Icon(
                 Icons.phone,
                 size: 18,
-                color: IntercityColors.primary,
+                color: AppColors.primaryText,
               ),
             ),
           ),

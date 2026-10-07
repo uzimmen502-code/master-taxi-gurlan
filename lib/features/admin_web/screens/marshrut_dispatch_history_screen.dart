@@ -22,7 +22,7 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
         const Material(
           color: Colors.white,
           child: TabBar(
-            labelColor: _blue,
+            labelColor: AppColors.primaryText,
             unselectedLabelColor: Colors.black54,
             tabs: [
               Tab(icon: Icon(Icons.pending_actions), text: 'Active requests'),
@@ -83,7 +83,7 @@ class MarshrutDispatchHistoryScreen extends StatelessWidget {
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.timeline, color: _blue),
+          child: const Icon(Icons.timeline, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -244,7 +244,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
   @override
   Widget build(BuildContext context) {
     final color =
-        widget.trip.status == 'accepted' ? AppColors.primary : Colors.orange;
+        widget.trip.status == 'accepted' ? AppColors.primaryText : Colors.orange;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
@@ -307,7 +307,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
                   label: const Text('Completed'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -362,7 +362,8 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
         operatorPhone: auth.phone ?? '',
       );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Request cancelled қилинди'),
+        content: Text('Request cancelled қилинди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -407,7 +408,8 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
         operatorPhone: auth.phone ?? '',
       );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Trip completed қилинди'),
+        content: Text('Trip completed қилинди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -438,7 +440,7 @@ class _ActiveTripCardState extends State<_ActiveTripCard> {
 Color _typeColor(String type) {
   switch (type) {
     case 'accepted':
-      return AppColors.primary;
+      return AppColors.primaryText;
     case 'rejected':
       return Colors.orange;
     case 'timeout':
@@ -447,7 +449,7 @@ Color _typeColor(String type) {
       return Colors.blueGrey;
     case 'completed':
     case 'admin_completed':
-      return AppColors.primary;
+      return AppColors.primaryText;
     case 'driver_auto_paused':
       return Colors.deepPurple;
     default:

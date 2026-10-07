@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/l10n/l10n_extension.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../repositories/schedules_repository.dart';
 import '../../repositories/taxi_billing_repository.dart';
@@ -421,7 +422,8 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           ),
                         ),
                         Row(children: [
-                          Icon(Icons.route, color: color, size: 24),
+                          const Icon(Icons.route,
+                              color: AppColors.primaryText, size: 24),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
@@ -443,7 +445,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           _placeField(
                             ctrl: _fromCtrl,
                             hint: 'Қаердан (шаҳар)',
-                            color: color,
+                            color: AppColors.primaryText,
                             showSug: _showFromSug,
                             query: _fromQuery,
                             onChanged: (q) => setState(() {
@@ -460,7 +462,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                           _placeField(
                             ctrl: _toCtrl,
                             hint: 'Қаерга (шаҳар)',
-                            color: color,
+                            color: AppColors.primaryText,
                             showSug: _showToSug,
                             query: _toQuery,
                             onChanged: (q) => setState(() {
@@ -485,7 +487,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                 labelStyle: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: !_departureIsTomorrow
-                                      ? color
+                                      ? AppColors.primaryText
                                       : Colors.grey,
                                 ),
                               ),
@@ -501,7 +503,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                 labelStyle: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: _departureIsTomorrow
-                                      ? color
+                                      ? AppColors.primaryText
                                       : Colors.grey,
                                 ),
                               ),
@@ -512,8 +514,8 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: _pickTime,
-                                icon: Icon(Icons.access_time,
-                                    size: 18, color: color),
+                                icon: const Icon(Icons.access_time,
+                                    size: 18, color: AppColors.primaryText),
                                 label: Text(
                                   'Жўнаш: ${_fmtTime(_departure)}',
                                   style: const TextStyle(
@@ -540,8 +542,8 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                 ],
                                 decoration: InputDecoration(
                                   hintText: 'Нарх (сўм)',
-                                  prefixIcon: Icon(Icons.payments_outlined,
-                                      color: color, size: 20),
+                                  prefixIcon: const Icon(Icons.payments_outlined,
+                                      color: AppColors.primaryText, size: 20),
                                   border: OutlineInputBorder(
                                       borderRadius:
                                           BorderRadius.circular(12)),
@@ -560,7 +562,8 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(children: [
-                              Icon(Icons.event_seat, color: color, size: 20),
+                              const Icon(Icons.event_seat,
+                                  color: AppColors.primaryText, size: 20),
                               const SizedBox(width: 8),
                               const Text('Ўриндиқлар',
                                   style:
@@ -571,7 +574,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                     ? () => setState(() => _seats--)
                                     : null,
                                 icon: const Icon(Icons.remove_circle_outline),
-                                color: color,
+                                color: AppColors.primaryText,
                                 visualDensity: VisualDensity.compact,
                               ),
                               SizedBox(
@@ -587,7 +590,7 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                     ? () => setState(() => _seats++)
                                     : null,
                                 icon: const Icon(Icons.add_circle_outline),
-                                color: color,
+                                color: AppColors.primaryText,
                                 visualDensity: VisualDensity.compact,
                               ),
                             ]),
@@ -607,14 +610,14 @@ class _IntercityQuickStartSheetState extends State<IntercityQuickStartSheet> {
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
+                                    strokeWidth: 2, color: AppColors.onPrimary))
                             : const Icon(Icons.check_circle_outline,
                                 size: 22),
                         label:
                             Text(_saving ? 'Сақланмоқда...' : 'Тасдиқлаш'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: color,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.onPrimary,
                           disabledBackgroundColor: Colors.grey.shade300,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),

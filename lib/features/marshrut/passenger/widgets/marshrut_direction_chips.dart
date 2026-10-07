@@ -48,7 +48,7 @@ class MarshrutDirectionChips extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: 0.85),
+            color: AppColors.onPrimary.withValues(alpha: 0.85),
             letterSpacing: 0.2,
           ),
         ),
@@ -116,7 +116,7 @@ class _DirectionChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? AppColors.primary : Colors.white,
+              color: selected ? AppColors.primaryText : AppColors.onPrimary,
             ),
           ),
         ),

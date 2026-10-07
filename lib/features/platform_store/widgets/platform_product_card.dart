@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
 import '../ava_store_colors.dart';
@@ -145,7 +146,7 @@ class PlatformProductCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w800,
-                          color: AvaStoreColors.deep,
+                          color: AppColors.primaryText,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -219,7 +220,7 @@ class _MiniStepper extends StatelessWidget {
       decoration: BoxDecoration(
         color: AvaStoreColors.soft,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AvaStoreColors.brand, width: 1.2),
+        border: Border.all(color: AppColors.primaryText, width: 1.2),
       ),
       child: Row(
         children: [

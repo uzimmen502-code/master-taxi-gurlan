@@ -195,7 +195,7 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: const [
-                Icon(Icons.apartment_outlined, color: _green, size: 26),
+                Icon(Icons.apartment_outlined, color: AppColors.primaryText, size: 26),
                 SizedBox(width: 10),
                 Text(
                   'Кўчмас мулк — нарх ва созламалар',
@@ -309,7 +309,7 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
               if (_ok != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(_ok!, style: const TextStyle(color: _green)),
+                  child: Text(_ok!, style: const TextStyle(color: AppColors.primaryText)),
                 ),
               Row(
                 children: [
@@ -319,7 +319,7 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
                     label: Text(_saving ? 'Сақланмоқда...' : 'Сақлаш'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                     ),
                   ),
                   const SizedBox(width: 12),

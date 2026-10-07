@@ -28,7 +28,7 @@ class _OilPricesScreenState extends State<OilPricesScreen> {
       appBar: AppBar(
         title: Text(context.tr('oil_prices')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: FutureBuilder<List<OilPricePackage>>(
         future: _future,
@@ -66,7 +66,7 @@ class _OilPricesScreenState extends State<OilPricesScreen> {
                           ),
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                       ),
                     ),
                   ),

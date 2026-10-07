@@ -84,7 +84,7 @@ class WholesaleProductCard extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.primaryDark),
+                        color: AppColors.primaryText),
                   ),
                   const SizedBox(height: 2),
                   Text(

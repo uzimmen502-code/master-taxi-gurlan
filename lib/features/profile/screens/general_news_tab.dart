@@ -18,7 +18,7 @@ class GeneralNewsTab extends StatefulWidget {
 }
 
 class _GeneralNewsTabState extends State<GeneralNewsTab> {
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
 
   Future<({List<String> audiences, String userId})> _userContext() async {
     final prefs = await SharedPreferences.getInstance();

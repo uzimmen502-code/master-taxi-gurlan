@@ -737,7 +737,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                       _statusChip(
                         icon: Icons.hourglass_top,
                         label: context.tr('driver_map_waiting_passenger'),
-                        color: _green,
+                        color: AppColors.primaryText,
                       ),
                     if (showOffers)
                       _statusChip(
@@ -745,7 +745,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                         label: _fmt('driver_map_offers_count', {
                           'n': '${c.activeRequests.length}',
                         }),
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                       ),
                     if (inLocalTrip)
                       _statusChip(
@@ -759,7 +759,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                                 ? context.tr('driver_map_trip_arrived')
                                 : context.tr('driver_map_trip_navigating'))
                             : context.tr('driver_map_pick_destination'),
-                        color: _green,
+                        color: AppColors.primaryText,
                       ),
                   ],
                 ),
@@ -872,7 +872,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: isNearest
-            ? Border.all(color: AppColors.primary, width: 2)
+            ? Border.all(color: AppColors.primaryText, width: 2)
             : null,
         boxShadow: [
           BoxShadow(
@@ -885,7 +885,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
         children: [
           Row(children: [
             Icon(isNearest ? Icons.star : Icons.place,
-                color: isNearest ? AppColors.primary : Colors.grey, size: 20),
+                color: isNearest ? AppColors.primaryText : Colors.grey, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -979,7 +979,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: [
-              const Icon(Icons.phone, color: _green, size: 20),
+              const Icon(Icons.phone, color: AppColors.primaryText, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -1010,14 +1010,14 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.where_to_vote,
-                            color: _green, size: 16),
+                            color: AppColors.primaryText, size: 16),
                         const SizedBox(width: 6),
                         Text(
                           context.tr('driver_arrived_notified'),
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: _green,
+                            color: AppColors.primaryText,
                           ),
                         ),
                       ],
@@ -1027,8 +1027,8 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                           .read<DriverHomeController>()
                           .markArrived(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: _green,
-                        side: const BorderSide(color: _green),
+                        foregroundColor: AppColors.primaryText,
+                        side: const BorderSide(color: AppColors.primaryText),
                       ),
                       icon: const Icon(Icons.where_to_vote_outlined, size: 18),
                       label: Text(context.tr('driver_arrived_action')),
@@ -1063,7 +1063,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(children: [
-                const Icon(Icons.flag, color: _green, size: 18),
+                const Icon(Icons.flag, color: AppColors.primaryText, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(toHint,
@@ -1085,7 +1085,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
             ]),
           ] else if (_destination == null) ...[
             Row(children: [
-              const Icon(Icons.touch_app, color: _green, size: 20),
+              const Icon(Icons.touch_app, color: AppColors.primaryText, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1117,7 +1117,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
             ]),
           ] else if (_routeKm != null) ...[
             Row(children: [
-              const Icon(Icons.navigation, color: _green, size: 20),
+              const Icon(Icons.navigation, color: AppColors.primaryText, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1183,7 +1183,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
         children: [
           Row(children: [
             Icon(_arrived ? Icons.flag : Icons.navigation,
-                color: _green, size: 18),
+                color: AppColors.primaryText, size: 18),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1219,7 +1219,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                         style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: _green)),
+                            color: AppColors.primaryText)),
                   ],
                 ),
               ),
@@ -1236,7 +1236,7 @@ class _DriverUnifiedMapViewState extends State<DriverUnifiedMapView>
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2, color: AppColors.onPrimary))
                     : Text(context.tr('driver_map_finish_trip'),
                         style: const TextStyle(fontWeight: FontWeight.bold)),
               ),

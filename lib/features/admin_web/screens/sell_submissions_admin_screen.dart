@@ -127,6 +127,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
             result.audience == 'all'
                 ? 'Taklif barcha foydalanuvchilarga yo\'naltirildi'
                 : 'Taklif ${result.phones.length} ta foydalanuvchiga yuborildi',
+            style: const TextStyle(color: AppColors.onPrimary),
           ),
           backgroundColor: AppColors.button,
         ),
@@ -216,6 +217,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
           backgroundColor: AppColors.button,
           content: Text(
             'Йиғиб олиш вазифаси яратилди · ${formatMoney(created.totalValue)}',
+            style: const TextStyle(color: AppColors.onPrimary),
           ),
         ),
       );
@@ -257,7 +259,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
                   color: _blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.sell_outlined, color: _blue),
+                child: const Icon(Icons.sell_outlined, color: AppColors.primaryText),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -357,7 +359,7 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
       selectedColor: _blue.withValues(alpha: 0.15),
       labelStyle: TextStyle(
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-        color: selected ? _blue : Colors.black87,
+        color: selected ? AppColors.primaryText : Colors.black87,
       ),
       onSelected: (_) => setState(() => _statusFilter = value),
     );
@@ -667,7 +669,7 @@ class _SubmissionsTable extends StatelessWidget {
         if (s.status == 'pending')
           IconButton(
             tooltip: 'Кўрилди',
-            icon: const Icon(Icons.check_circle_outline, color: AppColors.primary),
+            icon: const Icon(Icons.check_circle_outline, color: AppColors.primaryText),
             iconSize: 22,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -685,7 +687,7 @@ class _SubmissionsTable extends StatelessWidget {
         if (s.status != 'archived' && !s.isForwarded)
           IconButton(
             tooltip: 'Foydalanuvchilarga yo\'naltirish',
-            icon: const Icon(Icons.send_outlined, color: AppColors.primary),
+            icon: const Icon(Icons.send_outlined, color: AppColors.primaryText),
             iconSize: 20,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),

@@ -39,7 +39,7 @@ class _IntercityDriverMessagesScreenState
         appBar: AppBar(
           title: Text(context.tr('messages_title')),
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
         ),
         body: Consumer<IntercityDriverPanelController>(
           builder: (context, c, _) {

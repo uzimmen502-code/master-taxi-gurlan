@@ -43,7 +43,7 @@ class ExtrasCountItem extends StatelessWidget {
         color: selected ? AppColors.scaffold : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: selected ? _green : Colors.grey.shade200,
+          color: selected ? AppColors.primaryText : Colors.grey.shade200,
           width: selected ? 1.5 : 1,
         ),
       ),
@@ -75,7 +75,7 @@ class ExtrasCountItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: AppText.bodySmall,
                 fontWeight: FontWeight.bold,
-                color: selected ? _green : Colors.grey.shade400,
+                color: selected ? AppColors.primaryText : Colors.grey.shade400,
               ),
             ),
           ),
@@ -106,7 +106,7 @@ class ExtrasCountItem extends StatelessWidget {
               color: enabled ? _green.withValues(alpha: 0.3) : Colors.grey.shade200),
         ),
         child: Icon(icon,
-            size: 14, color: enabled ? _green : Colors.grey.shade400),
+            size: 14, color: enabled ? AppColors.primaryText : Colors.grey.shade400),
       ),
     );
   }

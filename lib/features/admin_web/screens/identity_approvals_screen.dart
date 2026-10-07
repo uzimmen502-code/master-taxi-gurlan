@@ -30,7 +30,7 @@ class IdentityApprovalsScreen extends StatelessWidget {
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.verified_user_outlined, color: _blue),
+          child: const Icon(Icons.verified_user_outlined, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -118,7 +118,8 @@ class _BirthDateRequestCard extends StatelessWidget {
     try {
       await repo.approveBirthDateChange(request);
       messenger.showSnackBar(const SnackBar(
-        content: Text('Туғилган кун ўзгариши тасдиқланди'),
+        content: Text('Туғилган кун ўзгариши тасдиқланди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -174,7 +175,7 @@ class _RequestCard extends StatelessWidget {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           CircleAvatar(
             backgroundColor: const Color(0xFFE3F2FD),
-            child: Icon(icon, color: AppColors.primary),
+            child: Icon(icon, color: AppColors.primaryText),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -213,7 +214,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.check_circle_outline, size: 52, color: AppColors.primaryMid),
+        Icon(Icons.check_circle_outline, size: 52, color: AppColors.primaryText),
         const SizedBox(height: 10),
         Text(text, style: const TextStyle(fontSize: 16)),
       ]),

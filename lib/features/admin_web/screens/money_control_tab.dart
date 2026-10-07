@@ -144,7 +144,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
                   style: TextStyle(
                     fontSize: narrow ? 18 : 20,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                   ),
                 ),
               ),
@@ -294,7 +294,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
-          color: AppColors.primaryDark,
+          color: AppColors.primaryText,
         ),
       );
 

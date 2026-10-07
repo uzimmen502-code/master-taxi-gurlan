@@ -31,14 +31,14 @@ class MarshrutAdminScreen extends StatelessWidget {
         backgroundColor: AppColors.scaffold,
         appBar: AppBar(
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           title: const Text('🚌 Маршрут мониторинги'),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: Colors.white,
+          bottom: TabBar(
+            labelColor: AppColors.onPrimary,
+            unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.6),
+            indicatorColor: AppColors.onPrimary,
             isScrollable: true,
-            tabs: [
+            tabs: const [
               Tab(text: 'Фаол ҳайдовчилар'),
               Tab(text: 'Policy'),
               Tab(text: 'Auto-paused'),
@@ -128,7 +128,7 @@ class _OnlineDriversTab extends StatelessWidget {
                           : AppColors.tickerShell,
                       child: Icon(
                         isBusy ? Icons.person_pin : Icons.directions_bus,
-                        color: isBusy ? Colors.orange : AppColors.primary,
+                        color: isBusy ? Colors.orange : AppColors.primaryText,
                       ),
                     ),
                     title: Text(
@@ -348,7 +348,8 @@ class _OfferTimeoutPolicyCardState extends State<_OfferTimeoutPolicyCard> {
             value,
           );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Offer timeout сақланди'),
+        content: Text('Offer timeout сақланди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -464,7 +465,8 @@ class _TimeoutPolicyCardState extends State<_TimeoutPolicyCard> {
             value,
           );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Dispatch policy сақланди'),
+        content: Text('Dispatch policy сақланди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -569,7 +571,8 @@ class _PausedDriverCardState extends State<_PausedDriverCard> {
     try {
       await repo.reactivateAutoPausedDriver(widget.driver.driverId);
       messenger.showSnackBar(const SnackBar(
-        content: Text('Ҳайдовчи қайта навбатга қўйилди'),
+        content: Text('Ҳайдовчи қайта навбатга қўйилди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -979,7 +982,7 @@ class _TodayTripsTab extends StatelessWidget {
   Color _statusColor(String s) {
     switch (s) {
       case 'accepted':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'pending':
         return Colors.orange;
       case 'rejected':

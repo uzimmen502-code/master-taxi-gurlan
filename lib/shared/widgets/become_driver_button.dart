@@ -13,7 +13,7 @@ class BecomeDriverButton extends StatelessWidget {
     super.key,
     required this.onTap,
     this.loading = false,
-    this.color = AppColors.primaryMid,
+    this.color = AppColors.primaryText,
   });
 
   final VoidCallback? onTap;

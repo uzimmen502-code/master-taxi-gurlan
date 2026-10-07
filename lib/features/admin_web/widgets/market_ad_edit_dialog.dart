@@ -91,7 +91,8 @@ class _MarketAdEditDialogState extends State<_MarketAdEditDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('E\'lon yangilandi'),
+          content: Text('E\'lon yangilandi',
+              style: TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } catch (e) {

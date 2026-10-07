@@ -18,7 +18,7 @@ class QueueCard extends StatelessWidget {
 
   static const _blue = AppColors.primary;
   static const _green = AppColors.primaryDark;
-  static const _orange = AppColors.primary;
+  static const _orange = AppColors.primaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +47,7 @@ class QueueCard extends StatelessWidget {
                 const BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: Row(children: [
-            const Icon(Icons.queue, color: _blue, size: 18),
+            const Icon(Icons.queue, color: AppColors.primaryText, size: 18),
             const SizedBox(width: 8),
             const Text('📋 Навбат тизими',
                 style: TextStyle(
@@ -68,7 +68,7 @@ class QueueCard extends StatelessWidget {
                       : '$myPosition-навбат',
                   style: const TextStyle(
                       fontSize: AppText.labelSmall,
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       fontWeight: FontWeight.bold),
                 ),
               ),
@@ -109,7 +109,7 @@ class QueueCard extends StatelessWidget {
                               fontSize: AppText.labelSmall,
                               fontWeight: FontWeight.bold,
                               color: (i == 0 || isMe)
-                                  ? Colors.white
+                                  ? AppColors.onPrimary
                                   : Colors.grey.shade600))),
                 ),
                 const SizedBox(width: 10),
@@ -124,7 +124,7 @@ class QueueCard extends StatelessWidget {
                               fontWeight: isMe
                                   ? FontWeight.bold
                                   : FontWeight.normal,
-                              color: isMe ? _green : Colors.black87),
+                              color: isMe ? AppColors.primaryText : Colors.black87),
                         ),
                         Text('${q.from} → ${q.to}',
                             style: TextStyle(
@@ -147,7 +147,7 @@ class QueueCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.w600,
-                          color: q.seatsLeft > 0 ? _green : Colors.red)),
+                          color: q.seatsLeft > 0 ? AppColors.primaryText : Colors.red)),
                 ),
               ]),
             );

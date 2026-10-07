@@ -271,7 +271,7 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                     child: Row(
                       children: [
                         const Icon(Icons.workspace_premium_rounded,
-                            color: AppColors.primaryDark, size: 20),
+                            color: AppColors.primaryText, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -319,7 +319,7 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                     onPressed: canSave ? _save : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryDark,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -329,7 +329,7 @@ class _AddEvStationScreenState extends State<AddEvStationScreen> {
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                                strokeWidth: 2, color: AppColors.onPrimary),
                           )
                         : Text(_isEditing
                             ? 'Сақлаш'

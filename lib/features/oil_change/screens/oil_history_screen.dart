@@ -25,7 +25,7 @@ class OilHistoryScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.tr('oil_my_history_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: StreamBuilder<List<OilHistoryEntry>>(
         stream: repo.watchHistory(uid, vehicle.id),

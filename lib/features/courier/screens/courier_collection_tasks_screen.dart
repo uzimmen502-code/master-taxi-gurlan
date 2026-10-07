@@ -21,7 +21,7 @@ class CourierCollectionTasksScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('📦 Қабул вазифалари'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: StreamBuilder<List<CollectionTask>>(
@@ -170,7 +170,7 @@ class _TaskCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primaryDark,
+                      color: AppColors.primaryText,
                     ),
                   ),
                 ],

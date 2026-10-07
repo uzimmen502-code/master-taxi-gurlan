@@ -269,7 +269,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
       appBar: AppBar(
         title: const Text('МФЙ танлаш'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: StreamBuilder<List<OrderModel>>(
@@ -389,7 +389,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
                               : () => _onBuildRoute(groups),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _btn,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.onPrimary,
                             disabledBackgroundColor: Colors.grey.shade300,
                             disabledForegroundColor: Colors.grey.shade600,
                             padding: const EdgeInsets.symmetric(vertical: 14),

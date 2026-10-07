@@ -169,7 +169,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
       appBar: AppBar(
         title: const Text('Таҳрирлаш'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: Form(
         key: _formKey,
@@ -328,7 +328,7 @@ class _EditAdScreenState extends State<EditAdScreen> {
                         width: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                         ),
                       )
                     : const Text('Сақлаш'),

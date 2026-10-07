@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/l10n/l10n_extension.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../local_taxi_colors.dart';
 import '../../../../core/utils/formatters.dart';
@@ -33,7 +34,10 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
   late double _sliderValue;
   Timer? _debounce;
   bool _saving = false;
-  String? _error;
+  bool _error = false;
+
+  /// Yo'lovchi slayderni o'zi qo'zg'atganmi (aks holda saqlangan intent bilan sinxron).
+  bool _touched = false;
 
   int get _maxWallet => WalletPayment.maxDebitFromWallet(
         widget.walletBalance,
@@ -50,6 +54,13 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
   void didUpdateWidget(covariant LocalTaxiWalletPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     final maxW = _maxWallet;
+    // Balans yoki saqlangan intent keyin kelsa — slayder saqlangan summani
+    // ko'rsatsin (aks holda 0 ko'rinadi, server esa saqlangan summani yechadi).
+    if (!_touched &&
+        (widget.initialIntent != oldWidget.initialIntent ||
+            widget.walletBalance != oldWidget.walletBalance)) {
+      _sliderValue = widget.initialIntent.clamp(0, maxW).toDouble();
+    }
     if (_sliderValue > maxW) {
       _sliderValue = maxW.toDouble();
       _scheduleSave(maxW);
@@ -69,7 +80,7 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
       if (!mounted) return;
       setState(() {
         _saving = true;
-        _error = null;
+        _error = false;
       });
       try {
         await LocalTaxiPaymentService.setPassengerWalletIntent(
@@ -77,7 +88,8 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
           amount: amount,
         );
       } catch (e) {
-        if (mounted) setState(() => _error = '$e');
+        debugPrint('wallet intent: $e');
+        if (mounted) setState(() => _error = true);
       } finally {
         if (mounted) setState(() => _saving = false);
       }
@@ -107,10 +119,10 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               Icon(Icons.account_balance_wallet_outlined,
                   color: LocalTaxiColors.primary, size: 20),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Hamyon bilan to\'lash',
-                  style: TextStyle(
+                  context.tr('local_wallet_pay_title'),
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: AppText.bodyMedium,
                   ),
@@ -126,21 +138,25 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Balans: ${formatPrice(widget.walletBalance)} · '
-            'taxminiy yo\'lkira: ${formatPrice(fare)}',
+            context.trMsg('local_wallet_balance_line', params: {
+              'balance': formatPrice(widget.walletBalance),
+              'fare': formatPrice(fare),
+            }),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
           if (maxW <= 0) ...[
             const SizedBox(height: 8),
             Text(
-              'Hamyon bo\'sh yoki yo\'lkira aniqlanmagan — faqat naqd.',
+              context.tr('local_wallet_cash_only_hint'),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ] else ...[
             const SizedBox(height: 8),
             Text(
-              'Hamyon: ${formatPrice(_sliderValue.round())} · '
-              'Naqd: ${formatPrice(cashDue)}',
+              context.trMsg('local_wallet_split_line', params: {
+                'wallet': formatPrice(_sliderValue.round()),
+                'cash': formatPrice(cashDue),
+              }),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -154,7 +170,10 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               divisions: maxW > 0 ? maxW.clamp(1, 200) : 1,
               label: formatPrice(_sliderValue.round()),
               onChanged: (v) {
-                setState(() => _sliderValue = v);
+                setState(() {
+                  _sliderValue = v;
+                  _touched = true;
+                });
                 _scheduleSave(v.round());
               },
             ),
@@ -163,25 +182,31 @@ class _LocalTaxiWalletPanelState extends State<LocalTaxiWalletPanel> {
               children: [
                 TextButton(
                   onPressed: () {
-                    setState(() => _sliderValue = 0);
+                    setState(() {
+                      _sliderValue = 0;
+                      _touched = true;
+                    });
                     _scheduleSave(0);
                   },
-                  child: const Text('Faqat naqd'),
+                  child: Text(context.tr('local_wallet_cash_only')),
                 ),
                 TextButton(
                   onPressed: maxW > 0
                       ? () {
-                          setState(() => _sliderValue = maxW.toDouble());
+                          setState(() {
+                            _sliderValue = maxW.toDouble();
+                            _touched = true;
+                          });
                           _scheduleSave(maxW);
                         }
                       : null,
-                  child: const Text('To\'liq hamyon'),
+                  child: Text(context.tr('local_wallet_full')),
                 ),
               ],
             ),
           ],
-          if (_error != null)
-            Text(_error!, style: TextStyle(color: LocalTaxiColors.danger, fontSize: 12)),
+          if (_error)
+            Text(context.tr('local_wallet_save_failed'), style: TextStyle(color: LocalTaxiColors.danger, fontSize: 12)),
         ],
       ),
     );

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/service_config_holder.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../models/active_trip.dart';
 import '../../../../models/nearby_driver.dart';
@@ -11,7 +13,6 @@ import '../../../../repositories/local_taxi_block_repository.dart';
 import '../../../../repositories/rides_repository.dart';
 import '../../../../services/location_service.dart';
 import '../../services/local_trip_fare_lock_service.dart';
-import '../../../../utils/fare_calculator.dart';
 
 /// Yo'lovchining "haydovchi qidirish" oqimini boshqaradi (BROADCAST modeli).
 ///
@@ -65,6 +66,11 @@ class SearchingController extends ChangeNotifier {
 
   // ── State ──────────────────────────────────────────────────────────
   String? tripId;
+
+  /// Bitta buyurtma = bitta id: tarmoq qayta urinsa ham server ikkinchi
+  /// trip yaratmaydi (`createLocalTaxiTrip` idempotent).
+  final String _requestId = '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+      '${Random().nextInt(1 << 30).toRadixString(36)}';
   String _userPhone = '';
   String _userName = '';
   String _userGender = '';
@@ -131,6 +137,13 @@ class SearchingController extends ChangeNotifier {
         if (existing != null) {
           _fromLat = existing.fromLat;
           _fromLng = existing.fromLng;
+          // Qayta ochilganda radius 3 km ga qaytib, 7 km ni 5 km bilan
+          // ustidan yozmasin.
+          cycle = existing.radiusKm >= 7
+              ? 2
+              : existing.radiusKm >= 5
+                  ? 1
+                  : 0;
         }
       }
 
@@ -152,47 +165,59 @@ class SearchingController extends ChangeNotifier {
         }
       }
 
-      await FareCalculator.loadPrices(lat: _fromLat, lng: _fromLng);
-
       if (resumeId.isEmpty) {
-        tripId = await _ridesRepo.createSearchRequest(
-          userPhone: _userPhone,
-          userName: _userName,
-          userGender: _userGender,
-          userBirthDate: _userBirthDate,
-          fromAddr: from,
-          toAddr: to,
-          fromLat: _fromLat,
-          fromLng: _fromLng,
-          toLat: dropoffLat,
-          toLng: dropoffLng,
-          taxiType: taxiType,
-          initialRadiusKm: _radiusForCycle(0),
-        );
+        // Manzil majburiy, narxni server qotiradi (ega qarori 2026-10-07).
         final dLat = dropoffLat;
         final dLng = dropoffLng;
-        if (dLat != null &&
-            dLng != null &&
-            (dLat.abs() > 1e-6 || dLng.abs() > 1e-6)) {
-          try {
-            await _fareLock.lockFare(
-              tripId: tripId!,
-              fromLat: _fromLat,
-              fromLng: _fromLng,
-              toLat: dLat,
-              toLng: dLng,
-              toAddr: to,
-            );
-          } catch (e) {
-            debugPrint('fare lock on search: $e');
-            // Destination ixtiyoriy — qidiruv davom etadi; narx keyin qulflanadi.
-          }
+        if (dLat == null ||
+            dLng == null ||
+            (dLat.abs() < 1e-6 && dLng.abs() < 1e-6) ||
+            to.trim().isEmpty) {
+          errorMessage = 'local_destination_required';
+          isSearching = false;
+          notifyListeners();
+          return;
+        }
+        try {
+          final created = await _fareLock.createTrip(
+            requestId: _requestId,
+            fromAddr: from,
+            fromLat: _fromLat,
+            fromLng: _fromLng,
+            toAddr: to,
+            toLat: dLat,
+            toLng: dLng,
+            userName: _userName,
+            userGender: _userGender,
+            userBirthDate: _userBirthDate,
+            report: ServiceConfigHolder.reportStamp(),
+          );
+          tripId = created.tripId;
+        } catch (e) {
+          debugPrint('createLocalTaxiTrip: $e');
+          errorMessage = LocalTripFareLockService.errorKey(e);
+          isSearching = false;
+          notifyListeners();
+          return;
+        }
+        // Ekran yopilgan bo'lsa — trip'ni qoldirmaymiz.
+        if (_isDisposed) {
+          _ridesRepo.cancelSearch(tripId: tripId!).then((_) {},
+              onError: (Object e) {
+            debugPrint('cancelSearch after dispose: $e');
+          });
+          return;
         }
       }
       _tripSub = _ridesRepo.watch(tripId!).listen(_onTripUpdate);
     } catch (e) {
-      errorMessage = 'error_generic|$e';
+      debugPrint('searching start: $e');
+      errorMessage = 'local_order_failed';
       notifyListeners();
+      return;
+    }
+    if (_isDisposed) {
+      _tripSub?.cancel();
       return;
     }
 
@@ -328,28 +353,42 @@ class SearchingController extends ChangeNotifier {
   }
 
   /// Foydalanuvchi orqaga tugmasini bosganda.
-  Future<void> cancelByUser() async {
-    if (_isCancelled) return;
+  /// `true` — ekranni yopish mumkin; `false` — haydovchi shu lahzada qabul
+  /// qilgan (trip `accepted`), ekran faol safarga o'tadi (yopilmaydi —
+  /// aks holda haydovchi bo'sh joyga borardi).
+  Future<bool> cancelByUser() async {
+    if (_isCancelled) return true;
     _isCancelled = true;
     _timer?.cancel();
     _driversRefreshTimer?.cancel();
     _tripSub?.cancel();
-    if (tripId != null) {
-      try {
-        await _ridesRepo.cancelSearch(tripId: tripId!);
-      } catch (e) {
-        debugPrint('cancelSearch: $e');
-        errorMessage = 'error_generic|$e';
-        notifyListeners();
+    final id = tripId;
+    if (id == null) return true;
+    try {
+      final status = await _ridesRepo.cancelSearch(tripId: id);
+      if (status == 'accepted') {
+        final trip = await _ridesRepo.getTrip(id);
+        if (trip != null && trip.isAccepted && !_isDisposed) {
+          acceptedTrip = trip;
+          _handedOffToActiveTrip = true;
+          errorMessage = 'local_cancel_too_late_accepted';
+          notifyListeners();
+          return false;
+        }
       }
+    } catch (e) {
+      debugPrint('cancelSearch: $e');
+      // dispose'dagi jim bekor qilish yana urinsin.
+      _isCancelled = false;
     }
+    return true;
   }
 
   /// Fire-and-forget — dispose paytida; хатони log қилади.
   void _cancelTripSilently() {
     if (_isCancelled || tripId == null) return;
     _isCancelled = true;
-    _ridesRepo.cancelSearch(tripId: tripId!).catchError((Object e) {
+    _ridesRepo.cancelSearch(tripId: tripId!).then((_) {}, onError: (Object e) {
       debugPrint('cancelSearch silent: $e');
     });
   }

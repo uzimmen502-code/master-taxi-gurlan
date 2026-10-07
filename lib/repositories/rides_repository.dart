@@ -192,36 +192,41 @@ class RidesRepository {
 
   /// Qidiruvni bekor qiladi (`status: cancelled`, `cancelReason: search_cancelled`).
   /// Faqat `searching` / `pending` holatda — `accepted` ustiga yozmaydi.
-  Future<void> cancelSearch({
+  /// Qaytaradi: bekor qilingan bo'lsa `cancelled`, aks holda trip'ning
+  /// joriy holati (masalan `accepted` — haydovchi shu lahzada qabul qildi).
+  Future<String> cancelSearch({
     required String tripId,
   }) async {
-    if (tripId.isEmpty) return;
-    await _db.runTransaction((tx) async {
+    if (tripId.isEmpty) return '';
+    return _db.runTransaction<String>((tx) async {
       final ref = _trips.doc(tripId);
       final snap = await tx.get(ref);
-      if (!snap.exists) return;
+      if (!snap.exists) return '';
       final status = (snap.data()?['status'] ?? '') as String;
-      if (status != 'searching' && status != 'pending') return;
+      if (status != 'searching' && status != 'pending') return status;
       tx.update(ref, {
         'status': 'cancelled',
         'cancelledBy': 'passenger',
         'cancelReason': 'search_cancelled',
         'cancelledAt': FieldValue.serverTimestamp(),
       });
+      return 'cancelled';
     });
   }
 
   /// Qabul qilingan mahalliy safarni yo'lovchi bekor qiladi.
   /// Driver isBusy — CF `onTripUpdate` tozalaydi (client drivers write yo'q).
-  Future<void> cancelLocalTripByPassenger(String tripId) async {
-    await _db.runTransaction((t) async {
+  /// `true` — haqiqatan bekor qilindi; `false` — trip allaqachon boshqa
+  /// holatda (haydovchi tark etdi / yakunladi) va hech narsa yozilmadi.
+  Future<bool> cancelLocalTripByPassenger(String tripId) async {
+    return _db.runTransaction<bool>((t) async {
       final ref = _trips.doc(tripId);
       final snap = await t.get(ref);
-      if (!snap.exists) return;
+      if (!snap.exists) return false;
       final data = snap.data()!;
       final status = data['status'] as String? ?? '';
 
-      if (status != 'accepted') return;
+      if (status != 'accepted') return false;
 
       t.update(ref, {
         'status': 'cancelled',
@@ -229,6 +234,7 @@ class RidesRepository {
         'cancelReason': 'passenger_cancel_during_trip',
         'cancelledAt': FieldValue.serverTimestamp(),
       });
+      return true;
     });
   }
 
@@ -1604,6 +1610,12 @@ class RidesRepository {
         if (!canAccept) {
           throw Exception('taken');
         }
+        // Mahalliy taksi: muddati o'tgan qidiruv (yo'lovchi ekranida tugagan,
+        // server hali `expired` qilmagan) qabul qilinmaydi.
+        if ((taxiType == 'alone' || taxiType == 'local') &&
+            ActiveTrip.fromDoc(tripDoc).isExpired) {
+          throw Exception('taken');
+        }
         if (taxiType == 'marshrut' &&
             scheduleId != null &&
             scheduleId.isNotEmpty) {
@@ -1707,6 +1719,8 @@ class RidesRepository {
         'reservedBy': '',
         'reservedByName': '',
         'reservedAt': FieldValue.delete(),
+        // Server shundan yangi qidiruv muddatini hisoblaydi (expirePendingTrips).
+        'releasedAt': FieldValue.serverTimestamp(),
       });
       tx.set(
         _drivers.doc(driverId),

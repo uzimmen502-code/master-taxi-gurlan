@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../utils/fare_calculator.dart';
 import '../../../utils/taxi_price_region.dart';
 
 /// Admin — mahalliy taksi narxi (`settings/prices`).
@@ -178,24 +178,31 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
     });
 
     try {
+      // Server orqali: har saqlash yangi tarif versiyasi + o'zgarmas tarix
+      // (`local_taxi_tariffs/v{n}`). O'chirilgan mintaqa — yuborilmaydi
+      // (server `regions`ni to'liq almashtiradi).
       final regions = <String, dynamic>{};
       for (final entry in _regionDrafts.entries) {
         final map = _draftToMap(entry.key, entry.value);
-        if (map != null) regions[entry.key] = map;
+        if (map != null) {
+          regions[entry.key] = {
+            'base': map['local_base'],
+            'perKm': map['local_per_km'],
+            'coef': map['local_coef'],
+          };
+        }
       }
 
-      await FirebaseFirestore.instance.collection('settings').doc('prices').set(
-        {
-          'local_base': base,
-          'local_per_km': perKm,
-          'local_coef': coef,
-          if (regions.isNotEmpty) 'regions': regions,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('adminSetLocalTaxiPrices')
+          .call(<String, dynamic>{
+        'global': {'base': base, 'perKm': perKm, 'coef': coef},
+        'regions': regions,
+      });
+      final version = (res.data is Map ? (res.data as Map)['version'] : null);
       if (mounted) {
-        setState(() => _ok = 'Saqlandi. Yangi narx keyingi qidiruvdan kuchga kiradi.');
+        setState(() => _ok =
+            'Saqlandi (tarif v$version). Yangi narx keyingi buyurtmadan kuchga kiradi.');
       }
     } catch (e) {
       if (mounted) setState(() => _error = 'Saqlashda xatolik: $e');
@@ -238,7 +245,9 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
               const SizedBox(height: 8),
               Text(
                 'Formula: (boshlang\'ich + masofa × km_narx) × koeffitsient. '
-                'Keyin tungi/bayram va masofa koeffitsientlari qo\'llanadi.',
+                'Keyin masofa koeffitsienti va tungi ×1.5 (23:00–06:00, avtomatik) '
+                'qo\'llanadi. Narxni server hisoblaydi va har buyurtmaga tarif '
+                'versiyasi bilan qotiradi.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 24),

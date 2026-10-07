@@ -121,6 +121,9 @@ class DriverHomeController extends ChangeNotifier {
   /// Oxirgi qaytim settlement natijasi (UI snackbar uchun).
   TripChangeSettlementOutcome? lastSettlementOutcome;
 
+  /// Oxirgi mahalliy safar yakuni — server natijasi (naqd ulush tekshiruvi uchun).
+  LocalTripCompleteResult? lastLocalComplete;
+
   bool _disposed = false;
 
   String get _todayDateStr {
@@ -134,6 +137,9 @@ class DriverHomeController extends ChangeNotifier {
     await FareCalculator.loadPrices();
     _listenConnectivity();
     await _tryRestoreOnlineSession();
+    // Qabul qilingan safar online bo'lmasa ham tiklansin (GPS yo'q yoki
+    // jadval yarim tunda yopilgan bo'lsa ham — safar ochiq qolmasin).
+    if (_acceptedTripsSub == null) _listenAcceptedTrips();
     // Ilova ochilishida — kutib qolgan deferred settlement'larni yuborish.
     unawaited(DeferredSettlementQueue.flush());
   }
@@ -467,7 +473,12 @@ class DriverHomeController extends ChangeNotifier {
   Future<void> _goOffline() async {
     if (session.driverId.isEmpty) return;
     _gpsSub?.cancel();
+    _gpsSub = null;
     _acceptedTripsSub?.cancel();
+    _acceptedTripsSub = null;
+    // Takliflar oqimi ham yopilsin (endWorkDay → offline'da ortiqcha read yo'q).
+    _tripsSub?.cancel();
+    _tripsSub = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('driver_online', false);
     try {
@@ -782,9 +793,12 @@ class DriverHomeController extends ChangeNotifier {
     if (ride == null) return 0;
     _finishingTripId = ride.id;
     _gpsSub?.cancel();
+    _gpsSub = null;
+    var finished = false;
 
     try {
       lastSettlementOutcome = null;
+      lastLocalComplete = null;
       final isLocal = ride.taxiType == 'local' || ride.taxiType == 'alone';
       int change = 0;
 
@@ -795,6 +809,9 @@ class DriverHomeController extends ChangeNotifier {
           cashPaid: cashPaid,
         );
         change = result.change;
+        lastLocalComplete = result;
+        // Server qotirgan narx — statistika ham shundan.
+        fare = result.fare;
       } else {
         await _ridesRepo.finishTrip(
             tripId: ride.id, fare: fare, cashPaid: cashPaid);
@@ -829,10 +846,14 @@ class DriverHomeController extends ChangeNotifier {
       _reconcileGpsProfile();
       if (isOnline && _gpsSub == null) _startGpsTracking();
       notifyListeners();
+      finished = true;
       await _saveStats();
       return fare;
     } finally {
       _finishingTripId = null;
+      // Yakunlash xato bersa — safar davom etadi, GPS qayta yoqilsin
+      // (aks holda yo'lovchi haydovchini qotib qolgan joyda ko'rardi).
+      if (!finished && isOnline && _gpsSub == null) _startGpsTracking();
     }
   }
 

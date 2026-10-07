@@ -88,8 +88,8 @@ class _SearchingViewState extends State<_SearchingView> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await c.cancelByUser();
-        if (context.mounted) Navigator.of(context).pop();
+        final canClose = await c.cancelByUser();
+        if (canClose && context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
         body: Stack(
@@ -117,8 +117,10 @@ class _SearchingViewState extends State<_SearchingView> {
                       _roundIconButton(
                         icon: Icons.close,
                         onPressed: () async {
-                          await c.cancelByUser();
-                          if (context.mounted) Navigator.pop(context);
+                          final canClose = await c.cancelByUser();
+                          if (canClose && context.mounted) {
+                            Navigator.pop(context);
+                          }
                         },
                       ),
                       const SizedBox(width: 8),

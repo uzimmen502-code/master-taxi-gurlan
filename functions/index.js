@@ -38,6 +38,12 @@ const { attachTaxiBilling } = require('./taxi_billing');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
 });
+// Mahalliy taksi — SERVER narxi (ega qarori 2026-10-07): trip yaratish,
+// narx qulfi va admin tarif versiyasi. Yakunlash — pastdagi completeLocalTrip.
+const { attachLocalTaxi } = require('./local_taxi');
+attachLocalTaxi(exports, {
+  functions, db, admin, callerPhone, canonicalUid, axios,
+});
 // AVA Logistics eskrou (D-11): pul faqat ledger orqali — u shu yerda;
 // ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
 const { attachRelayEscrow } = require('./relay_escrow');
@@ -1627,23 +1633,38 @@ exports.onTripUpdate = functions.firestore
 
     let localCancelFb = after.localCancelFeedback || null;
 
+    // Mahalliy taksi: trip `accepted`dan QANDAY chiqmasin (yo'lovchi/admin
+    // bekor, expired, tark etish, yakun) — haydovchi bo'shatiladi. Avval faqat
+    // yo'lovchi bekorida bo'shatilardi → admin bekor qilsa `isBusy` abadiy
+    // true qolib, haydovchi boshqa buyurtma ololmasdi.
+    if (isLocal && before.status === 'accepted' && after.status !== 'accepted') {
+      const localDriverId = String(
+          before.acceptedDriverId || before.driverId || '');
+      if (localDriverId) {
+        try {
+          const other = await db.collection('trips')
+              .where('acceptedDriverId', '==', localDriverId)
+              .where('status', '==', 'accepted')
+              .limit(1)
+              .get();
+          // Haydovchi shu orada boshqa safarni olgan bo'lsa — tegmaymiz.
+          if (other.empty) {
+            await db.collection('drivers').doc(localDriverId).update({
+              isBusy: false,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.error('release driver isBusy failed:', e);
+        }
+      }
+    }
+
     if (
       after.status === 'cancelled' &&
       (after.taxiType === 'local' || after.taxiType === 'alone') &&
       (after.cancelledBy === 'passenger' || after.cancelledBy === 'user')
     ) {
-      const localDriverId = String(
-          after.acceptedDriverId || after.driverId || '');
-      if (localDriverId) {
-        try {
-          await db.collection('drivers').doc(localDriverId).update({
-            isBusy: false,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        } catch (e) {
-          console.error('release driver isBusy failed:', e);
-        }
-      }
 
       // Faqat qabuldan keyingi bekor — qidiruv bekorida blok yo'q.
       // Block count + trip.localTaxiBlockCounted bitta txn (TOCTOU yo'q).
@@ -10902,8 +10923,26 @@ exports.expirePendingTrips = functions.pubsub
       await db.runTransaction(async (t) => {
         const snap = await t.get(ref);
         if (!snap.exists) return;
-        const st = String((snap.data() || {}).status || '');
+        const cur = snap.data() || {};
+        const st = String(cur.status || '');
         if (st !== 'pending' && st !== 'searching') return;
+        // Mahalliy taksi: haydovchi tark etgan (accepted → searching) trip'ga
+        // yangi qidiruv oynasi — releasedAt + 3 daqiqa (eski expiresAt emas).
+        const releasedMs = cur.releasedAt && cur.releasedAt.toMillis
+          ? cur.releasedAt.toMillis() : 0;
+        if (st === 'searching' && releasedMs > 0) {
+          const renewedMs = releasedMs + 3 * 60 * 1000;
+          const expMs = cur.expiresAt && cur.expiresAt.toMillis
+            ? cur.expiresAt.toMillis() : 0;
+          if (renewedMs > now.toMillis()) {
+            if (renewedMs > expMs) {
+              t.update(ref, {
+                expiresAt: admin.firestore.Timestamp.fromMillis(renewedMs),
+              });
+            }
+            return;
+          }
+        }
         t.update(ref, {
           status: 'expired',
           expiredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -14274,7 +14313,9 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
 
   const idemRef = db.collection('wallet_idempotency').doc(`local_trip_complete_${tripId}`);
   const existing = await idemRef.get();
-  if (existing.exists) {
+  // Natija faqat o'sha haydovchiga (eski idem hujjatlarida driverUid yo'q —
+  // ular transaction ichida trip biriktirilishi bo'yicha tekshiriladi).
+  if (existing.exists && existing.data().driverUid === driverUid) {
     return existing.data().result || { ok: true, duplicate: true };
   }
 
@@ -14283,11 +14324,6 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
 
   await db.runTransaction(async (t) => {
     const idemSnap = await t.get(idemRef);
-    if (idemSnap.exists) {
-      resultPayload = idemSnap.data().result;
-      return;
-    }
-
     const tripSnap = await t.get(tripRef);
     if (!tripSnap.exists) {
       throw new functions.https.HttpsError('not-found', 'Trip topilmadi');
@@ -14296,6 +14332,16 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
     if (trip.taxiType !== 'local' && trip.taxiType !== 'alone') {
       throw new functions.https.HttpsError(
           'failed-precondition', 'Faqat mahalliy taksi');
+    }
+    const assignedDriver = String(
+        trip.acceptedDriverId || trip.driverId || '').trim();
+    if (assignedDriver !== driverUid) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Bu safar sizga biriktirilmagan');
+    }
+    if (idemSnap.exists) {
+      resultPayload = idemSnap.data().result;
+      return;
     }
     if (trip.status === 'completed') {
       resultPayload = {
@@ -14313,6 +14359,7 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       };
       t.set(idemRef, {
         type: 'completeLocalTrip',
+        driverUid,
         result: resultPayload,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -14322,20 +14369,18 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
           'failed-precondition', `Trip holati: ${trip.status}`);
     }
-    const assignedDriver = String(
-        trip.acceptedDriverId || trip.driverId || '').trim();
-    if (assignedDriver !== driverUid) {
-      throw new functions.https.HttpsError(
-          'permission-denied', 'Bu safar sizga biriktirilmagan');
-    }
 
-    // Asosiy qoida: destination bo'yicha qulflangan yo'lkira.
+    // Asosiy qoida (ega qarori 2026-10-07): yo'lkira SERVERDA qotiriladi
+    // (`local_taxi.js`, fareSource == 'server'). Eski ilovalar yaratgan trip'lar
+    // (server narxisiz) — o'tish davri: haydovchi narxi, lekin HAMYON YECHILMAYDI
+    // (klient yozgan narx/intent'ga pul ishonilmaydi — qoida 18).
+    const serverPriced = trip.fareSource === 'server';
     const lockedFare = Math.trunc(Number(trip.lockedFare || 0));
-    const fare = lockedFare > 0 ? lockedFare : clientFare;
+    const fare = serverPriced ? lockedFare : (lockedFare > 0 ? lockedFare : clientFare);
     if (!Number.isInteger(fare) || fare <= 0) {
       throw new functions.https.HttpsError(
           'invalid-argument',
-          lockedFare > 0
+          serverPriced
             ? 'lockedFare noto\'g\'ri'
             : 'Avval manzilni belgilab yo\'lkirani qulflang yoki fare yuboring');
     }
@@ -14345,7 +14390,8 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
         0, Math.trunc(Number(trip.passengerWalletIntent || 0)));
     let walletPaid = 0;
 
-    if (walletIntent > 0 && passengerUid.length >= 12) {
+    if (serverPriced && walletIntent > 0 && passengerUid.length >= 12
+        && passengerUid !== driverUid) {
       const userRef = db.collection('users').doc(passengerUid);
       const userSnap = await t.get(userRef);
       if (!userSnap.exists) {
@@ -14356,16 +14402,21 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
           Number((userSnap.data() || {}).bonusBalance || 0));
       walletPaid = Math.min(walletIntent, fare, balance);
       if (walletPaid > 0) {
+        // Ega qarori 2026-10-07: hamyon qismi HAYDOVCHI HAMYONIGA
+        // (Dr passenger_credit:yo'lovchi / Cr passenger_credit:haydovchi).
         const idempotencyKey = `trip_wallet_${tripId}`;
         const bonusCtx = await settlementLedger.prepareBonusInTx(
-            t, db, passengerUid, { idempotencyKey });
+            t, db, passengerUid, {
+              idempotencyKey,
+              fundingAccount: settlementLedger.passengerCreditAccount(driverUid),
+            });
+        const driverUserRef = db.collection('users').doc(driverUid);
         const nextBal = balance - walletPaid;
         t.set(userRef, {
           bonusBalance: nextBal,
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        const ledgerId = userRef.collection('wallet_ledger').doc().id;
-        t.set(userRef.collection('wallet_ledger').doc(ledgerId), {
+        t.set(userRef.collection('wallet_ledger').doc(), {
           type: 'local_taxi_debit',
           amount: -walletPaid,
           module: 'local_taxi',
@@ -14375,12 +14426,26 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           createdBy: 'completeLocalTrip',
         });
+        t.set(driverUserRef, {
+          bonusBalance: admin.firestore.FieldValue.increment(walletPaid),
+          balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        t.set(driverUserRef.collection('wallet_ledger').doc(), {
+          type: 'local_taxi_credit',
+          amount: walletPaid,
+          module: 'local_taxi',
+          refType: 'trip',
+          refId: tripId,
+          meta: { passengerUid },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: 'completeLocalTrip',
+        });
         settlementLedger.commitBonusInTx(t, bonusCtx, {
           delta: -walletPaid,
           kind: 'local_taxi_debit',
           refType: 'trip',
           refId: tripId,
-          meta: { module: 'local_taxi', driverUid },
+          meta: { module: 'local_taxi', driverUid, passengerUid },
           postedBy: driverUid,
           postedRole: 'driver',
         });
@@ -14416,9 +14481,11 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       walletPaid,
       cashDue,
       change,
+      serverPriced,
     };
     t.set(idemRef, {
       type: 'completeLocalTrip',
+      driverUid,
       result: resultPayload,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });

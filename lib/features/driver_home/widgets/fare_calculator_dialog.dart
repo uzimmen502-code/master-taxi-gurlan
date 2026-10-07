@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../utils/fare_calculator.dart';
 
@@ -54,7 +55,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
   bool _isRainy = false;
   bool _isUrgent = false;
   final _cashPaidCtrl = TextEditingController();
-  bool _cashPaidInitialized = false;
+  bool _cashPaidEdited = false;
 
   @override
   void initState() {
@@ -100,10 +101,12 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             isRainy: _isRainy,
             isUrgent: _isUrgent,
           );
-    if (!_cashPaidInitialized) {
-      final cashDefault = (fare - widget.passengerWalletIntent).clamp(0, fare);
-      _cashPaidCtrl.text = '$cashDefault';
-      _cashPaidInitialized = true;
+    // Ҳайдовчи нақдни ўзи ўзгартирмагунча, у йўлкира билан бирга янгиланади
+    // (аввал бир марта тўлдирилиб қоларди → км камайтирилса, сервер ортиқча
+    // «қайтим» ҳисоблаб, ҳайдовчи ҳамёнидан йўловчига ўтказарди).
+    if (!_cashPaidEdited) {
+      final cashDefault = '${(fare - widget.passengerWalletIntent).clamp(0, fare)}';
+      if (_cashPaidCtrl.text != cashDefault) _cashPaidCtrl.text = cashDefault;
     }
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -223,8 +226,28 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _cashPaidEdited = true),
           ),
+          Builder(builder: (context) {
+            // Ортиқча нақд — қайтим йўловчи ҳамёнига ўтказилади (settlement).
+            // Ҳайдовчи нақд ҳам бериб юбормаслиги учун аниқ айтамиз.
+            final paid = int.tryParse(
+                    _cashPaidCtrl.text.replaceAll(RegExp(r'[^\d]'), '')) ??
+                0;
+            final due = (fare - widget.passengerWalletIntent).clamp(0, fare);
+            if (paid <= due) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                context.trMsg('local_change_goes_wallet',
+                    params: {'amount': FareCalculator.format(paid - due)}),
+                style: const TextStyle(
+                    fontSize: AppText.bodySmall,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepOrange),
+              ),
+            );
+          }),
         ]),
       ),
       actions: [

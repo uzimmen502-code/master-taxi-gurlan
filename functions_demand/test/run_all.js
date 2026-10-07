@@ -37,6 +37,7 @@ const SUITES = [
   'parity.test.js',
   'dictionary_fresh.test.js',
   'analytics.test.js',
+  'wholesale_admin.test.js',
 ];
 
 let failed = 0;

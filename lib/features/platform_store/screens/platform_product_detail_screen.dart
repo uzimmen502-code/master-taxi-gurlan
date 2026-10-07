@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
@@ -111,18 +110,15 @@ class _PlatformProductDetailScreenState
     return Scaffold(
       backgroundColor: AvaStoreColors.scaffold,
       appBar: AppBar(
-        title: Text.rich(
-          TextSpan(
-            style: const TextStyle(
-              color: AvaStoreColors.onBrand,
-              fontWeight: FontWeight.w900,
-              fontSize: 17,
-              letterSpacing: 0.15,
-            ),
-            children: [
-              const TextSpan(text: BrandLabels.brand),
-              TextSpan(text: ' ${context.tr('platform_store_title_suffix')}'),
-            ],
+        // «AVA дўкони» эмас — AVA товари Улгуржи бозорнинг бир қисми
+        // (эга қарори 2026-10-07).
+        title: Text(
+          context.tr('wholesale_title'),
+          style: const TextStyle(
+            color: AvaStoreColors.onBrand,
+            fontWeight: FontWeight.w900,
+            fontSize: 17,
+            letterSpacing: 0.15,
           ),
         ),
         backgroundColor: AvaStoreColors.brand,

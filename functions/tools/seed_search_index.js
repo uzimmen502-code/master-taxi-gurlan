@@ -77,7 +77,8 @@ function productEntry(id, d) {
   const name = String(d.name || '').trim();
   const urls = Array.isArray(d.imageUrls) ? d.imageUrls : [];
   const kind = String(d.goodsKind || '').trim();
-  const keywords = ['ава', 'дукон', 'дўкон', 'ava', 'store', 'платформа'];
+  // `functions/index.js` dagi `platformProductToSearchEntry` bilan bir xil (2026-10-07).
+  const keywords = ['ава', 'ava', 'улгуржи', 'ulgurji', 'оптом', 'optom', 'дўкон', 'дукон'];
   if (kind === 'food') keywords.push('озиқ', 'oziq', 'food');
   if (kind === 'non_food') keywords.push('но-озиқ', 'non_food');
   return {
@@ -86,7 +87,7 @@ function productEntry(id, d) {
     sourceCollection: 'platform_products',
     sourceId: id,
     title: name,
-    subtitle: 'AVA дўкони',
+    subtitle: 'Улгуржи бозор · AVA',
     price: Math.trunc(Number(d.price) || 0),
     imageUrl: String((urls[0] || d.imageUrl || '')).trim(),
     iconKey: 'shop',
@@ -147,7 +148,7 @@ const SERVICES = [
   { id: 'marshrut', moduleId: 'marshrut', title: 'Маршрут такси', subtitle: 'Маршрут бўйича', iconKey: 'taxi', keywords: ['такси', 'taxi', 'маршрут', 'marshrut'], boost: 20 },
   { id: 'yuk_local', moduleId: 'yuk_local', title: 'Туман ичида юк', subtitle: 'Яқин юк машиналари', iconKey: 'yuk', keywords: ['юк', 'yuk', 'груз', 'туман', 'яқин', 'машина', 'такси'], boost: 18 },
   { id: 'yuk_intercity', moduleId: 'yuk_intercity', title: 'Шаҳарлараро юк', subtitle: 'Юк биржаси эълонлари', iconKey: 'yuk', keywords: ['юк', 'yuk', 'биржа', 'груз', 'шаҳарлараро', 'такси'], boost: 18 },
-  { id: 'platform', moduleId: 'platform', title: 'AVA дўкони', subtitle: 'Платформа дўкони', iconKey: 'shop', keywords: ['ава', 'ava', 'дўкон', 'дукон', 'магазин', 'платформа'], boost: 20 },
+  { id: 'platform', moduleId: 'platform', title: 'Улгуржи бозор', subtitle: 'AVA ва сотувчилар товарлари', iconKey: 'shop', keywords: ['улгуржи', 'ulgurji', 'оптом', 'optom', 'ава', 'ava', 'дўкон', 'дукон', 'магазин'], boost: 20 },
   { id: 'food', moduleId: 'food', title: 'Овқат', subtitle: 'Таом буюртма', iconKey: 'food', keywords: ['овқат', 'ovqat', 'таом', 'кафе', 'емак'], boost: 20 },
   { id: 'bread', moduleId: 'bread', title: 'Нон', subtitle: 'Нон буюртма', iconKey: 'bread', keywords: ['нон', 'non', 'патир', 'чўрек'], boost: 20 },
   { id: 'jobs', moduleId: 'jobs', title: 'ИШ ЭЪЛОН', subtitle: 'Иш ва хизмат эълонлари', iconKey: 'job', keywords: ['иш', 'ish', 'вакансия', 'эълон', 'лаборант'], boost: 22 },

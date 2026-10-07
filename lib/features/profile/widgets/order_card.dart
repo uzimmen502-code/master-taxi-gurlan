@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
@@ -23,8 +22,10 @@ class OrderCard extends StatelessWidget {
     final isFood = order.type == 'food';
     final isPlatform = order.type == 'platform';
     final emoji = isPlatform ? '🛒' : (isFood ? '🍽️' : '🫓');
+    // AVA товари буюртмаси — «Улгуржи бозор» (2026-10-07 дан «AVA дўкони»
+    // йўқ; буюртма тури `platform` ўзгармаган).
     final title = isPlatform
-        ? '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}'
+        ? context.tr('wholesale_title')
         : (isFood ? 'Овқат буюртма' : 'Нон буюртма');
     final color = AppColors.primaryText;
 

@@ -15379,7 +15379,9 @@ function platformProductToSearchEntry(id, d) {
   const urls = Array.isArray(d.imageUrls) ? d.imageUrls : [];
   const cover = String((urls[0] || d.imageUrl || '')).trim();
   const kind = String(d.goodsKind || '').trim();
-  const keywords = ['ава', 'дукон', 'дўкон', 'ava', 'store', 'платформа'];
+  // 2026-10-07: «AVA дўкони» йўқ — AVA товари Улгуржи бозорда. «дўкон»
+  // калити қолди: одатланган одам шу сўз билан ҳам топсин.
+  const keywords = ['ава', 'ava', 'улгуржи', 'ulgurji', 'оптом', 'optom', 'дўкон', 'дукон'];
   if (kind === 'food') keywords.push('озиқ', 'oziq', 'food');
   if (kind === 'non_food') keywords.push('но-озиқ', 'non_food');
   return {
@@ -15388,7 +15390,7 @@ function platformProductToSearchEntry(id, d) {
     sourceCollection: 'platform_products',
     sourceId: id,
     title: name,
-    subtitle: 'AVA дўкони',
+    subtitle: 'Улгуржи бозор · AVA',
     price: Math.trunc(Number(d.price) || 0),
     imageUrl: cover,
     iconKey: 'shop',
@@ -15629,10 +15631,12 @@ const SEARCH_SERVICE_SEEDS = [
   {
     id: 'platform',
     moduleId: 'platform',
-    title: 'AVA дўкони',
-    subtitle: 'Платформа дўкони',
+    // `moduleId: 'platform'` АТАЙЛАБ ўзгармади: Play'даги эски илова уни
+    // эски дўкон экранига, янгиси — Улгуржи бозорга очади (2026-10-07).
+    title: 'Улгуржи бозор',
+    subtitle: 'AVA ва сотувчилар товарлари',
     iconKey: 'shop',
-    keywords: ['ава', 'ava', 'дўкон', 'дукон', 'магазин', 'платформа'],
+    keywords: ['улгуржи', 'ulgurji', 'оптом', 'optom', 'ава', 'ava', 'дўкон', 'дукон', 'магазин'],
     boost: 20,
   },
   {

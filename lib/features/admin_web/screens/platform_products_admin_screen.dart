@@ -23,7 +23,11 @@ import '../services/admin_market_service.dart';
 import '../utils/clipboard_paste_image.dart';
 import '../utils/web_image_compress.dart';
 
-/// Админ: платформа дўкони каталоги.
+/// Админ: AVA товарлари каталоги (`platform_products`).
+///
+/// 2026-10-07 дан алоҳида «AVA дўкони» бўлими эмас — «Улгуржи бозор»
+/// бўлимининг «AVA товарлари» таби (иловада AVA дўкони тўлиқ Улгуржига
+/// ўтган, эга қарори 2026-10-06). Коллекция ва маълумот ўзгармаган.
 class PlatformProductsAdminScreen extends StatefulWidget {
   const PlatformProductsAdminScreen({super.key});
 
@@ -1081,9 +1085,11 @@ class _EditDialogState extends State<_EditDialog> {
   late String _goodsKind;
   late String _docId;
 
-  /// Улгуржи нарх поғоналари (2026-09-29). Поғона қўйилган товар
-  /// Улгуржи бозор лентасига чиқади; бўш қолдирилса — товар аввалгидек
-  /// фақат AVA дўконида, битта нарх билан сотилади.
+  /// Улгуржи нарх поғоналари. Поғона Улгуржи лентасига чиқиш шарти ЭМАС
+  /// (2026-10-06 дан ҳар қандай фаол ва сотиладиган AVA товари лентада);
+  /// у фақат миқдорга қараб нархни белгилайди. Эски товарда бўш бўлса
+  /// поғоналар базадаги нархдан ҳисобланади, янги товарда камида битта
+  /// поғона мажбурий.
   late List<_TierRow> _tiers;
   late List<String> _imageUrls;
   bool _uploading = false;

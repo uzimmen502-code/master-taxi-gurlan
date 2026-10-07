@@ -11,8 +11,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/same_origin_nav.dart';
 import '../../analytics/screens/admin_orders_screen.dart';
 import '../../analytics/screens/monitoring_center_screen.dart';
+import '../../wholesale/models/wholesale_product.dart';
+import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_news_read_service.dart';
+import '../utils/count_stream_sum.dart';
 import '../../../repositories/news_repository.dart';
 import 'admin_home_ticker_screen.dart';
 import 'admin_news_list_screen.dart';
@@ -155,15 +158,20 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.local_post_office_outlined,
       description: 'Жўнатма тарифи (версияли) ва маршрутлар',
     ),
-    _AdminSection(
-      label: 'AVA дўкони',
-      icon: Icons.store_mall_directory_outlined,
-      description: 'Тавсия / платформа каталоги',
-    ),
+    // «AVA дўкони» алоҳида бўлими ОЛИБ ТАШЛАНДИ (2026-10-07): иловада AVA
+    // дўкони тўлиқ Улгуржига ўтган (эга қарори 2026-10-06), энди админда
+    // ҳам AVA товарлари каталоги «Улгуржи бозор»нинг биринчи табида.
+    // Хитой бозори эса — иловадаги каби алоҳида бўлим: аввал унинг
+    // маҳсулотлари «Улгуржи бозор» ичида аралаш чиқарди.
     _AdminSection(
       label: 'Улгуржи бозор',
       icon: Icons.warehouse_outlined,
-      description: 'Сотувчилар ва улгуржи маҳсулот модерацияси',
+      description: 'AVA товарлари, сотувчилар ва улгуржи маҳсулотлар',
+    ),
+    _AdminSection(
+      label: 'Хитой бозори',
+      icon: Icons.local_shipping_outlined,
+      description: 'Хитой бозори маҳсулотлари модерацияси',
     ),
     _AdminSection(
       label: 'AVAGram',
@@ -434,7 +442,17 @@ class _AdminShellState extends State<AdminShell> {
       return const MarketModerationScreen();
     }
     if (section.label == 'Улгуржи бозор') {
-      return const WholesaleModerationScreen();
+      return const WholesaleModerationScreen(
+        leadingTab: (
+          label: '🏬 AVA товарлари',
+          child: PlatformProductsAdminScreen(),
+        ),
+      );
+    }
+    if (section.label == 'Хитой бозори') {
+      return const WholesaleModerationScreen(
+        market: WholesaleProduct.marketChina,
+      );
     }
     if (section.label == 'EV зарядлаш') {
       return const EvStationModerationScreen();
@@ -444,9 +462,6 @@ class _AdminShellState extends State<AdminShell> {
     }
     if (section.label == 'AVA Logistics') {
       return const LogisticsAdminScreen();
-    }
-    if (section.label == 'AVA дўкони') {
-      return const PlatformProductsAdminScreen();
     }
     if (section.label == 'AVAGram') {
       return const TvClipsModerationScreen();
@@ -932,12 +947,21 @@ class _Sidebar extends StatelessWidget {
             .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
+      // Сотувчилар рўйхати иккала бозорга битта — кутаётган сотувчилар
+      // фақат «Улгуржи бозор» нишонида (икки марта саналмасин).
+      // Маҳсулотлар эса бозори бўйича ажратилади (аввал кутаётган
+      // маҳсулот нишонда умуман саналмасди).
       case 'Улгуржи бозор':
-        return db
-            .collection('wholesale_sellers')
-            .where('approvalStatus', isEqualTo: 'pending')
-            .snapshots()
-            .map((s) => s.docs.length);
+        return sumCountStreams([
+          db
+              .collection('wholesale_sellers')
+              .where('approvalStatus', isEqualTo: 'pending')
+              .snapshots()
+              .map((s) => s.docs.length),
+          _pendingWholesaleProducts(db, WholesaleProduct.marketWholesale),
+        ]);
+      case 'Хитой бозори':
+        return _pendingWholesaleProducts(db, WholesaleProduct.marketChina);
       case '❤️ Танишув':
         return db
             .collection('dating_profiles')
@@ -1040,6 +1064,20 @@ class _Sidebar extends StatelessWidget {
       default:
         return null;
     }
+  }
+
+  /// [market] бозорида тасдиқ кутаётган маҳсулотлар сони. Бозор филтри
+  /// клиентда: эски ёзувларда `market` майдони йўқ (улар — Улгуржи).
+  Stream<int> _pendingWholesaleProducts(FirebaseFirestore db, String market) {
+    return db
+        .collection('wholesale_products')
+        .where('status', isEqualTo: WholesaleProduct.statusPending)
+        .limit(200)
+        .snapshots()
+        .map((s) => WholesaleProductsRepository.filterByMarket(
+              s.docs.map(WholesaleProduct.fromFirestore),
+              market,
+            ).length);
   }
 
   Widget _sidebarBadge({required Stream<int> stream}) {

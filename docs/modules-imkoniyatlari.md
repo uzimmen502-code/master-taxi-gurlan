@@ -146,6 +146,10 @@
 
 **Манба:** `lib/models/platform_product.dart`, `repositories/platform_products_repository.dart`, `features/platform_store/screens/{platform_store_screen,platform_product_detail_screen}.dart`.
 
+**Улгуржига ўтиш (эга қарори):**
+- 2026-10-06 — иловада «AVA ДЎКОНИ» плиткаси олиб ташланди, ҳамма фаол AVA товари «Улгуржи бозор» лентасида.
+- 2026-10-07 — админ панелда ҳам: алоҳида «AVA дўкони» бўлими йўқ, каталог «Улгуржи бозор» бўлимининг «AVA товарлари» табида. Хитой бозори — иловадаги каби алоҳида «Хитой бозори» бўлими (аввал унинг маҳсулотлари «Улгуржи бозор» ичида аралаш чиқарди). Сотувчилар рўйхати иккала бозорга битта. Маълумот (`platform_products`, `wholesale_products`, `wholesale_sellers`) ўзгармаган.
+
 ---
 
 ## Умумий эслатма (контент учун)

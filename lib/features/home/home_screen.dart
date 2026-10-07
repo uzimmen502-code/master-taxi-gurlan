@@ -612,9 +612,11 @@ class _HomeViewState extends State<_HomeView> {
 
   /// Улгуржи ёки Хитой бозори — телефон Home subtree'дан узатилади
   /// (`WholesaleMarketScreen` `HomeController` ни ўзи ўқий олмайди).
-  /// Иккала бозор битта модул калити (`wholesale_market`) остида.
+  /// Ҳар бозор ЎЗ дарвозаси билан (2026-10-07): аввал Хитой бўлимининг
+  /// «Ҳаммаси» тугмаси ҳам `wholesale_market` ни текширарди — Улгуржи
+  /// ёпилса, ёқиқ Хитой бозори ҳам «Тез кунда» дерди.
   Future<void> _openWholesale(String market) async {
-    if (!ServiceConfigHolder.isOpenable('wholesale_market')) {
+    if (!ServiceConfigHolder.isOpenable(WholesaleProduct.moduleIdFor(market))) {
       _showTezKundaSnack();
       return;
     }
@@ -641,7 +643,8 @@ class _HomeViewState extends State<_HomeView> {
 
   /// Бўлимдаги маҳсулот — тўғридан-тўғри тафсилот саҳифаси.
   Future<void> _openWholesaleProduct(WholesaleProduct product) async {
-    if (!ServiceConfigHolder.isOpenable('wholesale_market')) {
+    if (!ServiceConfigHolder.isOpenable(
+        WholesaleProduct.moduleIdFor(product.market))) {
       _showTezKundaSnack();
       return;
     }

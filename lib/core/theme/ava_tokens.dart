@@ -16,11 +16,14 @@ import 'package:flutter/material.dart';
 
 /// Ёруғ режим хом қийматлари.
 abstract final class AvaLight {
-  static const bg = Color(0xFFF3F5F8);
+  /// Экран фони = Primary light (эга қарори, 2026-10-07). Аввал `F3F5F8`.
+  /// Оқ карточка шу фонда 1.13 контраст беради — ажралиш `line` чизиғи
+  /// билан сақланади.
+  static const bg = Color(0xFFFFF0D1);
   static const surface = Color(0xFFFFFFFF);
   static const surface2 = Color(0xFFEEF1F6);
   static const line = Color(0xFFDFE4EC);
-  static const ink = Color(0xFF1A1A1A);
+  static const ink = Color(0xFF171717);
   static const inkRow = Color(0xFF3A3A3A);
   static const insetEdgeTop = Color(0xFFD2D9E4);
   static const insetEdgeBottom = Color(0xFFFBFCFE);
@@ -31,9 +34,30 @@ abstract final class AvaLight {
   static const insetShadow = Color(0x8C586882);
   static const ink2 = Color(0xFF6B6B6B);
   static const ink3 = Color(0xFF9E9E9E);
-  static const brand = Color(0xFF1E4FD8);
-  static const brandInk = Color(0xFFFFFFFF);
-  static const brandSoft = Color(0xFFE8EEFF);
+  // ─── Бренд (эга қарори, 2026-10-07): AVA Primary #FFA500 ───
+  // Аввал кўк `1E4FD8` эди.
+
+  /// AVA Primary — тугма, AppBar, FAB, тўлдирилган акцент ФОНИ.
+  /// ⚠️ Матн ранги сифатида ИШЛАТИЛМАСИН: оқ фонда контраст 1.97.
+  static const brand = Color(0xFFFFA500);
+
+  /// Бренд устидаги матн/иконка — тўқ (эга қарори). `FFA500` устида
+  /// оқ матн 1.97, `171717` эса 9.08 беради.
+  static const brandInk = Color(0xFF171717);
+
+  /// Primary light — чип, белги, енгил акцент фони. Экран фони билан бир
+  /// хил, шунинг учун у фақат оқ `surface` устида ажралиб кўринади.
+  static const brandSoft = Color(0xFFFFF0D1);
+
+  /// Primary dark — босилган ҳолат ва hover фони.
+  /// Матнга ЯРАМАЙДИ: оқ фонда 2.63.
+  static const brandPressed = Color(0xFFE68A00);
+
+  /// Оч фондаги бренд МАТНИ/иконкаси/ингичка чизиғи — нарх, ҳавола,
+  /// танланган ёрлиқ (эга қарори, 2026-10-07, «Б» варианти).
+  /// Контраст: оқ `surface` да 5.02, `bg` (`FFF0D1`) да 4.46.
+  static const brandText = Color(0xFFB45309);
+
   static const ok = Color(0xFF177A4C);
   static const okSoft = Color(0xFFE4F5EC);
   static const warn = Color(0xFFB4590E);
@@ -66,6 +90,11 @@ abstract final class AvaDark {
   static const brand = Color(0xFF6E93FF);
   static const brandInk = Color(0xFF0B1020);
   static const brandSoft = Color(0xFF1E2A4C);
+
+  /// Қоронғи режим бренди ҳали ҚАРОР ҚИЛИНМАГАН (2026-10-07): эски кўк
+  /// қийматлар турибди. Янги токенлар мавжуд [brand] га тенг.
+  static const brandPressed = brand;
+  static const brandText = brand;
   static const ok = Color(0xFF6FD3A3);
   static const okSoft = Color(0xFF173327);
   static const warn = Color(0xFFF0A868);
@@ -100,6 +129,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
     required this.brand,
     required this.brandInk,
     required this.brandSoft,
+    required this.brandPressed,
+    required this.brandText,
     required this.ok,
     required this.okSoft,
     required this.warn,
@@ -160,6 +191,13 @@ class AvaColors extends ThemeExtension<AvaColors> {
   /// Бренднинг юмшоқ фони — чип, белги.
   final Color brandSoft;
 
+  /// Босилган/hover ҳолатдаги бренд фони. Матнга ишлатилмайди.
+  final Color brandPressed;
+
+  /// Оч фондаги бренд матни, иконкаси ва ингичка чизиғи.
+  /// [brand] ни матн ранги қилиб ишлатманг — шуни ишлатинг.
+  final Color brandText;
+
   /// Муваффақият.
   final Color ok;
   final Color okSoft;
@@ -190,6 +228,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
     brand: AvaLight.brand,
     brandInk: AvaLight.brandInk,
     brandSoft: AvaLight.brandSoft,
+    brandPressed: AvaLight.brandPressed,
+    brandText: AvaLight.brandText,
     ok: AvaLight.ok,
     okSoft: AvaLight.okSoft,
     warn: AvaLight.warn,
@@ -214,6 +254,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
     brand: AvaDark.brand,
     brandInk: AvaDark.brandInk,
     brandSoft: AvaDark.brandSoft,
+    brandPressed: AvaDark.brandPressed,
+    brandText: AvaDark.brandText,
     ok: AvaDark.ok,
     okSoft: AvaDark.okSoft,
     warn: AvaDark.warn,
@@ -239,6 +281,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
     Color? brand,
     Color? brandInk,
     Color? brandSoft,
+    Color? brandPressed,
+    Color? brandText,
     Color? ok,
     Color? okSoft,
     Color? warn,
@@ -262,6 +306,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
       brand: brand ?? this.brand,
       brandInk: brandInk ?? this.brandInk,
       brandSoft: brandSoft ?? this.brandSoft,
+      brandPressed: brandPressed ?? this.brandPressed,
+      brandText: brandText ?? this.brandText,
       ok: ok ?? this.ok,
       okSoft: okSoft ?? this.okSoft,
       warn: warn ?? this.warn,
@@ -291,6 +337,8 @@ class AvaColors extends ThemeExtension<AvaColors> {
       brand: c(brand, other.brand),
       brandInk: c(brandInk, other.brandInk),
       brandSoft: c(brandSoft, other.brandSoft),
+      brandPressed: c(brandPressed, other.brandPressed),
+      brandText: c(brandText, other.brandText),
       ok: c(ok, other.ok),
       okSoft: c(okSoft, other.okSoft),
       warn: c(warn, other.warn),
@@ -371,7 +419,7 @@ abstract final class AvaText {
     height: 1.3,
   );
 
-  /// Нарх — 14/700 (ранги `brand`) — ягона «оғир нуқта».
+  /// Нарх — 14/700 (ранги `brandText`) — ягона «оғир нуқта».
   static const price = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w700,

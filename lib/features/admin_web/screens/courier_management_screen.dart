@@ -1,8 +1,23 @@
+// КУРЬЕРЛАР — админ (D-CLEAN-1, ега қарори 2026-10-07).
+//
+// Курьерлик ҳуқуқи энди фақат `provider_capabilities.status.courier`дан
+// келади (`functions/index.js` → `resolveAuthorizedCourierUid`). Эски
+// `couriers` ҳужжати ҲУҚУҚ БЕРМАЙДИ — шунинг учун бу экран унга ёзмайди.
+//
+// Амаллар СЕРВЕРДА (europe-west1):
+//   • «Қўшиш» → `adminGrantCapability`: дарҳол `approved` (ега қарори),
+//     фақат иловага кирган рақам ва фақат `not_registered`дан;
+//   • «Тасдиқлаш» / «Тўхтатиш» → `adminSetCapabilityStatus`.
+// Ўтиш `canTransition(..., 'admin')` билан текширилади, ҳар амал
+// `capability_audit`га тушади (41-қоида). Экран фақат чақиради.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/formatters.dart';
+import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
 
 class CourierManagementScreen extends StatefulWidget {
   const CourierManagementScreen({super.key});
@@ -12,30 +27,53 @@ class CourierManagementScreen extends StatefulWidget {
 }
 
 class _CourierManagementScreenState extends State<CourierManagementScreen> {
+  static const _filters = <String, String>{
+    'approved': 'Тасдиқланган',
+    'trial': 'Синов (3 кун)',
+    'trial_expired': 'Синов тугаган (grace)',
+    'suspended': 'Тўхтатилган',
+  };
+
   final _db = FirebaseFirestore.instance;
   final _phoneCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
+  final _reasonCtrl = TextEditingController();
   bool _adding = false;
   String? _error;
+  String _filter = 'approved';
+  String? _busyAccountId;
+
+  HttpsCallable _callable(String name) =>
+      FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
+          .httpsCallable(name);
 
   @override
   void dispose() {
     _phoneCtrl.dispose();
-    _nameCtrl.dispose();
+    _reasonCtrl.dispose();
     super.dispose();
   }
 
-  String _normalize(String raw) {
-    final digits = phoneDigits(raw);
-    if (digits.length == 9) return '998$digits';
-    if (digits.length == 12 && digits.startsWith('998')) return digits;
-    return digits;
+  /// 25-қоида: фойдаланувчига тушунарли матн, ички код — фақат сабаб.
+  String _grantErrorText(FirebaseFunctionsException e) {
+    final details = e.details;
+    final reason = details is Map ? details['reason']?.toString() : null;
+    if (reason == 'user_not_registered') {
+      return 'Бу рақам AVA иловасига ҳали кирмаган. Аввал иловага кирсин, '
+          'кейин қайта қўшинг.';
+    }
+    if (reason == 'already_registered') {
+      final st = details is Map ? details['status']?.toString() ?? '' : '';
+      return 'Бу одам аллақачон рўйхатда (ҳолат: ${_filters[st] ?? st}). '
+          'Пастдаги рўйхатдан амал қилинг.';
+    }
+    if (e.code == 'invalid-argument') return 'Телефон рақамни тўлиқ киритинг';
+    if (e.code == 'permission-denied') return 'Бу амал учун рухсат йўқ';
+    return 'Курьерни қўшиб бўлмади. Қайта уриниб кўринг.';
   }
 
   Future<void> _addCourier() async {
-    final id = _normalize(_phoneCtrl.text);
-    final name = _nameCtrl.text.trim();
-    if (id.length < 9) {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.replaceAll(RegExp(r'\D'), '').length < 9) {
       setState(() => _error = 'Телефон рақамни тўлиқ киритинг');
       return;
     }
@@ -44,83 +82,118 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
       _error = null;
     });
     try {
-      await _db.collection('couriers').doc(id).set({
-        'phone': '+$id',
-        'name': name.isEmpty ? 'Курьер' : name,
-        'isOnline': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      final res = await _callable('adminGrantCapability').call<Object?>({
+        'phone': phone,
+        'service': 'courier',
+        'reason': _reasonCtrl.text.trim(),
+      });
+      final data = res.data is Map ? res.data as Map : const {};
       _phoneCtrl.clear();
-      _nameCtrl.clear();
+      _reasonCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Курьер қўшилди: +$id'),
+            content: Text(data['changed'] == false
+                ? 'Бу курьер аллақачон тасдиқланган'
+                : '✅ Курьер қўшилди ва тасдиқланди'),
             backgroundColor: AvaLight.ok,
           ),
         );
+        setState(() => _filter = 'approved');
       }
-    } catch (e) {
-      setState(() => _error = 'Хатолик: $e');
+    } on FirebaseFunctionsException catch (e) {
+      setState(() => _error = _grantErrorText(e));
+    } catch (_) {
+      setState(() => _error = 'Курьерни қўшиб бўлмади. Қайта уриниб кўринг.');
     } finally {
       if (mounted) setState(() => _adding = false);
     }
   }
 
-  Future<void> _removeCourier(String id, String name) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+  /// Тўхтатилган курьер қўлидаги рейсни ҳозир тугата олмайди (сервер
+  /// `isWorking`ни текширади) — шунинг учун фаол рейс бўлса тўхтатилмайди.
+  Future<bool> _hasActiveRoute(String courierId) async {
+    final snap = await _db
+        .collection('delivery_routes')
+        .where('courierId', isEqualTo: courierId)
+        .where('status', whereIn: ['ready', 'active'])
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
+
+  Future<void> _setStatus(
+      String accountId, String primaryUid, String status) async {
+    if (status == 'suspended' && await _hasActiveRoute(primaryUid)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Курьер фаол рейсда — аввал рейсни якунланг'),
+          backgroundColor: Colors.red,
         ),
-        title: const Text('Курьерни ўчириш'),
-        content: Text('$name (+$id) ни ўчирасизми?'),
+      );
+      return;
+    }
+    final reason = await _askReason(status);
+    if (reason == null || !mounted) return;
+    setState(() => _busyAccountId = accountId);
+    try {
+      await _callable('adminSetCapabilityStatus').call<Object?>({
+        'accountId': accountId,
+        'service': 'courier',
+        'status': status,
+        'reason': reason,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ҳолат ўзгартирилди: ${_label(status)}')),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          content: Text(e.code == 'failed-precondition'
+              ? 'Бу ҳолатдан «${_label(status)}»га ўтиб бўлмайди'
+              : 'Ҳолатни ўзгартириб бўлмади. Қайта уриниб кўринг.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busyAccountId = null);
+    }
+  }
+
+  String _label(String status) => switch (status) {
+        'approved' => 'Тасдиқланган',
+        'suspended' => 'Тўхтатилган',
+        _ => _filters[status] ?? status,
+      };
+
+  Future<String?> _askReason(String status) async {
+    final ctrl = TextEditingController();
+    final out = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Сабаб — ${_label(status)}'),
+        content: TextField(
+          controller: ctrl,
+          decoration:
+              const InputDecoration(hintText: 'Audit учун қисқа сабаб'),
+          maxLength: 200,
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Бекор'),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Бекор')),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Ўчириш'),
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Тасдиқлаш'),
           ),
         ],
       ),
     );
-    if (confirm != true) return;
-
-    // Aktiv reys borligini tekshirish
-    final activeRoute = await _db
-        .collection('delivery_routes')
-        .where('courierId', isEqualTo: id)
-        .where('status', whereIn: ['ready', 'active'])
-        .limit(1)
-        .get();
-
-    if (activeRoute.docs.isNotEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                '❌ Kuryer aktiv reysda — avval reysni yakunlang'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    await _db.collection('couriers').doc(id).delete();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Курьер ўчирилди')),
-      );
-    }
+    ctrl.dispose();
+    return out;
   }
 
   @override
@@ -130,7 +203,6 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Add courier form
           Card(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
@@ -146,6 +218,12 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Одам AVA иловасига камида бир марта кирган бўлиши керак. '
+                    'Қўшилган курьер дарҳол тасдиқланади.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -172,11 +250,12 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
-                          controller: _nameCtrl,
+                          controller: _reasonCtrl,
+                          maxLength: 200,
                           decoration: InputDecoration(
-                            labelText: 'Исм (ихтиёрий)',
-                            hintText: 'Курьер исми',
-                            prefixIcon: const Icon(Icons.person),
+                            labelText: 'Изоҳ (ихтиёрий, audit учун)',
+                            counterText: '',
+                            prefixIcon: const Icon(Icons.notes),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -218,29 +297,42 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Couriers list
-          const Text(
-            'Рўйхатдаги курьерлар',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Курьерлар',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              DropdownButton<String>(
+                value: _filter,
+                items: _filters.entries
+                    .map((e) =>
+                        DropdownMenuItem(value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) => setState(() => _filter = v ?? _filter),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _db
-                  .collection('couriers')
-                  .orderBy('createdAt', descending: true)
+                  .collection('provider_capabilities')
+                  .where('status.courier', isEqualTo: _filter)
+                  .limit(200)
                   .snapshots(),
               builder: (context, snap) {
                 if (snap.hasError) {
-                  return Center(child: Text('Хатолик: ${snap.error}'));
+                  return const Center(
+                    child: Text('Рўйхатни юклаб бўлмади. Қайта уриниб кўринг.'),
+                  );
                 }
                 if (!snap.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                  return const Center(child: CircularProgressIndicator());
                 }
                 final docs = snap.data!.docs;
                 if (docs.isEmpty) {
@@ -255,7 +347,7 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Курьерлар йўқ',
+                          '«${_filters[_filter]}» рўйхати бўш',
                           style: TextStyle(
                             color: Colors.grey.shade500,
                             fontSize: 16,
@@ -265,57 +357,126 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                     ),
                   );
                 }
-                return ListView.builder(
+                return ListView.separated(
                   itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final d = docs[i].data();
-                    final id = docs[i].id;
-                    final name = d['name'] as String? ?? 'Курьер';
-                    final phone = d['phone'] as String? ?? '+$id';
-                    final isOnline = d['isOnline'] as bool? ?? false;
-                    final lat = (d['lat'] as num?)?.toDouble();
-                    final lng = (d['lng'] as num?)?.toDouble();
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isOnline
-                              ? AvaLight.okSoft
-                              : Colors.grey.shade100,
-                          child: Icon(
-                            Icons.delivery_dining,
-                            color: isOnline ? AvaLight.ok : Colors.grey,
-                          ),
-                        ),
-                        title: Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '$phone${isOnline ? ' · 🟢 Онлайн' : ' · ⚫ Офлайн'}'
-                          '${lat != null ? '\n📍 ${lat.toStringAsFixed(4)}, ${lng?.toStringAsFixed(4)}' : ''}',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                          ),
-                          onPressed: () => _removeCourier(id, name),
-                          tooltip: 'Ўчириш',
-                        ),
-                      ),
-                    );
-                  },
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _CourierCapabilityCard(
+                    accountId: docs[i].id,
+                    data: docs[i].data(),
+                    busy: _busyAccountId == docs[i].id,
+                    onSetStatus: _setStatus,
+                  ),
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CourierCapabilityCard extends StatelessWidget {
+  const _CourierCapabilityCard({
+    required this.accountId,
+    required this.data,
+    required this.busy,
+    required this.onSetStatus,
+  });
+
+  final String accountId;
+  final Map<String, dynamic> data;
+  final bool busy;
+  final Future<void> Function(String accountId, String primaryUid, String status)
+      onSetStatus;
+
+  String _fmt(dynamic ts) {
+    if (ts is! Timestamp) return '—';
+    final d = ts.toDate();
+    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+  }
+
+  /// Исм — `users/{телефон}`; эски ҳужжатлар 9 хонали калитда бўлиши мумкин.
+  static Future<String> _loadName(String phone) async {
+    if (phone.isEmpty) return '';
+    final ids = [phone, if (phone.length == 12) phone.substring(3)];
+    for (final id in ids) {
+      final s =
+          await FirebaseFirestore.instance.collection('users').doc(id).get();
+      if (s.exists) return (s.data()?['name'] ?? '').toString().trim();
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final identity = (data['identity'] as Map?) ?? const {};
+    final phone = (identity['primaryUid'] ?? '').toString();
+    final status = ((data['status'] as Map?)?['courier'] ?? '').toString();
+    final window = ((data['window'] as Map?)?['courier'] as Map?) ?? const {};
+
+    // Админ учун рухсат этилган ўтишлар (сервер ҳам текширади).
+    final actions = <(String, String, Color)>[
+      if (status != 'approved')
+        ('approved', 'Тасдиқлаш', Colors.green.shade700),
+      if (status != 'suspended')
+        ('suspended', 'Тўхтатиш', Colors.red.shade700),
+    ];
+
+    final dates = <String>[
+      if (window['startedAt'] != null) 'Бошланган: ${_fmt(window['startedAt'])}',
+      if (status == 'trial' && window['endsAt'] != null)
+        'Синов тугайди: ${_fmt(window['endsAt'])}',
+      if (status == 'trial_expired' && window['graceEndsAt'] != null)
+        'Тўхтатилади: ${_fmt(window['graceEndsAt'])}',
+    ];
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: FutureBuilder<String>(
+                    future: _loadName(phone),
+                    builder: (_, s) {
+                      final name = s.data ?? '';
+                      return Text(
+                        '${name.isEmpty ? 'Курьер' : name}  ·  +$phone',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      );
+                    },
+                  ),
+                ),
+                Chip(label: Text(status)),
+              ],
+            ),
+            if (dates.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                dates.join('   ·   '),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: actions
+                  .map((a) => OutlinedButton(
+                        onPressed: busy || phone.isEmpty
+                            ? null
+                            : () => onSetStatus(accountId, phone, a.$1),
+                        style: OutlinedButton.styleFrom(foregroundColor: a.$3),
+                        child: Text(a.$2),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -24,7 +24,11 @@ function makeDb(seed = {}) {
   const db = new FakeFirestore({ [`users/${ADMIN}`]: { role: 'admin' }, ...seed });
   db.runTransaction = async (fn) => {
     const tx = {
-      get: (ref) => ref.get(),
+      // Haqiqiy SDK kabi: yozuvdan keyin o'qish — xato.
+      get: (ref) => {
+        if (tx._ops.length) throw new Error('Firestore transactions require all reads to be executed before all writes.');
+        return ref.get();
+      },
       set: (ref, data, opts) => { tx._ops.push(() => ref.set(data, opts)); },
       update: (ref, data) => { tx._ops.push(() => ref.update(data)); },
       delete: (ref) => { tx._ops.push(() => ref.delete()); },
@@ -173,6 +177,86 @@ ok('oddiy foydalanuvchi admin amalini chaqira olmaydi', async () => {
     (e) => e.code === 'permission-denied');
 });
 
+// ─── admin qo'shadi (adminGrantCapability, ega qarori 2026-10-07) ─────
+const grant = (db) => admin.makeAdminGrantCapability({ db, now: () => NOW });
+const auditOf = (db) => Object.values(db.dump('capability_audit'));
+
+ok('GRANT: kuryer darhol `approved`, audit 2 qadam (trial → approved), active YOZILMAYDI', async () => {
+  const db = makeDb({ [`users/${A}`]: { phone: A } });
+  const r = await grant(db)({ phone: `+${A}`, service: 'courier', reason: 'shaxsan tanishaman' }, ctx(ADMIN));
+  assert.strictEqual(r.status, 'approved');
+  assert.strictEqual(r.changed, true);
+  assert.strictEqual(db.dump('users')[A].accountId, r.accountId, 'users.accountId yozilgan');
+  const cap = capOf(db, r.accountId);
+  assert.strictEqual(cap.status.courier, 'approved');
+  assert.strictEqual(caps.isWorking('courier', caps.statusOf(cap, 'courier')), true, 'resolveAuthorizedCourierUid o\'tkazadi');
+  assert.deepStrictEqual(cap.identity, { accountId: r.accountId, primaryUid: A });
+  assert.strictEqual(cap.review.courier.reviewedBy, ADMIN);
+  assert.strictEqual(cap.courier, undefined, '`courier.active` — odamning o\'z xohishi');
+  const audit = auditOf(db);
+  assert.deepStrictEqual(audit.map((a) => `${a.from}>${a.to}`), ['not_registered>trial', 'trial>approved']);
+  assert.ok(audit.every((a) => a.by === ADMIN && a.kind === 'admin_grant' && a.reason === 'shaxsan tanishaman'));
+});
+ok('GRANT IDEMPOTENT: qayta chaqiruv o\'zgartirmaydi, audit ko\'paymaydi', async () => {
+  const db = makeDb({ [`users/${A}`]: { phone: A } });
+  const r1 = await grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN));
+  const r2 = await grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN));
+  assert.strictEqual(r2.changed, false);
+  assert.strictEqual(r2.accountId, r1.accountId);
+  assert.strictEqual(auditOf(db).length, 2);
+});
+ok('GRANT: ilovaga kirmagan raqam → not-found (user_not_registered), HECH NARSA yozilmaydi', async () => {
+  const db = makeDb();
+  await assert.rejects(() => grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN)),
+    (e) => e.code === 'not-found' && e.details.reason === 'user_not_registered');
+  assert.strictEqual(db.dump('users')[A], undefined, 'users hujjati o\'ylab yaratilmaydi');
+  assert.deepStrictEqual(db.dump('provider_capabilities'), {});
+  assert.deepStrictEqual(db.dump('capability_audit'), {});
+});
+ok('GRANT: o\'zi ariza bergan (trial) → already_registered, holat o\'zgarmaydi', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r0 = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
+  await assert.rejects(() => grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN)),
+    (e) => e.code === 'failed-precondition' && e.details.reason === 'already_registered' && e.details.status === 'trial');
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'trial');
+});
+ok('GRANT: `suspended` kuryerni «qo\'shish» bilan jimgina TIKLAMAYDI', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r0 = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
+  await admin.makeAdminSetCapabilityStatus({ db, now: () => NOW })(
+    { accountId: r0.accountId, service: 'courier', status: 'suspended', reason: 'shikoyat' }, ctx(ADMIN));
+  await assert.rejects(() => grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN)),
+    (e) => e.code === 'failed-precondition' && e.details.status === 'suspended');
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'suspended');
+});
+ok('GRANT: taksi capability\'si bor odamga kuryer qo\'shiladi, taksi TEGILMAYDI', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const id = await withTaxi(db);
+  const r = await grant(db)({ phone: A, service: 'courier' }, ctx(ADMIN));
+  assert.strictEqual(r.accountId, id, 'bitta akkaunt');
+  const cap = capOf(db, id);
+  assert.strictEqual(cap.status.courier, 'approved');
+  assert.strictEqual(cap.status.taxi, 'starter');
+  assert.ok(cap.window.taxi.verificationDueAt, 'taksi oynasi saqlangan');
+});
+ok('GRANT: 9 xonali eski users kaliti topiladi, primaryUid kanon', async () => {
+  const db = makeDb({ 'users/901110001': { phone: '901110001' } });
+  const r = await grant(db)({ phone: '90 111 00 01', service: 'courier' }, ctx(ADMIN));
+  assert.strictEqual(db.dump('users')['901110001'].accountId, r.accountId);
+  assert.strictEqual(db.dump('users')[A], undefined, '12 xonali dublikat yaratilmaydi');
+  assert.strictEqual(capOf(db, r.accountId).identity.primaryUid, A);
+});
+ok('GRANT: oddiy foydalanuvchi chaqira olmaydi; taksi va noto\'g\'ri raqam rad', async () => {
+  const db = makeDb({ [`users/${A}`]: { role: 'user' }, 'users/998901110003': {} });
+  await assert.rejects(() => grant(db)({ phone: '998901110003', service: 'courier' }, ctx(A)),
+    (e) => e.code === 'permission-denied');
+  await assert.rejects(() => grant(db)({ phone: '998901110003', service: 'taxi' }, ctx(ADMIN)),
+    (e) => e.code === 'invalid-argument', 'taksi uchun ega qarori yo\'q');
+  await assert.rejects(() => grant(db)({ phone: '12345', service: 'courier' }, ctx(ADMIN)),
+    (e) => e.code === 'invalid-argument');
+  assert.deepStrictEqual(db.dump('provider_capabilities'), {});
+});
+
 // ─── T-6 migratsiya ───────────────────────────────────────────────────
 const D1 = '998912778777';
 const D2 = '903334455';
@@ -192,6 +276,9 @@ ok('migratsiya dryRun STANDART: hech narsa yozilmaydi, ro\'yxat qaytadi', async 
   assert.strictEqual(r.total, 2, 'faqat approved');
   assert.strictEqual(r.migrated.length, 2);
   assert.deepStrictEqual(db.dump('provider_capabilities'), {});
+  for (const u of Object.values(db.dump('users'))) {
+    assert.strictEqual(u.accountId, undefined, 'dryRun users.accountId ni ham yozmaydi');
+  }
 });
 ok('migratsiya: verified + 4 oylik billing grace, starter EMAS (T-6)', async () => {
   const db = makeDb(driversSeed());

@@ -456,6 +456,7 @@ F админ couriers→presence · G test data cleanup · H деплой.
 | R-7 | Такси operational қоидалари (`approvedDriverForTaxi` → `drivers.approved`) capability `starter/verified`га кўчирилиши — `queue`, `schedules`, `driver_requests` оқими. Ҳозир янги ҳайдовчи `starter` олса ҳам, `schedules`/`queue` қоидаси ҳамон `drivers.approved` талаб қилади | Алоҳида катта иш: 6+ қоида блоки + `driver_requests` CF |
 | R-8 | Админ `couriers` экранлари → `provider_presence`; `courier_controller`даги `couriers` dual-write олиб ташлаш | Экранлар кўчгач |
 | R-9 | Эски test driver/user/provider маълумотларини тозалаш | Эга «мумкин» деди, «қил» демади — буйруқ билан, dry-run рўйхатидан кейин |
+| **BUG-ACC** | ✅ коди тузатилди (2026-10-07), ⏳ **деплой кутилмоқда**: `ensureAccountId` транзакцияда ёзиб, кейин чақирувчи ўқирди — ҳақиқий SDK `reads before writes` хатоси. `accountId`и йўқ ҳар қандай одамда `requestCapability` (такси starter ҳам) ва `acceptServiceAgreement` йиқиларди. Fix: `readAccountId` + `commitAccountId`; эмулятор тести 0/7 → 9/9. Тафсилот: [relay_delivery_architecture_uz.md](relay_delivery_architecture_uz.md) 9-bis.3 | `functions:demand` деплойи |
 
 ### 3.2 Деплой ҳолати — 2026-10-06 кечки
 

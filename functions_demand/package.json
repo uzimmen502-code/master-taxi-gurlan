@@ -30,7 +30,8 @@
     "test:maintenance": "node test/maintenance.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
-    "test:analytics": "node test/analytics.test.js"
+    "test:analytics": "node test/analytics.test.js",
+    "test:caps-tx": "firebase emulators:exec --only firestore --project demo-caps-tx \"node test/capabilities_tx_emulator.test.js\""
   },
   "dependencies": {
     "ajv": "^8.17.1",

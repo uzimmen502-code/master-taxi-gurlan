@@ -156,6 +156,14 @@ exports.adminSetCapabilityStatus = fn.https.onCall(wrapCallable(
 ));
 
 /**
+ * ADMIN — telefon bo'yicha xizmat qo'shish (kuryer: darhol `approved`,
+ * ega qarori 2026-10-07). Faqat `not_registered` dan; har qadam audit.
+ */
+exports.adminGrantCapability = fn.https.onCall(wrapCallable(
+  adminCapsApi.makeAdminGrantCapability({ db }),
+));
+
+/**
  * ADMIN — T-6 migratsiyasi: `drivers.approved` → taxi `verified` +
  * 4 oylik billing grace. `dryRun` standart TRUE; `{dryRun:false}` yozadi.
  */

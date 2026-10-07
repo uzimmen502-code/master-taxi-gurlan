@@ -288,6 +288,21 @@ const LIFECYCLES = {
   freight: simpleLifecycle,
 };
 
+/**
+ * ADMIN QO'SHGANDA qaysi holatgacha olib boriladi (`adminGrantCapability`).
+ *
+ * Kuryer — darhol `approved` (ega qarori 2026-10-07): admin odamni o'zi
+ * kafolatlaydi; hujjat oqimi (`submitCapabilityDocument`) hali yo'q,
+ * `trial` bersa 8 kunda sweeper to'xtatib qo'yardi. Yo'l state machine
+ * BO'YLAB yuradi — har qadam `canTransition(..., 'admin')` bilan
+ * tekshiriladi va auditga alohida tushadi; yangi o'tish qo'shilmaydi.
+ *
+ * Ro'yxatda yo'q xizmatni admin qo'sha olmaydi — ega qarori yo'q.
+ */
+const ADMIN_GRANT_PATH = {
+  courier: [COURIER.trial, COURIER.approved],
+};
+
 function isService(v) {
   return Object.prototype.hasOwnProperty.call(LIFECYCLES, String(v || ''));
 }
@@ -463,6 +478,7 @@ module.exports = {
   TAXI,
   SIMPLE,
   LIFECYCLES,
+  ADMIN_GRANT_PATH,
   TRIAL_DAYS,
   GRACE_DAYS,
   STARTER_MONTHS,

@@ -36,7 +36,12 @@ function makeDb(seed = {}) {
   const db = new FakeFirestore(seed);
   db.runTransaction = async (fn) => {
     const tx = {
-      get: (ref) => ref.get(),
+      // Haqiqiy SDK kabi: yozuvdan keyin o'qish — xato (accountId bug'i
+      // fake'da ko'rinmagan edi, emulatorda topildi).
+      get: (ref) => {
+        if (tx._ops.length) throw new Error('Firestore transactions require all reads to be executed before all writes.');
+        return ref.get();
+      },
       set: (ref, data, opts) => { tx._ops.push(() => ref.set(data, opts)); },
       update: (ref, data) => { tx._ops.push(() => ref.update(data)); },
       delete: (ref) => { tx._ops.push(() => ref.delete()); },

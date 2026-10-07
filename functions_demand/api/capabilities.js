@@ -13,9 +13,9 @@
  * o'zgartirolmaydi. `provider_capabilities/{accountId}`. Telefon
  * almashsa ham starter davri shu hujjatda qoladi (D-TAXI-2).
  *
- * `ensureAccountId` TRANZAKSIYADA: ikkita qurilma bir vaqtda birinchi
- * arizani bersa ham bitta accountId yoziladi (22-qoida). 9 va 12 xonali
- * `users` kalitlari ikkalasi ham qaraladi (eski hujjatlar).
+ * `readAccountId` + `commitAccountId` TRANZAKSIYADA: ikkita qurilma bir
+ * vaqtda birinchi arizani bersa ham bitta accountId yoziladi (22-qoida).
+ * 9 va 12 xonali `users` kalitlari ikkalasi ham qaraladi (eski hujjatlar).
  */
 
 const caps = require('../core/capabilities');
@@ -40,11 +40,21 @@ function newAccountId(db) {
 }
 
 /**
- * Foydalanuvchining barqaror accountId'si — bo'lmasa yaratadi.
+ * Foydalanuvchining barqaror accountId'si — bo'lmasa YANGISI tayyorlanadi.
  *
- * @returns {Promise<{accountId: string, userRef: object, created: boolean}>}
+ * FAQAT O'QIYDI. Firestore tranzaksiyasida barcha o'qishlar yozuvlardan
+ * oldin bo'lishi shart — SDK aks holda `transactions require all reads to
+ * be executed before all writes` deb tashlaydi. Chaqiruvchilar bundan
+ * keyin ham o'qiydi (`provider_capabilities`, `service_agreements`),
+ * shuning uchun yozuv alohida: o'z o'qishlarini tugatgach
+ * `commitAccountId(tx, acc)`. Avval bu funksiya o'zi yozardi va yangi
+ * foydalanuvchining birinchi arizasi hech qachon o'tmasdi (emulator testi:
+ * `capabilities_tx_emulator.test.js`).
+ *
+ * @returns {Promise<{accountId: string, userRef: object, created: boolean,
+ *   userExists: boolean, canon: string}>}
  */
-async function ensureAccountId(db, tx, phoneId) {
+async function readAccountId(db, tx, phoneId) {
   const canon = requireCanonicalId(phoneId, 'phoneId');
   const ids = candidateIdsFor(canon); // [12 xonali, 9 xonali]
 
@@ -62,18 +72,26 @@ async function ensureAccountId(db, tx, phoneId) {
   }
 
   if (userData && userData.accountId) {
-    return { accountId: String(userData.accountId), userRef, created: false };
+    return { accountId: String(userData.accountId), userRef, created: false, userExists: true, canon };
   }
+  return {
+    accountId: newAccountId(db),
+    // Phone Auth'dan o'tgan, lekin `users` hujjati hali yo'q — yaratiladi.
+    userRef: userRef || db.collection(USERS).doc(canon),
+    created: true,
+    userExists: !!userRef,
+    canon,
+  };
+}
 
-  const accountId = newAccountId(db);
-  if (!userRef) {
-    // Phone Auth'dan o'tgan, lekin `users` hujjati hali yo'q — yaratamiz.
-    userRef = db.collection(USERS).doc(canon);
-    tx.set(userRef, { phone: canon, phoneDigits: canon, accountId }, { merge: true });
+/** `readAccountId` tayyorlagan YANGI accountId'ni yozadi (mavjud bo'lsa — hech narsa). */
+function commitAccountId(tx, acc) {
+  if (!acc.created) return;
+  if (acc.userExists) {
+    tx.update(acc.userRef, { accountId: acc.accountId });
   } else {
-    tx.update(userRef, { accountId });
+    tx.set(acc.userRef, { phone: acc.canon, phoneDigits: acc.canon, accountId: acc.accountId }, { merge: true });
   }
-  return { accountId, userRef, created: true };
 }
 
 /**
@@ -102,7 +120,8 @@ function makeRequestCapability(deps) {
     const now = nowFn ? nowFn() : new Date();
 
     return db.runTransaction(async (tx) => {
-      const { accountId } = await ensureAccountId(db, tx, callerId);
+      const acc = await readAccountId(db, tx, callerId);
+      const { accountId } = acc;
       const ref = db.collection(COLLECTION).doc(accountId);
       const snap = await tx.get(ref);
       const doc = snap.exists ? (snap.data() || {}) : {};
@@ -159,6 +178,8 @@ function makeRequestCapability(deps) {
         updatedAt: now,
       };
       if (window) patch.window = { [service]: window };
+      // Barcha o'qishlar tugadi — endi yozuvlar.
+      commitAccountId(tx, acc);
       tx.set(ref, patch, { merge: true });
 
       const out = { accountId, status: lc.initial, changed: true };
@@ -348,7 +369,8 @@ module.exports = {
   TAXI_DUE_NEWS,
   taxiDueNewsId,
   newAccountId,
-  ensureAccountId,
+  readAccountId,
+  commitAccountId,
   makeRequestCapability,
   makeCapabilitySweeper,
   fetchByPhone,

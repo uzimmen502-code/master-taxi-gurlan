@@ -43,6 +43,7 @@ codebase'ида талаб → таклиф ядроси аллақачон иш
 | **D-14** | **Capability статусини фойдаланувчи ЎЗИГА БЕРА ОЛМАЙДИ.** У фақат ариза беради, ҳужжат юклайди ва ўз presence'ини ўзгартиради. `trial` `approved` `rejected` `suspended` — фақат ишончли сервер ёки админ | AVA_DECIDED | 2026-10-06 |
 | **D-15** | **Курьер lifecycle:** `not_registered → trial → document_submitted → under_review → approved`, ёндош ҳолатлар `trial_expired` `document_rejected` `suspended`. Янги курьерга **3 кун** синов; шу муддатда ягона дарча орқали ўзини ўзи банд қилган шахс сифатида рўйхатдан ўтиб, ҳужжат юклаши шарт | AVA_DECIDED | 2026-10-06 |
 | **D-15.1** | **3 кун HARD CUTOFF ЭМАС.** Талаб бажарилмаса — **бир марта** 5 кунлик `grace period`. Extension фақат БИР МАРТА берилади. 5 кун ҳам тугаса → courier capability `suspended`, янги буюртма олиш ёпилади. **Аккаунтнинг ўзи очиқ қолади**; ҳужжат юклаб тасдиқдан ўтгач capability қайта `approved` бўлиши мумкин | AVA_DECIDED | 2026-10-06 |
+| **D-15.2** | **Админ «Курьер қўшиш» → дарҳол `approved`.** Админ одамни ўзи кафолатлайди. Йўл state machine бўйлаб юради (`not_registered → trial → approved`, ҳар қадам `canTransition(..., 'admin')` ва алоҳида audit); янги ўтиш қўшилмайди. Фақат `not_registered`дан ва фақат иловага кирган рақамга. Сабаб: ҳужжат оқими (2b) йўқ, `trial` берилса 8 кунда sweeper тўхтатарди. Таъсир: `ADMIN_GRANT_PATH` (`core/capabilities.js`), `adminGrantCapability` | AVA_DECIDED | 2026-10-07 |
 | **D-16** | **Масъулият бўлиниши:** `users` — бу ким · `provider_capabilities` — нима қилишга рухсати бор · `provider_presence` — ҳозир онлайнми ва қаерда · `provider_stats` — қандай ишлаяпти · `courier_documents` — ҳужжатлари борми. `couriers` — ўтиш даври манбаси, якуний authorization source ЭМАС | AVA_DECIDED | 2026-10-06 |
 | **D-TAXI / D-SERVICE** | Такси billing (2% = `farePerSeat × 4 × 2%`, 4 ой starter, verification) ва бошқа хизматлар учун умумий қоидалар — **алоҳида реестр:** [taxi_billing_uz.md](taxi_billing_uz.md). Capability lifecycle хизмат бўйича фарқ қилади (T-2); `providerId` барқарорлиги (T-1) ҳал қилиниши керак | AVA_DECIDED | 2026-10-06 |
 | D-2 | Тариф архитектураси BTS модели асосида; `ZONE_0`…`ZONE_5`, 6 зона; зона origin↔destination matrix орқали; зона «маъноси» кодга ёзилмайди; эски Z1–Z5 бекор | AVA_DECIDED | 2026-10-05 |
@@ -848,6 +849,53 @@ PIN'сиз ўтади.
 Қарорсиз ҳолда `couriers` ТЕГИЛМАЙДИ: ҳозир у ёнма-ён ишлайди ва ҳеч
 нарса йўқолмайди.
 
+### 9-bis.3 Ҳолат — 2026-10-07
+
+9-bis.1/9-bis.2 даги ҳуқуқ масаласи D-CLEAN-1 билан ҳал бўлди
+(`resolveAuthorizedCourierUid` → фақат capability, деплой қилинган).
+Шундан кейин иккита янги тешик қолган эди:
+
+**1. BUG — янги фойдаланувчи ҲЕЧ ҚАНДАЙ capability ола олмасди.**
+
+- *Symptom:* `requestCapability` / `acceptServiceAgreement` / T-6 миграция
+  `users.accountId`и йўқ одамда доим `Firestore transactions require all
+  reads to be executed before all writes` билан йиқилади (клиентга —
+  `internal`).
+- *Root cause:* `ensureAccountId` транзакцияда `accountId`ни ЁЗАР, кейин
+  чақирувчи `provider_capabilities`ни ЎҚИРДИ. Ҳақиқий SDK бунга йўл
+  қўймайди. Unit тестлардаги fake транзакция ёзувни охирига сурарди —
+  шунинг учун 565 тест буни кўрмаган. `accountId`ни бошқа ҳеч ким
+  ёзмайди → продакшнда ҳеч кимда `accountId` бўлмаслиги кутилади
+  (INFERRED; продакшн ўлчови қилинмади).
+- *Таъсир:* курьер ҳам, такси ҳам — янги провайдер ҳуқуқ ола олмайди
+  (taxi `ensureTaxiCapability` ҳам шу callable'ни чақиради).
+- *Fix:* `readAccountId` (фақат ўқийди) + `commitAccountId` (чақирувчи
+  ўз ўқишларини тугатгач ёзади). Миграциянинг `dryRun`и энди
+  `users.accountId`ни ҳам ёзмайди.
+- *Regression:* `functions_demand/test/capabilities_tx_emulator.test.js`
+  (ҳақиқий Admin SDK, эмулятор): тузатишдан олдин **0/7**, кейин
+  **9/9** (+ admin grant). Fake транзакция `capabilities_api` ва
+  `agreements_admin` тестларида энди ҳақиқий SDK каби қатъий.
+
+**2. Админ «Курьер қўшиш» `couriers`га ёзарди — бу ҲУҚУҚ БЕРМАЙДИ.**
+Энди `adminGrantCapability` (D-15.2) + экран `provider_capabilities`
+бўйича (фильтр, тасдиқлаш, тўхтатиш — сабаб билан, audit).
+
+**Деплой (ҳали ҚИЛИНМАГАН):** `functions:demand` → `requestCapability`
+`acceptServiceAgreement` `adminSetCapabilityStatus` `adminGrantCapability`
+`adminMigrateTaxiDrivers`; кейин hosting (админ панели). Қоида ва
+индекс ўзгармади.
+
+**Қолганлари (кейинги босқичлар):**
+
+| # | Нима |
+|---|---|
+| a | ⚠️ `suspended` курьер қўлидаги рейсни тугата олмайди: `resolveAuthorizedCourierUid` `isWorking`ни текширади, `canFinishActive` ишлатилмайди (15-қоида, эга тасдиқлаган қоида — `core/capabilities.js` 333). Админ экрани ҳозирча фаол рейсда тўхтатишни блоклайди; sweeper эса блокламайди |
+| b | Ҳужжат оқими (2b) йўқ → ўзи ариза берган курьер 8 кунда `suspended`; админ рўйхатдан тасдиқлаши керак |
+| c | `courier_controller` (GPS) ва `profile_controller` (offline) ҳали `couriers`га ёзади — янги курьерда қоида рад этади, хато ютилади |
+| d | `sell_submissions_admin_screen` курьер танлаш рўйхати ва `cleanupStaleDrivers` ҳали `couriers`дан ўқийди |
+| e | Тест маълумотини тозалаш (3.0-bis G) — эга ишга туширади; сўнг `couriers` қоидаси ва коллекция чиқарилади |
+
 ---
 
 ## 9-ter. Capability модели (D-12…D-16) — мавжуд код билан солиштириш
@@ -953,9 +1001,9 @@ function driverApprovalPatchOnly() {
 | 1 | ✅ **БАЖАРИЛДИ** — шакл ўзгарди (битта uid, хизматлар ичида), сервер калитлари `status` `trial` `review` `suspend`, қоида битта қатор билан ҳимоялайди. Модел: `functions_demand/core/capabilities.js` | — |
 | 2a | ✅ **БАЖАРИЛДИ** — `requestCapability` callable'и: `not_registered → trial` + 3 кунлик ойна, идемпотент | — |
 | 2b | ❌ `courier_documents` + `submitCapabilityDocument` | кейинги |
-| 3 | ❌ Админ томони: `approveCapability` / `rejectCapability` / `suspendCapability` + audit log (41-қоида) | кейинги |
+| 3 | 🟡 **ҚИСМАН (2026-10-07)** — ҳолат ўзгартириш `adminSetCapabilityStatus` (audit билан) орқали; админ қўшиши `adminGrantCapability` (D-15.2); админ экрани «Курьерлар» `provider_capabilities`га кўчди. `document_rejected` учун UI йўқ (ҳужжат оқими 2b кутилмоқда) | — |
 | 4 | ✅ **БАЖАРИЛДИ** — `capabilitySweeper` (ҳар соат): `trial` → (бир марта) `trial_expired`/grace → `suspended` | — |
-| 5 | ❌ Authorization кўчиши: `resolveAuthorizedCourierUid` → capability; `users.role == 'courier'` ва `isStaff()` даги `courier`/`seller` олиб ташланади | кейинги |
+| 5 | ✅ **БАЖАРИЛДИ (D-CLEAN-1, 2026-10-06)** — `resolveAuthorizedCourierUid` → фақат capability; `users.role == 'courier'` ва `isStaff()` даги `courier`/`seller` олиб ташланди ([taxi_billing_uz.md](taxi_billing_uz.md) 3.0) | — |
 | 6 | ❌ `couriers` ўтиш манбаси сифатида қолади, кейин чиқарилади | кейинги |
 
 **Бажарилган қисмнинг шакли** (жонли, 2026-10-06 кечки деплой — T-1a ва

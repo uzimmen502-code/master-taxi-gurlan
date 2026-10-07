@@ -43,6 +43,7 @@ const capabilitiesApi = require('./api/capabilities');
 const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
+const wholesaleAdminApi = require('./api/wholesale_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -224,6 +225,23 @@ exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
 /** ADMIN — muddati tugagan LEG'ni qayta ochish (matching qaytadan, payout o'zgarmaydi). */
 exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
+));
+
+// ═══════════════════════════════════════════════════════════════════════
+// ULGURJI / XITOY BOZORI — admin
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ADMIN — mahsulotni Ulgurji ↔ Xitoy bozoriga ko'chirish (2026-10-07).
+ * Rules `market`ni hech kimga o'zgartirtirmaydi (ataylab); bu yerda admin
+ * tekshiruvi, tranzaksiya, idempotentlik va `wholesale_market_audit`
+ * (41-qoida). Valyutali narxni so'mli Ulgurjiga o'tkazish RAD etiladi.
+ */
+exports.adminSetWholesaleProductMarket = fn.https.onCall(wrapCallable(
+  wholesaleAdminApi.makeAdminSetWholesaleProductMarket({
+    db,
+    deleteField: () => admin.firestore.FieldValue.delete(),
+  }),
 ));
 
 /**

@@ -14,6 +14,8 @@ import '../../l10n/app_localizations.dart';
 import '../../models/home_module.dart';
 import '../../models/user_model.dart';
 import '../../models/home_ticker_ad.dart';
+import '../../models/platform_product.dart';
+import '../../repositories/platform_products_repository.dart';
 import '../../repositories/rides_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/home_ticker_repository.dart';
@@ -35,7 +37,7 @@ import '../ev_charging/screens/ev_charging_map_screen.dart';
 import '../agro_pickup/screens/milk_pickup_screen.dart';
 import '../oil_change/screens/oil_change_home_screen.dart';
 import '../food/screens/food_screen.dart';
-import '../platform_store/screens/platform_store_screen.dart';
+import '../ads/widgets/platform_market_card.dart' show openPlatformProductDetail;
 import '../wholesale/models/wholesale_product.dart';
 import '../wholesale/screens/wholesale_market_screen.dart';
 import '../wholesale/screens/wholesale_product_detail_screen.dart';
@@ -331,9 +333,6 @@ class _HomeViewState extends State<_HomeView> {
       case 'jobs':
         screen = const JobsScreen();
         break;
-      case 'platform_store':
-        screen = const PlatformStoreScreen();
-        break;
       case 'tv_market':
         screen = const TvMarketFeedScreen();
         break;
@@ -381,14 +380,25 @@ class _HomeViewState extends State<_HomeView> {
       return;
     }
 
-    if (e.type == SearchIndexEntry.typePlatformProduct ||
-        module == 'platform') {
-      await _push(
-        PlatformStoreScreen(
-          highlightProductId:
-              e.type == SearchIndexEntry.typePlatformProduct ? e.sourceId : null,
-        ),
-      );
+    // AVA товари / эски «AVA дўкони» хизмат картаси — алоҳида дўкон экрани
+    // йўқ (2026-10-07): товар — ўзининг тафсилоти, хизмат — Улгуржи бозор.
+    // `wholesale_market` — қидирув индексидаги янги хизмат картаси.
+    if (e.type == SearchIndexEntry.typePlatformProduct) {
+      final p = e.sourceId.isEmpty
+          ? null
+          : await PlatformProductsRepository()
+              .getById(e.sourceId)
+              .catchError((Object _) => null);
+      if (!mounted) return;
+      if (p != null && p.active) {
+        await _openPlatformProduct(p, const []);
+      } else {
+        await _openWholesale(WholesaleProduct.marketWholesale);
+      }
+      return;
+    }
+    if (module == 'platform' || module == 'wholesale_market') {
+      await _openWholesale(WholesaleProduct.marketWholesale);
       return;
     }
 
@@ -651,6 +661,20 @@ class _HomeViewState extends State<_HomeView> {
     await _push(WholesaleProductDetailScreen(product: product));
   }
 
+  /// AVA товари — Улгуржи бозорнинг бир қисми, шунинг учун Улгуржи
+  /// дарвозаси (алоҳида «AVA дўкони» модули 2026-10-07 дан йўқ).
+  Future<void> _openPlatformProduct(
+    PlatformProduct product,
+    List<PlatformProduct> shelf,
+  ) async {
+    if (!ServiceConfigHolder.isOpenable(
+        WholesaleProduct.moduleIdFor(WholesaleProduct.marketWholesale))) {
+      _showTezKundaSnack();
+      return;
+    }
+    await openPlatformProductDetail(context, product, shelf);
+  }
+
   /// Юқори қатордаги ҳудуд тугмаси.
   Future<void> _openRegionPicker() async {
     final uid = phoneDigits(context.read<HomeController>().phone);
@@ -871,6 +895,9 @@ class _HomeViewState extends State<_HomeView> {
                                 onOpenAll: () => _openWholesale(
                                     WholesaleProduct.marketWholesale),
                                 onOpenProduct: _openWholesaleProduct,
+                                // AVA товарлари ҳам шу бўлимда (эга қарори
+                                // 2026-10-07: AVA дўкони — Улгуржи бозор).
+                                onOpenPlatformProduct: _openPlatformProduct,
                               ),
                             ],
                             // Хитой бозори. Архитектураси улгуржи билан

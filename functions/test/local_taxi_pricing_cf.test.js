@@ -34,7 +34,11 @@ lt.attachLocalTaxi(api, {
   functions, db, admin,
   callerPhone: (ctx) => String(ctx.auth.token.phone_number || '').replace(/\D/g, ''),
   canonicalUid: (v) => { const d = String(v || '').replace(/\D/g, ''); return d.length === 9 ? `998${d}` : d; },
-  fetchRoute: async () => { routeCalls += 1; return routeMeters ? { distanceMeters: routeMeters, polyline: 'abc' } : null; },
+  fetchRoute: async () => {
+    routeCalls += 1;
+    if (routeMeters === 'throw') throw new Error('timeout');
+    return routeMeters ? { distanceMeters: routeMeters, polyline: 'abc' } : null;
+  },
   now: () => clock,
 });
 const ctxOf = (p) => ({ auth: { uid: `u_${p}`, token: { phone_number: `+${p}` } } });
@@ -89,6 +93,12 @@ async function main() {
       assert.ok(Number.isInteger(f) && f % 500 === 0 && f > 0, `m=${m} fare=${f}`);
     }
   });
+  await check('F7b maxsus soatlar: 20–24 (yarim tundan o\'tmaydi) va start==end (o\'chiq)', () => {
+    assert.strictEqual(lt.isNightAt(new Date('2026-10-07T15:30:00Z'), 20, 0), true); // 20:30
+    assert.strictEqual(lt.isNightAt(new Date('2026-10-07T14:30:00Z'), 20, 0), false); // 19:30
+    assert.strictEqual(lt.isNightAt(new Date('2026-10-07T19:30:00Z'), 23, 23), false);
+    assert.strictEqual(lt.isNightAt(new Date('2026-10-07T05:00:00Z'), 9, 17), true); // 10:00, start<end
+  });
   await check('F7 tun chegarasi (Toshkent): 22:59 kun, 23:00 tun, 05:59 tun, 06:00 kun', () => {
     assert.strictEqual(lt.isNightAt(new Date('2026-10-07T17:59:00Z')), false);
     assert.strictEqual(lt.isNightAt(new Date('2026-10-07T18:00:00Z')), true);
@@ -104,7 +114,10 @@ async function main() {
   });
   await check('F9 mintaqa narxi globalni bosadi; yo\'q bo\'lsa default mintaqa; umuman yo\'q — null', () => {
     const doc = { local_base: 5000, local_per_km: 1500, regions: { xorazm: { local_base: 4000, local_per_km: 1000, local_coef: 1.1 } } };
-    assert.deepStrictEqual(lt.resolvePrices(doc, 'xorazm'), { regionKey: 'xorazm', base: 4000, perKm: 1000, coefPermille: 1100, source: 'region:xorazm' });
+    assert.deepStrictEqual(lt.resolvePrices(doc, 'xorazm'), {
+      regionKey: 'xorazm', base: 4000, perKm: 1000, coefPermille: 1100,
+      nightPermille: 1500, nightStartH: 23, nightEndH: 6, roadFactorPermille: 1300,
+      source: 'region:xorazm' });
     assert.strictEqual(lt.resolvePrices(doc, 'tashkent').base, 5000);
     assert.strictEqual(lt.resolvePrices({}, 'xorazm'), null);
   });
@@ -159,11 +172,48 @@ async function main() {
     await reset(null);
     assert.strictEqual(await codeOf(api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER))), 'TARIFF_NOT_CONFIGURED');
   });
-  await check('C7 marshrut topilmasa — ROUTE_NOT_FOUND, trip yaratilmaydi', async () => {
+  await check('C7 Directions yo\'l bermasa — rad EMAS: to\'g\'ri chiziq × 1.3, distanceSource=estimate', async () => {
     await reset();
     routeMeters = 0;
-    assert.strictEqual(await codeOf(api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER))), 'ROUTE_NOT_FOUND');
-    assert.strictEqual((await db.collection('trips').get()).size, 0);
+    const r = await api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER));
+    const t = (await db.collection('trips').doc(r.tripId).get()).data();
+    const straight = lt.haversineMeters(GURLAN.lat, GURLAN.lng, 41.86, 60.42);
+    assert.strictEqual(t.distanceSource, 'estimate');
+    assert.strictEqual(t.lockedDistanceM, Math.round(straight * 1.3));
+    assert.strictEqual(t.tariffSnapshot.roadFactorPermille, 1300);
+    assert.strictEqual(t.lockedFare, lt.computeFare({
+      distanceMeters: t.lockedDistanceM, prices: { base: 5000, perKm: 1500, coefPermille: 1000 }, night: false }).fare);
+  });
+  await check('C7b Directions xato (timeout) — ham estimate, buyurtma o\'tadi', async () => {
+    await reset();
+    const saved = routeMeters;
+    routeMeters = 'throw';
+    const r = await api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER));
+    routeMeters = saved;
+    assert.strictEqual((await db.collection('trips').doc(r.tripId).get()).data().distanceSource, 'estimate');
+  });
+  await check('C7c oddiy holatda distanceSource=route, roadFactor snapshot null', async () => {
+    await reset();
+    const r = await api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER));
+    const t = (await db.collection('trips').doc(r.tripId).get()).data();
+    assert.strictEqual(t.distanceSource, 'route');
+    assert.strictEqual(t.tariffSnapshot.roadFactorPermille, null);
+  });
+  await check('C7d admin tun koeffitsienti 1.2 va soatlari 22–05: 22:30 da ×1.2', async () => {
+    await reset({ local_base: 5000, local_per_km: 1500, local_coef: 1.0,
+      local_night_coef: 1.2, local_night_start: 22, local_night_end: 5 });
+    clock = new Date('2026-10-07T17:30:00Z'); // 22:30 Toshkent
+    const r = await api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER));
+    // 12500 × 0.9 × 1.2 = 13500
+    assert.strictEqual(r.fare, 13500);
+    const t = (await db.collection('trips').doc(r.tripId).get()).data();
+    assert.strictEqual(t.tariffSnapshot.nightPermille, 1200);
+    assert.strictEqual(t.tariffSnapshot.nightStartH, 22);
+  });
+  await check('C7e tun koeffitsienti 1.0 — tunda ham oddiy narx', async () => {
+    await reset({ local_base: 5000, local_per_km: 1500, local_coef: 1.0, local_night_coef: 1 });
+    clock = NIGHT;
+    assert.strictEqual((await api.createLocalTaxiTrip.run(order(), ctxOf(PASSENGER))).fare, 11500);
   });
   await check('C8 bloklangan yo\'lovchi — LOCAL_TAXI_BLOCKED (server tomonda)', async () => {
     await reset();
@@ -230,6 +280,34 @@ async function main() {
     assert.strictEqual(r.version, 2);
     const t = await api.createLocalTaxiTrip.run(order({ fromLat: 38, fromLng: 65 }), ctxOf(PASSENGER));
     assert.strictEqual((await db.collection('trips').doc(t.tripId).get()).data().tariffVersion, 2);
+  });
+  await check('A3b admin tun/yo\'l koeffitsientini saqlaydi — versiya, tarix (avvalgi qiymat bilan)', async () => {
+    const r = await api.adminSetLocalTaxiPrices.run({
+      global: { base: 5000, perKm: 1500, coef: 1 },
+      night: { coef: 1.3, startH: 22, endH: 5 },
+      roadFactor: 1.4,
+    }, ctxOf(ADMIN));
+    assert.strictEqual(r.version, 3);
+    const p = (await db.collection('settings').doc('prices').get()).data();
+    assert.strictEqual(p.local_night_coef, 1.3);
+    assert.strictEqual(p.local_night_start, 22);
+    assert.strictEqual(p.local_night_end, 5);
+    assert.strictEqual(p.local_road_factor, 1.4);
+    const h = (await db.collection('local_taxi_tariffs').doc('v3').get()).data();
+    assert.strictEqual(h.local_night_coef, 1.3);
+    assert.strictEqual(h.previous.local_night_coef, 1.5);
+  });
+  await check('A3c tun/yo\'l berilmasa — joriy qiymat saqlanadi', async () => {
+    await api.adminSetLocalTaxiPrices.run({ global: { base: 5000, perKm: 1500, coef: 1 } }, ctxOf(ADMIN));
+    const p = (await db.collection('settings').doc('prices').get()).data();
+    assert.strictEqual(p.local_night_coef, 1.3);
+    assert.strictEqual(p.local_road_factor, 1.4);
+  });
+  await check('A3d noto\'g\'ri tun/yo\'l qiymatlari rad', async () => {
+    const g = { base: 5000, perKm: 1500, coef: 1 };
+    assert.strictEqual(await codeOf(api.adminSetLocalTaxiPrices.run({ global: g, night: { coef: 5, startH: 23, endH: 6 } }, ctxOf(ADMIN))), 'NIGHT_COEF_INVALID');
+    assert.strictEqual(await codeOf(api.adminSetLocalTaxiPrices.run({ global: g, night: { coef: 1.5, startH: 24, endH: 6 } }, ctxOf(ADMIN))), 'NIGHT_HOURS_INVALID');
+    assert.strictEqual(await codeOf(api.adminSetLocalTaxiPrices.run({ global: g, roadFactor: 3 }, ctxOf(ADMIN))), 'ROAD_FACTOR_INVALID');
   });
   await check('A4 noto\'g\'ri narx/koeffitsient rad (0, kasr, coef 0)', async () => {
     assert.strictEqual(await codeOf(api.adminSetLocalTaxiPrices.run({ global: { base: 0, perKm: 1, coef: 1 } }, ctxOf(ADMIN))), 'PRICE_INVALID');

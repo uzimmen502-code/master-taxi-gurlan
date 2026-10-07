@@ -1646,6 +1646,8 @@ service cloud.firestore {
             || !request.resource.data.diff(
                  resource == null ? {} : resource.data).affectedKeys()
                  .hasAny(['local_base', 'local_per_km', 'local_coef', 'regions',
+                          'local_night_coef', 'local_night_start', 'local_night_end',
+                          'local_road_factor',
                           'localTariffVersion', 'localTariffUpdatedAt',
                           'localTariffUpdatedBy'])
           );

@@ -233,6 +233,8 @@ async function main() {
   const adminDb = ctxFor(ADMIN).firestore();
   await check('C4 admin klient orqali mahalliy taksi tarifini to\'g\'ridan yoza olmaydi (faqat CF, versiya bilan)',
     () => assertFails(adminDb.collection('settings').doc('prices').set({ local_base: 1 }, { merge: true })));
+  await check('C4b admin tun/yo\'l koeffitsientini ham to\'g\'ridan yoza olmaydi',
+    () => assertFails(adminDb.collection('settings').doc('prices').set({ local_night_coef: 3 }, { merge: true })));
   await check('C5 admin non narxini (boshqa kalit) yozishi buzilmagan',
     () => assertSucceeds(adminDb.collection('settings').doc('prices').set({ bread_price: 3500 }, { merge: true })));
   await check('C6 tarif tarixi: admin o\'qiydi, hech kim yozmaydi',

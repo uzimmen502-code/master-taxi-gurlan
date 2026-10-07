@@ -20,7 +20,14 @@ const geoHash = require('./geo_hash');
 
 const LOCAL_TAXI_TYPES = ['local', 'alone'];
 const SEARCH_TTL_MS = 3 * 60 * 1000;
-const NIGHT_PERMILLE = 1500;
+// Standart qiymatlar — admin tarifda bermasa (ega qarori 2026-10-07: tun ×1.5,
+// 23:00–06:00). Admin `TaxiPriceScreen`da o'zgartiradi (versiya bilan).
+const DEFAULT_NIGHT_PERMILLE = 1500;
+const DEFAULT_NIGHT_START_H = 23;
+const DEFAULT_NIGHT_END_H = 6;
+// Directions ishlamasa: to'g'ri chiziq × yo'l koeffitsienti (PROPOSED 1.3 —
+// shahar ichi yo'llari to'g'ri chiziqdan odatda ~25–40% uzun).
+const DEFAULT_ROAD_FACTOR_PERMILLE = 1300;
 const ROUND_TO = 500;
 const TASHKENT_UTC_OFFSET_H = 5; // DST yo'q
 const PRICES_DOC = ['settings', 'prices'];
@@ -44,9 +51,28 @@ function distanceCoefPermille(meters) {
   return 600;
 }
 
-function isNightAt(date) {
+/** Tun oralig'i [startH, endH) Toshkent vaqtida; start > end bo'lsa yarim tundan o'tadi. */
+function isNightAt(date, startH = DEFAULT_NIGHT_START_H, endH = DEFAULT_NIGHT_END_H) {
   const h = (date.getUTCHours() + TASHKENT_UTC_OFFSET_H) % 24;
-  return h >= 23 || h < 6;
+  if (startH === endH) return false; // tun koeffitsienti o'chirilgan
+  return startH > endH ? (h >= startH || h < endH) : (h >= startH && h < endH);
+}
+
+/** Ikki nuqta orasidagi to'g'ri chiziq masofasi (metr, butun). */
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+}
+
+function intOr(v, def, min, max) {
+  if (v == null || v === '') return def; // Number(null) === 0 — tuzoq
+  const n = Number(v);
+  return Number.isInteger(n) && n >= min && n <= max ? n : def;
 }
 
 /** a / b, yarim yuqoriga yaxlitlash (musbat BigInt). */
@@ -85,11 +111,18 @@ function resolvePrices(pricesDoc, regionKey) {
   if (!Number.isInteger(base) || base <= 0 || !Number.isInteger(perKm) || perKm <= 0) {
     return null;
   }
+  const nightCoef = pick('local_night_coef');
+  const roadFactor = pick('local_road_factor');
   return {
     regionKey,
     base,
     perKm,
     coefPermille: toPermille(pick('local_coef')),
+    nightPermille: nightCoef == null ? DEFAULT_NIGHT_PERMILLE : toPermille(nightCoef),
+    nightStartH: intOr(pick('local_night_start'), DEFAULT_NIGHT_START_H, 0, 23),
+    nightEndH: intOr(pick('local_night_end'), DEFAULT_NIGHT_END_H, 0, 23),
+    roadFactorPermille: roadFactor == null
+      ? DEFAULT_ROAD_FACTOR_PERMILLE : toPermille(roadFactor),
     source,
   };
 }
@@ -103,7 +136,9 @@ function computeFare({ distanceMeters, prices, night }) {
   const distancePart = Number(divRoundHalfUp(BigInt(m) * BigInt(prices.perKm), 1000n));
   const subtotal = BigInt(prices.base + distancePart);
   const distCoefPermille = distanceCoefPermille(m);
-  const nightPermille = night ? NIGHT_PERMILLE : 1000;
+  const nightPermille = night
+    ? (Number.isInteger(prices.nightPermille) ? prices.nightPermille : DEFAULT_NIGHT_PERMILLE)
+    : 1000;
   const total = divRoundHalfUp(
       subtotal * BigInt(prices.coefPermille) * BigInt(distCoefPermille) * BigInt(nightPermille),
       1000000000n);
@@ -179,17 +214,29 @@ function attachLocalTaxi(exportsObj, deps) {
     const prices = resolvePrices(pricesData, regionKey);
     if (!prices) throw fail('failed-precondition', 'TARIFF_NOT_CONFIGURED');
 
-    let route;
+    let route = null;
     try {
       route = await fetchRoute({ fromLat, fromLng, toLat, toLng });
     } catch (e) {
       console.error('local_taxi route error:', e.message || e);
-      throw fail('unavailable', 'ROUTE_UNAVAILABLE');
     }
-    if (!route || !(route.distanceMeters > 0)) throw fail('failed-precondition', 'ROUTE_NOT_FOUND');
+    // Directions ishlamasa / yo'l topmasa — buyurtma rad etilmaydi: masofa
+    // to'g'ri chiziq × yo'l koeffitsienti (tarifda, versiya bilan) bo'yicha
+    // hisoblanadi va trip'da `distanceSource: 'estimate'` deb belgilanadi.
+    let distanceSource = 'route';
+    if (!route || !(route.distanceMeters > 0)) {
+      distanceSource = 'estimate';
+      const straight = haversineMeters(fromLat, fromLng, toLat, toLng);
+      route = {
+        distanceMeters: Number(divRoundHalfUp(
+            BigInt(straight) * BigInt(prices.roadFactorPermille), 1000n)),
+        polyline: '',
+      };
+      log('route_fallback', { regionKey, straightM: straight, estimateM: route.distanceMeters });
+    }
 
     const at = now();
-    const night = isNightAt(at);
+    const night = isNightAt(at, prices.nightStartH, prices.nightEndH);
     const r = computeFare({ distanceMeters: route.distanceMeters, prices, night });
     if (!(r.fare > 0)) throw fail('internal', 'FARE_ZERO');
     const tariffVersion = Number.isInteger(pricesData.localTariffVersion)
@@ -202,6 +249,7 @@ function attachLocalTaxi(exportsObj, deps) {
       lockedPolyline: route.polyline || '',
       fareNight: night,
       fareSource: 'server',
+      distanceSource,
       tariffVersion,
       tariffSnapshot: {
         regionKey: prices.regionKey,
@@ -211,6 +259,9 @@ function attachLocalTaxi(exportsObj, deps) {
         coefPermille: prices.coefPermille,
         distCoefPermille: r.distCoefPermille,
         nightPermille: r.nightPermille,
+        nightStartH: prices.nightStartH,
+        nightEndH: prices.nightEndH,
+        roadFactorPermille: distanceSource === 'estimate' ? prices.roadFactorPermille : null,
         distancePart: r.distancePart,
       },
     };
@@ -381,11 +432,36 @@ function attachLocalTaxi(exportsObj, deps) {
       if (v) regions[k] = parseTier(v, k);
     }
 
+    // Tun va yo'l koeffitsienti — global (mintaqasiz). Berilmasa joriy qiymat.
+    const night = d.night && typeof d.night === 'object' ? d.night : null;
+    if (night) {
+      const c = Number(night.coef);
+      if (!Number.isFinite(c) || c < 1 || c > 3) throw fail('invalid-argument', 'NIGHT_COEF_INVALID');
+      for (const h of [night.startH, night.endH]) {
+        if (!Number.isInteger(h) || h < 0 || h > 23) throw fail('invalid-argument', 'NIGHT_HOURS_INVALID');
+      }
+    }
+    if (d.roadFactor != null) {
+      const rf = Number(d.roadFactor);
+      if (!Number.isFinite(rf) || rf < 1 || rf > 2) throw fail('invalid-argument', 'ROAD_FACTOR_INVALID');
+    }
+
     const ref = db.collection(PRICES_DOC[0]).doc(PRICES_DOC[1]);
     const version = await db.runTransaction(async (t) => {
       const snap = await t.get(ref);
       const cur = snap.exists ? snap.data() : {};
       const next = (Number.isInteger(cur.localTariffVersion) ? cur.localTariffVersion : 0) + 1;
+      const extras = {
+        local_night_coef: night ? Math.round(Number(night.coef) * 1000) / 1000
+          : (cur.local_night_coef != null ? cur.local_night_coef : DEFAULT_NIGHT_PERMILLE / 1000),
+        local_night_start: night ? night.startH
+          : intOr(cur.local_night_start, DEFAULT_NIGHT_START_H, 0, 23),
+        local_night_end: night ? night.endH
+          : intOr(cur.local_night_end, DEFAULT_NIGHT_END_H, 0, 23),
+        local_road_factor: d.roadFactor != null ? Math.round(Number(d.roadFactor) * 1000) / 1000
+          : (cur.local_road_factor != null ? cur.local_road_factor : DEFAULT_ROAD_FACTOR_PERMILLE / 1000),
+      };
+      Object.assign(global, extras);
       t.set(ref, {
         ...global,
         regions,
@@ -395,6 +471,7 @@ function attachLocalTaxi(exportsObj, deps) {
         updatedAt: ts(),
       }, {
         mergeFields: ['local_base', 'local_per_km', 'local_coef', 'regions',
+          'local_night_coef', 'local_night_start', 'local_night_end', 'local_road_factor',
           'localTariffVersion', 'localTariffUpdatedAt', 'localTariffUpdatedBy', 'updatedAt'],
       });
       t.create(db.collection(TARIFF_HISTORY).doc(`v${next}`), {
@@ -406,6 +483,10 @@ function attachLocalTaxi(exportsObj, deps) {
           local_base: cur.local_base == null ? null : cur.local_base,
           local_per_km: cur.local_per_km == null ? null : cur.local_per_km,
           local_coef: cur.local_coef == null ? null : cur.local_coef,
+          local_night_coef: cur.local_night_coef == null ? null : cur.local_night_coef,
+          local_night_start: cur.local_night_start == null ? null : cur.local_night_start,
+          local_night_end: cur.local_night_end == null ? null : cur.local_night_end,
+          local_road_factor: cur.local_road_factor == null ? null : cur.local_road_factor,
           regions: cur.regions || {},
         },
         changedBy: uid,
@@ -424,6 +505,7 @@ module.exports = {
   resolvePrices,
   computeFare,
   isNightAt,
+  haversineMeters,
   distanceCoefPermille,
   LOCAL_TAXI_TYPES,
 };

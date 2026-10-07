@@ -11,6 +11,7 @@ import '../../../models/driver_session.dart';
 import '../../../models/queue_entry.dart';
 import '../../../models/trip_request.dart';
 import '../../../utils/fare_calculator.dart';
+import '../../../utils/geo_hash.dart';
 import '../../../repositories/driver_repository.dart';
 import '../../../repositories/queue_repository.dart';
 import '../../../repositories/rides_repository.dart';
@@ -72,6 +73,9 @@ class DriverHomeController extends ChangeNotifier {
   // ─── Subscriptions ────────────────────────────────────────────────
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   StreamSubscription<List<ActiveTrip>>? _tripsSub;
+  Timer? _offersTicker;
+  List<ActiveTrip> _lastOfferTrips = const [];
+  String? _offersCellHash;
   StreamSubscription<List<ActiveTrip>>? _acceptedTripsSub;
   StreamSubscription<List<QueueEntry>>? _queueSub;
   StreamSubscription<Position>? _gpsSub;
@@ -230,7 +234,8 @@ class DriverHomeController extends ChangeNotifier {
   bool _isLocalTaxiTrip(ActiveTrip trip) =>
       trip.taxiType == 'local' || trip.taxiType == 'alone';
 
-  TripRequest _tripRequestFromActiveTrip(ActiveTrip t, {int secsLeft = 0, double distanceKm = 0}) =>
+  TripRequest _tripRequestFromActiveTrip(ActiveTrip t,
+          {int secsLeft = 0, double distanceKm = 0}) =>
       TripRequest(
         id: t.id,
         userPhone: t.userPhone,
@@ -258,8 +263,7 @@ class DriverHomeController extends ChangeNotifier {
   void _setAcceptedFromActiveTrip(ActiveTrip trip) {
     acceptedRide = _tripRequestFromActiveTrip(trip);
     isBusy = true;
-    activeRequests =
-        activeRequests.where((r) => r.id != trip.id).toList();
+    activeRequests = activeRequests.where((r) => r.id != trip.id).toList();
     _reconcileGpsProfile();
     notifyListeners();
   }
@@ -281,8 +285,7 @@ class DriverHomeController extends ChangeNotifier {
     _acceptedTripsSub =
         _ridesRepo.watchAcceptedForDriver(session.driverId).listen((trips) {
       if (_disposed) return;
-      final local =
-          trips.where(_isLocalTaxiTrip).toList(growable: false);
+      final local = trips.where(_isLocalTaxiTrip).toList(growable: false);
 
       if (acceptedRide != null) {
         ActiveTrip? match;
@@ -315,7 +318,6 @@ class DriverHomeController extends ChangeNotifier {
 
   /// Ишни бошлаш экранидан қайтгандан кейин қайта чақирилади.
   Future<void> refreshTodaySchedule() => _checkTodaySchedule();
-
 
   /// Маҳаллий такси (alone/local) учун "ИШНИ БОШЛАШ" — бир босишда:
   /// бугунги жадвални яратади (агар йўқ бўлса) ва онлайнга чиқаради.
@@ -388,7 +390,7 @@ class DriverHomeController extends ChangeNotifier {
         activeRequests = const [];
         acceptedRide = null;
         isBusy = false;
-        _tripsSub?.cancel();
+        _stopOffers();
         _acceptedTripsSub?.cancel();
       }
       notifyListeners();
@@ -477,8 +479,7 @@ class DriverHomeController extends ChangeNotifier {
     _acceptedTripsSub?.cancel();
     _acceptedTripsSub = null;
     // Takliflar oqimi ham yopilsin (endWorkDay → offline'da ortiqcha read yo'q).
-    _tripsSub?.cancel();
-    _tripsSub = null;
+    _stopOffers();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('driver_online', false);
     try {
@@ -516,11 +517,12 @@ class DriverHomeController extends ChangeNotifier {
           distanceFilter: 10,
         ),
     };
-    _gpsSub = Geolocator.getPositionStream(locationSettings: settings)
-        .listen((pos) {
+    _gpsSub =
+        Geolocator.getPositionStream(locationSettings: settings).listen((pos) {
       _driverLat = pos.latitude;
       _driverLng = pos.longitude;
       if (!isOnline || session.driverId.isEmpty) return;
+      _maybeRefreshOffersCell(pos.latitude, pos.longitude);
 
       final minWriteM = switch (_gpsProfile) {
         _DriverGpsProfile.waiting => 80.0,
@@ -557,8 +559,7 @@ class DriverHomeController extends ChangeNotifier {
       }
       queuePosition = pos;
       if (pos > 0) {
-        _queueRepo.saveLastPosition(
-            driverId: session.driverId, position: pos);
+        _queueRepo.saveLastPosition(driverId: session.driverId, position: pos);
       }
       notifyListeners();
     });
@@ -569,13 +570,54 @@ class DriverHomeController extends ChangeNotifier {
     _tripsSub?.cancel();
     final lat = _driverLat;
     final lng = _driverLng;
+    // Obuna markazi (geohash4) — haydovchi boshqa katakka o'tsa qayta obuna
+    // (aks holda online bo'lgan joydagi 9 katak abadiy qolardi).
+    _offersCellHash = lat != null && lng != null
+        ? GeoHash.encode(lat, lng, precision: 4)
+        : null;
     final stream = lat != null && lng != null
         ? _ridesRepo.watchPendingTripsNear(lat: lat, lng: lng)
         : _ridesRepo.watchPendingTrips();
+    _offersTicker?.cancel();
+    // Taymer har soniya: `secsLeft` kamayadi, muddati o'tgan taklif yo'qoladi
+    // (avval faqat Firestore snapshot kelganda yangilanardi).
+    _offersTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_disposed || _lastOfferTrips.isEmpty) return;
+      _rebuildOffers(_lastOfferTrips, announce: false);
+    });
     _tripsSub = stream.listen((trips) {
       if (offersStreamError != null) {
         offersStreamError = null;
       }
+      _lastOfferTrips = trips;
+      _rebuildOffers(trips, announce: true);
+    }, onError: (Object e, StackTrace st) {
+      debugPrint('offers stream error: $e\n$st');
+      offersStreamError = 'Чақирувларни ўқиб бўлмади. Қайтa уриниб кўринг.';
+      _lastOfferTrips = const [];
+      activeRequests = const [];
+      notifyListeners();
+    });
+  }
+
+  /// Haydovchi boshqa geohash4 katagiga o'tdimi — takliflar oqimini yangilash.
+  void _maybeRefreshOffersCell(double lat, double lng) {
+    if (!isOnline || isBusy || _tripsSub == null) return;
+    final cell = GeoHash.encode(lat, lng, precision: 4);
+    if (cell != _offersCellHash) _listenToTrips();
+  }
+
+  void _stopOffers() {
+    _tripsSub?.cancel();
+    _tripsSub = null;
+    _offersTicker?.cancel();
+    _offersTicker = null;
+    _lastOfferTrips = const [];
+    _offersCellHash = null;
+  }
+
+  void _rebuildOffers(List<ActiveTrip> trips, {required bool announce}) {
+    {
       final now = DateTime.now();
       final filtered = trips.where((t) {
         if (t.taxiType == 'marshrut') return false;
@@ -633,21 +675,17 @@ class DriverHomeController extends ChangeNotifier {
               ) /
               1000;
         }
-        return _tripRequestFromActiveTrip(t, secsLeft: secs, distanceKm: distKm);
+        return _tripRequestFromActiveTrip(t,
+            secsLeft: secs, distanceKm: distKm);
       }).toList();
 
       activeRequests = list;
       _reconcileGpsProfile();
       notifyListeners();
-      if (list.isNotEmpty && !isBusy && acceptedRide == null) {
+      if (announce && list.isNotEmpty && !isBusy && acceptedRide == null) {
         _newRequestController.add(list.first);
       }
-    }, onError: (Object e, StackTrace st) {
-      debugPrint('offers stream error: $e\n$st');
-      offersStreamError = 'Чақирувларни ўқиб бўлмади. Қайтa уриниб кўринг.';
-      activeRequests = const [];
-      notifyListeners();
-    });
+    }
   }
 
   bool _matchesTaxiType(String tripTaxiType) {
@@ -687,8 +725,7 @@ class DriverHomeController extends ChangeNotifier {
 
     // Local taxi (alone/local) — "ўрин" тушунчаси йўқ (битта ҳайдовчи,
     // битта йўловчи). Seats камайтириш фақат marshrut/schedule учун.
-    final isLocalTaxi =
-        ride.taxiType == 'alone' || ride.taxiType == 'local';
+    final isLocalTaxi = ride.taxiType == 'alone' || ride.taxiType == 'local';
 
     if (!isLocalTaxi) {
       // Marshrut'дан ташқари — schedule'да scheduleId бўлса камайтириш
@@ -830,8 +867,7 @@ class DriverHomeController extends ChangeNotifier {
         );
         if (lastSettlementOutcome!.status ==
             TripChangeSettlementStatus.failedPermanent) {
-          debugPrint(
-              'settlement: ${lastSettlementOutcome!.reasonCode} '
+          debugPrint('settlement: ${lastSettlementOutcome!.reasonCode} '
               '${lastSettlementOutcome!.userMessage}');
         }
       }
@@ -953,7 +989,7 @@ class DriverHomeController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _connSub?.cancel();
-    _tripsSub?.cancel();
+    _stopOffers();
     _acceptedTripsSub?.cancel();
     _queueSub?.cancel();
     _gpsSub?.cancel();

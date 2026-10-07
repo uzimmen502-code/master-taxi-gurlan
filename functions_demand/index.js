@@ -213,6 +213,11 @@ exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminPlanShipmentRoute(logisticsDeps),
 ));
 
+/** ADMIN — muddati tugagan LEG'ni qayta ochish (matching qaytadan, payout o'zgarmaydi). */
+exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
+  logisticsApi.makeAdminReactivateLeg(logisticsDeps),
+));
+
 /**
  * Eskrou tushdi (default codebase yozadi) → LEG-1 ochiladi + matching.
  * Idempotent: faqat `pending → escrow_funded` o'tishida, LEG draft bo'lsa.

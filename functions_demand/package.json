@@ -27,6 +27,7 @@
     "test:logistics-core": "node test/logistics_core.test.js",
     "test:logistics-api": "node test/logistics_api.test.js",
     "test:logistics-parity": "node test/logistics_parity.test.js",
+    "test:maintenance": "node test/maintenance.test.js",
     "test:offers": "node test/offers.test.js",
     "test:dict": "node test/dictionary_fresh.test.js",
     "test:analytics": "node test/analytics.test.js"

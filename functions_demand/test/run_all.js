@@ -32,6 +32,7 @@ const SUITES = [
   'logistics_core.test.js',
   'logistics_api.test.js',
   'logistics_parity.test.js',
+  'maintenance.test.js',
   'offers.test.js',
   'parity.test.js',
   'dictionary_fresh.test.js',

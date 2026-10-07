@@ -63,8 +63,12 @@ async function status(db) {
   console.log(`${arg === 'write' ? 'YOZILADI' : 'DRY-RUN'}: ${tariff.COLLECTION}/${ref.id} (status: draft)`);
   console.log('  faol qilish uchun yetishmaydi:', tariff.validateTariff(doc, { forActivation: true }).join('; '));
   if (arg === 'write') {
-    await ref.set({ ...doc, createdAt: new Date(), createdBy: 'seed_logistics_tariff.js', updatedAt: new Date() }, { merge: true });
-    console.log('  yozildi.');
+    // TO'LIQ almashtirish (merge EMAS): merge bilan eski qoralamaning
+    // `prices.ZONE_x` kabi ichki kalitlari production'da qolib ketardi
+    // (2026-10-07 da shunday bo'lgan). Draft — yagona qoralama, tarixi yo'q.
+    const createdAt = existing.exists ? ((existing.data() || {}).createdAt || new Date()) : new Date();
+    await ref.set({ ...doc, createdAt, createdBy: 'seed_logistics_tariff.js', updatedAt: new Date() });
+    console.log('  yozildi (to\'liq almashtirildi).');
   }
   await status(db);
   process.exit(0);

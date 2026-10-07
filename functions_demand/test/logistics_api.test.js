@@ -372,6 +372,60 @@ ok('tarif admini: qoralama narxsiz FAOL qilinmaydi; to\'liq → faol, eski retir
   assert.strictEqual(db.dump('shipments')[r.shipmentIds[0]].priceSnapshot.tariffVersion, 8);
 });
 
+ok('LEG-2 muddati tugadi (kuryer topilmadi) → shipment.legProblem; admin qayta ochadi → matching qaytadan, zanjir davom etadi', async () => {
+  const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const maint = require('../api/maintenance');
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload({
+    destination: { regionId: 'toshkent_shahri', districtId: 'chilonzor', lat: 41.28, lng: 69.2, addressText: 'Chilonzor 9' },
+    parcels: [{ actualWeightG: 5000, lengthCm: 50, widthCm: 40, heightCm: 40 }],
+  }), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0];
+  await fund(db, shipmentId);
+  const p = await api.makeAdminPlanShipmentRoute(d)({ shipmentId, reason: 'Urganch orqali', legs: [
+    { to: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+    { from: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+  ] }, ctx(ADMIN));
+  const [leg0, leg1] = p.legIds;
+  await api.makeAcceptLeg(d)({ legId: leg0 }, ctx(K1));
+  const sec = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(OWNER));
+  await api.makeScanHandover(d)({ legId: leg0, code: sec.handoverCode, photoUrls: PHOTO }, ctx(K1));
+  assert.strictEqual(db.dump('demands')[leg1].status, 'active', 'LEG-2 matching ochiq');
+  const payoutBefore = db.dump('demands')[leg1].attributes.payout;
+
+  // 3 kun + 1 soat o'tdi, hech kim olmadi → sweeper.
+  const later = new Date(NOW.getTime() + (3 * 24 + 1) * 3600 * 1000);
+  const sw = await maint.makeExpireSweeper({ db, now: () => later })();
+  assert.strictEqual(sw.expired, 1); assert.strictEqual(sw.legProblems, 1);
+  assert.strictEqual(db.dump('demands')[leg1].status, 'expired');
+  assert.strictEqual(db.dump('shipments')[shipmentId].legProblem.legId, leg1);
+  assert.strictEqual(db.dump('shipments')[shipmentId].status, 'in_transit', 'jo\'natma K1 qo\'lida, qotib qolmaydi');
+  assert.strictEqual(db.dump('demand_matches')[`${leg1}_${F1}`].status, 'expired');
+  // in_transit'da to'liq qayta rejalash hali ham RAD (LEG-1 ijrochi qo'lida) — qayta ochish yo'li alohida.
+  await assert.rejects(() => api.makeAdminPlanShipmentRoute(d)({ shipmentId, legs: [{}] }, ctx(ADMIN)), (e) => e.details.reason === 'shipment_not_replannable');
+
+  const react = api.makeAdminReactivateLeg({ ...d, now: () => later });
+  await assert.rejects(() => react({ legId: leg1 }, ctx(OWNER)), (e) => e.code === 'permission-denied');
+  await assert.rejects(() => react({ legId: leg0 }, ctx(ADMIN)), (e) => e.details.reason === 'leg_not_expired', 'in_progress LEG qayta ochilmaydi');
+  const rr = await react({ legId: leg1, reason: 'kuryer topilmadi, qayta' }, ctx(ADMIN));
+  assert.strictEqual(rr.ok, true);
+  const leg1b = db.dump('demands')[leg1];
+  assert.strictEqual(leg1b.status, 'active');
+  assert.strictEqual(leg1b.reopenCount, 1);
+  assert.ok(leg1b.timeWindow.expiresAt.getTime() > later.getTime(), 'muddat qaytadan');
+  assert.strictEqual(leg1b.attributes.payout, payoutBefore, 'payout o\'zgarmaydi');
+  assert.strictEqual(db.dump('shipments')[shipmentId].legProblem, null);
+  assert.strictEqual(db.dump('demand_matches')[`${leg1}_${F1}`].status, 'new', 'F1 ga yana taklif');
+  assert.ok(Object.values(db.dump('logistics_audit')).some((x) => x.kind === 'leg_reactivate' && x.legId === leg1), 'audit (41-band)');
+  // Zanjir davom etadi: F1 oladi, K1 dan posilkani oladi.
+  await api.makeAcceptLeg({ ...d, now: () => later })({ legId: leg1 }, ctx(F1));
+  const secK = await api.makeGetShipmentSecrets(d)({ shipmentId }, ctx(K1));
+  const s1 = await api.makeScanHandover({ ...d, now: () => later })({ legId: leg1, code: secK.handoverCode, photoUrls: PHOTO }, ctx(F1));
+  assert.strictEqual(s1.idempotent, false);
+  assert.strictEqual(db.dump('demands')[leg0].status, 'completed');
+  assert.strictEqual(db.dump('demands')[leg1].status, 'in_progress');
+});
+
 ok('onShipmentFunded: faqat pending→escrow_funded o\'tishida; takror chaqiruv LEG\'ni qayta ochmaydi', async () => {
   const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
   const d = deps(db);

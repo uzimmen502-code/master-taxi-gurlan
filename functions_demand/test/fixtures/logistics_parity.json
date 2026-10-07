@@ -96,6 +96,8 @@
     "legs_discontinuous",
     "tariff_missing",
     "leg_assigned",
+    "leg_not_expired",
+    "leg_reactivate_failed",
     "tariff_zone_price_missing",
     "bad_weight",
     "bad_dimensions",

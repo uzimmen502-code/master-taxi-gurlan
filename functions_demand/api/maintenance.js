@@ -23,6 +23,7 @@ const { getAdapter } = require('../core/registry');
 const caps = require('../core/capabilities');
 const { runMatching } = require('../matching/orchestrator');
 const capabilities = require('../sources/capabilities');
+const L = require('../core/logistics');
 
 const DEMANDS = 'demands';
 const MATCHES = 'demand_matches';
@@ -55,15 +56,33 @@ function makeExpireSweeper(deps) {
 
     const batch = db.batch();
     const ids = [];
+    const legProblems = [];
     for (const d of snap.docs) {
+      const data = d.data() || {};
       batch.update(d.ref, {
         status: sm.STATUS.EXPIRED,
         expiredAt: now,
         updatedAt: now,
       });
       ids.push(d.id);
+      // AVA Logistics LEG'i (relay): muddati tugagan LEG jo'natmani
+      // «qotirib» qo'ymasin — jo'natmaga admin ko'radigan belgi
+      // (`legProblem`), admin `adminReactivateLeg` bilan qayta ochadi.
+      const shipmentId = String((data.attributes || {}).shipmentId || '');
+      if (data.module === L.MODULE && shipmentId) legProblems.push({ legId: d.id, shipmentId });
     }
     await batch.commit();
+
+    for (const p of legProblems) {
+      try {
+        await db.collection(L.SHIPMENTS).doc(p.shipmentId).update({
+          legProblem: { legId: p.legId, kind: 'leg_expired', at: now },
+          updatedAt: now,
+        });
+      } catch (e) {
+        console.error(`legProblem yozilmadi (${p.shipmentId}/${p.legId}): ${e.message}`);
+      }
+    }
 
     // Match yozuvlarini ham yopamiz — taklifchi inbox'ida eskirgan
     // talab ko'rinib qolmasligi uchun.
@@ -81,8 +100,8 @@ function makeExpireSweeper(deps) {
       }
     }
 
-    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired`);
-    return { expired: ids.length, ids };
+    console.log(`expireDemandsSweeper: ${ids.length} ta talab expired${legProblems.length ? `, ${legProblems.length} ta logistika LEG'i` : ''}`);
+    return { expired: ids.length, ids, legProblems: legProblems.length };
   };
 }
 
@@ -109,6 +128,13 @@ function makeReopenStaleAssignments(deps) {
     let reopened = 0;
     for (const d of snap.docs) {
       const demand = d.data() || {};
+      // AVA Logistics LEG'i (relay) — BU SWEEPER'DAN CHIQARILGAN (ega qarori
+      // 2026-10-07): LEG'ning o'z hayot sikli bor (custody kodi bilan
+      // boshlanadi, egasi bekor qiladi, admin qayta rejalaydi/ochadi).
+      // Umumiy 120 daqiqalik «qabul qildi, lekin boshlamadi» muddati bu
+      // yerda noto'g'ri: LEG-2 kuryeri LEG-1 posilkani olib kelguncha
+      // soatlab kutadi — uni chiqarib tashlash + NO_SHOW jazosi xato.
+      if (demand.module === L.MODULE) continue;
       const a = demand.assignment || {};
       if (!a.acceptedAt || !a.providerId) continue;
 

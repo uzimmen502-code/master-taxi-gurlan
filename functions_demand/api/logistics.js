@@ -444,8 +444,11 @@ function makeCreateLogisticsOrder(deps) {
 /**
  * `draft` → `active` + matching + push. Modul o'chiq bo'lsa LEG draft'da
  * qoladi (`skipped: 'disabled'`) — keyin admin/qayta urinish ochadi.
+ *
+ * `opts.allowExpired` — admin qayta ochishi (`adminReactivateLeg`):
+ * `expired` → `active` (state machine ruxsat beradi), muddat qaytadan.
  */
-async function activateLeg(deps, legId) {
+async function activateLeg(deps, legId, opts = {}) {
   const { db, keywordIndex, notify, now: nowFn } = deps;
   const now = nowFn ? nowFn() : new Date();
   const ref = db.collection(DEMANDS).doc(legId);
@@ -453,7 +456,8 @@ async function activateLeg(deps, legId) {
   if (!snap.exists) return { skipped: 'missing' };
   const d = snap.data() || {};
   if (d.module !== L.MODULE) return { skipped: 'not_logistics' };
-  if (d.status !== sm.STATUS.DRAFT) return { skipped: `status_${d.status}` };
+  const allowed = opts.allowExpired ? [sm.STATUS.DRAFT, sm.STATUS.EXPIRED] : [sm.STATUS.DRAFT];
+  if (!allowed.includes(d.status)) return { skipped: `status_${d.status}` };
 
   const flags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
   if (!flags.enabled) return { skipped: 'disabled' };
@@ -461,12 +465,19 @@ async function activateLeg(deps, legId) {
   const ttl = Number((config.logistics || {}).legTtlMinutes) || 3 * 24 * 60;
 
   sm.assertTransition(d.status, sm.STATUS.ACTIVE, 'activateLeg');
-  await ref.update({
+  const patch = {
     status: sm.STATUS.ACTIVE,
     'timeWindow.expiresAt': new Date(now.getTime() + ttl * 60000),
     activatedAt: now,
     updatedAt: now,
-  });
+  };
+  if (d.status === sm.STATUS.EXPIRED) {
+    patch.reopenedAt = now;
+    patch.reopenReason = opts.reason || 'admin_reactivate';
+    patch.reopenCount = Number(d.reopenCount || 0) + 1;
+    patch.expiredAt = null;
+  }
+  await ref.update(patch);
 
   const demand = { id: legId, ...d, status: sm.STATUS.ACTIVE };
   const adapter = getAdapter(L.MODULE);
@@ -1206,6 +1217,59 @@ function makeAdminPlanShipmentRoute(deps) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ADMIN — muddati tugagan LEG'ni qayta ochish (zanjir qotib qolmasin)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * `expireDemandsSweeper` LEG'ni `expired` qilib, jo'natmaga `legProblem`
+ * yozadi (jo'natma `ready`/`in_transit`da qoladi, pul eskrouda). Admin shu
+ * callable bilan o'sha LEG'ni qayta ochadi: muddat qaytadan, matching +
+ * push qaytadan, payout va marshrut O'ZGARMAYDI. Audit (41-band).
+ */
+function makeAdminReactivateLeg(deps) {
+  const { db, now: nowFn } = deps;
+
+  return async function adminReactivateLeg(data, context) {
+    const now = nowFn ? nowFn() : new Date();
+    const adminId = await assertAnalyticsAdmin(db, context);
+    const legId = String((data || {}).legId || '');
+    const reason = String((data || {}).reason || '').slice(0, 300);
+    if (!legId) throw fail('invalid-argument', 'legId majburiy');
+
+    const legRef = db.collection(DEMANDS).doc(legId);
+    const legSnap = await legRef.get();
+    if (!legSnap.exists) throw fail('not-found', 'LEG topilmadi');
+    const leg = legSnap.data() || {};
+    if (leg.module !== L.MODULE) throw fail('failed-precondition', 'Bu jo\'natma emas', 'not_logistics');
+    if (leg.status !== sm.STATUS.EXPIRED) {
+      throw fail('failed-precondition', 'LEG muddati tugamagan — qayta ochish shart emas', 'leg_not_expired', { status: leg.status });
+    }
+    const shipmentId = String((leg.attributes || {}).shipmentId || '');
+    const shipRef = db.collection(L.SHIPMENTS).doc(shipmentId);
+    const shipSnap = await shipRef.get();
+    if (!shipSnap.exists) throw fail('failed-precondition', 'Jo\'natma topilmadi', 'shipment_missing');
+    const ship = shipSnap.data() || {};
+    if (![L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT].includes(ship.status)) {
+      throw fail('failed-precondition', 'Jo\'natma holati qayta ochishga mos emas', 'shipment_not_ready', { status: ship.status });
+    }
+
+    // Eski match yozuvlari (`expired`) — matching qaytadan yozadi; eski
+    // yozuv qolsa ijrochi inbox'ida «yopiq» bo'lib ko'rinmay qolardi.
+    const old = await db.collection(MATCHES).where('demandId', '==', legId).get();
+    for (const m of old.docs) await m.ref.delete();
+
+    const res = await activateLeg(deps, legId, { allowExpired: true, reason: 'admin_reactivate' });
+    if (!res.activated) throw fail('failed-precondition', 'LEG qayta ochilmadi', 'leg_reactivate_failed', res);
+
+    await shipRef.update({ legProblem: null, updatedAt: now });
+    await db.collection(TARIFF_AUDIT).add({
+      kind: 'leg_reactivate', legId, shipmentId, by: adminId, reason, at: now,
+    });
+    return { ok: true, legId, shipmentId, matchedBucket: res.matchedBucket };
+  };
+}
+
 module.exports = {
   TARIFF_AUDIT,
   MAX_PARCELS,
@@ -1228,4 +1292,5 @@ module.exports = {
   makeAdminUpsertLogisticsTariff,
   makeAdminActivateLogisticsTariff,
   makeAdminPlanShipmentRoute,
+  makeAdminReactivateLeg,
 };

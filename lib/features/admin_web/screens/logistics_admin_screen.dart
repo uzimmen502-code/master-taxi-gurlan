@@ -41,6 +41,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     'cancelled': 'Бекор',
     'disputed': 'Низо',
     'lost': 'Йўқолган',
+    'leg_problem': '⚠ LEG муддати тугаган',
   };
 
   final _db = FirebaseFirestore.instance;
@@ -439,7 +440,10 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
               if (snap.hasError) return Center(child: Text('Хато: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final docs = snap.data!.docs
-                  .where((d) => _filter.isEmpty || d.data()['status'] == _filter)
+                  .where((d) => _filter.isEmpty
+                      || (_filter == 'leg_problem'
+                          ? d.data()['legProblem'] != null
+                          : d.data()['status'] == _filter))
                   .toList();
               if (docs.isEmpty) {
                 return Center(child: Text('Жўнатма йўқ', style: TextStyle(color: Colors.grey.shade600)));
@@ -457,22 +461,60 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     );
   }
 
+  /// Muddati tugagan LEG (sweeper `legProblem` yozgan) — qayta ochish:
+  /// matching qaytadan, payout/marshrut o'zgarmaydi, audit bilan.
+  Future<void> _reactivateLeg(String shipmentId, String legId) async {
+    final reason = await _askReason('LEG\'ни қайта очиш — сабаб (audit)');
+    if (reason == null) return;
+    final res = await _call('adminReactivateLeg', {'legId': legId, 'reason': reason});
+    if (res != null) _snack('LEG қайта очилди: ${res['legId']} (ижрочилар: ${res['matchedBucket']})');
+  }
+
+  Future<String?> _askReason(String title) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(hintText: 'Қисқа сабаб'),
+          maxLength: 300,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Бекор')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Тасдиқлаш')),
+        ],
+      ),
+    );
+  }
+
   Widget _shipmentTile(String id, Map<String, dynamic> s) {
     final status = (s['status'] ?? '').toString();
     final replannable = status == 'awaiting_payment' || status == 'ready';
     final cust = s['currentCustodian'] is Map ? s['currentCustodian'] as Map : const {};
     final price = (s['priceSnapshot'] is Map ? (s['priceSnapshot'] as Map)['customerPrice'] : null) ?? 0;
+    final problem = s['legProblem'] is Map ? s['legProblem'] as Map : null;
     return Card(
+      color: problem != null ? Colors.orange.shade50 : null,
       child: ListTile(
         title: Text('${s['trackingNumber'] ?? id} · $status · ${s['paymentStatus'] ?? ''}'),
         subtitle: Text(
           'эгаси: ${s['ownerId']} · қўлида: ${cust['kind']} ${cust['id'] ?? ''} · '
           'LEG: ${s['legCount'] ?? 1} (маршрут v${s['routePlanVersion'] ?? 1}) · '
-          'нарх: $price · янгиланган: ${_fmt(s['updatedAt'])}',
+          'нарх: $price · янгиланган: ${_fmt(s['updatedAt'])}'
+          '${problem != null ? '\n⚠ LEG муддати тугаган: ${problem['legId']} (${_fmt(problem['at'])}) — ижрочи топилмади' : ''}',
         ),
+        isThreeLine: problem != null,
         trailing: Wrap(
           spacing: 6,
           children: [
+            if (problem != null)
+              FilledButton.icon(
+                onPressed: _busy ? null : () => _reactivateLeg(id, (problem['legId'] ?? '').toString()),
+                icon: const Icon(Icons.replay, size: 16),
+                label: const Text('LEG\'ни қайта очиш'),
+              ),
             OutlinedButton.icon(
               onPressed: () => _showCustody(id),
               icon: const Icon(Icons.history, size: 16),
@@ -662,11 +704,10 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
     Navigator.pop(context, doc);
   }
 
-  String _bracketLabel(int i) {
-    final g = _brackets[i];
-    final kg = g % 1000 == 0 ? (g ~/ 1000).toString() : (g / 1000).toStringAsFixed(1);
-    return '≤$kg кг';
-  }
+  static String _kgLabel(int grams) =>
+      grams % 1000 == 0 ? (grams ~/ 1000).toString() : (grams / 1000).toStringAsFixed(1);
+
+  String _bracketLabel(int i) => '≤${_kgLabel(_brackets[i])} кг';
 
   @override
   Widget build(BuildContext context) {
@@ -748,9 +789,15 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
                           padding: const EdgeInsets.all(4),
                           child: Text(_bracketLabel(i), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
                         ),
-                      const Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Text('+1 кг (20 кг дан ошса)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Text(
+                          _brackets.isEmpty
+                              ? '+1 кг'
+                              : '+1 кг (${_kgLabel(_brackets.last)} кг дан ошса, ҳар бошланган кг)',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                        ),
                       ),
                     ],
                   ),

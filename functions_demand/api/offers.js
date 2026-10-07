@@ -427,6 +427,11 @@ function makeCancelAssignment(deps) {
 
       sm.assertTransition(demand.status, sm.STATUS.ACTIVE, 'cancelAssignment');
 
+      // Taklif YOZUVDAN OLDIN o'qiladi: haqiqiy SDK `tx.update`dan keyingi
+      // `tx.get`ni rad etadi (?reads before writes?) ? avval shu tartib
+      // teskari edi va har bir bekor qilish xato bilan tugardi.
+      const offerSnap = await tx.get(offerRef);
+
       tx.update(demandRef, {
         status: sm.STATUS.ACTIVE,
         assignment: { providerId: null, offerId: null, acceptedAt: null },
@@ -436,7 +441,6 @@ function makeCancelAssignment(deps) {
         updatedAt: now,
       });
 
-      const offerSnap = await tx.get(offerRef);
       if (offerSnap.exists) {
         const o = offerSnap.data() || {};
         tx.update(offerRef, {

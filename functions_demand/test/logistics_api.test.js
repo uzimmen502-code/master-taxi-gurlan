@@ -439,6 +439,20 @@ ok('onShipmentFunded: faqat pending→escrow_funded o\'tishida; takror chaqiruv 
   assert.strictEqual(again.skipped, 'status_active', 'idempotent');
 });
 
+// Harness fake'i qulflanadi: yana «yumshoq» bo'lib qolsa, yuqoridagi oqimlar
+// haqiqiy SDK'da yiqiladigan tranzaksiyani yashil ko'rsatadi.
+ok('harness fake tranzaksiyasi haqiqiy SDK kabi: yozuvdan KEYIN o\'qish XATO', async () => {
+  const db = makeDb(seed());
+  const ref = db.collection('shipments').doc('s1');
+  await assert.rejects(
+    () => db.runTransaction(async (tx) => {
+      tx.set(ref, { x: 1 });
+      await tx.get(ref);
+    }),
+    /all reads to be executed before all writes/,
+  );
+});
+
 (async () => {
   for (const t of tests) {
     try { await t.fn(); passed += 1; console.log(`  OK  ${t.name}`); } catch (e) {

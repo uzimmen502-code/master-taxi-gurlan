@@ -33,7 +33,12 @@ function makeDb(seed) {
   const db = new FakeFirestore(seed);
   db.runTransaction = async (fn) => {
     const tx = {
-      get: (ref) => ref.get(),
+      // Haqiqiy SDK kabi: yozuvdan keyin o'qish — xato (lenient fake
+      // accountId bug'ini yashirgan edi, emulatorda topildi).
+      get: (ref) => {
+        if (tx._ops.length) throw new Error('Firestore transactions require all reads to be executed before all writes.');
+        return ref.get();
+      },
       set: (ref, data, opts) => { tx._ops.push(() => ref.set(data, opts)); },
       update: (ref, data) => { tx._ops.push(() => ref.update(data)); },
       delete: (ref) => { tx._ops.push(() => ref.delete()); },
@@ -417,6 +422,40 @@ ok('trust voqeasi yoziladi (tez bekor qilish vs kech)', async () => {
   // 2 daqiqa ichida bekor qilindi -> `quickCancel` (jarima yo'q).
   assert.strictEqual(events[0].type, 'quickCancel');
   assert.strictEqual(events[0].subjectId, USTA_A);
+});
+
+// Relay LEG'ida `assignment.offerId: null` — taklif hujjati umuman yo'q.
+// Bu shox ham avval yozuvdan keyin o'qirdi (emulatorda isbotlangan).
+ok('cancelAssignment: taklif hujjati YO`Q (Relay LEG) -> qayta ochiladi', async () => {
+  const db = makeDb(seed({
+    [`demands/${DEMAND_ID}`]: {
+      ownerId: OWNER,
+      module: 'logistics',
+      status: sm.STATUS.ACCEPTED,
+      assignment: { providerId: USTA_A, offerId: null, acceptedAt: new Date() },
+      matching: { state: 'done' },
+    },
+  }));
+  config.clearCache();
+  await offersApi.makeCancelAssignment({ db })({ demandId: DEMAND_ID }, ctxA);
+  const d = db.docs.get(`demands/${DEMAND_ID}`);
+  assert.strictEqual(d.status, 'active');
+  assert.strictEqual(d.assignment.providerId, null);
+  assert.ok(!db.docs.has(`demands/${DEMAND_ID}/offers/${USTA_A}`), 'taklif hujjati yaratilmasligi kerak');
+});
+
+// Fake'ning o'zi qulflanadi: yana «yumshoq» bo'lib qolsa, yuqoridagi
+// testlar haqiqiy SDK'da yiqiladigan kodni yashil ko'rsatadi.
+ok('fake tranzaksiya haqiqiy SDK kabi: yozuvdan KEYIN o`qish XATO', async () => {
+  const db = makeDb(seed());
+  const ref = db.collection('demands').doc(DEMAND_ID);
+  await assert.rejects(
+    () => db.runTransaction(async (tx) => {
+      tx.update(ref, { x: 1 });
+      await tx.get(ref);
+    }),
+    /all reads to be executed before all writes/,
+  );
 });
 
 // ── autentifikatsiya ─────────────────────────────────────────────────

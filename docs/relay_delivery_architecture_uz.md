@@ -1113,10 +1113,23 @@ abort). У ва `clipPage` v3 2026-10-06 06:39 UTC да `fix/realty-audit-p1`
 сўм; фаол версиядан — янги қоралама, 9-банд); ҳисоб `tariff_adjust.dart`
 (соф Dart, тест билан).
 
-Деплойдан кейин ҳам хизмат **OFF**: `module_config/logistics_all` йўқ
-(`enabled: false`), фаол тариф йўқ (`module_tariffs/logistics` йўқ —
-v1 қоралама турибди), admin панелда `logistics` модули ёқилмаган
-(hosting'даги `/admin` — эски build, `logistics`ни билмайди). Ёқиш — эга қарорлари: тариф рақамлари →
+**Ёқиш калитлари (2026-10-07, эга рухсати билан):**
+`module_config/logistics_all` ← `{enabled, matchingEnabled, pushEnabled:
+true}` — `functions_demand/tools/enable_module.js --write` билан яратилди
+(real код йўли `resolveFlags` орқали текширилди: enabled/matching/push
+true, killReason бўш). `config/module_defaults.modules.logistics` аллақачон
+`enabled` эди (эга ўзи қўйган, `enforce=true`) — тегилмади.
+**Hosting (2026-10-07, эга рухсати):** `scripts/build_combined_web.ps1`
+→ `firebase deploy --only hosting` — `/` ва `/admin/` шу ветвдан (жонли
+версия аввал ҳам 1.0.33+71 эди, бошқа ветв йўқ); `/admin/`да «AVA
+Logistics» бўлими ва «Ҳудудлар ва хизматлар → logistics» бор (жонли
+`main.dart.js`да текширилди). Диққат: `/` веб-илова ҳам янги — модул
+enabled бўлгани учун веб фойдаланувчи «Жўнатма» плиткасини кўради; тариф
+фаол бўлмагунча нарх сўрови «хизмат ҳали ишга тушмаган» дейди.
+**Хизмат ҳали ишламайди:** фаол тариф йўқ (`module_tariffs/logistics`
+pointer йўқ — v1 қоралама `internal.*` сиз фаоллашмайди) → `createLogisticsOrder`
+`tariff_not_active` қайтаради; мобил плитка эса фақат янги илова build'ида
+(1.0.34 ҳали қурилмаган, эга қарори). Ёқиш — эга қарорлари: тариф рақамлари →
 `seed --write` → `adminActivateLogisticsTariff`; `module_config/logistics_all`
 (`enabled/matchingEnabled/pushEnabled: true`); admin web rebuild
 (`scripts/build_combined_web.ps1` → `hosting`) → «Ҳудудлар ва хизматлар»

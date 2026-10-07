@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Асосий экран фони — статик (эга қарори: анимацион фон чарчатган,
-/// олиб ташланди). `AvaLight.bg` (#F3F5F8) — Avito услуби: нейтрал фон,
-/// бренд ранги фақат қидирув майдони ва «Барча хизматлар» катагида.
+/// олиб ташланди). `AvaLight.bg` — 2026-10-07 дан Primary light `#FFF0D1`
+/// (эга қарори; аввал нейтрал `#F3F5F8`).
 class HomeAliveBackground extends StatelessWidget {
   const HomeAliveBackground({super.key});
 

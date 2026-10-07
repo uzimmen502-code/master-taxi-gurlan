@@ -110,7 +110,7 @@ void main() {
       expect(AvaLight.bg, const Color(0xFFFFF0D1));
       expect(AvaLight.ink, const Color(0xFF171717));
       expect(AvaLight.brandInk, const Color(0xFF171717));
-      expect(AvaLight.brandText, const Color(0xFFB45309));
+      expect(AvaLight.brandText, const Color(0xFFA84D08));
     });
 
     // Positive: бренд устидаги матн ўқилади.
@@ -125,11 +125,26 @@ void main() {
       expect(AvaLight.brandInk, isNot(const Color(0xFFFFFFFF)));
     });
 
-    // Boundary: brandText оқ карточкада AA'дан ўтади; фонда (FFF0D1)
-    // 4.46 — чегарадан озгина паст, лекин йирик матн меъёри (3.0) дан юқори.
-    test('brandText: оқ устида ≥ 4.5, фонда ≥ 3.0', () {
+    // Boundary: brandText ҳам оқ карточкада, ҳам крем фонда AA (4.5) дан
+    // ўтиши шарт. Регрессия қўриқчиси: аввалги `B45309` фонда 4.46 берарди.
+    test('brandText: оқ устида ҳам, фонда ҳам ≥ 4.5', () {
       expect(_contrast(AvaLight.brandText, AvaLight.surface), greaterThanOrEqualTo(4.5));
-      expect(_contrast(AvaLight.brandText, AvaLight.bg), greaterThanOrEqualTo(3.0));
+      expect(_contrast(AvaLight.brandText, AvaLight.bg), greaterThanOrEqualTo(4.5));
+      expect(_contrast(const Color(0xFFB45309), AvaLight.bg), lessThan(4.5));
+    });
+
+    // Илиқ нейтраллар: қават поғонаси сақланади, иккиламчи матн ўқилади.
+    test('илиқ нейтраллар — поғона ва ўқилиш', () {
+      // positive: оқ рамка ↔ ботиқ майдон фарқи эскисидан (1.13) кам эмас
+      expect(_contrast(AvaLight.surface, AvaLight.surface2), greaterThanOrEqualTo(1.13));
+      // positive: карточка чизиғи крем фонда эскисидан (1.13) кучлироқ
+      expect(_contrast(AvaLight.line, AvaLight.bg), greaterThan(1.13));
+      // boundary: иккиламчи матн ботиқ майдон ва чипда AA
+      expect(_contrast(AvaLight.ink2, AvaLight.surface2), greaterThanOrEqualTo(4.5));
+      expect(_contrast(AvaLight.ink2, AvaLight.chip), greaterThanOrEqualTo(4.5));
+      // negative: эски кўк-кулранг қийматлар қайтиб келмасин
+      expect(AvaLight.surface2, isNot(const Color(0xFFEEF1F6)));
+      expect(AvaLight.line, isNot(const Color(0xFFDFE4EC)));
     });
 
     test('бренд матн ранги сифатида темада ишлатилмайди', () {

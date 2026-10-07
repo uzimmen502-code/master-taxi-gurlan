@@ -24,9 +24,9 @@ class _TripRequestDialog extends StatelessWidget {
 
   final TripRequest ride;
 
-  static const _blue = AppColors.primary;
+  static const _blue = AppColors.primaryText;
   static const _green = AppColors.primaryDark;
-  static const _orange = AppColors.primary;
+  static const _orange = AppColors.primaryText;
   static const _red = Color(0xFFB71C1C);
 
   Widget _infoRow(String label, String value) => Padding(
@@ -71,7 +71,7 @@ class _TripRequestDialog extends StatelessWidget {
                 .take(ride.secsLeft),
             builder: (ctx, snap) {
               final secs = snap.data ?? ride.secsLeft;
-              final color = secs > 60 ? _green : secs > 30 ? _orange : _red;
+              final color = secs > 60 ? AppColors.primaryText : secs > 30 ? _orange : _red;
               final m = secs ~/ 60;
               final s = secs % 60;
               return Row(children: [
@@ -94,7 +94,7 @@ class _TripRequestDialog extends StatelessWidget {
             final url = Uri.parse('tel:${phoneForCall(ride.userPhone)}');
             if (await canLaunchUrl(url)) await launchUrl(url);
           },
-          icon: const Icon(Icons.call, color: _green, size: 28),
+          icon: const Icon(Icons.call, color: AppColors.primaryText, size: 28),
           tooltip: 'Қўнғироқ',
         ),
         TextButton(
@@ -107,7 +107,7 @@ class _TripRequestDialog extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop('accept'),
           style: ElevatedButton.styleFrom(
               backgroundColor: _green,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10))),
           child: const Text('ҚАБУЛ',

@@ -196,7 +196,10 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(context.tr('driver_mode_activated')),
+      content: Text(
+        context.tr('driver_mode_activated'),
+        style: const TextStyle(color: AppColors.onPrimary),
+      ),
       backgroundColor: AppColors.button,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 3),
@@ -597,9 +600,14 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
 
   void _snack(String msg, [Color? backgroundColor]) {
     if (!mounted) return;
+    final bg = backgroundColor ?? AppColors.button;
+    // Оч фон (бренд/апельсин) устида тўқ матн, тўқ фонда — оқ.
+    final onColor = ThemeData.estimateBrightnessForColor(bg) == Brightness.light
+        ? AppColors.onPrimary
+        : Colors.white;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: backgroundColor ?? AppColors.button,
+      content: Text(msg, style: TextStyle(color: onColor)),
+      backgroundColor: bg,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
@@ -630,7 +638,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
           overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         actions: [
           Padding(
@@ -655,7 +663,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                           height: 13,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.primary,
+                            color: AppColors.primaryText,
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -667,7 +675,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
+                          color: AppColors.primaryText,
                         ),
                       ),
                     ],
@@ -775,7 +783,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
       ),
       child: Row(
         children: [
-          Icon(Icons.route, size: 16, color: AppColors.primary),
+          Icon(Icons.route, size: 16, color: AppColors.primaryText),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -845,7 +853,7 @@ class _MarshrutTaxiViewState extends State<_MarshrutTaxiView> {
             child: Text(
               _reminderScheduledLabel(c)!,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppColors.primary),
+              style: TextStyle(fontSize: 12, color: AppColors.primaryText),
             ),
           )
         else
@@ -999,7 +1007,7 @@ class _SearchPanel extends StatelessWidget {
                               hint: context.tr('from'),
                               value: fromMfy,
                               icon: Icons.trip_origin,
-                              iconColor: AppColors.primaryMid,
+                              iconColor: AppColors.primaryText,
                               onTap: onFromTap,
                               onClear: onFromClear,
                             ),
@@ -1040,7 +1048,7 @@ class _SearchPanel extends StatelessWidget {
             const LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.white24,
-              color: Colors.white,
+              color: AppColors.onPrimary,
             ),
           ] else if (canSearch && onManualSearch != null) ...[
             const SizedBox(height: 4),
@@ -1048,10 +1056,10 @@ class _SearchPanel extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: onManualSearch,
-                icon: const Icon(Icons.refresh, size: 16, color: Colors.white),
+                icon: const Icon(Icons.refresh, size: 16, color: AppColors.onPrimary),
                 label: Text(
                   context.tr('marshrut_search_again'),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: const TextStyle(color: AppColors.onPrimary, fontSize: 12),
                 ),
               ),
             ),
@@ -1085,7 +1093,7 @@ class _SwapDirectionButton extends StatelessWidget {
             height: _size,
             child: Icon(
               Icons.swap_vert,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
               size: 22,
             ),
           ),

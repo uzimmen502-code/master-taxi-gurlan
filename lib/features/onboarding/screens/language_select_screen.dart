@@ -147,7 +147,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -211,7 +211,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                       borderRadius: BorderRadius.circular(14),
                                       border: Border.all(
                                         color: on
-                                            ? AppColors.primary
+                                            ? AppColors.primaryText
                                             : Colors.transparent,
                                         width: 1.4,
                                       ),
@@ -229,14 +229,14 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                               color: on
-                                                  ? AppColors.primaryDark
+                                                  ? AppColors.primaryText
                                                   : _ink,
                                             ),
                                           ),
                                         ),
                                         if (on)
                                           const Icon(Icons.check_circle,
-                                              color: AppColors.primary,
+                                              color: AppColors.primaryText,
                                               size: 20),
                                       ],
                                     ),
@@ -343,7 +343,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                     onPressed: _saving ? null : _onContinuePressed,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryDark,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                       disabledBackgroundColor:
                           AppColors.primaryDark.withValues(alpha: 0.35),
                       elevation: 0,
@@ -356,7 +356,7 @@ class _LanguageSelectScreenState extends State<LanguageSelectScreen> {
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
+                              color: AppColors.onPrimary,
                               strokeWidth: 2,
                             ),
                           )

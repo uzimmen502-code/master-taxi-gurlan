@@ -83,7 +83,8 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('🗑 "${item.title}" ўчирилди'),
+          content: Text('🗑 "${item.title}" ўчирилди',
+              style: const TextStyle(color: AppColors.onPrimary)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -147,7 +148,8 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('📲 "${item.title}" uchun push yuborildi'),
+          content: Text('📲 "${item.title}" uchun push yuborildi',
+              style: const TextStyle(color: AppColors.onPrimary)),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -249,7 +251,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
             label: const Text('Янги хабaр'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               shape: RoundedRectangleBorder(
@@ -266,9 +268,9 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: TabBar(
         controller: _tabController,
-        labelColor: AppColors.primary,
+        labelColor: AppColors.primaryText,
         unselectedLabelColor: Colors.grey.shade600,
-        indicatorColor: AppColors.primary,
+        indicatorColor: AppColors.primaryText,
         indicatorWeight: 3,
         tabs: const [
           Tab(
@@ -309,7 +311,7 @@ class _AdminNewsListScreenState extends State<AdminNewsListScreen>
             selectedColor: AppColors.primary.withValues(alpha: 0.15),
             labelStyle: TextStyle(
               color: _filter == f.$1
-                  ? AppColors.primary
+                  ? AppColors.primaryText
                   : Colors.grey.shade700,
               fontWeight:
                   _filter == f.$1 ? FontWeight.bold : FontWeight.normal,
@@ -717,9 +719,9 @@ class _NewsCard extends StatelessWidget {
   final bool resendingPush;
 
   static const _categoryColors = <String, Color>{
-    'info': AppColors.primary,
-    'update': AppColors.primary,
-    'promo': AppColors.primary,
+    'info': AppColors.primaryText,
+    'update': AppColors.primaryText,
+    'promo': AppColors.primaryText,
     'warning': Color(0xFFFFA000),
     'emergency': Color(0xFFD32F2F),
     'wallet': AvaLight.ok,
@@ -877,7 +879,7 @@ class _NewsCard extends StatelessWidget {
                         icon: const Icon(Icons.notifications_active, size: 14),
                         label: const Text('Push qayta'),
                         style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
+                          foregroundColor: AppColors.primaryText,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 4,
@@ -950,7 +952,7 @@ class _PushStatusChip extends StatelessWidget {
             Icon(
               Icons.notifications_active,
               size: 14,
-              color: count > 0 ? AppColors.primaryDark : Colors.orange.shade800,
+              color: count > 0 ? AppColors.primaryText : Colors.orange.shade800,
             ),
             const SizedBox(width: 6),
             Flexible(
@@ -962,7 +964,7 @@ class _PushStatusChip extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: count > 0
-                      ? AppColors.primaryDark
+                      ? AppColors.primaryText
                       : Colors.orange.shade900,
                 ),
                 maxLines: 1,

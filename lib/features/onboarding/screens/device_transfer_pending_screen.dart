@@ -129,7 +129,7 @@ class _DeviceTransferPendingScreenState
       appBar: AppBar(
         title: const Text('Tasdiq kutilmoqda'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -137,7 +137,7 @@ class _DeviceTransferPendingScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 24),
-            const Icon(Icons.phonelink_lock, size: 56, color: AppColors.primary),
+            const Icon(Icons.phonelink_lock, size: 56, color: AppColors.primaryText),
             const SizedBox(height: 20),
             Text(
               label.isEmpty

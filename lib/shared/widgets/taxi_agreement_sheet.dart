@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/l10n_extension.dart';
+import '../../core/theme/app_theme.dart';
 import '../../repositories/taxi_billing_repository.dart';
 
 /// `true` — қабул қилинди ва серверга ёзилди.
@@ -136,7 +137,7 @@ class _TaxiAgreementSheetState extends State<_TaxiAgreementSheet> {
                       Text('${i + 1}. ',
                           style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              color: widget.primaryColor)),
+                              color: AppColors.primaryText)),
                       Expanded(
                           child: Text(points[i],
                               style: const TextStyle(fontSize: 14, height: 1.35))),
@@ -170,7 +171,7 @@ class _TaxiAgreementSheetState extends State<_TaxiAgreementSheet> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onPrimary))
                       : Text(context.tr('taxi_agreement_accept')),
                 ),
               ),

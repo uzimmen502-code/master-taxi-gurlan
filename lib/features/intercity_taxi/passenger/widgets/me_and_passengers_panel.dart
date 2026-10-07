@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../intercity_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
@@ -275,7 +276,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                 children: [
                   Icon(
                     Icons.people_outline,
-                    color: IntercityColors.primary,
+                    color: AppColors.primaryText,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -285,7 +286,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: IntercityColors.primary,
+                        color: AppColors.primaryText,
                       ),
                     ),
                   ),
@@ -347,7 +348,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: IntercityColors.primary,
+                  foregroundColor: AppColors.primaryText,
                   side: BorderSide(color: IntercityColors.border),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -477,7 +478,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
             child: Row(
               children: [
                 Icon(Icons.people_outline,
-                    color: IntercityColors.primary, size: 20),
+                    color: AppColors.primaryText, size: 20),
                 const SizedBox(width: 12),
                 Text(
                   context.tr('passengers'),
@@ -501,7 +502,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: IntercityColors.primary,
+                    color: AppColors.primaryText,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -527,7 +528,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               Text(
                 formatMoney(total),
                 style: TextStyle(
-                  color: IntercityColors.primary,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                 ),
@@ -623,7 +624,7 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
               Text(
                 formatMoney(total),
                 style: TextStyle(
-                  color: IntercityColors.primary,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                 ),
@@ -726,7 +727,10 @@ class _MeAndPassengersPanelState extends State<MeAndPassengersPanel> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✅ Брон муваффақиятли юборилди!'),
+          content: const Text(
+            '✅ Брон муваффақиятли юборилди!',
+            style: TextStyle(color: IntercityColors.onPrimary),
+          ),
           backgroundColor: IntercityColors.primary,
           duration: const Duration(seconds: 2),
         ),
@@ -865,7 +869,7 @@ class _StatusBadge extends StatelessWidget {
               ? IntercityColors.warning
               : isCompleted
                   ? IntercityColors.info
-                  : IntercityColors.primary,
+                  : AppColors.primaryText,
         ),
       ),
     );
@@ -995,7 +999,7 @@ class _PassengerTile extends StatelessWidget {
               onPressed: () => callPhone(booking.userPhone),
               icon: Icon(
                 Icons.phone,
-                color: IntercityColors.primary,
+                color: AppColors.primaryText,
                 size: 20,
               ),
               style: IconButton.styleFrom(
@@ -1114,7 +1118,7 @@ class _RatingDone extends StatelessWidget {
         Text(
           context.tr('rating_sent'),
           style: TextStyle(
-            color: IntercityColors.primary,
+            color: AppColors.primaryText,
             fontWeight: FontWeight.w500,
             fontSize: 13,
           ),

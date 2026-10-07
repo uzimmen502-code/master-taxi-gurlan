@@ -101,7 +101,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -109,7 +109,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                 Expanded(
                   child: _starting
                       ? const Center(
-                          child: CircularProgressIndicator(color: AppColors.primary),
+                          child: CircularProgressIndicator(color: AppColors.primaryText),
                         )
                       : PageView.builder(
                           controller: _pageCtrl,
@@ -132,7 +132,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                       onPressed: _start,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryDark,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -150,7 +150,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
                       onPressed: _start,
                       child: Text(
                         context.tr('guest_intro2_read_later'),
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryDark),
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryText),
                       ),
                     ),
                   ],
@@ -214,7 +214,7 @@ class _IntroPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 6),
-          Icon(data.icon, size: 52, color: AppColors.primary),
+          Icon(data.icon, size: 52, color: AppColors.primaryText),
           const SizedBox(height: 14),
           Text(
             context.tr(data.headKey),

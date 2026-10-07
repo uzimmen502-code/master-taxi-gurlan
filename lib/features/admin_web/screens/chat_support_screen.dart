@@ -210,7 +210,7 @@ class _ChatTile extends StatelessWidget {
             radius: 22,
             backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             child: const Icon(Icons.person,
-                color: AppColors.primary, size: 22),
+                color: AppColors.primaryText, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -382,7 +382,7 @@ class _ChatViewState extends State<_ChatView> {
           radius: 18,
           backgroundColor: AppColors.primary.withValues(alpha: 0.15),
           child:
-              const Icon(Icons.person, color: AppColors.primary, size: 18),
+              const Icon(Icons.person, color: AppColors.primaryText, size: 18),
         ),
         const SizedBox(width: 10),
         Column(
@@ -434,11 +434,11 @@ class _ChatViewState extends State<_ChatView> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                      strokeWidth: 2, color: AppColors.onPrimary))
               : const Icon(Icons.send),
           style: IconButton.styleFrom(
             backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
         ),
       ]),
@@ -493,14 +493,14 @@ class _MessageBubble extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 14,
                             color:
-                                isOutgoing ? Colors.white : Colors.black87)),
+                                isOutgoing ? AppColors.onPrimary : Colors.black87)),
                     const SizedBox(height: 4),
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       Text(time,
                           style: TextStyle(
                               fontSize: 10,
                               color: isOutgoing
-                                  ? Colors.white70
+                                  ? AppColors.onPrimary.withValues(alpha: 0.7)
                                   : Colors.grey.shade500)),
                       if (isOutgoing) ...[
                         const SizedBox(width: 4),
@@ -509,7 +509,7 @@ class _MessageBubble extends StatelessWidget {
                                 ? Icons.done_all
                                 : Icons.done,
                             size: 12,
-                            color: Colors.white70),
+                            color: AppColors.onPrimary.withValues(alpha: 0.7)),
                       ],
                     ]),
                   ]),

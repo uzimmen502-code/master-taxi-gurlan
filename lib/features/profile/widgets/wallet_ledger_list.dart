@@ -26,7 +26,7 @@ class WalletLedgerList extends StatelessWidget {
   final String emptyMessage;
   final double? maxHeight;
 
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
   static const _red = Color(0xFFC62828);
 
   @override

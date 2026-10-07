@@ -150,7 +150,8 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       initialTime: c.departureTime,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(primary: _blue)),
+            colorScheme: const ColorScheme.light(
+                primary: _blue, onPrimary: AppColors.onPrimary)),
         child: child!,
       ),
     );
@@ -164,7 +165,8 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       initialTime: isStart ? c.startTime : c.endTime,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(primary: _blue)),
+            colorScheme: const ColorScheme.light(
+                primary: _blue, onPrimary: AppColors.onPrimary)),
         child: child!,
       ),
     );
@@ -221,7 +223,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       appBar: AppBar(
         title: const Text('Ишга чиқиш'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: GestureDetector(
@@ -247,13 +249,13 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
               // белгиламайди — шунинг учун бу бўлим кўрсатилмайди.
               if (!c.isAlone) ...[
                 Row(children: [
-                  const Icon(Icons.route, color: AppColors.primary, size: 20),
+                  const Icon(Icons.route, color: AppColors.primaryText, size: 20),
                   const SizedBox(width: 8),
                   const Text('ЙЎНАЛИШ',
                       style: TextStyle(
                           fontSize: AppText.titleSmall,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: AppColors.primaryText,
                           letterSpacing: 1.2)),
                 ]),
                 const SizedBox(height: 12),
@@ -330,7 +332,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onPrimary))
                       : const Icon(Icons.check_circle_outline, size: 22),
                   label: Text(
                     c.isSaving ? 'Сақланмоқда...' : 'ИШГА ЧИҚИШНИ ТАСДИҚЛАЙМАН',
@@ -339,7 +341,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _green,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
@@ -372,8 +374,8 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           icon: const Icon(Icons.swap_horiz, size: 20),
           label: const Text('Йўналишни орқага қайтариш'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.primary,
-            side: const BorderSide(color: AppColors.primary),
+            foregroundColor: AppColors.primaryText,
+            side: const BorderSide(color: AppColors.primaryText),
             padding: const EdgeInsets.symmetric(vertical: 10),
           ),
         ),
@@ -385,7 +387,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
         ctrl: _fromAddrCtrl,
         hint: 'Шаҳар ёки туман',
         icon: Icons.trip_origin,
-        iconColor: AppColors.primary,
+        iconColor: AppColors.primaryText,
         onChanged: _onFromAddrChanged,
       ),
       if (_fromAddrSug.isNotEmpty)
@@ -474,7 +476,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: AppColors.primary),
+                color: AppColors.primaryText),
           ),
         ),
       ],
@@ -495,7 +497,9 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
           Text(time,
               style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold, color: _blue)),
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryText)),
         ]),
       ),
     );
@@ -508,7 +512,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
       MfyField(
         ctrl: _fromSearchCtrl,
         hint: 'МФЙ танланг...',
-        iconColor: AppColors.primary,
+        iconColor: AppColors.primaryText,
         showSug: _showFromSug,
         query: _fromQuery,
         onChanged: (q) => setState(() {
@@ -644,13 +648,13 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             border: Border.all(color: _blue.withValues(alpha: 0.15)),
           ),
           child: Row(children: [
-            const Icon(Icons.route, color: AppColors.primary, size: 16),
+            const Icon(Icons.route, color: AppColors.primaryText, size: 16),
             const SizedBox(width: 8),
             Expanded(
                 child: Text(c.allStops.join(' → '),
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontWeight: FontWeight.w600))),
           ]),
         ),
@@ -703,7 +707,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(
-                  color: AppColors.primary, width: 1.5)),
+                  color: AppColors.primaryText, width: 1.5)),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           filled: true,
@@ -746,7 +750,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                             horizontal: 14, vertical: 10),
                         child: Row(children: [
                           const Icon(Icons.location_on,
-                              size: 14, color: AppColors.primary),
+                              size: 14, color: AppColors.primaryText),
                           const SizedBox(width: 8),
                           Text(p, style: const TextStyle(fontSize: 13)),
                         ])),
@@ -768,7 +772,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
               BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
             ]),
         child: Row(children: [
-          const Icon(Icons.access_time, color: AppColors.primary, size: 18),
+          const Icon(Icons.access_time, color: AppColors.primaryText, size: 18),
           const SizedBox(width: 8),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label,
@@ -777,7 +781,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
                 style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
+                    color: AppColors.primaryText)),
           ]),
           const Spacer(),
           Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 18),
@@ -809,7 +813,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-          prefixIcon: Icon(icon, color: _blue, size: 20),
+          prefixIcon: Icon(icon, color: AppColors.primaryText, size: 20),
           border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey.shade200)),
@@ -819,7 +823,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide:
-                  const BorderSide(color: AppColors.primary, width: 1.5)),
+                  const BorderSide(color: AppColors.primaryText, width: 1.5)),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           filled: true,
@@ -848,7 +852,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? AppColors.primary : Colors.grey.shade300,
+              color: selected ? AppColors.primaryText : Colors.grey.shade300,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -858,7 +862,7 @@ class _DriverScheduleViewState extends State<_DriverScheduleView> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: selected ? AppColors.primary : Colors.grey.shade700,
+              color: selected ? AppColors.primaryText : Colors.grey.shade700,
             ),
           ),
         ),
@@ -913,7 +917,7 @@ class _HeaderCard extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.primary)),
+                  color: AppColors.primaryText)),
           Text('${controller.driverCar} · ${controller.driverPlate}',
               style:
                   TextStyle(fontSize: 11, color: Colors.grey.shade500)),
@@ -962,10 +966,10 @@ class _SeatsCard extends StatelessWidget {
                     : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: c.seats > 1 ? _blue : Colors.grey.shade300),
+                    color: c.seats > 1 ? AppColors.primaryText : Colors.grey.shade300),
               ),
               child: Icon(Icons.remove,
-                  color: c.seats > 1 ? _blue : Colors.grey, size: 20),
+                  color: c.seats > 1 ? AppColors.primaryText : Colors.grey, size: 20),
             ),
           ),
           const SizedBox(width: 24),
@@ -974,7 +978,7 @@ class _SeatsCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary)),
+                    color: AppColors.primaryText)),
             Text('ўрин',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ]),
@@ -993,10 +997,10 @@ class _SeatsCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                     color:
-                        c.seats < c.maxSeats ? _blue : Colors.grey.shade300),
+                        c.seats < c.maxSeats ? AppColors.primaryText : Colors.grey.shade300),
               ),
               child: Icon(Icons.add,
-                  color: c.seats < c.maxSeats ? _blue : Colors.grey,
+                  color: c.seats < c.maxSeats ? AppColors.primaryText : Colors.grey,
                   size: 20),
             ),
           ),

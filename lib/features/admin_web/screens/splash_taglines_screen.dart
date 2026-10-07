@@ -101,7 +101,8 @@ class _SplashTaglinesScreenState extends State<SplashTaglinesScreen> {
       setState(() => _updatedBy = adminPhone);
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Splash soʻzlari saqlandi'),
+          content: Text('Splash soʻzlari saqlandi',
+              style: TextStyle(color: AppColors.onPrimary)),
           backgroundColor: AppColors.button,
         ),
       );

@@ -93,7 +93,7 @@ class ScheduleCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: AppText.titleMedium,
                           fontWeight: FontWeight.bold,
-                          color: _blue)),
+                          color: AppColors.primaryText)),
                 ),
               const SizedBox(width: 10),
               Expanded(
@@ -164,12 +164,12 @@ class ScheduleCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.notifications_active,
-                      color: Colors.white, size: 18),
+                      color: AppColors.onPrimary, size: 18),
                   const SizedBox(width: 8),
                   Text(
                     context.tr('marshrut_call_system'),
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

@@ -117,7 +117,7 @@ class _CarpetWashAdminScreenState extends State<CarpetWashAdminScreen> {
             '🧺 Gilam yuvish',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: AppColors.primaryText,
                 ),
           ),
         ),

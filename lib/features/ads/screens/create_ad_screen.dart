@@ -304,7 +304,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.limeDeep, width: 1.6),
+        borderSide: const BorderSide(color: AppColors.primaryText, width: 1.6),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -323,7 +323,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       return const Scaffold(
         backgroundColor: _pageBg,
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.limeDeep),
+          child: CircularProgressIndicator(color: AppColors.primaryText),
         ),
       );
     }
@@ -335,7 +335,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: _chipBg,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         titleSpacing: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,7 +345,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
               style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 17,
-                color: Colors.white,
+                color: AppColors.onPrimary,
               ),
             ),
             Text(
@@ -410,7 +410,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                     decoration: _fieldDecoration(
                       label: context.tr('create_ad_name_label'),
                       hint: context.tr('create_ad_name_hint'),
-                      prefix: const Icon(Icons.sell_outlined, color: AppColors.limeDeep),
+                      prefix: const Icon(Icons.sell_outlined, color: AppColors.primaryText),
                     ),
                     validator: (v) {
                       final t = v?.trim() ?? '';
@@ -436,7 +436,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                       hint: context.tr('create_ad_price_hint'),
                       prefix: const Icon(
                         Icons.payments_outlined,
-                        color: AppColors.limeDeep,
+                        color: AppColors.primaryText,
                       ),
                     ).copyWith(
                       suffixText: context.tr('currency_sum'),
@@ -501,7 +501,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                         const Icon(
                           Icons.phone_in_talk_outlined,
                           size: 20,
-                          color: AppColors.limeDeep,
+                          color: AppColors.primaryText,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -541,7 +541,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                   onPressed: _loading ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.limeDeep,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     disabledBackgroundColor:
                         AppColors.limeDeep.withValues(alpha: 0.45),
                     shape: RoundedRectangleBorder(
@@ -555,7 +555,7 @@ class _CreateAdScreenState extends State<CreateAdScreen> {
                           width: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.4,
-                            color: Colors.white,
+                            color: AppColors.onPrimary,
                           ),
                         )
                       : Text(
@@ -627,7 +627,7 @@ class _IntroCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.88),
+                    color: AppColors.onPrimary.withValues(alpha: 0.88),
                     height: 1.3,
                   ),
                 ),
@@ -724,7 +724,7 @@ class _PhotoPickerRow extends StatelessWidget {
                           child: Icon(
                             Icons.close_rounded,
                             size: 16,
-                            color: Colors.white,
+                            color: AppColors.onPrimary,
                           ),
                         ),
                       ),
@@ -763,7 +763,7 @@ class _PhotoPickerRow extends StatelessWidget {
                         ),
                         child: const Icon(
                           Icons.add_a_photo_outlined,
-                          color: AppColors.limeDeep,
+                          color: AppColors.primaryText,
                           size: 20,
                         ),
                       ),

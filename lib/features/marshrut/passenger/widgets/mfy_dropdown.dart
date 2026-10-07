@@ -36,7 +36,7 @@ class MfyDropdown extends StatelessWidget {
   final VoidCallback? onTap;
   final bool compact;
 
-  static const Color _blue = AppColors.primary;
+  static const Color _blue = AppColors.primaryText;
 
   List<String> _suggestions() {
     final q = ctrl.text.trim();

@@ -117,7 +117,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     final msg = c.consumeSuccess();
     if (msg != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppColors.button),
+        SnackBar(
+          content: Text(
+            msg,
+            style: const TextStyle(color: AppColors.onPrimary),
+          ),
+          backgroundColor: AppColors.button,
+        ),
       );
     }
   }
@@ -140,7 +146,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       _phoneCtrl.text = c.phone;
       final loc = AppLocalizations.of(context)!;
       messenger.showSnackBar(SnackBar(
-        content: Text(loc.translate('saved')),
+        content: Text(
+          loc.translate('saved'),
+          style: const TextStyle(color: AppColors.onPrimary),
+        ),
         backgroundColor: AppColors.button,
       ));
     }
@@ -162,11 +171,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         ),
         titleSpacing: 0,
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           if (!_editing)
             IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white),
+              icon: const Icon(Icons.edit, color: AppColors.onPrimary),
               tooltip: loc.translate('save'),
               onPressed: () => setState(() => _editing = true),
             )
@@ -174,7 +183,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             // Edit режимида иккита текстли тугма — экранда тор бўлиб қолмасин
             // деб иконкалaштирилди (бутун жой эгaллaмaйди).
             IconButton(
-              icon: const Icon(Icons.close, color: Colors.white70),
+              icon: Icon(Icons.close, color: AppColors.onPrimary.withValues(alpha: 0.7)),
               tooltip: loc.translate('cancel'),
               onPressed: () {
                 _nameCtrl.text = c.name;
@@ -188,9 +197,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: AppColors.onPrimary),
                     )
-                  : const Icon(Icons.check, color: Colors.white),
+                  : const Icon(Icons.check, color: AppColors.onPrimary),
               tooltip: loc.translate('save'),
               onPressed: _saving ? null : _save,
             ),
@@ -331,7 +340,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     ),
                   ),
                   const Icon(Icons.edit_location_alt,
-                      color: _green, size: 18),
+                      color: AppColors.primaryText, size: 18),
                 ]),
               ),
             ),
@@ -352,7 +361,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         decoration: BoxDecoration(
             color: AvaLight.okSoft,
             borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, color: _green, size: 18),
+        child: Icon(icon, color: AppColors.primaryText, size: 18),
       ),
       const SizedBox(width: 12),
       Expanded(
@@ -391,7 +400,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             borderSide: BorderSide(color: Colors.grey.shade300)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: _green)),
+            borderSide: const BorderSide(color: AppColors.primaryText)),
       ),
     );
   }
@@ -414,7 +423,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 11,
-                  color: sel ? Colors.white : Colors.black87,
+                  color: sel ? AppColors.onPrimary : Colors.black87,
                   fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
         ),
       ),

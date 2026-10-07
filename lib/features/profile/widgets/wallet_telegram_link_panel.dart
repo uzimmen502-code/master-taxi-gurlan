@@ -192,7 +192,7 @@ class _WalletTelegramLinkPanelState extends State<WalletTelegramLinkPanel> {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                   ),
                 )
               : const Icon(Icons.telegram),

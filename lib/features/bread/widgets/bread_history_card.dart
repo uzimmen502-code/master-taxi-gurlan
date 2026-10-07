@@ -14,13 +14,13 @@ class BreadHistoryCard extends StatelessWidget {
   Color _statusColor(String s) {
     switch (s) {
       case 'accepted':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'ready':
         return Colors.deepOrange;
       case 'in_delivery':
         return Colors.indigo;
       case 'delivered':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'rejected':
         return Colors.red;
       default:
@@ -110,7 +110,7 @@ class BreadHistoryCard extends StatelessWidget {
             style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary),
+                color: AppColors.primaryText),
           ),
         ]),
         const SizedBox(height: 4),

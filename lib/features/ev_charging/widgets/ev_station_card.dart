@@ -129,7 +129,7 @@ class EvStationCard extends StatelessWidget {
                 label: const Text('Йўл кўрсатиш'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryDark,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),

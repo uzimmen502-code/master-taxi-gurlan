@@ -26,9 +26,9 @@ class CourierOnlineToggle extends StatelessWidget {
           ),
           child: Text(
             isOnline ? '🟢 Онлайн' : '⚫ Оффлайн',
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 12,
-                color: Colors.white,
+                color: isOnline ? AppColors.onPrimary : Colors.white,
                 fontWeight: FontWeight.bold),
           ),
         ),

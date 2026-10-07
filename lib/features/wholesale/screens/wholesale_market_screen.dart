@@ -644,7 +644,7 @@ class _MyProductsView extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
-                color: AppColors.primaryDark,
+                color: AppColors.primaryText,
                 fontSize: AppText.titleSmall,
               ),
             ),

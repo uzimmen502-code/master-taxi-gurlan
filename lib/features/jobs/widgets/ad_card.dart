@@ -206,7 +206,7 @@ class AdCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: AppText.labelSmall,
                   fontWeight: FontWeight.w700,
-                  color: JobsColors.priceText,
+                  color: AppColors.primaryText,
                 ),
               ),
             ),

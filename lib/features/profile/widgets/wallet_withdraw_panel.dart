@@ -212,7 +212,10 @@ class WalletWithdrawPanel extends StatelessWidget {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Ечиш аризаси юборилди'),
+                              content: Text(
+                                'Ечиш аризаси юборилди',
+                                style: TextStyle(color: AppColors.onPrimary),
+                              ),
                               backgroundColor: AppColors.primary,
                             ),
                           );

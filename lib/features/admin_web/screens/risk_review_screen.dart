@@ -53,7 +53,7 @@ class RiskReviewScreen extends StatelessWidget {
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.security, color: _blue),
+          child: const Icon(Icons.security, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -170,7 +170,8 @@ class _RiskEventCardState extends State<_RiskEventCard> {
         operatorPhone: auth.phone ?? '',
       );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Risk event ёпилди'),
+        content: Text('Risk event ёпилди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } catch (e) {
@@ -206,7 +207,7 @@ class _EmptyRiskState extends StatelessWidget {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.verified_user_outlined,
-            size: 54, color: AppColors.primaryMid),
+            size: 54, color: AppColors.primaryText),
         const SizedBox(height: 10),
         const Text('Очиқ risk event йўқ'),
       ]),

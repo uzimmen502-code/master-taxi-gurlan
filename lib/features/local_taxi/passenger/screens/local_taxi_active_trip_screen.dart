@@ -11,6 +11,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../local_taxi_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/utils/phone_launcher.dart';
@@ -290,7 +291,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
           ],
         ),
         child: Row(children: [
-          const Icon(Icons.phone, color: LocalTaxiColors.primary, size: 20),
+          const Icon(Icons.phone, color: AppColors.primaryText, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -337,7 +338,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: LocalTaxiColors.primary,
+                color: AppColors.primaryText,
               ),
             ),
             const SizedBox(height: 8),
@@ -676,7 +677,8 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor:
                     isHard ? LocalTaxiColors.danger : LocalTaxiColors.primary,
-                foregroundColor: Colors.white,
+                foregroundColor:
+                    isHard ? Colors.white : LocalTaxiColors.onPrimary,
               ),
               onPressed: () => Navigator.pop(ctx),
               child: Text(ctx.tr('ok')),

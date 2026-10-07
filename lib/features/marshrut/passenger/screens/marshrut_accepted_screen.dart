@@ -182,7 +182,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
       appBar: AppBar(
         title: Text(context.tr('marshrut_driver_accepted')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<ActiveTrip>(
@@ -282,7 +282,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: trip.driverPhone.isNotEmpty
-                                      ? AppColors.primary
+                                      ? AppColors.primaryText
                                       : Colors.grey,
                                   decoration: trip.driverPhone.isNotEmpty
                                       ? TextDecoration.underline
@@ -292,7 +292,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                             ),
                             if (trip.driverPhone.isNotEmpty)
                               Icon(Icons.call,
-                                  size: 20, color: AppColors.primary),
+                                  size: 20, color: AppColors.primaryText),
                           ],
                         ),
                       ),
@@ -379,7 +379,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
                   style: const TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     height: 1.15,
                   ),
                 ),
@@ -440,7 +440,7 @@ class _MarshrutAcceptedScreenState extends State<MarshrutAcceptedScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.button,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
             ),
             child: Text(context.tr('continue')),
           ),

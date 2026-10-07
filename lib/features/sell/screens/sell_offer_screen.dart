@@ -13,7 +13,7 @@ class SellOfferScreen extends StatelessWidget {
 
   final String phone;
 
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
   static const _brown = AppColors.primarySoft;
 
   @override
@@ -29,7 +29,7 @@ class SellOfferScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: ListView(
@@ -83,7 +83,7 @@ class SellOfferScreen extends StatelessWidget {
         style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.bold,
-          color: AppColors.primaryDark,
+          color: AppColors.primaryText,
         ),
       ),
     );

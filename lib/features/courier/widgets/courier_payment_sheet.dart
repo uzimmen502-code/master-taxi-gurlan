@@ -313,7 +313,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
             const Icon(
               Icons.account_balance_wallet_outlined,
               size: 20,
-              color: AppColors.primary,
+              color: AppColors.primaryText,
             ),
           const SizedBox(width: 8),
           Expanded(
@@ -390,7 +390,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     return Text(
       changeNote,
       style: const TextStyle(
-        color: AppColors.primaryDark,
+        color: AppColors.primaryText,
         fontWeight: FontWeight.w600,
       ),
     );
@@ -509,13 +509,13 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
     if (diff > 0) {
       // Ортиқча — қайтим
       rows.add(_summaryRow('Қайтим', '${formatPrice(diff)} $_cur',
-          color: AppColors.primaryDark));
+          color: AppColors.primaryText));
       rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
-          bold: true, color: AppColors.primaryDark));
+          bold: true, color: AppColors.primaryText));
       borderColor = AppColors.primary;
     } else if (diff == 0) {
       rows.add(_summaryRow('Кошелёк (янги)', '${formatPrice(x)} $_cur',
-          bold: true, color: AppColors.primaryDark));
+          bold: true, color: AppColors.primaryText));
       borderColor = AppColors.primary;
     } else {
       // Маҳсулот кам — кошелёкдан Y - Z
@@ -525,7 +525,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
       if (newBalance >= 0) {
         rows.add(_summaryRow(
             'Кошелёк (янги)', '${formatPrice(newBalance)} $_cur',
-            bold: true, color: AppColors.primaryDark));
+            bold: true, color: AppColors.primaryText));
         borderColor = AppColors.primary;
       } else {
         rows.add(_summaryRow('Етишмаяпти', '${formatPrice(-newBalance)} $_cur',
@@ -611,7 +611,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
             style: const TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 15,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
             ),
           ),
           const SizedBox(height: 8),
@@ -695,7 +695,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
             }),
             style: const TextStyle(
               fontWeight: FontWeight.w600,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
             ),
           ),
         const SizedBox(height: 6),
@@ -890,7 +890,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
           Row(
             children: [
               const Icon(Icons.account_balance_wallet,
-                  color: AppColors.primary, size: 24),
+                  color: AppColors.primaryText, size: 24),
               const SizedBox(width: 8),
               Text(
                 _l('courier_customer_wallet'),
@@ -905,7 +905,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
             _walletBreakdownRow(
               _l('courier_wallet_change'),
               changeCredit,
-              color: AppColors.primaryDark,
+              color: AppColors.primaryText,
             ),
           ],
           if (walletSum > 0) ...[
@@ -1037,7 +1037,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
                   width: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                   ),
                 )
               : Text(
@@ -1175,7 +1175,7 @@ class _CourierPaymentSheetState extends State<CourierPaymentSheet> {
                       width: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: AppColors.onPrimary,
                       ),
                     )
                   : Text(

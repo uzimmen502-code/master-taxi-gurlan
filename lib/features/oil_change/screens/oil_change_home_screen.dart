@@ -100,7 +100,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       appBar: AppBar(
         title: Text(context.tr('oil_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
             tooltip: context.tr('oil_setup'),
@@ -157,7 +157,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Icon(Icons.directions_car_filled_outlined,
-              size: 72, color: AppColors.primary),
+              size: 72, color: AppColors.primaryText),
           const SizedBox(height: 16),
           Text(
             context.tr('oil_my_car'),
@@ -211,7 +211,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                   label: Text(
                     v.plate.isNotEmpty ? v.plate : v.model,
                     style: TextStyle(
-                      color: on ? Colors.white : oilHubInk,
+                      color: on ? AppColors.onPrimary : oilHubInk,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -849,7 +849,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
                           formatPrice(f.price),
                         ),
                     style: const TextStyle(
-                      color: oilHubViolet,
+                      color: AppColors.primaryText,
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
                     ),
@@ -978,7 +978,7 @@ class _OilChangeHomeScreenState extends State<OilChangeHomeScreen> {
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ListTile(
-        leading: Icon(icon, color: AppColors.primary),
+        leading: Icon(icon, color: AppColors.primaryText),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,

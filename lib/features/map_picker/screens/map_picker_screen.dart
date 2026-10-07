@@ -131,14 +131,14 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           if (_selectedLocation != null)
             TextButton(
               onPressed: _confirmSelection,
               child: const Text('Танлаш',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 16)),
             ),
@@ -248,7 +248,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ],
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.history, size: 18, color: AppColors.primary),
+            const Icon(Icons.history, size: 18, color: AppColors.primaryText),
             const SizedBox(width: 6),
             Text(
               'Сақланган ${widget.recentPlaces.length}',
@@ -343,7 +343,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                     fontSize: 15, fontWeight: FontWeight.w600)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.button,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),

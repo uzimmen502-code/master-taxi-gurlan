@@ -195,7 +195,7 @@ class _DriverRegisterMarshrutViewState
             ? context.tr('marshrut_route_profile')
             : context.tr('marshrut_route_driver_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: GestureDetector(
@@ -227,7 +227,7 @@ class _DriverRegisterMarshrutViewState
             MfyField(
               ctrl: _fromCtrl,
               hint: context.tr('mfy_select_hint'),
-              iconColor: AppColors.primary,
+              iconColor: AppColors.primaryText,
               showSug: _showFromSug,
               query: _fromQuery,
               onChanged: (q) => setState(() {
@@ -358,7 +358,7 @@ class _DriverRegisterMarshrutViewState
         ),
         child: Row(
           children: [
-            const Icon(Icons.schedule, color: _color),
+            const Icon(Icons.schedule, color: AppColors.primaryText),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -515,7 +515,7 @@ class _DriverRegisterMarshrutViewState
             onChanged: (v) => c.setPriceInput(int.tryParse(v.trim())),
             decoration: InputDecoration(
               hintText: 'Масалан: 6000',
-              prefixIcon: const Icon(Icons.payments_outlined, color: _color),
+              prefixIcon: const Icon(Icons.payments_outlined, color: AppColors.primaryText),
               suffixText: 'сўм',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -541,14 +541,14 @@ class _DriverRegisterMarshrutViewState
         border: Border.all(color: _color.withValues(alpha: 0.2)),
       ),
       child: Row(children: [
-        const Icon(Icons.route, color: _color, size: 16),
+        const Icon(Icons.route, color: AppColors.primaryText, size: 16),
         const SizedBox(width: 8),
         Expanded(
             child: Text(
           stops.join(' → '),
           style: const TextStyle(
               fontSize: AppText.labelSmall,
-              color: _color,
+              color: AppColors.primaryText,
               fontWeight: FontWeight.w600),
         )),
       ]),
@@ -586,7 +586,7 @@ class _DriverRegisterMarshrutViewState
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2, color: AppColors.onPrimary))
             : const Icon(Icons.check_circle, size: 22),
         label: Text(
           c.isSaving
@@ -598,7 +598,7 @@ class _DriverRegisterMarshrutViewState
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: _color,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
@@ -651,13 +651,13 @@ class _Banner extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+                  color: AppColors.onPrimary)),
           Text(
             isRegistered
                 ? context.tr('marshrut_update_your_data')
                 : context.tr('marshrut_register_once_hint'),
             style:
-                TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
+                TextStyle(fontSize: 12, color: AppColors.onPrimary.withValues(alpha: 0.85)),
           ),
         ])),
       ]),

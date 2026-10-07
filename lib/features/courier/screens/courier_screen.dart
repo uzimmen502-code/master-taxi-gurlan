@@ -44,8 +44,6 @@ class _CourierView extends StatefulWidget {
 }
 
 class _CourierViewState extends State<_CourierView> {
-  static const Color _btn = AppColors.primaryDark;
-
   String? _lastSnackShown;
 
   String _localizedMsg(String msg) {
@@ -83,7 +81,7 @@ class _CourierViewState extends State<_CourierView> {
       appBar: AppBar(
         title: Text(context.tr('courier_panel_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         actions: [
           CourierOnlineToggle(
@@ -141,7 +139,7 @@ class _CourierViewState extends State<_CourierView> {
             ),
               style: const TextStyle(
                   fontSize: 13,
-                  color: _btn,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.bold)),
         ]),
       ),
@@ -150,7 +148,7 @@ class _CourierViewState extends State<_CourierView> {
             ? 0
             : c.currentOrderIndex / c.routeOrders.length,
         backgroundColor: Colors.grey.shade200,
-        valueColor: const AlwaysStoppedAnimation<Color>(_btn),
+        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryText),
       ),
       Expanded(
           child: ListView.builder(
@@ -388,7 +386,7 @@ class _NoRouteView extends StatelessWidget {
               label: Text(context.tr('courier_start_work')),
               style: ElevatedButton.styleFrom(
                   backgroundColor: _btn,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -410,7 +408,7 @@ class _NoRouteView extends StatelessWidget {
                   label: Text(context.tr('courier_mfy_route')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _btn,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 12,

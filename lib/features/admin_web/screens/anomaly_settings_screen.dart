@@ -98,7 +98,8 @@ class _AnomalySettingsScreenState extends State<AnomalySettingsScreen> {
       setState(() => _lastUpdatedBy = adminPhone);
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Созламалар сақланди'),
+          content: Text('Созламалар сақланди',
+              style: TextStyle(color: AppColors.onPrimary)),
           backgroundColor: AppColors.button,
         ),
       );

@@ -77,7 +77,8 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
                       color: isOnline ? _green : Colors.grey,
                       shape: BoxShape.circle),
                   child: Icon(isOnline ? Icons.wifi : Icons.wifi_off,
-                      color: Colors.white, size: 14),
+                      color: isOnline ? AppColors.onPrimary : Colors.white,
+                      size: 14),
                 ),
               ),
             ),
@@ -91,7 +92,9 @@ class _OnlinePulseToggleState extends State<OnlinePulseToggle>
                     style: TextStyle(
                         fontSize: AppText.bodyLarge,
                         fontWeight: FontWeight.bold,
-                        color: isOnline ? _green : Colors.grey.shade600)),
+                        color: isOnline
+                            ? AppColors.primaryText
+                            : Colors.grey.shade600)),
                 Text(
                     isOnline
                         ? 'Буюртмалар қабул қилинмоқда'

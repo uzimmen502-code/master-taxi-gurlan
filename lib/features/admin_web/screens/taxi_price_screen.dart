@@ -224,7 +224,7 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                const Icon(Icons.local_taxi, color: _green, size: 26),
+                const Icon(Icons.local_taxi, color: AppColors.primaryText, size: 26),
                 const SizedBox(width: 10),
                 Text(
                   'Mahalliy taksi narxi',
@@ -312,7 +312,7 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
                 Text(
                   _ok!,
                   style: const TextStyle(
-                    color: _green,
+                    color: AppColors.primaryText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -332,7 +332,7 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: AppColors.onPrimary,
                           ),
                         )
                       : const Icon(Icons.save_outlined),

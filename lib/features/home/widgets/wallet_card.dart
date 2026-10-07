@@ -71,8 +71,8 @@ class _WalletCardState extends State<WalletCard>
   }
 
   Color get _txAmountColor {
-    if (widget.lastTxIsCredit == null) return Colors.white;
-    return widget.lastTxIsCredit! ? Colors.white : _debitTint;
+    if (widget.lastTxIsCredit == null) return AppColors.onPrimary;
+    return widget.lastTxIsCredit! ? AppColors.onPrimary : _debitTint;
   }
 
   BoxDecoration get _shellDecoration => BoxDecoration(
@@ -121,7 +121,7 @@ class _WalletCardState extends State<WalletCard>
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.85),
+                            color: AppColors.onPrimary.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -159,7 +159,7 @@ class _WalletCardState extends State<WalletCard>
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
-                              color: Colors.white,
+                              color: AppColors.onPrimary,
                             ),
                             children: [
                               TextSpan(
@@ -218,7 +218,7 @@ class _WalletCardState extends State<WalletCard>
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: Colors.white,
+                              color: AppColors.onPrimary,
                             ),
                             children: [
                               TextSpan(
@@ -265,7 +265,7 @@ class _WalletCardState extends State<WalletCard>
                                   style: const TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w500,
-                                    color: Colors.white,
+                                    color: AppColors.onPrimary,
                                   ),
                                 ),
                               ),

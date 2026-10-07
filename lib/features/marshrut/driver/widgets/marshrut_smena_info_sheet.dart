@@ -146,7 +146,7 @@ class _MarshrutSmenaInfoSheetState extends State<_MarshrutSmenaInfoSheet> {
             child: SwitchListTile(
               secondary: Icon(
                 _statusSoundsEnabled ? Icons.volume_up : Icons.volume_off,
-                color: AppColors.primaryDark,
+                color: AppColors.primaryText,
               ),
               title: Text(
                 context.tr('marshrut_status_sounds_title'),
@@ -169,7 +169,7 @@ class _MarshrutSmenaInfoSheetState extends State<_MarshrutSmenaInfoSheet> {
             icon: const Icon(Icons.person_outline, size: 18),
             label: Text(context.tr('edit_driver_data')),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primaryDark,
+              foregroundColor: AppColors.primaryText,
               minimumSize: const Size(double.infinity, 48),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -200,7 +200,7 @@ class _InfoTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppColors.primaryDark),
+          Icon(icon, size: 20, color: AppColors.primaryText),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

@@ -52,7 +52,8 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
     messenger.showSnackBar(
       SnackBar(
         backgroundColor: error ? Colors.red : AppColors.button,
-        content: Text(msg),
+        content: Text(msg,
+            style: TextStyle(color: error ? null : AppColors.onPrimary)),
         duration: const Duration(seconds: 4),
       ),
     );
@@ -223,8 +224,8 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
           ),
           TabBar(
             controller: _tabs,
-            labelColor: AppColors.primaryDark,
-            indicatorColor: AppColors.primary,
+            labelColor: AppColors.primaryText,
+            indicatorColor: AppColors.primaryText,
             tabs: const [
               Tab(text: 'Мойлар'),
               Tab(text: 'Фильтрлар'),
@@ -371,7 +372,7 @@ class _OilCatalogAdminScreenState extends State<OilCatalogAdminScreen>
                     : const Color(0xFFEEF2F7),
                 child: Icon(
                   p.isOil ? Icons.opacity : Icons.filter_alt_outlined,
-                  color: AppColors.primary,
+                  color: AppColors.primaryText,
                 ),
               ),
       ),
@@ -580,7 +581,7 @@ class _OilCatalogEditDialogState extends State<_OilCatalogEditDialog> {
                                 ? Icons.filter_alt_outlined
                                 : Icons.opacity,
                             size: 48,
-                            color: AppColors.primary,
+                            color: AppColors.primaryText,
                           ),
                         ),
                 ),
@@ -719,7 +720,7 @@ class _OilCatalogEditDialogState extends State<_OilCatalogEditDialog> {
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                   ),
                 )
               : const Text('Сақлаш'),

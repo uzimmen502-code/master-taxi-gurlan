@@ -25,7 +25,6 @@ class CourierAdminScreen extends StatefulWidget {
 }
 
 class _CourierAdminScreenState extends State<CourierAdminScreen> {
-  static const _blue = AppColors.primary;
   static final _money = NumberFormat.decimalPattern('en');
   static final _date = DateFormat('dd.MM HH:mm');
   static final _time = DateFormat('HH:mm');
@@ -83,7 +82,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         title: const Text(
           '🛵 Kuryer boshqaruvi',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -98,7 +97,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Row(
                 children: [
-                  const Icon(Icons.alt_route, color: _blue),
+                  const Icon(Icons.alt_route, color: AppColors.primaryText),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -202,7 +201,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                             _BoardColumn(
                               title: 'Курьерда',
                               icon: Icons.delivery_dining,
-                              color: AppColors.primary,
+                              color: AppColors.primaryText,
                               count:
                                   activeRoutes.length + inDeliveryOrders.length,
                               child: _InDeliveryPanel(
@@ -428,7 +427,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.map_outlined, color: AppColors.primary),
+            const Icon(Icons.map_outlined, color: AppColors.primaryText),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -543,7 +542,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
             padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
             child: Row(
               children: [
-                const Icon(Icons.map, color: AppColors.primary, size: 18),
+                const Icon(Icons.map, color: AppColors.primaryText, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -765,7 +764,7 @@ class _RouteList extends StatelessWidget {
       itemCount: routes.length,
       itemBuilder: (_, i) {
         final r = routes[i];
-        final statusColor = r.isActive ? AppColors.primary : Colors.orange;
+        final statusColor = r.isActive ? AppColors.primaryText : Colors.orange;
         final statusText = r.isActive ? 'Aktiv' : 'Tayyor';
         final selected = selectedRouteId == r.id;
         final loading = loadingRouteId == r.id;
@@ -862,7 +861,7 @@ class _InDeliveryPanel extends StatelessWidget {
                   dense: true,
                   leading: const CircleAvatar(
                     backgroundColor: AvaLight.okSoft,
-                    child: Icon(Icons.delivery_dining, color: AppColors.primary),
+                    child: Icon(Icons.delivery_dining, color: AppColors.primaryText),
                   ),
                   title: Text(
                     '${r.currentIndex}/${r.orderIds.length} yetkazildi',

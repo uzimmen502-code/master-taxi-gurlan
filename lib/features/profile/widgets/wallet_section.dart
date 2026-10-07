@@ -16,8 +16,8 @@ class WalletSection extends StatelessWidget {
   final String phone;
   final bool showTitle;
 
-  static const _green = AppColors.primaryDark;
-  static const _blue = AppColors.primary;
+  static const _green = AppColors.primaryText;
+  static const _blue = AppColors.primaryText;
 
   @override
   Widget build(BuildContext context) {

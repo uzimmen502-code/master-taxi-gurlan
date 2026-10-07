@@ -17,7 +17,7 @@ class OilServicesScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(context.tr('oil_services_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: StreamBuilder<List<OilServicePoint>>(
         stream: repo.watchServicePoints(),

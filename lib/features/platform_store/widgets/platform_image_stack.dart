@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../ava_store_colors.dart';
 
@@ -238,7 +239,7 @@ class _Frame extends StatelessWidget {
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
           color: elevated
-              ? AvaStoreColors.brand.withValues(alpha: 0.7)
+              ? AppColors.primaryText.withValues(alpha: 0.7)
               : AvaStoreColors.border,
           width: elevated ? 1.2 : 0.9,
         ),
@@ -294,7 +295,7 @@ class _NetImage extends StatelessWidget {
             height: 22,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AvaStoreColors.deep,
+              color: AppColors.primaryText,
             ),
           ),
         ),

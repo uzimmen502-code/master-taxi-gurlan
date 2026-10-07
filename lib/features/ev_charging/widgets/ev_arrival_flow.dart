@@ -109,7 +109,7 @@ class EvArrivalFlow {
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryDark,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
             ),
             child: Text(yes),
           ),

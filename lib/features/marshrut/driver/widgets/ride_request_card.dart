@@ -56,7 +56,7 @@ class RideRequestCard extends StatelessWidget {
             child: Text(context.tr('marshrut_view_request'),
                 style: const TextStyle(
                     fontSize: AppText.labelSmall,
-                    color: Colors.white,
+                    color: AppColors.onPrimary,
                     fontWeight: FontWeight.bold)),
           ),
         ),

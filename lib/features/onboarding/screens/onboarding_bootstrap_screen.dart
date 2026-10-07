@@ -123,7 +123,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -134,7 +134,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
                     height: 36,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      color: AppColors.primary,
+                      color: AppColors.primaryText,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -180,7 +180,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
                       onPressed: _retrying ? null : _run,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryDark,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onPrimary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),

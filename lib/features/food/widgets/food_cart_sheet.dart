@@ -154,7 +154,8 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
         SnackBar(
           content: Text(isOffline
               ? loc.translate('bread_snack_order_saved_offline')
-              : loc.translate('bread_snack_order_sent')),
+              : loc.translate('bread_snack_order_sent'),
+              style: const TextStyle(color: AppColors.onPrimary)),
           backgroundColor: isOffline ? Colors.orange : _primary,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
@@ -287,7 +288,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                                     fontWeight: FontWeight.w600)),
                             Text('${formatPrice(itemTotal)} ${loc.translate("sum")}',
                                 style: const TextStyle(
-                                    color: _green,
+                                    color: AppColors.primaryText,
                                     fontWeight: FontWeight.w500)),
                           ],
                         ),
@@ -304,7 +305,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                       IconButton(
                         onPressed: () => c.increase(product.id),
                         icon: const Icon(Icons.add_circle_outline,
-                            color: _green, size: 24),
+                            color: AppColors.primaryText, size: 24),
                       ),
                     ]),
                   );
@@ -329,7 +330,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                           style: const TextStyle(
                               fontSize: AppText.titleMedium,
                               fontWeight: FontWeight.bold,
-                              color: _green)),
+                              color: AppColors.primaryText)),
                     ]),
                     const SizedBox(height: 10),
                     OrderCheckoutWalletBanner(
@@ -369,7 +370,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
+                                strokeWidth: 2, color: AppColors.onPrimary))
                         : const Icon(Icons.send, size: 18),
                     label: Text(
                         _isSending
@@ -380,7 +381,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
                             fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
@@ -421,7 +422,7 @@ class _FoodCartSheetState extends State<FoodCartSheet> {
             borderSide: BorderSide(color: Colors.grey.shade200)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: _green, width: 1.5)),
+            borderSide: const BorderSide(color: AppColors.primaryText, width: 1.5)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         filled: true,
@@ -461,7 +462,7 @@ class _ModeChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : Colors.black87,
+            color: selected ? AppColors.onPrimary : Colors.black87,
           ),
         ),
       ),

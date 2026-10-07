@@ -174,7 +174,7 @@ class _PendingCodeAutoModeSwitchState extends State<PendingCodeAutoModeSwitch> {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: widget.onLightBackground
-                      ? AppColors.primary
+                      ? AppColors.primaryText
                       : Colors.white,
                 ),
               )
@@ -279,7 +279,7 @@ class _PendingCodesScreenState extends State<PendingCodesScreen> {
                   color: _blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.pin_outlined, color: _blue),
+                child: const Icon(Icons.pin_outlined, color: AppColors.primaryText),
               ),
               const SizedBox(width: 14),
               const Expanded(
@@ -332,7 +332,8 @@ class _PendingCodeCardState extends State<_PendingCodeCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Код яратилди'),
+            content: Text('Код яратилди',
+                style: TextStyle(color: AppColors.onPrimary)),
             backgroundColor: AppColors.button,
           ),
         );

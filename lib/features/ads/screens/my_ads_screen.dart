@@ -44,13 +44,13 @@ class _MyAdsScreenState extends State<MyAdsScreen>
         appBar: AppBar(
           title: const Text('Менинг эълонларим'),
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
+          bottom: TabBar(
+            labelColor: AppColors.onPrimary,
+            unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
+            indicatorColor: AppColors.onPrimary,
             isScrollable: true,
-            tabs: [
+            tabs: const [
               Tab(text: 'Фаол'),
               Tab(text: 'Текширувда'),
               Tab(text: 'Яширилган'),

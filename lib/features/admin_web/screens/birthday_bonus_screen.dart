@@ -77,7 +77,7 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.card_giftcard, color: _blue),
+          child: const Icon(Icons.card_giftcard, color: AppColors.primaryText),
         ),
         const SizedBox(width: 14),
         const Expanded(
@@ -119,7 +119,7 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
             border: Border.all(color: Colors.grey.shade200),
           ),
           child: Row(children: [
-            const Icon(Icons.savings_outlined, color: _blue),
+            const Icon(Icons.savings_outlined, color: AppColors.primaryText),
             const SizedBox(width: 10),
             const Text('Бонус суммаси:',
                 style: TextStyle(fontWeight: FontWeight.w700)),
@@ -149,7 +149,8 @@ class _BirthdayBonusScreenState extends State<BirthdayBonusScreen> {
                         if (!mounted) return;
                         messenger.showSnackBar(
                           const SnackBar(
-                            content: Text('Бонус суммаси сақланди'),
+                            content: Text('Бонус суммаси сақланди',
+                                style: TextStyle(color: AppColors.onPrimary)),
                             backgroundColor: AppColors.button,
                           ),
                         );
@@ -210,7 +211,7 @@ class _BirthdayColumnView extends StatelessWidget {
                           ? Icons.cake_outlined
                           : Icons.event_available_outlined,
                       color: column.canGrant
-                          ? AppColors.primary
+                          ? AppColors.primaryText
                           : Colors.blue.shade700,
                       size: 20,
                     ),
@@ -299,7 +300,7 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
         child: Row(children: [
           const CircleAvatar(
             backgroundColor: Color(0xFFFFF3E0),
-            child: Icon(Icons.cake_outlined, color: AppColors.primary),
+            child: Icon(Icons.cake_outlined, color: AppColors.primaryText),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -376,7 +377,8 @@ class _BirthdayUserCardState extends State<_BirthdayUserCard> {
         operatorPhone: auth.phone ?? '',
       );
       messenger.showSnackBar(const SnackBar(
-        content: Text('Birthday bonus берилди'),
+        content: Text('Birthday bonus берилди',
+            style: TextStyle(color: AppColors.onPrimary)),
         backgroundColor: AppColors.button,
       ));
     } on FirebaseFunctionsException catch (e) {

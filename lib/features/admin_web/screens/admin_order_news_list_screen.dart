@@ -131,7 +131,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               color: _orange.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.sms_outlined, color: _orange),
+            child: const Icon(Icons.sms_outlined, color: AppColors.primaryText),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -179,7 +179,7 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
               onSelected: (_) => setState(() => _statusFilter = f.$1),
               selectedColor: _orange.withValues(alpha: 0.15),
               labelStyle: TextStyle(
-                color: _statusFilter == f.$1 ? _orange : Colors.grey.shade700,
+                color: _statusFilter == f.$1 ? AppColors.primaryText : Colors.grey.shade700,
                 fontWeight:
                     _statusFilter == f.$1 ? FontWeight.bold : FontWeight.normal,
                 fontSize: 12,
@@ -284,7 +284,7 @@ class _OrderNewsCard extends StatelessWidget {
                   child: Text(
                     status,
                     style: const TextStyle(
-                      color: _orange,
+                      color: AppColors.primaryText,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),

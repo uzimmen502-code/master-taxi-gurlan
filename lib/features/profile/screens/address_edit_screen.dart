@@ -33,7 +33,7 @@ class AddressEditScreen extends StatefulWidget {
 }
 
 class _AddressEditScreenState extends State<AddressEditScreen> {
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
 
   final _mfyCtrl = TextEditingController();
   final _streetCtrl = TextEditingController();
@@ -144,11 +144,12 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       final lowAcc = coords.isLowAccuracy;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: _green,
+        backgroundColor: AppColors.primaryDark,
         content: Text(
           lowAcc
               ? '📍 GPS олинди (паст аниқлик ±${acc!.toStringAsFixed(0)} м). Очиқ жойда қайта урининг.'
               : '📍 GPS олинди: ${coords.lat.toStringAsFixed(5)}, ${coords.lng.toStringAsFixed(5)}$accText',
+          style: const TextStyle(color: AppColors.onPrimary),
         ),
       ));
       if (_streetCtrl.text.trim().isEmpty) {
@@ -282,13 +283,13 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.75),
+                color: AppColors.onPrimary.withValues(alpha: 0.75),
               ),
             ),
           ],
         ),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -303,7 +304,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                   color: AppColors.primary.withValues(alpha: 0.25)),
             ),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.info_outline, color: AppColors.primary),
+              const Icon(Icons.info_outline, color: AppColors.primaryText),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -314,13 +315,13 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                       style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary),
+                          color: AppColors.primaryText),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       context.tr('addr_intro_body'),
                       style: const TextStyle(
-                          fontSize: 12, color: AppColors.primary),
+                          fontSize: 12, color: AppColors.primaryText),
                     ),
                   ],
                 ),
@@ -374,7 +375,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                     context.tr('addr_gps_missing_hint'),
                     style: const TextStyle(
                         fontSize: 13,
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -388,7 +389,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onPrimary))
                       : Icon(
                           (_lat != null && _lng != null)
                               ? Icons.refresh
@@ -398,8 +399,8 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                       ? 'addr_gps_refresh'
                       : 'addr_gps_get')),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _green,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppColors.primaryDark,
+                    foregroundColor: AppColors.onPrimary,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
@@ -575,14 +576,14 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onPrimary))
                   : const Icon(Icons.check, size: 20),
               label: Text(context.tr('save'),
                   style: const TextStyle(
                       fontSize: 15, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _green,
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.primaryDark,
+                foregroundColor: AppColors.onPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
@@ -607,7 +608,7 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
             style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: AppColors.primary)),
+                color: AppColors.primaryText)),
       );
     }
 
@@ -617,11 +618,11 @@ class _AddressEditScreenState extends State<AddressEditScreen> {
       GpsQuality.high =>
         (context.tr('addr_gps_high'), AppColors.tickerShell, _green),
       GpsQuality.medium =>
-        (context.tr('addr_gps_medium'), AppColors.scaffold, AppColors.primary),
+        (context.tr('addr_gps_medium'), AppColors.scaffold, AppColors.primaryText),
       GpsQuality.low =>
         (context.tr('addr_gps_low'), Colors.red.shade50, Colors.red.shade700),
       GpsQuality.unknown =>
-        ('OK', AppColors.tickerShell, AppColors.primaryDark),
+        ('OK', AppColors.tickerShell, AppColors.primaryText),
       GpsQuality.none =>
         (context.tr('addr_gps_none'), Colors.grey.shade100, Colors.grey),
     };

@@ -211,7 +211,7 @@ class _CheapProductsScreenState extends State<CheapProductsScreen> {
       appBar: AppBar(
         title: Text(context.tr('cheap_products_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         actions: [
           IconButton(
             icon: const Icon(Icons.list_alt),

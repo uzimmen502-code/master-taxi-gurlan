@@ -86,7 +86,7 @@ class AdCard extends StatelessWidget {
                     Text(
                       formatMoney(ad.price),
                       style: const TextStyle(
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontWeight: FontWeight.w700,
                         fontSize: AppText.bodySmall,
                       ),

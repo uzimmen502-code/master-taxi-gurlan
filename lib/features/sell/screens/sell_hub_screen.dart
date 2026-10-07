@@ -61,12 +61,12 @@ class _SellHubScreenState extends State<SellHubScreen>
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: AppColors.onPrimary,
+          labelColor: AppColors.onPrimary,
+          unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
           tabs: const [
             Tab(text: 'Менинг таклифларим'),
             Tab(text: 'Менга юборилган'),
@@ -206,7 +206,7 @@ class _PathCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: AppColors.primary, size: 28),
+              Icon(icon, color: AppColors.primaryText, size: 28),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -217,7 +217,7 @@ class _PathCard extends StatelessWidget {
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
-                        color: AppColors.primaryDark,
+                        color: AppColors.primaryText,
                       ),
                     ),
                     const SizedBox(height: 2),

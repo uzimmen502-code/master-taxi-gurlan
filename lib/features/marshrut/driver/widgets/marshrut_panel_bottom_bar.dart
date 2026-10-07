@@ -140,7 +140,9 @@ class _FullWidthButton extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon, color: Colors.white, size: fontSize + 4),
+              Icon(icon,
+                  color: enabled ? AppColors.onPrimary : Colors.white,
+                  size: fontSize + 4),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -148,7 +150,7 @@ class _FullWidthButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: fontSize,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: enabled ? AppColors.onPrimary : Colors.white,
                 ),
               ),
             ]),
@@ -243,7 +245,9 @@ class _SegmentHalf extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = active ? activeColor : Colors.grey.shade200;
     final fg = active
-        ? (activeColor == AppColors.accentGold ? Colors.black87 : Colors.white)
+        ? (activeColor == AppColors.accentGold
+            ? Colors.black87
+            : AppColors.onPrimary)
         : Colors.grey.shade600;
     final enabled = onTap != null;
 

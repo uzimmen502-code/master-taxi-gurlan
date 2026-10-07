@@ -158,7 +158,7 @@ class _OperationsTabState extends State<OperationsTab>
                   icon: '🏆',
                   child: TopList(
                     items: o.topOrderProducts,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     maxItems: 5,
                   ),
                 ),
@@ -170,7 +170,7 @@ class _OperationsTabState extends State<OperationsTab>
                   icon: '🛣',
                   child: TopList(
                     items: o.topTripRoutes,
-                    color: AppColors.primary,
+                    color: AppColors.primaryText,
                     maxItems: 5,
                   ),
                 ),
@@ -216,7 +216,7 @@ class _OperationsTabState extends State<OperationsTab>
       icon: '⚙️',
       child: KpiGrid(
         aspectRatio: 1.45,
-        accent: AppColors.primary,
+        accent: AppColors.primaryText,
         kpis: [
           KpiValue(
               label: 'Бугунги буюртмалар',
@@ -261,17 +261,17 @@ class _OperationsTabState extends State<OperationsTab>
           ),
           child: Row(children: [
             const Icon(Icons.notifications_active,
-                color: AppColors.primary, size: 22),
+                color: AppColors.primaryText, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text('$n та ҳайдовчи аризаси кутмоқда',
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary)),
+                      color: AppColors.primaryText)),
             ),
             // Аризаларни кўриш — pending_drivers экранига
             // (улар Cloud Functions/Repository орқали ҳал қилинади).
-            const Icon(Icons.chevron_right, color: AppColors.primary),
+            const Icon(Icons.chevron_right, color: AppColors.primaryText),
           ]),
         );
       },

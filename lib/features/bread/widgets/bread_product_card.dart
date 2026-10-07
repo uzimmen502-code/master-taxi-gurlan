@@ -175,7 +175,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                             : 'Тайёр',
                     style: TextStyle(
                       fontSize: AppText.labelTiny,
-                      color: accentColor,
+                      color: AppColors.primaryText,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -186,7 +186,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                       style: TextStyle(
                           fontSize: AppText.labelSmall,
                           fontWeight: FontWeight.bold,
-                          color: accentColor)),
+                          color: AppColors.primaryText)),
                 ],
                 const SizedBox(height: 6),
                 widget.count > 0
@@ -228,7 +228,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
               height: 28,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: product.isYopish ? _orange : _primary,
+                color: AppColors.primaryText,
                 value: progress.expectedTotalBytes != null
                     ? progress.cumulativeBytesLoaded /
                         progress.expectedTotalBytes!
@@ -286,7 +286,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
               style: TextStyle(
                   fontSize: AppText.titleMedium,
                   fontWeight: FontWeight.bold,
-                  color: accent))),
+                  color: AppColors.primaryText))),
       GestureDetector(
         onTap: canIncrement ? widget.onIncrement : null,
         child: Container(
@@ -302,7 +302,7 @@ class _BreadProductCardState extends State<BreadProductCard> {
                         ? accent.withValues(alpha: 0.3)
                         : Colors.grey.shade300)),
             child: Icon(Icons.add,
-                size: 14, color: canIncrement ? accent : Colors.grey)),
+                size: 14, color: canIncrement ? AppColors.primaryText : Colors.grey)),
       ),
     ]);
   }

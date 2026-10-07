@@ -167,7 +167,7 @@ class _MessagesTabState extends State<MessagesTab> {
                   color: _green.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.support_agent, color: _green),
+                child: const Icon(Icons.support_agent, color: AppColors.primaryText),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -267,7 +267,7 @@ class _MessagesTabState extends State<MessagesTab> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.mark_email_unread_outlined,
-                    color: AppColors.primary),
+                    color: AppColors.primaryText),
               ),
               const SizedBox(width: 12),
               Expanded(

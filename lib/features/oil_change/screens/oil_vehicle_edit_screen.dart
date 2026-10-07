@@ -225,7 +225,7 @@ class _OilVehicleEditScreenState extends State<OilVehicleEditScreen> {
             ? context.tr('oil_edit_add_title')
             : context.tr('oil_edit_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -354,7 +354,7 @@ class _OilVehicleEditScreenState extends State<OilVehicleEditScreen> {
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.onPrimary,
                     ),
                   )
                 : Text(context.tr('oil_save')),

@@ -129,7 +129,7 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
               color: _blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.warehouse_outlined, color: _blue),
+            child: const Icon(Icons.warehouse_outlined, color: AppColors.primaryText),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -292,7 +292,7 @@ class _WarehouseStockScreenState extends State<WarehouseStockScreen> {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primaryDark,
+                      color: AppColors.primaryText,
                     ),
                   ),
                 ],

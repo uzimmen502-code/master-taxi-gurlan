@@ -73,9 +73,9 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
           child: TabBar(
             controller: _tabCtrl,
             isScrollable: true,
-            labelColor: AppColors.primaryDark,
+            labelColor: AppColors.primaryText,
             unselectedLabelColor: Colors.grey,
-            indicatorColor: AppColors.primary,
+            indicatorColor: AppColors.primaryText,
             labelPadding: EdgeInsets.symmetric(horizontal: narrow ? 12 : 16),
             tabs: const [
               Tab(text: 'Назорат'),
@@ -118,7 +118,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
       label: Text(narrow ? 'Sverka' : 'Sverka'),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         visualDensity: narrow ? VisualDensity.compact : VisualDensity.standard,
       ),
     );
@@ -133,7 +133,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.account_balance, color: AppColors.primaryDark),
+                    Icon(Icons.account_balance, color: AppColors.primaryText),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text('Finance Center',
@@ -151,7 +151,7 @@ class _FinanceCenterScreenState extends State<FinanceCenterScreen>
             )
           : Row(
               children: [
-                const Icon(Icons.account_balance, color: AppColors.primaryDark),
+                const Icon(Icons.account_balance, color: AppColors.primaryText),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Column(
@@ -271,7 +271,7 @@ class _CashExchangeTab extends StatelessWidget {
                 label: const Text('Cash Exchange (нақд → ҳамён)'),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white),
+                    foregroundColor: AppColors.onPrimary),
               ),
               OutlinedButton.icon(
                 onPressed: () => _cashExchangeDialog(context, toWallet: false),
@@ -351,7 +351,7 @@ class _CashExchangeTab extends StatelessWidget {
           CircleAvatar(
             backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             child: const Icon(Icons.account_balance_wallet,
-                color: AppColors.primaryDark),
+                color: AppColors.primaryText),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -362,7 +362,7 @@ class _CashExchangeTab extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text('${formatMoney(bal)}',
                     style: const TextStyle(
-                        color: AppColors.primaryDark, fontSize: 13)),
+                        color: AppColors.primaryText, fontSize: 13)),
               ],
             ),
           ),
@@ -845,7 +845,7 @@ class _JournalTabState extends State<_JournalTab> {
                       ),
                       Text('${formatMoney(amount)}',
                           style: const TextStyle(
-                              color: AppColors.primaryDark,
+                              color: AppColors.primaryText,
                               fontWeight: FontWeight.bold)),
                     ],
                   ),
@@ -912,7 +912,7 @@ class _ClosingTabState extends State<_ClosingTab> {
                   label: const Text('Давр қулфлаш'),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryDark,
-                      foregroundColor: Colors.white),
+                      foregroundColor: AppColors.onPrimary),
                 ),
               ),
             ],

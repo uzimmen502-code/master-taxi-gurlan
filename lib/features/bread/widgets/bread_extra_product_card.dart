@@ -65,7 +65,7 @@ class BreadExtraProductCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: AppText.labelTiny,
                   color: product.remaining > 3
-                      ? AppColors.primary
+                      ? AppColors.primaryText
                       : product.remaining > 0
                           ? Colors.orange
                           : Colors.red,
@@ -89,12 +89,12 @@ class BreadExtraProductCard extends StatelessWidget {
                     color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: Row(children: [
-                const Icon(Icons.check, size: 16, color: AppColors.primary),
+                const Icon(Icons.check, size: 16, color: AppColors.primaryText),
                 const SizedBox(width: 4),
                 Text(loc.translate('bread_added'),
                     style: const TextStyle(
                         fontSize: AppText.labelSmall,
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontWeight: FontWeight.bold)),
               ]),
             ),

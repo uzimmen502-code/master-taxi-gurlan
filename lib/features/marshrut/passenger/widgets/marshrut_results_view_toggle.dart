@@ -38,7 +38,7 @@ class MarshrutResultsViewToggle extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         foregroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return AppColors.primary;
+            return AppColors.primaryText;
           }
           return Colors.grey.shade700;
         }),

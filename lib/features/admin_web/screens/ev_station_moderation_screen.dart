@@ -171,7 +171,7 @@ class _ReportRow extends StatelessWidget {
       title: Text(report.reason.label),
       subtitle: report.comment.isEmpty ? null : Text(report.comment),
       trailing: report.resolved
-          ? const Icon(Icons.check_circle, color: AppColors.primaryDark)
+          ? const Icon(Icons.check_circle, color: AppColors.primaryText)
           : TextButton(
               onPressed: busy ? null : onResolve,
               child: const Text('Ko\'rib chiqildi'),

@@ -150,7 +150,7 @@ class _CourierCollectionDetailScreenState
       appBar: AppBar(
         title: const Text('📦 Қабул вазифаси'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
       body: ListView(
@@ -190,7 +190,7 @@ class _CourierCollectionDetailScreenState
           Row(
             children: [
               const Icon(Icons.person_outline,
-                  size: 20, color: AppColors.primary),
+                  size: 20, color: AppColors.primaryText),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -241,7 +241,7 @@ class _CourierCollectionDetailScreenState
                 icon: const Icon(Icons.map_outlined, size: 18),
                 label: const Text('Google Maps\'да очиш'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primaryDark,
+                  foregroundColor: AppColors.primaryText,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -323,7 +323,7 @@ class _CourierCollectionDetailScreenState
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primaryDark,
+                      color: AppColors.primaryText,
                     ),
                   ),
                 ],
@@ -359,7 +359,7 @@ class _CourierCollectionDetailScreenState
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryText,
                   ),
                 ),
               ],
@@ -381,7 +381,7 @@ class _CourierCollectionDetailScreenState
                         width: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                         ),
                       )
                     : Text(
@@ -659,7 +659,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                     size: 20,
                     color: isWithdrawal
                         ? Colors.orange.shade800
-                        : AppColors.primary,
+                        : AppColors.primaryText,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -727,7 +727,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                         width: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                         ),
                       )
                     : const Text(
@@ -798,7 +798,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
             children: [
               const Icon(
                 Icons.account_balance_wallet,
-                color: AppColors.primary,
+                color: AppColors.primaryText,
                 size: 28,
               ),
               const SizedBox(width: 12),

@@ -31,8 +31,8 @@ class _StatusColumnMeta {
 }
 
 const _statusColumns = [
-  _StatusColumnMeta('pending', '🟠 Кутаётган', AppColors.primary),
-  _StatusColumnMeta('approved', '🟢 Тасдиқланган', AppColors.primary),
+  _StatusColumnMeta('pending', '🟠 Кутаётган', AppColors.primaryText),
+  _StatusColumnMeta('approved', '🟢 Тасдиқланган', AppColors.primaryText),
   _StatusColumnMeta('rejected', '🔴 Рад / Чиқарilgan', Color(0xFFD32F2F)),
 ];
 
@@ -186,11 +186,11 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.pending_actions,
-                      size: 16, color: AppColors.primary),
+                      size: 16, color: AppColors.primaryText),
                   const SizedBox(width: 6),
                   Text('$n та кутяпти',
                       style: const TextStyle(
-                          color: AppColors.primary,
+                          color: AppColors.primaryText,
                           fontSize: 13,
                           fontWeight: FontWeight.bold)),
                 ]),
@@ -383,7 +383,7 @@ class _DriverApprovalModeTile extends StatelessWidget {
               label: const Text('AUTO', style: TextStyle(fontSize: 12)),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.button,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
               ),
             ),
           ]),
@@ -699,11 +699,11 @@ String _driverTypeLabel(String type) {
 Color _driverTypeColor(String type) {
   switch (type) {
     case 'marshrut':
-      return AppColors.primary;
+      return AppColors.primaryText;
     case 'intercity':
-      return AppColors.primary;
+      return AppColors.primaryText;
     default:
-      return AppColors.primaryMid;
+      return AppColors.primaryText;
   }
 }
 
@@ -861,7 +861,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
       SnackBar(
         backgroundColor: result.warnings.isEmpty ? AppColors.primary : Colors.orange,
         duration: const Duration(seconds: 6),
-        content: Text(msg),
+        content: Text(msg, style: const TextStyle(color: AppColors.onPrimary)),
       ),
     );
     setState(() => _busy = false);
@@ -1053,7 +1053,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
               Icon(
                 active ? Icons.circle : Icons.circle_outlined,
                 size: 10,
-                color: active ? AppColors.primaryDark : Colors.orange.shade800,
+                color: active ? AppColors.primaryText : Colors.orange.shade800,
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -1062,7 +1062,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: active ? AppColors.primaryDark : Colors.orange.shade900,
+                    color: active ? AppColors.primaryText : Colors.orange.shade900,
                   ),
                 ),
               ),
@@ -1125,11 +1125,11 @@ class _ApplicationCardState extends State<_ApplicationCard> {
   Widget build(BuildContext context) {
     final docStatus = _f('status', widget.status);
     final color = docStatus == 'pending'
-        ? AppColors.primary
+        ? AppColors.primaryText
         : docStatus == 'approved'
-            ? AppColors.primary
+            ? AppColors.primaryText
             : docStatus == 'revoked'
-                ? AppColors.primary
+                ? AppColors.primaryText
                 : const Color(0xFFD32F2F);
     final createdAt = _ts('createdAt');
     final taxiType = _normalizeTaxiType(_f('taxiType'));
@@ -1287,12 +1287,12 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onPrimary))
                       : const Icon(Icons.check, size: 16),
                   label: const Text('Тасдиқ'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.button,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                 ),

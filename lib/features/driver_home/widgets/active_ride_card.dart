@@ -32,13 +32,13 @@ class ActiveRideCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Row(children: [
-          Icon(Icons.directions_car, color: _green, size: 20),
+          Icon(Icons.directions_car, color: AppColors.primaryText, size: 20),
           SizedBox(width: 8),
           Text('Фаол сафар',
               style: TextStyle(
                   fontSize: AppText.bodyLarge,
                   fontWeight: FontWeight.bold,
-                  color: _green)),
+                  color: AppColors.primaryText)),
         ]),
         const SizedBox(height: 10),
         Text('📞 ${ride.userPhone}',
@@ -57,8 +57,8 @@ class ActiveRideCard extends StatelessWidget {
               icon: const Icon(Icons.where_to_vote_outlined, size: 18),
               label: const Text('ЕТИБ КЕЛДИМ'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: _green,
-                side: const BorderSide(color: _green),
+                foregroundColor: AppColors.primaryText,
+                side: const BorderSide(color: AppColors.primaryText),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -68,14 +68,14 @@ class ActiveRideCard extends StatelessWidget {
         else if (ride.hasArrived)
           Row(
             children: const [
-              Icon(Icons.where_to_vote, color: _green, size: 16),
+              Icon(Icons.where_to_vote, color: AppColors.primaryText, size: 16),
               SizedBox(width: 6),
               Text(
                 'Йўловчи хабардор қилинди',
                 style: TextStyle(
                   fontSize: AppText.bodySmall,
                   fontWeight: FontWeight.w600,
-                  color: _green,
+                  color: AppColors.primaryText,
                 ),
               ),
             ],
@@ -89,7 +89,7 @@ class ActiveRideCard extends StatelessWidget {
             label: const Text('САФАРНИ ЯКУНЛАШ'),
             style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10))),
           ),

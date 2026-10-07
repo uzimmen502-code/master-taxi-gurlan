@@ -150,12 +150,12 @@ class _NewsHubScreenState extends State<NewsHubScreen>
       appBar: AppBar(
         title: const Text('Хабарлар'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: AppColors.onPrimary,
+          labelColor: AppColors.onPrimary,
+          unselectedLabelColor: AppColors.onPrimary.withValues(alpha: 0.7),
           tabs: [
             Tab(
               child: _TabLabel(

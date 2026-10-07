@@ -85,7 +85,7 @@ class _ChatViewState extends State<_ChatView> {
       appBar: AppBar(
         title: Text(title),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: Column(
         children: [
@@ -141,7 +141,7 @@ class _ChatViewState extends State<_ChatView> {
                     onPressed: _send,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary,
                     ),
                     child: const Icon(Icons.send),
                   ),

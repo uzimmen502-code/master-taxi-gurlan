@@ -110,7 +110,7 @@ class _EvStationTariffSheetState extends State<EvStationTariffSheet> {
           const SizedBox(height: 14),
           Row(
             children: [
-              const Icon(Icons.ev_station_rounded, color: AppColors.primaryDark),
+              const Icon(Icons.ev_station_rounded, color: AppColors.primaryText),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -224,7 +224,7 @@ class _TariffTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? AppColors.primaryDark : Colors.black12,
+              color: selected ? AppColors.primaryText : Colors.black12,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -232,7 +232,7 @@ class _TariffTile extends StatelessWidget {
             children: [
               Icon(
                 selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: selected ? AppColors.primaryDark : Colors.black38,
+                color: selected ? AppColors.primaryText : Colors.black38,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -282,7 +282,7 @@ class _Step extends StatelessWidget {
             child: Text(
               '$number',
               style: const TextStyle(
-                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                  color: AppColors.onPrimary, fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 10),

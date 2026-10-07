@@ -160,7 +160,7 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                const Icon(Icons.campaign_outlined, color: _green, size: 26),
+                const Icon(Icons.campaign_outlined, color: AppColors.primaryText, size: 26),
                 const SizedBox(width: 10),
                 Text(
                   'AVAGram реклама нархи',
@@ -212,7 +212,7 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
                 Text(
                   _ok!,
                   style: const TextStyle(
-                    color: _green,
+                    color: AppColors.primaryText,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -232,7 +232,7 @@ class _TvAdPricingAdminScreenState extends State<TvAdPricingAdminScreen> {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: AppColors.onPrimary,
                           ),
                         )
                       : const Icon(Icons.save_outlined),

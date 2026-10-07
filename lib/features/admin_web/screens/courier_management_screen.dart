@@ -194,7 +194,7 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
                                   height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: AppColors.onPrimary,
                                   ),
                                 )
                               : const Icon(Icons.add),

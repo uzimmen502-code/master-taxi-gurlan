@@ -64,7 +64,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     _OrderColumnSpec(
       status: 'delivered',
       title: 'Етказилди',
-      color: AppColors.primary,
+      color: AppColors.primaryText,
     ),
     _OrderColumnSpec(
       status: 'rejected',
@@ -169,7 +169,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       case 'courier':
         return Colors.indigo;
       case 'delivered':
-        return AppColors.primary;
+        return AppColors.primaryText;
       case 'rejected':
         return Colors.red;
       case 'cancelled':
@@ -465,7 +465,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(
               children: [
-                const Icon(Icons.view_kanban_outlined, color: _blue),
+                const Icon(Icons.view_kanban_outlined, color: AppColors.primaryText),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -634,7 +634,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         backgroundColor: _blue,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         title: const Text(
           '📦 Буюртмалар',
           style: TextStyle(fontWeight: FontWeight.bold),

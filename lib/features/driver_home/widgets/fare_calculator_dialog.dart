@@ -83,7 +83,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
             style: TextStyle(
                 fontSize: AppText.labelSmall,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : Colors.black87)),
+                color: selected ? AppColors.onPrimary : Colors.black87)),
       ),
     );
   }
@@ -109,7 +109,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Row(children: [
         Icon(widget.fareLocked ? Icons.lock : Icons.calculate,
-            color: _blue, size: 24),
+            color: AppColors.primaryText, size: 24),
         const SizedBox(width: 8),
         Text(widget.fareLocked ? 'Қулфланган йўлкира' : 'Йўлкира ҳисоблаш'),
       ]),
@@ -211,7 +211,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
                   style: const TextStyle(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
-                      color: _green)),
+                      color: AppColors.primaryText)),
             ]),
           ),
           const SizedBox(height: 12),
@@ -243,7 +243,7 @@ class _FareCalculatorDialogState extends State<_FareCalculatorDialog> {
           label: const Text('ЯКУНЛАШ'),
           style: ElevatedButton.styleFrom(
               backgroundColor: _green,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10))),
         ),

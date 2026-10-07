@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/l10n/l10n_extension.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/map_launcher.dart';
 import '../controllers/intercity_driver_panel_controller.dart';
 
@@ -42,7 +43,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
-                  color: primaryColor,
+                  color: AppColors.primaryText,
                 ),
               ),
               if (from.isNotEmpty && to.isNotEmpty) ...[
@@ -68,14 +69,14 @@ class IntercityPickupRouteCard extends StatelessWidget {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: AppColors.onPrimary.withValues(alpha: 0.9),
                           ),
                         )
                       : const Icon(Icons.route, size: 18),
                   label: Text(context.tr('pickup_passengers_btn')),
                   style: FilledButton.styleFrom(
                     backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                   ),
                 ),
               ),
@@ -118,7 +119,7 @@ class IntercityPickupRouteCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: primaryColor,
+                              color: AppColors.primaryText,
                             ),
                           ),
                         ),
@@ -173,8 +174,8 @@ class IntercityPickupRouteCard extends StatelessWidget {
                     icon: const Icon(Icons.navigation, size: 18),
                     label: Text(context.tr('intercity_pickup_route_start_nav')),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryColor,
-                      side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
+                      foregroundColor: AppColors.primaryText,
+                      side: BorderSide(color: AppColors.primaryText.withValues(alpha: 0.5)),
                     ),
                   ),
                 ),

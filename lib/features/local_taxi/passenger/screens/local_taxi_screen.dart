@@ -397,7 +397,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
               Navigator.pop(context, t);
             },
             style: ElevatedButton.styleFrom(
-                backgroundColor: _green, foregroundColor: Colors.white),
+                backgroundColor: _green,
+                foregroundColor: LocalTaxiColors.onPrimary),
             child: Text(context.tr('save')),
           ),
         ],
@@ -534,6 +535,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                   borderRadius: BorderRadius.circular(10)),
               content: Text(
                 context.tr('driver_mode_activated'),
+                style: const TextStyle(color: AppColors.onPrimary),
               ),
             ));
           } else {
@@ -563,6 +565,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           content: Text(
             context.tr('driver_mode_activated'),
+            style: const TextStyle(color: AppColors.onPrimary),
           ),
         ));
       } catch (e) {
@@ -579,7 +582,8 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         content: Text(
-          context.tr('driver_mobile_only')),
+          context.tr('driver_mobile_only'),
+          style: const TextStyle(color: AppColors.onPrimary)),
       ));
       return;
     }
@@ -610,7 +614,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
       appBar: AppBar(
         title: Text(loc.translate('local_taxi')),
         backgroundColor: LocalTaxiColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: LocalTaxiColors.onPrimary,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -620,7 +624,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
           BecomeDriverButton(
             onTap: _isSubmitting ? null : _onDriverTap,
             loading: _isSubmitting,
-            color: LocalTaxiColors.primary,
+            color: AppColors.primaryText,
           ),
         ],
       ),
@@ -716,11 +720,11 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                                       height: 22,
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2.4,
-                                          color: Colors.white),
+                                          color: LocalTaxiColors.onPrimary),
                                     )
                                   else
                                     const Icon(Icons.search,
-                                        size: 22, color: Colors.white),
+                                        size: 22, color: LocalTaxiColors.onPrimary),
                                   const SizedBox(width: 8),
                                   Text(
                                       _isSearching
@@ -729,7 +733,7 @@ class _LocalTaxiViewState extends State<_LocalTaxiView> {
                                       style: const TextStyle(
                                           fontSize: AppText.bodyLarge,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
+                                          color: LocalTaxiColors.onPrimary)),
                                 ],
                               ),
                             ),
@@ -897,9 +901,9 @@ class _HeroCard extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: LocalTaxiColors.onPrimary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        border: Border.all(color: LocalTaxiColors.onPrimary.withValues(alpha: 0.3)),
       ),
       child: Row(children: [
         const SizedBox(width: 12),
@@ -910,14 +914,15 @@ class _HeroCard extends StatelessWidget {
             controller: ctrl,
             focusNode: focus,
             onChanged: onChange,
+            cursorColor: LocalTaxiColors.onPrimary,
             style: const TextStyle(
                 fontSize: AppText.bodyLarge,
-                color: Colors.white,
+                color: LocalTaxiColors.onPrimary,
                 fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: LocalTaxiColors.onPrimary.withValues(alpha: 0.5),
                   fontSize: AppText.bodyMedium),
               border: InputBorder.none,
               isDense: true,
@@ -1020,12 +1025,12 @@ class _SavedPlacesSection extends StatelessWidget {
               border: Border.all(color: _green.withValues(alpha: 0.3)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.add, size: 12, color: LocalTaxiColors.primary),
+              const Icon(Icons.add, size: 12, color: AppColors.primaryText),
               const SizedBox(width: 2),
               Text(addLabel,
                   style: const TextStyle(
                       fontSize: AppText.labelSmall,
-                      color: LocalTaxiColors.primary,
+                      color: AppColors.primaryText,
                       fontWeight: FontWeight.w600)),
             ]),
           ),

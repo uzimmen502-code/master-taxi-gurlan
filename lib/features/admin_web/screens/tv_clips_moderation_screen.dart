@@ -677,7 +677,7 @@ class _ClipsTable extends StatelessWidget {
             style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
-                color: AppColors.primary)),
+                color: AppColors.primaryText)),
       ),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -1063,7 +1063,7 @@ class _TvAutoApproveBarState extends State<_TvAutoApproveBar> {
                     const Text('АВТО', style: TextStyle(fontSize: 12)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.button,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   minimumSize: const Size(0, 36),
                 ),

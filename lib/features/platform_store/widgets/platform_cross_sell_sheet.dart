@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/platform_product.dart';
@@ -124,7 +125,7 @@ class _CrossSellSheet extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AvaStoreColors.deep,
+                      foregroundColor: AppColors.primaryText,
                       side: const BorderSide(color: AvaStoreColors.border),
                       minimumSize: const Size(0, 48),
                       shape: RoundedRectangleBorder(
@@ -219,7 +220,7 @@ class _SuggestTile extends StatelessWidget {
                   priceText,
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: AvaStoreColors.deep,
+                    color: AppColors.primaryText,
                   ),
                 ),
               ],
@@ -248,7 +249,7 @@ class _SuggestTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AvaStoreColors.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AvaStoreColors.brand),
+                border: Border.all(color: AppColors.primaryText),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

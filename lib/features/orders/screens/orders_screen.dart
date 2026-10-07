@@ -68,7 +68,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.home_outlined),
@@ -261,7 +261,7 @@ class _TypeChip extends StatelessWidget {
       selected: selected,
       onSelected: (_) => onTap(),
       selectedColor: AppColors.primary.withValues(alpha: 0.15),
-      checkmarkColor: AppColors.primary,
+      checkmarkColor: AppColors.primaryText,
     );
   }
 }
@@ -464,7 +464,7 @@ class _SegmentToggle extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: selected ? AppColors.primary : Colors.grey.shade600,
+              color: selected ? AppColors.primaryText : Colors.grey.shade600,
             ),
           ),
         ),

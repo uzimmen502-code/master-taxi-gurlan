@@ -191,7 +191,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
       child: Row(
         children: [
           Icon(Icons.electric_car_rounded,
-              color: ready ? AppColors.primaryDark : const Color(0xFFE65100)),
+              color: ready ? AppColors.primaryText : const Color(0xFFE65100)),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -253,7 +253,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.place_rounded, color: AppColors.primaryDark),
+            const Icon(Icons.place_rounded, color: AppColors.primaryText),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -351,7 +351,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
           Row(
             children: [
               const Icon(Icons.battery_charging_full_rounded,
-                  color: AppColors.primaryDark, size: 20),
+                  color: AppColors.primaryText, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -386,7 +386,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
         onPressed: ready && !_controller.loading ? _calculate : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryDark,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
@@ -395,7 +395,7 @@ class _EvTripScreenState extends State<EvTripScreen> {
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2, color: AppColors.onPrimary),
               )
             : Text(
                 context.tr('ev_trip_calculate'),

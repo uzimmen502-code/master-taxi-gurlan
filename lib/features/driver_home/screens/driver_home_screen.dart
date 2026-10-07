@@ -73,8 +73,13 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
 
   void _showSnack(String msg, Color color) {
     if (!mounted) return;
+    // Оч фон (бренд/апельсин) устида тўқ матн, тўқ фонда — оқ.
+    final onColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.light
+            ? AppColors.onPrimary
+            : Colors.white;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
+      content: Text(msg, style: TextStyle(color: onColor)),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
@@ -100,7 +105,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
           Text('ҲАРАКАТНИ БОШЛАШИНГИЗ МУМКИН!',
               style: TextStyle(
                   fontSize: AppText.bodyMedium,
-                  color: _green,
+                  color: AppColors.primaryText,
                   fontWeight: FontWeight.w600),
               textAlign: TextAlign.center),
         ]),
@@ -109,7 +114,7 @@ class _DriverHomeViewState extends State<_DriverHomeView> {
             onPressed: () => Navigator.of(context).pop(),
             style: ElevatedButton.styleFrom(
                 backgroundColor: _green,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10))),
             child: const Text('OK'),

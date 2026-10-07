@@ -96,7 +96,7 @@ class _AnonymousProfileView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.person_outline_rounded,
-                  size: 64, color: AppColors.primary),
+                  size: 64, color: AppColors.primaryText),
               const SizedBox(height: 16),
               Text(
                 context.tr('profile_login_cta'),
@@ -120,7 +120,7 @@ class _AnonymousProfileView extends StatelessWidget {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryDark,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -154,7 +154,7 @@ class _ProfileView extends StatefulWidget {
 }
 
 class _ProfileViewState extends State<_ProfileView> {
-  static const _green = AppColors.primaryDark;
+  static const _green = AppColors.primaryText;
   static const String _rolePin = '2024';
 
   bool _autoOpenHandled = false;
@@ -213,7 +213,7 @@ class _ProfileViewState extends State<_ProfileView> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.75),
+                      color: AppColors.onPrimary.withValues(alpha: 0.75),
                     ),
                   ),
               ],
@@ -221,11 +221,11 @@ class _ProfileViewState extends State<_ProfileView> {
           },
         ),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
+            icon: const Icon(Icons.more_vert, color: AppColors.onPrimary),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             onSelected: (val) {
@@ -342,7 +342,7 @@ class _ProfileViewState extends State<_ProfileView> {
   // ────────────────────────────────────────────────────────────────────
   Widget _header(ProfileController c, AppLocalizations loc) {
     return Container(
-      color: _green,
+      color: AppColors.primaryDark,
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
       child: Center(
         child: Column(children: [
@@ -381,7 +381,7 @@ class _ProfileViewState extends State<_ProfileView> {
               style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+                  color: AppColors.onPrimary)),
           const SizedBox(height: 4),
           GestureDetector(
             onTap: _onRoleLabelTap,
@@ -392,7 +392,7 @@ class _ProfileViewState extends State<_ProfileView> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(_roleLabel(context, c.role, loc),
-                  style: const TextStyle(fontSize: 12, color: Colors.white)),
+                  style: const TextStyle(fontSize: 12, color: AppColors.onPrimary)),
             ),
           ),
         ]),
@@ -661,7 +661,7 @@ class _ProfileViewState extends State<_ProfileView> {
                   fontSize: 15, fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
             backgroundColor: color,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14)),
           ),

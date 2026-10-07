@@ -246,8 +246,13 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
   }
 
   void _snack(String msg, Color color) {
+    // Оч фон (бренд/апельсин) устида тўқ матн, тўқ фонда — оқ.
+    final onColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.light
+            ? AppColors.onPrimary
+            : Colors.white;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
+      content: Text(msg, style: TextStyle(color: onColor)),
       backgroundColor: color,
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 2),
@@ -304,7 +309,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
           return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(children: [
-            const Icon(Icons.person_pin, color: _color, size: 26),
+            const Icon(Icons.person_pin, color: AppColors.primaryText, size: 26),
             const SizedBox(width: 8),
             Text(context.tr('new_order_alert'),
                 style: const TextStyle(fontSize: AppText.titleMedium)),
@@ -322,7 +327,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
           actions: [
             IconButton(
               onPressed: () => _callUser(ride.userPhone),
-              icon: const Icon(Icons.call, color: AppColors.primary, size: 28),
+              icon: const Icon(Icons.call, color: AppColors.primaryText, size: 28),
             ),
             TextButton(
               onPressed: () {
@@ -344,7 +349,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
               },
               style: ElevatedButton.styleFrom(
                   backgroundColor: _color,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10))),
               child: Text(context.tr('accept')),
@@ -388,7 +393,7 @@ class _DriverPanelMarshrutViewState extends State<_DriverPanelMarshrutView>
       appBar: AppBar(
         title: Text(context.tr('marshrut_panel_title')),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         actions: [
           if (c.hasScheduleToday) ...[
@@ -754,7 +759,7 @@ class _MarshrutCashDialogState extends State<_MarshrutCashDialog> {
           onPressed: _cash < _fare ? null : () => Navigator.pop(context, _cash),
           style: ElevatedButton.styleFrom(
             backgroundColor: widget.color,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.onPrimary,
           ),
           child: Text(context.tr('complete_trip_confirm_btn')),
         ),
@@ -769,7 +774,7 @@ class _AcceptedTripsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      const Icon(Icons.check_circle_outline, color: AppColors.primaryDark, size: 20),
+      const Icon(Icons.check_circle_outline, color: AppColors.primaryText, size: 20),
       const SizedBox(width: 8),
       Text(
         context.tr('accepted_trips_title'),
@@ -846,7 +851,7 @@ class _AcceptedTripCard extends StatelessWidget {
               label: Text(context.tr('complete_short')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _color,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary,
               ),
             ),
           ],
@@ -944,7 +949,7 @@ class _RequestsHeader extends StatelessWidget {
         child: Text('$count',
             style: const TextStyle(
                 fontSize: AppText.labelSmall,
-                color: Colors.white,
+                color: AppColors.onPrimary,
                 fontWeight: FontWeight.bold)),
       ),
     ]);

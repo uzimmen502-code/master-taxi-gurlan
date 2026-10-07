@@ -90,7 +90,7 @@ class PlatformMarketCard extends StatelessWidget {
                       child: const Text(
                         'AVA',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onPrimary,
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                         ),
@@ -124,7 +124,7 @@ class PlatformMarketCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontWeight: FontWeight.w700,
                         fontSize: AppText.bodySmall,
                       ),

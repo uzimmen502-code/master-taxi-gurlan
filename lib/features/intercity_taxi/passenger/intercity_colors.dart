@@ -51,7 +51,7 @@ abstract final class IntercityColors {
   static const Color warningSoft = AvaLight.warnSoft;
 
   /// Маълумот / янги ҳайдовчи.
-  static const Color info = AvaLight.brand;
+  static const Color info = AvaLight.brandText;
   static const Color infoSoft = AvaLight.brandSoft;
 
   /// Рейтинг юлдузи.

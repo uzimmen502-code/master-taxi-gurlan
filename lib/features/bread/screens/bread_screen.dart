@@ -128,7 +128,8 @@ class _BreadViewState extends State<_BreadView> {
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
 
-        content: Text(loc.translate('bread_snack_cart_empty')),
+        content: Text(loc.translate('bread_snack_cart_empty'),
+            style: const TextStyle(color: AppColors.onPrimary)),
 
         backgroundColor: AppColors.button,
 
@@ -212,7 +213,7 @@ class _BreadViewState extends State<_BreadView> {
 
         c.isLoading
 
-            ? const Center(child: CircularProgressIndicator(color: _primary))
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primaryText))
 
             : CustomScrollView(slivers: [
 
@@ -224,7 +225,7 @@ class _BreadViewState extends State<_BreadView> {
 
                   backgroundColor: AppColors.primary,
 
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary,
 
                   flexibleSpace: FlexibleSpaceBar(
 
@@ -238,7 +239,7 @@ class _BreadViewState extends State<_BreadView> {
 
                         fontWeight: FontWeight.bold,
 
-                        color: Colors.white,
+                        color: AppColors.onPrimary,
 
                         shadows: [
 
@@ -486,11 +487,11 @@ class _BreadViewState extends State<_BreadView> {
 
                             Text(_cartSummary(c),
 
-                                style: const TextStyle(
+                                style: TextStyle(
 
                                     fontSize: AppText.bodyMedium,
 
-                                    color: Colors.white70),
+                                    color: AppColors.onPrimary.withValues(alpha: 0.7)),
 
                                 maxLines: 1,
 
@@ -498,11 +499,11 @@ class _BreadViewState extends State<_BreadView> {
 
                             Text(loc.translate('bread_view_cart'),
 
-                                style: const TextStyle(
+                                style: TextStyle(
 
                                     fontSize: AppText.bodySmall,
 
-                                    color: Colors.white60)),
+                                    color: AppColors.onPrimary.withValues(alpha: 0.6))),
 
                           ]),
 
@@ -534,7 +535,7 @@ class _BreadViewState extends State<_BreadView> {
 
                               fontWeight: FontWeight.bold,
 
-                              color: Colors.white)),
+                              color: AppColors.onPrimary)),
 
                     ),
 

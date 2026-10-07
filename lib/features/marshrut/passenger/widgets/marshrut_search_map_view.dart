@@ -156,7 +156,7 @@ class _MarshrutSearchMapViewState extends State<MarshrutSearchMapView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.near_me, size: 16, color: AppColors.primary),
+            Icon(Icons.near_me, size: 16, color: AppColors.primaryText),
             const SizedBox(width: 6),
             Flexible(
               child: Text(

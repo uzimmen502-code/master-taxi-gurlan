@@ -222,7 +222,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        prefixIcon: Icon(icon, size: 18, color: AppColors.primaryDark),
+        prefixIcon: Icon(icon, size: 18, color: AppColors.primaryText),
         suffixIcon: loading
             ? const Padding(
                 padding: EdgeInsets.all(12),
@@ -243,7 +243,7 @@ class _ServiceAreaPickerState extends State<ServiceAreaPicker> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide:
-              const BorderSide(color: AppColors.primaryDark, width: 1.5),
+              const BorderSide(color: AppColors.primaryText, width: 1.5),
         ),
       ),
       hint: Text(

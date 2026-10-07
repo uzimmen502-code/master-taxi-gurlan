@@ -20,7 +20,7 @@ class DialogNewsDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(group.title),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: ListView(
         padding: const EdgeInsets.all(12),

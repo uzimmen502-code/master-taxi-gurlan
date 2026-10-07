@@ -143,7 +143,8 @@ class _ProcurementPricesScreenState extends State<ProcurementPricesScreen> {
   void _snack(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg,
+            style: TextStyle(color: error ? null : AppColors.onPrimary)),
         backgroundColor: error ? Colors.red.shade700 : AppColors.button,
       ),
     );
@@ -167,7 +168,7 @@ class _ProcurementPricesScreenState extends State<ProcurementPricesScreen> {
                   color: _blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.price_change_outlined, color: _blue),
+                child: const Icon(Icons.price_change_outlined, color: AppColors.primaryText),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -269,7 +270,7 @@ class _ProcurementPricesScreenState extends State<ProcurementPricesScreen> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: AppColors.onPrimary,
                             ),
                           )
                         : const Icon(Icons.save_outlined),

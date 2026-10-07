@@ -46,9 +46,9 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
         color: Colors.white,
         child: TabBar(
           controller: _tabCtrl,
-          indicatorColor: AppColors.primary,
+          indicatorColor: AppColors.primaryText,
           indicatorWeight: 3,
-          labelColor: AppColors.primary,
+          labelColor: AppColors.primaryText,
           unselectedLabelColor: Colors.grey.shade600,
           labelStyle:
               const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -108,12 +108,12 @@ class _PayoutManagementScreenState extends State<PayoutManagementScreen>
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.account_balance_wallet,
-                    size: 16, color: AppColors.primary),
+                    size: 16, color: AppColors.primaryText),
                 const SizedBox(width: 6),
                 Text(
                     '${docs.length} тa · ${formatMoney(totalAmount)}',
                     style: const TextStyle(
-                        color: AppColors.primary,
+                        color: AppColors.primaryText,
                         fontSize: 13,
                         fontWeight: FontWeight.bold)),
               ]),
@@ -161,7 +161,7 @@ class _PayoutsList extends StatelessWidget {
             color: status == 'pending'
                 ? Colors.grey
                 : status == 'completed'
-                    ? AppColors.primary
+                    ? AppColors.primaryText
                     : Colors.red,
             title: status == 'pending'
                 ? 'Кутаётган payout ёқ'
@@ -236,7 +236,7 @@ class _PayoutRowState extends State<_PayoutRow> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Тaсдиқ',
-                style: TextStyle(color: AppColors.primary)),
+                style: TextStyle(color: AppColors.primaryText)),
           ),
         ],
       ),
@@ -254,7 +254,8 @@ class _PayoutRowState extends State<_PayoutRow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppColors.button,
-          content: Text('✅ Pаyout тaсдиқлaнди (${_amountText()})'),
+          content: Text('✅ Pаyout тaсдиқлaнди (${_amountText()})',
+              style: const TextStyle(color: AppColors.onPrimary)),
         ),
       );
     } on FirebaseFunctionsException catch (e) {
@@ -353,9 +354,9 @@ class _PayoutRowState extends State<_PayoutRow> {
   Widget build(BuildContext context) {
     final data = widget.doc.data();
     final color = widget.status == 'pending'
-        ? AppColors.primary
+        ? AppColors.primaryText
         : widget.status == 'completed'
-            ? AppColors.primary
+            ? AppColors.primaryText
             : const Color(0xFFD32F2F);
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
     final phone = (data['userPhone'] ?? '').toString();
@@ -401,7 +402,7 @@ class _PayoutRowState extends State<_PayoutRow> {
                       style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary)),
+                          color: AppColors.primaryText)),
                 ]),
                 const SizedBox(height: 2),
                 Wrap(spacing: 12, children: [
@@ -447,12 +448,12 @@ class _PayoutRowState extends State<_PayoutRow> {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2, color: AppColors.onPrimary))
                 : const Icon(Icons.check, size: 18),
             label: const Text('Тaсдиқ'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.button,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.onPrimary,
             ),
           ),
         ],

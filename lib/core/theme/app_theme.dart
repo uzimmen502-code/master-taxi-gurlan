@@ -269,7 +269,8 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(AvaRadius.sheet),
         ),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.brand),
+      // Спиннер асосан оқ/оч фонда — `brand` (1.97) кўринмайди.
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.brandText),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../l10n/app_localizations.dart';
@@ -94,7 +95,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                 style: const TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 17,
-                  color: AvaStoreColors.deep,
+                  color: AppColors.primaryText,
                 ),
               ),
             ),
@@ -168,7 +169,10 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
       Navigator.of(context).pop();
       rootMessenger.showSnackBar(
         SnackBar(
-          content: Text(loc.translate('bread_snack_order_sent')),
+          content: Text(
+            loc.translate('bread_snack_order_sent'),
+            style: const TextStyle(color: AppColors.onPrimary),
+          ),
           backgroundColor: _deep,
           behavior: SnackBarBehavior.floating,
         ),
@@ -230,7 +234,9 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                     c.clearCart();
                     Navigator.pop(context);
                   },
-                  style: TextButton.styleFrom(foregroundColor: _deep),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primaryText,
+                  ),
                   child: Text(
                     context.tr('platform_store_clear_cart'),
                     style: const TextStyle(fontWeight: FontWeight.w700),
@@ -322,7 +328,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
-                        color: AvaStoreColors.deep,
+                        color: AppColors.primaryText,
                       ),
                     ),
                   ],
@@ -364,7 +370,7 @@ class _PlatformCartSheetState extends State<PlatformCartSheet> {
                       '${formatPrice(c.grandTotal)} ${loc.translate('sum')}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
-                        color: _deep,
+                        color: AppColors.primaryText,
                         fontSize: 20,
                       ),
                     ),
@@ -480,7 +486,7 @@ class _CartLine extends StatelessWidget {
                 Text(
                   '${formatPrice(line)} ${loc.translate('sum')}',
                   style: const TextStyle(
-                    color: AvaStoreColors.deep,
+                    color: AppColors.primaryText,
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
                   ),
@@ -494,7 +500,7 @@ class _CartLine extends StatelessWidget {
             decoration: BoxDecoration(
               color: AvaStoreColors.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AvaStoreColors.brand, width: 1.2),
+              border: Border.all(color: AppColors.primaryText, width: 1.2),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -579,7 +585,7 @@ class _Thumb extends StatelessWidget {
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AvaStoreColors.deep,
+              color: AppColors.primaryText,
             ),
           ),
         ),

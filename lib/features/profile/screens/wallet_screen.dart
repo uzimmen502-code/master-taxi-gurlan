@@ -17,7 +17,7 @@ class WalletScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Кошелёк'),
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),

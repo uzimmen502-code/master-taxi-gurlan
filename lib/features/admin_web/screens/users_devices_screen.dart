@@ -120,7 +120,7 @@ class _UsersDevicesScreenState extends State<UsersDevicesScreen> {
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: FilterChip(
-              avatar: Icon(icons[i], size: 18, color: active ? _blue : null),
+              avatar: Icon(icons[i], size: 18, color: active ? AppColors.primaryText : null),
               label: Text(labels[i], style: const TextStyle(fontSize: 12)),
               selected: active,
               onSelected: (_) {
@@ -132,7 +132,7 @@ class _UsersDevicesScreenState extends State<UsersDevicesScreen> {
                 );
               },
               selectedColor: _blue.withValues(alpha: 0.15),
-              checkmarkColor: _blue,
+              checkmarkColor: AppColors.primaryText,
             ),
           );
         }),
@@ -153,7 +153,7 @@ class _UsersDevicesScreenState extends State<UsersDevicesScreen> {
               color: _blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.manage_accounts_outlined, color: _blue),
+            child: const Icon(Icons.manage_accounts_outlined, color: AppColors.primaryText),
           ),
           const SizedBox(width: 14),
           const Expanded(
@@ -181,7 +181,7 @@ class _UsersDevicesScreenState extends State<UsersDevicesScreen> {
 class _UsersColumnPanel extends StatelessWidget {
   const _UsersColumnPanel();
 
-  static const _accent = AppColors.primary;
+  static const _accent = AppColors.primaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +203,7 @@ class _UsersColumnPanel extends StatelessWidget {
 class _DevicesColumnPanel extends StatelessWidget {
   const _DevicesColumnPanel();
 
-  static const _accent = AppColors.primary;
+  static const _accent = AppColors.primaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -444,7 +444,7 @@ List<QueryDocumentSnapshot<Map<String, dynamic>>> _hashBindingDocs(
 class _MultiDeviceUsersColumnPanel extends StatelessWidget {
   const _MultiDeviceUsersColumnPanel();
 
-  static const _accent = AppColors.primary;
+  static const _accent = AppColors.primaryText;
 
   @override
   Widget build(BuildContext context) {
@@ -1020,6 +1020,7 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
               (isRemove
                   ? '✅ Rol olib tashlandi: ${widget.phone}'
                   : '✅ $label roli berildi: ${widget.phone}'),
+          style: TextStyle(color: err == null ? AppColors.onPrimary : null),
         ),
       ),
     );
@@ -1064,7 +1065,7 @@ class _UserRoleActionsState extends State<_UserRoleActions> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (canPriv) ...[
-            _roleBtn('admin', Icons.admin_panel_settings, AppColors.primary, role),
+            _roleBtn('admin', Icons.admin_panel_settings, AppColors.primaryText, role),
             _roleBtn('finance', Icons.account_balance, AvaLight.ok, role),
             _roleBtn('auditor', Icons.fact_check, Colors.indigo, role),
           ],
@@ -1141,7 +1142,8 @@ class _DeviceBindingCardState extends State<_DeviceBindingCard> {
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(err ?? okMsg),
+        content: Text(err ?? okMsg,
+            style: TextStyle(color: err == null ? AppColors.onPrimary : null)),
         backgroundColor: err == null ? AppColors.button : Colors.red,
         duration: Duration(seconds: err == null ? 2 : 5),
       ),
@@ -1362,7 +1364,7 @@ class _InfoCard extends StatelessWidget {
           children: [
             CircleAvatar(
               backgroundColor: const Color(0xFFE3F2FD),
-              child: Icon(icon, color: AppColors.primary),
+              child: Icon(icon, color: AppColors.primaryText),
             ),
             const SizedBox(width: 12),
             Expanded(

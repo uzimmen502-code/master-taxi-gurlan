@@ -166,11 +166,13 @@ class _MonitoringViewState extends State<_MonitoringView>
     final tabBar = TabBar(
       controller: _tabCtrl,
       isScrollable: true,
-      indicatorColor: widget.embedded ? AppColors.primary : Colors.white,
+      indicatorColor:
+          widget.embedded ? AppColors.primaryText : AppColors.onPrimary,
       indicatorWeight: 3,
-      labelColor: widget.embedded ? AppColors.primary : Colors.white,
-      unselectedLabelColor:
-          widget.embedded ? Colors.grey.shade600 : Colors.white70,
+      labelColor: widget.embedded ? AppColors.primaryText : AppColors.onPrimary,
+      unselectedLabelColor: widget.embedded
+          ? Colors.grey.shade600
+          : AppColors.onPrimary.withValues(alpha: 0.7),
       labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
       tabs: const [
         Tab(text: '📊 Dashboard'),
@@ -235,7 +237,7 @@ class _MonitoringViewState extends State<_MonitoringView>
       backgroundColor: AppColors.scaffold,
       appBar: AppBar(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary,
         elevation: 0,
         title: const Text('📊 Monitoring Center',
             style: TextStyle(fontWeight: FontWeight.bold)),

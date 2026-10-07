@@ -57,7 +57,7 @@ class _EvChargingAnonymousGate extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.ev_station_rounded, size: 64, color: AppColors.primary),
+              const Icon(Icons.ev_station_rounded, size: 64, color: AppColors.primaryText),
               const SizedBox(height: 16),
               const Text(
                 'Бу бўлим фақат рўйхатдан ўтган фойдаланувчилар учун очиқ.',
@@ -77,7 +77,7 @@ class _EvChargingAnonymousGate extends StatelessWidget {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryDark,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: const Text('Рўйхатдан ўтиш'),
@@ -307,18 +307,18 @@ class _TripPlannerBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primaryDark, width: 1.4),
+            border: Border.all(color: AppColors.primaryText, width: 1.4),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.route_rounded,
-                  color: AppColors.primaryDark, size: 20),
+                  color: AppColors.primaryText, size: 20),
               const SizedBox(width: 8),
               Text(
                 context.tr('ev_trip_entry'),
                 style: const TextStyle(
-                  color: AppColors.primaryDark,
+                  color: AppColors.primaryText,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   height: 1,
@@ -361,12 +361,12 @@ class _PaidAddStationBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+              const Icon(Icons.add_rounded, color: AppColors.onPrimary, size: 20),
               const SizedBox(width: 6),
               const Text(
                 'Станция қўшиш',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   height: 1,

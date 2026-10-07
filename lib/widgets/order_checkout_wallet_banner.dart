@@ -48,7 +48,7 @@ class OrderCheckoutWalletBanner extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.account_balance_wallet_outlined,
-                  size: 20, color: AppColors.primary),
+                  size: 20, color: AppColors.primaryText),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -122,7 +122,7 @@ class OrderCheckoutWalletBanner extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: AppColors.primary,
+                color: AppColors.primaryText,
               ),
             ),
             const SizedBox(height: 4),

@@ -1152,8 +1152,9 @@ ZONE_2/3/5 — нарх йўқ (матрицада ҳам йўқ). Seed:
 `core/seed/logistics_tariff_draft.json`; seed tool draft'ни **тўлиқ
 алмаштиради** (merge эмас — акс ҳолда эски `prices.ZONE_x` қолиб кетарди).
 Production'даги `logistics_v1` draft ҳали **эски 5 поғонали** кўринишда
-(01:55 UTC seed) — алмаштириш эга қарори билан (A: `seed --write`, B:
-admin JSON). `limits.maxWeightG = 20000` — эга белгилагунча ўзгартирилмади
+(01:55 UTC seed) — эга қарори (2026-10-07): **B** — эга admin JSON
+муҳаррири орқали тайёр JSON билан ўзи алмаштиради (callable тўлиқ
+алмаштиради, `logistics_audit`). `limits.maxWeightG = 20000` — эга белгилагунча ўзгартирилмади
 (21 кг чегара билан зиддиятли: 20–21 кг рад, `extraPerKg` ишламайди —
 тест билан қулфланган). Фаоллаштириш учун етишмайди:
 `internal.platformMarginBps`, `internal.legShareBps` (эга беради; admin
@@ -1162,7 +1163,10 @@ admin JSON). `limits.maxWeightG = 20000` — эга белгилагунча ў�
 **«Барча нархларни % га»** тугмаси (яхлитлаш 1/100/1000 сўм; фаол
 версиядан — янги қоралама); ҳисоб `tariff_adjust.dart` (соф Dart, тест).
 
-**Pilot'гача ёпилган бўшлиқлар (2026-10-07, эга рухсати, deploy кутяпти):**
+**Pilot'гача ёпилган бўшлиқлар (2026-10-07, эга рухсати; деплой қилинди
+04:25 UTC — `functions:demand` 1 яратилди/31 янгиланди/0 хато,
+`adminReactivateLeg` ACTIVE, sweeper'лар v8; hosting `/`+`/admin/` қайта
+чиқарилди, жонли бандлда текширилди):**
 (А) `reopenStaleAssignments` логистика LEG'ларини ўтказиб юборади
 (`api/maintenance.js`) — акс ҳолда LEG-1 келгунча кутаётган LEG-2 ижрочиси
 120 дақиқадан кейин чиқариб ташланиб NO_SHOW жазоси оларди; (Б)

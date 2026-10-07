@@ -24,6 +24,8 @@ const { callerIdFrom, requireCanonicalId, candidateIdsFor } = require('../core/i
 
 const COLLECTION = 'provider_capabilities';
 const USERS = 'users';
+/** Append-only audit (41-qoida) — `admin_capabilities.js` ham shuni ishlatadi. */
+const AUDIT = 'capability_audit';
 
 function httpError(code, message) {
   const e = new Error(message);
@@ -165,6 +167,21 @@ function makeRequestCapability(deps) {
         throw httpError('failed-precondition', `«${current}» holatidan boshlab bo'lmaydi`);
       }
 
+      // D-15.3: kuryerda admin tanlagan rejim (`settings/courier`). `auto` —
+      // darhol `approved`, lekin state machine bo'ylab (trial → approved,
+      // admin siyosati) va auditga tushadi. O'QISH — yozuvlardan oldin.
+      let target = lc.initial;
+      let autoApproval = null;
+      if (service === 'courier') {
+        const settings = await tx.get(db.collection('settings').doc('courier'));
+        const sData = settings.exists ? (settings.data() || {}) : {};
+        if (caps.courierApprovalModeOf(sData) === caps.COURIER_APPROVAL_MODES.auto
+            && caps.canTransition(service, lc.initial, caps.COURIER.approved, 'admin')) {
+          target = caps.COURIER.approved;
+          autoApproval = { modeSetBy: String(sData.approvalModeUpdatedBy || '') };
+        }
+      }
+
       const existingWindow = ((doc.window || {})[service]) || null;
       // BIR MARTA: oyna allaqachon bo'lsa (masalan taksi starter'i), saqlanadi.
       const window = existingWindow && existingWindow.startedAt
@@ -174,15 +191,27 @@ function makeRequestCapability(deps) {
       const patch = {
         identity: { accountId, primaryUid: requireCanonicalId(callerId, 'primaryUid') },
         [service]: { active: true },
-        status: { [service]: lc.initial },
+        status: { [service]: target },
         updatedAt: now,
       };
       if (window) patch.window = { [service]: window };
+      if (autoApproval) {
+        patch.review = {
+          [service]: { reviewedBy: 'auto', at: now, decision: target, reason: 'approval_mode_auto' },
+        };
+      }
       // Barcha o'qishlar tugadi — endi yozuvlar.
       commitAccountId(tx, acc);
       tx.set(ref, patch, { merge: true });
+      if (autoApproval) {
+        // 41-qoida: avtomatik tasdiq ham — kim yoqqan siyosat bo'yicha.
+        tx.set(db.collection(AUDIT).doc(), {
+          accountId, service, from: lc.initial, to: target, reason: 'approval_mode_auto',
+          by: 'auto', modeSetBy: autoApproval.modeSetBy, at: now, kind: 'auto_approve',
+        });
+      }
 
-      const out = { accountId, status: lc.initial, changed: true };
+      const out = { accountId, status: target, changed: true };
       const w = window || existingWindow;
       if (w && w.endsAt) out.trialEndsAt = new Date(caps.toMillis(w.endsAt)).toISOString();
       if (w && w.verificationDueAt) {
@@ -366,6 +395,7 @@ async function fetchByPhone(db, phoneId) {
 
 module.exports = {
   COLLECTION,
+  AUDIT,
   TAXI_DUE_NEWS,
   taxiDueNewsId,
   newAccountId,

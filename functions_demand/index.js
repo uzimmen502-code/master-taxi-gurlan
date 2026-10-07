@@ -165,6 +165,14 @@ exports.adminGrantCapability = fn.https.onCall(wrapCallable(
 ));
 
 /**
+ * ADMIN — kuryer arizasini tasdiqlash rejimi (D-15.3): `manual` (sinov,
+ * admin tasdiqlaydi; standart) | `auto` (ariza → darhol approved). Audit.
+ */
+exports.adminSetCourierApprovalMode = fn.https.onCall(wrapCallable(
+  adminCapsApi.makeAdminSetCourierApprovalMode({ db }),
+));
+
+/**
  * ADMIN — T-6 migratsiyasi: `drivers.approved` → taxi `verified` +
  * 4 oylik billing grace. `dryRun` standart TRUE; `{dryRun:false}` yozadi.
  */

@@ -29,6 +29,8 @@ const courierPush = createCourierPush({ db, canonicalUid });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');
+// Kuryer avtorizatsiyasi: 'new' / 'finish' rejimlari + buyurtma egaligi.
+const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
@@ -2434,37 +2436,25 @@ function assertCourierPhone(courierPhone) {
   return uid;
 }
 
+const courierAuth = makeCourierAuth({
+  db, caps: capabilitiesModel, canonicalUid, HttpsError: functions.https.HttpsError,
+});
+
 /**
- * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1).
- *
- * `users/{uid}.accountId` → `provider_capabilities/{accountId}` →
- * `courier` statusi ishlaydigan holatda (`trial`, `trial_expired`,
- * `document_submitted`, `under_review`, `approved`). Statusni faqat
- * server/admin yozadi, shuning uchun bu tekshiruvga ishonish mumkin.
+ * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1), ikki rejim
+ * (`courier_auth.js`, ega qarori 2026-10-07):
+ *   'new'    — yangi ish (marshrut, gilam/sut vazifasini olish):
+ *              ishlaydigan holat (`trial` … `approved`);
+ *   'finish' — qo'ldagi ishni tugatish: `suspended` ham (custody
+ *              uzilmasin). Buyurtma amallarida qo'shimcha
+ *              `courierAuth.assertOrderOnActiveRoute` shart.
  *
  * OLIB TASHLANDI (D-CLEAN-1): `couriers/{uid}` mavjudligi va
  * `users.role === 'courier'` zahiralari — ikkalasi ham klient o'ziga
  * yozishi mumkin bo'lgan manbalar edi (self_approval_rules.test.js).
  */
-async function resolveAuthorizedCourierUid(courierPhone) {
-  const uid9 = userUid(courierPhone);
-  const uid12 = canonicalUid(courierPhone);
-  const ids = uid9 === uid12 ? [uid12] : [uid12, uid9];
-
-  for (let i = 0; i < ids.length; i += 1) {
-    const userDoc = await db.collection('users').doc(ids[i]).get();
-    if (!userDoc.exists) continue;
-    const accountId = String((userDoc.data() || {}).accountId || '');
-    if (!accountId) break;
-    const cap = await db.collection('provider_capabilities').doc(accountId).get();
-    const doc = cap.exists ? (cap.data() || {}) : {};
-    if (capabilitiesModel.isWorking('courier', capabilitiesModel.statusOf(doc, 'courier'))) {
-      return uid12;
-    }
-    break;
-  }
-
-  throw new functions.https.HttpsError('permission-denied', 'Courier not authorized');
+async function resolveAuthorizedCourierUid(courierPhone, mode = COURIER_AUTH_MODES.new) {
+  return courierAuth.resolve(courierPhone, mode);
 }
 
 async function loadOrderOrThrow(orderId) {
@@ -4006,9 +3996,14 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  // Huquq ('finish' — to'xtatilgan kuryer ham qo'lidagini tugatadi) va
+  // buyurtma shu kuryerning faol marshrutida bo'lishi shart. Avval bu
+  // yerda hech qanday tekshiruv yo'q edi (`courier_auth.js`).
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
   if (fs === 'cancelled' || fs === 'completed') {
     throw new functions.https.HttpsError('failed-precondition', 'order closed');
@@ -4146,7 +4141,9 @@ exports.courierRecoverOrphanRoute = functions.https.onCall(async (data, context)
     if (canonicalUid(callerPhone(context)) !== canonicalUid(courierDigits)) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    const courierId = await resolveAuthorizedCourierUid(courierPhone);
+    // 'finish': faqat O'ZIGA allaqachon biriktirilgan buyurtmalarni
+    // tiklaydi — to'xtatilgan kuryer ham qo'lidagini yo'qotmasin.
+    const courierId = await resolveAuthorizedCourierUid(courierPhone, COURIER_AUTH_MODES.finish);
 
     // Аллақачон фаол маршрут борми?
     const activeSnap = await db.collection('delivery_routes')
@@ -4213,9 +4210,11 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'courier_picked' && od.status !== 'in_delivery') {
     throw new functions.https.HttpsError('failed-precondition', 'pick first');
@@ -4264,11 +4263,14 @@ exports.courierGetCustomerWalletBalance = functions.https.onCall(async (data, co
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
 
-    await resolveAuthorizedCourierUid(courierPhone);
+    await resolveAuthorizedCourierUid(courierPhone, COURIER_AUTH_MODES.finish);
 
     if (!customerPhone.trim()) {
       throw new functions.https.HttpsError('invalid-argument', 'customerPhone required');
     }
+    // Faqat o'z faol marshrutidagi mijoz — avval istalgan raqamning
+    // hamyon qoldig'i qaytarilardi (40-qoida).
+    await courierAuth.assertCustomerOnActiveRoute(courierPhone, customerPhone);
 
     const uid9 = userUid(customerPhone);
     const uid12 = canonicalUid(customerPhone);
@@ -4303,11 +4305,15 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  // Huquq + egalik: avval tekshiruvsiz har kim ortiqcha «naqd»ni qaytim
+  // sifatida o'z hamyoniga yoza olardi (`courier_auth.js`).
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const linesIn = Array.isArray(data.lines) ? data.lines : [];
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
 
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'arrived') {
     throw new functions.https.HttpsError('failed-precondition', 'arrived first');
@@ -7941,7 +7947,8 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
     if (callerPhone(context) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    await resolveAuthorizedCourierUid(data.courierPhone);
+    // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
+    await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
 
     const taskId = String(data.taskId || '').trim();
     if (!taskId) {
@@ -8005,7 +8012,8 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     if (callerPhone(context) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    await resolveAuthorizedCourierUid(data.courierPhone);
+    // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
+    await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
 
     const taskId = String(data.taskId || '').trim();
     if (!taskId) {
@@ -17656,13 +17664,18 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
   }
 });
 
-async function assertCourierCaller(courierPhone, context) {
+/**
+ * `mode`: vazifani OLISH — 'new' (standart); olingan vazifani bajarish —
+ * 'finish' (to'xtatilgan kuryer ham tugatadi; egalik har funksiyada
+ * `Not your … task` bilan tekshiriladi).
+ */
+async function assertCourierCaller(courierPhone, context, mode = COURIER_AUTH_MODES.new) {
   const courierDigits = assertCourierPhone(courierPhone);
   const caller = callerPhone(context);
   if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
-  return resolveAuthorizedCourierUid(courierPhone);
+  return resolveAuthorizedCourierUid(courierPhone, mode);
 }
 
 /** Kuryer: gilam olish vazifasini olish (pickup_ready → pickup_in_delivery). */
@@ -17721,7 +17734,8 @@ exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) 
     }
     const orderId = String(data.orderId || '').trim();
     const leg = String(data.leg || 'pickup').trim().toLowerCase();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -17788,7 +17802,8 @@ exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -17872,7 +17887,8 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -18121,7 +18137,8 @@ exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, conte
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -18168,7 +18185,8 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }

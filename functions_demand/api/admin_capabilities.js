@@ -12,10 +12,9 @@
 const caps = require('../core/capabilities');
 const { candidateIdsFor, toCanonicalId } = require('../core/ids');
 const { assertAnalyticsAdmin } = require('../analytics/access');
-const { readAccountId, commitAccountId } = require('./capabilities');
+const { readAccountId, commitAccountId, AUDIT } = require('./capabilities');
 
 const COLLECTION = 'provider_capabilities';
-const AUDIT = 'capability_audit';
 
 function httpError(code, message) {
   const e = new Error(message);
@@ -178,6 +177,41 @@ function makeAdminGrantCapability(deps) {
 }
 
 /**
+ * ADMIN — kuryer arizasini tasdiqlash rejimi (D-15.3): `manual` | `auto`.
+ * `settings/courier.approvalMode` + kim/qachon; har o'zgarish auditda
+ * (41-qoida: avtomatik tasdiqni kim yoqqani ko'rinib tursin).
+ * IDEMPOTENT: o'sha rejim qayta yuborilsa — `changed: false`, audit yo'q.
+ */
+function makeAdminSetCourierApprovalMode(deps) {
+  const { db, now: nowFn } = deps;
+
+  return async function adminSetCourierApprovalMode(data, context) {
+    const adminId = await assertAnalyticsAdmin(db, context);
+    const mode = String((data && data.mode) || '');
+    if (!Object.values(caps.COURIER_APPROVAL_MODES).includes(mode)) {
+      throw httpError('invalid-argument', `noma'lum rejim: «${mode}»`);
+    }
+    const reason = String((data && data.reason) || '').slice(0, 500);
+    const now = nowFn ? nowFn() : new Date();
+
+    return db.runTransaction(async (tx) => {
+      const ref = db.collection('settings').doc('courier');
+      const snap = await tx.get(ref);
+      const from = caps.courierApprovalModeOf(snap.exists ? snap.data() : null);
+      if (from === mode) return { mode, changed: false };
+      tx.set(ref, {
+        approvalMode: mode, approvalModeUpdatedAt: now, approvalModeUpdatedBy: adminId,
+      }, { merge: true });
+      tx.set(db.collection(AUDIT).doc(), {
+        accountId: '', service: 'courier', from, to: mode, reason, by: adminId, at: now,
+        kind: 'approval_mode_change',
+      });
+      return { mode, changed: true, from };
+    });
+  };
+}
+
+/**
  * T-6 MIGRATSIYASI: mavjud tasdiqlangan haydovchilar (`drivers.approved`)
  * → `taxi.status = verified` + `billingGraceUntil = now + 4 oy`.
  * Starter'ga TUSHIRILMAYDI (ega qarori).
@@ -248,5 +282,5 @@ function makeAdminMigrateTaxiDrivers(deps) {
 
 module.exports = {
   AUDIT, resolveAccountId, makeAdminSetCapabilityStatus, makeAdminGrantCapability,
-  makeAdminMigrateTaxiDrivers,
+  makeAdminSetCourierApprovalMode, makeAdminMigrateTaxiDrivers,
 };

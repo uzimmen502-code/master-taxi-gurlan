@@ -7,7 +7,10 @@
 // Амаллар СЕРВЕРДА (europe-west1):
 //   • «Қўшиш» → `adminGrantCapability`: дарҳол `approved` (ега қарори),
 //     фақат иловага кирган рақам ва фақат `not_registered`дан;
-//   • «Тасдиқлаш» / «Тўхтатиш» → `adminSetCapabilityStatus`.
+//   • «Тасдиқлаш» / «Тўхтатиш» → `adminSetCapabilityStatus`;
+//   • «Тасдиқлаш режими» → `adminSetCourierApprovalMode` (D-15.3):
+//     Мануал — ариза синовга тушади, админ шу ердан тасдиқлайди;
+//     Авто — ариза дарҳол тасдиқланади. Режим `settings/courier`да.
 // Ўтиш `canTransition(..., 'admin')` билан текширилади, ҳар амал
 // `capability_audit`га тушади (41-қоида). Экран фақат чақиради.
 
@@ -28,9 +31,9 @@ class CourierManagementScreen extends StatefulWidget {
 
 class _CourierManagementScreenState extends State<CourierManagementScreen> {
   static const _filters = <String, String>{
+    'trial': 'Тасдиқ кутяпти (синов)',
+    'trial_expired': 'Тасдиқ кутяпти (охирги 5 кун)',
     'approved': 'Тасдиқланган',
-    'trial': 'Синов (3 кун)',
-    'trial_expired': 'Синов тугаган (grace)',
     'suspended': 'Тўхтатилган',
   };
 
@@ -38,8 +41,9 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
   final _phoneCtrl = TextEditingController();
   final _reasonCtrl = TextEditingController();
   bool _adding = false;
+  bool _savingMode = false;
   String? _error;
-  String _filter = 'approved';
+  String _filter = 'trial';
   String? _busyAccountId;
 
   HttpsCallable _callable(String name) =>
@@ -163,6 +167,112 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
     }
   }
 
+  Future<void> _setApprovalMode(String mode) async {
+    final toAuto = mode == 'auto';
+    final ctrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(toAuto ? 'Авто тасдиқни ёқиш' : 'Мануал тасдиққа ўтиш'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(toAuto
+                ? 'Курьер аризаси ҳеч қандай текширувсиз ДАРҲОЛ тасдиқланади. '
+                    'Ҳозир синовдаги курьерлар ўзгармайди — уларни рўйхатдан '
+                    'тасдиқланг.'
+                : 'Янги аризалар синовга тушади (3 кун + 5 кун). Тасдиқламасангиз, '
+                    'курьер 8 кунда тўхтатилади.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              decoration:
+                  const InputDecoration(hintText: 'Audit учун қисқа сабаб'),
+              maxLength: 200,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Бекор')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Тасдиқлаш'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (reason == null || !mounted) return;
+    setState(() => _savingMode = true);
+    try {
+      await _callable('adminSetCourierApprovalMode')
+          .call<Object?>({'mode': mode, 'reason': reason});
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          content: Text(e.code == 'permission-denied'
+              ? 'Бу амал учун рухсат йўқ'
+              : 'Режимни ўзгартириб бўлмади. Қайта уриниб кўринг.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingMode = false);
+    }
+  }
+
+  Widget _approvalModeCard() {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _db.collection('settings').doc('courier').snapshots(),
+      builder: (context, snap) {
+        // Сервер билан бир хил: фақат аниқ 'auto' — авто, қолгани мануал.
+        final mode =
+            snap.data?.data()?['approvalMode'] == 'auto' ? 'auto' : 'manual';
+        return Card(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Курьер аризасини тасдиқлаш режими',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'manual',
+                      label: Text('Мануал'),
+                      icon: Icon(Icons.how_to_reg),
+                    ),
+                    ButtonSegment(
+                      value: 'auto',
+                      label: Text('Авто'),
+                      icon: Icon(Icons.bolt),
+                    ),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: !snap.hasData || _savingMode
+                      ? null
+                      : (s) {
+                          if (s.first != mode) _setApprovalMode(s.first);
+                        },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   String _label(String status) => switch (status) {
         'approved' => 'Тасдиқланган',
         'suspended' => 'Тўхтатилган',
@@ -203,6 +313,8 @@ class _CourierManagementScreenState extends State<CourierManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _approvalModeCard(),
+          const SizedBox(height: 12),
           Card(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),

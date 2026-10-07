@@ -51,7 +51,7 @@ async function wipe(col) {
 }
 async function reset(seed = {}) {
   await Promise.all(['users', 'provider_capabilities', 'service_agreements',
-    'capability_audit', 'drivers'].map(wipe));
+    'capability_audit', 'drivers', 'settings'].map(wipe));
   await db.collection('users').doc(ADMIN).set({ role: 'admin' });
   await Promise.all(Object.entries(seed).map(([path, data]) => db.doc(path).set(data)));
 }
@@ -144,6 +144,16 @@ const capDoc = async (id) => (await db.collection('provider_capabilities').doc(i
     assert.strictEqual(vals[0].accountId, vals[1].accountId);
     const audit = await db.collection('capability_audit').get();
     assert.strictEqual(audit.size, 2);
+  });
+
+  await check('D-15.3 AUTO: accountId\'siz kuryer → darhol approved + audit (haqiqiy tx)', async () => {
+    await reset({ [`users/${A}`]: { phone: A } });
+    await adminCaps.makeAdminSetCourierApprovalMode({ db, now: () => NOW })({ mode: 'auto' }, ctx(ADMIN));
+    const r = await makeRequestCapability({ db, now: () => NOW })({ service: 'courier' }, ctx(A));
+    assert.strictEqual(r.status, caps.COURIER.approved);
+    assert.strictEqual((await capDoc(r.accountId)).status.courier, caps.COURIER.approved);
+    const audit = await db.collection('capability_audit').where('kind', '==', 'auto_approve').get();
+    assert.strictEqual(audit.size, 1);
   });
 
   const failed = results.filter((r) => !r.pass).length;

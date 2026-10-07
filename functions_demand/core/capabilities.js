@@ -303,6 +303,28 @@ const ADMIN_GRANT_PATH = {
   courier: [COURIER.trial, COURIER.approved],
 };
 
+/**
+ * KURYER ARIZASINI TASDIQLASH REJIMI (D-15.3, ega qarori 2026-10-07) —
+ * `settings/courier.approvalMode`, admin panelda almashtiriladi
+ * (`adminSetCourierApprovalMode`, audit bilan).
+ *
+ *   manual — ariza → `trial` (D-15: 3 kun + bir martalik 5 kun grace),
+ *            admin ro'yxatdan tasdiqlaydi. STANDART.
+ *   auto   — ariza → darhol `approved`: state machine bo'ylab
+ *            (`trial → approved`, admin siyosati sifatida), auditga tushadi.
+ *
+ * Noma'lum yoki bo'sh qiymat — `manual` (xavfsiz tomon). Rejim faqat
+ * ARIZA paytida qo'llanadi: `auto`ga o'tish mavjud `trial`larni
+ * o'zgartirmaydi — ularni admin ro'yxatdan tasdiqlaydi.
+ */
+const COURIER_APPROVAL_MODES = Object.freeze({ manual: 'manual', auto: 'auto' });
+
+function courierApprovalModeOf(settingsDoc) {
+  return (settingsDoc && settingsDoc.approvalMode) === COURIER_APPROVAL_MODES.auto
+    ? COURIER_APPROVAL_MODES.auto
+    : COURIER_APPROVAL_MODES.manual;
+}
+
 function isService(v) {
   return Object.prototype.hasOwnProperty.call(LIFECYCLES, String(v || ''));
 }
@@ -479,6 +501,8 @@ module.exports = {
   SIMPLE,
   LIFECYCLES,
   ADMIN_GRANT_PATH,
+  COURIER_APPROVAL_MODES,
+  courierApprovalModeOf,
   TRIAL_DAYS,
   GRACE_DAYS,
   STARTER_MONTHS,

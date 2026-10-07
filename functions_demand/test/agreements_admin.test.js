@@ -257,6 +257,77 @@ ok('GRANT: oddiy foydalanuvchi chaqira olmaydi; taksi va noto\'g\'ri raqam rad',
   assert.deepStrictEqual(db.dump('provider_capabilities'), {});
 });
 
+// ─── tasdiqlash rejimi (D-15.3, ega qarori 2026-10-07) ────────────────
+const setMode = (db) => admin.makeAdminSetCourierApprovalMode({ db, now: () => NOW });
+const reqCap = (db) => makeRequestCapability({ db, now: () => NOW });
+
+ok('REJIM: sozlama yo\'q → MANUAL standart: kuryer `trial`, audit yo\'q', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r = await reqCap(db)({ service: 'courier' }, ctx(A));
+  assert.strictEqual(r.status, 'trial');
+  assert.ok(r.trialEndsAt, 'D-15 sinov oynasi');
+  assert.deepStrictEqual(db.dump('capability_audit'), {});
+});
+ok('REJIM: AUTO → ariza darhol `approved`, review=auto, audit (kim yoqqani bilan)', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  await setMode(db)({ mode: 'auto', reason: 'kuryer yetishmaydi' }, ctx(ADMIN));
+  const r = await reqCap(db)({ service: 'courier' }, ctx(A));
+  assert.strictEqual(r.status, 'approved');
+  const cap = capOf(db, r.accountId);
+  assert.strictEqual(cap.status.courier, 'approved');
+  assert.strictEqual(cap.review.courier.reviewedBy, 'auto');
+  assert.strictEqual(cap.courier.active, true);
+  const auto = auditOf(db).filter((a) => a.kind === 'auto_approve');
+  assert.strictEqual(auto.length, 1);
+  assert.strictEqual(auto[0].from, 'trial');
+  assert.strictEqual(auto[0].to, 'approved');
+  assert.strictEqual(auto[0].modeSetBy, ADMIN);
+});
+ok('REJIM: AUTO taksiga TA\'SIR QILMAYDI (starter)', async () => {
+  const db = makeDb({ [`users/${A}`]: {}, 'settings/courier': { approvalMode: 'auto' } });
+  const r = await reqCap(db)({ service: 'taxi' }, ctx(A));
+  assert.strictEqual(r.status, 'starter');
+  assert.deepStrictEqual(db.dump('capability_audit'), {});
+});
+ok('REJIM: noma\'lum qiymat → MANUAL (xavfsiz tomon)', async () => {
+  const db = makeDb({ [`users/${A}`]: {}, 'settings/courier': { approvalMode: 'AUTO ' } });
+  const r = await reqCap(db)({ service: 'courier' }, ctx(A));
+  assert.strictEqual(r.status, 'trial');
+});
+ok('REJIM: AUTO ga o\'tish mavjud `trial`ni O\'ZGARTIRMAYDI', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r0 = await reqCap(db)({ service: 'courier' }, ctx(A));
+  await setMode(db)({ mode: 'auto' }, ctx(ADMIN));
+  const r1 = await reqCap(db)({ service: 'courier' }, ctx(A));
+  assert.strictEqual(r1.changed, false);
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'trial');
+});
+ok('REJIM: `suspended` kuryer AUTO da ham qayta ariza bilan TIKLANMAYDI', async () => {
+  const db = makeDb({ [`users/${A}`]: {} });
+  const r0 = await reqCap(db)({ service: 'courier' }, ctx(A));
+  await admin.makeAdminSetCapabilityStatus({ db, now: () => NOW })(
+    { accountId: r0.accountId, service: 'courier', status: 'suspended', reason: 'shikoyat' }, ctx(ADMIN));
+  await setMode(db)({ mode: 'auto' }, ctx(ADMIN));
+  await assert.rejects(() => reqCap(db)({ service: 'courier' }, ctx(A)), (e) => e.code === 'failed-precondition');
+  assert.strictEqual(capOf(db, r0.accountId).status.courier, 'suspended');
+});
+ok('REJIM almashtirish: sozlama + audit; IDEMPOTENT; oddiy foydalanuvchi va noto\'g\'ri rejim rad', async () => {
+  const db = makeDb({ [`users/${A}`]: { role: 'user' } });
+  const r1 = await setMode(db)({ mode: 'auto', reason: 'sinov' }, ctx(ADMIN));
+  assert.deepStrictEqual(r1, { mode: 'auto', changed: true, from: 'manual' });
+  const s = db.dump('settings').courier;
+  assert.strictEqual(s.approvalMode, 'auto');
+  assert.strictEqual(s.approvalModeUpdatedBy, ADMIN);
+  const r2 = await setMode(db)({ mode: 'auto' }, ctx(ADMIN));
+  assert.strictEqual(r2.changed, false);
+  const changes = auditOf(db).filter((a) => a.kind === 'approval_mode_change');
+  assert.strictEqual(changes.length, 1, 'takroriy chaqiruv auditni ko\'paytirmaydi');
+  assert.strictEqual(changes[0].from, 'manual');
+  await assert.rejects(() => setMode(db)({ mode: 'manual' }, ctx(A)), (e) => e.code === 'permission-denied');
+  await assert.rejects(() => setMode(db)({ mode: 'yes' }, ctx(ADMIN)), (e) => e.code === 'invalid-argument');
+  assert.strictEqual(db.dump('settings').courier.approvalMode, 'auto');
+});
+
 // ─── T-6 migratsiya ───────────────────────────────────────────────────
 const D1 = '998912778777';
 const D2 = '903334455';

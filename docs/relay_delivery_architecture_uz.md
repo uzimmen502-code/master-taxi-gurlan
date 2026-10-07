@@ -44,6 +44,8 @@ codebase'ида талаб → таклиф ядроси аллақачон иш
 | **D-15** | **Курьер lifecycle:** `not_registered → trial → document_submitted → under_review → approved`, ёндош ҳолатлар `trial_expired` `document_rejected` `suspended`. Янги курьерга **3 кун** синов; шу муддатда ягона дарча орқали ўзини ўзи банд қилган шахс сифатида рўйхатдан ўтиб, ҳужжат юклаши шарт | AVA_DECIDED | 2026-10-06 |
 | **D-15.1** | **3 кун HARD CUTOFF ЭМАС.** Талаб бажарилмаса — **бир марта** 5 кунлик `grace period`. Extension фақат БИР МАРТА берилади. 5 кун ҳам тугаса → courier capability `suspended`, янги буюртма олиш ёпилади. **Аккаунтнинг ўзи очиқ қолади**; ҳужжат юклаб тасдиқдан ўтгач capability қайта `approved` бўлиши мумкин | AVA_DECIDED | 2026-10-06 |
 | **D-15.2** | **Админ «Курьер қўшиш» → дарҳол `approved`.** Админ одамни ўзи кафолатлайди. Йўл state machine бўйлаб юради (`not_registered → trial → approved`, ҳар қадам `canTransition(..., 'admin')` ва алоҳида audit); янги ўтиш қўшилмайди. Фақат `not_registered`дан ва фақат иловага кирган рақамга. Сабаб: ҳужжат оқими (2b) йўқ, `trial` берилса 8 кунда sweeper тўхтатарди. Таъсир: `ADMIN_GRANT_PATH` (`core/capabilities.js`), `adminGrantCapability` | AVA_DECIDED | 2026-10-07 |
+| **D-15.3** | **Курьер аризасини тасдиқлаш режими — админ панелда «Мануал / Авто».** Мануал (стандарт): ариза → `trial` (D-15 ўзгармайди), админ «Курьерлар» рўйхатидан тасдиқлайди, тасдиқламаса 8 кунда `suspended`. Авто: ариза → дарҳол `approved` (state machine бўйлаб, `by: auto` + ким ёққани audit'да). Режим фақат АРИЗА пайтида қўлланади. Таъсир: `settings/courier.approvalMode`, `adminSetCourierApprovalMode` | AVA_DECIDED | 2026-10-07 |
+| **D-15.4** | **Тўхтатилган (`suspended`) курьер қўлидаги ишни ТУГАТАДИ**, янги иш ололмайди (15-қоида: custody узилмасин). Таъсир: `courier_auth.js` — `new` / `finish` режимлари | AVA_DECIDED | 2026-10-07 |
 | **D-16** | **Масъулият бўлиниши:** `users` — бу ким · `provider_capabilities` — нима қилишга рухсати бор · `provider_presence` — ҳозир онлайнми ва қаерда · `provider_stats` — қандай ишлаяпти · `courier_documents` — ҳужжатлари борми. `couriers` — ўтиш даври манбаси, якуний authorization source ЭМАС | AVA_DECIDED | 2026-10-06 |
 | **D-TAXI / D-SERVICE** | Такси billing (2% = `farePerSeat × 4 × 2%`, 4 ой starter, verification) ва бошқа хизматлар учун умумий қоидалар — **алоҳида реестр:** [taxi_billing_uz.md](taxi_billing_uz.md). Capability lifecycle хизмат бўйича фарқ қилади (T-2); `providerId` барқарорлиги (T-1) ҳал қилиниши керак | AVA_DECIDED | 2026-10-06 |
 | D-2 | Тариф архитектураси BTS модели асосида; `ZONE_0`…`ZONE_5`, 6 зона; зона origin↔destination matrix орқали; зона «маъноси» кодга ёзилмайди; эски Z1–Z5 бекор | AVA_DECIDED | 2026-10-05 |
@@ -881,17 +883,48 @@ PIN'сиз ўтади.
 Энди `adminGrantCapability` (D-15.2) + экран `provider_capabilities`
 бўйича (фильтр, тасдиқлаш, тўхтатиш — сабаб билан, audit).
 
-**Деплой (ҳали ҚИЛИНМАГАН):** `functions:demand` → `requestCapability`
-`acceptServiceAgreement` `adminSetCapabilityStatus` `adminGrantCapability`
-`adminMigrateTaxiDrivers`; кейин hosting (админ панели). Қоида ва
-индекс ўзгармади.
+**Деплой (ҳали ҚИЛИНМАГАН), ТАРТИБ БИЛАН:**
+1. `functions:demand` → `requestCapability` `acceptServiceAgreement`
+   `adminSetCapabilityStatus` `adminGrantCapability`
+   `adminSetCourierApprovalMode` `adminMigrateTaxiDrivers`; hosting (админ).
+2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
+3. default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
+   `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`
+   `courierRecoverOrphanRoute` `courierCreateRoute` `courierMarkCollectionArrived`
+   `courierFinalizeCollection` ва 8 та гилам/сут курьер функцияси.
+
+Қоида ва индекс ўзгармади.
+
+**3. ХАВФСИЗЛИК — курьер буюртма амаллари ҳуқуқ ва эгаликни текширмасди
+(CONFIRMED, эмуляторда исботланган).**
+
+- *Symptom:* `courierMarkPicked` / `courierMarkArrived` /
+  `courierSubmitPayment` фақат «чақирувчи ўз рақами билан»ни текширарди.
+  Иловага кирган ИСТАЛГАН одам ўз буюртмасини «олдим → етиб келдим»
+  қилиб, `submitPayment`га «нақд 10 000 000» юборарди — сервер ортиқчани
+  қайтим сифатида унинг ҳамёнига ёзарди (`changeCredit`). Бировнинг
+  буюртмасини «етказилди» қилиш ва мижоз ҳамёнидан ечиш ҳам мумкин эди.
+  `courierGetCustomerWalletBalance` исталган рақамнинг қолдиғини берарди.
+- *Root cause:* учта callable'да `resolveAuthorizedCourierUid` чақирилмаган,
+  буюртма эгалиги умуман текширилмаган.
+- *Fix:* `functions/courier_auth.js` — `new` / `finish` режимлари (D-15.4)
+  + «буюртма шу курьернинг ФАОЛ маршрутида» (`delivery_routes.courierId`ни
+  фақат админ/сервер ёзади — қоида кафолатлайди) + ҳамён фақат ўз
+  маршрутидаги мижозники.
+- *Regression:* `functions/test/courier_callables_cf.test.js` — ҲАҚИҚИЙ
+  `index.js` callable'лари: тузатишдан олдинги коддан **4/8** (ҳужум ўтади),
+  кейин **8/8**. Модул: `courier_auth.test.js` **12/12**.
+- ⚠️ *Деплой тартиби:* бу default функциялар деплой қилингач, capability'си
+  йўқ курьер буюртмани олиб/топшира олмайди. Шунинг учун АВВАЛ demand
+  (accountId fix + `adminGrantCapability`) + hosting → админ ҳақиқий
+  курьерларни «Курьерлар» экранидан қўшади → ШУНДАН КЕЙИН default.
 
 **Қолганлари (кейинги босқичлар):**
 
 | # | Нима |
 |---|---|
-| a | ⚠️ `suspended` курьер қўлидаги рейсни тугата олмайди: `resolveAuthorizedCourierUid` `isWorking`ни текширади, `canFinishActive` ишлатилмайди (15-қоида, эга тасдиқлаган қоида — `core/capabilities.js` 333). Админ экрани ҳозирча фаол рейсда тўхтатишни блоклайди; sweeper эса блокламайди |
-| b | Ҳужжат оқими (2b) йўқ → ўзи ариза берган курьер 8 кунда `suspended`; админ рўйхатдан тасдиқлаши керак |
+| a | ✅ **БАЖАРИЛДИ (D-15.4)** — `suspended` курьер қўлидаги буюртма/вазифани тугатади, янгисини ололмайди. Деплой кутилмоқда |
+| b | 🟡 Ҳужжат оқими (2b) ҳали йўқ. **D-15.3** бўйича «Мануал/Авто» режими қўшилди: мануалда админ рўйхатдан тасдиқлайди («Тасдиқ кутяпти» фильтри стандарт), автода ариза дарҳол тасдиқланади |
 | c | `courier_controller` (GPS) ва `profile_controller` (offline) ҳали `couriers`га ёзади — янги курьерда қоида рад этади, хато ютилади |
 | d | `sell_submissions_admin_screen` курьер танлаш рўйхати ва `cleanupStaleDrivers` ҳали `couriers`дан ўқийди |
 | e | Тест маълумотини тозалаш (3.0-bis G) — эга ишга туширади; сўнг `couriers` қоидаси ва коллекция чиқарилади |

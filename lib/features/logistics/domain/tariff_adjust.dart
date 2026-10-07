@@ -55,7 +55,10 @@ Map<String, Map<String, dynamic>> adjustTariffPrices(
         : <int>[];
     out[zone] = {
       'brackets': brackets,
-      'extraPerKg': adjustPrice(_asInt(raw['extraPerKg']), percentBps: percentBps, step: step),
+      // null — «ҳали берилмаган»: 0 га айлантирилмайди (сервер фаоллаштиришни блоклайди).
+      'extraPerKg': raw['extraPerKg'] == null
+          ? null
+          : adjustPrice(_asInt(raw['extraPerKg']), percentBps: percentBps, step: step),
     };
   });
   return out;

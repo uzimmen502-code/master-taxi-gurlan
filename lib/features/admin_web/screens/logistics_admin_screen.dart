@@ -533,7 +533,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
   }
 }
 
-/// Нарх жадвали: зона × вазн поғонаси + 20 кг дан ошган ҳар кг + ички
+/// Нарх жадвали: зона × вазн поғонаси + охирги поғонадан ошган ҳар кг + ички
 /// улушлар. «Ҳаммасини % га» — битта тугма (эга талаби, 2026-10-07):
 /// фоиз (манфий = камайтириш), яхлитлаш қадами; натижа катакларда
 /// кўринади, кейин «Сақлаш». Ҳисоб — `tariff_adjust.dart` (соф Dart,
@@ -657,9 +657,12 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
         _error = '$z: ҳамма поғона мусбат бутун сўм бўлиши керак (ёки қатор тўлиқ бўш)';
         return null;
       }
-      final extra = _int(row.last) ?? 0;
-      if (extra < 0) {
-        _error = '$z: 20 кг дан ошган ҳар кг нархи манфий бўлмайди';
+      // Бўш — «ҳали берилмаган» (null): сервер фаоллаштиришни блоклайди.
+      // 0 га айлантирилмайди — акс ҳолда оғир посилка жимгина охирги
+      // поғона нархида кетарди.
+      final extra = _int(row.last);
+      if (extra != null && extra < 0) {
+        _error = '$z: ${_kgLabel(_brackets.last)} кг дан ошган ҳар кг нархи манфий бўлмайди';
         return null;
       }
       prices[z] = {'brackets': vals.cast<int>(), 'extraPerKg': extra};
@@ -822,7 +825,8 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди).',
+                'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди). '
+                '«+1 кг» бўш бўлса — оғир посилка нархи йўқ, фаоллаштириб бўлмайди; 0 — қўшимча ҳақ олинмайди.',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 14),

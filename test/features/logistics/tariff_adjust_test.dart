@@ -75,5 +75,14 @@ void main() {
       }, percentBps: 0);
       expect(out['ZONE_1']!['brackets'], [34000, 52000]);
     });
+
+    test('extraPerKg null («ҳали берилмаган») — null қолади, 0 га айланмайди', () {
+      final out = adjustTariffPrices({
+        'ZONE_0': {'brackets': [29000], 'extraPerKg': null},
+        'ZONE_1': {'brackets': [34000], 'extraPerKg': 3000},
+      }, percentBps: -1000, step: 100);
+      expect(out['ZONE_0']!['extraPerKg'], isNull);
+      expect(out['ZONE_1']!['extraPerKg'], 2700);
+    });
   });
 }

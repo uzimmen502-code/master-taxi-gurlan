@@ -134,7 +134,8 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
   @override
   Widget build(BuildContext context) {
     return AvaSection(
-      moduleId: 'wholesale_market',
+      // Хитой бўлимида ўз белгиси (аввал унда ҳам Улгуржи белгиси турарди).
+      moduleId: WholesaleProduct.moduleIdFor(widget.market),
       title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,

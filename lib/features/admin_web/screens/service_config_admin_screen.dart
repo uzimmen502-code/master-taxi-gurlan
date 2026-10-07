@@ -47,7 +47,10 @@ const Map<String, String> _moduleLabels = {
   'tire': 'Avto shina',
   'car_wash': 'Avto yuvish',
   'oil_change': 'Moy almashtirish',
-  'platform_store': 'AVA do\'koni',
+  // Эски алоҳида «AVA дўкони» экранининг дарвозаси. AVA товарлари
+  // 2026-10-06 дан Улгуржи бозорда — улар `wholesale_market` га бўйсунади,
+  // бу калитга эмас. Ном шуни адаштирмаслиги учун (2026-10-07).
+  'platform_store': 'AVA дўкони (эски экран)',
   'tv_market': 'AVAGram',
   'chatgpt': 'AVA ёрдамчиси',
   'ev_charging': 'EV zaryadlash',

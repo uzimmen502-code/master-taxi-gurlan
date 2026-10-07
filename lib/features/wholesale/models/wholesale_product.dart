@@ -107,6 +107,19 @@ class WholesaleProduct implements AdSearchable {
 
   bool get isChina => market == marketChina;
 
+  /// Маҳсулот [m] бозорига тегишлими. Ягона қоида (иловадаги лента,
+  /// сотувчининг ўз рўйхати ва админ панел — ҳаммаси шуни ишлатади):
+  /// Хитой — фақат `market == 'china'`; Улгуржи — қолган ҳамма, жумладан
+  /// `market` майдони йўқ эски ёзувлар.
+  bool belongsToMarket(String m) => m == marketChina ? isChina : !isChina;
+
+  /// Бозорнинг модул калити (`config/module_defaults` дарвозаси ва
+  /// хизмат белгиси). Хитой бозорининг дарвозаси алоҳида (эга қарори,
+  /// 2026-09-28), шунинг учун Хитой оқими `wholesale_market` ни эмас,
+  /// `china_market` ни текшириши керак.
+  static String moduleIdFor(String market) =>
+      market == marketChina ? 'china_market' : 'wholesale_market';
+
   /// Нарх ёнидаги валюта белгиси — Хитой бозорида ўзиники, қолганда сўм.
   String get currencyLabel =>
       currency.trim().isNotEmpty ? currency.trim() : kCurrencySum;

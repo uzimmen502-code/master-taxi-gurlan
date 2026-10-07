@@ -124,12 +124,19 @@ class WholesaleProductsRepository {
     return base
         .limit(limit * 4)
         .snapshots()
-        .map((s) => s.docs
-            .map(WholesaleProduct.fromFirestore)
-            .where((p) => !p.isChina)
-            .take(limit)
-            .toList());
+        .map((s) => filterByMarket(
+              s.docs.map(WholesaleProduct.fromFirestore),
+              market,
+            ).take(limit).toList());
   }
+
+  /// [market] бозорига тегишли маҳсулотлар, тартиб сақланади —
+  /// [WholesaleProduct.belongsToMarket] қоидаси бўйича.
+  static List<WholesaleProduct> filterByMarket(
+    Iterable<WholesaleProduct> all,
+    String market,
+  ) =>
+      all.where((p) => p.belongsToMarket(market)).toList();
 
   /// Фаол маҳсулотлар — қидирув (кирилл↔лотин, `CatalogSearch`).
   ///
@@ -170,10 +177,8 @@ class WholesaleProductsRepository {
     if (id.isEmpty) return Stream.value(const []);
     return _col.where('sellerId', isEqualTo: id).snapshots().map((snap) {
       final all = snap.docs.map(WholesaleProduct.fromFirestore);
-      final list = (market == null
-              ? all
-              : all.where((p) => p.market == market))
-          .toList();
+      final list =
+          market == null ? all.toList() : filterByMarket(all, market);
       list.sort((a, b) {
         final at = a.updatedAt ?? a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bt = b.updatedAt ?? b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -184,9 +189,18 @@ class WholesaleProductsRepository {
   }
 
   /// Admin — барча маҳсулотлар (лимит 500).
-  Stream<List<WholesaleProduct>> watchAllForAdmin({int limit = 500}) {
+  ///
+  /// [market] берилса фақат ўша бозорникилари (2026-10-07): аввал админ
+  /// «Улгуржи бозор» бўлимида Хитой бозори маҳсулотлари ҳам аралаш
+  /// чиқарди. Филтр клиентда — эски ёзувларда `market` майдони йўқ.
+  Stream<List<WholesaleProduct>> watchAllForAdmin({
+    int limit = 500,
+    String? market,
+  }) {
     return _col.limit(limit).snapshots().map((snap) {
-      final list = snap.docs.map(WholesaleProduct.fromFirestore).toList();
+      final all = snap.docs.map(WholesaleProduct.fromFirestore);
+      final list =
+          market == null ? all.toList() : filterByMarket(all, market);
       list.sort((a, b) {
         final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);

@@ -9,12 +9,30 @@ import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/repositories/wholesale_sellers_repository.dart';
 import '../services/admin_auth_service.dart';
 
-/// Улгуржи/кичик улгуржи бозор — admin модерацияси.
+/// Улгуржи бозор ёки Хитой бозори — admin модерацияси.
 /// `JobsModerationScreen`нинг live-stream карта-рўйхат андозаси асосида.
 /// Cloud Function йўқ — ёзувлар тўғридан-тўғри `firestore.rules`даги
 /// admin whitelist-патч орқали чекланади.
+///
+/// Иккала бозор битта коллекцияда (`wholesale_products`, `market` билан
+/// ажралади) ва сотувчилар рўйхати битта (`wholesale_sellers`). Админда
+/// эса иловадаги каби ИККИ алоҳида бўлим (2026-10-07): аввал «Улгуржи
+/// бозор» бўлимида Хитой бозори маҳсулотлари аралаш чиқарди. [market]
+/// қайси бозорнинг маҳсулотлари кўрсатилишини белгилайди.
 class WholesaleModerationScreen extends StatefulWidget {
-  const WholesaleModerationScreen({super.key});
+  const WholesaleModerationScreen({
+    super.key,
+    this.market = WholesaleProduct.marketWholesale,
+    this.leadingTab,
+  });
+
+  /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
+  final String market;
+
+  /// Бўлим бошидаги қўшимча таб. «Улгуржи бозор»да — AVA товарлари
+  /// каталоги (эга қарори 2026-10-06: AVA дўкони тўлиқ Улгуржига ўтди;
+  /// админдаги алоҳида «AVA дўкони» бўлими 2026-10-07 да шу ерга кўчди).
+  final ({String label, Widget child})? leadingTab;
 
   @override
   State<WholesaleModerationScreen> createState() =>
@@ -30,10 +48,20 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
 
   static const _blue = AppColors.primary;
 
+  bool get _isChina => widget.market == WholesaleProduct.marketChina;
+
+  /// Бир марта очилади: ҳолат филтри (`setState`) ҳар босилганда
+  /// Firestore тинглови қайта очилмасин.
+  late final Stream<List<WholesaleProduct>> _productsStream =
+      _productsRepo.watchAllForAdmin(market: widget.market);
+
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(
+      length: widget.leadingTab == null ? 2 : 3,
+      vsync: this,
+    );
   }
 
   @override
@@ -141,6 +169,23 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги сотувчилар дарҳол тасдиқланади',
             offLabel:
                 'ҚЎЛДА тасдиқ — янги сотувчилар admin тасдиғини кутади',
+          ),
+          // Рўйхат битта — бу ердаги тасдиқ/рад иккала бозорга ҳам
+          // тегишли. Админ буни билмаса, «Хитой бозори»да рад этган
+          // сотувчиси Улгуржидан ҳам ёпилиб қолганига ҳайрон бўлади.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+            child: Row(children: [
+              const Icon(Icons.info_outline, size: 16, color: Colors.black45),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Сотувчилар рўйхати Улгуржи бозор ва Хитой бозори учун '
+                  'битта: тасдиқ ёки рад иккала бозорга ҳам тегишли.',
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                ),
+              ),
+            ]),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
@@ -270,7 +315,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
 
   Widget _productsTab() {
     return StreamBuilder<List<WholesaleProduct>>(
-      stream: _productsRepo.watchAllForAdmin(),
+      stream: _productsStream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -284,11 +329,13 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             : all.where((p) => p.status == _productStatusFilter).toList();
         int count(String s) => all.where((e) => e.status == s).length;
         return Column(children: [
+          // `settings/app` даги битта майдон — иккала бозор учун умумий.
           const _AutoApproveBar(
             settingsField: 'wholesaleProductAutoApprove',
-            onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги маҳсулотлар дарҳол фаол',
-            offLabel:
-                'ҚЎЛДА тасдиқ — янги маҳсулотлар «Кутилмоқда»га тушади',
+            onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги маҳсулотлар дарҳол фаол '
+                '(Улгуржи ва Хитой бозори учун битта созлама)',
+            offLabel: 'ҚЎЛДА тасдиқ — янги маҳсулотлар «Кутилмоқда»га '
+                'тушади (Улгуржи ва Хитой бозори учун битта созлама)',
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
@@ -348,12 +395,8 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             _badge(_productStatusLabel(p.status), color),
-            // Иккала бозор битта коллекцияда — модерацияда қайси бозор
-            // экани кўриниб турсин.
-            if (p.isChina) ...[
-              const SizedBox(width: 6),
-              _badge('Хитой', Colors.deepOrange),
-            ],
+            // Бозор белгиси энди керак эмас: ҳар бўлим фақат ўз бозорини
+            // кўрсатади ([WholesaleModerationScreen.market]).
             const Spacer(),
             Text(_dateText(p.createdAt),
                 style: const TextStyle(color: Colors.black45, fontSize: 12)),
@@ -401,6 +444,15 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           _meta(Icons.storefront, p.sellerCompanyName.isEmpty
               ? 'Сотувчи номаълум'
               : p.sellerCompanyName),
+          if (_isChina) ...[
+            const SizedBox(height: 4),
+            _meta(
+              Icons.local_shipping_outlined,
+              (p.deliveryDays ?? 0) > 0
+                  ? 'Етказиш: ${p.deliveryDays} кун'
+                  : 'Етказиш муддати кўрсатилмаган',
+            ),
+          ],
           if (p.adminNote.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('Admin: ${p.adminNote}',
@@ -446,6 +498,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final leading = widget.leadingTab;
     return Column(children: [
       _header(),
       Container(
@@ -454,16 +507,23 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           controller: _tabCtrl,
           labelColor: _blue,
           indicatorColor: _blue,
-          tabs: const [
-            Tab(text: '🧾 Сотувчилар'),
-            Tab(text: '📦 Маҳсулотлар'),
+          tabs: [
+            if (leading != null) Tab(text: leading.label),
+            Tab(
+              text: _isChina ? '📦 Маҳсулотлар' : '📦 Сотувчилар товарлари',
+            ),
+            const Tab(text: '🧾 Сотувчилар'),
           ],
         ),
       ),
       Expanded(
         child: TabBarView(
           controller: _tabCtrl,
-          children: [_sellersTab(), _productsTab()],
+          children: [
+            if (leading != null) leading.child,
+            _productsTab(),
+            _sellersTab(),
+          ],
         ),
       ),
     ]);
@@ -481,21 +541,31 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.warehouse_outlined, color: _blue),
+          child: Icon(
+            // Иловадаги хизмат белгиси билан бир хил.
+            _isChina ? Icons.local_shipping_outlined : Icons.warehouse_outlined,
+            color: _blue,
+          ),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'УЛГУРЖИ БОЗОР — назорати',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                _isChina
+                    ? 'ХИТОЙ БОЗОРИ — назорати'
+                    : 'УЛГУРЖИ БОЗОР — назорати',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 3),
+              const SizedBox(height: 3),
               Text(
-                'Сотувчиларни тасдиқлаш ва маҳсулот эълонларини модерация қилиш',
-                style: TextStyle(color: Colors.black54),
+                _isChina
+                    ? 'Хитой бозори маҳсулотларини модерация қилиш'
+                    : 'AVA товарлари каталоги, сотувчилар товарлари ва '
+                        'сотувчиларни тасдиқлаш',
+                style: const TextStyle(color: Colors.black54),
               ),
             ],
           ),

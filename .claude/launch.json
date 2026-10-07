@@ -4,8 +4,8 @@
     {
       "name": "admin-web",
       "runtimeExecutable": "flutter",
-      "runtimeArgs": ["run", "-d", "chrome", "-t", "lib/main_admin.dart", "--web-port", "5050"],
-      "port": 5050
+      "runtimeArgs": ["run", "-d", "chrome", "-t", "lib/main_admin.dart", "--web-port", "18081"],
+      "port": 18081
     }
   ]
 }

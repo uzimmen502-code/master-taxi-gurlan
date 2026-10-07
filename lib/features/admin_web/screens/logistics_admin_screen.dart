@@ -17,6 +17,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
+import '../../logistics/domain/tariff_adjust.dart';
 
 class LogisticsAdminScreen extends StatefulWidget {
   const LogisticsAdminScreen({super.key});
@@ -105,6 +106,31 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
       return;
     }
     final res = await _call('adminUpsertLogisticsTariff', {'tariff': parsed});
+    if (res == null) return;
+    final errs = (res['activationErrors'] as List?) ?? const [];
+    _snack(errs.isEmpty
+        ? 'Сақланди: v${res['version']} (қоралама) — фаоллаштиришга тайёр'
+        : 'Сақланди (қоралама). Фаоллаштириш учун етишмайди:\n${errs.join('\n')}');
+  }
+
+  /// Нарх жадвали муҳаррири (зона × поғона, «ҳаммасини % га» тугмаси,
+  /// ички улушлар). Фаол/эски версиядан — ЯНГИ қоралама (ўзгармаслик,
+  /// 9-банд); қораламанинг ўзи — жойида.
+  Future<void> _editPrices(
+    Map<String, dynamic> base, {
+    required int version,
+    required bool asNewVersion,
+  }) async {
+    final initial = <String, dynamic>{...base}
+      ..removeWhere((k, _) => _serverKeys.contains(k))
+      ..['module'] = 'logistics'
+      ..['version'] = version;
+    final doc = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _PriceGridDialog(base: initial, version: version, asNewVersion: asNewVersion),
+    );
+    if (doc == null) return;
+    final res = await _call('adminUpsertLogisticsTariff', {'tariff': doc});
     if (res == null) return;
     final errs = (res['activationErrors'] as List?) ?? const [];
     _snack(errs.isEmpty
@@ -273,7 +299,8 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
             final docs = snap.data!.docs.toList()
               ..sort((a, b) => ((b.data()['version'] as num?) ?? 0).compareTo((a.data()['version'] as num?) ?? 0));
             final latest = docs.isEmpty ? null : docs.first.data();
-            final nextVersion = ((latest?['version'] as num?)?.toInt() ?? 0) + 1;
+            _latestVersion = (latest?['version'] as num?)?.toInt() ?? 0;
+            final nextVersion = _latestVersion + 1;
             return ListView(
               padding: const EdgeInsets.all(12),
               children: [
@@ -312,6 +339,13 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     );
   }
 
+  /// Фаол/эски версиядан янги қоралама рақами — рўйхатдаги энг каттасидан
+  /// кейингиси (stream'даги ҳужжатлар `_latestVersion`да сақланади).
+  int _nextVersionFrom(Map<String, dynamic> t, int active) =>
+      (_latestVersion > 0 ? _latestVersion : ((t['version'] as num?)?.toInt() ?? active)) + 1;
+
+  int _latestVersion = 0;
+
   Widget _tariffTile(Map<String, dynamic> t, int active) {
     final version = (t['version'] as num?)?.toInt() ?? 0;
     final status = (t['status'] ?? '').toString();
@@ -338,6 +372,17 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
         trailing: Wrap(
           spacing: 6,
           children: [
+            FilledButton.tonalIcon(
+              onPressed: _busy
+                  ? null
+                  : () => _editPrices(
+                        t,
+                        version: isDraft ? version : (_nextVersionFrom(t, active)),
+                        asNewVersion: !isDraft,
+                      ),
+              icon: const Icon(Icons.grid_on, size: 16),
+              label: Text(isDraft ? 'Нархлар' : 'Нархлар → янги версия'),
+            ),
             OutlinedButton.icon(
               onPressed: _busy
                   ? null
@@ -442,6 +487,331 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Нарх жадвали: зона × вазн поғонаси + 20 кг дан ошган ҳар кг + ички
+/// улушлар. «Ҳаммасини % га» — битта тугма (эга талаби, 2026-10-07):
+/// фоиз (манфий = камайтириш), яхлитлаш қадами; натижа катакларда
+/// кўринади, кейин «Сақлаш». Ҳисоб — `tariff_adjust.dart` (соф Dart,
+/// тестланган); сервер яна текширади.
+class _PriceGridDialog extends StatefulWidget {
+  const _PriceGridDialog({
+    required this.base,
+    required this.version,
+    required this.asNewVersion,
+  });
+
+  final Map<String, dynamic> base;
+  final int version;
+  final bool asNewVersion;
+
+  @override
+  State<_PriceGridDialog> createState() => _PriceGridDialogState();
+}
+
+class _PriceGridDialogState extends State<_PriceGridDialog> {
+  static const _zones = ['ZONE_0', 'ZONE_1', 'ZONE_2', 'ZONE_3', 'ZONE_4', 'ZONE_5'];
+  static const _legKeys = ['first_mile', 'line_haul', 'last_mile'];
+  static const _legLabels = {'first_mile': 'Биринчи чақирим', 'line_haul': 'Асосий йўл', 'last_mile': 'Охирги чақирим'};
+
+  late final List<int> _brackets;
+  late final Map<String, List<TextEditingController>> _cells; // zone → [b0..bn, extraPerKg]
+  late final TextEditingController _margin;
+  late final Map<String, TextEditingController> _legShare;
+  final _pct = TextEditingController(text: '-10');
+  int _step = 1000;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final wb = widget.base['weightBrackets'];
+    _brackets = wb is List ? wb.map((v) => (v as num).toInt()).toList() : const [];
+    final prices = widget.base['prices'] is Map ? widget.base['prices'] as Map : const {};
+    _cells = {
+      for (final z in _zones)
+        z: [
+          for (var i = 0; i < _brackets.length; i += 1)
+            TextEditingController(text: _cellText(prices[z], i)),
+          TextEditingController(text: _extraText(prices[z])),
+        ],
+    };
+    final internal = widget.base['internal'] is Map ? widget.base['internal'] as Map : const {};
+    _margin = TextEditingController(
+      text: internal['platformMarginBps'] is num ? bpsToPercentText((internal['platformMarginBps'] as num).toInt()) : '',
+    );
+    final share = internal['legShareBps'] is Map ? internal['legShareBps'] as Map : const {};
+    _legShare = {
+      for (final k in _legKeys)
+        k: TextEditingController(text: share[k] is num ? bpsToPercentText((share[k] as num).toInt()) : ''),
+    };
+  }
+
+  static String _cellText(Object? zone, int i) {
+    if (zone is! Map) return '';
+    final b = zone['brackets'];
+    if (b is! List || i >= b.length) return '';
+    return (b[i] as num?)?.toInt().toString() ?? '';
+  }
+
+  static String _extraText(Object? zone) {
+    if (zone is! Map) return '';
+    final v = zone['extraPerKg'];
+    return v is num ? v.toInt().toString() : '';
+  }
+
+  @override
+  void dispose() {
+    for (final row in _cells.values) {
+      for (final c in row) {
+        c.dispose();
+      }
+    }
+    _margin.dispose();
+    for (final c in _legShare.values) {
+      c.dispose();
+    }
+    _pct.dispose();
+    super.dispose();
+  }
+
+  int? _int(TextEditingController c) {
+    final t = c.text.replaceAll(RegExp(r'\s'), '');
+    if (t.isEmpty) return null;
+    return int.tryParse(t);
+  }
+
+  /// «Ҳаммасини % га» — фақат тўлдирилган катакларга.
+  void _applyPercent() {
+    final bps = percentTextToBps(_pct.text);
+    if (bps == null) {
+      setState(() => _error = 'Фоиз нотўғри (масалан −10 ёки 7,5)');
+      return;
+    }
+    for (final row in _cells.values) {
+      for (var i = 0; i < row.length; i += 1) {
+        final v = _int(row[i]);
+        if (v == null) continue;
+        final isExtra = i == row.length - 1;
+        row[i].text = (isExtra
+                ? adjustPrice(v, percentBps: bps, step: _step)
+                : adjustBracketPrice(v, percentBps: bps, step: _step))
+            .toString();
+      }
+    }
+    setState(() => _error = null);
+  }
+
+  Map<String, dynamic>? _buildDoc() {
+    final prices = <String, dynamic>{};
+    for (final z in _zones) {
+      final row = _cells[z]!;
+      final vals = [for (var i = 0; i < _brackets.length; i += 1) _int(row[i])];
+      final filled = vals.where((v) => v != null).length;
+      if (filled == 0) continue;
+      if (filled != _brackets.length || vals.any((v) => v! <= 0)) {
+        _error = '$z: ҳамма поғона мусбат бутун сўм бўлиши керак (ёки қатор тўлиқ бўш)';
+        return null;
+      }
+      final extra = _int(row.last) ?? 0;
+      if (extra < 0) {
+        _error = '$z: 20 кг дан ошган ҳар кг нархи манфий бўлмайди';
+        return null;
+      }
+      prices[z] = {'brackets': vals.cast<int>(), 'extraPerKg': extra};
+    }
+    final internal = <String, dynamic>{};
+    final mBps = _margin.text.trim().isEmpty ? null : percentTextToBps(_margin.text);
+    if (_margin.text.trim().isNotEmpty && (mBps == null || mBps < 0 || mBps > 10000)) {
+      _error = 'Платформа улуши 0..100 % бўлиши керак';
+      return null;
+    }
+    internal['platformMarginBps'] = mBps;
+    final anyShare = _legShare.values.any((c) => c.text.trim().isNotEmpty);
+    if (anyShare) {
+      final share = <String, int>{};
+      var sum = 0;
+      for (final k in _legKeys) {
+        final b = percentTextToBps(_legShare[k]!.text);
+        if (b == null || b < 0 || b > 10000) {
+          _error = '${_legLabels[k]}: 0..100 % бўлиши керак';
+          return null;
+        }
+        share[k] = b;
+        sum += b;
+      }
+      if (sum != 10000) {
+        _error = 'LEG улушлари йиғиндиси 100 % бўлиши керак (ҳозир ${bpsToPercentText(sum)} %)';
+        return null;
+      }
+      internal['legShareBps'] = share;
+    } else {
+      internal['legShareBps'] = null;
+    }
+    return {...widget.base, 'version': widget.version, 'prices': prices, 'internal': internal};
+  }
+
+  void _save() {
+    final doc = _buildDoc();
+    if (doc == null) {
+      setState(() {});
+      return;
+    }
+    Navigator.pop(context, doc);
+  }
+
+  String _bracketLabel(int i) {
+    final g = _brackets[i];
+    final kg = g % 1000 == 0 ? (g ~/ 1000).toString() : (g / 1000).toStringAsFixed(1);
+    return '≤$kg кг';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cellStyle = const TextStyle(fontSize: 12);
+    InputDecoration deco([String? label]) => InputDecoration(
+          labelText: label,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          border: const OutlineInputBorder(),
+        );
+    return AlertDialog(
+      title: Text(widget.asNewVersion ? 'Нархлар → янги қоралама v${widget.version}' : 'Нархлар — қоралама v${widget.version}'),
+      content: SizedBox(
+        width: 860,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Битта тугма: ҳаммасини % га ──
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Row(
+                  children: [
+                    const Text('Барча нархларни', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 90,
+                      child: TextField(
+                        controller: _pct,
+                        decoration: deco('% га'),
+                        style: cellStyle,
+                        keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('яхлитлаш:'),
+                    const SizedBox(width: 6),
+                    DropdownButton<int>(
+                      value: _step,
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('1 сўм')),
+                        DropdownMenuItem(value: 100, child: Text('100 сўм')),
+                        DropdownMenuItem(value: 1000, child: Text('1 000 сўм')),
+                      ],
+                      onChanged: (v) => setState(() => _step = v ?? _step),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: _applyPercent,
+                      icon: const Icon(Icons.percent, size: 16),
+                      label: const Text('Қўллаш'),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'манфий = камайтириш · сақланмагунча ҳеч нарса ўзгармайди',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // ── Жадвал ──
+              Table(
+                defaultColumnWidth: const FlexColumnWidth(),
+                columnWidths: const {0: FixedColumnWidth(84)},
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  TableRow(
+                    children: [
+                      const Padding(padding: EdgeInsets.all(4), child: Text('Зона', style: TextStyle(fontWeight: FontWeight.w700))),
+                      for (var i = 0; i < _brackets.length; i += 1)
+                        Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Text(_bracketLabel(i), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Text('+1 кг (20 кг дан ошса)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                  for (final z in _zones)
+                    TableRow(
+                      children: [
+                        Padding(padding: const EdgeInsets.all(4), child: Text(z, style: const TextStyle(fontWeight: FontWeight.w600))),
+                        for (final c in _cells[z]!)
+                          Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: TextField(
+                              controller: c,
+                              decoration: deco(),
+                              style: cellStyle,
+                              textAlign: TextAlign.right,
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди).',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 14),
+              // ── Ички улушлар (14-банд: мижозга кўрсатилмайди) ──
+              const Text('Ички тақсимот (мижозга кўринмайди)', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  SizedBox(width: 150, child: TextField(controller: _margin, decoration: deco('Платформа улуши, %'), style: cellStyle)),
+                  const SizedBox(width: 10),
+                  for (final k in _legKeys) ...[
+                    SizedBox(width: 150, child: TextField(controller: _legShare[k], decoration: deco('${_legLabels[k]}, %'), style: cellStyle)),
+                    const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'LEG улушлари йиғиндиси 100 %. Бўш қолса — фаоллаштириб бўлмайди (сервер талаб қилади).',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Бекор')),
+        FilledButton(
+          onPressed: _save,
+          child: Text(widget.asNewVersion ? 'Янги қоралама сифатида сақлаш' : 'Сақлаш'),
+        ),
+      ],
     );
   }
 }

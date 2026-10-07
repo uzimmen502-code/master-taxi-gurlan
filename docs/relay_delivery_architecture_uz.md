@@ -1079,27 +1079,49 @@ Hyper-V ҳар юкланишда шу ичидан блоклар банд қи
 `emulators:exec` тугагач JVM (`cloud-firestore-emulator`) ўчмай қолади —
 кейинги run'дан олдин ўша `java.exe` тўхтатилади, акс ҳолда «port taken».
 
-**Деплой тартиби (эга буйруғи билан, ҳар бири алоҳида):**
+**Деплой — 2026-10-07, 01:43–01:50 UTC (эга буйруғи билан, ҳар бири алоҳида):**
 
-```powershell
-# 1) functions default — relay_escrow (fundShipmentEscrow + 2 trigger)
-firebase deploy --only "functions:default" --project master-taxi-gurlan
-# 2) functions demand — 10 callable + onShipmentFunded
-$env:FUNCTIONS_DISCOVERY_TIMEOUT=90
-firebase deploy --only "functions:demand" --project master-taxi-gurlan
-# 3) indexlar — --force ЙЎҚ, «Deleting N» қаторини қўлда кўриш
-firebase deploy --only firestore:indexes --project master-taxi-gurlan
-# 4) rules — ФАҚАТ ўзи
-firebase deploy --only firestore:rules --project master-taxi-gurlan
-# 5) storage rules
-firebase deploy --only storage --project master-taxi-gurlan
-```
+| # | Нима | Ҳолат |
+|---|---|---|
+| 1 | `functions:default` — **фақат** `fundShipmentEscrow`, `onLogisticsCustodyEvent`, `onLogisticsShipmentUpdate` (номма-ном) | ✅ ACTIVE 01:43 UTC, v1. Тўлиқ `functions:default` деплойи **ҚИЛИНМАДИ** — пастдаги огоҳликка қаранг |
+| 2 | `functions:demand` — тўлиқ | ✅ 11 яратилди, 20 янгиланди, 0 хато; `demandCoreStatus` → `modules: service, courier, logistics` |
+| 3 | indexes (`--force` йўқ) | ✅ 5 та logistics индекси CREATING → READY; эски `taxi_trips(…refunded…)` индекси **ўчирилмади** (CLI фақат огоҳлантирди, 1 та) |
+| 4 | rules — алоҳида | ✅ Ruleset `d7e1405a-9a7f-4e24-af94-05e2903e107a`, 01:48 UTC; жонли матн HEAD билан айнан мос. Rollback: `2dc6b7fa-1e2b-4b6d-bc42-0012cccd7af7` (== commit `b29a8df~1`) |
+| 5 | storage rules | ✅ released; жонли матн HEAD билан мос. Rollback: `ab3a29fd-0863-4d08-a4a4-ef71ad933f79` |
+
+Деплойдан кейин 20 дақиқада `cloud_function severity>=ERROR` — йўқ.
+
+**ОГОҲЛИК — production default codebase бир нечта ветвдан йиғилган.**
+Тўлиқ `functions:default` деплойи бу ветвдан бошланганда CLI
+`reconcileTvProfileViews`ни ўчиришни талаб қилди (non-interactive'да
+abort). У ва `clipPage` v3 2026-10-06 06:39 UTC да `fix/realty-audit-p1`
+ветвидаги `606509e` («Phase 2: playbackStats») commit'идан чиққан — бу
+ветвда йўқ. Шунинг учун бу ветвдан `functions:default`ни **тўлиқ деплой
+қилиб бўлмайди**: у бошқа сессия функциясини ўчиради ва `clipPage`ни эски
+версияга қайтаради. Default codebase функциялари фақат номма-ном
+(`functions:default:<name>`) деплой қилинади, то ветвлар бирлаштирилмагунча.
+
+**Тариф — эга рақамлари (2026-10-07, AVA_DECIDED).** 6 зона × 5 поғона
+(≤1/≤3/≤5/≤10/≤20 кг) `core/seed/logistics_tariff_draft.json`га ёзилди
+ва `seed --write` билан production'га `module_tariffs/logistics_v1`
+(status **draft**) сифатида чиқарилди. Жадвал 20 кг да тугайди →
+`limits.maxWeightG = 20000` (20–30 кг нархи UNKNOWN). Фаоллаштириш учун
+етишмайди: `internal.platformMarginBps` ва `internal.legShareBps`
+(UNKNOWN — эга беради; admin панел «Нархлар» муҳарририда ҳам
+тўлдирилади). Admin панел: нарх жадвали муҳаррири (зона × поғона, ички
+улушлар) ва **«Барча нархларни % га»** тугмаси (яхлитлаш 1/100/1000
+сўм; фаол версиядан — янги қоралама, 9-банд); ҳисоб `tariff_adjust.dart`
+(соф Dart, тест билан).
 
 Деплойдан кейин ҳам хизмат **OFF**: `module_config/logistics_all` йўқ
-(`enabled: false`), фаол тариф йўқ (`module_tariffs/logistics` йўқ),
-admin панелда `logistics` модули ёқилмаган. Ёқиш — учта алоҳида эга
-қарори: тариф рақамлари → `adminActivateLogisticsTariff`; конфиг;
-«Ҳудудлар ва хизматлар».
+(`enabled: false`), фаол тариф йўқ (`module_tariffs/logistics` йўқ —
+v1 қоралама турибди), admin панелда `logistics` модули ёқилмаган
+(hosting'даги `/admin` — эски build, `logistics`ни билмайди). Ёқиш — эга қарорлари: тариф рақамлари →
+`seed --write` → `adminActivateLogisticsTariff`; `module_config/logistics_all`
+(`enabled/matchingEnabled/pushEnabled: true`); admin web rebuild
+(`scripts/build_combined_web.ps1` → `hosting`) → «Ҳудудлар ва хизматлар»
+→ `logistics` Очиқ (ёки `config/module_defaults.modules.logistics.status =
+enabled`); янги илова build'и 1.0.34 (плитка ва оқимлар фақат унда).
 
 **Кейинга қолган (эга билан):** L6a–L6c, L13 (камера сканери — ҳозир
 код қўлда киритилади, QR кўрсатилади), L14 (шартлар матни —

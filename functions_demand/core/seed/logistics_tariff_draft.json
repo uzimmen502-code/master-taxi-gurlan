@@ -1,5 +1,5 @@
 {
-  "_comment": "AVA Logistics tarifi — QORALAMA (status: draft). Zona matritsasi pilot yo'nalishlari uchun INFERRED (hujjat §10: Xorazm ichi → Urganch ↔ Toshkent). NARXLAR ATAYLAB YO'Q — ular ega qarori (CLAUDE.md 1-band): `prices` to'ldirilmaguncha `validateTariff(forActivation)` faol qilishga yo'l bermaydi. volumetricDivisor 6000 — BTS benchmark (BTS_CONFIRMED), AVA qarori emas. `node functions_demand/tools/seed_logistics_tariff.js --write` bilan yoziladi (standart: dry-run).",
+  "_comment": "AVA Logistics tarifi — QORALAMA (status: draft). NARXLAR — EGA QARORI, 2026-10-07 (AVA_DECIDED): 6 zona × 5 vazn pog'onasi (≤1/≤3/≤5/≤10/≤20 kg), butun so'm. Zona matritsasi pilot yo'nalishlari uchun INFERRED (hujjat §10: Xorazm ichi → Urganch ↔ Toshkent) — ZONE_2/3/5 narxi bor, lekin matritsada hali yo'nalish yo'q. 20 kg dan og'ir posilka QABUL QILINMAYDI (limits.maxWeightG = 20000, jadval shu yerda tugaydi; extraPerKg = 0 shuning uchun hech qachon ishlamaydi — 20–30 kg narxi UNKNOWN, ega bersa limit ko'tariladi). internal.* (platforma ulushi, LEG ulushlari) — UNKNOWN: to'ldirilmaguncha `validateTariff(forActivation)` faol qilishga yo'l bermaydi. volumetricDivisor 6000 — BTS benchmark (BTS_CONFIRMED). `node functions_demand/tools/seed_logistics_tariff.js --write` bilan yoziladi (standart: dry-run).",
   "module": "logistics",
   "version": 1,
   "status": "draft",
@@ -19,9 +19,16 @@
     }
   },
   "weightBrackets": [1000, 3000, 5000, 10000, 20000],
-  "prices": {},
+  "prices": {
+    "ZONE_0": { "brackets": [29000, 36000, 43000, 59000, 88000], "extraPerKg": 0 },
+    "ZONE_1": { "brackets": [34000, 52000, 69000, 110000, 187000], "extraPerKg": 0 },
+    "ZONE_2": { "brackets": [36000, 55000, 74000, 117000, 200000], "extraPerKg": 0 },
+    "ZONE_3": { "brackets": [40000, 60000, 80000, 126000, 213000], "extraPerKg": 0 },
+    "ZONE_4": { "brackets": [42000, 64000, 85000, 133000, 225000], "extraPerKg": 0 },
+    "ZONE_5": { "brackets": [46000, 69000, 92000, 143000, 240000], "extraPerKg": 0 }
+  },
   "declaredValue": { "feeBps": 100, "maxValue": 50000000 },
-  "limits": { "maxWeightG": 30000, "maxDimCm": 150, "maxSumDimCm": 300 },
+  "limits": { "maxWeightG": 20000, "maxDimCm": 150, "maxSumDimCm": 300 },
   "internal": {
     "platformMarginBps": null,
     "legShareBps": null

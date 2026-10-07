@@ -47,20 +47,21 @@ ok('QORALAMA (seed): EGA MODELI N=1 (2026-10-07, AVA_DECIDED) aynan; ZONE_2/3/5 
   for (const z of ['ZONE_2', 'ZONE_3', 'ZONE_5']) {
     assert.ok(!(z in draft.prices), `${z}: ega narx bermagan — o'ylab topilmaydi`);
   }
-  // Maksimal vazn — ega hali belgilamagan (alohida qaror): eski 20000
-  // qoladi; 21 kg chegara bilan ziddiyat quyidagi testda qulflangan.
-  assert.strictEqual(draft.limits.maxWeightG, 20000);
+  // Maksimal vazn chegarasi YO'Q (ega qarori 2026-10-07): maxWeightG
+  // yozilmaydi — og'ir posilka extraPerKg bilan narxlanadi, rad etilmaydi.
+  assert.strictEqual(draft.limits.maxWeightG, undefined);
+  // O'lcham limitlari INFERRED — ega tasdig'ini kutadi (hozircha turadi).
+  assert.deepStrictEqual(draft.limits, { maxDimCm: 150, maxSumDimCm: 300 });
   const errs = tariff.validateTariff(draft, { forActivation: true });
   assert.ok(!errs.some((e) => e.includes('prices.')), `narx xatosi bo'lmasligi kerak: ${errs.join('; ')}`);
   assert.ok(errs.some((e) => e.includes('legShareBps')), errs.join('; '));
   assert.ok(errs.some((e) => e.includes('platformMarginBps')), errs.join('; '));
 });
 ok('QORALAMA: N=1 formulasi — 5/10/20/21 kg = bazaviy; 22/25/30 kg = + boshlangan kg × extraPerKg; hajmiy vazn ustun', () => {
-  // Faqat FORMULANI ko'rsatish uchun: status active + ichki ulushlar +
-  // limit ko'tarilgan NUSXA (seed'ning o'zi o'zgarmaydi).
+  // Faqat FORMULANI ko'rsatish uchun: status active + ichki ulushlar
+  // (seed'ning o'zi o'zgarmaydi).
   const live = {
     ...draft, status: 'active',
-    limits: { ...draft.limits, maxWeightG: 50000 },
     internal: { platformMarginBps: 2000, legShareBps: { first_mile: 2500, line_haul: 5000, last_mile: 2500 } },
   };
   const g = { regionId: 'xorazm', districtId: 'gurlan' };
@@ -88,16 +89,15 @@ ok('QORALAMA: N=1 formulasi — 5/10/20/21 kg = bazaviy; 22/25/30 kg = + boshlan
   assert.strictEqual(vol.volumetricWeightG, 25000);
   assert.strictEqual(vol.chargeableWeightG, 25000);
   assert.strictEqual(vol.customerPrice, 140000);
-  // Limit HAQIQIY vaznga (ega qarori): 60 kg haqiqiy (> 50 kg limit) → rad;
-  // 8 kg haqiqiy / 25 kg hajmiy → o'tadi (yuqorida); 40 kg haqiqiy → o'tadi.
-  assert.throws(() => q(60, g, g), (e) => e.details.reason === 'over_weight');
+  // Maksimal vazn chegarasi YO'Q (ega qarori): 40 kg → +19 kg, 60 kg → +39 kg, rad yo'q.
   assert.strictEqual(q(40, g, g).customerPrice, 130000 + 19 * 2500);
-});
-ok('QORALAMA ZIDDIYATI (ega hal qiladi): maxWeightG=20000 bilan 20–21 kg rad etiladi va extraPerKg ishlamaydi', () => {
-  const live = { ...draft, status: 'active', internal: { platformMarginBps: 2000, legShareBps: { first_mile: 2500, line_haul: 5000, last_mile: 2500 } } };
-  const g = { regionId: 'xorazm', districtId: 'gurlan' };
-  assert.throws(() => tariff.quoteParcel(live, { actualWeightG: 20001, lengthCm: 10, widthCm: 10, heightCm: 10 }, g, g),
-    (e) => e.details.reason === 'over_weight', 'maksimal vazn belgilanmaguncha 20 kg dan og\'iri rad');
+  assert.strictEqual(q(60, g, g).customerPrice, 130000 + 39 * 2500);
+  // Limit qo'yilsa — HAQIQIY vaznga ishlaydi (hajmiy vaznga emas): 8 kg
+  // haqiqiy / 25 kg hajmiy posilka 20 kg limitdan o'tadi, 21 kg haqiqiy — yo'q.
+  const limited = { ...live, limits: { ...live.limits, maxWeightG: 20000 } };
+  assert.strictEqual(tariff.quoteParcel(limited, { actualWeightG: 8000, lengthCm: 50, widthCm: 60, heightCm: 50 }, g, g).customerPrice, 140000);
+  assert.throws(() => tariff.quoteParcel(limited, { actualWeightG: 21000, lengthCm: 10, widthCm: 10, heightCm: 10 }, g, g),
+    (e) => e.details.reason === 'over_weight');
 });
 ok('6 ta zona aynan ZONE_0…ZONE_5 (D-2); boshqa nom rad', () => {
   const bad = { ...T, zones: ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] };

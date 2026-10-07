@@ -1,5 +1,5 @@
 {
-  "_comment": "AVA Logistics tarifi — QORALAMA (status: draft). MODEL — EGA QARORI 2026-10-07 (AVA_DECIDED): N=1 — 0–21 kg bazaviy narx, 21 kg dan keyin har BOSHLANGAN 1 kg uchun extraPerKg (tariff.js basePriceFor: ceil). Narxlar ham ega qarori: ZONE_0 130 000 (+2 500), ZONE_1 250 000 (+6 000), ZONE_4 310 000 (+8 500). ZONE_2/3/5 — narx BERILMAGAN, matritsada ham yo'nalish yo'q: yozilmaydi (o'ylab topilmaydi). limits.maxWeightG — ega HALI belgilamagan (alohida qaror); 20000 qiymati eski qoralamadan qolgan va 21 kg chegara bilan ZIDDIYATLI (20–21 kg rad etiladi, extraPerKg hech qachon ishlamaydi) — maksimal vazn qarori bilan hal bo'ladi, bu yerda o'zgartirilmadi. Zona matritsasi pilot uchun INFERRED (hujjat §10: Xorazm ichi → Urganch ↔ Toshkent). internal.* (platforma ulushi, LEG ulushlari) — UNKNOWN: to'ldirilmaguncha `validateTariff(forActivation)` faol qilishga yo'l bermaydi. volumetricDivisor 6000 — BTS benchmark (BTS_CONFIRMED). `node functions_demand/tools/seed_logistics_tariff.js --write` bilan yoziladi (standart: dry-run; draft to'liq almashtiriladi).",
+  "_comment": "AVA Logistics tarifi — QORALAMA (status: draft). MODEL — EGA QARORI 2026-10-07 (AVA_DECIDED): N=1 — 0–21 kg bazaviy narx, 21 kg dan keyin har BOSHLANGAN 1 kg uchun extraPerKg (tariff.js basePriceFor: ceil). Narxlar ham ega qarori: ZONE_0 130 000 (+2 500), ZONE_1 250 000 (+6 000), ZONE_4 310 000 (+8 500). ZONE_2/3/5 — narx BERILMAGAN, matritsada ham yo'nalish yo'q: yozilmaydi (o'ylab topilmaydi). MAKSIMAL VAZN CHEGARASI YO'Q (ega qarori 2026-10-07) — limits.maxWeightG yozilmaydi, har qanday og'irlik extraPerKg bilan narxlanadi. limits.maxDimCm 150 / maxSumDimCm 300 — INFERRED (BTS namunasi), ega hali tasdiqlamagan: «yo'q» desa olib tashlanadi. Zona matritsasi pilot uchun INFERRED (hujjat §10: Xorazm ichi → Urganch ↔ Toshkent). internal.* (platforma ulushi, LEG ulushlari) — ega admin «Narxlar» muharririda to'ldiradi; to'ldirilmaguncha `validateTariff(forActivation)` faol qilishga yo'l bermaydi. volumetricDivisor 6000 — BTS benchmark (BTS_CONFIRMED). `node functions_demand/tools/seed_logistics_tariff.js --write` bilan yoziladi (standart: dry-run; draft to'liq almashtiriladi).",
   "module": "logistics",
   "version": 1,
   "status": "draft",
@@ -25,7 +25,7 @@
     "ZONE_4": { "brackets": [310000], "extraPerKg": 8500 }
   },
   "declaredValue": { "feeBps": 100, "maxValue": 50000000 },
-  "limits": { "maxWeightG": 20000, "maxDimCm": 150, "maxSumDimCm": 300 },
+  "limits": { "maxDimCm": 150, "maxSumDimCm": 300 },
   "internal": {
     "platformMarginBps": null,
     "legShareBps": null

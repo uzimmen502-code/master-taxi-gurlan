@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,6 +16,7 @@ import '../../../repositories/orders_repository.dart';
 import '../../../services/google_directions_service.dart';
 import '../../../services/polyline_decoder.dart';
 import '../../../shared/widgets/order_receipt_view.dart';
+import '../widgets/order_history_from_bar.dart';
 
 /// Admin web — courier dispatcher board.
 class CourierAdminScreen extends StatefulWidget {
@@ -37,14 +39,34 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
   String? _loadingRouteMapId;
   RouteCandidate? _selectedCandidate;
   DeliveryRoute? _selectedRoute;
+  StreamSubscription<DateTime?>? _historyFromSub;
+  DateTime? _historyFrom;
+  bool _historyFromLoaded = false;
 
   @override
   void initState() {
     super.initState();
+    _historyFromSub = context
+        .read<OrdersRepository>()
+        .watchAdminOrderHistoryFrom()
+        .listen(
+      (from) {
+        if (!mounted) return;
+        setState(() {
+          _historyFrom = from;
+          _historyFromLoaded = true;
+        });
+      },
+      // Чегара ўқилмаса — ҳаммаси кўринади, доска тўхтаб қолмасин.
+      onError: (Object _) {
+        if (mounted) setState(() => _historyFromLoaded = true);
+      },
+    );
   }
 
   @override
   void dispose() {
+    _historyFromSub?.cancel();
     _boardScrollController.dispose();
     super.dispose();
   }
@@ -113,6 +135,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
               ),
             ),
           ),
+          OrderHistoryFromBar(from: _historyFrom),
           _RouteMapPreview(
             key: _mapPreviewKey,
             candidate: _selectedCandidate,
@@ -130,7 +153,7 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                   return Center(
                       child: Text('Buyurtmalar xatosi: ${orderSnap.error}'));
                 }
-                if (!orderSnap.hasData) {
+                if (!orderSnap.hasData || !_historyFromLoaded) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -173,7 +196,9 @@ class _CourierAdminScreenState extends State<CourierAdminScreen> {
                                 o.status == 'courier')
                             .toList();
                         final deliveredOrders = orders
-                            .where((o) => o.status == 'delivered')
+                            .where((o) =>
+                                o.status == 'delivered' &&
+                                !isHiddenByOrderHistoryFrom(o, _historyFrom))
                             .toList();
                         final routes = routeSnap.data!;
                         final readyRoutes =

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import '../../../services/admin_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../admin_web/services/admin_auth_service.dart';
 import '../../admin_web/services/admin_orders_service.dart';
+import '../../admin_web/widgets/order_history_from_bar.dart';
 
 /// Админ учун — `orders` навбати (ҳолатни янгилаш).
 ///
@@ -39,6 +41,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   String? _busyOrderId;
   String? _bulkBusyColumn;
   final ScrollController _boardScrollController = ScrollController();
+  StreamSubscription<DateTime?>? _historyFromSub;
+  DateTime? _historyFrom;
+  bool _historyFromLoaded = false;
 
   static const _columns = [
     _OrderColumnSpec(
@@ -76,6 +81,22 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   @override
   void initState() {
     super.initState();
+    _historyFromSub = context
+        .read<OrdersRepository>()
+        .watchAdminOrderHistoryFrom()
+        .listen(
+      (from) {
+        if (!mounted) return;
+        setState(() {
+          _historyFrom = from;
+          _historyFromLoaded = true;
+        });
+      },
+      // Чегара ўқилмаса — ҳаммаси кўринади, доска тўхтаб қолмасин.
+      onError: (Object _) {
+        if (mounted) setState(() => _historyFromLoaded = true);
+      },
+    );
     _checkAdmin();
   }
 
@@ -423,6 +444,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
   @override
   void dispose() {
+    _historyFromSub?.cancel();
     _boardScrollController.dispose();
     super.dispose();
   }
@@ -481,6 +503,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             ),
           ),
         ),
+        OrderHistoryFromBar(from: _historyFrom),
         Expanded(
           child: StreamBuilder<List<OrderModel>>(
               stream: context
@@ -490,10 +513,12 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                 if (snap.hasError) {
                   return Center(child: Text('Хато: ${snap.error}'));
                 }
-                if (!snap.hasData) {
+                if (!snap.hasData || !_historyFromLoaded) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final orders = snap.data!;
+                final orders = snap.data!
+                    .where((o) => !isHiddenByOrderHistoryFrom(o, _historyFrom))
+                    .toList(growable: false);
                 if (orders.isEmpty) {
                   return const Center(
                     child: Text(

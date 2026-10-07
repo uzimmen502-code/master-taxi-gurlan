@@ -1176,7 +1176,11 @@ Production'даги `logistics_v1` draft — эга топшириғи била�
 «ўзинг бажар») `seed --write` орқали **тўлиқ алмаштирилди**: N=1,
 ZONE_0/1/4, `maxWeightG` йўқ (максимал чегара йўқ — эга қарори). Кечқурун
 эга жадвали билан яна `seed --write` (эга рухсати): 6 зона × 5 поғона,
-`extraPerKg: null`. Фаоллаштириш учун етишмайди: `prices.ZONE_0/1/4.extraPerKg`
+`extraPerKg: null`. Шу код (`234b79e`) эга рухсати билан deploy қилинди,
+2026-10-07 ~18:06 UTC: `functions:demand` (ҳамма функциялар ACTIVE, 40 дақиқада
+ERROR йўқ) ва hosting (`/`+`/admin/`) — умумий worktree'да бошқа сессиянинг
+commit қилинмаган ишлари бўлгани учун hosting **тоза detached worktree**'дан
+йиғилди (жонли админ бандли build билан байтма-байт бир хил). Фаоллаштириш учун етишмайди: `prices.ZONE_0/1/4.extraPerKg`
 (+1 кг), `internal.platformMarginBps`, `internal.legShareBps` — эга
 admin «Нархлар» муҳарририда ўзи тўлдиради ва «Фаоллаштириш»ни босади. Admin панел: нарх жадвали
 муҳаррири (устунлар `weightBrackets`дан динамик), ички улушлар,

@@ -299,6 +299,24 @@ class OrdersRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
+
+  /// Админ тарихи: шу санадан олдин яратилган якунланган буюртмалар
+  /// админ устунларида кўрсатилмайди (базадан ўчирилмайди).
+  /// `null` — чегара йўқ, ҳаммаси кўринади.
+  Stream<DateTime?> watchAdminOrderHistoryFrom() {
+    return _appSettings.snapshots().map((snap) {
+      final v = snap.data()?['adminOrderHistoryFrom'];
+      return v is Timestamp ? v.toDate() : null;
+    });
+  }
+
+  Future<void> setAdminOrderHistoryFrom(DateTime? from) async {
+    await _appSettings.set({
+      'adminOrderHistoryFrom':
+          from == null ? FieldValue.delete() : Timestamp.fromDate(from),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
 }
 
 /// Буюртма Kanban: қабул / тайёр автомат ёки қўлда.

@@ -9462,6 +9462,18 @@ exports.leaveDriverRole = functions.https.onCall(async (data, context) => {
   if (uid.length < 9) {
     throw new functions.https.HttpsError('invalid-argument', 'userPhone');
   }
+  // Фақат ЎЗИ учун (админ аудити, 2026-10-08). Аввал клиент юборган
+  // `userPhone`га ишониларди: ҳар қандай сессия (аноним ҳам) истаган
+  // одамнинг ролини `user`га тушира (superadmin'ни ҳам — админ панел
+  // қулфланарди), ҳайдовчини офлайн қилиб, шаҳарлараро эълонини ёпа оларди.
+  const tokenUid = canonicalUid(callerPhone(context));
+  if (!tokenUid || tokenUid.length < 12 || canonicalUid(uid) !== tokenUid) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your account');
+  }
+  // Рол фақат `driver` бўлса `user`га тушади — ҳайдовчи ҳужжати бор
+  // админ/диспетчер «ҳайдовчи режимидан чиқса» панел ҳуқуқини йўқотмасин.
+  const userSnapForRole = await db.collection('users').doc(uid).get();
+  const currentRole = String((userSnapForRole.data() || {}).role || '');
 
   const clientHandledCleanup = data.clientHandledCleanup === true;
 
@@ -9519,12 +9531,14 @@ exports.leaveDriverRole = functions.https.onCall(async (data, context) => {
     { merge: true },
   );
 
-  // 5. Rolni o'zgartirish
-  batch.set(
-    db.collection('users').doc(uid),
-    { role: 'user', updatedAt: now },
-    { merge: true },
-  );
+  // 5. Rolni o'zgartirish (faqat haydovchi roli)
+  if (currentRole === 'driver') {
+    batch.set(
+      db.collection('users').doc(uid),
+      { role: 'user', updatedAt: now },
+      { merge: true },
+    );
+  }
 
   batch.set(
     db.collection('intercity_drivers').doc(uid),
@@ -12047,6 +12061,13 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
 
       const tripRef = db.collection('trips').doc(tripId);
       let userPhone = '';
+      // Фақат сафар эгаси (йўловчи). Аввал эгалик текширилмасди: ҳар қандай
+      // сессия бегона қабул қилинган сафарни бекор қилиб, ўша йўловчига
+      // бекор-блок ҳисобини қўша оларди.
+      const callerUid = canonicalUid(callerPhone(context));
+      if (!callerUid || callerUid.length < 12) {
+        throw new functions.https.HttpsError('permission-denied', 'Phone login required');
+      }
 
       await db.runTransaction(async (t) => {
         const tripSnap = await t.get(tripRef);
@@ -12060,6 +12081,9 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
               'Not a marshrut trip',
           );
         }
+        if (canonicalUid(String(trip.userPhone || '')) !== callerUid) {
+          throw new functions.https.HttpsError('permission-denied', 'Not your trip');
+        }
         if (trip.status !== 'accepted') {
           throw new functions.https.HttpsError(
               'failed-precondition',
@@ -12069,6 +12093,17 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
         userPhone = digits(trip.userPhone || '');
         const scheduleId = trip.scheduleId || '';
         const driverId = trip.acceptedDriverId || '';
+
+        // Ўқишлар ЁЗИШДАН ОЛДИН (Firestore транзакция қоидаси). Аввал
+        // сафар янгилангач жадвал/навбат ўқиларди — SDK «reads before
+        // writes» билан рад этарди ва функция `scheduleId`/`driverId` бор
+        // ҳар сафарда йиқиларди (илова клиент fallback'ига ўтарди).
+        const schedRef = scheduleId ? db.collection('schedules').doc(scheduleId) : null;
+        const queueRef = driverId ? db.collection('queue').doc(driverId) : null;
+        const [schedSnapPre, queueSnapPre] = await Promise.all([
+          schedRef ? t.get(schedRef) : Promise.resolve(null),
+          queueRef ? t.get(queueRef) : Promise.resolve(null),
+        ]);
 
         t.update(tripRef, {
           status: 'cancelled',
@@ -12080,8 +12115,7 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
         });
 
         if (scheduleId) {
-          const schedRef = db.collection('schedules').doc(scheduleId);
-          const schedSnap = await t.get(schedRef);
+          const schedSnap = schedSnapPre;
           if (schedSnap.exists) {
             const schedData = schedSnap.data() || {};
             const seats = Number(schedData.seats) || 1;
@@ -12097,8 +12131,7 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
         }
 
         if (driverId) {
-          const queueRef = db.collection('queue').doc(driverId);
-          const queueSnap = await t.get(queueRef);
+          const queueSnap = queueSnapPre;
           if (queueSnap.exists) {
             const queueData = queueSnap.data() || {};
             const seats = Number(queueData.seats) || 1;
@@ -12175,17 +12208,39 @@ exports.updateDriverRating = functions.https.onCall(async (data, context) => {
     );
   }
   const { driverId, rating, tripId } = data;
-  if (!driverId || !rating || rating < 1 || rating > 5) {
+  if (!driverId || !Number.isInteger(rating) || rating < 1 || rating > 5
+      || !tripId) {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'Invalid rating',
     );
   }
+  // Фақат шу сафарнинг йўловчиси, шу сафарнинг ҳайдовчисига, бир марта.
+  // Аввал ҳар қандай сессия истаган ҳайдовчига чексиз баҳо қўйиб
+  // (рейтингни тушириб/кўтариб), бегона сафарга `passengerRating` ёза
+  // оларди.
+  const callerUid = canonicalUid(callerPhone(context));
+  if (!callerUid || callerUid.length < 12) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone login required');
+  }
 
-  const driverRef = db.collection('drivers').doc(driverId);
+  const driverRef = db.collection('drivers').doc(String(driverId));
+  const tripRef = db.collection('trips').doc(String(tripId));
 
   await db.runTransaction(async (t) => {
-    const snap = await t.get(driverRef);
+    const [snap, tripSnap] = await Promise.all([t.get(driverRef), t.get(tripRef)]);
+    if (!tripSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Trip not found');
+    }
+    const trip = tripSnap.data() || {};
+    if (canonicalUid(String(trip.userPhone || '')) !== callerUid) {
+      throw new functions.https.HttpsError('permission-denied', 'Not your trip');
+    }
+    const tripDriver = canonicalUid(String(trip.acceptedDriverId || trip.driverId || ''));
+    if (!tripDriver || tripDriver !== canonicalUid(String(driverId))) {
+      throw new functions.https.HttpsError('permission-denied', 'Driver mismatch');
+    }
+    if (trip.passengerRating != null) return; // бир марта (идемпотент)
     if (!snap.exists) return;
 
     const d = snap.data();
@@ -12200,7 +12255,6 @@ exports.updateDriverRating = functions.https.onCall(async (data, context) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    const tripRef = db.collection('trips').doc(tripId);
     t.update(tripRef, {
       passengerRating: rating,
       ratedAt: admin.firestore.FieldValue.serverTimestamp(),

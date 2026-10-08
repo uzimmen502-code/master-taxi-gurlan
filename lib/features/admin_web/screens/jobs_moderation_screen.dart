@@ -8,6 +8,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_jobs_service.dart';
+import '../utils/admin_paged_list.dart';
+import '../widgets/admin_load_more_bar.dart';
 import '../widgets/jobs_ad_edit_dialog.dart';
 import 'jobs_complaints_tab.dart';
 
@@ -28,16 +30,27 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
   String _query = '';
   late final TabController _tabCtrl;
 
+  /// Бир марта очилади. Аввал оқим `build` ичида яратиларди — ҳар филтр
+  /// босилганда Firestore тинглови қайтадан очилиб, 500 та қайта ўқиларди.
+  late final AdminFirestorePagedList<JobAd> _ads;
+
   static const _blue = AppColors.primary;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
+    final query = context.read<JobsRepository>().adminListQuery();
+    _ads = AdminFirestorePagedList<JobAd>(
+      watch: (window) => watchFirestoreWindow(query, window),
+      map: JobAd.fromDoc,
+      idOf: (ad) => ad.id,
+    );
   }
 
   @override
   void dispose() {
+    _ads.dispose();
     _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -178,34 +191,45 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
   }
 
   Widget _adsTab() {
-    return StreamBuilder<List<JobAd>>(
-          stream: context.read<JobsRepository>().watchAllForAdmin(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting &&
-                !snap.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return Center(child: Text('Хатолик: ${snap.error}'));
-            }
+    return ListenableBuilder(
+      listenable: _ads,
+      builder: (context, _) {
+        if (_ads.error != null) {
+          return Center(child: Text('Хатолик: ${_ads.error}'));
+        }
+        if (_ads.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-            final all = snap.data ?? const <JobAd>[];
-            final ads = _filter(all);
-            return Column(children: [
-              _summary(all),
-              _filters(),
-              Expanded(
-                child: ads.isEmpty
-                    ? const Center(child: Text('Эълон топилмади'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                        itemCount: ads.length,
-                        itemBuilder: (_, i) => _adCard(ads[i]),
-                      ),
-              ),
-            ]);
-          },
+        final all = _ads.items;
+        final ads = _filter(all);
+        final more = _ads.hasMore;
+        final loadMore = AdminLoadMoreBar(
+          loading: _ads.loadingMore,
+          failed: _ads.loadMoreError != null,
+          onPressed: _ads.loadMore,
         );
+        return Column(children: [
+          _summary(all),
+          _filters(),
+          Expanded(
+            child: ads.isEmpty
+                ? Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Text('Эълон топилмади'),
+                      if (more) loadMore,
+                    ]),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                    itemCount: ads.length + (more ? 1 : 0),
+                    itemBuilder: (_, i) =>
+                        i < ads.length ? _adCard(ads[i]) : loadMore,
+                  ),
+          ),
+        ]);
+      },
+    );
   }
 
   Widget _header() {
@@ -274,8 +298,16 @@ class _JobsModerationScreenState extends State<JobsModerationScreen>
         CircleAvatar(
           radius: 18,
           backgroundColor: color.withValues(alpha: 0.1),
-          child: Text('$value',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+          // «Яна юклаш»дан кейин сон 4+ хонали бўлиши мумкин — доирага
+          // сиғдирилади (аввал «100/0» бўлиб иккинчи қаторга ўтарди).
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('$value',
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+            ),
+          ),
         ),
         const SizedBox(width: 10),
         Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),

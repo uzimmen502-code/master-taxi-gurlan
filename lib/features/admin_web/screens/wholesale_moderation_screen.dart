@@ -11,6 +11,8 @@ import '../../wholesale/models/wholesale_seller.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/repositories/wholesale_sellers_repository.dart';
 import '../services/admin_auth_service.dart';
+import '../utils/admin_paged_list.dart';
+import '../widgets/admin_load_more_bar.dart';
 
 /// Улгуржи бозор ёки Хитой бозори — admin модерацияси.
 /// `JobsModerationScreen`нинг live-stream карта-рўйхат андозаси асосида.
@@ -55,9 +57,9 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
   bool get _isChina => widget.market == WholesaleProduct.marketChina;
 
   /// Бир марта очилади: ҳолат филтри (`setState`) ҳар босилганда
-  /// Firestore тинглови қайта очилмасин.
-  late final Stream<List<WholesaleProduct>> _productsStream =
-      _productsRepo.watchAllForAdmin(market: widget.market);
+  /// Firestore тинглови қайта очилмасин. Бозор филтри — клиентда
+  /// ([WholesaleProductsRepository.adminListQuery]).
+  late final AdminFirestorePagedList<WholesaleProduct> _products;
 
   @override
   void initState() {
@@ -66,10 +68,20 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
       length: widget.leadingTab == null ? 2 : 3,
       vsync: this,
     );
+    final query = _productsRepo.adminListQuery();
+    _products = AdminFirestorePagedList<WholesaleProduct>(
+      watch: (window) => watchFirestoreWindow(query, window),
+      map: (doc) {
+        final p = WholesaleProduct.fromFirestore(doc);
+        return p.belongsToMarket(widget.market) ? p : null;
+      },
+      idOf: (p) => p.id,
+    );
   }
 
   @override
   void dispose() {
+    _products.dispose();
     _tabCtrl.dispose();
     super.dispose();
   }
@@ -430,16 +442,22 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
   }
 
   Widget _productsTab() {
-    return StreamBuilder<List<WholesaleProduct>>(
-      stream: _productsStream,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+    return ListenableBuilder(
+      listenable: _products,
+      builder: (context, _) {
+        if (_products.error != null) {
+          return Center(child: Text('Хатолик: ${_products.error}'));
+        }
+        if (_products.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snap.hasError) {
-          return Center(child: Text('Хатолик: ${snap.error}'));
-        }
-        final all = snap.data ?? const <WholesaleProduct>[];
+        final all = _products.items;
+        final more = _products.hasMore;
+        final loadMore = AdminLoadMoreBar(
+          loading: _products.loadingMore,
+          failed: _products.loadMoreError != null,
+          onPressed: _products.loadMore,
+        );
         final filtered = _productStatusFilter == 'all'
             ? all
             : all.where((p) => p.status == _productStatusFilter).toList();
@@ -485,11 +503,18 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           const SizedBox(height: 8),
           Expanded(
             child: filtered.isEmpty
-                ? const Center(child: Text('Маҳсулот топилмади'))
+                ? Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Text('Маҳсулот топилмади'),
+                      if (more) loadMore,
+                    ]),
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) => _productCard(filtered[i]),
+                    itemCount: filtered.length + (more ? 1 : 0),
+                    itemBuilder: (_, i) => i < filtered.length
+                        ? _productCard(filtered[i])
+                        : loadMore,
                   ),
           ),
         ]);
@@ -725,8 +750,16 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         CircleAvatar(
           radius: 18,
           backgroundColor: color.withValues(alpha: 0.1),
-          child: Text('$value',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+          // «Яна юклаш»дан кейин сон 4+ хонали бўлиши мумкин — доирага
+          // сиғдирилади (аввал «100/0» бўлиб иккинчи қаторга ўтарди).
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text('$value',
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+            ),
+          ),
         ),
         const SizedBox(width: 10),
         Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),

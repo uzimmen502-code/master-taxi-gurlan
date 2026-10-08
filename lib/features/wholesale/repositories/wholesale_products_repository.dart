@@ -188,35 +188,20 @@ class WholesaleProductsRepository {
     });
   }
 
-  /// Admin — барча маҳсулотлар (лимит 500).
+  /// Admin рўйхати — барча маҳсулотлар, энг янгиси биринчи. Саҳифалар
+  /// (500 та + «Яна юклаш») — экранда, `AdminPagedList` орқали.
   ///
-  /// [market] берилса фақат ўша бозорникилари (2026-10-07): аввал админ
-  /// «Улгуржи бозор» бўлимида Хитой бозори маҳсулотлари ҳам аралаш
-  /// чиқарди. Филтр клиентда — эски ёзувларда `market` майдони йўқ.
-  Stream<List<WholesaleProduct>> watchAllForAdmin({
-    int limit = 500,
-    String? market,
-  }) {
-    // Энг янгиси биринчи СЕРВЕРДА (2026-10-08): аввал `limit` тартибсиз эди —
-    // Firestore ID тартибида биринчи [limit] тасини берарди, маҳсулот кўпайса
-    // янги/кутаётганлари рўйхатга тушмай қоларди. Бир майдонли саралаш —
-    // композит индекс керак эмас. `createdAt` ни ҳар доим илова ёзади.
-    return _col
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snap) {
-      final all = snap.docs.map(WholesaleProduct.fromFirestore);
-      final list =
-          market == null ? all.toList() : filterByMarket(all, market);
-      list.sort((a, b) {
-        final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bt.compareTo(at);
-      });
-      return list;
-    });
-  }
+  /// Бозор филтри ([WholesaleProduct.belongsToMarket], 2026-10-07) —
+  /// клиентда: эски ёзувларда `market` майдони йўқ, Firestore'да «майдон
+  /// йўқ» бўйича сўраб бўлмайди. Шунинг учун саҳифалар бутун коллекция
+  /// бўйича.
+  ///
+  /// Энг янгиси биринчи СЕРВЕРДА (2026-10-08): аввал `limit` тартибсиз эди —
+  /// Firestore ID тартибида биринчи 500 тасини берарди, маҳсулот кўпайса
+  /// янги/кутаётганлари рўйхатга тушмай қоларди. Бир майдонли саралаш —
+  /// композит индекс керак эмас. `createdAt` ни ҳар доим илова ёзади.
+  Query<Map<String, dynamic>> adminListQuery() =>
+      _col.orderBy('createdAt', descending: true);
 
   /// Admin — фаоллаштириш.
   Future<void> approve(String productId, {required String adminId}) async {

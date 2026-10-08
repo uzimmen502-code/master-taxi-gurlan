@@ -2,6 +2,17 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../ads/models/ad_model.dart';
 
+/// `adminListMarketAds` жавобининг бир саҳифаси.
+class MarketAdsPage {
+  const MarketAdsPage({required this.ads, this.nextCursor});
+
+  final List<AdModel> ads;
+
+  /// Кейинги саҳифа учун — серверга ўзгармасдан қайтарилади.
+  /// `null` — бошқа саҳифа йўқ (ёки сервер ҳали саҳифаламайди).
+  final Map<String, dynamic>? nextCursor;
+}
+
 /// Admin web — Onlayn BOZOR e'lonlari (Cloud Functions).
 class AdminMarketService {
   AdminMarketService({FirebaseFunctions? functions})
@@ -101,21 +112,31 @@ class AdminMarketService {
     });
   }
 
-  Future<List<AdModel>> listAds({required String adminPhone}) async {
+  /// Бир саҳифа (сервер: энг янгиси биринчи, 500 та). [after] — олдинги
+  /// саҳифанинг [MarketAdsPage.nextCursor]и, `null` — биринчи саҳифа.
+  Future<MarketAdsPage> listAdsPage({
+    required String adminPhone,
+    Map<String, dynamic>? after,
+  }) async {
     try {
       final result =
           await _functions.httpsCallable('adminListMarketAds').call({
         'adminPhone': adminPhone,
+        if (after != null) 'after': after,
       });
       final raw = result.data;
       final list = (raw is Map ? raw['ads'] : null) as List<dynamic>? ?? [];
-      return list
-          .map((e) {
-            final map = Map<String, dynamic>.from(e as Map);
-            return AdModel.fromMap(map['id'] as String? ?? '', map);
-          })
-          .where((a) => a.id.isNotEmpty)
-          .toList(growable: false);
+      final next = raw is Map ? raw['nextCursor'] : null;
+      return MarketAdsPage(
+        ads: list
+            .map((e) {
+              final map = Map<String, dynamic>.from(e as Map);
+              return AdModel.fromMap(map['id'] as String? ?? '', map);
+            })
+            .where((a) => a.id.isNotEmpty)
+            .toList(growable: false),
+        nextCursor: next is Map ? Map<String, dynamic>.from(next) : null,
+      );
     } on FirebaseFunctionsException catch (e) {
       throw StateError(e.message ?? e.code);
     }

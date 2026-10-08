@@ -1,5 +1,8 @@
+# DIQQAT: android/ios splash resurslari QO'LDA sozlangan (Android 12 da bo'sh ikonka,
+# ranglar android/app/src/main/res/values/colors.xml -> splash_bg). `flutter_native_splash:create`
+# ni qayta ishga tushirmang — u qo'lda sozlamalarni bosib ketadi (2026-10-08 tekshirildi).
 flutter_native_splash:
-  color: "#000000"
+  color: "#FFA500"
   image: assets/images/splash_logo.png
   android_gravity: center
   fullscreen: true
@@ -9,5 +12,5 @@ flutter_native_splash:
   ios_content_mode: center
 
   android_12:
-    color: "#000000"
-    icon_background_color: "#000000"
+    color: "#FFA500"
+    icon_background_color: "#FFA500"

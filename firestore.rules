@@ -2464,8 +2464,14 @@ service cloud.firestore {
               || (
                 (request.resource.data.status == 'inactive'
                     && resource.data.status in ['active', 'pending'])
+                // Админ рад этган/яширган эълонни (`adminRejected`,
+                // `adminUpdateMarketAd[Status]` CF) эга қайта
+                // жойлаштира олмайди — аввал «Қайта жойлаштириш» +
+                // авто-тасдиқ рад этилган эълонни дарҳол яна очарди.
+                // Муддати ўзи тугагани (`autoExpiredAt`) — мумкин.
                 || (request.resource.data.status == 'pending'
-                    && resource.data.status in ['inactive', 'active'])
+                    && resource.data.status in ['inactive', 'active']
+                    && resource.data.get('adminRejected', false) != true)
               ));
     }
 

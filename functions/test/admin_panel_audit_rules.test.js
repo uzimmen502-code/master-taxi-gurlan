@@ -288,6 +288,27 @@ async function main() {
   await check('settings/app: hamma o\'qiydi (ilova)',
       () => assertSucceeds(settings(unauth(), 'app').get()));
 
+  // ── ads (Onlayn bozor): admin rad etgani egasi qayta ocholmaydi ─────
+  const marketAd = (extra) => ({
+    type: 'cheap_product', ownerId: OWNER, phone: OWNER, price: 50000,
+    title: 'Velosiped', description: 'Yaxshi holatda', imageUrls: ['https://x/1.jpg'],
+    status: 'inactive', ...extra,
+  });
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection('ads').doc('mk1').set(marketAd({adminRejected: true}));
+    await ctx.firestore().collection('ads').doc('mk2').set(marketAd({autoExpiredAt: new Date()}));
+    await ctx.firestore().collection('ads').doc('mk3').set(marketAd({status: 'active'}));
+  });
+  const ad = (db, id) => db.collection('ads').doc(id);
+  await check('bozor: admin rad etgan e\'lonni egasi qayta joylashtira olmaydi',
+      () => assertFails(ad(as(OWNER), 'mk1').update({status: 'pending', updatedAt: new Date()})));
+  await check('bozor: egasi adminRejected belgisini o\'chira olmaydi',
+      () => assertFails(ad(as(OWNER), 'mk1').update({adminRejected: false})));
+  await check('bozor: muddati o\'tgan (admin rad etmagan) e\'lonni egasi qayta joylaydi',
+      () => assertSucceeds(ad(as(OWNER), 'mk2').update({status: 'pending', updatedAt: new Date()})));
+  await check('bozor: egasi faol e\'lonni yashiradi (regressiya yo\'q)',
+      () => assertSucceeds(ad(as(OWNER), 'mk3').update({status: 'inactive', updatedAt: new Date()})));
+
   // ── admin_credentials / admin_audit (faqat Admin SDK) ───────────────
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await ctx.firestore().collection('admin_credentials').doc(ADMIN).set({pin: {hash: 'x'}});

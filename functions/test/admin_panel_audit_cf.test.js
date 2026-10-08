@@ -446,6 +446,47 @@ async function main() {
     assert.strictEqual(m.docs[0].data().fromAdmin, true);
   });
 
+  // ── O. Moderatsiya: bozor rad etishi va ish e'loni egasi tahriri ────
+  await reset();
+  await db.collection('ads').doc('mk1').set({ type: 'cheap_product', ownerId: OTHER, status: 'active', title: 'Velosiped' });
+  await check('O1 admin bozor e\'lonini «Nofaol» qilsa — adminRejected: true; «Faol» — false', async () => {
+    await fns.adminUpdateMarketAdStatus.run({ adId: 'mk1', status: 'inactive' }, ctxOf(ADMIN));
+    assert.strictEqual((await db.collection('ads').doc('mk1').get()).data().adminRejected, true);
+    await fns.adminUpdateMarketAdStatus.run({ adId: 'mk1', status: 'active' }, ctxOf(ADMIN));
+    assert.strictEqual((await db.collection('ads').doc('mk1').get()).data().adminRejected, false);
+  });
+  const runAdUpdate = async (id, patch) => {
+    const ref = db.collection('ads').doc(id);
+    const before = await ref.get();
+    await ref.update(patch);
+    const after = await ref.get();
+    await fns.onAdUpdate.run({ before, after }, { params: { adId: id } });
+    return (await ref.get()).data();
+  };
+  await db.collection('settings').doc('app').set({ jobsAutoApprove: false });
+  await db.collection('ads').doc('j1').set({
+    type: 'work', status: 'active', text: 'Ishchi kerak', authorPhone: OTHER,
+    moderatedAt: admin.firestore.Timestamp.fromMillis(1000),
+  });
+  await check('O2 QO\'LDA rejim: egasi tasdiqlangan ish e\'loni matnini o\'zgartirsa — qayta pending', async () => {
+    const d = await runAdUpdate('j1', { text: 'Boshqa narsa sotaman', editedAt: new Date() });
+    assert.strictEqual(d.status, 'pending');
+    assert.strictEqual(d.moderationReason, 'owner_edit');
+  });
+  await db.collection('ads').doc('j2').set({
+    type: 'work', status: 'active', text: 'Ishchi kerak', authorPhone: OTHER,
+    moderatedAt: admin.firestore.Timestamp.fromMillis(1000),
+  });
+  await check('O3 admin tahriri (moderatedAt o\'zgaradi) — active qoladi', async () => {
+    const d = await runAdUpdate('j2', { text: 'Admin tuzatdi', moderatedAt: admin.firestore.Timestamp.fromMillis(2000) });
+    assert.strictEqual(d.status, 'active');
+  });
+  await check('O4 AVTO rejim: egasi tahriri — active qoladi', async () => {
+    await db.collection('settings').doc('app').set({ jobsAutoApprove: true });
+    const d = await runAdUpdate('j2', { text: 'Egasi tuzatdi', editedAt: new Date() });
+    assert.strictEqual(d.status, 'active');
+  });
+
   // ── N. Gilam / sut — admin o'tishlari (custody) ─────────────────────
   await reset();
   await Promise.all(['carpet_wash_orders', 'agro_pickup_orders'].map(wipe));

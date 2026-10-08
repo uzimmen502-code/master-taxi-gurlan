@@ -1162,6 +1162,23 @@ exports.onOrderCreate = functions.firestore
     return null;
   });
 
+/**
+ * Вақт белгиси майдони ўзгардими (Firestore `Timestamp`, `Date`, сон ёки
+ * йўқ). `String(Timestamp)` доим "[object Object]" беради — шунинг учун
+ * аввалги `String(a) !== String(b)` солиштирувлари иккала томонда
+ * қиймат бўлганда ҲЕЧ ҚАЧОН ўзгариш кўрмасди.
+ */
+function tsChanged(a, b) {
+  const ms = (v) => {
+    if (v == null || v === '') return null;
+    if (typeof v.toMillis === 'function') return v.toMillis();
+    if (v instanceof Date) return v.getTime();
+    const n = Number(v);
+    return Number.isFinite(n) ? n : String(v);
+  };
+  return ms(a) !== ms(b);
+}
+
 // Эълон модерацияси — статус ўзгарса муаллифга хабар
 // Jobs: authorPhone; Onlayn BOZOR (cheap_product): ownerId
 exports.onAdUpdate = functions.firestore
@@ -1169,6 +1186,30 @@ exports.onAdUpdate = functions.firestore
   .onUpdate(async (change) => {
     const before = change.before.data() || {};
     const after = change.after.data() || {};
+
+    // ИШ ЭЪЛОН: эгаси ТАСДИҚЛАНГАН эълон матнини ўзгартирса
+    // (`JobsRepository.updateAdByOwner` — rules `adOwnerPatchOk`) ва
+    // авто-тасдиқ ўчиқ бўлса — эълон қайта модерацияга (`pending`). Аввал у
+    // `active` қолиб, кўрилмаган янги матн дарҳол лентага чиқарди. Эга
+    // таҳрири `moderatedAt`ни ўзгартирмайди; админ таҳрири (CF/rules)
+    // доим ўзгартиради — шу билан ажратилади. Кўчмас мулк бунини аллақачон
+    // қилади (`realty.js`).
+    if (String(after.type || '') !== 'cheap_product'
+        && before.status === 'active' && after.status === 'active') {
+      const contentKeys = ['text', 'title', 'priceText', 'isUrgent', 'type'];
+      const contentChanged = contentKeys.some(
+          (k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null));
+      const moderatedChanged = tsChanged(before.moderatedAt, after.moderatedAt);
+      if (contentChanged && !moderatedChanged && !(await isJobsAutoApproveEnabled())) {
+        await change.after.ref.update({
+          status: 'pending',
+          moderationReason: 'owner_edit',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return null;
+      }
+    }
+
     if (before.status === after.status) return;
 
     const isMarket = String(after.type || '') === 'cheap_product';
@@ -1245,16 +1286,17 @@ exports.onAdUpdate = functions.firestore
         break;
       case 'inactive': {
         if (!isMarket) return;
-        const moderatedChanged =
-          String(before.moderatedAt || '') !== String(after.moderatedAt || '');
+        // `tsChanged` — аввал `String(Timestamp)` солиштирилар эди ва
+        // иккала томонда вақт бўлганда (масалан, тасдиқланган эълонни
+        // админ яширганда) ўзгариш кўрилмай, хабар кетмасди.
+        const moderatedChanged = tsChanged(before.moderatedAt, after.moderatedAt);
         // Муддати ўзи тугаганми — `expirePendingTrips` шу майдонни ёзади.
         //
         // Бу текширув БИРИНЧИ туриши шарт: автомат тугашда `moderatedAt`
         // ўзгармайди, шунинг учун у қуйидаги «эга ўзи яширди» тармоғига
         // тушиб, жимгина қайтиб кетарди — сотувчи 60 кундан кейин эълони
         // лентадан тушганини УМУМАН билмасди (аудит, 2026-09-27).
-        const autoExpired =
-          String(before.autoExpiredAt || '') !== String(after.autoExpiredAt || '');
+        const autoExpired = tsChanged(before.autoExpiredAt, after.autoExpiredAt);
         // Owner hide — jim; admin reject/hide ва автомат тугаш — хабар.
         if (autoExpired) {
           title = '⏳ Бозор эълонингиз муддати тугади';
@@ -7690,6 +7732,10 @@ exports.adminUpdateMarketAdStatus = functions.https.onCall(async (data, context)
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
     moderatedBy: adminDocId,
+    // Админ рад этди/яширди — эга «Қайта жойлаштириш» билан уни яна
+    // `pending`га қайтара олмайди (rules `cheapProductOwnerUpdateOk`).
+    // Аввал авто-тасдиқ ёқиқ бўлса рад этилган эълон дарҳол яна очиларди.
+    adminRejected: status === 'inactive',
   };
   if (status === 'active') {
     patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -7743,6 +7789,9 @@ exports.adminUpdateMarketAd = functions.https.onCall(async (data, context) => {
   const status = String(data.status || '').trim();
   if (status && ADMIN_MARKET_AD_STATUSES.has(status)) {
     patch.status = status;
+    // `adminUpdateMarketAdStatus` билан бир хил: админ «Нофаол» —
+    // эга қайта жойлаштира олмайди; «Фаол» — белги ечилади.
+    patch.adminRejected = status === 'inactive';
     if (status === 'active') {
       patch.publishedAt = admin.firestore.FieldValue.serverTimestamp();
       patch.expiresAt = admin.firestore.Timestamp.fromDate(

@@ -17,8 +17,11 @@ class DatingModerationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Аввал фақат `pending` кўринарди: блокланган/рад этилган профилни
+    // админ топа олмасди — блокдан чиқариш ёки тасдиқни қайтариб олиш
+    // мумкин эмас эди (CF ҳар қандай ҳолатдан рухсат беради; аудит O-14).
     return DefaultTabController(
-      length: 2,
+      length: 5,
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F4F8),
         appBar: AppBar(
@@ -26,12 +29,16 @@ class DatingModerationScreen extends StatelessWidget {
           backgroundColor: const Color(0xFFE5446D),
           foregroundColor: Colors.white,
           bottom: const TabBar(
+            isScrollable: true,
             indicatorColor: Colors.white,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
               Tab(text: 'Текширувда'),
               Tab(text: 'Шикоятлар'),
+              Tab(text: 'Блокланган'),
+              Tab(text: 'Рад этилган'),
+              Tab(text: 'Тасдиқланган'),
             ],
           ),
         ),
@@ -41,8 +48,11 @@ class DatingModerationScreen extends StatelessWidget {
             Expanded(
               child: TabBarView(
                 children: [
-                  _PendingProfilesTab(),
+                  _ProfilesByStatusTab('pending', 'Текширувда профил йўқ.'),
                   _ReportsTab(),
+                  _ProfilesByStatusTab('blocked', 'Блокланган профил йўқ.'),
+                  _ProfilesByStatusTab('rejected', 'Рад этилган профил йўқ.'),
+                  _ProfilesByStatusTab('approved', 'Тасдиқланган профил йўқ.'),
                 ],
               ),
             ),
@@ -176,21 +186,34 @@ class _DatingAutoApproveBarState extends State<_DatingAutoApproveBar> {
   }
 }
 
-class _PendingProfilesTab extends StatelessWidget {
-  const _PendingProfilesTab();
+class _ProfilesByStatusTab extends StatefulWidget {
+  const _ProfilesByStatusTab(this.status, this.emptyText);
+
+  final String status;
+  final String emptyText;
+
+  @override
+  State<_ProfilesByStatusTab> createState() => _ProfilesByStatusTabState();
+}
+
+class _ProfilesByStatusTabState extends State<_ProfilesByStatusTab> {
+  late final Stream<List<DatingProfile>> _stream =
+      DatingRepository().watchByStatus(widget.status);
 
   @override
   Widget build(BuildContext context) {
-    final repo = DatingRepository();
     return StreamBuilder<List<DatingProfile>>(
-      stream: repo.watchByStatus('pending'),
+      stream: _stream,
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(child: Text('Хатолик: ${snap.error}'));
+        }
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         final list = snap.data ?? const <DatingProfile>[];
         if (list.isEmpty) {
-          return const Center(child: Text('Текширувда профил йўқ.'));
+          return Center(child: Text(widget.emptyText));
         }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -305,34 +328,51 @@ class _ProfileModerationCardState extends State<_ProfileModerationCard> {
               const SizedBox(height: 8),
               Text(p.about),
             ],
+            if (p.status != 'pending' && p.rejectionReason.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Сабаб: ${p.rejectionReason}',
+                  style: TextStyle(color: Colors.red.shade700)),
+            ],
             const SizedBox(height: 12),
             if (_busy)
               const Center(child: CircularProgressIndicator())
             else
+              // Ҳозирги ҳолатга ўтиш тугмаси кўрсатилмайди.
               Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _moderate('approve'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: AvaLight.ok,
-                          foregroundColor: Colors.white),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Тасдиқлаш'),
+                  if (p.status != 'approved')
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _moderate('approve'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AvaLight.ok,
+                            foregroundColor: Colors.white),
+                        icon: const Icon(Icons.check),
+                        label: Text(p.status == 'blocked'
+                            ? 'Блокдан чиқариш'
+                            : 'Тасдиқлаш'),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  if (p.status != 'rejected') ...[
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: () => _moderate('reject'),
+                      child: Text(p.status == 'approved'
+                          ? 'Тасдиқни қайтариш'
+                          : 'Рад'),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () => _moderate('reject'),
-                    child: const Text('Рад'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () => _moderate('block'),
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red),
-                    child: const Text('Блок'),
-                  ),
+                  ],
+                  if (p.status != 'blocked') ...[
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: () => _moderate('block'),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red),
+                      child: const Text('Блок'),
+                    ),
+                  ],
                 ],
               ),
           ],

@@ -274,6 +274,9 @@ async function main() {
     assert.strictEqual(priv.lat, 41.5);
     assert.strictEqual(priv.lng, 60.6);
     assertJittered(pub.areaLat, pub.areaLng, 41.5, 60.6);
+    // Эга қарори 2026-10-08: кўча/уй — ПУЛЛИК, фақат ёпиқ ҳужжатда.
+    assert.ok(!('addressText' in pub), 'манзил очиқ ҳужжатда бўлмаслиги керак');
+    assert.strictEqual(priv.addressText, 'Гурлан, Навоий 12');
     console.log('✓ 1) Янги эълон: танлов ёзувда, рақам созламадан');
   }
 
@@ -589,6 +592,57 @@ async function main() {
       'нуқта кўчса очиқ ҳужжатдаги тахминий нуқта ҳам кўчади',
     );
     console.log('✓ 7) Таҳрирлаш: валидация, майдон ўчириш, силкитиш сақланади');
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // 8) Манзил пакетдан кейин (эга қарори 2026-10-08) + рақамли нарх:
+  //    эски очиқ манзил таҳрирда ёпиққа кўчади; бўш манзил — эскиси
+  //    сақланади (эски илова); нарх — бутун сўм, нотўғриси рад
+  // ─────────────────────────────────────────────────────────────────
+  {
+    const db = makeDb();
+    const h = {};
+    db._store.set(`users/${OWNER}`, { phone: OWNER, realtyOwnerKey: 'KEY' });
+    // Эски ёзув: манзил ОЧИҚ ҳужжатда қолган.
+    seedListing(db, 'A1', { addressText: 'Гурлан, Эски кўча 5' });
+    attachRealty(h, {
+      functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp,
+      assertAdmin, notifyUserInApp, settlementLedger,
+    });
+    const base = {
+      listingId: 'A1', deal: 'rent', title: 'Икки хонали',
+      text: 'Таъмирланган', lat: 41.5, lng: 60.6, contactMode: 'owner',
+    };
+
+    // Эски илова манзилни юбормади → эскиси ёпиқ ҳужжатга кўчади.
+    await h.updateRealtyListing({ ...base, addressText: '' }, ctx(OWNER));
+    let pub = db._store.get('realty_listings/A1');
+    let priv = db._store.get('realty_listings/A1/private/detail');
+    assert.ok(!('addressText' in pub), 'эски очиқ манзил тозаланади');
+    assert.strictEqual(priv.addressText, 'Гурлан, Эски кўча 5');
+
+    // Янги манзил + рақамли нарх.
+    await h.updateRealtyListing(
+      { ...base, addressText: 'Гурлан, Янги кўча 7', priceAmount: 3000000 },
+      ctx(OWNER),
+    );
+    pub = db._store.get('realty_listings/A1');
+    priv = db._store.get('realty_listings/A1/private/detail');
+    assert.strictEqual(priv.addressText, 'Гурлан, Янги кўча 7');
+    assert.strictEqual(pub.priceAmount, 3000000);
+
+    // Бўш қолдирилган нарх ўчирилади; каср ва манфий — рад (8-қоида).
+    await h.updateRealtyListing({ ...base, addressText: 'Гурлан, Янги кўча 7' }, ctx(OWNER));
+    assert.ok(!('priceAmount' in db._store.get('realty_listings/A1')));
+    await expectError(
+      h.updateRealtyListing({ ...base, priceAmount: 2500.5 }, ctx(OWNER)),
+      'invalid-argument', 'price_invalid',
+    );
+    await expectError(
+      h.updateRealtyListing({ ...base, priceAmount: -1 }, ctx(OWNER)),
+      'invalid-argument', 'price_invalid',
+    );
+    console.log('✓ 8) Манзил ёпиқ ҳужжатда, эскиси кўчади; рақамли нарх бутун сўм');
   }
 
   console.log('\nҲаммаси ўтди: realty_expiry.test.js');

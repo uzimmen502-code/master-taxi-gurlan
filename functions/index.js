@@ -66,6 +66,11 @@ attachRealty(exports, {
   functions, db, admin, callerPhone, canonicalUid, ownerGeoStamp, assertAdmin,
   notifyUserInApp, settlementLedger,
 });
+// «Шундай уй чиқса, хабар бер» (эга қарори 2026-10-08) — `realty_alerts.js`.
+const { attachRealtyAlerts } = require('./realty_alerts');
+attachRealtyAlerts(exports, {
+  functions, db, admin, callerPhone, canonicalUid,
+});
 
 const DEVICE_BINDING_MAX_FAILED = 5;
 /** Soft cooldown (Faza 1) — 24 soat hard block o‘rniga. */

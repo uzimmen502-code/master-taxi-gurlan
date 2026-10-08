@@ -3576,6 +3576,36 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // ИЖАРА / СОТУВ ХАБАРНОМАСИ — «шундай уй чиқса, хабар бер» (эга
+    // қарори 2026-10-08, `functions/realty_alerts.js`). Ёзиш ФАҚАТ CF:
+    // текширув, лимит ва муддат серверда (18-қоида). Эгаси ўзиникини
+    // ўқийди (`where('ownerId', ==, телефон)`).
+    // Тест: functions/test/realty_alerts_rules.test.js
+    match /realty_alerts/{alertId} {
+      allow read: if isOwner(resource.data.ownerId) || isAdmin();
+      allow write: if false;
+    }
+    // Idempotency ёзуви (`{alertId}_{listingId}`) — клиентга керак эмас.
+    match /realty_alert_hits/{hitId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // Ижарачининг «мос эълонлар» рўйхати. Фақат очиқ маълумот (рақам,
+    // манзил, аниқ нуқта ЙЎҚ). Эгаси фақат `seen` белгисини ўзгартиради
+    // ва ўчира олади; яратиш — фақат CF.
+    match /users/{userId}/realty_matches/{listingId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['seen']);
+      allow delete: if isOwner(userId);
+      allow create: if false;
+    }
+    // Кунлик push саноғи — фақат сервер (транзакция).
+    match /users/{userId}/realty_alert_meta/{docId} {
+      allow read, write: if false;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // ТАЛАБ → ТАКЛИФ ЯДРОСИ (13.3.1, 13.3.2)
     // Ҳужжат: docs/talab_taklif_yadrosi_uz.md

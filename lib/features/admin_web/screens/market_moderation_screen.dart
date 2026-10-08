@@ -251,7 +251,7 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Аҳоли бозор — nazorati',
+                  'Аҳоли бозори — nazorati',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 3),

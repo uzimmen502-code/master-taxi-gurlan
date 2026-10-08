@@ -898,7 +898,15 @@ PIN'сиз ўтади.
    build билан хеш бўйича БИР ХИЛ, `/downloads/` 3 APK жойида. Кейинги
    hosting деплойлари `5b2bfcd` устига қурилсин.
 2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
-3. default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
+   (D-15.5 — 2026-10-08 15:15: `functions:demand` 6 функцияси ва hosting
+   `9bda798` жонли; курьер иловадан ҳам ариза бера олади — тугма APK кутади.)
+3. ✅ **2026-10-08 ~15:40 (эга рухсати)** — HEAD `0c0dc3b` (`e399c66` ни ўз
+   ичига олади), 16 функция НОМИ БИЛАН, us-central1, ҳаммаси «Successful
+   update». `adminCreateCollectionTask` АТАЙЛАБ киритилмади: у
+   `1ee9355`даги `assertAdmin` ўзгаришини олиб чиқарди (админ аудити —
+   алоҳида deploy). Олдин emulator: courier_auth 12/12, courier_callables_cf
+   8/8, courier_orders_cf 14/14, wallet_order_credit_cf 17/17. Рўйхат —
+   default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
    `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`
    `courierRecoverOrphanRoute` `courierCreateRoute` `courierMarkCollectionArrived`
    `courierFinalizeCollection` ва 8 та гилам/сут курьер функцияси.

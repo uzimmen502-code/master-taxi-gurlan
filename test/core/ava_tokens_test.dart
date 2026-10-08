@@ -173,6 +173,27 @@ void main() {
     });
   });
 
+  group('Бўлим қаторлари матни (feedRow)', () {
+    // Эга сўрови 2026-10-08: ҳарфлар ораси кенгроқ.
+    test('ҳарфлар ораси кенгайтирилган (0 эмас)', () {
+      expect(AvaText.feedRow.letterSpacing, AvaText.feedRowLetterSpacing);
+      expect(AvaText.feedRow.letterSpacing, greaterThan(0));
+    });
+
+    // Чегара: «сочилиб» кетмаслиги учун шрифтнинг 5% идан ошмасин.
+    test('ҳарф ораси шрифтнинг 5% идан ошмайди', () {
+      expect(AvaText.feedRow.letterSpacing!,
+          lessThanOrEqualTo(AvaText.feedRow.fontSize! * 0.05));
+    });
+
+    // Олдинги эга қарори (2026-09-26) бузилмаганини қўриқлайди.
+    test('шрифт 12, қатор баландлиги аниқ 14 px — ўзгармаган', () {
+      expect(AvaText.feedRow.fontSize, 12);
+      expect(AvaText.feedRow.fontSize! * AvaText.feedRow.height!,
+          closeTo(14, 1e-9));
+    });
+  });
+
   group('Шрифт файллари', () {
     // pubspec.yaml да эълон қилинган ҳар бир вазн ҳақиқатан жойида
     // турганини текширади — файл тасодифан ўчса, тест йиқилади.

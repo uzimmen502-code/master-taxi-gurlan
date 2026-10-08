@@ -88,6 +88,19 @@ class AdminMarketService {
     });
   }
 
+  /// Bozor shikoyatini (`reports`, `type: market_ad`) hal qilish.
+  /// `adminResolveDatingReport` CF aslida umumiy — istalgan `reports`
+  /// hujjatini `resolved` qiladi (assertAdmin); yangi CF deploy shart emas.
+  Future<void> resolveComplaint({
+    required String adminPhone,
+    required String reportId,
+  }) async {
+    await _call('adminResolveDatingReport', {
+      'adminPhone': adminPhone,
+      'reportId': reportId,
+    });
+  }
+
   Future<List<AdModel>> listAds({required String adminPhone}) async {
     try {
       final result =

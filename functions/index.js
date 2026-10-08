@@ -7934,8 +7934,13 @@ function serializeMarketAdForAdmin(doc) {
 /** Admin web: Onlayn BOZOR ro'yxati (Firestore rules custom token bilan emas). */
 exports.adminListMarketAds = functions.https.onCall(async (data, context) => {
   await assertAdmin(String(data.adminPhone || ''), context);
+  // Энг янгиси биринчи СЕРВЕРДА (2026-10-08): аввал `limit(500)` тартибсиз
+  // эди — 500 дан ортиқ эълонда ID тартибида биринчи 500 таси келиб, янги
+  // кутаётган эълон рўйхатга тушмай қолиши мумкин эди (нишон эса санарди).
+  // Индекс: ads (type ASC, createdAt DESC). `createdAt` ни сервер ёзади.
   const snap = await db.collection('ads')
     .where('type', '==', 'cheap_product')
+    .orderBy('createdAt', 'desc')
     .limit(500)
     .get();
   const ads = snap.docs.map(serializeMarketAdForAdmin);

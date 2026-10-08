@@ -1091,24 +1091,95 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Marshrut `trips` — status va haydovchi maydonlari (whitelist).
+    // Marshrut `trips` — kim qaysi o'tishni qila oladi (admin audit O-2,
+    // 2026-10-08). Avval faqat maydon whitelist'i bor edi, auth/egalik YO'Q:
+    // har kim (hatto kirmagan) istalgan marshrut safarining `status`,
+    // `fare`, `cashPaid`, `acceptedDriverId`ini o'zgartira olardi.
+    // Yozuvchilar — `lib/repositories/rides_repository.dart`; admin
+    // («Dispatch history») — `isAdmin()` shoxchasi; CF — Admin SDK.
+    // Test: functions/test/marshrut_trips_rules.test.js
+    //
+    // Yo'lovchi (`userPhone`): muddati o'tgan pending → expired;
+    // pending/accepted → cancelled (o'zi, reroute'siz).
+    function marshrutPaxUpdate(uid, d, prev, k) {
+      return phoneDocIdsMatch(uid, phoneDigits(prev.get('userPhone', '')))
+          && (
+            (prev.status == 'pending' && d.status == 'expired'
+                && k.hasOnly(['status', 'expiredAt']))
+            || (prev.status in ['pending', 'accepted'] && d.status == 'cancelled'
+                && d.get('cancelledBy', '') in ['user', 'passenger']
+                && d.get('notifyPassengerReroute', false) == false
+                && k.hasOnly(['status', 'cancelledBy', 'cancelledAt',
+                              'cancelReason', 'notifyPassengerReroute']))
+          );
+    }
+
+    // Haydovchi — o'ziga yo'naltirilgan (`targetDriverId`) pending taklif:
+    // qabul (faqat o'zini `acceptedDriverId`), rad, joy yo'q, muddati o'tdi.
+    function marshrutDriverOfferUpdate(uid, d, prev, k) {
+      return phoneDocIdsMatch(uid, prev.get('targetDriverId', ''))
+          && prev.status == 'pending'
+          && (
+            (d.status == 'accepted'
+                && phoneDocIdsMatch(uid, d.get('acceptedDriverId', ''))
+                && k.hasOnly(['status', 'acceptedDriverId', 'acceptedDriverName',
+                              'acceptedDriverPhone', 'acceptedDriverCar',
+                              'acceptedDriverPlate', 'acceptedAt']))
+            || (d.status == 'rejected'
+                && phoneDocIdsMatch(uid, d.get('rejectedBy', ''))
+                && k.hasOnly(['status', 'rejectedBy', 'rejectedAt']))
+            || (d.status == 'no_seats' && k.hasOnly(['status']))
+            || (d.status == 'expired' && k.hasOnly(['status', 'expiredAt']))
+          );
+    }
+
+    // Haydovchi — o'zi qabul qilgan (`acceptedDriverId`) safar: bekor yoki
+    // yakunlash (+ `cashPaid`). `fare` o'zgarmaydi (faqat eski, fare'siz
+    // safarda 0 yoziladi — `_completeMarshrutRide`).
+    function marshrutDriverAcceptedUpdate(uid, d, prev, k) {
+      return phoneDocIdsMatch(uid, prev.get('acceptedDriverId', ''))
+          && prev.status == 'accepted'
+          && (
+            (d.status == 'cancelled' && d.get('cancelledBy', '') == 'driver'
+                && phoneDocIdsMatch(uid, d.get('cancelledByPhone', uid))
+                && k.hasOnly(['status', 'cancelledBy', 'cancelledByPhone',
+                              'cancelReason', 'notifyPassengerReroute',
+                              'cancelledAt']))
+            || (d.status == 'completed'
+                && phoneDocIdsMatch(uid, d.get('completedBy', ''))
+                && d.get('cashPaid', 0) is int
+                && d.get('cashPaid', 0) >= 0
+                && k.hasOnly(['status', 'completedBy', 'completedAt',
+                              'cashPaid', 'fare'])
+                && (!k.hasAny(['fare'])
+                    || (prev.get('fare', null) == null && d.fare == 0)))
+          );
+    }
+
     function marshrutTripLifecycleUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return resource.data.taxiType == 'marshrut'
-          && changed.hasOnly([
-            'status', 'expiredAt', 'rejectedAt', 'rejectedBy',
-            'cancelledAt', 'cancelledBy', 'cancelledByPhone', 'cancelReason',
-            'notifyPassengerReroute',
-            'completedAt', 'completedBy', 'completedByPhone',
-            'acceptedDriverId', 'acceptedDriverName', 'acceptedDriverPhone',
-            'acceptedDriverCar', 'acceptedDriverPlate', 'acceptedAt',
-            'driverLat', 'driverLng', 'targetDriverId', 'targetedAt',
-            'fare', 'cashPaid', 'updatedAt'
-          ])
-          && request.resource.data.status in [
-            'pending', 'accepted', 'rejected', 'no_seats',
-            'cancelled', 'completed', 'expired', 'searching'
-          ];
+      let uid = userDocIdFromPhoneToken();
+      let d = request.resource.data;
+      let prev = resource.data;
+      let k = d.diff(prev).affectedKeys();
+      return uid != ''
+          && prev.get('taxiType', '') == 'marshrut'
+          && (marshrutPaxUpdate(uid, d, prev, k)
+              || marshrutDriverOfferUpdate(uid, d, prev, k)
+              || marshrutDriverAcceptedUpdate(uid, d, prev, k));
+    }
+
+    // Marshrut haydovchisi o'ziga yo'naltirilgan / qabul qilgan safarlarni
+    // ro'yxat so'rovi bilan o'qiydi (`watchPendingForDriver`,
+    // `watchAcceptedForDriver` — `targetDriverId` / `acceptedDriverId`
+    // bo'yicha). Avval faqat `driverPhone` tekshirilardi — rules filtr
+    // emas, shuning uchun bu so'rovlar RAD etilardi (emulator, 2026-10-08).
+    function tripMarshrutDriverRead() {
+      let uid = userDocIdFromPhoneToken();
+      return uid != ''
+          && (resource.data.get('targetDriverId', '') == uid
+              || resource.data.get('acceptedDriverId', '') == uid
+              || phoneDocIdsMatch(uid, resource.data.get('targetDriverId', ''))
+              || phoneDocIdsMatch(uid, resource.data.get('acceptedDriverId', '')));
     }
 
     function localTripPassengerPatchFields() {
@@ -1262,6 +1333,7 @@ service cloud.firestore {
       allow read: if isStaff()
           || tripParticipantRead()
           || tripDriverRead()
+          || tripMarshrutDriverRead()
           || tripLocalOfferRead();
 
       // Яратиш. Yangi ilova mahalliy taksini CF `createLocalTaxiTrip` orqali
@@ -1285,6 +1357,13 @@ service cloud.firestore {
             && request.resource.data.taxiType == 'marshrut'
             && request.resource.data.status in ['pending', 'searching']
             && request.resource.data.userPhone.matches('^[0-9]{9,15}$')
+            // Faqat O'Z nomidan (avval begona `userPhone` bilan ham
+            // yaratish mumkin edi; ilova buyurtmani faqat telefon
+            // sessiyasidan keyin beradi — marshrut_waiting_controller).
+            && userDocIdFromPhoneToken() != ''
+            && phoneDocIdsMatch(
+                 userDocIdFromPhoneToken(),
+                 phoneDigits(request.resource.data.userPhone))
           )
       );
 

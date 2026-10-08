@@ -108,15 +108,35 @@ function attachEvCharging(exportsObj, deps) {
     if (!stationId || !reportId) {
       throw new functions.https.HttpsError('invalid-argument', 'stationId/reportId required');
     }
-    await db
-      .collection('ev_charging_stations').doc(stationId)
-      .collection('reports').doc(reportId)
-      .update({
+    // `reportCount` — очиқ шикоятлар сони: admin навбати ва sidebar badge
+    // (`reportCount > 0`) ҳамда trip planner жаримаси шунга таянади. Аввал
+    // ҳал қилинганда камаймасди — навбат ҳеч қачон тозаланмасди.
+    // Транзакция: бир шикоятни икки марта ҳал қилиш санашни икки марта
+    // камайтирмайди; 0 дан пастга тушмайди.
+    const stationRef = db.collection('ev_charging_stations').doc(stationId);
+    const reportRef = stationRef.collection('reports').doc(reportId);
+    const out = await db.runTransaction(async (tx) => {
+      const [reportSnap, stationSnap] = await Promise.all([
+        tx.get(reportRef), tx.get(stationRef),
+      ]);
+      if (!reportSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Report not found');
+      }
+      if ((reportSnap.data() || {}).resolved === true) {
+        return { alreadyResolved: true };
+      }
+      tx.update(reportRef, {
         resolved: true,
         resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
         resolvedBy: adminDocId,
       });
-    return { ok: true, stationId, reportId };
+      if (stationSnap.exists) {
+        const cur = Number((stationSnap.data() || {}).reportCount) || 0;
+        tx.update(stationRef, { reportCount: Math.max(0, cur - 1) });
+      }
+      return { alreadyResolved: false };
+    });
+    return { ok: true, stationId, reportId, ...out };
   });
 
   /** Admin web: stansiya holatini o'zgartirish (`working`|...|`unknown`, 6-band). */

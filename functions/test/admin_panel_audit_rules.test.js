@@ -29,6 +29,7 @@ const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const [HOST, PORT] = EMULATOR_HOST.split(':');
 
 const ADMIN = '998901112233';
+const SUPER = '998901112255';
 const DISPATCHER = '998901112244';
 const OWNER = '998905556677';
 const STRANGER = '998904445566';
@@ -122,6 +123,11 @@ async function main() {
       const db = ctx.firestore();
       await db.collection('users').doc(ADMIN).set({role: 'admin', phone: '+' + ADMIN});
       await db.collection('users').doc(DISPATCHER).set({role: 'dispatcher', phone: '+' + DISPATCHER});
+      await db.collection('users').doc(SUPER).set({role: 'superadmin', phone: '+' + SUPER});
+      await db.collection('settings').doc('wallet_bot').set({
+        depositCardNumber: '8600000000000000', topUpApproveMode: 'manual',
+      });
+      await db.collection('settings').doc('anomaly_settings').set({maxDailyWithdraw: 1000000});
       await db.collection('users').doc(OWNER).set({role: 'user', phone: '+' + OWNER, name: 'Aziz'});
       await db.collection('users').doc(STRANGER).set({role: 'user', phone: '+' + STRANGER});
       await db.collection('settings').doc('app').set({tvAutoApprove});
@@ -257,6 +263,30 @@ async function main() {
       () => assertSucceeds(as(ADMIN).collection('tv_clips').add(clip({status: 'active'}))));
   await check('tv_clips: admin socialRetryAt qo\'yadi («Соцсетга жойлаш»)',
       () => assertSucceeds(as(ADMIN).collection('tv_clips').doc('c1').update({socialRetryAt: 1000})));
+
+  // ── settings/wallet_bot, settings/anomaly_settings ──────────────────
+  const settings = (db, id) => db.collection('settings').doc(id);
+  await check('wallet_bot: kirmagan o\'qiy olmaydi (depozit kartasi)',
+      () => assertFails(settings(unauth(), 'wallet_bot').get()));
+  await check('wallet_bot: dispatcher depozit kartasini o\'zgartira olmaydi',
+      () => assertFails(settings(as(DISPATCHER), 'wallet_bot').set(
+          {depositCardNumber: '9860111122223333'}, {merge: true})));
+  await check('wallet_bot: superadmin ham klientdan yoza olmaydi (faqat CF)',
+      () => assertFails(settings(as(SUPER), 'wallet_bot').set(
+          {topUpApproveMode: 'auto'}, {merge: true})));
+  await check('anomaly_settings: admin yoza olmaydi (panelda superadmin bo\'limi)',
+      () => assertFails(settings(as(ADMIN), 'anomaly_settings').set(
+          {maxDailyWithdraw: 99999999}, {merge: true})));
+  await check('anomaly_settings: superadmin yozadi',
+      () => assertSucceeds(settings(as(SUPER), 'anomaly_settings').set(
+          {maxDailyWithdraw: 2000000, updatedAt: new Date()}, {merge: true})));
+  await check('anomaly_settings: o\'qish ochiq (ekran o\'qiydi)',
+      () => assertSucceeds(settings(as(ADMIN), 'anomaly_settings').get()));
+  await check('settings/app: admin hamon yozadi (regressiya yo\'q)',
+      () => assertSucceeds(settings(as(ADMIN), 'app').set(
+          {jobsAutoApprove: true}, {merge: true})));
+  await check('settings/app: hamma o\'qiydi (ilova)',
+      () => assertSucceeds(settings(unauth(), 'app').get()));
 
   // ── marshrut_state ──────────────────────────────────────────────────
   const ms = (db) => db.collection('users').doc(OWNER).collection('marshrut_state').doc('active');

@@ -4,8 +4,9 @@ service cloud.firestore {
 
     // MOBIL (Flutter) + WEB (master-taxi-web) bir xil Firestore loyihasida.
     // Mobil: Phone Auth enabled — Firebase verifyPhoneNumber.
-    // `usersGuestProfilePatchOnly` va `marshrut_block` auth bilan.
-    // Web foydalanuvchi: Anonymous Auth + `users/{998...}` (telefon `phone-normalize.js`).
+    // `marshrut_block` auth bilan. `users` profilini faqat egasi/admin yozadi.
+    // (Eski web foydalanuvchi — Anonymous Auth + `users/{998...}` — 2026-06 dan
+    // beri deploy qilinmagan; uning mehmon patch yo'li olib tashlandi.)
     // Web operator (admin.html): faqat PIN sessiyasi — Firestore `role` operator uchun emas.
 
     // ══════════════════════════════════════
@@ -152,22 +153,13 @@ service cloud.firestore {
               in ['superadmin', 'finance', 'auditor'];
     }
 
-    // Phone Auth enabled — Firebase verifyPhoneNumber.
-    // Faqat quyidagi ustunlarga tegadigan profil patchlariga ruxsat.
-    function usersGuestProfilePatchOnly() {
-      // Phone Auth joriy qilingandan keyin auth talab qilinadi.
-      // FCM token, lastNewsReadAt kabi texnik maydonlar ham Auth bilan yangilanadi.
-      return isAuth()
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly([
-                'name', 'phone', 'gender', 'address', 'legacyAddress',
-                'addressUpdatedAt', 'updatedAt', 'createdAt',
-                'birthDate', 'birthDateSetAt',
-                'fcmToken', 'cancelCount', 'blockedUntil',
-                'lastNewsReadAt', 'lastOrderNewsReadAt', 'lastMessagesReadAt',
-                'homeBadgePersonal', 'lastSeenBroadcastSeq'
-              ]);
-    }
+    // `usersGuestProfilePatchOnly` ОЛИБ ТАШЛАНДИ (ҳамён аудити 2026-10-08):
+    // `isOwner`сиз эди — ҳар қандай кирган сессия (аноним ҳам) ИСТАЛГАН
+    // профилда `name/birthDate` (payout KYC), `fcmToken` (push ўғирлаш),
+    // `blockedUntil/cancelCount` (бировни блоклаш) ни ўзгартира оларди.
+    // Уни ишлатган аноним веб-клиент (`master-taxi-web`) 2026-06 дан бери
+    // деплой қилинмаган; илова профилни эгаси (`isOwner`) сифатида ёзади,
+    // блокни тозалаш — админ экранидан.
 
     // `usersWebLooseDriverPromotion` ОЛИБ ТАШЛАНДИ (ҳамён аудити 2026-10-07,
     // K-6): исталган сессия (аноним ҳам) ИСТАЛГАН `users` ҳужжатига
@@ -764,7 +756,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
 
       // create — Phone Auth'siz web/mobil uchun.
-      // update — Phone Auth (`isOwner`) yoki mehmon profil patch (`usersGuestProfilePatchOnly`).
+      // update — Phone Auth (`isOwner`) yoki admin (mehmon patch olib tashlandi).
       allow create: if isAuth()
           && request.resource.data.keys().hasAll(['phone'])
           && !request.resource.data.keys().hasAny([
@@ -792,7 +784,7 @@ service cloud.firestore {
             // (`AdminRoleService`). Тест: functions/test/admin_panel_audit_rules.test.js
             || (
               notChanged('role')
-              && (isOwner(userId) || isAdmin() || usersGuestProfilePatchOnly())
+              && (isOwner(userId) || isAdmin())
             )
           )
         );

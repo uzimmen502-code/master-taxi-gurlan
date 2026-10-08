@@ -115,6 +115,43 @@ async function main() {
         .update({ bonusBalance: 1000000 }));
   });
 
+  // ─── Бошқанинг профили (usersGuestProfilePatchOnly олиб ташланди) ───
+  await seed();
+  await check('G1 anonim sessiya begona profilda name/birthDate — RAD', async () => {
+    await assertFails(anonCtx().doc(`users/${VICTIM}`)
+        .update({ name: 'X', birthDate: '2000-01-01', updatedAt: now }));
+  });
+  await seed();
+  await check('G2 begona foydalanuvchi fcmToken\'ni o\'ziga burolmaydi — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${VICTIM}`)
+        .update({ fcmToken: 'attacker_token', updatedAt: now }));
+  });
+  await seed();
+  await check('G3 begona foydalanuvchi blockedUntil yoza olmaydi — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${VICTIM}`)
+        .update({ blockedUntil: now, cancelCount: 9 }));
+  });
+  await seed();
+  await check('G4 egasi: ilovaning haqiqiy yozuvlari (fcm _saveToken, yangiliklar) — ruxsat', async () => {
+    const own = phoneCtx(VICTIM).doc(`users/${VICTIM}`);
+    await assertSucceeds(own.set({
+      phone: VICTIM, phoneDigits: VICTIM, fcmToken: 't1', updatedAt: now,
+    }, { merge: true }));
+    await assertSucceeds(own.update({ lastNewsReadAt: now, lastSeenBroadcastSeq: 3 }));
+    await assertSucceeds(own.update({ birthDate: '1990-05-05', birthDateSetAt: now }));
+  });
+  await seed();
+  await check('G5 admin blokni tozalaydi (marshrut admin ekrani) — ruxsat', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`users/${VICTIM}`).update({ blockedUntil: now, cancelCount: 3 });
+    });
+    // rules-unit-testing compat SDK'ни ишлатади (provider_presence_rules каби).
+    const firebase = require('firebase/compat/app');
+    require('firebase/compat/firestore');
+    await assertSucceeds(phoneCtx(ADMIN).doc(`users/${VICTIM}`)
+        .update({ blockedUntil: firebase.firestore.FieldValue.delete(), cancelCount: 0 }));
+  });
+
   await testEnv.cleanup();
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;

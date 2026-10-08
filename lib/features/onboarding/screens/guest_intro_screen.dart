@@ -83,7 +83,7 @@ class _GuestIntroScreenState extends State<GuestIntroScreen> {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AvaLight.okSoft,
+              AvaLight.bg,
               AvaLight.surface2,
               AvaLight.line,
             ],

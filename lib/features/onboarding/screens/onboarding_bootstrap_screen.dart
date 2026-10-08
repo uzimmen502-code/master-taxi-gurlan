@@ -105,7 +105,7 @@ class _OnboardingBootstrapScreenState extends State<OnboardingBootstrapScreen> {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AvaLight.okSoft,
+              AvaLight.bg,
               AvaLight.surface2,
               AvaLight.line,
             ],

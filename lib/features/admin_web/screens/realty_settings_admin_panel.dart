@@ -198,7 +198,7 @@ class _RealtySettingsAdminPanelState extends State<RealtySettingsAdminPanel> {
                 Icon(Icons.apartment_outlined, color: AppColors.primaryText, size: 26),
                 SizedBox(width: 10),
                 Text(
-                  'Кўчмас мулк — нарх ва созламалар',
+                  'Кўчмас мулк кластери — нарх ва созламалар',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ]),

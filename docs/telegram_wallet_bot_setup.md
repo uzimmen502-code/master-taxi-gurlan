@@ -32,13 +32,16 @@ firebase deploy --only functions,firestore:rules,firestore:indexes,storage
 ```
 
 ### 4) Webhook (5-қадам)
-Deployдан кейин Functions URL олинг, охирига қўшинг:
-`?key=ava_wallet_2026_secret_xyz`
+Сир — тасодифий, камида 32 белги (масалан `openssl rand -hex 24`), Secret
+Manager'да `TELEGRAM_WALLET_WEBHOOK_SECRET`. Ҳужжатга ёки чатга ёзманг.
+Сир бўш бўлса webhook ишламайди (503) — 2026-10-08 дан (ҳамён аудити Y-9).
 
-Кейин браузерда:
+URL'га сир ҚЎШМАНГ (`?key=` сўров log'ига тушади). Фақат `secret_token`:
 ```
-https://api.telegram.org/botTOKEN/setWebhook?url=ТОЛИК_URL&secret_token=ava_wallet_2026_secret_xyz
+https://api.telegram.org/botTOKEN/setWebhook?url=FUNCTIONS_URL&secret_token=СИР
 ```
+Эски `?key=` ҳали қабул қилинади, лекин log'да `WEBHOOK_SECRET_IN_URL`
+огоҳлантириши чиқади — webhook'ни юқоридагидек қайта рўйхатдан ўтказинг.
 
 ### 5) Админда карта (6-қадам)
 Finance Center → Telegram ҳамён → Созлама

@@ -6,6 +6,8 @@
  */
 'use strict';
 
+const crypto = require('crypto');
+
 const TOPUP_COL = 'wallet_topup_requests';
 const WITHDRAW_COL = 'wallet_withdraw_requests';
 const LINK_COL = 'telegram_links';
@@ -21,6 +23,22 @@ const WITHDRAW_AUTO_LIMITS = [20000, 50000, 100000];
 const DEFAULT_WITHDRAW_AUTO_LIMIT = 20000;
 const LINK_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Bog'lash kodini taxmin qilish chegarasi (hamyon auditi Y-9): 6 xonali
+ * kod, 10 daqiqa — chegarasiz urinish begona hamyonni bog'lashga yo'l
+ * ochardi. Hisoblagich alohida, faqat server yozadigan hujjatda (sessiya
+ * `clearSession` bilan o'chiriladi). PROPOSED qiymatlar.
+ */
+const LINK_ATTEMPTS_COL = 'telegram_link_attempts';
+const LINK_MAX_FAILS = 5;
+const LINK_FAIL_WINDOW_MS = 15 * 60 * 1000;
+
+/** Sirni vaqtga bog'liq bo'lmagan taqqoslash. */
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a || ''));
+  const y = Buffer.from(String(b || ''));
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
+}
 
 function normalizeWithdrawAutoLimit(v) {
   const n = Math.trunc(Number(v) || 0);
@@ -442,7 +460,8 @@ function attachTelegramWalletBot(exports, deps) {
 
     let code = '';
     for (let i = 0; i < 8; i++) {
-      code = String(Math.floor(100000 + Math.random() * 900000));
+      // Kriptografik tasodif (Math.random oldindan aytilishi mumkin).
+      code = String(crypto.randomInt(100000, 1000000));
       const exists = await db.collection(CODE_COL).doc(code).get();
       if (!exists.exists) break;
     }
@@ -690,26 +709,29 @@ function attachTelegramWalletBot(exports, deps) {
     if (!snap.exists) {
       throw new functions.https.HttpsError('not-found', 'So\'rov topilmadi');
     }
-    const req = snap.data() || {};
-    if (req.status === 'credited') {
-      return { ok: true, status: 'credited', idempotent: true };
-    }
-    if (req.status !== 'awaiting_review') {
-      throw new functions.https.HttpsError(
-          'failed-precondition', `Holat: ${req.status}`);
+    await assertNotSelfReview(callerUid, snap.data() || {}, 'topup', requestId);
+    const claim = await claimRequest(ref, {
+      openStatus: 'awaiting_review',
+      doneStatuses: ['credited'],
+      accept,
+      callerUid,
+      rejectPatch: {
+        status: 'rejected',
+        rejectReason: rejectReason || 'Rad etildi',
+        reviewedBy: callerUid,
+        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+    });
+    const req = claim.req;
+    if (claim.done) {
+      return { ok: true, status: req.status, idempotent: true };
     }
 
     const amount = Math.trunc(Number(req.amount || 0));
     const uid = canonicalUid(req.uid);
     const tgChat = req.telegramChatId || req.telegramUserId;
 
-    if (!accept) {
-      await ref.set({
-        status: 'rejected',
-        rejectReason: rejectReason || 'Rad etildi',
-        reviewedBy: callerUid,
-        reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+    if (claim.rejected) {
       if (tgChat) {
         await tgSend(tgChat,
             `❌ Тўлдириш рад этилди (${amount} сўм).\n${rejectReason || ''}`.trim());
@@ -729,13 +751,89 @@ function attachTelegramWalletBot(exports, deps) {
       return { ok: true, status: 'rejected' };
     }
 
-    return creditTopUpRequest({
-      requestId,
-      req,
-      callerUid,
-      auto: false,
-    });
+    try {
+      return await creditTopUpRequest({
+        requestId,
+        req,
+        callerUid,
+        auto: false,
+      });
+    } catch (e) {
+      // Kredit yozilmadi — so'rov qayta ko'rib chiqishga qaytadi.
+      await releaseClaim(ref);
+      throw e;
+    }
   });
+
+  /**
+   * Maker–checker (hamyon auditi Y-9): `finance` o'z so'rovini o'zi ko'rib
+   * chiqa olmaydi (o'z hamyoniga pulsiz kredit / o'z kartasiga yechish).
+   * `superadmin` (ega) — mumkin, lekin `admin_audit`ga yoziladi. PROPOSED.
+   */
+  async function assertNotSelfReview(callerUid, req, kind, requestId) {
+    if (canonicalUid(req.uid) !== canonicalUid(callerUid)) return;
+    const role = String(((await db.collection('users').doc(callerUid).get()).data() || {}).role || '');
+    if (role !== 'superadmin') {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'O\'z so\'rovingizni o\'zingiz ko\'rib chiqa olmaysiz',
+          { errorCode: 'SELF_REVIEW_FORBIDDEN' });
+    }
+    await db.collection('admin_audit').add({
+      kind: 'wallet_self_review',
+      actor: callerUid,
+      requestKind: kind,
+      requestId,
+      amount: Math.trunc(Number(req.amount || 0)),
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  /** Tasdiq jarayoni «ijarasi»: shu vaqt ichida so'rovni rad etib bo'lmaydi. */
+  const REVIEW_LEASE_MS = 2 * 60 * 1000;
+
+  /**
+   * So'rovni tranzaksiyada «egallash» (hamyon auditi Y-9): avval holat
+   * tranzaksiyadan tashqarida o'qilib alohida yozilardi — parallel tasdiq
+   * va rad etishda so'rov `rejected` bo'lib qolar, pul esa yozilardi.
+   * Holat O'ZGARMAYDI (admin navbati `awaiting_review`/`pending` bo'yicha
+   * so'raydi) — tasdiq faqat `processingAt` ijarasini qo'yadi; ijara
+   * davomida rad etish mumkin emas. Funksiya yarim yo'lda to'xtasa ijara
+   * o'zi tugaydi; qayta tasdiq — ledger kalitlari idempotent.
+   */
+  async function claimRequest(ref, { openStatus, doneStatuses, accept, callerUid, rejectPatch }) {
+    return db.runTransaction(async (tx) => {
+      const s = await tx.get(ref);
+      if (!s.exists) throw new functions.https.HttpsError('not-found', 'So\'rov topilmadi');
+      const r = s.data() || {};
+      if (doneStatuses.includes(r.status)) return { done: true, req: r };
+      if (r.status !== openStatus) {
+        throw new functions.https.HttpsError('failed-precondition', `Holat: ${r.status}`);
+      }
+      if (!accept) {
+        const at = r.processingAt && r.processingAt.toMillis ? r.processingAt.toMillis() : 0;
+        if (at && at + REVIEW_LEASE_MS > Date.now()) {
+          throw new functions.https.HttpsError(
+              'failed-precondition', 'So\'rov hozir tasdiqlanmoqda',
+              { errorCode: 'REQUEST_IN_PROGRESS' });
+        }
+        tx.set(ref, rejectPatch, { merge: true });
+        return { rejected: true, req: r };
+      }
+      tx.set(ref, {
+        processingBy: callerUid,
+        processingAt: admin.firestore.Timestamp.now(),
+      }, { merge: true });
+      return { req: r };
+    });
+  }
+
+  /** Tasdiq muvaffaqiyatsiz — ijara olib tashlanadi (rad etish mumkin bo'ladi). */
+  async function releaseClaim(ref) {
+    await ref.set({
+      processingAt: admin.firestore.FieldValue.delete(),
+      processingBy: admin.firestore.FieldValue.delete(),
+    }, { merge: true }).catch(() => {});
+  }
 
   // ─── Callable: admin review withdraw ─────────────────────────────
   exports.adminReviewWalletWithdraw = functions
@@ -760,6 +858,7 @@ function attachTelegramWalletBot(exports, deps) {
     const amount = Math.trunc(Number(req.amount || 0));
     const uid = canonicalUid(req.uid);
     const tgChat = req.telegramChatId || req.telegramUserId;
+    await assertNotSelfReview(callerUid, req, 'withdraw', requestId);
 
     if (req.status === 'paid' || req.status === 'approved') {
       if (markPaid && req.status === 'approved') {
@@ -776,18 +875,23 @@ function attachTelegramWalletBot(exports, deps) {
       return { ok: true, status: req.status, idempotent: true };
     }
 
-    if (req.status !== 'pending') {
-      throw new functions.https.HttpsError(
-          'failed-precondition', `Holat: ${req.status}`);
-    }
-
-    if (!accept) {
-      await ref.set({
+    const claim = await claimRequest(ref, {
+      openStatus: 'pending',
+      doneStatuses: ['approved', 'paid'],
+      accept,
+      callerUid,
+      rejectPatch: {
         status: 'rejected',
         rejectReason: rejectReason || 'Rad etildi',
         reviewedBy: callerUid,
         reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+      },
+    });
+    if (claim.done) {
+      return { ok: true, status: claim.req.status, idempotent: true };
+    }
+
+    if (claim.rejected) {
       if (tgChat) {
         await tgSend(tgChat,
             `❌ Ечиш рад этилди (${amount} сўм).\n${rejectReason || ''}`.trim());
@@ -807,13 +911,19 @@ function attachTelegramWalletBot(exports, deps) {
       return { ok: true, status: 'rejected' };
     }
 
-    return approveWithdrawInternal({
-      requestId,
-      req,
-      callerUid,
-      markPaid,
-      auto: false,
-    });
+    try {
+      return await approveWithdrawInternal({
+        requestId,
+        req: claim.req,
+        callerUid,
+        markPaid,
+        auto: false,
+      });
+    } catch (e) {
+      // Masalan hamyon yetmaydi — so'rov qayta ko'rib chiqishga qaytadi.
+      await releaseClaim(ref);
+      throw e;
+    }
   });
 
   // ─── Callable: signed receipt URL ────────────────────────────────
@@ -872,41 +982,88 @@ function attachTelegramWalletBot(exports, deps) {
         '/support — ёрдам');
   }
 
+  /** Faol qulf tugash vaqti (ms) yoki 0. */
+  async function linkLockedUntil(tgId) {
+    const s = await db.collection(LINK_ATTEMPTS_COL).doc(tgId).get();
+    if (!s.exists) return 0;
+    const d = s.data() || {};
+    const start = d.windowStart && d.windowStart.toMillis ? d.windowStart.toMillis() : 0;
+    const until = start + LINK_FAIL_WINDOW_MS;
+    return (Number(d.fails) || 0) >= LINK_MAX_FAILS && until > Date.now() ? until : 0;
+  }
+
+  async function recordLinkFail(tgId, reason) {
+    const ref = db.collection(LINK_ATTEMPTS_COL).doc(tgId);
+    await db.runTransaction(async (tx) => {
+      const s = await tx.get(ref);
+      const d = s.exists ? (s.data() || {}) : {};
+      const start = d.windowStart && d.windowStart.toMillis ? d.windowStart.toMillis() : 0;
+      const fresh = !start || start + LINK_FAIL_WINDOW_MS <= Date.now();
+      tx.set(ref, {
+        fails: fresh ? 1 : (Number(d.fails) || 0) + 1,
+        windowStart: fresh ? admin.firestore.Timestamp.now() : d.windowStart,
+        lastReason: reason,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    console.warn(JSON.stringify({ action: 'telegramLink', result: 'refused', errorCode: reason }));
+  }
+
   async function cmdLink(chatId, tgUser, codeRaw) {
     const code = String(codeRaw || '').replace(/\D/g, '');
     if (code.length !== 6) {
       await tgSend(chatId, 'Формат: <code>/link 123456</code>');
       return;
     }
-    const ref = db.collection(CODE_COL).doc(code);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      await tgSend(chatId, '❌ Код топилмади.');
-      return;
-    }
-    const d = snap.data() || {};
-    if (d.used) {
-      await tgSend(chatId, '❌ Код аллақачон ишлатилган.');
-      return;
-    }
-    const exp = d.expiresAt && d.expiresAt.toMillis ? d.expiresAt.toMillis() : 0;
-    if (exp && exp < Date.now()) {
-      await tgSend(chatId, '❌ Код муддати ўтган. Иловадан янги код олинг.');
-      return;
-    }
-    const uid = canonicalUid(d.uid);
     const tgId = String(tgUser.id);
-
-    // One telegram → one uid
-    const existing = await db.collection(LINK_COL).doc(tgId).get();
-    if (existing.exists) {
-      const oldUid = canonicalUid((existing.data() || {}).uid);
-      if (oldUid && oldUid !== uid) {
-        await tgSend(chatId,
-            '❌ Бу Telegram бошқа ҳамёнга боғланган. Админга мурожаат қилинг.');
-        return;
-      }
+    // Hamyon auditi Y-9: urinishlar chegarasi (kodni taxmin qilib begona
+    // hamyonni bog'lash).
+    const lockedUntil = await linkLockedUntil(tgId);
+    if (lockedUntil) {
+      const mins = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));
+      await tgSend(chatId, `⏳ Жуда кўп нотўғри уриниш. ${mins} дақиқадан кейин қайта уриниб кўринг.`);
+      return;
     }
+    const ref = db.collection(CODE_COL).doc(code);
+    const linkRef = db.collection(LINK_COL).doc(tgId);
+    // Kod tranzaksiyada ishlatiladi — bitta kod ikki Telegram'ga bog'lanmaydi.
+    const res = await db.runTransaction(async (tx) => {
+      const [snap, existing] = await Promise.all([tx.get(ref), tx.get(linkRef)]);
+      if (!snap.exists) return { fail: 'LINK_CODE_NOT_FOUND' };
+      const d = snap.data() || {};
+      if (d.used) return { fail: 'LINK_CODE_USED' };
+      const exp = d.expiresAt && d.expiresAt.toMillis ? d.expiresAt.toMillis() : 0;
+      if (exp && exp < Date.now()) return { fail: 'LINK_CODE_EXPIRED' };
+      const uid = canonicalUid(d.uid);
+      // One telegram → one uid
+      if (existing.exists) {
+        const oldUid = canonicalUid((existing.data() || {}).uid);
+        if (oldUid && oldUid !== uid) return { otherWallet: true };
+      }
+      tx.set(ref, {
+        used: true,
+        usedAt: admin.firestore.FieldValue.serverTimestamp(),
+        telegramUserId: tgId,
+      }, { merge: true });
+      return { uid };
+    });
+    if (res.fail) {
+      await recordLinkFail(tgId, res.fail);
+      const msg = {
+        LINK_CODE_NOT_FOUND: '❌ Код топилмади.',
+        LINK_CODE_USED: '❌ Код аллақачон ишлатилган.',
+        LINK_CODE_EXPIRED: '❌ Код муддати ўтган. Иловадан янги код олинг.',
+      }[res.fail];
+      await tgSend(chatId, msg);
+      return;
+    }
+    if (res.otherWallet) {
+      await tgSend(chatId,
+          '❌ Бу Telegram бошқа ҳамёнга боғланган. Админга мурожаат қилинг.');
+      return;
+    }
+    const uid = res.uid;
+    await db.collection(LINK_ATTEMPTS_COL).doc(tgId).delete().catch(() => {});
 
     // One uid → preferably one telegram (revoke old)
     const otherLinks = await db.collection(LINK_COL)
@@ -929,11 +1086,6 @@ function attachTelegramWalletBot(exports, deps) {
       telegramUsername: tgUser.username || '',
       linkedAt: admin.firestore.FieldValue.serverTimestamp(),
       linkedBy: 'bot',
-    }, { merge: true });
-    batch.set(ref, {
-      used: true,
-      usedAt: admin.firestore.FieldValue.serverTimestamp(),
-      telegramUserId: tgId,
     }, { merge: true });
     batch.set(db.collection('users').doc(uid), {
       telegramId: tgId,
@@ -1354,13 +1506,30 @@ function attachTelegramWalletBot(exports, deps) {
       res.status(503).send('bot not configured');
       return;
     }
-    if (secret) {
-      const q = String((req.query && req.query.key) || '');
-      const h = String(req.get('x-telegram-bot-api-secret-token') || '');
-      if (q !== secret && h !== secret) {
-        res.status(403).send('forbidden');
-        return;
-      }
+    // Hamyon auditi Y-9: sir bo'sh bo'lsa tekshiruv O'CHARDI (fail-open) —
+    // istalgan odam `from.id` ni soxtalashtirib /withdraw /history qila
+    // olardi. Endi sir majburiy (Secret Manager'da bor — deploy shuni talab
+    // qiladi); yo'q bo'lsa webhook ishlamaydi va log'da ko'rinadi.
+    if (!secret) {
+      console.error(JSON.stringify({
+        action: 'telegramWalletBotWebhook', result: 'refused', errorCode: 'WEBHOOK_SECRET_MISSING',
+      }));
+      res.status(503).send('webhook not configured');
+      return;
+    }
+    const h = String(req.get('x-telegram-bot-api-secret-token') || '');
+    const q = String((req.query && req.query.key) || '');
+    const headerOk = safeEqual(h, secret);
+    if (!headerOk && !safeEqual(q, secret)) {
+      res.status(403).send('forbidden');
+      return;
+    }
+    if (!headerOk) {
+      // `?key=` URL'da — so'rov log'iga tushadi. setWebhook'ni faqat
+      // `secret_token` bilan qayta ro'yxatdan o'tkazish kerak (sir log'da yo'q).
+      console.warn(JSON.stringify({
+        action: 'telegramWalletBotWebhook', result: 'accepted', errorCode: 'WEBHOOK_SECRET_IN_URL',
+      }));
     }
     try {
       await processUpdate(req.body || {});

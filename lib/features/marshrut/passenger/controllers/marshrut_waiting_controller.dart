@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -285,32 +284,17 @@ class MarshrutWaitingController extends ChangeNotifier {
     }
   }
 
-  /// Qabul qilingan safarni bekor qilish (waiting ekranidan).
+  /// Qabul qilingan safarni bekor qilish (waiting ekranidan). Faqat CF —
+  /// klient fallback'i begona haydovchi hujjatlariga yozardi (2026-10-08).
+  /// Xato bo'lsa OTILADI: safar bekor qilinmagan.
   Future<void> cancelAfterAccept(String tripId) async {
-    try {
-      final callable = FirebaseFunctions.instance
-          .httpsCallable('marshrutPassengerCancelAfterAccept');
-      final result = await callable.call({
-        'tripId': tripId,
-        'reason': 'passenger_cancel_after_accept',
-      });
-      final data = result.data;
-      if (data is Map) {
-        if (data['warning'] == true) {
-          final remaining = (data['remaining'] as num?)?.toInt() ?? 2;
-          onCancelWarning?.call(remaining);
-        }
-      }
-    } catch (e) {
-      debugPrint('cancelAfterAccept error: $e');
-      try {
-        await _rides.cancelMarshrutByPassenger(
-          tripId: tripId,
-          reason: 'passenger_cancel_after_accept',
-        );
-      } catch (e2) {
-        debugPrint('cancelAfterAccept fallback error: $e2');
-      }
+    final data = await _rides.cancelMarshrutByPassenger(
+      tripId: tripId,
+      reason: 'passenger_cancel_after_accept',
+    );
+    if (data['warning'] == true) {
+      final remaining = (data['remaining'] as num?)?.toInt() ?? 2;
+      onCancelWarning?.call(remaining);
     }
   }
 

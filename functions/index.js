@@ -11767,14 +11767,9 @@ function normalizeTimeoutAutoPauseStreak(raw) {
   return Math.floor(value);
 }
 
-async function getMarshrutTimeoutAutoPauseStreak() {
-  const snap = await db.collection('settings').doc('app').get();
-  return normalizeTimeoutAutoPauseStreak(snap.data()?.marshrutTimeoutAutoPauseStreak);
-}
-
-async function logMarshrutDispatchEvent({ tripId, type, data, driverIdOverride }) {
-  const d = data || {};
-  await db.collection('marshrut_dispatch_events').add({
+/** `marshrut_dispatch_events` hujjati — ilovadagi `_logDispatchEventFromTrip` shakli. */
+function marshrutDispatchEventDoc(tripId, type, d, extra = {}) {
+  return {
     tripId,
     type,
     dispatchMode: d.dispatchMode || 'queue',
@@ -11784,110 +11779,112 @@ async function logMarshrutDispatchEvent({ tripId, type, data, driverIdOverride }
     userPhone: d.userPhone || '',
     pickupMfy: d.pickupMfy || '',
     dropoffMfy: d.dropoffMfy || '',
-    driverId: driverIdOverride || d.targetDriverId || '',
+    driverId: d.targetDriverId || '',
     driverName: d.driverName || '',
     driverPhone: d.driverPhone || '',
     scheduleId: d.scheduleId || '',
     offerTimeoutSeconds: d.offerTimeoutSeconds || 0,
+    ...extra,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  };
 }
 
-async function clearMarshrutActiveIfMatches({ userPhone, tripId, status }) {
-  const phone = digits(userPhone);
-  if (phone.length < 9 || !tripId) return;
-  const ref = db.collection('users').doc(phone).collection('marshrut_state').doc('active');
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists) return;
-    if ((snap.data()?.tripId || '') !== tripId) return;
-    tx.set(ref, {
-      status: status || 'cleared',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-  });
-}
+/**
+ * Marshrut `pending` taklifini yopish — BITTA tranzaksiyada (2026-10-08).
+ *
+ *   expired   — timeout siyosati: queue streak +1 (chegarada avto-pauza +
+ *               `driver_auto_paused` event), queue/schedules/drivers
+ *               `todayTimeouts` +1, `timeout` event.
+ *   cancelled — yo'lovchi kutishda bekor qildi: queue streak 0, `cancelled` event.
+ * Ikkalasida ham `users/{phone}/marshrut_state/active` (shu trip bo'lsa).
+ *
+ * Faqat trip hali `pending` bo'lsa yopadi — qayta chaqiruv, sweep va eski
+ * ilova bilan poygada IKKI MARTA hisoblamaydi. Avval sweep so'rovdagi eski
+ * snapshot bo'yicha siyosatni qo'llardi (trip orada yopilgan bo'lsa ham),
+ * siyosatning o'zi esa 4 ta alohida yozuv edi.
+ *
+ * Avval bularni yo'lovchi ILOVASI begona haydovchi hujjatlariga yozardi —
+ * shuning uchun rules begona yozuvni yopa olmasdi (driver_work_patch_rules).
+ * Qaytaradi: { closed, status } — status: tranzaksiya ko'rgan holat.
+ */
+async function closeMarshrutPendingOffer(tripRef, outcome) {
+  const { FieldValue } = admin.firestore;
+  let result = { closed: false, status: '' };
+  await db.runTransaction(async (t) => {
+    const snap = await t.get(tripRef);
+    const d = snap.exists ? (snap.data() || {}) : {};
+    result = { closed: false, status: String(d.status || '') };
+    if (d.taxiType !== 'marshrut' || d.status !== 'pending') return;
 
-async function applyMarshrutTimeoutPolicy(data) {
-  const d = data || {};
-  const driverId = d.targetDriverId || '';
-  if (!driverId) return;
+    const tripId = tripRef.id;
+    const driverId = String(d.targetDriverId || '');
+    const scheduleId = String(d.scheduleId || '');
+    const phone = digits(d.userPhone);
+    const queueRef = driverId ? db.collection('queue').doc(driverId) : null;
+    const activeRef = phone.length >= 9
+      ? db.collection('users').doc(phone).collection('marshrut_state').doc('active')
+      : null;
+    // O'qishlar — yozuvlardan OLDIN.
+    const [queueSnap, settingsSnap, activeSnap] = await Promise.all([
+      queueRef ? t.get(queueRef) : Promise.resolve(null),
+      outcome === 'expired'
+        ? t.get(db.collection('settings').doc('app')) : Promise.resolve(null),
+      activeRef ? t.get(activeRef) : Promise.resolve(null),
+    ]);
+    const now = FieldValue.serverTimestamp();
+    const events = db.collection('marshrut_dispatch_events');
 
-  const timeoutAutoPauseStreak = await getMarshrutTimeoutAutoPauseStreak();
-  const queueRef = db.collection('queue').doc(driverId);
-  let disabled = false;
-  let streakAfter = 0;
-
-  await db.runTransaction(async (tx) => {
-    const queueDoc = await tx.get(queueRef);
-    if (!queueDoc.exists) return;
-    const streak = Number(queueDoc.data()?.dispatchTimeoutStreak || 0);
-    streakAfter = streak + 1;
-    const patch = {
-      dispatchTimeoutStreak: streakAfter,
-      dispatchTimeoutCount: admin.firestore.FieldValue.increment(1),
-      todayTimeouts: admin.firestore.FieldValue.increment(1),
-      lastTimeoutAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    if (streakAfter >= timeoutAutoPauseStreak) {
-      disabled = true;
-      patch.isActive = false;
-      patch.autoPausedReason = 'dispatch_timeout_streak';
-      patch.autoPausedAt = admin.firestore.FieldValue.serverTimestamp();
+    if (outcome === 'expired') {
+      t.update(tripRef, { status: 'expired', expiredAt: now });
+      if (driverId) {
+        if (queueSnap && queueSnap.exists) {
+          const pauseAt = normalizeTimeoutAutoPauseStreak(
+              settingsSnap && settingsSnap.exists
+                ? (settingsSnap.data() || {}).marshrutTimeoutAutoPauseStreak
+                : undefined);
+          const streakAfter =
+            Number((queueSnap.data() || {}).dispatchTimeoutStreak || 0) + 1;
+          const patch = {
+            dispatchTimeoutStreak: streakAfter,
+            dispatchTimeoutCount: FieldValue.increment(1),
+            todayTimeouts: FieldValue.increment(1),
+            lastTimeoutAt: now,
+            updatedAt: now,
+          };
+          if (streakAfter >= pauseAt) {
+            patch.isActive = false;
+            patch.autoPausedReason = 'dispatch_timeout_streak';
+            patch.autoPausedAt = now;
+            t.set(events.doc(), marshrutDispatchEventDoc(tripId, 'driver_auto_paused', d, {
+              reason: `${pauseAt} consecutive timeouts`,
+              timeoutStreak: streakAfter,
+              timeoutAutoPauseStreak: pauseAt,
+            }));
+          }
+          t.set(queueRef, patch, { merge: true });
+        }
+        if (scheduleId) {
+          t.set(db.collection('schedules').doc(scheduleId),
+              { todayTimeouts: FieldValue.increment(1), updatedAt: now }, { merge: true });
+        }
+        t.set(db.collection('drivers').doc(driverId),
+            { todayTimeouts: FieldValue.increment(1), updatedAt: now }, { merge: true });
+      }
+      t.set(events.doc(), marshrutDispatchEventDoc(tripId, 'timeout', d));
+    } else {
+      t.update(tripRef, { status: 'cancelled', cancelledBy: 'user', cancelledAt: now });
+      if (queueSnap && queueSnap.exists) {
+        t.set(queueRef, { dispatchTimeoutStreak: 0, updatedAt: now }, { merge: true });
+      }
+      t.set(events.doc(), marshrutDispatchEventDoc(tripId, 'cancelled', d));
     }
-    tx.set(queueRef, patch, { merge: true });
+    if (activeSnap && activeSnap.exists
+        && String((activeSnap.data() || {}).tripId || '') === tripId) {
+      t.set(activeRef, { status: outcome, updatedAt: now }, { merge: true });
+    }
+    result = { closed: true, status: outcome };
   });
-
-  const scheduleId = d.scheduleId || '';
-  if (scheduleId) {
-    await db.collection('schedules').doc(scheduleId).set({
-      todayTimeouts: admin.firestore.FieldValue.increment(1),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-  }
-  await db.collection('drivers').doc(driverId).set({
-    todayTimeouts: admin.firestore.FieldValue.increment(1),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
-
-  if (disabled) {
-    await db.collection('marshrut_dispatch_events').add({
-      tripId: d.tripId || '',
-      type: 'driver_auto_paused',
-      dispatchMode: d.dispatchMode || 'queue',
-      dispatchSessionId: d.dispatchSessionId || '',
-      dispatchAttempt: d.dispatchAttempt || 1,
-      dispatchTotal: d.dispatchTotal || 1,
-      userPhone: d.userPhone || '',
-      pickupMfy: d.pickupMfy || '',
-      dropoffMfy: d.dropoffMfy || '',
-      driverId,
-      driverName: d.driverName || '',
-      driverPhone: d.driverPhone || '',
-      scheduleId,
-      offerTimeoutSeconds: d.offerTimeoutSeconds || 0,
-      reason: `${timeoutAutoPauseStreak} consecutive timeouts`,
-      timeoutStreak: streakAfter,
-      timeoutAutoPauseStreak,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
-}
-
-async function handleExpiredMarshrutTrip(doc) {
-  const data = doc.data();
-  if ((data.taxiType || '') !== 'marshrut') return;
-  if ((data.status || '') !== 'pending') return;
-  const tripId = doc.id;
-  const tripData = { ...data, tripId };
-  await applyMarshrutTimeoutPolicy(tripData);
-  await logMarshrutDispatchEvent({ tripId, type: 'timeout', data: tripData });
-  await clearMarshrutActiveIfMatches({
-    userPhone: data.userPhone,
-    tripId,
-    status: 'expired',
-  });
+  return result;
 }
 
 // ─── Trip + Booking TTL cleanup ───────────────────────────────────────────────
@@ -11978,19 +11975,18 @@ exports.expirePendingTrips = functions.pubsub
         });
       });
     }
-    await Promise.all(allDocs.map((doc) => expireTripIfStillOpen(doc.ref)));
-
-    const marshrutExpired = allDocs.filter((doc) => {
+    // Marshrut: yopish + timeout siyosati bitta tranzaksiyada, faqat trip
+    // HALI pending bo'lsa (yo'lovchi `marshrutPassengerCloseOffer` bilan
+    // orada yopgan bo'lsa — qayta hisoblanmaydi).
+    await Promise.all(allDocs.map((doc) => {
       const d = doc.data();
-      return d.taxiType === 'marshrut' && d.status === 'pending';
-    });
-    for (const doc of marshrutExpired) {
-      try {
-        await handleExpiredMarshrutTrip(doc);
-      } catch (e) {
-        console.error('handleExpiredMarshrutTrip', doc.id, e.message || e);
+      if (d.taxiType === 'marshrut' && d.status === 'pending') {
+        return closeMarshrutPendingOffer(doc.ref, 'expired').catch((e) => {
+          console.error('closeMarshrutPendingOffer', doc.id, e.message || e);
+        });
       }
-    }
+      return expireTripIfStillOpen(doc.ref);
+    }));
 
     for (const doc of expiredAdsSnap.docs) {
       const adType = String((doc.data() || {}).type || '');
@@ -12446,6 +12442,45 @@ exports.migrateCheapProductTitleLower = functions.https.onCall(
   },
 );
 
+/**
+ * Marshrut yo'lovchi — o'z `pending` taklifini yopish (2026-10-08):
+ * outcome `expired` (taklif muddati / keyingi haydovchiga o'tish / ekrandan
+ * chiqish) yoki `cancelled` (kutishda bekor). Avval ilova buni o'zi qilib,
+ * BEGONA haydovchining drivers/schedules/queue hujjatlariga yozardi.
+ * Trip allaqachon `accepted` bo'lsa hech narsa qilmaydi va `status:
+ * 'accepted'` qaytaradi — ilova `marshrutPassengerCancelAfterAccept` chaqiradi.
+ */
+exports.marshrutPassengerCloseOffer = functions.https.onCall(async (data, context) => {
+  const callerUid = requireCallerUid(context);
+  const tripId = String((data && data.tripId) || '').trim();
+  const outcome = String((data && data.outcome) || '');
+  if (!tripId) {
+    throw new functions.https.HttpsError('invalid-argument', 'tripId required');
+  }
+  if (outcome !== 'expired' && outcome !== 'cancelled') {
+    throw new functions.https.HttpsError('invalid-argument', 'outcome: expired | cancelled');
+  }
+  const tripRef = db.collection('trips').doc(tripId);
+  const snap = await tripRef.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Trip not found');
+  }
+  const trip = snap.data() || {};
+  if (trip.taxiType !== 'marshrut') {
+    throw new functions.https.HttpsError('failed-precondition', 'Not a marshrut trip');
+  }
+  // `userPhone` o'zgarmaydi — egalikni tranzaksiyadan tashqarida tekshirish yetarli.
+  if (canonicalUid(String(trip.userPhone || '')) !== callerUid) {
+    throw new functions.https.HttpsError('permission-denied', 'Not your trip');
+  }
+  const r = await closeMarshrutPendingOffer(tripRef, outcome);
+  console.log(JSON.stringify({
+    action: 'marshrutPassengerCloseOffer', tripId, outcome,
+    result: r.closed ? 'closed' : `noop:${r.status}`,
+  }));
+  return { ok: true, closed: r.closed, status: r.status };
+});
+
 /** Mahalliy taksi — yo'lovchi bahosi → haydovchi o'rtacha reytingi. */
 exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
     async (data, context) => {
@@ -12475,6 +12510,7 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
         throw new functions.https.HttpsError('permission-denied', 'Phone login required');
       }
 
+      let duplicate = false;
       await db.runTransaction(async (t) => {
         const tripSnap = await t.get(tripRef);
         if (!tripSnap.exists) {
@@ -12489,6 +12525,14 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
         }
         if (canonicalUid(String(trip.userPhone || '')) !== callerUid) {
           throw new functions.https.HttpsError('permission-denied', 'Not your trip');
+        }
+        // Qayta chaqiruv (javob yo'lda yo'qolgan): yo'lovchi allaqachon bekor
+        // qilgan — o'rin ikkinchi marta qaytmaydi, blok qayta sanalmaydi.
+        // Ilovada endi klient fallback yo'q (2026-10-08), shuning uchun shart.
+        if (trip.status === 'cancelled'
+            && ['passenger', 'user'].includes(String(trip.cancelledBy || ''))) {
+          duplicate = true;
+          return;
         }
         if (trip.status !== 'accepted') {
           throw new functions.https.HttpsError(
@@ -12573,6 +12617,10 @@ exports.marshrutPassengerCancelAfterAccept = functions.https.onCall(
           );
         }
       });
+
+      if (duplicate) {
+        return { ok: true, duplicate: true };
+      }
 
       try {
         await db.collection('marshrut_dispatch_events').add({

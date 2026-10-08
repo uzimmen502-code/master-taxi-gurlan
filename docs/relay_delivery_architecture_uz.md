@@ -950,8 +950,9 @@ callable'ига тегишли; `courierSubmitPayment.changeCredit`га қўйи
   мижоз» — `COURIER_OWN_ORDER`: ўз буюртмасини маршрутга ололмайди
   (`courierCreateRoute`, `courierRecoverOrphanRoute`), олдим/етдим/тўлов
   қилолмайди, ўз йиғиб олиш вазифасини якунлолмайди
-  (`courierFinalizeCollection`). ⏳ Қайтим (`changeCredit`) ЧЕГАРАСИ — эга
-  қарори кутилмоқда (тил бириктирган курьер+мижоз ҳали ҳам мумкин).
+  (`courierFinalizeCollection`). ✅ Қайтим (`changeCredit`) ЧЕГАРАСИ — ЙЎҚ
+  (эга қарори 2026-10-08, юқорида): тил бириктирган курьер+мижоз хавфи
+  эга томонидан қабул қилинган.
 - ✅ *ПАРАЛЛЕЛ ИШ БИРЛАШТИРИЛДИ (2026-10-08):* `fix/courier-order-authz`
   (worktree `jovial-bardeen-2a4c6d`, commit қилинмаган) дан олинди:
   `markPicked`/`markArrived`/`submitPayment` — битта транзакцияда;

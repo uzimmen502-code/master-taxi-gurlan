@@ -14,14 +14,14 @@
  *
  * Kalit `accountId` (T-1a): kelishuv AKKAUNTGA tegishli, telefon
  * almashsa ham saqlanadi. accountId bo'lmasa shu yerda yaratiladi
- * (`ensureAccountId`) — `AGREEMENT_GATED` xizmatlarda kelishuv xizmat
+ * (`readAccountId` + `commitAccountId`) — `AGREEMENT_GATED` xizmatlarda kelishuv xizmat
  * yoqilishidan OLDIN qabul qilinadi. Taksida (D-TAXI-24.1) esa 4 oy
  * o'tib `verification_required` bo'lganda taqdim qilinadi.
  */
 
 const caps = require('../core/capabilities');
 const { callerIdFrom } = require('../core/ids');
-const { ensureAccountId } = require('./capabilities');
+const { readAccountId, commitAccountId } = require('./capabilities');
 
 const COLLECTION = 'service_agreements';
 
@@ -50,7 +50,8 @@ function makeAcceptServiceAgreement(deps) {
 
     const now = nowFn ? nowFn() : new Date();
     return db.runTransaction(async (tx) => {
-      const { accountId } = await ensureAccountId(db, tx, callerId);
+      const acc = await readAccountId(db, tx, callerId);
+      const { accountId } = acc;
       const ref = db.collection(COLLECTION).doc(accountId);
       const snap = await tx.get(ref);
       const doc = snap.exists ? (snap.data() || {}) : {};
@@ -58,6 +59,8 @@ function makeAcceptServiceAgreement(deps) {
       if (caps.hasCurrentAgreement(doc, service)) {
         return { accountId, service, version: required, changed: false };
       }
+      // Barcha o'qishlar tugadi — endi yozuvlar.
+      commitAccountId(tx, acc);
       tx.set(ref, {
         accountId,
         [service]: { version: required, acceptedAt: now, acceptedByUid: callerId },

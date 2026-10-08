@@ -11,7 +11,7 @@
  */
 'use strict';
 const assert = require('assert');
-const { buildCaption, socialVideoUrl } = require('../tv_social_publish');
+const { buildCaption, socialVideoUrl, requestedNetworks } = require('../tv_social_publish');
 
 const results = [];
 function check(name, fn) {
@@ -121,6 +121,30 @@ check('socialVideoUrl — variantlar hali tayyor emas -> xom faylga qaytadi', ()
   assert.strictEqual(
     socialVideoUrl(clip({ videoVariants: undefined })),
     'https://cdn.example.com/orig.mp4');
+});
+
+// ── requestedNetworks — egasi rozilik bergan tarmoqlar (admin audit, 2026-10-08) ──
+check('requestedNetworks — eski `[\'tiktok\']` klip HECH QAYERGA ketmaydi (avval 4 tarmoq)', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ socialNetworks: ['tiktok'], socialConsent: true }), []);
+});
+check('requestedNetworks — tanlangan tarmoqlar tartib bilan', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ socialNetworks: ['telegram', 'TikTok', 'instagram'], socialConsent: true }),
+    ['instagram', 'telegram']);
+});
+check('requestedNetworks — `socialNetworks`siz eski klip + rozilik → 4 tarmoq (o\'zgarmagan)', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ socialConsent: true }),
+    ['instagram', 'facebook', 'youtube', 'telegram']);
+});
+check('requestedNetworks — rozilik yo\'q → hech qayer', () => {
+  assert.deepStrictEqual(requestedNetworks({ socialNetworks: [] }), []);
+});
+check('requestedNetworks — pullik reklama — majburiy 3 tarmoq', () => {
+  assert.deepStrictEqual(
+    requestedNetworks({ category: 'ad', socialNetworks: ['tiktok'] }),
+    ['instagram', 'facebook', 'telegram']);
 });
 
 const failed = results.filter((r) => !r.pass).length;

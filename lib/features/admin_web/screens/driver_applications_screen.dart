@@ -222,8 +222,11 @@ class _DriverApplicationsScreenState extends State<DriverApplicationsScreen> {
         ),
         const SizedBox(height: 10),
         const _DriverApprovalModeTile(),
-        const SizedBox(height: 10),
-        const _ResetTaxiDriversRegistryTile(),
+        // Оммавий ўчириш — сервер фақат superadmin'га рухсат беради.
+        if (context.watch<AdminAuthService>().isSuperAdmin) ...[
+          const SizedBox(height: 10),
+          const _ResetTaxiDriversRegistryTile(),
+        ],
       ]),
     );
   }
@@ -249,34 +252,78 @@ class _ResetTaxiDriversRegistryTileState
       return;
     }
 
-    final ok = await showDialog<bool>(
+    // 1-қадам: сервер фақат санайди (dry-run) — админ нима ўчишини кўради.
+    setState(() => _busy = true);
+    final preview = await AdminDriverRequestsService().resetTaxiDriversRegistry(
+      adminPhone: adminPhone,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (preview.error != null) {
+      _snack(preview.error!);
+      return;
+    }
+    final s = preview.stats ?? const <String, dynamic>{};
+
+    // 2-қадам: админ RESET_TAXI_DRIVERS ни ЎЗИ теради (аввал диалогда
+    // майдон йўқ эди, матнни сервис ўзи юборарди — битта босишда ўчарди).
+    final confirmCtrl = TextEditingController();
+    final typed = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('⚠️ Ҳайдовчilar bazasini tozalash'),
-        content: const Text(
-          'Маршрут, маҳаллий ва шаҳарлараро бўйича барча аризалар, '
-          'navbat, jadval va intercity ro\'yxatlari o\'chiriladi. '
-          'Haydovchilar qayta ro\'yxatdan o\'tishi kerak.\n\n'
-          'Davom etish uchun RESET_TAXI_DRIVERS deb yozing.',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('⚠️ Ҳайдовчилар базасини тозалаш'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ўчирилади (қайтариб бўлмайди):\n'
+                '• навбат: ${s['queueDeleted'] ?? 0}\n'
+                '• шаҳарлараро рўйхат: ${s['intercityDriversDeleted'] ?? 0}\n'
+                '• жадваллар: ${s['schedulesDeleted'] ?? 0}\n'
+                '• аризалар: ${s['driverRequestsDeleted'] ?? 0}\n'
+                '• ҳайдовчи ҳужжатлари: ${s['driversReset'] ?? 0}\n'
+                '• «driver» роли «user»га: ${s['usersRoleReset'] ?? 0}\n'
+                '${(s['usersRoleKept'] is Map && (s['usersRoleKept'] as Map).isNotEmpty) ? '• роли сақланади: ${s['usersRoleKept']}\n' : ''}'
+                '\nДавом этиш учун RESET_TAXI_DRIVERS деб ёзинг.',
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: confirmCtrl,
+                autofocus: true,
+                onChanged: (_) => setLocal(() {}),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'RESET_TAXI_DRIVERS',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Бекор'),
+            ),
+            TextButton(
+              onPressed: confirmCtrl.text.trim() == 'RESET_TAXI_DRIVERS'
+                  ? () => Navigator.pop(ctx, confirmCtrl.text.trim())
+                  : null,
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Тозалаш'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Бекор'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Тозалаш'),
-          ),
-        ],
       ),
     );
-    if (ok != true || !mounted) return;
+    confirmCtrl.dispose();
+    if (typed == null || !mounted) return;
 
     setState(() => _busy = true);
     final result = await AdminDriverRequestsService().resetTaxiDriversRegistry(
       adminPhone: adminPhone,
+      dryRun: false,
+      confirmText: typed,
     );
     if (!mounted) return;
     setState(() => _busy = false);

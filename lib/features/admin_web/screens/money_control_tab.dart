@@ -494,6 +494,10 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
     );
     String? selected = initialPhone;
     var busy = false;
+    // Idempotency: битта диалог + бир хил телефон/сумма = битта амал.
+    // Аввал `opId` ҳар босишда янгиланарди — сервер аслида бажарган, лекин
+    // жавоб етмаган сўровни қайта юбориш нақдни ИККИ МАРТА қабул қиларди.
+    final dialogNonce = DateTime.now().millisecondsSinceEpoch;
 
     await showDialog<void>(
       context: context,
@@ -583,8 +587,7 @@ class _MoneyControlTabState extends State<MoneyControlTab> {
                           }
                           setLocal(() => busy = true);
                           try {
-                            final opId =
-                                'ink_${DateTime.now().millisecondsSinceEpoch}_$phone';
+                            final opId = 'ink_${dialogNonce}_${phone}_$amount';
                             final res = await FirebaseFunctions.instance
                                 .httpsCallable('receiveCourierCash')
                                 .call({

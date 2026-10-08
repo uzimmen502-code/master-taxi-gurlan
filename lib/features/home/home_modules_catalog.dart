@@ -51,10 +51,9 @@ class HomeModulesCatalog {
       id: 'jobs',
       label: 'home_module_jobs',
     ),
-    HomeModule(
-      id: 'platform_store',
-      label: 'home_module_platform_store',
-    ),
+    // `platform_store` («AVA ДЎКОНИ») ОЛИБ ТАШЛАНДИ (2026-10-07): алоҳида
+    // дўкон экрани йўқ, AVA товарлари — Улгуржи бозорда. Конфиг калити
+    // (`kKnownModuleIds`) эса эски илова версиялари учун қолди.
     HomeModule(
       id: 'tv_market',
       label: 'home_module_tv_market',

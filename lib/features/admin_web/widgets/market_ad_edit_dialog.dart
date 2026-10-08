@@ -146,9 +146,17 @@ class _MarketAdEditDialogState extends State<_MarketAdEditDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _status,
                 decoration: const InputDecoration(labelText: 'Status'),
-                items: const [
-                  DropdownMenuItem(value: 'active', child: Text('Faol')),
-                  DropdownMenuItem(value: 'inactive', child: Text('Nofaol')),
+                items: [
+                  // Moderatsiyani kutayotgan e'lon: joriy qiymat ro'yxatda
+                  // bo'lmasa DropdownButtonFormField assert bilan yiqiladi.
+                  // CF `pending`ni qabul qilmaydi — holat o'zgarmay qoladi.
+                  if (widget.ad.status == 'pending')
+                    const DropdownMenuItem(
+                      value: 'pending',
+                      child: Text('Kutilmoqda (o\'zgarmaydi)'),
+                    ),
+                  const DropdownMenuItem(value: 'active', child: Text('Faol')),
+                  const DropdownMenuItem(value: 'inactive', child: Text('Nofaol')),
                 ],
                 onChanged: (v) {
                   if (v != null) setState(() => _status = v);

@@ -5,9 +5,15 @@ import 'package:flutter/material.dart';
 
 import 'dart:math';
 
+import '../../../core/brand_labels.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../core/utils/data_url_image.dart';
+import '../../../core/utils/fair_mix.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/session_shuffle.dart';
+import '../../../models/platform_product.dart';
+import '../../../repositories/platform_products_repository.dart';
+import '../../ads/widgets/platform_market_card.dart' show platformShelfPrice;
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import 'ava_list_row.dart';
@@ -44,6 +50,7 @@ class HomeWholesaleSection extends StatefulWidget {
     required this.titleKey,
     required this.onOpenAll,
     required this.onOpenProduct,
+    this.onOpenPlatformProduct,
   });
 
   /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
@@ -53,8 +60,18 @@ class HomeWholesaleSection extends StatefulWidget {
   final VoidCallback onOpenAll;
   final void Function(WholesaleProduct product) onOpenProduct;
 
+  /// Берилса — бўлимда AVA товарлари ҳам чиқади (фақат Улгуржида; эга
+  /// қарори 2026-10-07: «AVA дўкони энди Улгуржи бозор, бош саҳифада
+  /// ҳам чиқсин»). Иккинчи аргумент — бўлимдаги AVA товарлари (тафсилотда
+  /// суриб ўтиш учун).
+  final void Function(PlatformProduct product, List<PlatformProduct> shelf)?
+      onOpenPlatformProduct;
+
   /// Икки қатор тўлиши учун 5 эмас, 10 та (қаранг: [AvaProductShelf]).
   static const limit = 10;
+
+  /// Бош саҳифада AVA товарларидан нечтаси (тўлиқ рўйхат — «Ҳаммаси»).
+  static const platformLimit = 20;
 
   @override
   State<HomeWholesaleSection> createState() => _HomeWholesaleSectionState();
@@ -73,11 +90,65 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
   int _limit = HomeWholesaleSection.limit;
   bool _endReached = false;
 
+  /// Сотувчилар товари оқими биринчи жавоб бердими / хато бердими.
+  bool _sellersLoaded = false;
+  bool _sellersFailed = false;
+
+  /// AVA товарлари — бир марта юкланади, тартиби админдаги `sortOrder`.
+  final _platformRepo = PlatformProductsRepository();
+  List<PlatformProduct> _platform = const [];
+  bool _platformLoading = false;
+
+  bool get _withPlatform =>
+      widget.onOpenPlatformProduct != null &&
+      widget.market == WholesaleProduct.marketWholesale;
+
   @override
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
     _listen();
+    if (_withPlatform) unawaited(_loadPlatform());
+  }
+
+  Future<void> _loadPlatform() async {
+    _platformLoading = true;
+    try {
+      final list = await _platformRepo.fetchForWholesaleShelf(
+        limit: HomeWholesaleSection.platformLimit,
+      );
+      if (!mounted) return;
+      setState(() {
+        _platform = list;
+        _platformLoading = false;
+        _status = _computeStatus();
+      });
+    } catch (e) {
+      // AVA товарлари юкланмаса ҳам бўлим сотувчилар товари билан ишлайди.
+      debugPrint('[HomeWholesale] platform $e');
+      if (!mounted) return;
+      setState(() {
+        _platformLoading = false;
+        _status = _computeStatus();
+      });
+    }
+  }
+
+  /// Бўлим ҳолати иккала манбадан: бирортасида товар бўлса — тайёр.
+  AvaSectionStatus _computeStatus() {
+    if (_items.isNotEmpty || _platform.isNotEmpty) {
+      return AvaSectionStatus.ready;
+    }
+    final sellersPending = !_sellersLoaded && !_sellersFailed;
+    if (sellersPending || _platformLoading) return AvaSectionStatus.loading;
+    return _sellersFailed ? AvaSectionStatus.error : AvaSectionStatus.empty;
+  }
+
+  void _retry() {
+    _listen();
+    if (_withPlatform && _platform.isEmpty && !_platformLoading) {
+      unawaited(_loadPlatform());
+    }
   }
 
   void _onScroll() {
@@ -91,7 +162,11 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
   void _listen({bool initial = true}) {
     _sub?.cancel();
     if (initial && mounted) {
-      setState(() => _status = AvaSectionStatus.loading);
+      setState(() {
+        _sellersFailed = false;
+        _sellersLoaded = false;
+        _status = _computeStatus();
+      });
     }
     // Улгуржи бозор ҳудудга боғланмаган — сотувчилар вилоятлараро
     // ишлайди, шунинг учун бу бўлимда туман филтри йўқ.
@@ -113,13 +188,17 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
             random: _rnd,
           );
           _endReached = list.length < _limit;
-          _status =
-              _items.isEmpty ? AvaSectionStatus.empty : AvaSectionStatus.ready;
+          _sellersLoaded = true;
+          _status = _computeStatus();
         });
       },
       onError: (Object e) {
         debugPrint('[HomeWholesale] $e');
-        if (mounted) setState(() => _status = AvaSectionStatus.error);
+        if (!mounted) return;
+        setState(() {
+          _sellersFailed = true;
+          _status = _computeStatus();
+        });
       },
     );
   }
@@ -133,21 +212,30 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
 
   @override
   Widget build(BuildContext context) {
+    // Навбатма-навбат: AVA товари бошида тўпланиб қолмасин, сотувчилар
+    // товари ҳам кўринсин — Улгуржи экранидаги лента билан бир хил қоида.
+    final entries = FairMix.roundRobin<_ShelfEntry>([
+      _platform.map(_ShelfEntry.platform).toList(growable: false),
+      _items.map(_ShelfEntry.seller).toList(growable: false),
+    ]);
     return AvaSection(
-      moduleId: 'wholesale_market',
+      // Хитой бўлимида ўз белгиси (аввал унда ҳам Улгуржи белгиси турарди).
+      moduleId: WholesaleProduct.moduleIdFor(widget.market),
       title: context.tr(widget.titleKey),
       status: _status,
       onSeeAll: widget.onOpenAll,
-      onRetry: _listen,
+      onRetry: _retry,
       skeletonRows: 1,
       // Икки қатор, ёнга скролл (қаранг: [AvaProductShelf]).
       child: AvaProductShelf(
         // Қатъий 214 эмас — шрифт 130% бўлганда матн карточкадан тошиб
         // кетарди (`avaTileListHeight` изоҳига қаранг).
         rowHeight: avaTileListHeight(context),
-        itemCount: _items.length,
+        itemCount: entries.length,
         itemBuilder: (context, i) {
-          final p = _items[i];
+          final ava = entries[i].platform;
+          if (ava != null) return _platformTile(ava);
+          final p = entries[i].seller!;
           final cover = p.imageUrls.isEmpty ? '' : p.imageUrls.first;
           return AvaTileCard(
             title: p.title,
@@ -172,4 +260,37 @@ class _HomeWholesaleSectionState extends State<HomeWholesaleSection> {
       ),
     );
   }
+
+  /// AVA товари — сотувчи номи ўрнида «AVA».
+  Widget _platformTile(PlatformProduct p) {
+    final price = platformShelfPrice(p);
+    final cover = p.coverImageUrl.trim();
+    Widget? image;
+    if (isHttpImageUrl(cover)) {
+      image = CachedNetworkImage(imageUrl: cover, fit: BoxFit.cover);
+    } else if (isDataImageUrl(cover)) {
+      final bytes = decodeDataUrlImageBytes(cover);
+      if (bytes != null) image = Image.memory(bytes, fit: BoxFit.cover);
+    }
+    return AvaTileCard(
+      title: p.name,
+      price: price.price,
+      priceNote: price.note,
+      footnote: BrandLabels.brand,
+      onTap: () => widget.onOpenPlatformProduct?.call(p, _platform),
+      image: image,
+    );
+  }
+}
+
+/// Бўлимдаги битта катак: ё сотувчи товари, ё AVA товари.
+class _ShelfEntry {
+  const _ShelfEntry._({this.seller, this.platform});
+
+  factory _ShelfEntry.seller(WholesaleProduct p) => _ShelfEntry._(seller: p);
+  factory _ShelfEntry.platform(PlatformProduct p) =>
+      _ShelfEntry._(platform: p);
+
+  final WholesaleProduct? seller;
+  final PlatformProduct? platform;
 }

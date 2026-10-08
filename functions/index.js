@@ -29,6 +29,8 @@ const courierPush = createCourierPush({ db, canonicalUid });
 // Capability lifecycle nusxasi (manba: functions_demand/core/capabilities.js,
 // paritet testi bilan). `resolveAuthorizedCourierUid` shu orqali tekshiradi.
 const capabilitiesModel = require('./capabilities_model');
+// Kuryer avtorizatsiyasi: 'new' / 'finish' rejimlari + buyurtma egaligi.
+const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
@@ -37,6 +39,12 @@ const platformPricing = require('./platform_pricing');
 const { attachTaxiBilling } = require('./taxi_billing');
 attachTaxiBilling(exports, {
   functions, db, admin, callerPhone, canonicalUid, settlementLedger, notifyUserInApp,
+});
+// Mahalliy taksi — SERVER narxi (ega qarori 2026-10-07): trip yaratish,
+// narx qulfi va admin tarif versiyasi. Yakunlash — pastdagi completeLocalTrip.
+const { attachLocalTaxi } = require('./local_taxi');
+attachLocalTaxi(exports, {
+  functions, db, admin, callerPhone, canonicalUid, axios,
 });
 // AVA Logistics eskrou (D-11): pul faqat ledger orqali — u shu yerda;
 // ORDER/SHIPMENT/LEG/custody `functions_demand` da (relay hujjati 7.6).
@@ -728,8 +736,14 @@ async function bumpHomeNewsBadge(newsData) {
   }
 }
 
-/** Админ номи билан мижоз чатига (support_chats) — systemOrder: такрор push йўқ */
-async function appendSystemSupportChatMessage(userDigits, text) {
+/**
+ * Админ номи билан мижоз чатига (support_chats).
+ * `systemOrder: true` (стандарт) — буюртма хабари: push `admin_news` орқали
+ * алоҳида кетади, шунинг учун `onSupportChatMessageCreate` такрор push
+ * юбормайди. Админнинг қўлда ёзган жавоби `systemOrder: false` билан
+ * ёзилади — акс ҳолда мижозга ҳеч қандай билдиришнома бормасди.
+ */
+async function appendSystemSupportChatMessage(userDigits, text, { systemOrder = true } = {}) {
   const d = digits(userDigits);
   if (!d || d.length < 9) return;
   const t = String(text || '').trim();
@@ -749,7 +763,7 @@ async function appendSystemSupportChatMessage(userDigits, text) {
     fromPhone: '',
     fromName: 'Админ',
     sender: 'admin',
-    systemOrder: true,
+    systemOrder: systemOrder === true,
     read: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -1627,23 +1641,38 @@ exports.onTripUpdate = functions.firestore
 
     let localCancelFb = after.localCancelFeedback || null;
 
+    // Mahalliy taksi: trip `accepted`dan QANDAY chiqmasin (yo'lovchi/admin
+    // bekor, expired, tark etish, yakun) — haydovchi bo'shatiladi. Avval faqat
+    // yo'lovchi bekorida bo'shatilardi → admin bekor qilsa `isBusy` abadiy
+    // true qolib, haydovchi boshqa buyurtma ololmasdi.
+    if (isLocal && before.status === 'accepted' && after.status !== 'accepted') {
+      const localDriverId = String(
+          before.acceptedDriverId || before.driverId || '');
+      if (localDriverId) {
+        try {
+          const other = await db.collection('trips')
+              .where('acceptedDriverId', '==', localDriverId)
+              .where('status', '==', 'accepted')
+              .limit(1)
+              .get();
+          // Haydovchi shu orada boshqa safarni olgan bo'lsa — tegmaymiz.
+          if (other.empty) {
+            await db.collection('drivers').doc(localDriverId).update({
+              isBusy: false,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.error('release driver isBusy failed:', e);
+        }
+      }
+    }
+
     if (
       after.status === 'cancelled' &&
       (after.taxiType === 'local' || after.taxiType === 'alone') &&
       (after.cancelledBy === 'passenger' || after.cancelledBy === 'user')
     ) {
-      const localDriverId = String(
-          after.acceptedDriverId || after.driverId || '');
-      if (localDriverId) {
-        try {
-          await db.collection('drivers').doc(localDriverId).update({
-            isBusy: false,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        } catch (e) {
-          console.error('release driver isBusy failed:', e);
-        }
-      }
 
       // Faqat qabuldan keyingi bekor — qidiruv bekorida blok yo'q.
       // Block count + trip.localTaxiBlockCounted bitta txn (TOCTOU yo'q).
@@ -1788,7 +1817,9 @@ exports.onSupportChatMessageCreate = functions.firestore
         .limit(1)
         .get();
       if (!adminSnap.empty) {
-        targetToken = adminSnap.docs.first.data().fcmToken || '';
+        // `docs` — JS массив: `.first` йўқ (Dart одати), аввал шу ерда
+        // TypeError чиқиб админга push умуман кетмасди.
+        targetToken = adminSnap.docs[0].data().fcmToken || '';
       }
     }
     if (!targetToken) return;
@@ -1875,13 +1906,20 @@ async function assertAdmin(operatorPhone, context) {
   const tokenPhone = String(
     context.auth.token.phone_number || '').replace(/\D/g, '');
   const opDigits = digits(operatorPhone);
-  const phoneForLookup = opDigits || tokenPhone;
-  if (!phoneForLookup) {
+  // Rol FAQAT token telefoni bo'yicha aniqlanadi. Avval token'da telefon
+  // bo'lmasa (anonim sessiya — `signInAnonymously`) klient yuborgan
+  // `adminPhone`ga ishonilardi: admin raqamini bilgan har kim (u web
+  // bundle'da ochiq turadi) har bir admin callable'ni chaqira olardi.
+  // Admin web (`adminWebSignIn`) va mobil kirish (`createPhoneCustomToken`)
+  // token'ga doimiy `phone_number` claim qo'yadi — haqiqiy admin bunga
+  // tegmaydi.
+  if (!tokenPhone) {
     throw new functions.https.HttpsError(
-      'invalid-argument', 'operatorPhone');
+      'permission-denied', 'Phone login required');
   }
+  const phoneForLookup = tokenPhone;
 
-  if (opDigits && tokenPhone) {
+  if (opDigits) {
     const canonOp = canonicalUid(opDigits);
     const canonTok = canonicalUid(tokenPhone);
     if (canonOp !== canonTok && opDigits !== tokenPhone) {
@@ -2413,37 +2451,25 @@ function assertCourierPhone(courierPhone) {
   return uid;
 }
 
+const courierAuth = makeCourierAuth({
+  db, caps: capabilitiesModel, canonicalUid, HttpsError: functions.https.HttpsError,
+});
+
 /**
- * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1).
- *
- * `users/{uid}.accountId` → `provider_capabilities/{accountId}` →
- * `courier` statusi ishlaydigan holatda (`trial`, `trial_expired`,
- * `document_submitted`, `under_review`, `approved`). Statusni faqat
- * server/admin yozadi, shuning uchun bu tekshiruvga ishonish mumkin.
+ * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1), ikki rejim
+ * (`courier_auth.js`, ega qarori 2026-10-07):
+ *   'new'    — yangi ish (marshrut, gilam/sut vazifasini olish):
+ *              ishlaydigan holat (`trial` … `approved`);
+ *   'finish' — qo'ldagi ishni tugatish: `suspended` ham (custody
+ *              uzilmasin). Buyurtma amallarida qo'shimcha
+ *              `courierAuth.assertOrderOnActiveRoute` shart.
  *
  * OLIB TASHLANDI (D-CLEAN-1): `couriers/{uid}` mavjudligi va
  * `users.role === 'courier'` zahiralari — ikkalasi ham klient o'ziga
  * yozishi mumkin bo'lgan manbalar edi (self_approval_rules.test.js).
  */
-async function resolveAuthorizedCourierUid(courierPhone) {
-  const uid9 = userUid(courierPhone);
-  const uid12 = canonicalUid(courierPhone);
-  const ids = uid9 === uid12 ? [uid12] : [uid12, uid9];
-
-  for (let i = 0; i < ids.length; i += 1) {
-    const userDoc = await db.collection('users').doc(ids[i]).get();
-    if (!userDoc.exists) continue;
-    const accountId = String((userDoc.data() || {}).accountId || '');
-    if (!accountId) break;
-    const cap = await db.collection('provider_capabilities').doc(accountId).get();
-    const doc = cap.exists ? (cap.data() || {}) : {};
-    if (capabilitiesModel.isWorking('courier', capabilitiesModel.statusOf(doc, 'courier'))) {
-      return uid12;
-    }
-    break;
-  }
-
-  throw new functions.https.HttpsError('permission-denied', 'Courier not authorized');
+async function resolveAuthorizedCourierUid(courierPhone, mode = COURIER_AUTH_MODES.new) {
+  return courierAuth.resolve(courierPhone, mode);
 }
 
 async function loadOrderOrThrow(orderId) {
@@ -3154,6 +3180,116 @@ exports.placeOrderPostPaid = functions.https.onCall(async (data, context) => {
 });
 
 /**
+ * Буюртмани бекор қилиш ядроси (захира + ҳамён қайтариш) — мижоз бекори
+ * (`customerCancelOrder`) ва админ рад этиши (`adminSetOrderStatus` →
+ * `rejected`) учун ЯГОНА манба. Аввал админ рад этганда ҳамёндан олинган
+ * `balanceApplied` қайтмасди, захира эса фақат ярим тундаги reset'да
+ * қайтарди.
+ *
+ * Firestore транзакцияси барча ўқишни ёзишдан ОЛДИН талаб қилади. Аввалги
+ * кодда захира ҳужжати янгилангандан кейин мижоз ва ledger ҳужжатлари
+ * ўқиларди — захираси ҳисобланадиган маҳсулотли буюртмада бекор қилиш
+ * «reads before writes» хатоси билан йиқиларди. Шунинг учун икки фаза:
+ * `prepareOrderCancelInTx` (фақат ўқиш) → `commitOrderCancelInTx` (фақат
+ * ёзиш), ledger'нинг prepare/commit жуфти каби.
+ *
+ * Ledger калити иккала йўл учун битта (`order_cancel_refund_{orderId}`) —
+ * буюртма бекор/рад ҳолатини транзакция ичида текшириш асосий ҳимоя, калит
+ * эса иккинчи қаватли idempotency.
+ */
+function orderCancelRefundKey(orderId) {
+  return `order_cancel_refund_${orderId}`;
+}
+
+async function prepareOrderCancelInTx(t, orderRef, od) {
+  const decs = Array.isArray(od.inventoryDecrements) ? od.inventoryDecrements : [];
+  const inv = [];
+  for (let i = 0; i < decs.length; i += 1) {
+    const c = decs[i] || {};
+    const id = String(c.id || '').trim();
+    const qty = Number(c.qty);
+    if (!id || !Number.isFinite(qty) || qty <= 0) continue;
+    let col;
+    try {
+      col = inventoryCollectionForDecrementKind(String(c.kind || ''));
+    } catch (_) {
+      continue;
+    }
+    inv.push({ ref: db.collection(col).doc(id), qty });
+  }
+  const invSnaps = await Promise.all(inv.map((r) => t.get(r.ref)));
+
+  const walletRefund = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
+  let customerRef = null;
+  let customerSnap = null;
+  let bonusCtx = null;
+  const rawPhone = String(od.userPhone || od.phone || '');
+  const phoneDigitsOnly = digits(rawPhone);
+  if (walletRefund > 0 && phoneDigitsOnly.length >= 9) {
+    const uid12 = canonicalUid(rawPhone);
+    customerRef = db.collection('users').doc(uid12);
+    customerSnap = await t.get(customerRef);
+    if (!customerSnap.exists && phoneDigitsOnly !== uid12) {
+      customerRef = db.collection('users').doc(phoneDigitsOnly);
+      customerSnap = await t.get(customerRef);
+    }
+    if (customerSnap.exists) {
+      bonusCtx = await settlementLedger.prepareBonusInTx(
+          t, db, customerRef.id, { idempotencyKey: orderCancelRefundKey(orderRef.id) });
+    }
+  }
+  return { orderRef, od, inv, invSnaps, walletRefund, customerRef, customerSnap, bonusCtx };
+}
+
+/** @returns {number} ҳақиқатда қайтарилган ҳамён суммаси */
+function commitOrderCancelInTx(t, ctx, { orderPatch, actorUid, actorRole, createdBy, reason }) {
+  for (let i = 0; i < ctx.inv.length; i += 1) {
+    const s = ctx.invSnaps[i];
+    if (!s.exists) continue;
+    const totalStock = Number((s.data() || {}).totalStock) || 0;
+    if (totalStock <= 0) continue;
+    t.update(ctx.inv[i].ref, {
+      soldToday: admin.firestore.FieldValue.increment(-ctx.inv[i].qty),
+    });
+  }
+
+  let refunded = 0;
+  if (ctx.bonusCtx && !ctx.bonusCtx.jExists) {
+    const od = ctx.od;
+    const orderId = ctx.orderRef.id;
+    const bal = parseInt(String(ctx.customerSnap.data()?.bonusBalance ?? 0), 10) || 0;
+    t.set(ctx.customerRef, {
+      bonusBalance: bal + ctx.walletRefund,
+      balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    settlementLedger.commitBonusInTx(t, ctx.bonusCtx, {
+      delta: ctx.walletRefund,
+      kind: 'order_cancel_refund',
+      refType: 'order',
+      refId: orderId,
+      meta: { walletRefund: ctx.walletRefund, status: String(orderPatch.status || '') },
+      postedBy: actorUid,
+      postedRole: actorRole,
+    });
+    const ledgerId = ctx.customerRef.collection('wallet_ledger').doc().id;
+    t.set(ctx.customerRef.collection('wallet_ledger').doc(ledgerId), {
+      type: 'order_cancel_refund',
+      amount: ctx.walletRefund,
+      module: String(od.type || 'food') === 'bread' ? 'bread' : 'food',
+      refType: 'order',
+      refId: orderId,
+      meta: { reason },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy,
+    });
+    refunded = ctx.walletRefund;
+  }
+
+  t.update(ctx.orderRef, orderPatch);
+  return refunded;
+}
+
+/**
  * Мижоз: food/bread буюртмани бекор (фақат эрта ҳолат).
  * Захира қайтариш + ҳамён refund (agar balanceApplied > 0).
  */
@@ -3228,78 +3364,22 @@ exports.customerCancelOrder = functions.https.onCall(async (data, context) => {
       );
     }
 
-    // Захира қайтариш
-    const decs = Array.isArray(od.inventoryDecrements) ? od.inventoryDecrements : [];
-    for (let i = 0; i < decs.length; i += 1) {
-      const c = decs[i] || {};
-      const id = String(c.id || '').trim();
-      const qty = Number(c.qty);
-      if (!id || !Number.isFinite(qty) || qty <= 0) continue;
-      let col;
-      try {
-        col = inventoryCollectionForDecrementKind(String(c.kind || ''));
-      } catch (_) {
-        continue;
-      }
-      const invRef = db.collection(col).doc(id);
-      const invSnap = await t.get(invRef);
-      if (!invSnap.exists) continue;
-      const d = invSnap.data() || {};
-      const totalStock = Number(d.totalStock) || 0;
-      if (totalStock <= 0) continue;
-      t.update(invRef, {
-        soldToday: admin.firestore.FieldValue.increment(-qty),
-      });
-    }
-
-    const walletRefund = Math.max(0, Math.trunc(Number(od.balanceApplied || 0)));
-    const uid12 = canonicalUid(String(od.userPhone || od.phone || ''));
-    const uid9 = userUid(String(od.userPhone || od.phone || ''));
-    let customerRef = db.collection('users').doc(uid12);
-    let customerSnap = await t.get(customerRef);
-    if (!customerSnap.exists && uid9 !== uid12) {
-      customerRef = db.collection('users').doc(uid9);
-      customerSnap = await t.get(customerRef);
-    }
-
-    if (walletRefund > 0 && customerSnap.exists) {
-      const bal = parseInt(String(customerSnap.data()?.bonusBalance ?? 0), 10) || 0;
-      const bonusCtx = await settlementLedger.prepareBonusInTx(
-          t, db, customerRef.id, { idempotencyKey: idemKey });
-      t.set(customerRef, {
-        bonusBalance: bal + walletRefund,
-        balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-      settlementLedger.commitBonusInTx(t, bonusCtx, {
-        delta: walletRefund,
-        kind: 'order_cancel_refund',
-        refType: 'order',
-        refId: orderId,
-        meta: { walletRefund },
-        postedBy: callerUid,
-        postedRole: 'client',
-      });
-      const ledgerId = customerRef.collection('wallet_ledger').doc().id;
-      t.set(customerRef.collection('wallet_ledger').doc(ledgerId), {
-        type: 'order_cancel_refund',
-        amount: walletRefund,
-        module: String(od.type || 'food') === 'bread' ? 'bread' : 'food',
-        refType: 'order',
-        refId: orderId,
-        meta: { reason },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: 'customerCancelOrder',
-      });
-    }
-
-    t.update(orderRef, {
-      status: 'cancelled',
-      fulfillmentStatus: 'cancelled',
-      cancelReason: reason || 'Мижоз бекор қилди',
-      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
-      cancelledBy: callerUid,
-      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    // Захира + ҳамён қайтариш (ўқиш фазаси → ёзиш фазаси).
+    const cancelCtx = await prepareOrderCancelInTx(t, orderRef, od);
+    const walletRefund = commitOrderCancelInTx(t, cancelCtx, {
+      orderPatch: {
+        status: 'cancelled',
+        fulfillmentStatus: 'cancelled',
+        cancelReason: reason || 'Мижоз бекор қилди',
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+        cancelledBy: callerUid,
+        statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      actorUid: callerUid,
+      actorRole: 'client',
+      createdBy: 'customerCancelOrder',
+      reason,
     });
 
     const out = { ok: true, orderId, walletRefund };
@@ -3985,9 +4065,14 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  // Huquq ('finish' — to'xtatilgan kuryer ham qo'lidagini tugatadi) va
+  // buyurtma shu kuryerning faol marshrutida bo'lishi shart. Avval bu
+  // yerda hech qanday tekshiruv yo'q edi (`courier_auth.js`).
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
   if (fs === 'cancelled' || fs === 'completed') {
     throw new functions.https.HttpsError('failed-precondition', 'order closed');
@@ -4125,7 +4210,9 @@ exports.courierRecoverOrphanRoute = functions.https.onCall(async (data, context)
     if (canonicalUid(callerPhone(context)) !== canonicalUid(courierDigits)) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    const courierId = await resolveAuthorizedCourierUid(courierPhone);
+    // 'finish': faqat O'ZIGA allaqachon biriktirilgan buyurtmalarni
+    // tiklaydi — to'xtatilgan kuryer ham qo'lidagini yo'qotmasin.
+    const courierId = await resolveAuthorizedCourierUid(courierPhone, COURIER_AUTH_MODES.finish);
 
     // Аллақачон фаол маршрут борми?
     const activeSnap = await db.collection('delivery_routes')
@@ -4192,9 +4279,11 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'courier_picked' && od.status !== 'in_delivery') {
     throw new functions.https.HttpsError('failed-precondition', 'pick first');
@@ -4243,11 +4332,14 @@ exports.courierGetCustomerWalletBalance = functions.https.onCall(async (data, co
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
 
-    await resolveAuthorizedCourierUid(courierPhone);
+    await resolveAuthorizedCourierUid(courierPhone, COURIER_AUTH_MODES.finish);
 
     if (!customerPhone.trim()) {
       throw new functions.https.HttpsError('invalid-argument', 'customerPhone required');
     }
+    // Faqat o'z faol marshrutidagi mijoz — avval istalgan raqamning
+    // hamyon qoldig'i qaytarilardi (40-qoida).
+    await courierAuth.assertCustomerOnActiveRoute(courierPhone, customerPhone);
 
     const uid9 = userUid(customerPhone);
     const uid12 = canonicalUid(customerPhone);
@@ -4282,11 +4374,15 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
+  // Huquq + egalik: avval tekshiruvsiz har kim ortiqcha «naqd»ni qaytim
+  // sifatida o'z hamyoniga yoza olardi (`courier_auth.js`).
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const linesIn = Array.isArray(data.lines) ? data.lines : [];
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
 
   const { ref, data: od } = await loadOrderOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'arrived') {
     throw new functions.https.HttpsError('failed-precondition', 'arrived first');
@@ -4774,11 +4870,17 @@ exports.requestPayout = functions.https.onCall(async (data, context) => {
 });
 
 /** Админ: нақд чиқаришни тасдиқлаш */
+// Тўловни тасдиқлаш/рад этиш — админ панелдаги «Молия» бўлими каби фақат
+// finance ва superadmin (SoD). Аввал CF admin/dispatcher'ни қабул қилиб,
+// бўлимни кўрадиган finance'ни рад этарди — роллар тескари эди. auditor —
+// фақат ўқийди.
+const PAYOUT_DECIDER_ROLES = ['finance', 'superadmin'];
+
 exports.confirmPayout = functions.https.onCall(async (data, context) => {
   const adminUid = await requireCallerRoles(
     context,
-    ['admin', 'superadmin', 'dispatcher'],
-    'Admin role required',
+    PAYOUT_DECIDER_ROLES,
+    'Finance role required',
   );
 
   const requestId = String(data.requestId || '');
@@ -5029,14 +5131,36 @@ exports.grantBirthdayBonus = functions.https.onCall(async (data, context) => {
 
   const uid = userUid(String(data.uid || data.userPhone || ''));
   const year = parseInt(String(data.year ?? 0), 10);
-  const amount = parseInt(String(data.amount ?? 0), 10);
+  const clientAmount = parseInt(String(data.amount ?? 0), 10);
   const operatorPhone = String(data.operatorPhone || adminUid);
 
-  if (!Number.isFinite(year) || year < 2000 || year > 2100) {
-    throw new functions.https.HttpsError('invalid-argument', 'invalid year');
+  // Йил — фақат жорий йил (Тошкент вақти). Аввал 2000…2100 оралиғидаги
+  // ҳар қандай йил қабул қилинарди: битта фойдаланувчига 101 марта бонус
+  // бериш мумкин эди.
+  const currentYear = parseInt(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tashkent', year: 'numeric',
+  }).format(new Date()), 10);
+  if (!Number.isFinite(year) || year !== currentYear) {
+    throw new functions.https.HttpsError(
+        'invalid-argument', 'BIRTHDAY_BONUS_YEAR_NOT_CURRENT', { currentYear });
   }
+
+  // Сумма — сервер конфигидан (`settings/app.birthdayBonusAmount`, админ
+  // экрани кўрсатадиган ва ўзгартирадиган ўша майдон; стандарт 10 000 —
+  // `UserRepository.watchBirthdayBonusAmount` билан бир хил). Клиент
+  // юборган `amount` фақат текширув учун: экран эски суммани кўрсатиб
+  // турган бўлса — рад (CLAUDE.md 18: пулни клиентдан олмаймиз).
+  const appSettingsSnap = await db.collection('settings').doc('app').get();
+  const rawAmount = (appSettingsSnap.data() || {}).birthdayBonusAmount;
+  const amount = Number.isInteger(rawAmount) ? rawAmount
+    : (rawAmount == null ? 10000 : Math.trunc(Number(rawAmount)));
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'BIRTHDAY_BONUS_DISABLED');
+  }
+  if (Number.isFinite(clientAmount) && clientAmount > 0 && clientAmount !== amount) {
+    throw new functions.https.HttpsError(
+        'failed-precondition', 'BIRTHDAY_BONUS_AMOUNT_CHANGED', { amount });
   }
 
   const userRef = db.collection('users').doc(uid);
@@ -5065,6 +5189,10 @@ exports.grantBirthdayBonus = functions.https.onCall(async (data, context) => {
       );
     }
     const userSnap = await t.get(userRef);
+    if (!userSnap.exists) {
+      // Аввал йўқ фойдаланувчига ҳам `merge` билан баланс ёзиб юбориларди.
+      throw new functions.https.HttpsError('not-found', 'USER_NOT_FOUND');
+    }
     const prev = (userSnap.data() && userSnap.data().bonusBalance) || 0;
     const next = prev + amount;
 
@@ -5233,11 +5361,13 @@ async function assertOilCatalogEditor(operatorPhone, context) {
   const tokenPhone = String(
     context.auth.token.phone_number || '').replace(/\D/g, '');
   const opDigits = digits(operatorPhone);
-  const phoneForLookup = opDigits || tokenPhone;
-  if (!phoneForLookup) {
-    throw new functions.https.HttpsError('invalid-argument', 'operatorPhone');
+  // `assertAdmin` bilan bir xil: rol faqat token telefoni bo'yicha
+  // (anonim sessiya klient yuborgan raqam bilan kira olmasin).
+  if (!tokenPhone) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone login required');
   }
-  if (opDigits && tokenPhone) {
+  const phoneForLookup = tokenPhone;
+  if (opDigits) {
     const canonOp = canonicalUid(opDigits);
     const canonTok = canonicalUid(tokenPhone);
     if (canonOp !== canonTok && opDigits !== tokenPhone) {
@@ -6944,13 +7074,30 @@ exports.adminUpdateJobAdStatus = functions.https.onCall(async (data, context) =>
   if (!ADMIN_JOB_AD_STATUSES.has(status)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
   }
-  const { ref } = await getJobsBoardAdOrThrow(adId);
-  await ref.update({
+  const { ref, snap } = await getJobsBoardAdOrThrow(adId);
+  const existing = snap.data() || {};
+  const patch = {
     status,
     moderatedAt: admin.firestore.FieldValue.serverTimestamp(),
     editedAt: admin.firestore.FieldValue.serverTimestamp(),
     moderatedBy: adminDocId,
-  });
+  };
+  // Муддати ўтган эълонни админ қайта очса (`pending`/`active`) — муддат
+  // янгиланади (`createJobAd` билан бир хил қоида). Акс ҳолда
+  // `expirePendingTrips` бир дақиқа ичида уни яна `completed` қиларди —
+  // бозорда бу `onAdUpdate`да аллақачон тузатилган.
+  if (status === 'pending' || status === 'active') {
+    const exp = existing.expiresAt && typeof existing.expiresAt.toMillis === 'function'
+      ? existing.expiresAt.toMillis()
+      : null;
+    if (exp !== null && exp <= Date.now()) {
+      const days = jobAdExpiryDays(existing.type, existing.isUrgent === true);
+      patch.expiresAt = admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      );
+    }
+  }
+  await ref.update(patch);
   return { ok: true, adId, status };
 });
 
@@ -6990,7 +7137,11 @@ exports.adminUpdateJobAd = functions.https.onCall(async (data, context) => {
   if (status && ADMIN_JOB_AD_STATUSES.has(status)) {
     patch.status = status;
   }
-  if (data.expiresAt) {
+  if (data.clearExpiresAt === true) {
+    // «Муддатни олиб ташлаш» — аввал null юборилмас, CF ҳам фақат қиймат
+    // бўлганда ёзарди: тугма ҳеч нарса қилмасди.
+    patch.expiresAt = admin.firestore.FieldValue.delete();
+  } else if (data.expiresAt) {
     const exp = new Date(data.expiresAt);
     if (!Number.isNaN(exp.getTime())) {
       patch.expiresAt = admin.firestore.Timestamp.fromDate(exp);
@@ -7701,9 +7852,78 @@ const ADMIN_ORDER_STATUSES = new Set([
   'new', 'accepted', 'ready', 'in_delivery', 'delivered', 'rejected',
 ]);
 
+/**
+ * Админ доскаси (`admin_orders_screen.dart` `_nextActions`) таклиф қиладиган
+ * ўтишлар — сервер ҳам ФАҚАТ шуларни қабул қилади. Аввал ҳар қандай
+ * статус текширувсиз ёзиларди: эски snapshot'дан қурилган «Қабул» bulk
+ * тугмаси мижоз бекор қилган (пули қайтган) буюртмани `accepted`га
+ * тирилтира оларди. `delivered`/`rejected`/`cancelled` — якуний.
+ */
+const ADMIN_ORDER_TRANSITIONS = {
+  new: ['accepted', 'rejected'],
+  accepted: ['ready', 'rejected'],
+  ready: ['in_delivery', 'rejected'],
+  in_delivery: ['delivered'],
+  courier: ['delivered'],
+};
+// Курьер олиб кетган / етиб келган буюртмани админ рад этмайди
+// (`customerCancelOrder` билан бир хил чегара).
+const ORDER_FS_COURIER_HOLDS = new Set(['courier_picked', 'arrived', 'completed']);
+
+/** @returns {string|null} рад сабаби (diagnostic code) ёки null */
+function adminOrderTransitionError(od, next) {
+  const cur = String(od.status || '').trim();
+  const allowed = ADMIN_ORDER_TRANSITIONS[cur] || [];
+  if (!allowed.includes(next)) return 'ORDER_TRANSITION_NOT_ALLOWED';
+  const fs = String(od.fulfillmentStatus || '').trim().toLowerCase();
+  if (next === 'rejected' && ORDER_FS_COURIER_HOLDS.has(fs)) {
+    return 'ORDER_HELD_BY_COURIER';
+  }
+  return null;
+}
+
+/**
+ * Битта буюртмага админ статусини транзакцияда қўллайди.
+ * @returns {{orderId, status, unchanged?, skipped?, walletRefund?}}
+ */
+async function applyAdminOrderStatus(orderId, status, adminUid) {
+  const ref = db.collection('orders').doc(orderId);
+  return db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    if (!snap.exists) {
+      return { orderId, status, skipped: 'ORDER_NOT_FOUND' };
+    }
+    const od = snap.data() || {};
+    if (String(od.status || '').trim() === status) {
+      return { orderId, status, unchanged: true };
+    }
+    const err = adminOrderTransitionError(od, status);
+    if (err) {
+      return { orderId, status, skipped: err, from: String(od.status || '') };
+    }
+    if (status === 'rejected') {
+      const cancelCtx = await prepareOrderCancelInTx(t, ref, od);
+      const walletRefund = commitOrderCancelInTx(t, cancelCtx, {
+        orderPatch: {
+          ...buildOrderStatusPatch('rejected'),
+          rejectedBy: adminUid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        actorUid: adminUid,
+        actorRole: 'admin',
+        createdBy: 'adminSetOrderStatus',
+        reason: 'Админ рад этди',
+      });
+      return { orderId, status, walletRefund };
+    }
+    t.update(ref, buildOrderStatusPatch(status));
+    return { orderId, status };
+  });
+}
+
 /** Admin web: буюртма status (Firestore rules `isAdmin()` custom token bilan ишламайди). */
 exports.adminSetOrderStatus = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
   const orderId = String(data.orderId || '').trim();
   const status = String(data.status || '').trim();
   if (!orderId) {
@@ -7712,47 +7932,61 @@ exports.adminSetOrderStatus = functions.https.onCall(async (data, context) => {
   if (!ADMIN_ORDER_STATUSES.has(status)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
   }
-  const ref = db.collection('orders').doc(orderId);
-  const snap = await ref.get();
-  if (!snap.exists) {
+  const res = await applyAdminOrderStatus(orderId, status, adminUid);
+  if (res.skipped === 'ORDER_NOT_FOUND') {
     throw new functions.https.HttpsError('not-found', 'Order not found');
   }
-  await ref.update(buildOrderStatusPatch(status));
-  return { ok: true, orderId, status };
+  if (res.skipped) {
+    console.warn(JSON.stringify({
+      action: 'adminSetOrderStatus', result: 'refused', errorCode: res.skipped,
+      orderId, from: res.from, to: status, userId: adminUid,
+    }));
+    throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Буюртма ҳолати ўзгарган — бу амални бажариб бўлмайди. Саҳифани янгиланг.',
+        { code: res.skipped, from: res.from || '' },
+    );
+  }
+  return { ok: true, orderId, status, walletRefund: res.walletRefund || 0 };
 });
 
 /** Admin web: бир нечта буюртма status (Kanban ustun tugmasi). */
 exports.adminSetOrderStatusBatch = functions.https.onCall(async (data, context) => {
-  await assertAdmin(String(data.adminPhone || ''), context);
+  const adminUid = await assertAdmin(String(data.adminPhone || ''), context);
   const status = String(data.status || '').trim();
   const orderIds = Array.isArray(data.orderIds)
-    ? data.orderIds.map((id) => String(id || '').trim()).filter(Boolean)
+    ? [...new Set(data.orderIds.map((id) => String(id || '').trim()).filter(Boolean))]
     : [];
   if (orderIds.length === 0) {
     throw new functions.https.HttpsError('invalid-argument', 'orderIds required');
   }
+  if (orderIds.length > 200) {
+    throw new functions.https.HttpsError('invalid-argument', 'Too many orders (max 200)');
+  }
   if (!ADMIN_ORDER_STATUSES.has(status)) {
     throw new functions.https.HttpsError('invalid-argument', 'Invalid status');
   }
-  const patch = buildOrderStatusPatch(status);
-  let batch = db.batch();
-  let writes = 0;
+  // Ҳар буюртма — ўз транзакцияси (ўтиш текшируви + рад этишда қайтариш).
+  // Ҳолати ўзгариб кетган буюртма ўтказиб юборилади, қолганлари ишлайди.
   let updated = 0;
+  let walletRefund = 0;
+  const skipped = [];
   for (const orderId of orderIds) {
-    const ref = db.collection('orders').doc(orderId);
-    const snap = await ref.get();
-    if (!snap.exists) continue;
-    batch.update(ref, patch);
-    writes += 1;
-    updated += 1;
-    if (writes >= 450) {
-      await batch.commit();
-      batch = db.batch();
-      writes = 0;
+    const res = await applyAdminOrderStatus(orderId, status, adminUid);
+    if (res.skipped) {
+      skipped.push({ orderId, code: res.skipped, from: res.from || '' });
+      continue;
     }
+    if (!res.unchanged) updated += 1;
+    walletRefund += res.walletRefund || 0;
   }
-  if (writes > 0) await batch.commit();
-  return { ok: true, updated, status };
+  if (skipped.length > 0) {
+    console.warn(JSON.stringify({
+      action: 'adminSetOrderStatusBatch', result: 'partial', to: status,
+      userId: adminUid, skipped,
+    }));
+  }
+  return { ok: true, updated, status, skipped, walletRefund };
 });
 
 /** Admin: sell_submission → collection_task (йiғib оlish). */
@@ -7920,7 +8154,8 @@ exports.courierMarkCollectionArrived = functions.https.onCall(async (data, conte
     if (callerPhone(context) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    await resolveAuthorizedCourierUid(data.courierPhone);
+    // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
+    await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
 
     const taskId = String(data.taskId || '').trim();
     if (!taskId) {
@@ -7984,7 +8219,8 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     if (callerPhone(context) !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
     }
-    await resolveAuthorizedCourierUid(data.courierPhone);
+    // 'finish': vazifa shu kuryerniki ekani pastda (`task.courierId`) tekshiriladi.
+    await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
 
     const taskId = String(data.taskId || '').trim();
     if (!taskId) {
@@ -8247,38 +8483,38 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
 
 /** Админ: чиқариш талабини рад этиш */
 exports.rejectPayout = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated', 'Auth required');
-  }
-  const callerPhone = context.auth.token.phone_number
-      ?.replace(/\D/g, '') ?? '';
-  const callerDoc = await db.collection('users')
-      .doc(callerPhone).get();
-  const callerRole = callerDoc.data()?.role ?? 'user';
-  if (!['admin', 'superadmin', 'dispatcher'].includes(callerRole)) {
-    throw new functions.https.HttpsError(
-      'permission-denied', 'Admin role required');
-  }
+  const callerUid = await requireCallerRoles(
+    context,
+    PAYOUT_DECIDER_ROLES,
+    'Finance role required',
+  );
 
   const requestId = String(data.requestId || '');
   if (!requestId) {
     throw new functions.https.HttpsError('invalid-argument', 'requestId required');
   }
+  const reason = String(data.reason || '').trim().slice(0, 300);
 
+  // Транзакция: бир вақтда `confirmPayout` баланс ечиб `completed` ёзган
+  // бўлса, бу ерда уни `rejected` билан устидан ёзиб юбормаймиз (аввал
+  // get → check → update транзакциясиз эди).
   const reqRef = db.collection('payout_requests').doc(requestId);
-  const reqSnap = await reqRef.get();
-  if (!reqSnap.exists) {
-    throw new functions.https.HttpsError('not-found', 'request not found');
-  }
-  if (reqSnap.data().status !== 'pending') {
-    throw new functions.https.HttpsError('failed-precondition', 'not pending');
-  }
-
-  await reqRef.update({
-    status: 'rejected',
-    rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
-    rejectedBy: digits(callerPhone),
+  await db.runTransaction(async (t) => {
+    const reqSnap = await t.get(reqRef);
+    if (!reqSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'request not found');
+    }
+    if (reqSnap.data().status !== 'pending') {
+      throw new functions.https.HttpsError('failed-precondition', 'not pending');
+    }
+    t.update(reqRef, {
+      status: 'rejected',
+      rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+      rejectedBy: callerUid,
+      // Панель шу майдонни кўрсатади (`payout_management_screen.dart`) —
+      // аввал CF сабабни ташлаб юборарди.
+      ...(reason ? { rejectedReason: reason } : {}),
+    });
   });
 
   return { ok: true };
@@ -9054,17 +9290,85 @@ async function wipeCollection(colName, stats, key) {
   return total;
 }
 
-/** Admin: marshrut/mahalliy/shaharlararo haydovchi bazasini tozalash — yangi ro'yxatdan o'tish. */
-exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, context) => {
-  const adminPhone = String(data.adminPhone || '');
-  await assertAdmin(adminPhone, context);
+/** Haydovchi hujjatida taksi turi bormi (reset tool — dry-run va ijro uchun bitta qoida). */
+function driverDocHasTaxi(d) {
+  let types = Array.isArray(d.taxiTypes)
+    ? d.taxiTypes.map(normalizeDriverTaxiType)
+    : [];
+  if (types.length === 0 && d.taxiType) {
+    types = [normalizeDriverTaxiType(d.taxiType)];
+  }
+  const hasTaxi = types.some((t) => ['marshrut', 'intercity', 'local'].includes(t));
+  return hasTaxi || !!d.taxiType;
+}
 
+/**
+ * Admin: marshrut/mahalliy/shaharlararo haydovchi bazasini tozalash — yangi ro'yxatdan o'tish.
+ *
+ * Ommaviy, qaytarib bo'lmaydigan o'chirish (CLAUDE.md 27/28) — shuning uchun:
+ *   - faqat `superadmin` (avval dispatcher ham bosa olardi);
+ *   - STANDART `dryRun` — faqat sanaydi, hech narsa yozmaydi; ijro uchun
+ *     `dryRun: false` + `confirmText` (admin dialogda o'zi teradi);
+ *   - `users.role` faqat `driver` bo'lsa `user`ga tushiriladi (avval
+ *     haydovchi hujjati bor admin/dispatcher ham panel huquqini yo'qotardi);
+ *   - natija `admin_audit`ga yoziladi (41-band).
+ */
+exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, context) => {
+  const actorUid = await requireCallerRoles(
+    context, ['superadmin'], 'Faqat superadmin');
+
+  const dryRun = data.dryRun !== false;
   const confirmText = String(data.confirmText || '').trim();
-  if (confirmText !== 'RESET_TAXI_DRIVERS') {
+  if (!dryRun && confirmText !== 'RESET_TAXI_DRIVERS') {
     throw new functions.https.HttpsError(
       'invalid-argument',
       'confirmText must be RESET_TAXI_DRIVERS',
     );
+  }
+
+  const driversSnapPre = await db.collection('drivers').get();
+  const taxiDriverDocs = driversSnapPre.docs.filter((doc) => driverDocHasTaxi(doc.data() || {}));
+  const roleOf = new Map();
+  for (let i = 0; i < taxiDriverDocs.length; i += 100) {
+    const refs = taxiDriverDocs.slice(i, i + 100)
+      .map((doc) => db.collection('users').doc(doc.id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((s) => roleOf.set(s.id, s.exists ? String((s.data() || {}).role || '') : ''));
+  }
+
+  if (dryRun) {
+    const [queueCnt, intercityCnt, schedSnapDry, reqSnapDry] = await Promise.all([
+      db.collection('queue').count().get(),
+      db.collection('intercity_drivers').count().get(),
+      db.collection('schedules')
+        .where('taxiType', 'in', ['marshrut', 'intercity', 'local']).get(),
+      db.collection('driver_requests').get(),
+    ]);
+    const reqCount = reqSnapDry.docs.filter((doc) => {
+      const t = normalizeDriverTaxiType((doc.data() || {}).taxiType);
+      return t === 'marshrut' || t === 'intercity' || t === 'local';
+    }).length;
+    const keepRoles = {};
+    let usersRoleReset = 0;
+    for (const doc of taxiDriverDocs) {
+      const r = roleOf.get(doc.id) || '';
+      if (r === 'driver') usersRoleReset += 1;
+      else if (r) keepRoles[r] = (keepRoles[r] || 0) + 1;
+    }
+    return {
+      ok: true,
+      dryRun: true,
+      stats: {
+        queueDeleted: queueCnt.data().count,
+        intercityDriversDeleted: intercityCnt.data().count,
+        schedulesDeleted: schedSnapDry.size,
+        driverRequestsDeleted: reqCount,
+        driversReset: taxiDriverDocs.length,
+        usersRoleReset,
+        usersRoleKept: keepRoles,
+      },
+    };
   }
 
   const stats = {};
@@ -9112,20 +9416,9 @@ exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, cont
   }
   if (writes > 0) await batch.commit();
 
-  const driversSnap = await db.collection('drivers').get();
   writes = 0;
   batch = db.batch();
-  for (const doc of driversSnap.docs) {
-    const d = doc.data() || {};
-    let types = Array.isArray(d.taxiTypes)
-      ? d.taxiTypes.map(normalizeDriverTaxiType)
-      : [];
-    if (types.length === 0 && d.taxiType) {
-      types = [normalizeDriverTaxiType(d.taxiType)];
-    }
-    const hasTaxi = types.some((t) => ['marshrut', 'intercity', 'local'].includes(t));
-    if (!hasTaxi && !d.taxiType) continue;
-
+  for (const doc of taxiDriverDocs) {
     batch.set(
       doc.ref,
       {
@@ -9149,13 +9442,17 @@ exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, cont
     batch.delete(
       db.collection('users').doc(doc.id).collection('marshrut_state').doc('active'),
     );
-    batch.set(
-      db.collection('users').doc(doc.id),
-      { role: 'user', updatedAt: now },
-      { merge: true },
-    );
-    writes += 3;
-    stats.usersRoleReset = (stats.usersRoleReset || 0) + 1;
+    writes += 2;
+    // Faqat haydovchi roli tushiriladi — admin/dispatcher/finance/... tegilmaydi.
+    if (roleOf.get(doc.id) === 'driver') {
+      batch.set(
+        db.collection('users').doc(doc.id),
+        { role: 'user', updatedAt: now },
+        { merge: true },
+      );
+      writes += 1;
+      stats.usersRoleReset = (stats.usersRoleReset || 0) + 1;
+    }
 
     if (writes >= 400) {
       await batch.commit();
@@ -9165,7 +9462,17 @@ exports.adminResetTaxiDriversRegistry = functions.https.onCall(async (data, cont
   }
   if (writes > 0) await batch.commit();
 
-  return { ok: true, stats };
+  await db.collection('admin_audit').add({
+    kind: 'taxi_registry_reset',
+    actor: actorUid,
+    stats,
+    at: now,
+  });
+  console.log(JSON.stringify({
+    action: 'adminResetTaxiDriversRegistry', result: 'ok', userId: actorUid, stats,
+  }));
+
+  return { ok: true, dryRun: false, stats };
 });
 
 /** Mobil/web: PIN bilan `users/{phone}.role = admin` — eski usul (mobil profildan olib tashlandi). */
@@ -9222,7 +9529,8 @@ exports.sendSupportChatReply = functions.https.onCall(async (data, context) => {
   if (text.length > 4000) {
     throw new functions.https.HttpsError('invalid-argument', 'Матн узун');
   }
-  await appendSystemSupportChatMessage(chatId, text);
+  // Қўлда ёзилган жавоб — push + homeBadgePersonal керак (systemOrder эмас).
+  await appendSystemSupportChatMessage(chatId, text, { systemOrder: false });
   return { ok: true };
 });
 
@@ -10902,8 +11210,26 @@ exports.expirePendingTrips = functions.pubsub
       await db.runTransaction(async (t) => {
         const snap = await t.get(ref);
         if (!snap.exists) return;
-        const st = String((snap.data() || {}).status || '');
+        const cur = snap.data() || {};
+        const st = String(cur.status || '');
         if (st !== 'pending' && st !== 'searching') return;
+        // Mahalliy taksi: haydovchi tark etgan (accepted → searching) trip'ga
+        // yangi qidiruv oynasi — releasedAt + 3 daqiqa (eski expiresAt emas).
+        const releasedMs = cur.releasedAt && cur.releasedAt.toMillis
+          ? cur.releasedAt.toMillis() : 0;
+        if (st === 'searching' && releasedMs > 0) {
+          const renewedMs = releasedMs + 3 * 60 * 1000;
+          const expMs = cur.expiresAt && cur.expiresAt.toMillis
+            ? cur.expiresAt.toMillis() : 0;
+          if (renewedMs > now.toMillis()) {
+            if (renewedMs > expMs) {
+              t.update(ref, {
+                expiresAt: admin.firestore.Timestamp.fromMillis(renewedMs),
+              });
+            }
+            return;
+          }
+        }
         t.update(ref, {
           status: 'expired',
           expiredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -12892,6 +13218,26 @@ exports.onTvClipVideoReplacedV2 = onDocumentUpdated(
       const before = event.data.before.data() || {};
       const after = event.data.after.data() || {};
       if (!after.videoUrl || before.videoUrl === after.videoUrl) return;
+      // Тасдиқланган клип видеосини эгаси алмаштирса (`updateOwnClip`) —
+      // ҚЎЛДА режимда клип қайта модерацияга тушади. Аввал у `active`
+      // қолиб, янги (кўрилмаган) видео дарҳол лентага чиқарди: rules эгага
+      // `status`ни тегишни тақиқлайди, демак буни фақат сервер қила олади.
+      // Пуллик реклама (`ad`) — `publishTvAd` оқими, тегилмайди.
+      if (after.status === 'active' && after.category !== 'ad') {
+        try {
+          const s = await db.collection('settings').doc('app').get();
+          if ((s.data() || {}).tvAutoApprove !== true) {
+            await event.data.after.ref.update({
+              status: 'pending',
+              moderationReason: 'video_replaced',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch (e) {
+          console.error('onTvClipVideoReplacedV2 re-moderation:',
+              event.params.clipId, e.message || e);
+        }
+      }
       await transcodeTvClipVideo(event.params.clipId, after.videoUrl);
     });
 
@@ -12992,10 +13338,28 @@ exports.onTvClipDeleted = functions
     .document('tv_clips/{clipId}')
     .onDelete(async (snap) => {
       const clipId = snap.id;
+      const clip = snap.data() || {};
       try {
-        await deleteTvClipMedia(clipId, snap.data() || {});
+        await deleteTvClipMedia(clipId, clip);
       } catch (e) {
         console.error('onTvClipDeleted cleanup:', clipId, e.message || e);
+      }
+      // Дўкон маҳсулотидан клип id'сини олиб ташлаш — ҳар қандай ўчириш
+      // йўли учун (аввал фақат эгасининг `deleteOwnClip`и қиларди; админ
+      // ўчирганда `clipIds`да ўлик id қолиб, витрина «видео бор» дерди).
+      // `arrayRemove` идемпотент — эгаси аллақачон олиб ташлаган бўлса ҳам
+      // зарарсиз.
+      const shopItemId = String(clip.shopItemId || '').trim();
+      if (shopItemId) {
+        try {
+          await db.collection('tv_shop_items').doc(shopItemId).update({
+            clipIds: admin.firestore.FieldValue.arrayRemove(clipId),
+          });
+        } catch (e) {
+          if (e.code !== 5) { // 5 = NOT_FOUND (маҳсулот ўчирилган)
+            console.error('onTvClipDeleted shop item:', clipId, e.message || e);
+          }
+        }
       }
     });
 
@@ -13554,6 +13918,12 @@ exports.renewTvAd = functions.https.onCall(async (data, context) => {
       if (clip.category !== 'ad') {
         throw new functions.https.HttpsError(
             'failed-precondition', 'not_an_ad');
+      }
+      // Админ блоклаган рекламани узайтириб бўлмайди: аввал пул ечилиб,
+      // `blocked` ўзгармасди — мижоз ҳеч нарса олмай тўларди.
+      if (String(clip.status || '') === 'blocked') {
+        throw new functions.https.HttpsError(
+            'failed-precondition', 'TV_AD_BLOCKED');
       }
       if (canonicalUid(String(clip.ownerPhone || '')) !== uid) {
         throw new functions.https.HttpsError('permission-denied', 'not_owner');
@@ -14274,7 +14644,9 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
 
   const idemRef = db.collection('wallet_idempotency').doc(`local_trip_complete_${tripId}`);
   const existing = await idemRef.get();
-  if (existing.exists) {
+  // Natija faqat o'sha haydovchiga (eski idem hujjatlarida driverUid yo'q —
+  // ular transaction ichida trip biriktirilishi bo'yicha tekshiriladi).
+  if (existing.exists && existing.data().driverUid === driverUid) {
     return existing.data().result || { ok: true, duplicate: true };
   }
 
@@ -14283,11 +14655,6 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
 
   await db.runTransaction(async (t) => {
     const idemSnap = await t.get(idemRef);
-    if (idemSnap.exists) {
-      resultPayload = idemSnap.data().result;
-      return;
-    }
-
     const tripSnap = await t.get(tripRef);
     if (!tripSnap.exists) {
       throw new functions.https.HttpsError('not-found', 'Trip topilmadi');
@@ -14296,6 +14663,16 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
     if (trip.taxiType !== 'local' && trip.taxiType !== 'alone') {
       throw new functions.https.HttpsError(
           'failed-precondition', 'Faqat mahalliy taksi');
+    }
+    const assignedDriver = String(
+        trip.acceptedDriverId || trip.driverId || '').trim();
+    if (assignedDriver !== driverUid) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Bu safar sizga biriktirilmagan');
+    }
+    if (idemSnap.exists) {
+      resultPayload = idemSnap.data().result;
+      return;
     }
     if (trip.status === 'completed') {
       resultPayload = {
@@ -14313,6 +14690,7 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       };
       t.set(idemRef, {
         type: 'completeLocalTrip',
+        driverUid,
         result: resultPayload,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -14322,20 +14700,18 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
           'failed-precondition', `Trip holati: ${trip.status}`);
     }
-    const assignedDriver = String(
-        trip.acceptedDriverId || trip.driverId || '').trim();
-    if (assignedDriver !== driverUid) {
-      throw new functions.https.HttpsError(
-          'permission-denied', 'Bu safar sizga biriktirilmagan');
-    }
 
-    // Asosiy qoida: destination bo'yicha qulflangan yo'lkira.
+    // Asosiy qoida (ega qarori 2026-10-07): yo'lkira SERVERDA qotiriladi
+    // (`local_taxi.js`, fareSource == 'server'). Eski ilovalar yaratgan trip'lar
+    // (server narxisiz) — o'tish davri: haydovchi narxi, lekin HAMYON YECHILMAYDI
+    // (klient yozgan narx/intent'ga pul ishonilmaydi — qoida 18).
+    const serverPriced = trip.fareSource === 'server';
     const lockedFare = Math.trunc(Number(trip.lockedFare || 0));
-    const fare = lockedFare > 0 ? lockedFare : clientFare;
+    const fare = serverPriced ? lockedFare : (lockedFare > 0 ? lockedFare : clientFare);
     if (!Number.isInteger(fare) || fare <= 0) {
       throw new functions.https.HttpsError(
           'invalid-argument',
-          lockedFare > 0
+          serverPriced
             ? 'lockedFare noto\'g\'ri'
             : 'Avval manzilni belgilab yo\'lkirani qulflang yoki fare yuboring');
     }
@@ -14345,7 +14721,8 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
         0, Math.trunc(Number(trip.passengerWalletIntent || 0)));
     let walletPaid = 0;
 
-    if (walletIntent > 0 && passengerUid.length >= 12) {
+    if (serverPriced && walletIntent > 0 && passengerUid.length >= 12
+        && passengerUid !== driverUid) {
       const userRef = db.collection('users').doc(passengerUid);
       const userSnap = await t.get(userRef);
       if (!userSnap.exists) {
@@ -14356,16 +14733,21 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
           Number((userSnap.data() || {}).bonusBalance || 0));
       walletPaid = Math.min(walletIntent, fare, balance);
       if (walletPaid > 0) {
+        // Ega qarori 2026-10-07: hamyon qismi HAYDOVCHI HAMYONIGA
+        // (Dr passenger_credit:yo'lovchi / Cr passenger_credit:haydovchi).
         const idempotencyKey = `trip_wallet_${tripId}`;
         const bonusCtx = await settlementLedger.prepareBonusInTx(
-            t, db, passengerUid, { idempotencyKey });
+            t, db, passengerUid, {
+              idempotencyKey,
+              fundingAccount: settlementLedger.passengerCreditAccount(driverUid),
+            });
+        const driverUserRef = db.collection('users').doc(driverUid);
         const nextBal = balance - walletPaid;
         t.set(userRef, {
           bonusBalance: nextBal,
           balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
-        const ledgerId = userRef.collection('wallet_ledger').doc().id;
-        t.set(userRef.collection('wallet_ledger').doc(ledgerId), {
+        t.set(userRef.collection('wallet_ledger').doc(), {
           type: 'local_taxi_debit',
           amount: -walletPaid,
           module: 'local_taxi',
@@ -14375,12 +14757,26 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           createdBy: 'completeLocalTrip',
         });
+        t.set(driverUserRef, {
+          bonusBalance: admin.firestore.FieldValue.increment(walletPaid),
+          balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        t.set(driverUserRef.collection('wallet_ledger').doc(), {
+          type: 'local_taxi_credit',
+          amount: walletPaid,
+          module: 'local_taxi',
+          refType: 'trip',
+          refId: tripId,
+          meta: { passengerUid },
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: 'completeLocalTrip',
+        });
         settlementLedger.commitBonusInTx(t, bonusCtx, {
           delta: -walletPaid,
           kind: 'local_taxi_debit',
           refType: 'trip',
           refId: tripId,
-          meta: { module: 'local_taxi', driverUid },
+          meta: { module: 'local_taxi', driverUid, passengerUid },
           postedBy: driverUid,
           postedRole: 'driver',
         });
@@ -14416,9 +14812,11 @@ exports.completeLocalTrip = functions.https.onCall(async (data, context) => {
       walletPaid,
       cashDue,
       change,
+      serverPriced,
     };
     t.set(idemRef, {
       type: 'completeLocalTrip',
+      driverUid,
       result: resultPayload,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -14937,6 +15335,13 @@ exports.saveDatingProfile = functions.https.onCall(async (data, context) => {
   const ref = db.collection('dating_profiles').doc(uid);
   const prev = await ref.get();
   const prevData = prev.data() || {};
+  // Админ блоклаган профилни эгаси қайта сақлаб очиб юбора олмасин:
+  // аввал ҳар сақлашда `status` pending/approved бўлиб, блок бекор бўларди
+  // (таҳрир тугмасини фақат UI яширарди).
+  if (prevData.status === 'blocked') {
+    throw new functions.https.HttpsError(
+        'permission-denied', 'DATING_PROFILE_BLOCKED');
+  }
   const autoApprove = await isDatingAutoApproveEnabled();
   const status = autoApprove ? 'approved' : 'pending';
   const defaultPrefMin = Math.max(18, myAge - 15);
@@ -15312,7 +15717,9 @@ function platformProductToSearchEntry(id, d) {
   const urls = Array.isArray(d.imageUrls) ? d.imageUrls : [];
   const cover = String((urls[0] || d.imageUrl || '')).trim();
   const kind = String(d.goodsKind || '').trim();
-  const keywords = ['ава', 'дукон', 'дўкон', 'ava', 'store', 'платформа'];
+  // 2026-10-07: «AVA дўкони» йўқ — AVA товари Улгуржи бозорда. «дўкон»
+  // калити қолди: одатланган одам шу сўз билан ҳам топсин.
+  const keywords = ['ава', 'ava', 'улгуржи', 'ulgurji', 'оптом', 'optom', 'дўкон', 'дукон'];
   if (kind === 'food') keywords.push('озиқ', 'oziq', 'food');
   if (kind === 'non_food') keywords.push('но-озиқ', 'non_food');
   return {
@@ -15321,7 +15728,7 @@ function platformProductToSearchEntry(id, d) {
     sourceCollection: 'platform_products',
     sourceId: id,
     title: name,
-    subtitle: 'AVA дўкони',
+    subtitle: 'Улгуржи бозор · AVA',
     price: Math.trunc(Number(d.price) || 0),
     imageUrl: cover,
     iconKey: 'shop',
@@ -15562,10 +15969,12 @@ const SEARCH_SERVICE_SEEDS = [
   {
     id: 'platform',
     moduleId: 'platform',
-    title: 'AVA дўкони',
-    subtitle: 'Платформа дўкони',
+    // `moduleId: 'platform'` АТАЙЛАБ ўзгармади: Play'даги эски илова уни
+    // эски дўкон экранига, янгиси — Улгуржи бозорга очади (2026-10-07).
+    title: 'Улгуржи бозор',
+    subtitle: 'AVA ва сотувчилар товарлари',
     iconKey: 'shop',
-    keywords: ['ава', 'ava', 'дўкон', 'дукон', 'магазин', 'платформа'],
+    keywords: ['улгуржи', 'ulgurji', 'оптом', 'optom', 'ава', 'ava', 'дўкон', 'дукон', 'магазин'],
     boost: 20,
   },
   {
@@ -17585,13 +17994,18 @@ exports.adminSetCarpetWashStatus = functions.https.onCall(async (data, context) 
   }
 });
 
-async function assertCourierCaller(courierPhone, context) {
+/**
+ * `mode`: vazifani OLISH — 'new' (standart); olingan vazifani bajarish —
+ * 'finish' (to'xtatilgan kuryer ham tugatadi; egalik har funksiyada
+ * `Not your … task` bilan tekshiriladi).
+ */
+async function assertCourierCaller(courierPhone, context, mode = COURIER_AUTH_MODES.new) {
   const courierDigits = assertCourierPhone(courierPhone);
   const caller = callerPhone(context);
   if (canonicalUid(caller) !== canonicalUid(courierDigits)) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
-  return resolveAuthorizedCourierUid(courierPhone);
+  return resolveAuthorizedCourierUid(courierPhone, mode);
 }
 
 /** Kuryer: gilam olish vazifasini olish (pickup_ready → pickup_in_delivery). */
@@ -17650,7 +18064,8 @@ exports.courierMarkCarpetArrived = functions.https.onCall(async (data, context) 
     }
     const orderId = String(data.orderId || '').trim();
     const leg = String(data.leg || 'pickup').trim().toLowerCase();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -17717,7 +18132,8 @@ exports.courierMarkCarpetPickedUp = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -17801,7 +18217,8 @@ exports.courierMarkCarpetDelivered = functions.https.onCall(async (data, context
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -18050,7 +18467,8 @@ exports.courierMarkAgroPickupArrived = functions.https.onCall(async (data, conte
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }
@@ -18097,7 +18515,8 @@ exports.courierMarkAgroPickedUp = functions.https.onCall(async (data, context) =
       throw new functions.https.HttpsError('unauthenticated', 'Login required');
     }
     const orderId = String(data.orderId || '').trim();
-    const courierId = await assertCourierCaller(String(data.courierPhone || ''), context);
+    const courierId = await assertCourierCaller(
+      String(data.courierPhone || ''), context, COURIER_AUTH_MODES.finish);
     if (!orderId) {
       throw new functions.https.HttpsError('invalid-argument', 'orderId required');
     }

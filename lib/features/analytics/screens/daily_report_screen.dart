@@ -45,9 +45,16 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                     final messenger = ScaffoldMessenger.of(context);
                     await c.regenerateTodayReport();
                     if (!mounted) return;
+                    // Хато бўлса — ✅ эмас, хатони кўрсатамиз (аввал
+                    // `reportsError` ёзилса ҳам муваффақият дерди).
+                    final err = c.reportsError;
                     messenger.showSnackBar(
-                      const SnackBar(
-                          content: Text('✅ Ҳисобот қайта яратилди')),
+                      SnackBar(
+                        backgroundColor: err == null ? null : Colors.red,
+                        content: Text(err == null
+                            ? '✅ Ҳисобот қайта яратилди'
+                            : 'Ҳисоботни қайта яратиб бўлмади: $err'),
+                      ),
                     );
                   },
           ),

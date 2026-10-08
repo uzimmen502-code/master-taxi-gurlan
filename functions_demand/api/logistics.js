@@ -1198,8 +1198,12 @@ function makeAdminPlanShipmentRoute(deps) {
       createdAt: now,
       supersededAt: null,
     });
+    // `legProblem` eski marshrutning LEG'iga ishora qiladi — yangi reja
+    // bilan u ma'nosiz (aks holda admin «LEG'ni qayta ochish» tugmasi eski,
+    // bekor qilingan rejaning LEG'ini ochib yuborardi).
     batch.update(shipRef, {
-      routePlanVersion: version, legIds, legCount: legIds.length, legAssignments: {}, updatedAt: now,
+      routePlanVersion: version, legIds, legCount: legIds.length, legAssignments: {},
+      legProblem: null, updatedAt: now,
     });
     batch.set(shipRef.collection('private').doc('internal'), {
       platformShare: route.split.platformShare,
@@ -1252,6 +1256,20 @@ function makeAdminReactivateLeg(deps) {
     const ship = shipSnap.data() || {};
     if (![L.SHIPMENT_STATUS.READY, L.SHIPMENT_STATUS.IN_TRANSIT].includes(ship.status)) {
       throw fail('failed-precondition', 'Jo\'natma holati qayta ochishga mos emas', 'shipment_not_ready', { status: ship.status });
+    }
+    // Faqat JORIY marshrut rejasining LEG'i. Qayta rejalashdan keyin eski
+    // `expired` LEG `cancelled`ga o'ta olmaydi (state machine) va o'sha
+    // holatda qoladi — uni ochish eski payout bilan ikkinchi, «etim» LEG'ni
+    // jonlantirardi (13/15-band: shipment/LEG/custody zanjiri buziladi).
+    if (!Array.isArray(ship.legIds) || !ship.legIds.includes(legId)) {
+      throw fail('failed-precondition', 'Bu LEG joriy marshrutda yo\'q (qayta rejalangan)', 'leg_superseded', { legId });
+    }
+    // Modul o'chiq bo'lsa `activateLeg` LEG'ni ochmaydi — eski match
+    // yozuvlarini o'chirishdan OLDIN tekshiramiz (aks holda LEG `expired`da
+    // qolib, match tarixi yo'qolardi).
+    const preFlags = await resolveFlags(db, L.MODULE, CONFIG_REGION);
+    if (!preFlags.enabled) {
+      throw fail('failed-precondition', 'Logistika moduli o\'chiq', 'module_disabled');
     }
 
     // Eski match yozuvlari (`expired`) — matching qaytadan yozadi; eski

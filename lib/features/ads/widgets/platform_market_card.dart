@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/brand_labels.dart';
-import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/data_url_image.dart';
 import '../../../core/utils/formatters.dart';
@@ -37,27 +36,6 @@ class PlatformMarketCard extends StatelessWidget {
   /// минимал буюртма кўрсатилади (2026-09-29).
   final bool wholesale;
 
-  /// Тафсилот экрани саватни `PlatformStoreController`дан олади, шунинг
-  /// учун у шу маршрутда яратилади ва маршрут ёпилганда ўзи тозаланади
-  /// (`PlatformStoreScreen` билан бир хил андоза).
-  void _openDetail(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChangeNotifierProvider<PlatformStoreController>(
-          create: (_) {
-            final c = PlatformStoreController();
-            unawaited(c.init());
-            return c;
-          },
-          child: PlatformProductDetailScreen(
-            product: product,
-            catalog: catalog.isEmpty ? [product] : catalog,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -65,7 +43,7 @@ class PlatformMarketCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () => _openDetail(context),
+        onTap: () => openPlatformProductDetail(context, product, catalog),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -140,8 +118,10 @@ class PlatformMarketCard extends StatelessWidget {
                         ),
                       ),
                     const Spacer(),
+                    // Сотувчи номи ўрнида — «AVA» (2026-10-07: «AVA дўкони»
+                    // йўқ, AVA товари Улгуржи бозорнинг бир сотувчиси).
                     Text(
-                      '${BrandLabels.brand} ${context.tr('platform_store_title_suffix')}',
+                      BrandLabels.brand,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -182,6 +162,54 @@ String platformWholesaleSubLine(PlatformProduct p) {
     return '${p.tierRangeLabel(0)} ${p.unit}: ${formatMoney(t.first.price)}';
   }
   return 'МОҚ ${p.wholesaleMinQty} ${p.unit}';
+}
+
+/// Бош саҳифадаги тор карточка (148 px) учун ҚИСҚА нарх ва изоҳ.
+///
+/// [platformWholesalePriceLine] («10–50 дона: 10 000 сўм») тор карточкада
+/// икки қаторга ўтиб, қатор баландлигидан тошарди. Шунинг учун нарх ва
+/// оралиқ устма-уст: «10 000 сўм» / «10–50 дона» — сотувчи товари
+/// карточкаси билан бир хил шакл («9 000 сўм» / «10+ дона»).
+({String price, String note}) platformShelfPrice(PlatformProduct p) {
+  if (p.hasDerivedTiers && p.midTier != null) {
+    return (
+      price: formatMoney(p.midTier!.price),
+      note: '${p.tierRangeLabel(1)} ${p.unit}',
+    );
+  }
+  if (p.effectiveTiers.isNotEmpty) {
+    return (
+      price: formatMoney(p.wholesaleBasePrice),
+      note: '${p.tierRangeLabel(0)} ${p.unit}',
+    );
+  }
+  return (price: formatMoney(p.price), note: '');
+}
+
+/// AVA товари тафсилоти — лента, бош саҳифа ва қидирувдан бир хил.
+///
+/// Тафсилот экрани саватни `PlatformStoreController`дан олади, шунинг
+/// учун у шу маршрутда яратилади ва маршрут ёпилганда ўзи тозаланади.
+Future<void> openPlatformProductDetail(
+  BuildContext context,
+  PlatformProduct product, [
+  List<PlatformProduct> catalog = const [],
+]) {
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => ChangeNotifierProvider<PlatformStoreController>(
+        create: (_) {
+          final c = PlatformStoreController();
+          unawaited(c.init());
+          return c;
+        },
+        child: PlatformProductDetailScreen(
+          product: product,
+          catalog: catalog.isEmpty ? [product] : catalog,
+        ),
+      ),
+    ),
+  );
 }
 
 String _wholesalePriceLine(PlatformProduct p) => platformWholesalePriceLine(p);

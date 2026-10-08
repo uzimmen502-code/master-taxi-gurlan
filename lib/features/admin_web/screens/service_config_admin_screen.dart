@@ -47,7 +47,11 @@ const Map<String, String> _moduleLabels = {
   'tire': 'Avto shina',
   'car_wash': 'Avto yuvish',
   'oil_change': 'Moy almashtirish',
-  'platform_store': 'AVA do\'koni',
+  // Эски алоҳида «AVA дўкони» экранининг дарвозаси. Янги иловада бу экран
+  // ЙЎҚ (2026-10-07): AVA товарлари Улгуржи бозорда, `wholesale_market` га
+  // бўйсунади. Калит фақат Play'даги ЭСКИ версиялар учун қолди — у ерда
+  // «AVA ДЎКОНИ» плиткаси шу калит «Ёпиқ» бўлгани учун кўринмайди.
+  'platform_store': 'AVA дўкони (эски версия — Ёпиқ қолсин)',
   'tv_market': 'AVAGram',
   'chatgpt': 'AVA ёрдамчиси',
   'ev_charging': 'EV zaryadlash',
@@ -179,27 +183,16 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
       final dSaved = <String, Map<String, ModuleStatus?>>{};
       final dManuals = <String, Set<String>>{};
       final dSavedManuals = <String, Set<String>>{};
-      final liftDistrictIds = <String>[];
+      // Аввал бу ерда «lift» бор эди: туманда `manualModules` бўш бўлса,
+      // биринчи МФЙ override'и ҲАР очилишда туманга кўчириб сақланарди.
+      // Бу 2026-08-20 даги бир марталик миграция эди (туман даражаси
+      // қўшилганда, `58f1925`) ва ўшандан бери бажарилган. Ҳозир у фақат
+      // зарар қиларди: битта МФЙ учун мўлжалланган пилот бутун туманга
+      // ёйиларди ва туманни «Default (мерос)»га қайтариб бўлмасди.
       for (final d in districts) {
         final packed = districtBatch[d.id];
-        var cfg = packed?.config ?? ServiceModuleConfig.empty;
-        var manual = packed?.manualModules ?? <String>{};
-        if (manual.isEmpty) {
-          final primary = areas.where((a) => a.districtId == d.id).toList()
-            ..sort((a, b) => a.order.compareTo(b.order));
-          if (primary.isNotEmpty) {
-            final fromArea = manuals[primary.first.id] ?? const <String>{};
-            if (fromArea.isNotEmpty) {
-              manual = Set<String>.from(fromArea);
-              cfg = ServiceModuleConfig({
-                for (final id in fromArea)
-                  if (overrides[primary.first.id]?[id] != null)
-                    id: overrides[primary.first.id]![id]!,
-              });
-              liftDistrictIds.add(d.id);
-            }
-          }
-        }
+        final cfg = packed?.config ?? ServiceModuleConfig.empty;
+        final manual = packed?.manualModules ?? <String>{};
         dOverrides[d.id] = {
           for (final id in kKnownModuleIds)
             id: manual.contains(id) ? cfg.modules[id] : null,
@@ -254,9 +247,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
 
       if (staleSeedAreaIds.isNotEmpty) {
         unawaited(_purgeStaleSeedOverrides(staleSeedAreaIds));
-      }
-      if (liftDistrictIds.isNotEmpty) {
-        unawaited(_persistLiftedDistrictOverrides(liftDistrictIds));
       }
       unawaited(_syncMissingBaselineModules(
         defaultsRes.config,
@@ -350,31 +340,6 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     ));
   }
 
-  Future<void> _persistLiftedDistrictOverrides(List<String> districtIds) async {
-    final by = _adminId();
-    for (final id in districtIds) {
-      final district = _districtById[id];
-      if (district == null) continue;
-      final manual = _manualByDistrict[id] ?? const <String>{};
-      if (manual.isEmpty) continue;
-      final cur = _districtOverrides[id] ?? const {};
-      final overridden = <String, ModuleStatus>{
-        for (final mid in manual)
-          if (cur[mid] != null) mid: cur[mid]!,
-      };
-      try {
-        await _repo.setDistrictModules(
-          district,
-          ServiceModuleConfig(overridden),
-          manualModules: manual,
-          updatedBy: by,
-        );
-      } catch (e) {
-        debugPrint('[ServiceConfigAdmin] lift district $id: $e');
-      }
-    }
-  }
-
   Map<String, GeoDistrict> get _districtById => {
         for (final d in _districts) d.id: d,
       };
@@ -391,6 +356,11 @@ class _ServiceConfigAdminScreenState extends State<ServiceConfigAdminScreen> {
     bool enforce,
   ) async {
     if (remote.modules.isEmpty) return;
+    // `enforce=false` да `ServiceConfigHolder.statusOf` config'да БОР ҳар
+    // қандай модулни `enabled` қилади — `hidden` ёзиш янги модулни
+    // ЁҚИБ юборарди (`service_runtime_gate_test`: «enforce=false ham yangi
+    // APK modulini avtomatik ON qilmaydi»). Шу ҳолатда тегмаймиз.
+    if (!enforce) return;
     final missing = kKnownModuleIds
         .where((id) => !remote.modules.containsKey(id))
         .toList(growable: false);

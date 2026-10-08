@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/platform_product.dart';
 
-/// `platform_products` — платформа дўкони каталоги.
+/// `platform_products` — AVA товарлари каталоги (2026-10-06 дан Улгуржи
+/// бозорнинг бир қисми; алоҳида «AVA дўкони» экрани йўқ).
 class PlatformProductsRepository {
   PlatformProductsRepository({FirebaseFirestore? db})
       : _db = db ?? FirebaseFirestore.instance;
@@ -141,6 +142,18 @@ class PlatformProductsRepository {
   }) async {
     final all = await fetchCatalog(limit: catalogLimit);
     return wholesaleEligible(all).take(limit).toList(growable: false);
+  }
+
+  /// Бош саҳифадаги «Улгуржи бозор» бўлими учун AVA товарлари (эга
+  /// қарори 2026-10-07: «бош саҳифада ҳам чиқсин, AVA дўкони энди
+  /// Улгуржи бозор»).
+  ///
+  /// Бутун каталог ЭМАС: бош саҳифа ҳар очилишда 2000 тагача ҳужжат
+  /// ўқимаслиги учун индексли `active + sortOrder` сўрови ва [limit]
+  /// (37-қоида). Тўлиқ рўйхат — «Ҳаммаси» (Улгуржи экрани) орқали.
+  Future<List<PlatformProduct>> fetchForWholesaleShelf({int limit = 20}) async {
+    final active = await fetchActive(limit: limit);
+    return wholesaleEligible(active);
   }
 
   /// Улгуржи лентасига чиқадиган AVA товарлари: ФАОЛ ва сотиладиган

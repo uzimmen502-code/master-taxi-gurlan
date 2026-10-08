@@ -39,7 +39,9 @@
     "test:taxi-cap-rules": "node test/taxi_capability_rules.test.js",
     "test:logistics-rules": "node test/logistics_rules.test.js",
     "test:platform-pricing": "node test/platform_pricing.test.js",
-    "test:relay-escrow": "firebase emulators:exec --only firestore --project demo-relay-escrow \"node test/relay_escrow_cf.test.js\""
+    "test:relay-escrow": "firebase emulators:exec --only firestore --project demo-relay-escrow \"node test/relay_escrow_cf.test.js\"",
+    "test:courier-auth": "firebase emulators:exec --only firestore --project demo-courier-auth \"node test/courier_auth.test.js\"",
+    "test:courier-cf": "firebase emulators:exec --only firestore --project demo-courier-cf \"node test/courier_callables_cf.test.js\""
   },
   "engines": {
     "node": "20"

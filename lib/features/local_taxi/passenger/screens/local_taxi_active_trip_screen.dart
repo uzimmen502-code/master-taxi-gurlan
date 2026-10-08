@@ -53,11 +53,19 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Position? _myPosition;
   final _mapController = Completer<GoogleMapController>();
   final _localNotifications = FlutterLocalNotificationsPlugin();
-  String? _passengerUid;
+
+  // Oqimlar bir marta yaratiladi — `build` ichida yaratilsa, har haydovchi
+  // GPS yangilanishidagi setState yangi listener ochardi (ortiqcha read).
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _tripStream;
+  Stream<int>? _balanceStream;
 
   @override
   void initState() {
     super.initState();
+    _tripStream = FirebaseFirestore.instance
+        .collection('trips')
+        .doc(widget.tripId)
+        .snapshots();
     _trip = widget.initialTrip;
     _loadPassengerUid();
     _initPassengerPosition();
@@ -74,7 +82,8 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     final phone = prefs.getString('user_phone') ?? '';
     final uid = canonicalPhoneId(phone);
     if (mounted && uid.isNotEmpty) {
-      setState(() => _passengerUid = uid);
+      final balance = context.read<UserRepository>().watchBonusBalance(uid);
+      setState(() => _balanceStream = balance);
     }
   }
 
@@ -162,6 +171,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     await _showArrivalLocalNotification(
       title: arrivedTitle,
       body: '$name — $car',
+      channelName: context.tr('local_arrival_channel'),
     );
 
     if (!mounted) return;
@@ -196,6 +206,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
   Future<void> _showArrivalLocalNotification({
     required String title,
     required String body,
+    required String channelName,
   }) async {
     try {
       await NotificationService.instance.setup();
@@ -203,10 +214,10 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         9100 + widget.tripId.hashCode.abs() % 1000,
         title,
         body,
-        const NotificationDetails(
+        NotificationDetails(
           android: AndroidNotificationDetails(
             'incoming_ride',
-            'Янги буюртма',
+            channelName,
             importance: Importance.max,
             priority: Priority.max,
           ),
@@ -409,8 +420,6 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     try {
       await LocalTripFareLockService().lockFare(
         tripId: trip.id,
-        fromLat: trip.fromLat,
-        fromLng: trip.fromLng,
         toLat: picked.lat,
         toLng: picked.lng,
         toAddr: picked.label,
@@ -420,9 +429,12 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         SnackBar(content: Text(context.tr('locked_fare'))),
       );
     } catch (e) {
+      debugPrint('lockLocalTripFare: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
+        SnackBar(
+          content: Text(context.trMsg(LocalTripFareLockService.errorKey(e))),
+        ),
       );
     }
   }
@@ -533,19 +545,19 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Қайтим — ҳамёнга'),
+        title: Text(ctx.tr('local_change_to_wallet_title')),
         content: Text(
-          'Ҳайдовчи ${formatMoney(amount)} қайтимни ҳамёнингизга '
-          'ўтказмоқчи. Тасдиқлайсизми?',
+          ctx.trMsg('local_change_to_wallet_body',
+              params: {'amount': formatMoney(amount)}),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
-            child: const Text('Нақд керак'),
+            child: Text(ctx.tr('local_change_want_cash')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, 'confirm'),
-            child: const Text('Тасдиқлайман'),
+            child: Text(ctx.tr('local_change_confirm')),
           ),
         ],
       ),
@@ -556,7 +568,8 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         await SettlementService.confirmSettlement(settlementId: settlementId);
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${formatMoney(amount)} ҳамёнингизга қўшилди'),
+          content: Text(context.trMsg('local_change_added',
+              params: {'amount': formatMoney(amount)})),
           backgroundColor: LocalTaxiColors.success,
         ));
       } else {
@@ -566,9 +579,10 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
         );
       }
     } catch (e) {
+      debugPrint('settlement: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Settlement: $e'),
+        content: Text(context.tr('local_change_failed')),
         backgroundColor: LocalTaxiColors.danger,
       ));
     }
@@ -597,17 +611,26 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     if (ok != true || !context.mounted) return;
     _cancelInProgress = true;
     try {
-      await context.read<RidesRepository>().cancelLocalTripByPassenger(
-            widget.tripId,
-          );
+      final cancelled =
+          await context.read<RidesRepository>().cancelLocalTripByPassenger(
+                widget.tripId,
+              );
       if (!context.mounted) return;
+      if (!cancelled) {
+        // Trip shu orada boshqa holatga o'tgan (haydovchi tark etdi /
+        // yakunladi) — ekranni yopmaymiz, oqim o'sha holatni o'zi ko'rsatadi
+        // (aks holda ikki marta pop → ota ekran ham yopilardi).
+        _cancelInProgress = false;
+        return;
+      }
       _tripEndHandled = true;
       await _showCancelFeedbackThenPop(context);
     } catch (e) {
+      debugPrint('cancelLocalTripByPassenger: $e');
       _cancelInProgress = false;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(context.trMsg('error_generic|$e')),
+        content: Text(context.tr('local_cancel_failed')),
         backgroundColor: LocalTaxiColors.danger,
       ));
     }
@@ -696,10 +719,7 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
     return Scaffold(
       backgroundColor: LocalTaxiColors.bg,
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('trips')
-            .doc(widget.tripId)
-            .snapshots(),
+        stream: _tripStream,
         builder: (context, docSnap) {
           if (!docSnap.hasData || !docSnap.data!.exists) {
             return const Center(child: CircularProgressIndicator());
@@ -790,21 +810,25 @@ class _LocalTaxiActiveTripScreenState extends State<LocalTaxiActiveTripScreen> {
               : context.tr('trip_status_accepted');
 
           Widget? walletSection;
+          final balanceStream = _balanceStream;
+          // Hamyon faqat server narxli trip'da ishlatiladi (completeLocalTrip).
           if (trip.status == 'accepted' &&
-              _passengerUid != null &&
-              _passengerUid!.isNotEmpty) {
+              balanceStream != null &&
+              data['fareSource'] == 'server') {
             final fareEst = displayFare;
             walletSection = StreamBuilder<int>(
-              stream: context
-                  .read<UserRepository>()
-                  .watchBonusBalance(_passengerUid!),
-              builder: (context, balSnap) => LocalTaxiWalletPanel(
-                tripId: widget.tripId,
-                walletBalance: balSnap.data ?? 0,
-                fareEstimate: fareEst,
-                initialIntent: trip.passengerWalletIntent,
-                enabled: true,
-              ),
+              stream: balanceStream,
+              // Balans kelmaguncha panel yo'q — aks holda saqlangan intent
+              // 0 ga qisilib ko'rinardi.
+              builder: (context, balSnap) => !balSnap.hasData
+                  ? const SizedBox.shrink()
+                  : LocalTaxiWalletPanel(
+                      tripId: widget.tripId,
+                      walletBalance: balSnap.data!,
+                      fareEstimate: fareEst,
+                      initialIntent: trip.passengerWalletIntent,
+                      enabled: true,
+                    ),
             );
           }
 

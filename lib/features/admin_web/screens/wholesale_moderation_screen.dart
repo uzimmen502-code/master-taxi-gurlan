@@ -1,20 +1,42 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../demand_offer/data/demand_repository.dart' show kDemandCoreRegion;
 import '../../wholesale/models/wholesale_product.dart';
 import '../../wholesale/models/wholesale_seller.dart';
 import '../../wholesale/repositories/wholesale_products_repository.dart';
 import '../../wholesale/repositories/wholesale_sellers_repository.dart';
 import '../services/admin_auth_service.dart';
 
-/// Улгуржи/кичик улгуржи бозор — admin модерацияси.
+/// Улгуржи бозор ёки Хитой бозори — admin модерацияси.
 /// `JobsModerationScreen`нинг live-stream карта-рўйхат андозаси асосида.
-/// Cloud Function йўқ — ёзувлар тўғридан-тўғри `firestore.rules`даги
-/// admin whitelist-патч орқали чекланади.
+/// Тасдиқ/рад/ўчириш — тўғридан-тўғри ёзув, `firestore.rules`даги admin
+/// whitelist-патч орқали чекланади. Бозорни алмаштириш эса — серверда
+/// (`adminSetWholesaleProductMarket`, қуйида).
+///
+/// Иккала бозор битта коллекцияда (`wholesale_products`, `market` билан
+/// ажралади) ва сотувчилар рўйхати битта (`wholesale_sellers`). Админда
+/// эса иловадаги каби ИККИ алоҳида бўлим (2026-10-07): аввал «Улгуржи
+/// бозор» бўлимида Хитой бозори маҳсулотлари аралаш чиқарди. [market]
+/// қайси бозорнинг маҳсулотлари кўрсатилишини белгилайди.
 class WholesaleModerationScreen extends StatefulWidget {
-  const WholesaleModerationScreen({super.key});
+  const WholesaleModerationScreen({
+    super.key,
+    this.market = WholesaleProduct.marketWholesale,
+    this.leadingTab,
+  });
+
+  /// [WholesaleProduct.marketWholesale] ёки [WholesaleProduct.marketChina].
+  final String market;
+
+  /// Бўлим бошидаги қўшимча таб. «Улгуржи бозор»да — AVA товарлари
+  /// каталоги (эга қарори 2026-10-06: AVA дўкони тўлиқ Улгуржига ўтди;
+  /// админдаги алоҳида «AVA дўкони» бўлими 2026-10-07 да шу ерга кўчди).
+  final ({String label, Widget child})? leadingTab;
 
   @override
   State<WholesaleModerationScreen> createState() =>
@@ -30,10 +52,20 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
 
   static const _blue = AppColors.primary;
 
+  bool get _isChina => widget.market == WholesaleProduct.marketChina;
+
+  /// Бир марта очилади: ҳолат филтри (`setState`) ҳар босилганда
+  /// Firestore тинглови қайта очилмасин.
+  late final Stream<List<WholesaleProduct>> _productsStream =
+      _productsRepo.watchAllForAdmin(market: widget.market);
+
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(
+      length: widget.leadingTab == null ? 2 : 3,
+      vsync: this,
+    );
   }
 
   @override
@@ -141,6 +173,23 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги сотувчилар дарҳол тасдиқланади',
             offLabel:
                 'ҚЎЛДА тасдиқ — янги сотувчилар admin тасдиғини кутади',
+          ),
+          // Рўйхат битта — бу ердаги тасдиқ/рад иккала бозорга ҳам
+          // тегишли. Админ буни билмаса, «Хитой бозори»да рад этган
+          // сотувчиси Улгуржидан ҳам ёпилиб қолганига ҳайрон бўлади.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+            child: Row(children: [
+              const Icon(Icons.info_outline, size: 16, color: Colors.black45),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Сотувчилар рўйхати Улгуржи бозор ва Хитой бозори учун '
+                  'битта: тасдиқ ёки рад иккала бозорга ҳам тегишли.',
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+                ),
+              ),
+            ]),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
@@ -268,9 +317,121 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
     }
   }
 
+  // ─── Бозорни алмаштириш (Улгуржи ↔ Хитой) ─────────────────────────
+  //
+  // Rules `market`ни ҳеч кимга ўзгартиртирмайди (атайлаб) — шунинг учун
+  // СЕРВЕРДА: `adminSetWholesaleProductMarket` (europe-west1). У админлигини
+  // текширади, транзакцияда ёзади, қайта босилса иккинчи марта ёзмайди ва
+  // ҳар амални `wholesale_market_audit`га туширади (41-қоида). Экран фақат
+  // чақиради.
+
+  final Set<String> _movingIds = {};
+
+  Future<void> _callSetMarket(
+    WholesaleProduct p, {
+    required String market,
+    String currency = '',
+    int? deliveryDays,
+    String reason = '',
+  }) async {
+    setState(() => _movingIds.add(p.id));
+    try {
+      final res = await FirebaseFunctions.instanceFor(region: kDemandCoreRegion)
+          .httpsCallable('adminSetWholesaleProductMarket')
+          .call<Object?>({
+        'productId': p.id,
+        'market': market,
+        'currency': currency,
+        'deliveryDays': deliveryDays,
+        'reason': reason,
+      });
+      final data = res.data;
+      final changed = data is Map && data['changed'] == true;
+      final where = market == WholesaleProduct.marketChina
+          ? '«Хитой бозори»'
+          : '«Улгуржи бозор»';
+      _showResult(changed
+          ? '«${p.title}» → $where'
+          : 'Ўзгариш йўқ — «${p.title}» аллақачон шундай');
+    } on FirebaseFunctionsException catch (e) {
+      _showResult(_marketErrorText(e), error: true);
+    } catch (e) {
+      _showResult('Бозорни ўзгартириб бўлмади. Қайта уриниб кўринг.',
+          error: true);
+      debugPrint('[WholesaleModeration] setMarket $e');
+    } finally {
+      if (mounted) setState(() => _movingIds.remove(p.id));
+    }
+  }
+
+  /// Фойдаланувчига матн + диагностик код (25-қоида).
+  String _marketErrorText(FirebaseFunctionsException e) {
+    final details = e.details;
+    if (details is Map && details['reason'] == 'foreign_currency') {
+      return 'Нарх «${details['currency']}» да — Улгуржи бозор фақат сўмда. '
+          'Аввал сотувчи нархни сўмда киритсин.';
+    }
+    switch (e.code) {
+      case 'permission-denied':
+        return 'Бу амал фақат админ учун (${e.code}).';
+      case 'not-found':
+        return 'Маҳсулот топилмади — ўчирилган бўлиши мумкин (${e.code}).';
+      default:
+        return 'Бозорни ўзгартириб бўлмади. Қайта уриниб кўринг (${e.code}).';
+    }
+  }
+
+  /// Хитой бозорига кўчириш ёки Хитойдаги валюта/муддатни тузатиш.
+  Future<void> _moveToChina(WholesaleProduct p) async {
+    final r = await showDialog<_ChinaMarketChoice>(
+      context: context,
+      builder: (_) => _ChinaMarketDialog(product: p),
+    );
+    if (r == null || !mounted) return;
+    await _callSetMarket(
+      p,
+      market: WholesaleProduct.marketChina,
+      currency: r.currency,
+      deliveryDays: r.deliveryDays,
+      reason: r.reason,
+    );
+  }
+
+  Future<void> _moveToWholesale(WholesaleProduct p) async {
+    // Сервер ҳам рад этади; бу ерда — тушунарли сабаб билан олдиндан.
+    if (p.currency.trim().isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Улгуржига кўчириб бўлмайди'),
+          content: Text(
+            'Нарх «${p.currency.trim()}» да. Улгуржи бозор фақат сўмда — '
+            'кўчирилса «${p.basePrice} ${p.currency.trim()}» жимгина '
+            '«${p.basePrice} сўм» бўлиб қоларди.\n\n'
+            'Аввал сотувчи нархни сўмда киритсин (валютасини «сўм» қилсин).',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Тушунарли'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    final note = await _promptNote('«${p.title}»ни Улгуржи бозорга кўчириш');
+    if (note == null || !mounted) return;
+    await _callSetMarket(
+      p,
+      market: WholesaleProduct.marketWholesale,
+      reason: note,
+    );
+  }
+
   Widget _productsTab() {
     return StreamBuilder<List<WholesaleProduct>>(
-      stream: _productsRepo.watchAllForAdmin(),
+      stream: _productsStream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -284,11 +445,13 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             : all.where((p) => p.status == _productStatusFilter).toList();
         int count(String s) => all.where((e) => e.status == s).length;
         return Column(children: [
+          // `settings/app` даги битта майдон — иккала бозор учун умумий.
           const _AutoApproveBar(
             settingsField: 'wholesaleProductAutoApprove',
-            onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги маҳсулотлар дарҳол фаол',
-            offLabel:
-                'ҚЎЛДА тасдиқ — янги маҳсулотлар «Кутилмоқда»га тушади',
+            onLabel: 'АВТО тасдиқ: ЁҚИҚ — янги маҳсулотлар дарҳол фаол '
+                '(Улгуржи ва Хитой бозори учун битта созлама)',
+            offLabel: 'ҚЎЛДА тасдиқ — янги маҳсулотлар «Кутилмоқда»га '
+                'тушади (Улгуржи ва Хитой бозори учун битта созлама)',
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
@@ -348,12 +511,8 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             _badge(_productStatusLabel(p.status), color),
-            // Иккала бозор битта коллекцияда — модерацияда қайси бозор
-            // экани кўриниб турсин.
-            if (p.isChina) ...[
-              const SizedBox(width: 6),
-              _badge('Хитой', Colors.deepOrange),
-            ],
+            // Бозор белгиси энди керак эмас: ҳар бўлим фақат ўз бозорини
+            // кўрсатади ([WholesaleModerationScreen.market]).
             const Spacer(),
             Text(_dateText(p.createdAt),
                 style: const TextStyle(color: Colors.black45, fontSize: 12)),
@@ -401,6 +560,15 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           _meta(Icons.storefront, p.sellerCompanyName.isEmpty
               ? 'Сотувчи номаълум'
               : p.sellerCompanyName),
+          if (_isChina) ...[
+            const SizedBox(height: 4),
+            _meta(
+              Icons.local_shipping_outlined,
+              (p.deliveryDays ?? 0) > 0
+                  ? 'Етказиш: ${p.deliveryDays} кун'
+                  : 'Етказиш муддати кўрсатилмаган',
+            ),
+          ],
           if (p.adminNote.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('Admin: ${p.adminNote}',
@@ -430,6 +598,28 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
               label: const Text('Ёпиш/Рад этиш'),
               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             ),
+            // Бозорни алмаштириш — нотўғри жойда турган маҳсулот учун.
+            if (_isChina) ...[
+              OutlinedButton.icon(
+                onPressed:
+                    _movingIds.contains(p.id) ? null : () => _moveToChina(p),
+                icon: const Icon(Icons.currency_exchange, size: 18),
+                label: const Text('Валюта / муддат'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _movingIds.contains(p.id)
+                    ? null
+                    : () => _moveToWholesale(p),
+                icon: const Icon(Icons.warehouse_outlined, size: 18),
+                label: const Text('Улгуржига кўчириш'),
+              ),
+            ] else
+              OutlinedButton.icon(
+                onPressed:
+                    _movingIds.contains(p.id) ? null : () => _moveToChina(p),
+                icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                label: const Text('Хитой бозорига кўчириш'),
+              ),
             OutlinedButton.icon(
               onPressed: () => _deleteProduct(p),
               icon: const Icon(Icons.delete_outline, size: 18),
@@ -446,6 +636,7 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final leading = widget.leadingTab;
     return Column(children: [
       _header(),
       Container(
@@ -454,16 +645,23 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
           controller: _tabCtrl,
           labelColor: AppColors.primaryText,
           indicatorColor: AppColors.primaryText,
-          tabs: const [
-            Tab(text: '🧾 Сотувчилар'),
-            Tab(text: '📦 Маҳсулотлар'),
+          tabs: [
+            if (leading != null) Tab(text: leading.label),
+            Tab(
+              text: _isChina ? '📦 Маҳсулотлар' : '📦 Сотувчилар товарлари',
+            ),
+            const Tab(text: '🧾 Сотувчилар'),
           ],
         ),
       ),
       Expanded(
         child: TabBarView(
           controller: _tabCtrl,
-          children: [_sellersTab(), _productsTab()],
+          children: [
+            if (leading != null) leading.child,
+            _productsTab(),
+            _sellersTab(),
+          ],
         ),
       ),
     ]);
@@ -481,21 +679,31 @@ class _WholesaleModerationScreenState extends State<WholesaleModerationScreen>
             color: _blue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(Icons.warehouse_outlined, color: AppColors.primaryText),
+          child: Icon(
+            // Иловадаги хизмат белгиси билан бир хил.
+            _isChina ? Icons.local_shipping_outlined : Icons.warehouse_outlined,
+            color: AppColors.primaryText,
+          ),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'УЛГУРЖИ БОЗОР — назорати',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                _isChina
+                    ? 'ХИТОЙ БОЗОРИ — назорати'
+                    : 'УЛГУРЖИ БОЗОР — назорати',
+                style:
+                    const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 3),
+              const SizedBox(height: 3),
               Text(
-                'Сотувчиларни тасдиқлаш ва маҳсулот эълонларини модерация қилиш',
-                style: TextStyle(color: Colors.black54),
+                _isChina
+                    ? 'Хитой бозори маҳсулотларини модерация қилиш'
+                    : 'AVA товарлари каталоги, сотувчилар товарлари ва '
+                        'сотувчиларни тасдиқлаш',
+                style: const TextStyle(color: Colors.black54),
               ),
             ],
           ),
@@ -711,6 +919,156 @@ class _AutoApproveBarState extends State<_AutoApproveBar> {
           ]),
         );
       },
+    );
+  }
+}
+
+/// Хитой бозори учун танлов: валюта, етказиш муддати, сабаб.
+class _ChinaMarketChoice {
+  const _ChinaMarketChoice({
+    required this.currency,
+    required this.deliveryDays,
+    required this.reason,
+  });
+
+  final String currency;
+  final int? deliveryDays;
+  final String reason;
+}
+
+/// «Хитой бозорига кўчириш» / «Валюта / муддат» ойнаси.
+///
+/// Валюталар — сотувчининг Хитой формасидагидек ('' = сўм, `$`, `¥`).
+/// Нарх РАҚАМЛАРИ ўзгармайди: админ фақат улар қайси валютада эканини
+/// белгилайди (масалан 2026-10-07 даги трактор: 3800 — долларда).
+class _ChinaMarketDialog extends StatefulWidget {
+  const _ChinaMarketDialog({required this.product});
+
+  final WholesaleProduct product;
+
+  @override
+  State<_ChinaMarketDialog> createState() => _ChinaMarketDialogState();
+}
+
+class _ChinaMarketDialogState extends State<_ChinaMarketDialog> {
+  static const _currencies = <(String, String)>[
+    ('\$', '\$ доллар'),
+    ('¥', '¥ юань'),
+    ('', 'сўм'),
+  ];
+
+  late String _currency;
+  late final TextEditingController _days;
+  final _reason = TextEditingController();
+  String? _daysError;
+
+  bool get _alreadyChina => widget.product.isChina;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.product;
+    // Хитойда — жорий валюта; Улгуржидан кўчаётганда — доллар (Хитой
+    // бозоридаги товарларнинг аксарияти шу; админ ўзгартира олади).
+    _currency = _alreadyChina ? p.currency.trim() : '\$';
+    _days = TextEditingController(
+      text: (p.deliveryDays ?? 0) > 0 ? '${p.deliveryDays}' : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _days.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final raw = _days.text.trim();
+    int? days;
+    if (raw.isNotEmpty) {
+      days = int.tryParse(raw);
+      if (days == null || days < 1 || days > 365) {
+        setState(() => _daysError = '1–365 кун');
+        return;
+      }
+    }
+    Navigator.pop(
+      context,
+      _ChinaMarketChoice(
+        currency: _currency,
+        deliveryDays: days,
+        reason: _reason.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.product;
+    final tiers =
+        p.priceTiers.map((t) => '${t.minQty}+: ${t.price}').join(' · ');
+    return AlertDialog(
+      title: Text(_alreadyChina
+          ? '«${p.title}» — валюта ва муддат'
+          : '«${p.title}» → Хитой бозори'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Нарх поғоналари: $tiers',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+              'Рақамлар ўзгармайди — улар қайси валютада эканини танланг.',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, children: [
+              for (final c in _currencies)
+                ChoiceChip(
+                  label: Text(c.$2),
+                  selected: _currency == c.$1,
+                  onSelected: (_) => setState(() => _currency = c.$1),
+                ),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _days,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Етказиш муддати, кун (ихтиёрий)',
+                errorText: _daysError,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reason,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                labelText: 'Сабаб (audit учун, ихтиёрий)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Бекор қилиш'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(_alreadyChina ? 'Сақлаш' : 'Кўчириш'),
+        ),
+      ],
     );
   }
 }

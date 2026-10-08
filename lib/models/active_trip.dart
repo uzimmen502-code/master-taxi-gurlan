@@ -133,6 +133,16 @@ class ActiveTrip {
   /// UI uchun: qulflangan narx, yo'q bo'lsa legacy estimatedPrice.
   int get displayFare => lockedFare > 0 ? lockedFare : estimatedPrice;
 
+  /// Haydovchi tark etgan trip uchun qidiruv muddati `releasedAt + 3 daq`
+  /// (server `expirePendingTrips` bilan bir xil qoida).
+  static DateTime? _effectiveExpiresAt(Map<String, dynamic> d) {
+    final exp = (d['expiresAt'] as Timestamp?)?.toDate();
+    final released = (d['releasedAt'] as Timestamp?)?.toDate();
+    if (released == null) return exp;
+    final renewed = released.add(const Duration(minutes: 3));
+    return exp == null || renewed.isAfter(exp) ? renewed : exp;
+  }
+
   factory ActiveTrip.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? const <String, dynamic>{};
     return ActiveTrip(
@@ -165,7 +175,7 @@ class ActiveTrip {
       targetDriverId: (d['targetDriverId'] ?? '') as String,
       scheduleId: (d['scheduleId'] ?? '') as String,
       createdAt: (d['createdAt'] as Timestamp?)?.toDate(),
-      expiresAt: (d['expiresAt'] as Timestamp?)?.toDate(),
+      expiresAt: _effectiveExpiresAt(d),
       arrivedAt: (d['arrivedAt'] as Timestamp?)?.toDate(),
       offerTimeoutSeconds: (d['offerTimeoutSeconds'] as num?)?.toInt() ?? 0,
       cancelledBy: (d['cancelledBy'] ?? '') as String,

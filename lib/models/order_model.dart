@@ -87,6 +87,11 @@ class OrderModel {
   bool get isDelivered =>
       status == 'delivered' || effectiveFulfillment == 'completed';
 
+  /// Админ устунидаги якуний ҳолат: «Етказилди» ёки «Рад қилинган».
+  /// Бу буюртмада бошқа ҳаракат қолмаган.
+  bool get hasFinalStatus =>
+      status == 'delivered' || status == 'rejected' || status == 'cancelled';
+
   bool get canCourierPick =>
       effectiveFulfillment == 'confirmed' ||
       effectiveFulfillment == 'pending' ||

@@ -43,6 +43,7 @@ const capabilitiesApi = require('./api/capabilities');
 const agreementsApi = require('./api/agreements');
 const adminCapsApi = require('./api/admin_capabilities');
 const logisticsApi = require('./api/logistics');
+const wholesaleAdminApi = require('./api/wholesale_admin');
 const { makeDispatchNotifications } = require('./notify/dispatch');
 const trustEventsApi = require('./trust/events');
 const { getModuleConfig } = require('./core/config');
@@ -156,6 +157,22 @@ exports.adminSetCapabilityStatus = fn.https.onCall(wrapCallable(
 ));
 
 /**
+ * ADMIN — telefon bo'yicha xizmat qo'shish (kuryer: darhol `approved`,
+ * ega qarori 2026-10-07). Faqat `not_registered` dan; har qadam audit.
+ */
+exports.adminGrantCapability = fn.https.onCall(wrapCallable(
+  adminCapsApi.makeAdminGrantCapability({ db }),
+));
+
+/**
+ * ADMIN — kuryer arizasini tasdiqlash rejimi (D-15.3): `manual` (sinov,
+ * admin tasdiqlaydi; standart) | `auto` (ariza → darhol approved). Audit.
+ */
+exports.adminSetCourierApprovalMode = fn.https.onCall(wrapCallable(
+  adminCapsApi.makeAdminSetCourierApprovalMode({ db }),
+));
+
+/**
  * ADMIN — T-6 migratsiyasi: `drivers.approved` → taxi `verified` +
  * 4 oylik billing grace. `dryRun` standart TRUE; `{dryRun:false}` yozadi.
  */
@@ -216,6 +233,23 @@ exports.adminPlanShipmentRoute = fn.https.onCall(wrapCallable(
 /** ADMIN — muddati tugagan LEG'ni qayta ochish (matching qaytadan, payout o'zgarmaydi). */
 exports.adminReactivateLeg = fn.https.onCall(wrapCallable(
   logisticsApi.makeAdminReactivateLeg(logisticsDeps),
+));
+
+// ═══════════════════════════════════════════════════════════════════════
+// ULGURJI / XITOY BOZORI — admin
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * ADMIN — mahsulotni Ulgurji ↔ Xitoy bozoriga ko'chirish (2026-10-07).
+ * Rules `market`ni hech kimga o'zgartirtirmaydi (ataylab); bu yerda admin
+ * tekshiruvi, tranzaksiya, idempotentlik va `wholesale_market_audit`
+ * (41-qoida). Valyutali narxni so'mli Ulgurjiga o'tkazish RAD etiladi.
+ */
+exports.adminSetWholesaleProductMarket = fn.https.onCall(wrapCallable(
+  wholesaleAdminApi.makeAdminSetWholesaleProductMarket({
+    db,
+    deleteField: () => admin.firestore.FieldValue.delete(),
+  }),
 ));
 
 /**

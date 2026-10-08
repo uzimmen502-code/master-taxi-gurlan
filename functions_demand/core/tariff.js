@@ -173,11 +173,22 @@ function validateTariff(t, { forActivation = false } = {}) {
     } else if (p.brackets.some((v) => !isPosInt(v))) {
       errors.push(`prices.${z}.brackets faqat musbat butun so'm`);
     }
-    if (!isNonNegInt(p.extraPerKg)) errors.push(`prices.${z}.extraPerKg butun so'm (>=0) bo'lishi kerak`);
+    // `null` — qoralamada «hali berilmagan» (ega 2026-10-07: 20 kg dan
+    // og'ir narx keyin). 0 — ataylab «qo'shimcha haq yo'q» qarori.
+    if (p.extraPerKg != null && !isNonNegInt(p.extraPerKg)) errors.push(`prices.${z}.extraPerKg butun so'm (>=0) bo'lishi kerak`);
   }
   if (forActivation) {
+    // Oxirgi pog'onadan og'ir posilka qabul qilinadimi? (chegara yo'q yoki
+    // chegara oxirgi pog'onadan katta) — unda extraPerKg SHART, aks holda
+    // narx noto'g'ri (jimgina 0) chiqardi.
+    const lastBracket = Array.isArray(brackets) && brackets.length ? brackets[brackets.length - 1] : 0;
+    const maxW = (t.limits || {}).maxWeightG;
+    const needsExtra = !maxW || maxW > lastBracket;
     for (const z of usedZones) {
       if (!prices[z]) errors.push(`faol qilish uchun prices.${z} to'ldirilishi SHART (matritsada ishlatilgan)`);
+      else if (needsExtra && !isNonNegInt(prices[z].extraPerKg)) {
+        errors.push(`faol qilish uchun prices.${z}.extraPerKg kerak (oxirgi pog'onadan og'ir posilka qabul qilinadi)`);
+      }
     }
     if (usedZones.size === 0) errors.push('faol qilish uchun matritsa bo\'sh bo\'lmasligi kerak');
     if (!isPosInt(t.volumetricDivisor)) errors.push('faol qilish uchun volumetricDivisor kerak');
@@ -246,9 +257,12 @@ function basePriceFor(t, zone, chargeableG) {
   if (!p) throw typedError('failed-precondition', `«${zone}» uchun narx yo'q`, 'tariff_zone_price_missing');
   const idx = bracketIndex(t, chargeableG);
   if (idx >= 0) return p.brackets[idx];
+  if (!isNonNegInt(p.extraPerKg)) {
+    throw typedError('failed-precondition', `«${zone}» uchun oxirgi pog'onadan og'ir narx yo'q`, 'tariff_extra_price_missing');
+  }
   const lastMax = t.weightBrackets[t.weightBrackets.length - 1];
   const extraKg = ceilDiv(chargeableG - lastMax, 1000);
-  return p.brackets[p.brackets.length - 1] + extraKg * (p.extraPerKg || 0);
+  return p.brackets[p.brackets.length - 1] + extraKg * p.extraPerKg;
 }
 
 /** E'lon qilingan qiymat haqi — ceil(value × bps / 10000). */

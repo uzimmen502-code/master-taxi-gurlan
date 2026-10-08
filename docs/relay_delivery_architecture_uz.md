@@ -43,6 +43,9 @@ codebase'ида талаб → таклиф ядроси аллақачон иш
 | **D-14** | **Capability статусини фойдаланувчи ЎЗИГА БЕРА ОЛМАЙДИ.** У фақат ариза беради, ҳужжат юклайди ва ўз presence'ини ўзгартиради. `trial` `approved` `rejected` `suspended` — фақат ишончли сервер ёки админ | AVA_DECIDED | 2026-10-06 |
 | **D-15** | **Курьер lifecycle:** `not_registered → trial → document_submitted → under_review → approved`, ёндош ҳолатлар `trial_expired` `document_rejected` `suspended`. Янги курьерга **3 кун** синов; шу муддатда ягона дарча орқали ўзини ўзи банд қилган шахс сифатида рўйхатдан ўтиб, ҳужжат юклаши шарт | AVA_DECIDED | 2026-10-06 |
 | **D-15.1** | **3 кун HARD CUTOFF ЭМАС.** Талаб бажарилмаса — **бир марта** 5 кунлик `grace period`. Extension фақат БИР МАРТА берилади. 5 кун ҳам тугаса → courier capability `suspended`, янги буюртма олиш ёпилади. **Аккаунтнинг ўзи очиқ қолади**; ҳужжат юклаб тасдиқдан ўтгач capability қайта `approved` бўлиши мумкин | AVA_DECIDED | 2026-10-06 |
+| **D-15.2** | **Админ «Курьер қўшиш» → дарҳол `approved`.** Админ одамни ўзи кафолатлайди. Йўл state machine бўйлаб юради (`not_registered → trial → approved`, ҳар қадам `canTransition(..., 'admin')` ва алоҳида audit); янги ўтиш қўшилмайди. Фақат `not_registered`дан ва фақат иловага кирган рақамга. Сабаб: ҳужжат оқими (2b) йўқ, `trial` берилса 8 кунда sweeper тўхтатарди. Таъсир: `ADMIN_GRANT_PATH` (`core/capabilities.js`), `adminGrantCapability` | AVA_DECIDED | 2026-10-07 |
+| **D-15.3** | **Курьер аризасини тасдиқлаш режими — админ панелда «Мануал / Авто».** Мануал (стандарт): ариза → `trial` (D-15 ўзгармайди), админ «Курьерлар» рўйхатидан тасдиқлайди, тасдиқламаса 8 кунда `suspended`. Авто: ариза → дарҳол `approved` (state machine бўйлаб, `by: auto` + ким ёққани audit'да). Режим фақат АРИЗА пайтида қўлланади. Таъсир: `settings/courier.approvalMode`, `adminSetCourierApprovalMode` | AVA_DECIDED | 2026-10-07 |
+| **D-15.4** | **Тўхтатилган (`suspended`) курьер қўлидаги ишни ТУГАТАДИ**, янги иш ололмайди (15-қоида: custody узилмасин). Таъсир: `courier_auth.js` — `new` / `finish` режимлари | AVA_DECIDED | 2026-10-07 |
 | **D-16** | **Масъулият бўлиниши:** `users` — бу ким · `provider_capabilities` — нима қилишга рухсати бор · `provider_presence` — ҳозир онлайнми ва қаерда · `provider_stats` — қандай ишлаяпти · `courier_documents` — ҳужжатлари борми. `couriers` — ўтиш даври манбаси, якуний authorization source ЭМАС | AVA_DECIDED | 2026-10-06 |
 | **D-TAXI / D-SERVICE** | Такси billing (2% = `farePerSeat × 4 × 2%`, 4 ой starter, verification) ва бошқа хизматлар учун умумий қоидалар — **алоҳида реестр:** [taxi_billing_uz.md](taxi_billing_uz.md). Capability lifecycle хизмат бўйича фарқ қилади (T-2); `providerId` барқарорлиги (T-1) ҳал қилиниши керак | AVA_DECIDED | 2026-10-06 |
 | D-2 | Тариф архитектураси BTS модели асосида; `ZONE_0`…`ZONE_5`, 6 зона; зона origin↔destination matrix орқали; зона «маъноси» кодга ёзилмайди; эски Z1–Z5 бекор | AVA_DECIDED | 2026-10-05 |
@@ -391,18 +394,37 @@ L/W/H ни киритади; тизим ҳажмий вазнни ҳисобла
 (`tariff.js quoteParcel`). Курьер ўлчам киритмайди, ҳажмий вазн
 ҳисобламайди, нарх белгиламайди. Учта текширув аралашмайди:
 `limits.maxWeightG` — **ҳақиқий** вазн лимити; `maxDimCm`/`maxSumDimCm` —
-физик ўлчам; `chargeable` — фақат нарх учун. 21 кг — тариф чегараси
-(`weightBrackets: [21000]`), максимал вазн эмас. **Максимал вазн чегараси
-ЙЎҚ** (эга қарори 2026-10-07): `limits.maxWeightG` ёзилмайди, ҳар қандай
-оғирлик `extraPerKg` билан нархланади. Ўлчам лимитлари (`maxDimCm 150`,
+физик ўлчам; `chargeable` — фақат нарх учун. 20 кг — охирги нарх
+поғонаси, максимал вазн эмас. **Максимал вазн чегараси
+ЙЎҚ** (эга қарори 2026-10-07): `limits.maxWeightG` ёзилмайди, 20 кг дан
+оғир посилка ҳар бошланган кг учун `extraPerKg` билан нархланади. Ўлчам лимитлари (`maxDimCm 150`,
 `maxSumDimCm 300`) — INFERRED, эга тасдиғи кутилади. Custody'да яширин нарх ўзгармайди (D-8);
 «мос / мос эмас» назорати ва қайта нархлаш — алоҳида кейинги қарор.
 
-**Тариф модели — AVA_DECIDED (2026-10-07):** N=1 — 0–21 кг базавий нарх,
-21 кг дан кейин ҳар **бошланган** кг `extraPerKg`. ZONE_0 130 000 / +2 500;
-ZONE_1 250 000 / +6 000; ZONE_4 310 000 / +8 500. ZONE_2/3/5 — нарх
-берилмаган, матрицада йўналиш ҳам йўқ. Менинг аввалги 5 поғонали
-`[1,3,5,10,20] кг` жадвалим эга қарори эмас эди — бекор қилинган.
+**Тариф модели — AVA_DECIDED (2026-10-07, кечқурун; эрталабки N=1 қарорини
+бекор қилади):** 6 зона × 5 вазн поғонаси, бутун сўм, эга жадвали айнан:
+
+| Зона | ≤1 кг | ≤3 кг | ≤5 кг | ≤10 кг | ≤20 кг |
+|---|---:|---:|---:|---:|---:|
+| ZONE_0 | 29 000 | 36 000 | 43 000 | 59 000 | 88 000 |
+| ZONE_1 | 34 000 | 52 000 | 69 000 | 110 000 | 187 000 |
+| ZONE_2 | 36 000 | 55 000 | 74 000 | 117 000 | 200 000 |
+| ZONE_3 | 40 000 | 60 000 | 80 000 | 126 000 | 213 000 |
+| ZONE_4 | 42 000 | 64 000 | 85 000 | 133 000 | 225 000 |
+| ZONE_5 | 46 000 | 69 000 | 92 000 | 143 000 | 240 000 |
+
+**What:** `weightBrackets [1000,3000,5000,10000,20000]`, юқоридаги нархлар.
+**Why:** эга қарори (админ «Нархлар» ойнасини шу жадвалга ўтказиш).
+**Impact:** N=1 (ZONE_0 130 000 / ZONE_1 250 000 / ZONE_4 310 000, 0–21 кг)
+бекор; тариф ҳали фаол эмас — мижоз буюртмаларига таъсир йўқ.
+**20 кг дан оғир (+1 кг) нархи — UNKNOWN** (эга: «ҳозирча бўш қолсин»):
+`extraPerKg: null`. Максимал вазн чегараси йўқ бўлгани учун
+`validateTariff(forActivation)` ишлатилган зоналарда `extraPerKg`ни талаб
+қилади — у тўлдирилмагунча тариф **фаоллашмайди** (аввал бўш катак жимгина
+0 бўлиб, 50 кг посилка 20 кг нархида кетарди). `0` — ташқи қарор
+«қўшимча ҳақ йўқ» сифатида қабул қилинади. Фаол тарифда ҳам бўлмаса —
+`basePriceFor` `tariff_extra_price_missing` хатосини беради (жимгина 0 эмас).
+ZONE_2/3/5 нархи бор, лекин матрицада ҳали йўналиш йўқ.
 
 ### 7.6 Тўлов ва эскроу
 
@@ -829,6 +851,84 @@ PIN'сиз ўтади.
 Қарорсиз ҳолда `couriers` ТЕГИЛМАЙДИ: ҳозир у ёнма-ён ишлайди ва ҳеч
 нарса йўқолмайди.
 
+### 9-bis.3 Ҳолат — 2026-10-07
+
+9-bis.1/9-bis.2 даги ҳуқуқ масаласи D-CLEAN-1 билан ҳал бўлди
+(`resolveAuthorizedCourierUid` → фақат capability, деплой қилинган).
+Шундан кейин иккита янги тешик қолган эди:
+
+**1. BUG — янги фойдаланувчи ҲЕЧ ҚАНДАЙ capability ола олмасди.**
+
+- *Symptom:* `requestCapability` / `acceptServiceAgreement` / T-6 миграция
+  `users.accountId`и йўқ одамда доим `Firestore transactions require all
+  reads to be executed before all writes` билан йиқилади (клиентга —
+  `internal`).
+- *Root cause:* `ensureAccountId` транзакцияда `accountId`ни ЁЗАР, кейин
+  чақирувчи `provider_capabilities`ни ЎҚИРДИ. Ҳақиқий SDK бунга йўл
+  қўймайди. Unit тестлардаги fake транзакция ёзувни охирига сурарди —
+  шунинг учун 565 тест буни кўрмаган. `accountId`ни бошқа ҳеч ким
+  ёзмайди → продакшнда ҳеч кимда `accountId` бўлмаслиги кутилади
+  (INFERRED; продакшн ўлчови қилинмади).
+- *Таъсир:* курьер ҳам, такси ҳам — янги провайдер ҳуқуқ ола олмайди
+  (taxi `ensureTaxiCapability` ҳам шу callable'ни чақиради).
+- *Fix:* `readAccountId` (фақат ўқийди) + `commitAccountId` (чақирувчи
+  ўз ўқишларини тугатгач ёзади). Миграциянинг `dryRun`и энди
+  `users.accountId`ни ҳам ёзмайди.
+- *Regression:* `functions_demand/test/capabilities_tx_emulator.test.js`
+  (ҳақиқий Admin SDK, эмулятор): тузатишдан олдин **0/7**, кейин
+  **9/9** (+ admin grant). Fake транзакция `capabilities_api` ва
+  `agreements_admin` тестларида энди ҳақиқий SDK каби қатъий.
+
+**2. Админ «Курьер қўшиш» `couriers`га ёзарди — бу ҲУҚУҚ БЕРМАЙДИ.**
+Энди `adminGrantCapability` (D-15.2) + экран `provider_capabilities`
+бўйича (фильтр, тасдиқлаш, тўхтатиш — сабаб билан, audit).
+
+**Деплой (ҳали ҚИЛИНМАГАН), ТАРТИБ БИЛАН:**
+1. `functions:demand` → `requestCapability` `acceptServiceAgreement`
+   `adminSetCapabilityStatus` `adminGrantCapability`
+   `adminSetCourierApprovalMode` `adminMigrateTaxiDrivers`; hosting (админ).
+2. Админ ҳақиқий курьерларни «Курьерлар» экранидан қўшади.
+3. default (номи билан, `functions:default` тўлиқ эмас): `courierMarkPicked`
+   `courierMarkArrived` `courierSubmitPayment` `courierGetCustomerWalletBalance`
+   `courierRecoverOrphanRoute` `courierCreateRoute` `courierMarkCollectionArrived`
+   `courierFinalizeCollection` ва 8 та гилам/сут курьер функцияси.
+
+Қоида ва индекс ўзгармади.
+
+**3. ХАВФСИЗЛИК — курьер буюртма амаллари ҳуқуқ ва эгаликни текширмасди
+(CONFIRMED, эмуляторда исботланган).**
+
+- *Symptom:* `courierMarkPicked` / `courierMarkArrived` /
+  `courierSubmitPayment` фақат «чақирувчи ўз рақами билан»ни текширарди.
+  Иловага кирган ИСТАЛГАН одам ўз буюртмасини «олдим → етиб келдим»
+  қилиб, `submitPayment`га «нақд 10 000 000» юборарди — сервер ортиқчани
+  қайтим сифатида унинг ҳамёнига ёзарди (`changeCredit`). Бировнинг
+  буюртмасини «етказилди» қилиш ва мижоз ҳамёнидан ечиш ҳам мумкин эди.
+  `courierGetCustomerWalletBalance` исталган рақамнинг қолдиғини берарди.
+- *Root cause:* учта callable'да `resolveAuthorizedCourierUid` чақирилмаган,
+  буюртма эгалиги умуман текширилмаган.
+- *Fix:* `functions/courier_auth.js` — `new` / `finish` режимлари (D-15.4)
+  + «буюртма шу курьернинг ФАОЛ маршрутида» (`delivery_routes.courierId`ни
+  фақат админ/сервер ёзади — қоида кафолатлайди) + ҳамён фақат ўз
+  маршрутидаги мижозники.
+- *Regression:* `functions/test/courier_callables_cf.test.js` — ҲАҚИҚИЙ
+  `index.js` callable'лари: тузатишдан олдинги коддан **4/8** (ҳужум ўтади),
+  кейин **8/8**. Модул: `courier_auth.test.js` **12/12**.
+- ⚠️ *Деплой тартиби:* бу default функциялар деплой қилингач, capability'си
+  йўқ курьер буюртмани олиб/топшира олмайди. Шунинг учун АВВАЛ demand
+  (accountId fix + `adminGrantCapability`) + hosting → админ ҳақиқий
+  курьерларни «Курьерлар» экранидан қўшади → ШУНДАН КЕЙИН default.
+
+**Қолганлари (кейинги босқичлар):**
+
+| # | Нима |
+|---|---|
+| a | ✅ **БАЖАРИЛДИ (D-15.4)** — `suspended` курьер қўлидаги буюртма/вазифани тугатади, янгисини ололмайди. Деплой кутилмоқда |
+| b | 🟡 Ҳужжат оқими (2b) ҳали йўқ. **D-15.3** бўйича «Мануал/Авто» режими қўшилди: мануалда админ рўйхатдан тасдиқлайди («Тасдиқ кутяпти» фильтри стандарт), автода ариза дарҳол тасдиқланади |
+| c | ✅ **КОДИ БАЖАРИЛДИ (2026-10-08)** — илова `couriers`га ёзмайди (`courier_controller` GPS/offline, `profile_controller` logout); `CouriersRepository` ва `CourierStatus` ўчирилди. **Янги илова версияси керак** (эски версиялар ёзишда давом этади — қоида уларни янги курьерда рад этади, зарарсиз) |
+| d | 🟡 `sell_submissions_admin_screen` курьер танлаш рўйхати — ✅ `provider_capabilities`дан (ишлайдиган ҳолатлар, hosting деплойи билан). `cleanupStaleDrivers` атайин ҚОЛДИРИЛДИ: зарарсиз (кунига ~720 сўров), олиб ташлаш хатти-ҳаракатни ўзгартирмайди — `couriers` коллекцияси билан бирга (e) олиб ташланади |
+| e | Тест маълумотини тозалаш (3.0-bis G) — эга ишга туширади. Сўнг, янги илова версияси тарқалгач: `couriers` қоидаси, `cleanupStaleDrivers`даги `couriers` қисми ва коллекциянинг ўзи чиқарилади |
+
 ---
 
 ## 9-ter. Capability модели (D-12…D-16) — мавжуд код билан солиштириш
@@ -934,9 +1034,9 @@ function driverApprovalPatchOnly() {
 | 1 | ✅ **БАЖАРИЛДИ** — шакл ўзгарди (битта uid, хизматлар ичида), сервер калитлари `status` `trial` `review` `suspend`, қоида битта қатор билан ҳимоялайди. Модел: `functions_demand/core/capabilities.js` | — |
 | 2a | ✅ **БАЖАРИЛДИ** — `requestCapability` callable'и: `not_registered → trial` + 3 кунлик ойна, идемпотент | — |
 | 2b | ❌ `courier_documents` + `submitCapabilityDocument` | кейинги |
-| 3 | ❌ Админ томони: `approveCapability` / `rejectCapability` / `suspendCapability` + audit log (41-қоида) | кейинги |
+| 3 | 🟡 **ҚИСМАН (2026-10-07)** — ҳолат ўзгартириш `adminSetCapabilityStatus` (audit билан) орқали; админ қўшиши `adminGrantCapability` (D-15.2); админ экрани «Курьерлар» `provider_capabilities`га кўчди. `document_rejected` учун UI йўқ (ҳужжат оқими 2b кутилмоқда) | — |
 | 4 | ✅ **БАЖАРИЛДИ** — `capabilitySweeper` (ҳар соат): `trial` → (бир марта) `trial_expired`/grace → `suspended` | — |
-| 5 | ❌ Authorization кўчиши: `resolveAuthorizedCourierUid` → capability; `users.role == 'courier'` ва `isStaff()` даги `courier`/`seller` олиб ташланади | кейинги |
+| 5 | ✅ **БАЖАРИЛДИ (D-CLEAN-1, 2026-10-06)** — `resolveAuthorizedCourierUid` → фақат capability; `users.role == 'courier'` ва `isStaff()` даги `courier`/`seller` олиб ташланди ([taxi_billing_uz.md](taxi_billing_uz.md) 3.0) | — |
 | 6 | ❌ `couriers` ўтиш манбаси сифатида қолади, кейин чиқарилади | кейинги |
 
 **Бажарилган қисмнинг шакли** (жонли, 2026-10-06 кечки деплой — T-1a ва
@@ -1147,16 +1247,22 @@ abort). У ва `clipPage` v3 2026-10-06 06:39 UTC да `fix/realty-audit-p1`
 версияга қайтаради. Default codebase функциялари фақат номма-ном
 (`functions:default:<name>`) деплой қилинади, то ветвлар бирлаштирилмагунча.
 
-**Тариф — эга модели N=1 (2026-10-07, AVA_DECIDED, §7.5).**
-`weightBrackets: [21000]`; ZONE_0 `130 000 / +2 500`, ZONE_1
-`250 000 / +6 000`, ZONE_4 `310 000 / +8 500` (ҳар бошланган кг);
-ZONE_2/3/5 — нарх йўқ (матрицада ҳам йўқ). Seed:
+**Тариф — эга жадвали 6 зона × 5 поғона (2026-10-07 кечқурун, AVA_DECIDED,
+§7.5; N=1 бекор).** `weightBrackets: [1000,3000,5000,10000,20000]`;
+`extraPerKg: null` (20 кг дан оғир нархи UNKNOWN — фаоллаштириш блокда).
+Seed:
 `core/seed/logistics_tariff_draft.json`; seed tool draft'ни **тўлиқ
 алмаштиради** (merge эмас — акс ҳолда эски `prices.ZONE_x` қолиб кетарди).
 Production'даги `logistics_v1` draft — эга топшириғи билан (2026-10-07,
 «ўзинг бажар») `seed --write` орқали **тўлиқ алмаштирилди**: N=1,
-ZONE_0/1/4, `maxWeightG` йўқ (максимал чегара йўқ — эга қарори). Фаоллаштириш
-учун етишмайди: `internal.platformMarginBps`, `internal.legShareBps` — эга
+ZONE_0/1/4, `maxWeightG` йўқ (максимал чегара йўқ — эга қарори). Кечқурун
+эга жадвали билан яна `seed --write` (эга рухсати): 6 зона × 5 поғона,
+`extraPerKg: null`. Шу код (`234b79e`) эга рухсати билан deploy қилинди,
+2026-10-07 ~18:06 UTC: `functions:demand` (ҳамма функциялар ACTIVE, 40 дақиқада
+ERROR йўқ) ва hosting (`/`+`/admin/`) — умумий worktree'да бошқа сессиянинг
+commit қилинмаган ишлари бўлгани учун hosting **тоза detached worktree**'дан
+йиғилди (жонли админ бандли build билан байтма-байт бир хил). Фаоллаштириш учун етишмайди: `prices.ZONE_0/1/4.extraPerKg`
+(+1 кг), `internal.platformMarginBps`, `internal.legShareBps` — эга
 admin «Нархлар» муҳарририда ўзи тўлдиради ва «Фаоллаштириш»ни босади. Admin панел: нарх жадвали
 муҳаррири (устунлар `weightBrackets`дан динамик), ички улушлар,
 **«Барча нархларни % га»** тугмаси (яхлитлаш 1/100/1000 сўм; фаол

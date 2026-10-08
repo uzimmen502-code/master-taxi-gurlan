@@ -426,6 +426,61 @@ ok('LEG-2 muddati tugadi (kuryer topilmadi) → shipment.legProblem; admin qayta
   assert.strictEqual(db.dump('demands')[leg1].status, 'in_progress');
 });
 
+// Admin audit (2026-10-08): qayta rejalashdan keyin eski `expired` LEG
+// `cancelled`ga o'ta olmaydi va qoladi — uni «LEG'ni qayta ochish» bilan
+// jonlantirish ikkinchi, «etim» LEG yaratardi (13/15-band).
+ok('qayta rejalash: legProblem tozalanadi; eski (superseded) LEG qayta ochilmaydi', async () => {
+  const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const maint = require('../api/maintenance');
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload(), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0];
+  await fund(db, shipmentId);
+  const [oldLeg] = legOf(db, shipmentId);
+  assert.strictEqual(db.dump('demands')[oldLeg].status, 'active');
+
+  const later = new Date(NOW.getTime() + (3 * 24 + 1) * 3600 * 1000);
+  await maint.makeExpireSweeper({ db, now: () => later })();
+  assert.strictEqual(db.dump('demands')[oldLeg].status, 'expired');
+  assert.strictEqual(db.dump('shipments')[shipmentId].legProblem.legId, oldLeg);
+  assert.strictEqual(db.dump('shipments')[shipmentId].status, 'ready');
+
+  const p = await api.makeAdminPlanShipmentRoute({ ...d, now: () => later })({ shipmentId, reason: 'yangi yo\'l', legs: [
+    { to: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+    { from: { regionId: 'xorazm', districtId: 'urganch_shahri', addressText: 'Urganch bekat' } },
+  ] }, ctx(ADMIN));
+  assert.ok(!p.legIds.includes(oldLeg));
+  assert.strictEqual(db.dump('shipments')[shipmentId].legProblem, null, 'eski reja muammosi tozalandi');
+  assert.strictEqual(db.dump('demands')[oldLeg].status, 'expired', 'expired → cancelled o\'tishi yo\'q, qoladi');
+
+  const react = api.makeAdminReactivateLeg({ ...d, now: () => later });
+  await assert.rejects(() => react({ legId: oldLeg }, ctx(ADMIN)),
+    (e) => e.details.reason === 'leg_superseded', 'eski reja LEG\'i ochilmaydi');
+  assert.strictEqual(db.dump('demands')[oldLeg].status, 'expired');
+});
+
+ok('qayta ochish: modul o\'chiq — aniq sabab bilan rad, eski match tarixi O\'CHIRILMAYDI', async () => {
+  const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
+  const d = deps(db);
+  const maint = require('../api/maintenance');
+  const r = await api.makeCreateLogisticsOrder(d)(orderPayload(), ctx(OWNER));
+  const shipmentId = r.shipmentIds[0];
+  await fund(db, shipmentId);
+  const [leg] = legOf(db, shipmentId);
+  const later = new Date(NOW.getTime() + (3 * 24 + 1) * 3600 * 1000);
+  await maint.makeExpireSweeper({ db, now: () => later })();
+  const matchesBefore = Object.keys(db.dump('demand_matches')).filter((k) => k.startsWith(`${leg}_`));
+  assert.ok(matchesBefore.length > 0);
+
+  await db.collection('module_config').doc('logistics_all').set({ enabled: false });
+  config.clearCache();
+  const react = api.makeAdminReactivateLeg({ ...d, now: () => later });
+  await assert.rejects(() => react({ legId: leg }, ctx(ADMIN)), (e) => e.details.reason === 'module_disabled');
+  const matchesAfter = Object.keys(db.dump('demand_matches')).filter((k) => k.startsWith(`${leg}_`));
+  assert.deepStrictEqual(matchesAfter.sort(), matchesBefore.sort(), 'match tarixi saqlandi');
+  assert.strictEqual(db.dump('demands')[leg].status, 'expired');
+});
+
 ok('onShipmentFunded: faqat pending→escrow_funded o\'tishida; takror chaqiruv LEG\'ni qayta ochmaydi', async () => {
   const db = makeDb(seed()); config.clearCache(); tariffCore.clearCache();
   const d = deps(db);
@@ -437,6 +492,20 @@ ok('onShipmentFunded: faqat pending→escrow_funded o\'tishida; takror chaqiruv 
   await fund(db, shipmentId);
   const again = await run({ paymentStatus: 'pending' }, { paymentStatus: 'escrow_funded', legIds: legOf(db, shipmentId) }, shipmentId);
   assert.strictEqual(again.skipped, 'status_active', 'idempotent');
+});
+
+// Harness fake'i qulflanadi: yana «yumshoq» bo'lib qolsa, yuqoridagi oqimlar
+// haqiqiy SDK'da yiqiladigan tranzaksiyani yashil ko'rsatadi.
+ok('harness fake tranzaksiyasi haqiqiy SDK kabi: yozuvdan KEYIN o\'qish XATO', async () => {
+  const db = makeDb(seed());
+  const ref = db.collection('shipments').doc('s1');
+  await assert.rejects(
+    () => db.runTransaction(async (tx) => {
+      tx.set(ref, { x: 1 });
+      await tx.get(ref);
+    }),
+    /all reads to be executed before all writes/,
+  );
 });
 
 (async () => {

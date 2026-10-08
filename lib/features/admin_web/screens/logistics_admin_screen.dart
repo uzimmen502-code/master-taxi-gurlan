@@ -435,7 +435,16 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _db.collection('shipments').orderBy('updatedAt', descending: true).limit(100).snapshots(),
+            // «⚠ LEG муддати тугаган» — серверда сараланади: `legProblem.at`
+            // бўйича тартиблаш фақат муаммоли жўнатмаларни қайтаради
+            // (null/майдонсиз ҳужжатлар тушмайди; single-field индекс). Аввал
+            // охирги 100 та янгиланган жўнатма ичидан қидириларди — 100 та
+            // янги жўнатмадан кейин огоҳлантириш кўздан йўқоларди.
+            stream: (_filter == 'leg_problem'
+                    ? _db.collection('shipments').orderBy('legProblem.at', descending: true)
+                    : _db.collection('shipments').orderBy('updatedAt', descending: true))
+                .limit(100)
+                .snapshots(),
             builder: (context, snap) {
               if (snap.hasError) return Center(child: Text('Хато: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
@@ -494,7 +503,17 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     final replannable = status == 'awaiting_payment' || status == 'ready';
     final cust = s['currentCustodian'] is Map ? s['currentCustodian'] as Map : const {};
     final price = (s['priceSnapshot'] is Map ? (s['priceSnapshot'] as Map)['customerPrice'] : null) ?? 0;
-    final problem = s['legProblem'] is Map ? s['legProblem'] as Map : null;
+    final rawProblem = s['legProblem'] is Map ? s['legProblem'] as Map : null;
+    // Фақат ЖОРИЙ маршрутдаги LEG муаммоси: қайта режалангандан кейин эски
+    // `legProblem` эски LEG'га ишора қилади — уни очиш етим LEG яратарди
+    // (сервер ҳам `leg_superseded` билан рад этади). Бекор/етказилган
+    // жўнатмада ҳам тугма маъносиз.
+    final legIds = s['legIds'] is List ? s['legIds'] as List : const [];
+    final problem = rawProblem != null &&
+            legIds.contains(rawProblem['legId']) &&
+            (status == 'ready' || status == 'in_transit')
+        ? rawProblem
+        : null;
     return Card(
       color: problem != null ? Colors.orange.shade50 : null,
       child: ListTile(
@@ -533,7 +552,7 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
   }
 }
 
-/// Нарх жадвали: зона × вазн поғонаси + 20 кг дан ошган ҳар кг + ички
+/// Нарх жадвали: зона × вазн поғонаси + охирги поғонадан ошган ҳар кг + ички
 /// улушлар. «Ҳаммасини % га» — битта тугма (эга талаби, 2026-10-07):
 /// фоиз (манфий = камайтириш), яхлитлаш қадами; натижа катакларда
 /// кўринади, кейин «Сақлаш». Ҳисоб — `tariff_adjust.dart` (соф Dart,
@@ -657,9 +676,12 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
         _error = '$z: ҳамма поғона мусбат бутун сўм бўлиши керак (ёки қатор тўлиқ бўш)';
         return null;
       }
-      final extra = _int(row.last) ?? 0;
-      if (extra < 0) {
-        _error = '$z: 20 кг дан ошган ҳар кг нархи манфий бўлмайди';
+      // Бўш — «ҳали берилмаган» (null): сервер фаоллаштиришни блоклайди.
+      // 0 га айлантирилмайди — акс ҳолда оғир посилка жимгина охирги
+      // поғона нархида кетарди.
+      final extra = _int(row.last);
+      if (extra != null && extra < 0) {
+        _error = '$z: ${_kgLabel(_brackets.last)} кг дан ошган ҳар кг нархи манфий бўлмайди';
         return null;
       }
       prices[z] = {'brackets': vals.cast<int>(), 'extraPerKg': extra};
@@ -822,7 +844,8 @@ class _PriceGridDialogState extends State<_PriceGridDialog> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди).',
+                'Бутун сўм. Қатор тўлиқ бўш бўлса — шу зонага нарх йўқ (матритсада ишлатилса фаоллашмайди). '
+                '«+1 кг» бўш бўлса — оғир посилка нархи йўқ, фаоллаштириб бўлмайди; 0 — қўшимча ҳақ олинмайди.',
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 14),

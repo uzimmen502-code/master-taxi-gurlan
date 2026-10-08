@@ -8,7 +8,9 @@
  * ҳайдовчи ролини сервер (Admin SDK) тасдиқда беради.
  *
  * Тест тешикни ҳам, ҚОНУНИЙ оқимларни ҳам қулфлайди: эга профилини
- * ўзгартириши, ҳайдовчининг ўзи `user`га қайтиши, админ роль бериши.
+ * ўзгартириши, ҳайдовчининг ўзи `user`га қайтиши. Админ ролни фақат CF
+ * (`setUserRoleByAdmin`) орқали беради — rules'да `role` клиентдан
+ * ўзгармайди (52115b3).
  *
  *   firebase emulators:exec --only firestore --project demo-rules-test \
  *     "node functions/test/users_role_rules.test.js"
@@ -98,9 +100,14 @@ async function main() {
         .update({ role: 'user', updatedAt: now }));
   });
   await seed();
-  await check('R6 admin foydalanuvchiga role:\'driver\' beradi — ruxsat', async () => {
-    await assertSucceeds(phoneCtx(ADMIN).doc(`users/${VICTIM}`)
+  await check('R6 admin ham rules orqali role yoza olmaydi — faqat CF (52115b3)', async () => {
+    await assertFails(phoneCtx(ADMIN).doc(`users/${VICTIM}`)
         .update({ role: 'driver', updatedAt: now }));
+  });
+  await seed();
+  await check('R6b admin profil maydonini o\'zgartiradi (role\'siz) — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(ADMIN).doc(`users/${VICTIM}`)
+        .update({ name: 'Tuzatildi', updatedAt: now }));
   });
   await seed();
   await check('R7 egasi bonusBalance\'ga tega olmaydi (o\'zgarmagan himoya)', async () => {

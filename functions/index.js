@@ -36,6 +36,8 @@ const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth')
 const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
+// Admin «Аҳоли бозори» рўйхати — саҳифалар ва «Яна юклаш» (2026-10-08).
+const { parseMarketAdsCursor, listMarketAdsPage } = require('./admin_market_list');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
 // `settlement_ledger` orqali; capability mantiqi `capabilities_model.js`
 // nusxasidan (paritet testi). `notifyUserInApp` — hoisted declaration.
@@ -7984,18 +7986,18 @@ exports.adminListMarketAds = functions.https.onCall(async (data, context) => {
   // эди — 500 дан ортиқ эълонда ID тартибида биринчи 500 таси келиб, янги
   // кутаётган эълон рўйхатга тушмай қолиши мумкин эди (нишон эса санарди).
   // Индекс: ads (type ASC, createdAt DESC). `createdAt` ни сервер ёзади.
-  const snap = await db.collection('ads')
-    .where('type', '==', 'cheap_product')
-    .orderBy('createdAt', 'desc')
-    .limit(500)
-    .get();
-  const ads = snap.docs.map(serializeMarketAdForAdmin);
+  // «Яна юклаш» (эга, 2026-10-08): `after` = олдинги жавобдаги `nextCursor`
+  // (functions/admin_market_list.js).
+  const after = parseMarketAdsCursor(data.after, { admin, functions });
+  const { docs, nextCursor } = await listMarketAdsPage(db, { admin }, { after });
+  const ads = docs.map(serializeMarketAdForAdmin);
+  // Саҳифа ичида — эълон қилинган вақт бўйича (аввалгидек).
   ads.sort((a, b) => {
     const ap = Date.parse(a.publishedAt || a.createdAt || 0) || 0;
     const bp = Date.parse(b.publishedAt || b.createdAt || 0) || 0;
     return bp - ap;
   });
-  return { ads };
+  return { ads, nextCursor };
 });
 
 /** Admin web: Onlayn BOZOR e'lonini o'chirish. */

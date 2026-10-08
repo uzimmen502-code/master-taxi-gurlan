@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/catalog_search.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_market_service.dart';
+import '../widgets/admin_load_more_bar.dart';
 import '../widgets/market_ad_edit_dialog.dart';
 import '../widgets/market_complaints_bar.dart';
 
@@ -26,6 +27,18 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
   bool _loading = true;
   String? _loadError;
 
+  /// «Яна юклаш» (эга, 2026-10-08): сервер 500 тадан беради.
+  /// [_nextCursor] — кейинги саҳифа (`null` = бошқа йўқ). [_pageCount] —
+  /// нечта саҳифа очилган: амалдан кейинги янгилаш шунчасини қайта олади,
+  /// админ рўйхатнинг қаерида турган бўлса ўша ерда қолади.
+  Map<String, dynamic>? _nextCursor;
+  int _pageCount = 1;
+  bool _loadingMore = false;
+  bool _loadMoreFailed = false;
+
+  /// Янгилаш бошланса, кечиккан «Яна юклаш» жавоби ташлаб юборилади.
+  int _generation = 0;
+
   static const _blue = AppColors.primary;
 
   @override
@@ -41,25 +54,70 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
   }
 
   Future<void> _loadAds() async {
+    final generation = ++_generation;
     setState(() {
       _loading = true;
       _loadError = null;
+      _loadingMore = false;
+      _loadMoreFailed = false;
     });
     try {
       final adminPhone = context.read<AdminAuthService>().phoneDigits ?? '';
-      final ads = await context.read<AdminMarketService>().listAds(
-            adminPhone: adminPhone,
-          );
-      if (!mounted) return;
+      final service = context.read<AdminMarketService>();
+      final ads = <AdModel>[];
+      final seen = <String>{};
+      Map<String, dynamic>? cursor;
+      var pages = 0;
+      do {
+        final page =
+            await service.listAdsPage(adminPhone: adminPhone, after: cursor);
+        ads.addAll(page.ads.where((a) => seen.add(a.id)));
+        cursor = page.nextCursor;
+        pages++;
+      } while (cursor != null && pages < _pageCount);
+      if (!mounted || generation != _generation) return;
       setState(() {
         _allAds = ads;
+        _nextCursor = cursor;
+        _pageCount = pages;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
         _loadError = '$e';
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    final cursor = _nextCursor;
+    if (cursor == null || _loadingMore || _loading) return;
+    final generation = _generation;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
+    try {
+      final adminPhone = context.read<AdminAuthService>().phoneDigits ?? '';
+      final page = await context
+          .read<AdminMarketService>()
+          .listAdsPage(adminPhone: adminPhone, after: cursor);
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        final seen = _allAds.map((a) => a.id).toSet();
+        _allAds = [..._allAds, ...page.ads.where((a) => seen.add(a.id))];
+        _nextCursor = page.nextCursor;
+        _pageCount++;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      debugPrint('[MarketModeration] MARKET_ADS_LOAD_MORE_FAILED $e');
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _loadingMore = false;
+        _loadMoreFailed = true;
       });
     }
   }
@@ -174,6 +232,13 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
   @override
   Widget build(BuildContext context) {
     final ads = _filter(_allAds);
+    final loadMore = _nextCursor == null
+        ? null
+        : AdminLoadMoreBar(
+            loading: _loadingMore,
+            failed: _loadMoreFailed,
+            onPressed: _loadMore,
+          );
     return Column(
       children: [
         _header(),
@@ -205,13 +270,17 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
                           Expanded(
                             child: ads.isEmpty
                                 ? ListView(
-                                    children: const [
-                                      SizedBox(height: 120),
-                                      Center(child: Text('E\'lon topilmadi')),
+                                    children: [
+                                      const SizedBox(height: 120),
+                                      const Center(
+                                        child: Text('E\'lon topilmadi'),
+                                      ),
+                                      if (loadMore != null) loadMore,
                                     ],
                                   )
                                 : _AdsTable(
                                     ads: ads,
+                                    footer: loadMore,
                                     onOpen: _showAdDetail,
                                     onGallery: _openImageGallery,
                                     onActivate: (ad) =>
@@ -305,9 +374,17 @@ class _MarketModerationScreenState extends State<MarketModerationScreen> {
           CircleAvatar(
             radius: 18,
             backgroundColor: color.withValues(alpha: 0.1),
-            child: Text(
-              '$value',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            // «Яна юклаш»дан кейин сон 4+ хонали бўлиши мумкин — доирага
+            // сиғдирилади (аввал «100/0» бўлиб иккинчи қаторга ўтарди).
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '$value',
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -475,9 +552,13 @@ class _AdsTable extends StatelessWidget {
     required this.onDeactivate,
     required this.onEdit,
     required this.onDelete,
+    this.footer,
   });
 
   final List<AdModel> ads;
+
+  /// Жадвал остида, вертикал айланиш ичида («Яна юклаш»).
+  final Widget? footer;
   final ValueChanged<AdModel> onOpen;
   final ValueChanged<AdModel> onGallery;
   final ValueChanged<AdModel> onActivate;
@@ -502,44 +583,48 @@ class _AdsTable extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return SingleChildScrollView(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: constraints.maxWidth < 980
-                          ? 980
-                          : constraints.maxWidth,
-                    ),
-                    child: Table(
-                      columnWidths: const {
-                        0: FixedColumnWidth(64),
-                        1: FlexColumnWidth(2.2),
-                        2: FixedColumnWidth(120),
-                        3: FixedColumnWidth(110),
-                        4: FlexColumnWidth(1.4),
-                        5: FixedColumnWidth(72),
-                        6: FixedColumnWidth(100),
-                        7: FixedColumnWidth(148),
-                      },
-                      defaultVerticalAlignment:
-                          TableCellVerticalAlignment.middle,
-                      border: TableBorder(
-                        horizontalInside: BorderSide(
-                          color: _border.withValues(alpha: 0.7),
-                        ),
-                        verticalInside: const BorderSide(color: _border),
+              final table = SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth < 980
+                        ? 980
+                        : constraints.maxWidth,
+                  ),
+                  child: Table(
+                    columnWidths: const {
+                      0: FixedColumnWidth(64),
+                      1: FlexColumnWidth(2.2),
+                      2: FixedColumnWidth(120),
+                      3: FixedColumnWidth(110),
+                      4: FlexColumnWidth(1.4),
+                      5: FixedColumnWidth(72),
+                      6: FixedColumnWidth(100),
+                      7: FixedColumnWidth(148),
+                    },
+                    defaultVerticalAlignment:
+                        TableCellVerticalAlignment.middle,
+                    border: TableBorder(
+                      horizontalInside: BorderSide(
+                        color: _border.withValues(alpha: 0.7),
                       ),
-                      children: [
-                        TableRow(
-                          decoration: const BoxDecoration(color: _headerBg),
-                          children: _headers(),
-                        ),
-                        for (final ad in ads) _dataRow(ad),
-                      ],
+                      verticalInside: const BorderSide(color: _border),
                     ),
+                    children: [
+                      TableRow(
+                        decoration: const BoxDecoration(color: _headerBg),
+                        children: _headers(),
+                      ),
+                      for (final ad in ads) _dataRow(ad),
+                    ],
                   ),
                 ),
+              );
+              final more = footer;
+              return SingleChildScrollView(
+                child: more == null
+                    ? table
+                    : Column(children: [table, more]),
               );
             },
           ),

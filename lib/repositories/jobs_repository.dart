@@ -137,29 +137,17 @@ class JobsRepository {
     });
   }
 
-  /// Admin panel учун: фақат Иш топ doskasi (`work|service|ad`).
+  /// Admin panel рўйхати: фақат Иш топ doskasi (`work|service|ad`), энг
+  /// янгиси биринчи. Саҳифалар (500 та + «Яна юклаш») — экранда,
+  /// `AdminPagedList` орқали.
   ///
   /// Тур филтри СЕРВЕРДА (2026-10-08): аввал бутун `ads` коллекциясидан
-  /// охирги [limit] таси олиниб, клиентда филтрланарди — бозор эълонлари
+  /// охирги 500 таси олиниб, клиентда филтрланарди — бозор эълонлари
   /// ўринларни эгаллаб, иш эълонлари рўйхати ва жами сонлари қисқариб
   /// қоларди. Индекс: ads (type ASC, createdAt DESC).
-  Stream<List<JobAd>> watchAllForAdmin({int limit = 500}) {
-    return _ads
-        .where('type', whereIn: JobAd.jobsBoardTypes)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map(
-          (snap) => snap.docs
-              .where(
-                (d) => JobAd.isJobsBoardType(
-                  (d.data()['type'] ?? '') as String,
-                ),
-              )
-              .map(JobAd.fromDoc)
-              .toList(growable: false),
-        );
-  }
+  Query<Map<String, dynamic>> adminListQuery() => _ads
+      .where('type', whereIn: JobAd.jobsBoardTypes)
+      .orderBy('createdAt', descending: true);
 
   /// Шикоятлар (янги юқорида).
   Stream<List<JobComplaint>> watchComplaints({int limit = 200}) {

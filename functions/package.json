@@ -51,6 +51,7 @@
     "test:restaurant-cf": "firebase emulators:exec --only firestore --project demo-restaurant-orders \"node test/restaurant_orders_cf.test.js\"",
     "test:module-config": "firebase emulators:exec --only firestore --project demo-module-config \"node test/module_config_cf.test.js\"",
     "test:module-config-rules": "firebase emulators:exec --only firestore --project demo-module-config-rules \"node test/module_config_rules.test.js\"",
+    "test:admin-market-list": "firebase emulators:exec --only firestore --project demo-market-list \"node test/admin_market_list.test.js\"",
     "test:realty": "node test/realty_expiry.test.js",
     "test:realty-rules": "node test/realty_rules.test.js"
   },

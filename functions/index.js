@@ -5067,6 +5067,52 @@ async function courierSubmitPaymentTx(t, {
   };
 }
 
+/**
+ * `courierSubmitPaymentTx` — CHEKLANGAN QAYTA URINISH bilan (2026-10-08).
+ *
+ * Symptom: ikki parallel submit (ikki marta bosish / retry) emulator va
+ * SDK contention'ida ba'zan HttpsError emas, XOM «Transaction is invalid or
+ * closed» / ABORTED xatosi bilan yiqilardi (courier_orders_cf PARALLEL
+ * tekshiruvlari 8 ta ishga tushirishdan 2 tasida) — kuryer ilovada
+ * «internal» ko'rardi, pul esa allaqachon BIR marta to'g'ri harakatlangan.
+ * Root cause: Admin SDK bitta `Transaction` obyektini qayta urinishlar
+ * uchun qayta ishlatadi; ABORTED o'qishdan keyin oldingi urinishning
+ * tugallanmagan `get`lari yopilgan tranzaksiyaga tushadi.
+ * Fix: tranzaksiya funksiyasi to'liq idempotent (ichida `wallet_idempotency`
+ * tekshiruvi), shuning uchun xom xatoda butun tranzaksiya qayta ishga
+ * tushiriladi (3 marta, jitter); baribir bo'lmasa — saqlangan natija
+ * qaytariladi (g'olib allaqachon yozgan), u ham yo'q bo'lsa `aborted` +
+ * `CONTENTION_RETRY` (klient qayta uradi). HttpsError (biznes rad) —
+ * darhol, qayta urinishsiz.
+ * Regression: courier_orders_cf PARALLEL tekshiruvlari ketma-ket 5 marta.
+ */
+const COURIER_SUBMIT_TX_ATTEMPTS = 3;
+async function runCourierSubmitTx(args) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= COURIER_SUBMIT_TX_ATTEMPTS; attempt += 1) {
+    try {
+      return await db.runTransaction((t) => courierSubmitPaymentTx(t, args));
+    } catch (e) {
+      if (e instanceof functions.https.HttpsError) throw e;
+      lastErr = e;
+      console.warn(JSON.stringify({
+        action: 'courierSubmitPayment', orderId: args.orderId, result: 'retry',
+        attempt, errorCode: 'TX_CONTENTION', message: String((e && e.message) || e).slice(0, 120),
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 50 * attempt + Math.floor(Math.random() * 100)));
+    }
+  }
+  const idem = await db.collection('wallet_idempotency').doc(`courier_submit_${args.orderId}`).get();
+  if (idem.exists) {
+    return { done: true, result: { ...(idem.data().result || { ok: true }), idempotent: true } };
+  }
+  console.error(JSON.stringify({
+    action: 'courierSubmitPayment', orderId: args.orderId, result: 'failed',
+    errorCode: 'CONTENTION_RETRY', message: String((lastErr && lastErr.message) || lastErr).slice(0, 200),
+  }));
+  throw new functions.https.HttpsError('aborted', 'CONTENTION_RETRY', { code: 'CONTENTION_RETRY' });
+}
+
 exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Login required');
@@ -5094,9 +5140,9 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
           'USE_RESTAURANT_COMPLETION', { code: 'USE_RESTAURANT_COMPLETION' });
     }
   }
-  const tx = await db.runTransaction((t) => courierSubmitPaymentTx(t, {
+  const tx = await runCourierSubmitTx({
     ref, orderId, courierId, linesIn, lat, lng,
-  }));
+  });
   if (tx.done) return tx.result;
   const {
     normalized, orderTotal, totalSubmitted, changeCredit, walletSum, customerUid, module,

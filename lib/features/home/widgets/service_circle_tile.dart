@@ -303,6 +303,10 @@ const _kServiceImages = <String, String>{
   'yuk_local': 'assets/images/services/service_yuk_local.png',
   'yuk_intercity': 'assets/images/services/service_yuk_birja.png',
   'food': 'assets/images/services/service_food.png',
+  // «Кафе-Ресторан» (D-REST-6): ҳозирча `food` расмининг нусхаси —
+  // алоҳида брендли иконка эга қарори билан алмаштирилади (§13 B да
+  // `service_food.png` ўчирилганда бу файл қолади).
+  'restaurants': 'assets/images/services/service_restaurants.png',
   'jobs': 'assets/images/services/service_jobs.png',
   'cheap_products_home': 'assets/images/services/service_market.png',
   'bread': 'assets/images/services/service_bread.png',
@@ -382,6 +386,10 @@ Color olxTintFor(String moduleId) {
     // ── Овқат ва маҳсулот ───────────────────────────────────────
     case 'food':
       return const Color(0xFFFF6B5A);
+    // Кафе-ресторанлар — тўқ зангори-қизил (терракота): таом (маржон) ва
+    // нон (сариқ) билан бир қаторда туради, иккаласидан ҳам тўқроқ.
+    case 'restaurants':
+      return const Color(0xFFB7410E);
     case 'bread':
       return const Color(0xFFF2C14E);
     case 'milk':

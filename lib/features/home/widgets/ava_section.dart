@@ -209,15 +209,20 @@ class _InsetShadowPainter extends CustomPainter {
     canvas.save();
     // Қирқим — соя шу чегарадан ташқарига чиқа олмайди.
     canvas.clipRRect(rrect);
-    // Ташқи тўртбурчакдан майдон шаклини айириб «ҳалқа» оламиз. Ҳалқа
+    // Ташқи тўртбурчак билан майдон шакли орасидаги «ҳалқа». Ҳалқа
     // хираланганда унинг ички чети майдонга соя бўлиб тушади.
-    final ring = Path.combine(
-      ui.PathOperation.difference,
-      Path()..addRect(rrect.outerRect.inflate(blur * 2 + dy + 1)),
-      Path()..addRRect(rrect.shift(Offset(0, dy))),
+    //
+    // `drawDRRect` — `Path.combine(difference)` ЭМАС (2026-10-08): веб
+    // рендерери айирилган йўлни тешигисиз, бутун тўртбурчак қилиб чизарди
+    // — 55% соя бутун майдонни ва матнни қоплаб, панел лой рангида
+    // кўринарди (эга скриншоти). Мобил Skia'да хато йўқ эди.
+    final outer = RRect.fromRectAndRadius(
+      rrect.outerRect.inflate(blur * 2 + dy + 1),
+      Radius.zero,
     );
-    canvas.drawPath(
-      ring,
+    canvas.drawDRRect(
+      outer,
+      rrect.shift(Offset(0, dy)),
       Paint()
         ..color = color
         // `MaskFilter.blur` сигма билан ишлайди, CSS эса радиус билан:

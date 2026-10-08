@@ -1760,6 +1760,8 @@ class RidesRepository {
         'reservedAt': FieldValue.delete(),
         // Server shundan yangi qidiruv muddatini hisoblaydi (expirePendingTrips).
         'releasedAt': FieldValue.serverTimestamp(),
+        // Keyingi haydovchi uchun «yetib keldim» toza bo'lsin (CF ham tozalaydi).
+        if (data.containsKey('arrivedAt')) 'arrivedAt': FieldValue.delete(),
       });
       tx.set(
         _drivers.doc(driverId),

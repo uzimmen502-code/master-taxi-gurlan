@@ -16,6 +16,12 @@ import '../../../repositories/bread_repository.dart';
 import '../../../repositories/inventory_repository.dart';
 import '../../bread/services/bread_image_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../services/admin_inventory_service.dart';
+
+/// «Сотилган = 0» натижаси: очиқ тўланмаган буюртмалар захираси қолади.
+String _soldResetText(String name, num left) => left > 0
+    ? '🔄 "$name" — сотилган = $left (очиқ буюртмалар захираси)'
+    : '🔄 "$name" — сотилган = 0';
 
 /// Маҳсулoт менежери — нон, таом каталог (`food_catalog` + расмлар), қўшимча маҳсулотлар.
 class ProductsManagerScreen extends StatefulWidget {
@@ -235,14 +241,13 @@ class _BreadCard extends StatelessWidget {
 
   Future<void> _resetSold(BuildContext context) async {
     try {
-      await context
-          .read<BreadRepository>()
-          .resetProductSold(item.firestoreId ?? '');
+      final left = await AdminInventoryService()
+          .resetItemSold(kind: 'bread', id: item.firestoreId ?? '');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: Colors.blue,
-            content: Text('🔄 "${item.name}" сoтилгaн = 0')),
+            content: Text(_soldResetText(item.name, left))),
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -637,16 +642,15 @@ class _FoodProductCardState extends State<_FoodProductCard> {
 
   Future<void> _resetSold() async {
     try {
-      await context.read<InventoryRepository>().setStock(
-            kind: InventoryKind.food,
-            id: widget.product.inventoryId,
-            soldToday: 0,
-          );
+      final left = await AdminInventoryService().resetItemSold(
+        kind: 'food',
+        id: widget.product.inventoryId,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.blue,
-          content: Text('🔄 "${widget.product.name}" — сотилган = 0'),
+          content: Text(_soldResetText(widget.product.name, left)),
         ),
       );
     } catch (e) {
@@ -1495,12 +1499,13 @@ class _ExtraCard extends StatelessWidget {
 
   Future<void> _resetSold(BuildContext context) async {
     try {
-      await context.read<BreadRepository>().resetExtraSold(item.firestoreId);
+      final left = await AdminInventoryService()
+          .resetItemSold(kind: 'extra', id: item.firestoreId);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             backgroundColor: Colors.blue,
-            content: Text('🔄 "${item.name}" сoтилгaн = 0')),
+            content: Text(_soldResetText(item.name, left))),
       );
     } catch (e) {
       if (!context.mounted) return;

@@ -191,7 +191,14 @@ class _ProfileViewState extends State<_ProfileView> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final err = c.consumeError();
-      if (err != null && mounted) _snack(err, isError: true);
+      // Рақам алмаштириш хатолари l10n калити (`profile_phone_change_*`),
+      // қолганлари — аввалгидек тайёр матн.
+      if (err != null && mounted) {
+        _snack(
+          err.startsWith('profile_phone_change_') ? context.tr(err) : err,
+          isError: true,
+        );
+      }
       final ok = c.consumeSuccess();
       if (ok != null && mounted) _snack(ok);
     });

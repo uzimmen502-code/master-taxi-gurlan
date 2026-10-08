@@ -2776,5 +2776,10 @@
   "logistics_err_custody_mismatch": "Состояние посылки не совпадает — обратитесь к администратору",
   "logistics_err_not_last_leg": "Это не ваш этап — передайте следующему исполнителю",
   "logistics_err_delivery_code_format": "Код состоит из 6 цифр",
-  "logistics_err_self": "Нельзя взять собственную посылку"
+  "logistics_err_self": "Нельзя взять собственную посылку",
+  "profile_phone_change_not_yours": "Это устройство привязано к другому номеру. Номер можно сменить только из своего аккаунта.",
+  "profile_phone_change_bound_other": "Этот номер привязан к другому устройству. Введите другой номер.",
+  "profile_phone_change_has_account": "На этот номер уже есть аккаунт AVA. Введите другой номер или войдите с этим номером.",
+  "profile_phone_change_login_required": "Чтобы сменить номер, сначала войдите по своему номеру телефона.",
+  "profile_phone_change_failed": "Не удалось сменить номер. Попробуйте ещё раз."
 }

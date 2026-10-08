@@ -1688,6 +1688,29 @@ exports.onTripUpdate = functions.firestore
     // bekor, expired, tark etish, yakun) — haydovchi bo'shatiladi. Avval faqat
     // yo'lovchi bekorida bo'shatilardi → admin bekor qilsa `isBusy` abadiy
     // true qolib, haydovchi boshqa buyurtma ololmasdi.
+    // Haydovchi tark etdi (accepted → searching): oldingi haydovchining
+    // «Yetib keldim» belgisi (`arrivedAt`) o'chiriladi. Aks holda keyingi
+    // haydovchi qabul qilganda yo'lovchi darhol «yetib keldi» ko'radi, yangi
+    // haydovchi esa rules (faqat bir marta) tufayli o'zi belgilay olmaydi.
+    // Faqat o'sha eski qiymat bo'lsa (yangi haydovchi belgilagan bo'lsa tegmaymiz).
+    if (isLocal && before.status === 'accepted' && after.status === 'searching'
+        && after.arrivedAt) {
+      try {
+        const staleMs = after.arrivedAt.toMillis ? after.arrivedAt.toMillis() : null;
+        await db.runTransaction(async (t) => {
+          const cur = await t.get(change.after.ref);
+          const a = (cur.data() || {}).arrivedAt;
+          if (a && a.toMillis && a.toMillis() === staleMs) {
+            t.update(change.after.ref, {
+              arrivedAt: admin.firestore.FieldValue.delete(),
+            });
+          }
+        });
+      } catch (e) {
+        console.error('clear stale arrivedAt failed:', tripId, e.message || e);
+      }
+    }
+
     if (isLocal && before.status === 'accepted' && after.status !== 'accepted') {
       const localDriverId = String(
           before.acceptedDriverId || before.driverId || '');
@@ -2411,14 +2434,23 @@ async function resolveSellerCatalogLine(kind, inventoryId) {
   throw new functions.https.HttpsError('invalid-argument', 'bad item kind');
 }
 
+/** Ochiq to'lanmagan buyurtmalar so'rovi — kunlik va bitta mahsulot reseti uchun bitta manba. */
+function openUnpaidOrdersQuery() {
+  return db.collection('orders')
+      .where('paymentStatus', '==', 'unpaid')
+      .limit(500);
+}
+
 /** To'lanmagan buyurtmalardan soldToday rezervini yig'ish. */
 async function aggregateOpenOrderStockReservations() {
+  const snap = await openUnpaidOrdersQuery().get();
+  return stockReservationsFromOrderDocs(snap.docs);
+}
+
+/** `{ "<collection>__<id>": qty }` — ochiq to'lanmagan buyurtmalar rezervi. */
+function stockReservationsFromOrderDocs(docs) {
   const reserved = {};
-  const snap = await db.collection('orders')
-      .where('paymentStatus', '==', 'unpaid')
-      .limit(500)
-      .get();
-  for (const doc of snap.docs) {
+  for (const doc of docs) {
     const o = doc.data() || {};
     const fs = String(o.fulfillmentStatus || o.status || '').toLowerCase();
     if (['cancelled', 'canceled', 'completed', 'delivered', 'rejected'].includes(fs)) {
@@ -10309,6 +10341,37 @@ exports.resetSoldStockNow = functions.https.onCall(async (data, context) => {
   };
 });
 
+/// Admin: BITTA mahsulotning «сотилган»ини nolga — ochiq to'lanmagan buyurtma
+/// rezervi saqlanadi (kunlik reset bilan bir xil qoida). Avval admin ekrani
+/// klientdan `soldToday: 0` yozardi: ochiq buyurtmalar rezervi yo'qolib,
+/// qoldiq ortiqcha ko'rinar va ombor ortiqcha sotilardi (admin auditi O-8).
+/// Tranzaksiya mahsulot hujjatini o'qiydi — parallel buyurtma yaratish/bekor
+/// qilish (ular ham shu hujjatga yozadi) to'qnashib qayta uriniladi.
+exports.adminResetItemSoldToday = functions.https.onCall(async (data, context) => {
+  await assertAdmin(String(data.adminPhone || ''), context);
+  const col = inventoryCollectionForDecrementKind(String(data.kind || ''));
+  const id = String(data.id || '').trim();
+  if (!id || id.includes('/')) {
+    throw new functions.https.HttpsError('invalid-argument', 'id kerak');
+  }
+  const ref = db.collection(col).doc(id);
+  const key = `${col}__${id}`;
+  const result = await db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    // Hujjat yo'q — sotilgan ham yo'q (buyurtma rezervi hujjatni yaratadi).
+    if (!snap.exists) return { before: 0, reserved: 0, written: false };
+    const orders = await t.get(openUnpaidOrdersQuery());
+    const reserved = Number(stockReservationsFromOrderDocs(orders.docs)[key]) || 0;
+    const before = Number((snap.data() || {}).soldToday) || 0;
+    t.update(ref, { soldToday: reserved });
+    return { before, reserved, written: true };
+  });
+  console.log(JSON.stringify({
+    action: 'adminResetItemSoldToday', col, id, ...result,
+  }));
+  return { ok: true, soldToday: result.reserved, before: result.before };
+});
+
 // ─── P1-2: Heartbeat crash cleanup (drivers + couriers) ───────────────────────
 exports.cleanupStaleDrivers = functions.pubsub
   .schedule('every 2 minutes')
@@ -10630,6 +10693,26 @@ function intercityRestoredSeats(driverData, passengers) {
   return restored;
 }
 
+/**
+ * Haydovchining taksi capability holati — tranzaksiya ichida (o'qish).
+ * `users/{12|9 xonali}.accountId` → `provider_capabilities` (courier_auth
+ * bilan bir xil yo'l). Capability yo'q (eski / admin qo'shgan e'lon) → null.
+ */
+async function taxiStatusForPhoneInTx(tx, phone) {
+  const uid12 = canonicalUid(phone);
+  if (!/^\d{9,}$/.test(uid12)) return null;
+  const forms = /^998\d{9}$/.test(uid12) ? [uid12, uid12.slice(3)] : [uid12];
+  for (const id of forms) {
+    const u = await tx.get(db.collection('users').doc(id));
+    if (!u.exists) continue;
+    const accountId = String((u.data() || {}).accountId || '');
+    if (!accountId) return null;
+    const cap = await tx.get(db.collection('provider_capabilities').doc(accountId));
+    return capabilitiesModel.statusOf(cap.exists ? (cap.data() || {}) : {}, 'taxi');
+  }
+  return null;
+}
+
 exports.intercityCreateBooking = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Auth required');
@@ -10689,6 +10772,7 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
     const lockSnap = await tx.get(lockRef);
     const pLockSnap = await tx.get(passengerLockRef);
     const clientSnap = await tx.get(clientRef);
+    const driverTaxiStatus = await taxiStatusForPhoneInTx(tx, driverId);
 
     const activeBlocks = async (snap) => {
       if (!snap.exists) return false;
@@ -10708,6 +10792,18 @@ exports.intercityCreateBooking = functions.https.onCall(async (data, context) =>
     }
 
     if (driver.isActive === false) {
+      throw new functions.https.HttpsError(
+          'failed-precondition', 'driver_inactive');
+    }
+    // Админ «Такси верификацияси»да тўхтатган (`suspended`) ҳайдовчининг
+    // аввал чиққан эълони очиқ қолади — брон қабул қилинмайди (админ
+    // аудити O-13). Мижозга `driver_inactive` (эски илова ҳам шу кодни
+    // «рейс қабул қилмайди» деб кўрсатади); диагностика — логда.
+    if (driverTaxiStatus === capabilitiesModel.COMMON.suspended) {
+      console.warn(JSON.stringify({
+        action: 'intercityCreateBooking', result: 'rejected',
+        errorCode: 'DRIVER_SUSPENDED', driverId,
+      }));
       throw new functions.https.HttpsError(
           'failed-precondition', 'driver_inactive');
     }

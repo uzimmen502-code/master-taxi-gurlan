@@ -2776,5 +2776,10 @@
   "logistics_err_custody_mismatch": "Posilka holati mos kelmadi — adminga murojaat qiling",
   "logistics_err_not_last_leg": "Bu sizning bosqichingiz emas — keyingi ijrochiga topshiring",
   "logistics_err_delivery_code_format": "Kod 6 ta raqamdan iborat",
-  "logistics_err_self": "O'z jo'natmangizni olib bo'lmaydi"
+  "logistics_err_self": "O'z jo'natmangizni olib bo'lmaydi",
+  "profile_phone_change_not_yours": "Bu qurilma boshqa raqamga bog'langan. Raqamni faqat o'z hisobingizdan o'zgartirish mumkin.",
+  "profile_phone_change_bound_other": "Bu raqam boshqa qurilmaga bog'langan. Boshqa raqam kiriting.",
+  "profile_phone_change_has_account": "Bu raqamda AVA hisobi bor. Boshqa raqam kiriting yoki o'sha raqam bilan kiring.",
+  "profile_phone_change_login_required": "Raqamni o'zgartirish uchun avval telefon raqamingiz bilan kiring.",
+  "profile_phone_change_failed": "Raqamni o'zgartirib bo'lmadi. Qayta urinib ko'ring."
 }

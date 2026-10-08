@@ -14,7 +14,7 @@
 const path = require('path');
 const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { serverTimestamp } = require('firebase/firestore');
+const { serverTimestamp, deleteField } = require('firebase/firestore');
 
 const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
 const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
@@ -208,6 +208,16 @@ async function main() {
     () => assertFails(driver.collection('trips').doc('a5').update({
       ...releasePatch, releasedAt: new Date(Date.now() + 3600000),
     })));
+  await seed({ ar1: acceptedTrip({ arrivedAt: new Date() }), ar2: acceptedTrip({ arrivedAt: new Date() }) });
+  await check('C2b release paytida eski «yetib keldim» (arrivedAt) o\'chiriladi — ruxsat',
+    () => assertSucceeds(driver.collection('trips').doc('ar1').update({
+      ...releasePatch, releasedAt: serverTimestamp(), arrivedAt: deleteField(),
+    })));
+  await check('C2c release paytida arrivedAt\'ni yangi qiymatga qo\'yib bo\'lmaydi',
+    () => assertFails(driver.collection('trips').doc('ar2').update({
+      ...releasePatch, arrivedAt: new Date(Date.now() + 60000),
+    })));
+  await seed({ a5: acceptedTrip() });
   await check('C3 release + expiresAt\'ni klient o\'zi cho\'za olmaydi',
     () => assertFails(driver.collection('trips').doc('a5').update({
       ...releasePatch, expiresAt: new Date(Date.now() + 3600000),

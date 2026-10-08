@@ -39,6 +39,13 @@ String realtyErrorText(BuildContext context, RealtyException e) {
       return context.tr('realty_team_not_found');
     case 'member_has_listings':
       return context.tr('realty_team_has_listings');
+    // «Шундай уй чиқса, хабар бер» (2026-10-08).
+    case 'alert_limit_reached':
+      return context.tr('realty_alert_error_limit');
+    case 'price_invalid':
+      return context.tr('realty_alert_error_price');
+    case 'rooms_invalid':
+      return context.tr('realty_alert_error_rooms');
     default:
       return context.tr('realty_error_generic');
   }

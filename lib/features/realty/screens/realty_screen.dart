@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/realty_alert.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../../onboarding/screens/onboarding_screen.dart';
@@ -12,6 +13,7 @@ import '../widgets/realty_controls.dart';
 import '../widgets/realty_package_sheet.dart';
 import 'add_realty_listing_screen.dart';
 import 'realty_detail_screen.dart';
+import 'realty_alerts_screen.dart';
 import 'realty_map_screen.dart';
 
 /// 🏠 «Кўчмас мулк Кластери» — ЛЕНТА экрани.
@@ -98,6 +100,28 @@ class _RealtyScreenState extends State<RealtyScreen>
                 icon: const Icon(Icons.confirmation_number_outlined, size: 18),
                 label: Text('${snap.data ?? 0}'),
               ),
+            ),
+          // «Шундай уй чиқса, хабар бер» (эга қарори 2026-10-08, бепул).
+          // Нишон — ҳали очилмаган мос эълонлар сони.
+          if (!_isGuest)
+            StreamBuilder<List<RealtyMatch>>(
+              stream: _repo.watchMyMatches(limit: 20),
+              builder: (context, snap) {
+                final unseen =
+                    (snap.data ?? const <RealtyMatch>[]).where((m) => !m.seen).length;
+                return IconButton(
+                  key: const ValueKey('realty_alerts_entry'),
+                  tooltip: context.tr('realty_alerts_title'),
+                  icon: Badge(
+                    isLabelVisible: unseen > 0,
+                    label: Text('$unseen'),
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RealtyAlertsScreen()),
+                  ),
+                );
+              },
             ),
           // Харита энди алоҳида тўлиқ экранда — бу ердан шу тугма
           // орқали очилади.

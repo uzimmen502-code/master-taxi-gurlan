@@ -268,7 +268,7 @@ function attachRealty(exports, deps) {
    * мумкин эди. Фарқ қиладиган нарсалар — даража, статус, муддат ва
    * нуқта силкитиши — чақирувчиларнинг ўзида қолади.
    */
-  function parseListingInput(d) {
+  function parseListingInput(d, { addressFallback = '' } = {}) {
     const title = String(d.title || '').trim().slice(0, 120);
     if (title.length < 3) throw fail('invalid-argument', 'title_required');
     const text = String(d.text || '').trim().slice(0, 2000);
@@ -289,9 +289,28 @@ function attachRealty(exports, deps) {
     // пакетни очгач кўча ва уй рақамини кўриши керак. Таҳрирда ҳам
     // талаб қилинади — акс ҳолда эга эълонни жойлагач манзилни
     // ўчириб, текин «тизер» қилиб қўя оларди.
-    const addressText = String(d.addressText || '').trim();
+    //
+    // D-REALTY-ADDR (эга қарори 2026-10-08): манзил энди ЁПИҚ ҳужжатда.
+    // Эски илова таҳрирда манзилни очиқ ҳужжатдан тўлдирар эди — у ерда
+    // энди йўқ, шунинг учун бўш келса ЁПИҚ ҳужжатдаги эскиси сақланади
+    // ([addressFallback]); ўчириб «тизер» қилиш барибир мумкин эмас.
+    let addressText = String(d.addressText || '').trim();
+    if (addressText.length < 5) addressText = String(addressFallback || '').trim();
     if (addressText.length < 5) {
       throw fail('invalid-argument', 'address_required');
+    }
+
+    // Ихтиёрий РАҚАМЛИ нарх — хабарноманинг нарх фильтри учун (8-қоида:
+    // бутун сўм). Ижарада — ойига, сотувда — умумий. `priceText` (матн)
+    // кўрсатиш учун аввалгидек қолади.
+    const priceAmountRaw = d.priceAmount;
+    let priceAmount = null;
+    if (priceAmountRaw !== undefined && priceAmountRaw !== null && priceAmountRaw !== '') {
+      const n = Number(priceAmountRaw);
+      if (!Number.isInteger(n) || n < 1 || n > 1e12) {
+        throw fail('invalid-argument', 'price_invalid');
+      }
+      priceAmount = n;
     }
 
     return {
@@ -302,6 +321,7 @@ function attachRealty(exports, deps) {
       lng,
       addressText: addressText.slice(0, 300),
       priceText: String(d.priceText || '').trim().slice(0, 80),
+      priceAmount,
       // AVA риэлторлик хизматининг рақами ЁЗУВГА КЎЧИРИЛМАЙДИ (эга
       // қарори, 2026-10-02). Аввал у ҳар бир эълоннинг ёпиқ ҳужжатига
       // нусхаланар эди: `settings/app.realtyAgentPhone` ўзгарса, эски
@@ -328,12 +348,15 @@ function attachRealty(exports, deps) {
    * ўзи, шунинг учун иккита жойда алоҳида йиғилса, биттасида майдон
    * қолиб кетиши хавфи бор.
    */
-  function detailDoc(uid, lat, lng, { agentPhone = '' } = {}) {
+  function detailDoc(uid, lat, lng, { agentPhone = '', addressText = '' } = {}) {
     return {
       ownerId: uid,
       lat,
       lng,
       ownerPhone: uid,
+      // Кўча ва уй рақами — ПУЛЛИК ахборот (эга қарори 2026-10-08):
+      // аввал очиқ ҳужжатда эди ва пакетсиз кўринарди.
+      ...(addressText ? { addressText } : {}),
       // ⚠️ ВАҚТИНЧА (2026-10-02): рақам ёзувда САҚЛАНМАСЛИГИ керак —
       // эга қарори шу, ва янги илова уни барибир ўқимайди, жорий
       // рақамни `settings/app` дан олади. Лекин Play'да ТУРГАН илова
@@ -346,6 +369,21 @@ function attachRealty(exports, deps) {
       ...(agentPhone ? { agentPhone } : {}),
       updatedAt: ts(),
     };
+  }
+
+  /**
+   * МАНЗИЛ ФАҚАТ ЁПИҚДА — feature flag (`settings/app.realtyAddressPrivateOnly`,
+   * эга қарори 2026-10-08: кўча/уй пакетдан кейин).
+   *
+   * Нега флаг: Play'даги эски илова манзилни фақат ОЧИҚ ҳужжатдан ўқийди.
+   * Флагсиз ёқилса, эски иловада пакет сотиб олган харидор кўча/уйни
+   * умуман кўрмай қоларди (26-қоида). Шунинг учун тартиб: янги илова
+   * тарқалади → эга флагни `true` қилади → `tools/realty_move_address.js`
+   * эски ёзувлардан очиқ манзилни олиб ташлайди. Стандарт — `false`
+   * (аввалги хатти-ҳаракат: манзил иккала ҳужжатда).
+   */
+  function addressPrivateOnly(app) {
+    return appSetting(app, 'realtyAddressPrivateOnly', false) === true;
   }
 
   /** `settings/app.realtyAgentPhone` — фақат рақамлар. */
@@ -410,7 +448,11 @@ function attachRealty(exports, deps) {
       title: f.title,
       text: f.text,
       priceText: f.priceText,
-      addressText: f.addressText,
+      // Манзил доим ёпиқ `private/detail`да. Очиқ ҳужжатга фақат ўтиш
+      // даврида (қаранг: `addressPrivateOnly`) — Play'даги эски илова
+      // манзилни фақат шу ердан ўқийди.
+      ...(addressPrivateOnly(app) ? {} : { addressText: f.addressText }),
+      ...(f.priceAmount === null ? {} : { priceAmount: f.priceAmount }),
       ...(f.rooms === null ? {} : { rooms: f.rooms }),
       ...(f.floor === null ? {} : { floor: f.floor }),
       ...(f.totalFloors === null ? {} : { totalFloors: f.totalFloors }),
@@ -445,6 +487,7 @@ function attachRealty(exports, deps) {
       ref.collection('private').doc('detail'),
       detailDoc(uid, f.lat, f.lng, {
         agentPhone: agentPhoneFrom(app, f.contactMode),
+        addressText: f.addressText,
       }),
     );
 
@@ -481,7 +524,17 @@ function attachRealty(exports, deps) {
     const current = snap.data() || {};
     await assertOwner(listingId, uid);
 
-    const f = parseListingInput(d);
+    // Нуқта ўзгармаган бўлса ЭСКИ силкитиш сақланади. Ҳар таҳрирда
+    // қайта силкитилса, бир неча қийматнинг ўртачаси аниқ жойни очиб
+    // қўйган бўларди.
+    const prevDetail = await ref.collection('private').doc('detail').get();
+    const prev = prevDetail.data() || {};
+
+    // Манзил бўш келса — ёпиқ ҳужжатдаги (ёки эски ёзувда очиқдаги)
+    // аввалги манзил сақланади (эски илова версиялари учун).
+    const f = parseListingInput(d, {
+      addressFallback: String(prev.addressText || current.addressText || ''),
+    });
 
     // Модерация ёқиқ бўлса, таҳрирланган эълон қайта текширувга тушади —
     // акс ҳолда тасдиқдан ўтган матнни кейин алмаштириб юбориш мумкин эди.
@@ -491,11 +544,6 @@ function attachRealty(exports, deps) {
       ? 'blocked'
       : (autoApprove ? 'active' : 'pending');
 
-    // Нуқта ўзгармаган бўлса ЭСКИ силкитиш сақланади. Ҳар таҳрирда
-    // қайта силкитилса, бир неча қийматнинг ўртачаси аниқ жойни очиб
-    // қўйган бўларди.
-    const prevDetail = await ref.collection('private').doc('detail').get();
-    const prev = prevDetail.data() || {};
     const samePoint = Number(prev.lat) === f.lat && Number(prev.lng) === f.lng;
     const cell = (samePoint
         && Number.isFinite(Number(current.areaLat))
@@ -509,7 +557,10 @@ function attachRealty(exports, deps) {
       title: f.title,
       text: f.text,
       priceText: f.priceText,
-      addressText: f.addressText,
+      // Ўтиш даври тугагач (флаг ёқилгач) очиқ манзил таҳрирда
+      // тозаланади; ундан олдин эски илова учун аввалгидек ёзилади.
+      addressText: addressPrivateOnly(app) ? del : f.addressText,
+      priceAmount: f.priceAmount === null ? del : f.priceAmount,
       // Бўш қолдирилган майдон ЎЧИРИЛАДИ — акс ҳолда эски қиймат
       // («3 хона») таҳрирдан кейин ҳам ёзувда қолиб кетарди.
       rooms: f.rooms === null ? del : f.rooms,
@@ -538,6 +589,7 @@ function attachRealty(exports, deps) {
     await ref.collection('private').doc('detail').set(
       detailDoc(uid, f.lat, f.lng, {
         agentPhone: agentPhoneFrom(app, f.contactMode),
+        addressText: f.addressText,
       }),
       { merge: false },
     );

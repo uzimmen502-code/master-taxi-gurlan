@@ -24,6 +24,9 @@ import '../repositories/marshrut_driver_repository.dart';
 import '../repositories/rides_repository.dart';
 import '../features/profile/screens/news_hub_screen.dart';
 import '../features/realty/screens/my_realty_listings_screen.dart';
+import '../features/realty/screens/realty_alerts_screen.dart';
+import '../features/realty/screens/realty_detail_screen.dart';
+import '../repositories/realty_repository.dart';
 import '../features/seller/screens/seller_pos_screen.dart';
 import '../features/yuk_intercity/screens/yuk_intercity_screen.dart';
 import '../features/yuk_local/screens/yuk_local_screen.dart';
@@ -288,6 +291,23 @@ class PushNavigation {
     // ўчади, шунинг учун хабар «Менинг объектларим»га олиб боради —
     // эга у ердан муддатни узайтиради ёки эълонни таҳрирлайди.
     // Огоҳлантирилган эълон рўйхат бошига қўйилади (`listingId`).
+    // «Шундай уй чиқса, хабар бер» — push'да фақат `listingId` (манзил ва
+    // рақам ЙЎҚ). Эълон ўчган бўлса — хабарномалар бўлими.
+    if (screen == 'realty_match' || type == 'realty_match') {
+      final listingId = (data['listingId'] ?? '').trim();
+      final repo = RealtyRepository();
+      final listing = await repo.fetchListing(listingId);
+      if (listingId.isNotEmpty) repo.markMatchSeen(listingId);
+      await nav.push(
+        MaterialPageRoute(
+          builder: (_) => listing == null
+              ? const RealtyAlertsScreen()
+              : RealtyDetailScreen(listing: listing),
+        ),
+      );
+      return;
+    }
+
     if (screen == 'realty_my' || type == 'realty_expiry') {
       final listingId = (data['listingId'] ?? '').trim();
       await nav.push(

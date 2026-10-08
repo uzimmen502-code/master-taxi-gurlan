@@ -99,6 +99,7 @@ class RealtyListing {
     required this.areaLng,
     required this.status,
     this.priceText = '',
+    this.priceAmount,
     this.rooms,
     this.floor,
     this.totalFloors,
@@ -134,6 +135,10 @@ class RealtyListing {
   final String text;
   final String priceText;
 
+  /// Ихтиёрий РАҚАМЛИ нарх (бутун сўм; ижарада — ойига). Хабарноманинг
+  /// нарх фильтри шу бўйича ишлайди; кўрсатиш учун [priceText].
+  final int? priceAmount;
+
   final int? rooms;
   final int? floor;
   final int? totalFloors;
@@ -153,7 +158,9 @@ class RealtyListing {
   /// Харита катакчаси — `GeoHash.encode(lat, lng, precision: 4)`.
   final String geohash4;
 
-  /// Матнли манзил — харидорга қўшимча аниқлик учун, нуқта ўрнини босмайди.
+  /// ЭСКИ ёзувлардаги ОЧИҚ манзил. 2026-10-08 дан манзил ёпиқ ҳужжатда
+  /// ([RealtyDetail.addressText]) — бу майдон фақат миграциягача
+  /// қолган ёзувларда бўлади ва пакетсиз КЎРСАТИЛМАЙДИ.
   final String addressText;
 
   final RealtyContactMode contactMode;
@@ -226,6 +233,7 @@ class RealtyListing {
       title: (d['title'] ?? '') as String,
       text: (d['text'] ?? '') as String,
       priceText: (d['priceText'] ?? '') as String,
+      priceAmount: (d['priceAmount'] as num?)?.toInt(),
       rooms: (d['rooms'] as num?)?.toInt(),
       floor: (d['floor'] as num?)?.toInt(),
       totalFloors: (d['totalFloors'] as num?)?.toInt(),
@@ -269,11 +277,21 @@ class RealtyDetail {
     required this.lat,
     required this.lng,
     required this.ownerPhone,
+    this.addressText = '',
   });
 
   final double lat;
   final double lng;
   final String ownerPhone;
+
+  /// Кўча ва уй рақами — ПУЛЛИК (эга қарори 2026-10-08). Эски ёзувда
+  /// бўш бўлиши мумкин: унда манзил ҳали очиқ ҳужжатда.
+  final String addressText;
+
+  /// Очилган эълоннинг манзили: аввал ёпиқ ҳужжатдан, эски ёзувда —
+  /// очиқдагидан ([legacyPublic]).
+  String addressOr(String legacyPublic) =>
+      addressText.trim().isNotEmpty ? addressText.trim() : legacyPublic.trim();
 
   /// Харидор босадиган рақам — эга танлаган мурожаат усулига мос.
   ///
@@ -291,5 +309,6 @@ class RealtyDetail {
         lat: (d['lat'] as num?)?.toDouble() ?? 0,
         lng: (d['lng'] as num?)?.toDouble() ?? 0,
         ownerPhone: (d['ownerPhone'] ?? '') as String,
+        addressText: (d['addressText'] ?? '') as String,
       );
 }

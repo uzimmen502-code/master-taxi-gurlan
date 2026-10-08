@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/utils/formatters.dart';
+import '../models/realty_alert.dart';
 import '../models/realty_listing.dart';
 
 /// `realty_listings` — «Кўчмас мулк Кластери» базаси.
@@ -362,6 +363,7 @@ class RealtyRepository {
     required double lng,
     required RealtyContactMode contactMode,
     String priceText = '',
+    int? priceAmount,
     String addressText = '',
     int? rooms,
     int? floor,
@@ -381,6 +383,7 @@ class RealtyRepository {
           lng: lng,
           contactMode: contactMode,
           priceText: priceText,
+          priceAmount: priceAmount,
           addressText: addressText,
           rooms: rooms,
           floor: floor,
@@ -415,6 +418,7 @@ class RealtyRepository {
     required double lng,
     required RealtyContactMode contactMode,
     required String priceText,
+    required int? priceAmount,
     required String addressText,
     required int? rooms,
     required int? floor,
@@ -430,6 +434,7 @@ class RealtyRepository {
       'lng': lng,
       'contactMode': contactMode.key,
       'priceText': priceText.trim(),
+      'priceAmount': priceAmount,
       'addressText': addressText.trim(),
       'rooms': rooms,
       'floor': floor,
@@ -453,6 +458,7 @@ class RealtyRepository {
     required double lng,
     required RealtyContactMode contactMode,
     String priceText = '',
+    int? priceAmount,
     String addressText = '',
     int? rooms,
     int? floor,
@@ -471,6 +477,7 @@ class RealtyRepository {
           lng: lng,
           contactMode: contactMode,
           priceText: priceText,
+          priceAmount: priceAmount,
           addressText: addressText,
           rooms: rooms,
           floor: floor,
@@ -676,6 +683,117 @@ class RealtyRepository {
   /// Эга ўз объектини ўчиради («сотилди» ёки нотўғри киритилди).
   Future<void> deleteMine(String listingId) =>
       _call('deleteRealtyListing', {'listingId': listingId});
+
+  // ─── «Шундай уй чиқса, хабар бер» (эга қарори 2026-10-08) ───────────
+
+  /// Битта эълон — push ва «мос эълонлар»дан очиш учун. Ўчирилган ёки
+  /// муддати ўтган бўлса `null`.
+  Future<RealtyListing?> fetchListing(String listingId) async {
+    if (listingId.isEmpty) return null;
+    final snap = await _col.doc(listingId).get();
+    if (!snap.exists) return null;
+    final l = RealtyListing.fromDoc(snap);
+    return l.isExpired ? null : l;
+  }
+
+  /// Бир нечта эълон (хабарнома сақлангандаги «ҳозир мос») — `whereIn`
+  /// 10 тадан, яъни 50 та ID = 5 сўров (N+1 эмас).
+  Future<List<RealtyListing>> fetchListings(List<String> ids) async {
+    final out = <RealtyListing>[];
+    for (var i = 0; i < ids.length; i += 10) {
+      final chunk = ids.sublist(i, i + 10 > ids.length ? ids.length : i + 10);
+      final snap =
+          await _col.where(FieldPath.documentId, whereIn: chunk).get();
+      out.addAll(snap.docs
+          .map(RealtyListing.fromDoc)
+          .where((l) => l.isActive && !l.isExpired));
+    }
+    return out;
+  }
+
+  /// Янги хабарнома. Сервер текширади ва лимитни қўллайди.
+  /// Хатолар: `alert_limit_reached`, `radius_invalid`, `rooms_invalid`,
+  /// `price_invalid`, `location_required`.
+  Future<RealtyAlertCreateResult> createAlert({
+    required RealtyDeal deal,
+    required double lat,
+    required double lng,
+    required int radiusKm,
+    int? roomsMin,
+    int? roomsMax,
+    int? priceMax,
+  }) async {
+    final data = await _call('createRealtyAlert', {
+      'deal': deal.key,
+      'lat': lat,
+      'lng': lng,
+      'radiusKm': radiusKm,
+      'roomsMin': roomsMin,
+      'roomsMax': roomsMax,
+      'priceMax': priceMax,
+      // Тармоқ узилиб қайта босилса иккинчи хабарнома яратилмайди.
+      'idempotencyKey': _uuid.v4().replaceAll('-', ''),
+    });
+    return RealtyAlertCreateResult(
+      alertId: (data['alertId'] ?? '') as String,
+      matchIds: List<String>.from(data['matches'] ?? const <String>[]),
+    );
+  }
+
+  /// `active` (қайта ёқиш, +30 кун) | `paused` | `deleted`.
+  Future<void> setAlertStatus(String alertId, String status) =>
+      _call('setRealtyAlertStatus', {'alertId': alertId, 'status': status});
+
+  /// Ўз хабарномалари — `firestore.rules`: фақат `ownerId` ўзиники.
+  Stream<List<RealtyAlert>> watchMyAlerts() {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return Stream.value(const <RealtyAlert>[]);
+    return _db
+        .collection('realty_alerts')
+        .where('ownerId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .map((s) => s.docs.map(RealtyAlert.fromDoc).toList());
+  }
+
+  /// «Мос эълонлар» — сервер мослаб ёзган рўйхат (энг янгиси юқорида).
+  Stream<List<RealtyMatch>> watchMyMatches({int limit = 50}) {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return Stream.value(const <RealtyMatch>[]);
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('realty_matches')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((s) => s.docs.map(RealtyMatch.fromDoc).toList());
+  }
+
+  /// Қоида фақат `seen`ни ўзгартиришга рухсат беради.
+  Future<void> markMatchSeen(String listingId) async {
+    final uid = _currentUserId;
+    if (uid.isEmpty) return;
+    try {
+      await _db
+          .collection('users')
+          .doc(uid)
+          .collection('realty_matches')
+          .doc(listingId)
+          .update({'seen': true});
+    } catch (e) {
+      debugPrint('[RealtyRepository] markMatchSeen $e');
+    }
+  }
+}
+
+/// `createRealtyAlert` натижаси: ID ва ҲОЗИР мос келадиган эълонлар.
+class RealtyAlertCreateResult {
+  const RealtyAlertCreateResult({required this.alertId, required this.matchIds});
+
+  final String alertId;
+  final List<String> matchIds;
 }
 
 class RealtySubmitResult {

@@ -22,16 +22,19 @@ import '../widgets/realty_video_sheet.dart';
 /// билан тўсилган алоҳида ҳужжатда. Яъни бу экран маълумотни яшириб
 /// турмайди, унга эга эмас.
 class RealtyDetailScreen extends StatefulWidget {
-  const RealtyDetailScreen({super.key, required this.listing});
+  const RealtyDetailScreen({super.key, required this.listing, this.repository});
 
   final RealtyListing listing;
+
+  /// Тест учун; бўлмаса одатдаги репозиторий.
+  final RealtyRepository? repository;
 
   @override
   State<RealtyDetailScreen> createState() => _RealtyDetailScreenState();
 }
 
 class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
-  final _repo = RealtyRepository();
+  late final RealtyRepository _repo = widget.repository ?? RealtyRepository();
 
   RealtyDetail? _detail;
   bool _loading = true;
@@ -218,7 +221,10 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
           ],
           const SizedBox(height: 4),
 
-          if (r.addressText.isNotEmpty) ...[
+          // Кўча ва уй — ПУЛЛИК (эга қарори 2026-10-08): фақат очилгандан
+          // кейин. Эски ёзувда манзил ҳали очиқ ҳужжатда бўлиши мумкин —
+          // у ҳам пакетсиз кўрсатилмайди.
+          if (detail != null && detail.addressOr(r.addressText).isNotEmpty) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -226,7 +232,7 @@ class _RealtyDetailScreenState extends State<RealtyDetailScreen> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    r.addressText,
+                    detail.addressOr(r.addressText),
                     style: TextStyle(
                       fontSize: AppText.bodyMedium,
                       color: c.ink2,

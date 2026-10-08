@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/phone_launcher.dart';
 import '../../../models/agro_pickup_order.dart';
-import '../../../repositories/agro_pickup_orders_repository.dart';
 import '../../../services/agro_pickup_service.dart';
 import '../../../core/theme/ava_tokens.dart';
+import '../../courier/widgets/courier_task_list.dart';
 
 const _green = AvaLight.ok;
 
 /// Kuryer — sut qabul (olib ketish) vazifalari.
+///
+/// Рўйхатлар — `courierListAgroTasks` callable. Аввал `agro_pickup_orders`
+/// оқимлари эди: `courier` `isStaff()`дан чиқарилгач (D-SERVICE-4 /
+/// D-CLEAN-1) қоида уларни capability курьерга рад этарди, «Фаол» таб эса
+/// ҲАММА курьерларнинг `pickup_in_delivery` вазифаларини олиб, бегонасини
+/// клиентда яширарди.
 class AgroPickupCourierScreen extends StatefulWidget {
-  const AgroPickupCourierScreen({super.key});
+  const AgroPickupCourierScreen({super.key, this.service});
+
+  final AgroPickupService? service;
 
   @override
   State<AgroPickupCourierScreen> createState() =>
@@ -22,7 +29,8 @@ class AgroPickupCourierScreen extends StatefulWidget {
 }
 
 class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
-  final _service = AgroPickupService();
+  late final AgroPickupService _service =
+      widget.service ?? AgroPickupService();
   String _phone = '';
 
   @override
@@ -37,46 +45,21 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
     if (mounted) setState(() => _phone = phone);
   }
 
-  Future<void> _claim(AgroPickupOrder order) async {
+  /// Амал, кейин рўйхатни янгилаш (рад бўлса ҳам — вазифа ўзгарган бўлиши мумкин).
+  Future<void> _act(
+    Future<void> Function() action,
+    Future<void> Function() reload,
+  ) async {
     try {
-      await _service.courierClaimPickup(
-        courierPhone: _phone,
-        orderId: order.id,
-      );
+      await action();
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
     }
-  }
-
-  Future<void> _markArrived(AgroPickupOrder order) async {
-    try {
-      await _service.courierMarkArrived(
-        courierPhone: _phone,
-        orderId: order.id,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
-    }
-  }
-
-  Future<void> _markPickedUp(AgroPickupOrder order) async {
-    try {
-      await _service.courierMarkPickedUp(
-        courierPhone: _phone,
-        orderId: order.id,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
-    }
+    await reload();
   }
 
   @override
@@ -86,9 +69,6 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-
-    final repo = context.read<AgroPickupOrdersRepository>();
-    final uid = phoneDigits(_phone);
 
     return DefaultTabController(
       length: 2,
@@ -111,16 +91,33 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
         body: TabBarView(
           children: [
             _ReadyTab(
-              stream: repo.watchByStatus(AgroPickupOrder.statusAccepted),
+              load: () =>
+                  _service.listCourierTasks(AgroPickupService.courierListPickup),
               emptyText: context.tr('agro_courier_no_tasks'),
               actionLabel: context.tr('agro_courier_claim'),
-              onAction: _claim,
-              onCall: callPhone,
+              onAction: (order, reload) => _act(
+                () => _service.courierClaimPickup(
+                  courierPhone: _phone,
+                  orderId: order.id,
+                ),
+                reload,
+              ),
             ),
             _ActiveTab(
-              courierUid: uid,
-              onMarkArrived: _markArrived,
-              onMarkPickedUp: _markPickedUp,
+              load: () =>
+                  _service.listCourierTasks(AgroPickupService.courierListActive),
+              onNext: (order, reload) => _act(
+                () => order.arrivedAt != null
+                    ? _service.courierMarkPickedUp(
+                        courierPhone: _phone,
+                        orderId: order.id,
+                      )
+                    : _service.courierMarkArrived(
+                        courierPhone: _phone,
+                        orderId: order.id,
+                      ),
+                reload,
+              ),
               onCall: callPhone,
             ),
           ],
@@ -130,109 +127,69 @@ class _AgroPickupCourierScreenState extends State<AgroPickupCourierScreen> {
   }
 }
 
+typedef _TaskAction = Future<void> Function(
+  AgroPickupOrder order,
+  Future<void> Function() reload,
+);
+
+/// Олиш учун вазифалар: фақат литр — мижоз маълумоти вазифани олгандан
+/// кейин «Фаол» табида.
 class _ReadyTab extends StatelessWidget {
   const _ReadyTab({
-    required this.stream,
+    required this.load,
     required this.emptyText,
     required this.actionLabel,
     required this.onAction,
-    required this.onCall,
   });
 
-  final Stream<List<AgroPickupOrder>> stream;
+  final Future<List<AgroPickupOrder>> Function() load;
   final String emptyText;
   final String actionLabel;
-  final Future<void> Function(AgroPickupOrder order) onAction;
-  final Future<bool> Function(String phone) onCall;
+  final _TaskAction onAction;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<AgroPickupOrder>>(
-      stream: stream,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final orders = (snap.data ?? const [])
-            .where((o) => o.productType == AgroPickupOrder.productMilk)
-            .toList();
-        if (orders.isEmpty) {
-          return Center(
-            child: Text(emptyText, style: TextStyle(color: Colors.grey.shade600)),
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _OrderCard(
-            order: orders[i],
-            primaryLabel: actionLabel,
-            onPrimary: () => onAction(orders[i]),
-            onCall: () => onCall(orders[i].customerPhone),
-          ),
-        );
-      },
+    return CourierTaskList<AgroPickupOrder>(
+      load: () async => (await load())
+          .where((o) => o.productType == AgroPickupOrder.productMilk)
+          .toList(),
+      emptyText: emptyText,
+      itemBuilder: (context, order, reload) => _OrderCard(
+        order: order,
+        primaryLabel: actionLabel,
+        onPrimary: () => onAction(order, reload),
+      ),
     );
   }
 }
 
+/// Шу курьер олган вазифалар — сервер фақат уникини қайтаради.
 class _ActiveTab extends StatelessWidget {
   const _ActiveTab({
-    required this.courierUid,
-    required this.onMarkArrived,
-    required this.onMarkPickedUp,
+    required this.load,
+    required this.onNext,
     required this.onCall,
   });
 
-  final String courierUid;
-  final Future<void> Function(AgroPickupOrder order) onMarkArrived;
-  final Future<void> Function(AgroPickupOrder order) onMarkPickedUp;
+  final Future<List<AgroPickupOrder>> Function() load;
+  final _TaskAction onNext;
   final Future<bool> Function(String phone) onCall;
 
   @override
   Widget build(BuildContext context) {
-    final repo = context.read<AgroPickupOrdersRepository>();
-    return StreamBuilder<List<AgroPickupOrder>>(
-      stream: repo.watchByStatus(AgroPickupOrder.statusPickupInDelivery),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final orders = (snap.data ?? const [])
-            .where((o) => o.pickupCourierId == courierUid)
-            .toList();
-        if (orders.isEmpty) {
-          return Center(
-            child: Text(
-              context.tr('carpet_no_active_tasks'),
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: orders.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) {
-            final order = orders[i];
-            final hasArrived = order.arrivedAt != null;
-            return _OrderCard(
-              order: order,
-              subtitle: context.tr('agro_courier_pickup_in_progress'),
-              primaryLabel: hasArrived
-                  ? context.tr('agro_courier_mark_picked_up')
-                  : context.tr('courier_arrived_btn'),
-              onPrimary: () {
-                if (hasArrived) {
-                  onMarkPickedUp(order);
-                } else {
-                  onMarkArrived(order);
-                }
-              },
-              onCall: () => onCall(order.customerPhone),
-            );
-          },
+    return CourierTaskList<AgroPickupOrder>(
+      load: load,
+      emptyText: context.tr('carpet_no_active_tasks'),
+      itemBuilder: (context, order, reload) {
+        final hasArrived = order.arrivedAt != null;
+        return _OrderCard(
+          order: order,
+          subtitle: context.tr('agro_courier_pickup_in_progress'),
+          primaryLabel: hasArrived
+              ? context.tr('agro_courier_mark_picked_up')
+              : context.tr('courier_arrived_btn'),
+          onPrimary: () => onNext(order, reload),
+          onCall: () => onCall(order.customerPhone),
         );
       },
     );
@@ -244,18 +201,29 @@ class _OrderCard extends StatelessWidget {
     required this.order,
     required this.primaryLabel,
     required this.onPrimary,
-    required this.onCall,
+    this.onCall,
     this.subtitle,
   });
 
   final AgroPickupOrder order;
   final String primaryLabel;
   final VoidCallback onPrimary;
-  final VoidCallback onCall;
+
+  /// `null` — вазифа ҳали олинмаган: мижоз маълумоти йўқ, қўнғироқ ҳам йўқ.
+  final VoidCallback? onCall;
   final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
+    final claimed = onCall != null;
+    final primary = ElevatedButton(
+      onPressed: onPrimary,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _green,
+        foregroundColor: Colors.white,
+      ),
+      child: Text(primaryLabel),
+    );
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -278,32 +246,32 @@ class _OrderCard extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 6),
-          Text(order.pickupAddress),
-          Text('${order.customerName} · ${order.customerPhone}'),
-          if (order.note.isNotEmpty) Text(order.note),
+          if (claimed) ...[
+            Text(order.pickupAddress),
+            Text('${order.customerName} · ${order.customerPhone}'),
+            if (order.note.isNotEmpty) Text(order.note),
+          ] else
+            Text(
+              context.tr('courier_task_details_after_claim'),
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onCall,
-                  icon: const Icon(Icons.call, size: 18),
-                  label: Text(context.tr('call_short')),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: onPrimary,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _green,
-                    foregroundColor: Colors.white,
+          if (claimed)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onCall,
+                    icon: const Icon(Icons.call, size: 18),
+                    label: Text(context.tr('call_short')),
                   ),
-                  child: Text(primaryLabel),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(child: primary),
+              ],
+            )
+          else
+            SizedBox(width: double.infinity, child: primary),
         ],
       ),
     );

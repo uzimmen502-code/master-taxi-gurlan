@@ -303,6 +303,7 @@
   "courier_status_en_route": "Yo'lda",
   "courier_status_waiting": "Kutilmoqda",
   "courier_submit_payment": "To'lov qabul qilindi",
+  "courier_task_details_after_claim": "Manzil va telefon vazifani olganingizdan keyin ko'rinadi",
   "courier_wallet_balance": "💼 Hamyon qoldig'i: {amount} {currency}",
   "courier_wallet_change": "🔁 Qaytim (+)",
   "courier_wallet_checking": "💼 Hamyon tekshirilmoqda…",

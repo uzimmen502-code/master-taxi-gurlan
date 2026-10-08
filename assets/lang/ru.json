@@ -303,6 +303,7 @@
   "courier_status_en_route": "В пути",
   "courier_status_waiting": "Ожидание",
   "courier_submit_payment": "Оплата принята",
+  "courier_task_details_after_claim": "Адрес и телефон появятся после того, как вы возьмёте задачу",
   "courier_wallet_balance": "💼 Баланс кошелька: {amount} {currency}",
   "courier_wallet_change": "🔁 Сдача (+)",
   "courier_wallet_checking": "💼 Проверка кошелька…",

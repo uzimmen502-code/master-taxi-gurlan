@@ -62,7 +62,7 @@ const Map<String, String> _moduleLabels = {
   'pay_paynet': 'Paynet',
   'wholesale_market': 'Улгуржи бозор',
   'china_market': 'Хитой бозори',
-  'realty': 'Кўчмас мулк',
+  'realty': 'Кўчмас мулк кластери',
   'logistics': 'AVA Logistics (жўнатма)',
 };
 

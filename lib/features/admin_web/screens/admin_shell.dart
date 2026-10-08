@@ -281,7 +281,9 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _AdminSection(
       group: 'Бозорлар ва эълонлар',
-      label: 'Кўчмас мулк',
+      // Ном — иловадаги модул номи билан бир хил (эга, 2026-10-08:
+      // «Риэлторлик кластери» → «Кўчмас мулк кластери» ҳамма жойда).
+      label: 'Кўчмас мулк кластери',
       icon: Icons.apartment_outlined,
       description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
     ),
@@ -542,7 +544,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'EV зарядлаш') {
       return const EvStationModerationScreen();
     }
-    if (section.label == 'Кўчмас мулк') {
+    if (section.label == 'Кўчмас мулк кластери') {
       return const RealtyModerationScreen();
     }
     if (section.label == 'AVA Logistics') {
@@ -1054,7 +1056,7 @@ class _Sidebar extends StatelessWidget {
             .where('reportCount', isGreaterThan: 0)
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Кўчмас мулк':
+      case 'Кўчмас мулк кластери':
         return db
             .collection('realty_listings')
             .where('status', isEqualTo: 'pending')

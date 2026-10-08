@@ -145,6 +145,20 @@ async function main() {
     assert.strictEqual(r.ok, true);
     assert.strictEqual((await order('o2')).status, 'delivered');
   });
+  await check('restoran buyurtmasi: eski picked/arrived rad (USE_RESTAURANT_PICKUP / _ARRIVE) — kodsiz in_delivery yo\'q', async () => {
+    await seedOrder('rest1', { type: 'restaurant', restaurantStatus: 'ready', status: 'ready', fulfillmentStatus: 'confirmed' });
+    const failsWith = (p, code) => assert.rejects(p, (e) => {
+      assert.strictEqual(e.code, 'failed-precondition', `kod ${e.code}: ${e.message}`);
+      assert.strictEqual(e.details && e.details.code, code);
+      return true;
+    });
+    await failsWith(picked('rest1', A), 'USE_RESTAURANT_PICKUP');
+    await failsWith(arrived('rest1', A), 'USE_RESTAURANT_ARRIVE');
+    const od = await order('rest1');
+    assert.strictEqual(od.status, 'ready');
+    assert.strictEqual(od.restaurantStatus, 'ready');
+    assert.strictEqual(od.fulfillmentStatus, 'confirmed');
+  });
   await check('suspended S: o\'z marshrutidagini tugatadi', async () => {
     await seedOrder('o3', { fulfillmentStatus: 'courier_picked', courierId: S }, S);
     await arrived('o3', S);

@@ -44,6 +44,11 @@ class OrderModel {
   final String restaurantId;
   final String restaurantName;
   final String restaurantStatus;
+
+  /// Ресторан жойлашуви — курьернинг биринчи бекати (буюртмага snapshot).
+  final String restaurantAddress;
+  final double? restaurantLat;
+  final double? restaurantLng;
   final int itemsTotal;
   final int packagingTotal;
   final int deliveryFee;
@@ -101,6 +106,9 @@ class OrderModel {
     this.restaurantId = '',
     this.restaurantName = '',
     this.restaurantStatus = '',
+    this.restaurantAddress = '',
+    this.restaurantLat,
+    this.restaurantLng,
     this.itemsTotal = 0,
     this.packagingTotal = 0,
     this.deliveryFee = 0,
@@ -120,6 +128,9 @@ class OrderModel {
   bool get isRestaurant => type == 'restaurant';
 
   bool get hasCoordinates => lat != null && lng != null;
+
+  bool get hasRestaurantCoordinates =>
+      restaurantLat != null && restaurantLng != null;
 
   String get effectiveFulfillment {
     final fs = fulfillmentStatus.trim();
@@ -259,6 +270,9 @@ class OrderModel {
       restaurantId: (d['restaurantId'] ?? '') as String,
       restaurantName: (d['restaurantName'] ?? '') as String,
       restaurantStatus: (d['restaurantStatus'] ?? '') as String,
+      restaurantAddress: (d['restaurantAddress'] ?? '') as String,
+      restaurantLat: (d['restaurantLat'] as num?)?.toDouble(),
+      restaurantLng: (d['restaurantLng'] as num?)?.toDouble(),
       itemsTotal: (d['itemsTotal'] as num?)?.toInt() ?? 0,
       packagingTotal: (d['packagingTotal'] as num?)?.toInt() ?? 0,
       deliveryFee: (d['deliveryFee'] as num?)?.toInt() ?? 0,

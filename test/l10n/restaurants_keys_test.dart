@@ -23,6 +23,7 @@ Set<String> _keysInSource() {
     'lib/features/home/widgets/home_restaurants_section.dart',
     'lib/features/home/home_services_catalog.dart',
     'lib/features/profile/widgets/order_card.dart',
+    'lib/features/courier/screens/courier_screen.dart',
   ]) {
     for (final m in re.allMatches(File(path).readAsStringSync())) {
       out.add(m.group(1)!);
@@ -82,6 +83,19 @@ void main() {
     }
     for (final k in ['fresh', 'active', 'history']) {
       expect(cyrl.containsKey('restaurants_m_bucket_$k'), isTrue, reason: k);
+    }
+  });
+
+  test('kuryer (B3) — dinamik kalitlar: sabab, xato kodlari', () {
+    for (final r in ['customer_absent', 'customer_refused', 'courier_problem', 'other']) {
+      expect(cyrl.containsKey('restaurants_courier_fail_$r'), isTrue, reason: r);
+    }
+    for (final e in [
+      'COURIER_ASSIGNMENT_CONFLICT', 'NOT_AVA_COURIER_ORDER', 'ORDER_NOT_CLAIMABLE', 'COURIER_OWN_ORDER',
+      'COURIER_IS_RESTAURANT_MEMBER', 'BUYOUT_LIMIT_EXCEEDED', 'PICKUP_CODE_MISMATCH', 'PICKUP_CODE_LOCKED',
+      'RESTAURANT_NOT_READY', 'USE_RESTAURANT_PICKUP', 'USE_RESTAURANT_ARRIVE',
+    ]) {
+      expect(cyrl.containsKey('restaurants_err_$e'), isTrue, reason: e);
     }
   });
 }

@@ -852,7 +852,17 @@ function attachRestaurantOrders(exportsObj, deps) {
       const refund = commitFeeInTx(t, prep, { orderId, actorId: uid });
       t.update(orderRef, statusPatch(RS.rejected, { rejectedAt: ts(), rejectedBy: uid, rejectReason: reason, 'avaFee.refunded': refund.applied, 'avaFee.refundedAt': refund.applied ? ts() : null }));
       if (routeSnap && routeSnap.exists) {
-        t.update(routeRef, { orders: admin.firestore.FieldValue.arrayRemove(orderId), updatedAt: ts() });
+        const rd = routeSnap.data() || {};
+        const remaining = (Array.isArray(rd.orders) ? rd.orders : []).filter((id) => id !== orderId);
+        // Bajariladigan buyurtma qolmadi (hammasi `currentIndex`dan oldin —
+        // yakunlangan) → marshrut ham yopiladi; aks holda kuryer bo'sh
+        // «faol» marshrutda qolib, yangisini ololmas edi.
+        const exhausted = remaining.length <= (Number(rd.currentIndex) || 0)
+          && ['active', 'ready'].includes(String(rd.status || ''));
+        t.update(routeRef, {
+          orders: remaining, updatedAt: ts(),
+          ...(exhausted ? { status: 'completed', completedAt: ts(), completedReason: 'restaurant_rejected' } : {}),
+        });
       }
       addEvent(t, orderRef, { from, to: RS.rejected, actor: 'restaurant', actorId: uid, reason, meta: { refundAmount: refund.amount } });
       return { ok: true, customerUid: od.userPhone, courierId: od.courierId };

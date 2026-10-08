@@ -476,17 +476,28 @@ async function main() {
     assert.ok(ok.orderId, 'oldindan to\'lov bilan mumkin');
     await call('customerCancelRestaurantOrder', { orderId: ok.orderId }, CUSTOMER2);
   });
-  await check('K9 rad (ready, kuryer biriktirilgan) → marshrutdan olinadi, 2 % qaytadi', async () => {
+  await check('K9 rad (ready, kuryer biriktirilgan) → marshrutdan olinadi, 2 % qaytadi; oxirgisi ketsa marshrut yopiladi', async () => {
     const r = await place(rid, CUSTOMER);
+    const r2 = await place(rid, CUSTOMER);
     await call('restaurantAcceptOrder', { orderId: r.orderId }, OWNER);
+    await call('restaurantAcceptOrder', { orderId: r2.orderId }, OWNER);
     await call('courierClaimRestaurantOrder', { orderId: r.orderId }, COURIER_B);
+    await call('courierClaimRestaurantOrder', { orderId: r2.orderId }, COURIER_B);
     await call('restaurantMarkReady', { orderId: r.orderId }, OWNER);
     const o0 = await pcBal(OWNER);
     await call('restaurantRejectOrder', { orderId: r.orderId, reason: 'kuryer kelmadi' }, OWNER);
     assert.strictEqual(await pcBal(OWNER), o0 + 1200);
     const od = await order(r.orderId);
-    const route = await db.collection('delivery_routes').doc(od.deliveryRouteId).get();
-    assert.ok(!route.data().orders.includes(r.orderId), 'marshrutdan olindi');
+    const routeRef = db.collection('delivery_routes').doc(od.deliveryRouteId);
+    let route = (await routeRef.get()).data();
+    assert.deepStrictEqual(route.orders, [r2.orderId], 'marshrutdan olindi, ikkinchisi qoldi');
+    assert.strictEqual(route.status, 'active', 'buyurtma qolgan — marshrut ochiq');
+    await call('restaurantRejectOrder', { orderId: r2.orderId, reason: 'tugadi' }, OWNER);
+    route = (await routeRef.get()).data();
+    assert.deepStrictEqual(route.orders, []);
+    assert.strictEqual(route.status, 'completed', 'bo\'sh marshrut yopildi — kuryer yangisini ola oladi');
+    assert.strictEqual(route.completedReason, 'restaurant_rejected');
+    assert.strictEqual(await pcBal(OWNER), o0 + 2400, 'ikkala 2 % qaytdi');
   });
 
   // ── 5. O'z kuryeri / olib ketish / admin ───────────────────────────

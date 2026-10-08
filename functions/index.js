@@ -4326,6 +4326,13 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
   await db.runTransaction(async (t) => {
     const od = await getOrderInTxOrThrow(t, ref);
     courierAuth.assertOrderActionable(od, courierId, 'courierMarkPicked', orderId);
+    // Restoran buyurtmasi — faqat `courierPickupRestaurantOrder` (restoran
+    // kodi, vykup to'lovi, bitta holat jadvali); bu yo'l uni kodsiz
+    // `in_delivery` qilib, `restaurantStatus` bilan ajratib qo'yardi.
+    if (String(od.type || '') === 'restaurant') {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_RESTAURANT_PICKUP', { code: 'USE_RESTAURANT_PICKUP' });
+    }
     const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
     if (fs === 'cancelled' || fs === 'completed') {
       throw new functions.https.HttpsError('failed-precondition', 'order closed');
@@ -4603,6 +4610,12 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
   const od = await db.runTransaction(async (t) => {
     const cur = await getOrderInTxOrThrow(t, ref);
     courierAuth.assertOrderActionable(cur, courierId, 'courierMarkArrived', orderId);
+    // Restoran buyurtmasi — `courierArriveRestaurantOrder` (holat jadvali
+    // va mijozga bildirishnoma o'sha yerda).
+    if (String(cur.type || '') === 'restaurant') {
+      throw new functions.https.HttpsError('failed-precondition',
+          'USE_RESTAURANT_ARRIVE', { code: 'USE_RESTAURANT_ARRIVE' });
+    }
     const fs = cur.fulfillmentStatus || '';
     if (fs !== 'courier_picked' && cur.status !== 'in_delivery') {
       throw new functions.https.HttpsError('failed-precondition', 'pick first');

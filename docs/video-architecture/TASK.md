@@ -168,10 +168,34 @@ This single fact sets the entire priority order (Section 5).
    - Flush per active clip per interval. Writes now scale with **active clips ×
      intervals**, not views.
 
-3. **Cost (from script, 1M DAU):** ingest (1×views) + flush (active clips ×
-   intervals, capped) = **$1,391/mo** vs current **$4,320** → ~68% lower, and the
-   per-document contention disappears (clip counters written by one aggregator,
-   serialized).
+3. **Cost — re-derived 2026-10-02, and it changes the design.** Two facts the first
+   estimate missed:
+   - **A Firestore DELETE is billed as a write.** A Firestore-backed queue therefore
+     costs *two* writes per event (insert + delete) before any aggregation gain.
+   - **The `views/{viewerId}` dedup document cannot be merged** — one doc per viewer
+     per clip. It is the floor under every variant.
+
+   From `cost_model.py` (write cost per month):
+
+   | | 10k DAU | 100k DAU | 1M DAU |
+   |---|--------:|---------:|-------:|
+   | A — today (3× distinct + 1× stats) | $38.34 | $383.40 | $3,834 |
+   | B — Firestore queue + aggregator | $33.89 | $338.90 | $3,389 |
+   | C — Pub/Sub queue + aggregator | $12.33 | $123.34 | $1,233 |
+   | D — sample stats 10% (client only) | $28.62 | $286.20 | $2,862 |
+   | E — D + drop the profile write | $19.44 | $194.40 | $1,944 |
+
+   **B is nearly pointless** (−12%): the queue's own insert+delete eats the gain. If
+   the queue is built it must be **Pub/Sub** (C), where the queue costs no Firestore
+   writes at all (~$5/mo of Pub/Sub traffic at 1M DAU).
+
+   **E needs no queue, no aggregator and no new infrastructure** and still takes half
+   the cost out — `STATS_SAMPLE_RATE` on the client plus deriving
+   `tv_public_profiles.totalViewCount` in the nightly reconciliation.
+
+   At 10k DAU the whole line is $38/mo, so Phase 2 is a **latency and contention**
+   fix, not a cost fix (as §5.2 already said). C only earns its complexity somewhere
+   past ~100k DAU.
 
 4. **Likes:** keep the authoritative `likes/{clipId}_{uid}` doc for correctness
    (needed for "did I like this"); fold the counter delta into the same aggregator
@@ -276,9 +300,40 @@ stack.
   unaffected. (A percentage ramp was considered and dropped — a boolean is simpler
   and the blast radius is one clip at a time.)
 
-### 5.2 Priority #2 — view/stats aggregation (Section 3)
-**Why:** $4,320 → $1,391/mo at 1M, and removes hot-document contention (the real
-user-visible win: write latency). Ship behind a flag, A/B on write latency.
+### 5.2 Priority #2 — view/stats aggregation — **variant E implemented 2026-10-02**
+
+Built (commits `606509e`, `5221254`); **server half not yet deployed** — see 11.6.
+
+- **`playbackStats` is sampled** at `kTvPlaybackStatsSampleRate` = 10%
+  (`lib/features/tv_market/utils/tv_playback_sampling.dart`). Every metric it feeds
+  is an *average*, so a uniform sample does not shift it — proven over 200k draws in
+  `test/features/tv_market/tv_playback_sampling_test.dart`.
+- **`tv_public_profiles.totalViewCount` moved to the server.** The third write (and
+  second read) is gone from `recordView`. `reconcileTvProfileViews` recomputes it
+  nightly at 03:30 Tashkent as *live clips' `viewCount` + `deletedViewCount`*.
+- **`deletedViewCount`** is accumulated by `onTvClipDeleted`; without it a profile's
+  total would jump backwards whenever an owner deleted a clip.
+- **First-run seeding:** today's `totalViewCount` was built incrementally by clients
+  and already includes views of clips that have since been deleted. On the first run
+  the field is seeded as `max(0, oldTotal − liveSum)` so no profile's total drops.
+- **Transition is self-healing:** older app versions still increment
+  `totalViewCount` themselves (the rule still allows it); the next nightly pass
+  simply corrects the value.
+- **The audit script was adapted** (`functions/tools/audit_avagram_usage.js`), which
+  mattered because it is the input to the "should we drop video?" decision: averages
+  come from `playbackStats`, absolute counts now come from `viewCount` (exact,
+  deduped), and total watch time and traffic are estimated as *average × viewCount*
+  and labelled as estimates. `PLAYBACK_STATS_SAMPLE_RATE` must match the Dart
+  constant — a test enforces it, same pattern as `TV_CLIP_MAX_SECONDS`.
+
+The client half only takes effect in the next app release.
+
+### 5.2b Why not the queue (Section 3)
+**Why:** removes hot-document contention — the real user-visible win is write latency.
+On cost, see the re-derived table in §3: at 1M DAU the best queue variant is
+$3,834 → $1,233/mo, but at 10k DAU the whole line is $38/mo, so cost is not the
+reason to do this yet. Start with variant E (client-side, no infrastructure); build
+the Pub/Sub queue (C) only once the DAU justifies it.
 
 ### 5.3 Priority #3 — feed JSON (Section 4)
 **Why:** $1,800 → $0/mo at 1M, feed latency ~200ms → ~50ms. Author-own-clip query
@@ -550,6 +605,132 @@ Note on ordering: `processingStatus: 'ready'` is written by the fast-track 360p 
 (~4–9s) **before** `variantBackend`/`variantRun` land in the final update (~10s).
 `resolveClipBackend` covers that window by falling back to the URL host, and the
 fast-track URL is already the R2 one — verified.
+
+### 11.7 Phase 3 — feed JSON builder (server half) — built 2026-10-02
+
+Commit `52f6ae1`. **Not deployed** (see 11.8). The client does not read this yet, so
+the builder only writes; nothing changes until the next app release.
+
+Sized from real data rather than guessed: **228 active clips, 7 districts, 3 tabs,
+~1787 B per clip** — so at most 21 pools and a 20-clip page is ~35 KB. That is small
+enough that a plain full rebuild every 5 minutes is the right design; no dirty-pool
+tracking needed yet.
+
+- `functions/tv_feed.js` — the **pure** decisions (pool path, which fields, tab
+  matching, pagination). No Firestore, no R2, so it is tested without either:
+  `functions/test/tv_feed.test.js`, 25 assertions.
+- `buildTvFeedJson` (every 5 min) reads active clips once, groups by district, and
+  writes `feed/v1/{districtId}/{tab}/p{n}.json` to R2, deleting pages left over from
+  a shrunken pool.
+- `R2Output.putJson` — unlike clip files this is **not** `immutable`: the feed
+  changes, so it gets a short `max-age` plus `stale-while-revalidate`.
+- Tabs mirror the client's `_categoriesForTab`: `all` / `news` / `market`.
+- Only feed-relevant fields are emitted — `playbackStats`, `socialPost`,
+  `processedVideoUrl`, `variantRun` and friends are dropped. `createdAt` becomes
+  `createdAtMs` because a Firestore Timestamp has no JSON form.
+- An empty pool still gets one empty page, so the client sees `[]` rather than a 404.
+
+**Needed in Cloudflare before the client switches over:** the current Cache Rule
+matches `m3u8 ts m4s mp4 webp` only, so `.json` is not cached at the edge and the
+latency win would not materialise. Add `json` to the extension list (its own short
+TTL comes from the object's own `Cache-Control`).
+
+**Known gap in v1:** region/national-scoped ads (`_fetchScopedAds`) are not included —
+see 11.9.
+
+**Scaling limit:** every run reads all active clips. Past roughly 2,000 active clips
+those reads outgrow the savings, and only changed pools should be rebuilt.
+
+### 11.7b Phase 3 — client half, built 2026-10-02 (commit `d567e1c`)
+
+Takes effect only in the next app release; until then the feed behaves exactly as it
+does today.
+
+- **`TvClip.fromMap`** — `fromFirestore` now delegates to it, so both sources share
+  one parser. They differ only in how a date arrives (Firestore `Timestamp` vs the
+  JSON's `createdAtMs`), which `_asDate` absorbs. Adding a field later feeds both
+  sources automatically instead of letting two parsers drift apart.
+- **`TvFeedCdn`** is an *optional* source. It returns `null` — and the caller falls
+  back to Firestore — when the JSON is missing (404), unparseable, on a different
+  schema version, older than 6 hours (builder stopped), or the network fails. One
+  malformed clip is skipped rather than breaking the whole feed. This is what makes
+  the release safe before the builder is deployed.
+- **The feed screen picks the source once per load cycle.** If page 1 came from the
+  CDN, later pages do too; if the CDN fails, it drops to Firestore and does not retry
+  within that cycle. `_loadMoreClips` already de-duplicates, so a mid-cycle switch
+  cannot double up clips. Only the **district** feed uses the CDN — region and
+  unfiltered modes are untouched, since the server builds no pools for them.
+- **The author sees their own clip immediately.** The JSON can be up to 5 minutes
+  stale, so someone could publish and not find their video — and conclude it was
+  lost. When reading from the CDN the screen also pulls that user's latest clips
+  (1 user, ≤5 docs) and puts them at the top.
+
+Tests: `test/features/tv_market/tv_feed_cdn_test.dart` — 17 assertions, half of them
+exercising the fallback path specifically. Full suite: 430 passing, analyzer clean.
+
+### 11.8 Deploy blocked 2026-10-02 — Secret Manager returns a billing error
+
+`firebase deploy --only functions:buildTvFeedJson` fails at secret validation:
+
+```
+Failed to validate secret versions:
+403 This API method requires billing to be enabled ... projects/master-taxi-gurlan
+```
+
+What was checked:
+
+| Check | Result |
+|---|---|
+| `gcloud billing projects describe` | `billingEnabled: True`, account `0185D6-…` |
+| `gcloud secrets versions list` (R2 keys) | same 403 — so it is the API, not the CLI |
+| `gcloud billing accounts describe` | the signed-in account lacks permission to view it |
+| Firestore read | works |
+| Deployed functions | still running (`expireTvContent` 3 min earlier), no errors in 30 min |
+
+So **production is unaffected**; only APIs that strictly require a chargeable billing
+account are refusing. Earlier deploys today succeeded, so this began within hours.
+Most likely the billing account itself needs attention (closed, payment failed, or a
+verification hold) — only the owner can see that.
+
+Any function declaring `secrets:` is blocked until it clears. Pending:
+`buildTvFeedJson`.
+
+### 11.9 Defect found while measuring — `regionId` is empty on every clip
+
+All 228 active clips have `districtId`, and **none has `regionId`**. Consequences:
+
+- `_fetchScopedAds` (`tv_clips_repository.dart:124`) filters on
+  `adScope in ['region','national']` and then matches `c.regionId == regionId`, so a
+  region-wide paid ad can never appear in another district's feed. Whoever paid for
+  regional reach is not getting it.
+- `fetchByRegion` survives only because it works from the district list rather than
+  the clip's own `regionId` — the repository comment already notes clips may lack it.
+
+Not fixed here (outside this phase). A fix needs a backfill from `districtId` →
+`geo_districts.regionId` plus writing `regionId` at publish time.
+
+### 11.6 Pending deploy — `reconcileTvProfileViews`, `onTvClipDeleted`
+
+```
+firebase deploy --only functions:reconcileTvProfileViews,functions:onTvClipDeleted
+```
+
+Blocked on 2026-10-02: a parallel session is actively editing `functions/realty.js`.
+`firebase deploy` packages the **working tree, not the commit**, so a deploy during
+that would bundle half-written code into these two functions (one attempt already
+failed on a vanishing `realty.js.tmp.*`). Wait until that file stops changing.
+
+After deploying, prove the seeding worked — the first run must not lower anyone's
+total:
+
+1. Snapshot `tv_public_profiles` (`totalViewCount` per doc) before.
+2. `gcloud scheduler jobs run firebase-schedule-reconcileTvProfileViews-us-central1
+   --location=us-central1`
+3. Re-read and compare: no profile's `totalViewCount` may drop, and every profile
+   should gain a `deletedViewCount` field.
+
+Baseline captured before the attempt: **105 profiles, `totalViewCount` sum = 125,
+0 profiles carrying `deletedViewCount`.**
 
 ### 11.4 Original uploads on clip delete — fixed 2026-10-02
 

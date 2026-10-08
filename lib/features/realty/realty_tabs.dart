@@ -17,11 +17,6 @@ abstract final class RealtyTabs {
 
   static const int count = 3;
 
-  static RealtyTier tierForIndex(int index) =>
-      order[index.clamp(0, count - 1)];
-
-  static int indexForTier(RealtyTier tier) => order.indexOf(tier);
-
   /// Матн калитлари — `assets/lang/*.json`.
   static String labelKey(RealtyTier tier) {
     switch (tier) {

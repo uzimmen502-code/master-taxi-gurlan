@@ -6,6 +6,8 @@ import '../../../core/utils/formatters.dart';
 import '../../../models/realty_listing.dart';
 import '../../../repositories/realty_repository.dart';
 import '../realty_tabs.dart';
+import 'realty_controls.dart';
+import 'realty_feedback.dart';
 
 /// РЕКЛАМА / СРОЧНО сотиб олиш ва узайтириш варағи.
 ///
@@ -99,26 +101,16 @@ class _TierSheetState extends State<_TierSheet> {
       );
       if (!mounted) return;
       navigator.pop(RealtyTierChoice(tier: _tier, durationDays: days));
-      messenger.showSnackBar(SnackBar(
+      showRealtyInfo(
+        messenger,
         // `formatMoney` ўзи «сўм» қўшади — такрорламаймиз.
-        content: Text(
-          '${context.tr('realty_tier_bought')} · ${formatMoney(res.price)}',
-        ),
-        backgroundColor: RealtyTabs.colorFor(_tier),
-        behavior: SnackBarBehavior.floating,
-      ));
+        '${context.tr('realty_tier_bought')} · ${formatMoney(res.price)}',
+        background: RealtyTabs.colorFor(_tier),
+      );
     } on RealtyException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      messenger.showSnackBar(SnackBar(
-        content: Text(
-          e.code == 'insufficient_balance'
-              ? context.tr('realty_error_balance')
-              : context.tr('realty_error_generic'),
-        ),
-        backgroundColor: RealtyTabs.colorFor(RealtyTier.urgent),
-        behavior: SnackBarBehavior.floating,
-      ));
+      showRealtyError(messenger, realtyErrorText(context, e));
     }
   }
 
@@ -183,7 +175,7 @@ class _TierSheetState extends State<_TierSheet> {
                     RealtyTier.urgent,
                   ]) ...[
                     Expanded(
-                      child: _Choice(
+                      child: RealtyChoice(
                         label: context.tr(RealtyTabs.labelKey(tier)),
                         selected: _tier == tier,
                         color: RealtyTabs.colorFor(tier),
@@ -220,7 +212,7 @@ class _TierSheetState extends State<_TierSheet> {
                   children: [
                     for (final d in _tier.durationOptions) ...[
                       Expanded(
-                        child: _Choice(
+                        child: RealtyChoice(
                           label: '$d ${context.tr('realty_days_short')}',
                           // Тор катакча — «сўм»сиз, фақат рақам.
                           sub: _pricing[_tier]?[d] == null
@@ -281,59 +273,3 @@ class _TierSheetState extends State<_TierSheet> {
   }
 }
 
-class _Choice extends StatelessWidget {
-  const _Choice({
-    required this.label,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-    this.sub,
-  });
-
-  final String label;
-  final String? sub;
-  final bool selected;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ava;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: selected ? color : c.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: selected ? color : c.line),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: AppText.bodySmall,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : c.ink2,
-              ),
-            ),
-            if (sub != null)
-              Text(
-                sub!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: AppText.labelTiny,
-                  color: selected ? Colors.white70 : c.ink3,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

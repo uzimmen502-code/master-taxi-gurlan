@@ -255,6 +255,74 @@ async function main() {
     assert.strictEqual(await codeOf(api.lockLocalTripFare.run({ tripId: 'old1', toLat: 41.86, toLng: 60.42, toAddr: 'B' }, ctxOf(PASSENGER))), 'TRIP_NOT_ACTIVE');
   });
 
+  // ── K. Yo'l koeffitsienti kalibrovkasi (variant A + D) ────────────────
+  const mkSamples = (n, ratio, region = 'xorazm') => Array.from({ length: n }, (_, i) => {
+    const to = { lat: GURLAN.lat + 0.01 + i * 0.001, lng: GURLAN.lng + 0.01 };
+    const straight = lt.haversineMeters(GURLAN.lat, GURLAN.lng, to.lat, to.lng);
+    return { regionKey: region, fromLat: GURLAN.lat, fromLng: GURLAN.lng, toLat: to.lat, toLng: to.lng,
+      routeM: Math.round(straight * ratio) };
+  });
+  await check('K1 30 ta safar, nisbat 1.25 → 1250; 29 ta → null (ma\'lumot yetarli emas)', () => {
+    assert.deepStrictEqual(lt.computeRoadFactors(mkSamples(30, 1.25)), { xorazm: { factorPermille: 1250, samples: 30 } });
+    assert.deepStrictEqual(lt.computeRoadFactors(mkSamples(29, 1.25)), { xorazm: { factorPermille: null, samples: 29 } });
+  });
+  await check('K2 chetga chiquvchilar (nisbat >3, qisqa <500 m) tashlanadi; mediana barqaror', () => {
+    const s = [...mkSamples(31, 1.3), ...mkSamples(5, 9.0),
+      { regionKey: 'xorazm', fromLat: 41.84, fromLng: 60.39, toLat: 41.8401, toLng: 60.3901, routeM: 900 }];
+    assert.deepStrictEqual(lt.computeRoadFactors(s), { xorazm: { factorPermille: 1300, samples: 31 } });
+  });
+  await check('K3 yuqori chegara 2.0 (clamp)', () => {
+    assert.strictEqual(lt.computeRoadFactors(mkSamples(30, 2.6)).xorazm.factorPermille, 2000);
+  });
+
+  await reset();
+  await db.recursiveDelete(db.collection('local_taxi_calibration'));
+  const day = admin.firestore.Timestamp.fromMillis(DAY.getTime() - 24 * 3600 * 1000);
+  const old = admin.firestore.Timestamp.fromMillis(DAY.getTime() - 40 * 24 * 3600 * 1000);
+  let k = 0;
+  for (const s of mkSamples(30, 1.25)) {
+    await db.collection('trips').doc(`k${k++}`).set({
+      taxiType: 'local', fareSource: 'server', distanceSource: 'route', createdAt: day,
+      fromLat: s.fromLat, fromLng: s.fromLng, toLat: s.toLat, toLng: s.toLng,
+      lockedDistanceM: s.routeM, tariffSnapshot: { regionKey: 'xorazm' },
+    });
+  }
+  // Hisobga kirmasligi kerak: estimate, eski ilova (server narxisiz), 30 kundan eski.
+  for (const [i, extra] of [{ distanceSource: 'estimate' }, { fareSource: null }, { createdAt: old }].entries()) {
+    const s = mkSamples(1, 2.5)[0];
+    await db.collection('trips').doc(`kx${i}`).set({
+      taxiType: 'local', fareSource: 'server', distanceSource: 'route', createdAt: day,
+      fromLat: s.fromLat, fromLng: s.fromLng, toLat: s.toLat, toLng: s.toLng,
+      lockedDistanceM: s.routeM, tariffSnapshot: { regionKey: 'xorazm' }, ...extra,
+    });
+  }
+  await check('K4 haftalik ish: xorazm 1250 (30 namuna), joriy + runs tarixi yoziladi', async () => {
+    await api.calibrateLocalTaxiRoadFactor.run({});
+    const cur = (await db.collection('local_taxi_calibration').doc('road_factor').get()).data();
+    assert.deepStrictEqual(cur.regions.xorazm, { factorPermille: 1250, samples: 30 });
+    assert.strictEqual(cur.usedSamples, 30);
+    const runs = await db.collection('local_taxi_calibration').doc('road_factor').collection('runs').get();
+    assert.strictEqual(runs.size, 1);
+  });
+  await check('K5 Directions ishlamasa — HISOBLANGAN koeffitsient (1.25) ishlatiladi, manbasi snapshot\'da', async () => {
+    routeMeters = 0;
+    const r = await api.createLocalTaxiTrip.run(order({ requestId: 'req_calib01' }), ctxOf(PASSENGER));
+    const t = (await db.collection('trips').doc(r.tripId).get()).data();
+    const straight = lt.haversineMeters(GURLAN.lat, GURLAN.lng, 41.86, 60.42);
+    assert.strictEqual(t.lockedDistanceM, Math.round(straight * 1.25));
+    assert.strictEqual(t.tariffSnapshot.roadFactorPermille, 1250);
+    assert.ok(t.tariffSnapshot.roadFactorSource.startsWith('calibrated:'), t.tariffSnapshot.roadFactorSource);
+    routeMeters = 5000;
+  });
+  await check('K6 boshqa mintaqada ma\'lumot yo\'q — tarif koeffitsienti (1.3), manba tariff', async () => {
+    routeMeters = 0;
+    const r = await api.createLocalTaxiTrip.run(order({ requestId: 'req_calib02', fromLat: 41.3, fromLng: 69.25, toLat: 41.32, toLng: 69.27 }), ctxOf(PASSENGER));
+    const t = (await db.collection('trips').doc(r.tripId).get()).data();
+    assert.strictEqual(t.tariffSnapshot.roadFactorPermille, 1300);
+    assert.strictEqual(t.tariffSnapshot.roadFactorSource, 'tariff');
+    routeMeters = 5000;
+  });
+
   // ── adminSetLocalTaxiPrices ──────────────────────────────────────────
   await reset({ local_base: 5000, local_per_km: 1500, local_coef: 1.0, bread_price: 3000, regions: { tashkent: { local_base: 1, local_per_km: 1 } } });
   await check('A1 oddiy foydalanuvchi narxni o\'zgartira olmaydi', async () => {

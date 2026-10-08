@@ -137,8 +137,14 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     }
   }
 
-  List<String>? _nextActions(String status, OrderFlowModes flow) {
-    switch (status) {
+  /// Сервер (`ADMIN_ORDER_TRANSITIONS`) билан бир хил қоида. Эга қарори
+  /// 2026-10-08: «Курьерда» админдан олиб ташланди (курьерни курьер иловаси
+  /// беради — админ қўйгани курьерсиз буюртмани қотириб қўярди);
+  /// «Етказилди» — фақат тўланган буюртмада (аввал тўлов ёзувисиз
+  /// `paid` қиларди). Аввалги тугмадан қолган курьерсиз буюртмани курьер
+  /// навбатига (`ready`) қайтариш мумкин.
+  List<String>? _nextActions(OrderModel o, OrderFlowModes flow) {
+    switch (o.status) {
       case 'new':
         if (flow.acceptAuto) return const ['rejected'];
         return const ['accepted', 'rejected'];
@@ -146,10 +152,14 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         if (flow.readyAuto) return const ['rejected'];
         return const ['ready', 'rejected'];
       case 'ready':
-        return const ['in_delivery'];
+        return const ['rejected'];
       case 'in_delivery':
       case 'courier':
-        return const ['delivered'];
+        final orphan = (o.courierId ?? '').trim().isEmpty;
+        return [
+          if (o.paymentStatus.trim() == 'paid') 'delivered',
+          if (orphan) 'ready',
+        ];
       default:
         return null;
     }
@@ -249,19 +259,13 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
         return const [
           _BulkActionSpec(status: 'ready', label: 'Тайёр', positive: true),
         ];
-      case 'ready':
-        return const [
-          _BulkActionSpec(
-            status: 'in_delivery',
-            label: 'Курьерда',
-            positive: true,
-          ),
-        ];
+      // «Тайёр» устунида оммавий «Курьерда» йўқ (эга қарори 2026-10-08).
       case 'in_delivery':
+        // Фақат тўланганларга қўлланади (`_applyBulkStatus` сарайди).
         return const [
           _BulkActionSpec(
             status: 'delivered',
-            label: 'Етказилди',
+            label: 'Етказилди (тўланганлар)',
             positive: true,
           ),
         ];
@@ -326,8 +330,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   }
 
   Future<String?> _adminPhoneForCf() async {
-    if (!widget.embedded) return null;
-
     String? raw;
     try {
       final auth = context.read<AdminAuthService>();
@@ -348,75 +350,72 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return digits.length >= 9 ? digits : null;
   }
 
+  // Статус ҲАР ДОИМ сервер орқали (`adminSetOrderStatus[Batch]`): ўтиш
+  // текшируви ва рад этишда захира/ҳамён қайтариш фақат CF'да. Аввал
+  // Monitoring Center'дан очилган (`embedded: false`) доска
+  // `OrdersRepository` орқали тўғридан-тўғри ёзарди — шу текширувлар
+  // четлаб ўтиларди.
   Future<bool> _setStatus(String orderId, String status) async {
-    if (widget.embedded) {
-      final adminPhone = await _adminPhoneForCf();
-      if (adminPhone == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.red,
-              content: Text('Админ телефони аниқланмади — қайта киринг'),
-            ),
-          );
-        }
-        return false;
+    final adminPhone = await _adminPhoneForCf();
+    if (adminPhone == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Админ телефони аниқланмади — қайта киринг'),
+          ),
+        );
       }
-      final err = await AdminOrdersService().setOrderStatus(
-        adminPhone: adminPhone,
-        orderId: orderId,
-        status: status,
-      );
-      if (err != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(err),
-            ),
-          );
-        }
-        return false;
-      }
-      return true;
+      return false;
     }
-    await context.read<OrdersRepository>().setOrderStatus(orderId, status);
+    final err = await AdminOrdersService().setOrderStatus(
+      adminPhone: adminPhone,
+      orderId: orderId,
+      status: status,
+    );
+    if (err != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(err),
+          ),
+        );
+      }
+      return false;
+    }
     return true;
   }
 
   Future<bool> _setStatusBatch(List<String> orderIds, String status) async {
-    if (widget.embedded) {
-      final adminPhone = await _adminPhoneForCf();
-      if (adminPhone == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.red,
-              content: Text('Админ телефони аниқланмади — қайта киринг'),
-            ),
-          );
-        }
-        return false;
+    final adminPhone = await _adminPhoneForCf();
+    if (adminPhone == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Админ телефони аниқланмади — қайта киринг'),
+          ),
+        );
       }
-      final err = await AdminOrdersService().setOrderStatusBatch(
-        adminPhone: adminPhone,
-        orderIds: orderIds,
-        status: status,
-      );
-      if (err != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(err),
-            ),
-          );
-        }
-        return false;
-      }
-      return true;
+      return false;
     }
-    await context.read<OrdersRepository>().setOrderStatusBatch(orderIds, status);
+    final err = await AdminOrdersService().setOrderStatusBatch(
+      adminPhone: adminPhone,
+      orderIds: orderIds,
+      status: status,
+    );
+    if (err != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(err),
+          ),
+        );
+      }
+      return false;
+    }
     return true;
   }
 
@@ -578,13 +577,19 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                                             orders: orders
                                                 .where((o) =>
                                                     _columnStatus(o.status) ==
-                                                    column.status)
+                                                        column.status &&
+                                                    // «Етказилди» — фақат
+                                                    // тўланган буюртма.
+                                                    (next != 'delivered' ||
+                                                        o.paymentStatus
+                                                                .trim() ==
+                                                            'paid'))
                                                 .toList(growable: false),
                                             next: next,
                                             columnTitle: column.title,
                                           ),
-                                          nextActions: (s) =>
-                                              _nextActions(s, flow),
+                                          nextActions: (o) =>
+                                              _nextActions(o, flow),
                                           statusColor: _statusColor,
                                           statusUz: _statusUz,
                                           typeUz: _typeUz,
@@ -720,7 +725,7 @@ class _OrdersColumn extends StatelessWidget {
   final bool bulkBusy;
   final List<_BulkActionSpec>? bulkActions;
   final Future<void> Function(String next) onBulkAction;
-  final List<String>? Function(String status) nextActions;
+  final List<String>? Function(OrderModel order) nextActions;
   final Color Function(String status) statusColor;
   final String Function(String status) statusUz;
   final String Function(String type) typeUz;
@@ -854,13 +859,18 @@ class _OrdersColumn extends StatelessWidget {
                       return _OrderCard(
                         order: o,
                         busy: busyOrderId == o.id || bulkBusy,
-                        next: nextActions(o.status),
+                        next: nextActions(o),
                         statusColor: statusColor(o.status),
                         statusUz: statusUz(o.status),
                         typeUz: typeUz(o.type),
                         money: money,
                         date: date,
-                        actionLabel: actionLabel,
+                        // «Курьерда» устунидаги `ready` — курьерсиз қолган
+                        // буюртмани курьер навбатига қайтариш.
+                        actionLabel: (s) =>
+                            spec.status == 'in_delivery' && s == 'ready'
+                                ? 'Навбатга қайтариш'
+                                : actionLabel(s),
                         onAction: onAction,
                       );
                     },

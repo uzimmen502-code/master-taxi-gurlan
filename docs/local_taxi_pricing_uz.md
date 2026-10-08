@@ -29,9 +29,15 @@
     (`local_night_coef`, `local_night_start`, `local_night_end`; стандарт ×1.5,
     23:00–06:00; коэффициент 1.0 = ўчирилган). Тариф версиясига киради.
   - **Directions ишламаса** буюртма рад этилмайди: масофа = тўғри чизиқ ×
-    `local_road_factor` (стандарт **1.3 — PROPOSED**, админ 1.0–2.0 оралиғида
-    ўзгартиради). Trip'да `distanceSource: 'estimate'` ва
-    `tariffSnapshot.roadFactorPermille` сақланади — кейин таҳлил қилиш мумкин.
+    йўл коэффициенти. Trip'да `distanceSource: 'estimate'`,
+    `tariffSnapshot.roadFactorPermille` ва `roadFactorSource` сақланади.
+  - **Йўл коэффициенти маълумотдан (эга танлови 2026-10-08, вариант A + D):**
+    `calibrateLocalTaxiRoadFactor` ҳар душанба 03:00 (Тошкент) охирги 30 кунлик
+    сервер нархли, ҳақиқий маршрутли trip'лардан минтақа бўйича «йўл / тўғри
+    чизиқ» медианасини ҳисоблайди → `local_taxi_calibration/road_factor`
+    (+ ўзгармас `runs/`). Шартлар (PROPOSED): ≥30 намуна, тўғри чизиқ ≥500 м,
+    нисбат 1.0–3.0, натижа 1.0–2.0 га чекланади. Маълумот етарли бўлмаса —
+    админ тарифидаги `local_road_factor` (стандарт 1.3).
 - `settings/prices`да `local_base`/`local_per_km` бўлмаса — `TARIFF_NOT_CONFIGURED`
   (hardcode default 5000/1500 ишлатилмайди). Production'да бор (5990 / 2150).
 

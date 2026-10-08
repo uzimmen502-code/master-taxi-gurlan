@@ -355,8 +355,11 @@ class _TaxiPriceScreenState extends State<TaxiPriceScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Google marshrut bermasa, masofa = to\'g\'ri chiziq × shu '
-                'koeffitsient. Buyurtma rad etilmaydi.',
+                'Google marshrut bermasa, masofa = to\'g\'ri chiziq × yo\'l '
+                'koeffitsienti. Buyurtma rad etilmaydi. Koeffitsient har dushanba '
+                'oxirgi 30 kunlik safarlardan mintaqa bo\'yicha avtomatik '
+                'hisoblanadi; ma\'lumot yetarli bo\'lmasa (30 tadan kam safar) '
+                'shu qiymat ishlatiladi.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
               const SizedBox(height: 8),

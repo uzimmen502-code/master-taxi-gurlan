@@ -97,6 +97,7 @@
     "tariff_missing",
     "leg_assigned",
     "leg_not_expired",
+    "leg_superseded",
     "leg_reactivate_failed",
     "tariff_zone_price_missing",
     "tariff_extra_price_missing",

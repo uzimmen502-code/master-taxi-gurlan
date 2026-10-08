@@ -2,24 +2,65 @@ rules_version = '2';
 // Deploy: firebase deploy --only storage  |  Guide: docs/storage_cors_uz.md
 service firebase.storage {
   match /b/{bucket}/o {
-    // Bread catalog images (Flutter admin upload + user app read).
-    // TEMP: open read/write without auth — replace with request.auth after Admin Auth.
+    // Админ панел каталог юкловчиси (Phone Auth token + `users/{phone}.role`).
+    //
+    // Аввал `bread_images`, `extra_images`, `oil_images`, `food_images`,
+    // `platform_images` — `write: if true` («TEMP … after Admin Auth»):
+    // ҳар ким (ҳатто кирмаган) иловадаги каталог расмларини алмаштира
+    // оларди (номлари детерминистик: `{docId}.jpg`). `entertainment/` эса
+    // аутентификациясиз 400MB юклашга рухсат берарди. Админ web аллақачон
+    // Phone Auth'да (`adminWebSignIn` → `phone_number` claim), ягона
+    // юкловчи — `BreadImageStorage` (админ экранлари) ва Кино каталоги таби.
+    //
+    // ⚠ Cross-service (Storage → Firestore) қоида: биринчи deploy'да CLI
+    // Storage хизматига `firebaserules.firestoreServiceAgent` ролини
+    // беришни сўрайди — розилик берилмаса текширув рад этади (админ юклаши
+    // тўхтайди).
+    function panelPhone() {
+      return request.auth != null && request.auth.token.phone_number is string
+          ? request.auth.token.phone_number.replace('\\+', '')
+          : '';
+    }
+    function hasCatalogRole(docId) {
+      return firestore.exists(/databases/(default)/documents/users/$(docId))
+          && firestore.get(/databases/(default)/documents/users/$(docId)).data.role
+              in ['admin', 'superadmin', 'dispatcher', 'finance'];
+    }
+    function isCatalogAdmin() {
+      let p = panelPhone();
+      return p != ''
+          && (hasCatalogRole(p)
+              || (p.size() == 12 && p.matches('998[0-9]{9}')
+                  && hasCatalogRole(p[3:12])));
+    }
+    // 20MB — аввал чегара умуман йўқ эди; сиқилмаган телефон фотоси ҳам
+    // ўтсин (ёзувчи фақат админ).
+    function catalogImageOk() {
+      return isCatalogAdmin()
+          && request.resource.size < 20 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+    }
+
     // Нон расмлари
     match /bread_images/{name=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if catalogImageOk();
+      allow delete: if isCatalogAdmin();
     }
 
     // Қўшимча маҳсулот расмлари
     match /extra_images/{name=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if catalogImageOk();
+      allow delete: if isCatalogAdmin();
     }
 
-    // Shaharlararo safar kinosi (MP4) — o'qish hammaga; yozish faqat .mp4, ≤400MB.
+    // Shaharlararo safar kinosi (MP4) — o'qish hammaga; yozish faqat admin,
+    // .mp4, ≤400MB (har yuklash 4 GiB transkod ishga tushiradi).
     match /entertainment/{fileName} {
       allow read: if true;
-      allow create: if fileName.matches('.*\\.mp4')
+      allow create: if isCatalogAdmin()
+          && fileName.matches('.*\\.mp4')
           && request.resource.size < 400 * 1024 * 1024
           && request.resource.contentType.matches('video/.*');
       allow update, delete: if false;
@@ -142,19 +183,22 @@ service firebase.storage {
     // Мой/фильтр каталог расмлари (админ upload + илова read).
     match /oil_images/{name=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if catalogImageOk();
+      allow delete: if isCatalogAdmin();
     }
 
     // Таом каталог расмлари
     match /food_images/{name=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if catalogImageOk();
+      allow delete: if isCatalogAdmin();
     }
 
     // Платформа дўкони каталог расмлари (админ upload + илова read).
     match /platform_images/{name=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if catalogImageOk();
+      allow delete: if isCatalogAdmin();
     }
 
     // TV Market видеолари + постер — authed, ≤400MB.

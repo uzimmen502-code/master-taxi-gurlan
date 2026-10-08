@@ -56,6 +56,13 @@ function requestedNetworks(clip) {
     if (raw.map((x) => String(x).toLowerCase()).includes(id)) picked.push(id);
   }
   if (picked.length) return picked;
+  // Эга тармоқ танлаган, лекин уларнинг бирортаси ҳозир қўллаб-
+  // қувватланмайди (масалан, TikTok олиб ташланганидан олдинги
+  // `['tiktok']`) — эга бошқа тармоқларга РОЗИЛИК бермаган: ҳеч қаерга
+  // жойламаймиз. Аввал бу ҳолат `socialConsent` орқали тўрттала тармоққа
+  // тушиб кетарди. Эски, `socialNetworks`сиз клиплар учун `socialConsent`
+  // қоидаси ўзгармаган.
+  if (raw.length > 0) return [];
   if (clip.socialConsent === true) return ORDERED.slice();
   return [];
 }
@@ -602,4 +609,4 @@ function attachTvSocialPublish(exports, deps) {
 
 // `buildCaption` / `socialVideoUrl` — тоза функциялар, тест учун
 // очиқ (қаранг: test/tv_social_caption.test.js).
-module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl };
+module.exports = { attachTvSocialPublish, buildCaption, socialVideoUrl, requestedNetworks };

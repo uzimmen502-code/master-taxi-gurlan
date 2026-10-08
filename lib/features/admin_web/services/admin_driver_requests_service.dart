@@ -66,15 +66,21 @@ class AdminDriverRequestsService {
   }
 
   /// Marshrut / mahalliy / shaharlararo haydovchi bazasini tozalash.
+  ///
+  /// [dryRun] (standart) — server faqat sanaydi, hech narsa o'chirmaydi.
+  /// Ijro uchun `dryRun: false` va admin O'ZI tergan [confirmText].
   Future<({String? error, Map<String, dynamic>? stats})> resetTaxiDriversRegistry({
     required String adminPhone,
+    bool dryRun = true,
+    String confirmText = '',
   }) async {
     try {
       final fn = FirebaseFunctions.instance
           .httpsCallable('adminResetTaxiDriversRegistry');
       final res = await fn.call(<String, dynamic>{
         'adminPhone': adminPhone,
-        'confirmText': 'RESET_TAXI_DRIVERS',
+        'dryRun': dryRun,
+        if (!dryRun) 'confirmText': confirmText.trim(),
       });
       final data = res.data;
       if (data is Map) {

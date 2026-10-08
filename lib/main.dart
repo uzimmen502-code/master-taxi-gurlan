@@ -22,7 +22,6 @@ import 'repositories/carpet_wash_orders_repository.dart';
 import 'repositories/agro_pickup_orders_repository.dart';
 import 'repositories/chat_repository.dart';
 import 'repositories/collection_tasks_repository.dart';
-import 'repositories/couriers_repository.dart';
 import 'repositories/provider_presence_repository.dart';
 import 'repositories/delivery_routes_repository.dart';
 import 'repositories/driver_repository.dart';
@@ -322,9 +321,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             create: (_) => DeliveryRoutesRepository()),
         Provider<CollectionTasksRepository>(
             create: (_) => CollectionTasksRepository()),
-        Provider<CouriersRepository>(create: (_) => CouriersRepository()),
-        // 13.6.3 — ўтиш даври: курьер ҳолати `couriers` ва
-        // `provider_presence` ИККАЛАСИГА ёзилади (`CourierController`).
+        // Курьернинг жонли ҳолати — фақат `provider_presence` (D-CLEAN-1).
         Provider<ProviderPresenceRepository>(
             create: (_) => ProviderPresenceRepository()),
         Provider<SettingsRepository>(create: (_) => SettingsRepository()),

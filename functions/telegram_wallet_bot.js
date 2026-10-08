@@ -412,18 +412,23 @@ function attachTelegramWalletBot(exports, deps) {
     const tokenPhone = String(
         (context.auth.token && context.auth.token.phone_number) || '')
         .replace(/\D/g, '');
+    // Token'da telefon bo'lmasa (anonim sessiya) — rad: aks holda klient
+    // yuborgan begona raqam uchun kod olinib, Telegram o'sha odamning
+    // hamyoniga bog'lanardi.
+    if (!tokenPhone) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Telefon bilan kiring');
+    }
     const uid = canonicalUid(
         (data && (data.phone || data.userPhone)) || tokenPhone);
     if (!uid || uid.length < 12) {
       throw new functions.https.HttpsError('invalid-argument', 'phone kerak');
     }
     // Faqat o'z telefoni uchun kod.
-    if (tokenPhone) {
-      const tokenUid = canonicalUid(tokenPhone);
-      if (tokenUid && tokenUid !== uid) {
-        throw new functions.https.HttpsError(
-            'permission-denied', 'Faqat o\'z raqamingiz');
-      }
+    const tokenUid = canonicalUid(tokenPhone);
+    if (tokenUid !== uid) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Faqat o\'z raqamingiz');
     }
     if (!(await isIdentifiedUser(uid))) {
       throw new functions.https.HttpsError(
@@ -474,17 +479,21 @@ function attachTelegramWalletBot(exports, deps) {
     const tokenPhone = String(
         (context.auth.token && context.auth.token.phone_number) || '')
         .replace(/\D/g, '');
+    // Anonim sessiya begona raqam hamyonidan yechish so'rovini yubora
+    // olmasin — faqat token telefoni egasi.
+    if (!tokenPhone) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Telefon bilan kiring');
+    }
     const uid = canonicalUid(
         (data && (data.phone || data.userPhone)) || tokenPhone);
     if (!uid || uid.length < 12) {
       throw new functions.https.HttpsError('invalid-argument', 'phone kerak');
     }
-    if (tokenPhone) {
-      const tokenUid = canonicalUid(tokenPhone);
-      if (tokenUid && tokenUid !== uid) {
-        throw new functions.https.HttpsError(
-            'permission-denied', 'Faqat o\'z raqamingiz');
-      }
+    const tokenUid = canonicalUid(tokenPhone);
+    if (tokenUid !== uid) {
+      throw new functions.https.HttpsError(
+          'permission-denied', 'Faqat o\'z raqamingiz');
     }
     if (!(await isIdentifiedUser(uid))) {
       throw new functions.https.HttpsError(

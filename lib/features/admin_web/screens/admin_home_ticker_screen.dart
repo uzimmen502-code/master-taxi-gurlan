@@ -137,8 +137,14 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
     }
   }
 
+  // Чегара — rules (`durationSec` 5…120) ва битта матн муҳаррири билан бир
+  // хил. Аввал 3…12 (стандарт 4) эди: 3–4 сония rules'да рад бўлиб, бутун
+  // batch йиқиларди.
+  static const _minDurationSec = 5;
+  static const _maxDurationSec = 120;
+
   Future<void> _openBulkDuration() async {
-    int value = 4;
+    int value = HomeTickerAd.defaultDurationSec;
     final repo = context.read<HomeTickerRepository>();
     final applied = await showDialog<bool>(
       context: context,
@@ -159,7 +165,7 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: value > 3
+                    onPressed: value > _minDurationSec
                         ? () => setLocal(() => value--)
                         : null,
                   ),
@@ -176,13 +182,13 @@ class _AdminHomeTickerScreenState extends State<AdminHomeTickerScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline),
-                    onPressed: value < 12
+                    onPressed: value < _maxDurationSec
                         ? () => setLocal(() => value++)
                         : null,
                   ),
                 ],
               ),
-              const Text('(3–12 сония)',
+              const Text('($_minDurationSec–$_maxDurationSec сония)',
                   style: TextStyle(fontSize: 11, color: Colors.grey)),
             ],
           ),

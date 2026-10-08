@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../models/collection_task.dart';
 import '../../../repositories/collection_tasks_repository.dart';
-import '../../../repositories/couriers_repository.dart';
 import '../../../repositories/delivery_routes_repository.dart';
 import '../../../repositories/orders_repository.dart';
 import '../../../repositories/provider_presence_repository.dart';
@@ -28,7 +27,6 @@ class CourierScreen extends StatelessWidget {
       create: (ctx) => CourierController(
         routesRepo: ctx.read<DeliveryRoutesRepository>(),
         ordersRepo: ctx.read<OrdersRepository>(),
-        couriersRepo: ctx.read<CouriersRepository>(),
         presenceRepo: ctx.read<ProviderPresenceRepository>(),
       )..init(),
       child: const _CourierView(),

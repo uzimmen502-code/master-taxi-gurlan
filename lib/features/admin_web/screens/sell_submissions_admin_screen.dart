@@ -227,17 +227,40 @@ class _SellSubmissionsAdminScreenState extends State<SellSubmissionsAdminScreen>
     }
   }
 
+  /// Ишлай оладиган курьер ҳолатлари — сервердаги
+  /// `LIFECYCLES.courier.working` (`functions_demand/core/capabilities.js`).
+  /// Бу рўйхат фақат танлов учун: ҳақиқий текширувни
+  /// `adminCreateCollectionTask` → `resolveAuthorizedCourierUid` қилади.
+  static const _workingCourierStatuses = [
+    'trial', 'trial_expired', 'document_submitted', 'under_review', 'approved',
+  ];
+
+  /// Курьерлар — `provider_capabilities` (D-CLEAN-1). Эски `couriers`
+  /// ҳужжати ҳуқуқ бермайди: ундан танланган одамни сервер рад этарди.
   Future<List<_CourierOption>> _loadCouriers() async {
-    final snap =
-        await FirebaseFirestore.instance.collection('couriers').get();
-    final list = snap.docs.map((d) {
-      final data = d.data();
-      return _CourierOption(
-        phone: phoneDigits((data['phone'] ?? d.id) as String? ?? d.id),
-        name: (data['name'] ?? '') as String,
-      );
-    }).where((c) => c.phone.isNotEmpty).toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final db = FirebaseFirestore.instance;
+    final snap = await db
+        .collection('provider_capabilities')
+        .where('status.courier', whereIn: _workingCourierStatuses)
+        .limit(200)
+        .get();
+    final phones = <String>{
+      for (final d in snap.docs)
+        ((d.data()['identity'] as Map?)?['primaryUid'] ?? '').toString(),
+    }..remove('');
+    final list = await Future.wait(phones.map((phone) async {
+      // Исм — `users/{телефон}`; эски ҳужжатлар 9 хонали калитда бўлиши мумкин.
+      var name = '';
+      for (final id in [phone, if (phone.length == 12) phone.substring(3)]) {
+        final u = await db.collection('users').doc(id).get();
+        if (u.exists) {
+          name = (u.data()?['name'] ?? '').toString().trim();
+          break;
+        }
+      }
+      return _CourierOption(phone: phone, name: name);
+    }));
+    list.sort((a, b) => a.name.compareTo(b.name));
     return list;
   }
 

@@ -1,14 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../tv_market/models/tv_clip.dart';
 import '../../tv_market/services/tv_social.dart';
-import '../services/admin_auth_service.dart';
 import '../widgets/tv_social_settings_bar.dart';
 
 /// Админ панел — TV Market клиплар модерацияси.
@@ -67,7 +65,8 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
 
   Future<void> _setStatus(TvClip clip, String status, {String reason = ''}) async {
     try {
-      await FirebaseFirestore.instance.collection('tv_clips').doc(clip.id).update({
+      final db = FirebaseFirestore.instance;
+      await db.collection('tv_clips').doc(clip.id).update({
         'status': status,
         if (status == 'blocked') 'rejectReason': reason,
         if (status == 'blocked')
@@ -75,6 +74,18 @@ class _TvClipsModerationScreenState extends State<TvClipsModerationScreen> {
         else
           'rejectReason': FieldValue.delete(),
       });
+      // ҚЎЛДА режимда клип билан бирга яратилган дўкон маҳсулоти ҳам
+      // `pending` бўлади (`tv_publish_screen`), лекин уни ҳеч ким
+      // фаоллаштирмасди — витрина фақат `active`ни кўрсатади. Клип
+      // тасдиқланганда кутаётган маҳсулот ҳам очилади (бошқа ҳолатдаги —
+      // масалан, эгаси ўчирган `deleted` — тегилмайди).
+      if (status == 'active' && clip.shopItemId.isNotEmpty) {
+        final itemRef = db.collection('tv_shop_items').doc(clip.shopItemId);
+        final item = await itemRef.get();
+        if (item.exists && item.data()?['status'] == 'pending') {
+          await itemRef.update({'status': 'active'});
+        }
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

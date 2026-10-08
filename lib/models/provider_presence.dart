@@ -1,7 +1,7 @@
 // `provider_presence/{uid}` — «ҳозир шу ерда, онлайн ва ишга тайёр».
 //
-// Бу МОДЕЛ ЁЗИШ payload'и, ҳаётий модел эмас (`CourierStatus` билан бир
-// хил ёндашув). Ўқиш серверда: `functions_demand/sources/presence_geo.js`.
+// Бу МОДЕЛ ЁЗИШ payload'и, ҳаётий модел эмас. Ўқиш серверда:
+// `functions_demand/sources/presence_geo.js`.
 //
 // ── НЕГА АЛОҲИДА КОЛЛЕКЦИЯ (`couriers` ўрнига) ─────────────────────────
 // `couriers` фақат курьерлар учун ва ўша ҳужжатда исм, телефон, fcmToken

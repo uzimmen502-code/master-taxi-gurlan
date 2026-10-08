@@ -110,6 +110,10 @@ class _JobsAdEditDialogState extends State<_JobsAdEditDialog> {
             priceText: _price.text.trim(),
             address: _address.text.trim(),
             expiresAt: _expiresAt,
+            // Муддат бор эди, админ уни олиб ташлади — CF'га аниқ айтамиз
+            // (null юборилмайди, акс ҳолда эски муддат қолаверарди).
+            clearExpiresAt:
+                _expiresAt == null && widget.ad.expiresAt != null,
             adminNote: _adminNote.text.trim(),
           );
       if (!mounted) return;
@@ -207,7 +211,7 @@ class _JobsAdEditDialogState extends State<_JobsAdEditDialog> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Муддат: $_expiresSummary',
+                'Муддат: ${_expiresSummary()}',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),

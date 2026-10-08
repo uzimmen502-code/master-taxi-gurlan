@@ -40,6 +40,7 @@ class AdminJobsService {
     String? priceText,
     String? address,
     DateTime? expiresAt,
+    bool clearExpiresAt = false,
     String? adminNote,
   }) async {
     await _call('adminUpdateJobAd', {
@@ -52,6 +53,7 @@ class AdminJobsService {
       if (title != null) 'title': title,
       if (priceText != null) 'priceText': priceText,
       if (address != null) 'address': address,
+      if (clearExpiresAt) 'clearExpiresAt': true,
       if (expiresAt != null) 'expiresAt': expiresAt.toUtc().toIso8601String(),
       if (adminNote != null) 'adminNote': adminNote,
     });

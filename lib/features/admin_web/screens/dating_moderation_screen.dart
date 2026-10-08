@@ -361,19 +361,28 @@ class _ReportsTab extends StatelessWidget {
   }) async {
     final adminPhone = _adminPhone(context);
     if (adminPhone.isEmpty) return;
-    if (blockUserId != null && blockUserId.isNotEmpty) {
-      try {
+    final messenger = ScaffoldMessenger.of(context);
+    // Блоклаш муваффақиятсиз бўлса — шикоят ЁПИЛМАЙДИ: аввал хато
+    // ютилиб (`catch (_) {}`), шикоят «ҳал қилинди» бўлиб кетарди, профил
+    // эса очиқ қоларди. Ҳал қилиш хатоси ҳам кўрсатилади.
+    try {
+      if (blockUserId != null && blockUserId.isNotEmpty) {
         await DatingService.adminModerate(
           userId: blockUserId,
           action: 'block',
           reason: 'Шикоят асосида',
         );
-      } catch (_) {}
+      }
+      await AdminDatingService.resolveReport(
+        adminPhone: adminPhone,
+        reportId: reportId,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        backgroundColor: Colors.red,
+        content: Text('Бажарилмади: $e'),
+      ));
     }
-    await AdminDatingService.resolveReport(
-      adminPhone: adminPhone,
-      reportId: reportId,
-    );
   }
 
   @override

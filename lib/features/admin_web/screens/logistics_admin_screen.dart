@@ -435,7 +435,16 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _db.collection('shipments').orderBy('updatedAt', descending: true).limit(100).snapshots(),
+            // «⚠ LEG муддати тугаган» — серверда сараланади: `legProblem.at`
+            // бўйича тартиблаш фақат муаммоли жўнатмаларни қайтаради
+            // (null/майдонсиз ҳужжатлар тушмайди; single-field индекс). Аввал
+            // охирги 100 та янгиланган жўнатма ичидан қидириларди — 100 та
+            // янги жўнатмадан кейин огоҳлантириш кўздан йўқоларди.
+            stream: (_filter == 'leg_problem'
+                    ? _db.collection('shipments').orderBy('legProblem.at', descending: true)
+                    : _db.collection('shipments').orderBy('updatedAt', descending: true))
+                .limit(100)
+                .snapshots(),
             builder: (context, snap) {
               if (snap.hasError) return Center(child: Text('Хато: ${snap.error}'));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
@@ -494,7 +503,17 @@ class _LogisticsAdminScreenState extends State<LogisticsAdminScreen> {
     final replannable = status == 'awaiting_payment' || status == 'ready';
     final cust = s['currentCustodian'] is Map ? s['currentCustodian'] as Map : const {};
     final price = (s['priceSnapshot'] is Map ? (s['priceSnapshot'] as Map)['customerPrice'] : null) ?? 0;
-    final problem = s['legProblem'] is Map ? s['legProblem'] as Map : null;
+    final rawProblem = s['legProblem'] is Map ? s['legProblem'] as Map : null;
+    // Фақат ЖОРИЙ маршрутдаги LEG муаммоси: қайта режалангандан кейин эски
+    // `legProblem` эски LEG'га ишора қилади — уни очиш етим LEG яратарди
+    // (сервер ҳам `leg_superseded` билан рад этади). Бекор/етказилган
+    // жўнатмада ҳам тугма маъносиз.
+    final legIds = s['legIds'] is List ? s['legIds'] as List : const [];
+    final problem = rawProblem != null &&
+            legIds.contains(rawProblem['legId']) &&
+            (status == 'ready' || status == 'in_transit')
+        ? rawProblem
+        : null;
     return Card(
       color: problem != null ? Colors.orange.shade50 : null,
       child: ListTile(

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analytics/daily_report.dart';
@@ -75,10 +76,22 @@ class DailyReportService {
   }
 
   /// Қўлда мажбурий қайта-ясаш — масалан, "Янгилаш" тугмаси.
+  ///
+  /// Серверда (`generateDailyReportNow` CF). Аввал клиент ҳисоботни ўзи
+  /// ясаб `daily_reports`га ёзарди — rules буни рад этади (ёзиш фақат
+  /// Admin SDK), хато ютилиб экран «✅ қайта яратилди» дерди; бунинг
+  /// устига ҳар босишда users/orders тўлиқ ўқиларди.
   Future<DailyReport> forceRegenerate() async {
-    final report = await _repo.generateAndSaveDailyReport();
+    final res = await FirebaseFunctions.instance
+        .httpsCallable('generateDailyReportNow')
+        .call<Map<String, dynamic>>(<String, dynamic>{});
+    final key = (res.data['dateKey'] as String?) ?? dateKeyFor(DateTime.now());
+    final report = await _repo.getDailyReport(key);
+    if (report == null) {
+      throw StateError('DAILY_REPORT_NOT_FOUND: $key');
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastGeneratedKey, dateKeyFor(DateTime.now()));
+    await prefs.setString(_lastGeneratedKey, key);
     return report;
   }
 

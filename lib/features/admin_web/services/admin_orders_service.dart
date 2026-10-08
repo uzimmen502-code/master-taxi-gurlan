@@ -34,11 +34,19 @@ class AdminOrdersService {
   }) async {
     try {
       final fn = _functions.httpsCallable('adminSetOrderStatusBatch');
-      await fn.call(<String, dynamic>{
+      final res = await fn.call<Map<String, dynamic>>(<String, dynamic>{
         'adminPhone': adminPhone,
         'orderIds': orderIds,
         'status': status,
       });
+      // Сервер ҳолати ўзгариб кетган (масалан, мижоз бекор қилган)
+      // буюртмаларни ўтказиб юборади — админ буни билиши керак.
+      final skipped = res.data['skipped'];
+      if (skipped is List && skipped.isNotEmpty) {
+        final done = orderIds.length - skipped.length;
+        return '$done та бажарилди, ${skipped.length} та ўтказиб юборилди '
+            '(ҳолати ўзгарган).';
+      }
       return null;
     } on FirebaseFunctionsException catch (e) {
       return e.message ?? e.code;

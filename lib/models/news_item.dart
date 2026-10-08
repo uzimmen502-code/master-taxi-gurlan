@@ -157,7 +157,12 @@ class NewsItem {
     if (isPersonal) {
       return uid.length >= 9 && phonesMatch(targetUserId, userId);
     }
-    return audiences.contains('all') || audiences.contains(audience);
+    // [audiences] — КЎРУВЧИНИНГ гуруҳлари (`['all', role]`). Хабар
+    // `audience == 'all'` бўлса ҳаммага, акс ҳолда фақат шу гуруҳга. Аввал
+    // `audiences.contains('all')` текширилар ва у доим рост эди — админ
+    // «фақат ҳайдовчиларга» деб юборган хабар ҳамма йўловчиларга ҳам
+    // кўринарди.
+    return audience == 'all' || audience.isEmpty || audiences.contains(audience);
   }
 
   Map<String, dynamic> toCreateMap() => {

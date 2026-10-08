@@ -106,7 +106,10 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
       description: 'Нон ва овқат буюртмалари',
-      access: _SectionAccess.opsAndFinance,
+      // finance/auditor кўрарди, лекин `orders` ўқиш `isStaff()` (admin/
+      // superadmin/dispatcher/staff), статус CF'лари `assertAdmin` —
+      // уларда доска бўш, нишон 0 эди.
+      access: _SectionAccess.ops,
     ),
     _AdminSection(
       label: 'Gilam yuvish',
@@ -244,7 +247,10 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Омбор',
       icon: Icons.warehouse_outlined,
       description: 'Йиғилган маҳсулот қолдиқлари',
-      access: _SectionAccess.opsAndFinance,
+      // `adminGetWarehouseStock` — `assertAdmin` (admin/superadmin/
+      // dispatcher), rules `warehouse_stock` — `isAdmin()`: finance/auditor
+      // учун бўлим доим хато берарди.
+      access: _SectionAccess.ops,
     ),
     _AdminSection(
       label: 'Ҳaйдовчи aризалари',
@@ -1019,22 +1025,26 @@ class _Sidebar extends StatelessWidget {
             .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
+      // `intercity_orders` деган коллекция йўқ (ҳеч ким ёзмайди, rules'да
+      // ҳам йўқ — сўров permission-denied, нишон доим 0 эди). Бронлар
+      // `intercity_bookings`да; ҳайдовчи тасдиғини кутаётганлари `pending`
+      // (`intercityCreateBooking`).
       case 'Shaharlararo':
         return db
-            .collection('intercity_orders')
+            .collection('intercity_bookings')
             .where('status', isEqualTo: 'pending')
+            .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
-      case 'Фойдаланувчилар':
-        return db
-            .collection('risk_events')
-            .where('reviewed', isEqualTo: false)
-            .snapshots()
-            .map((s) => s.docs.length);
+      // «Фойдаланувчилар» экрани risk маълумотини кўрсатмайди — нишон
+      // йўқ. Risk ҳодисалари `status: 'open'` билан ёзилади ва
+      // `resolved` бўлади (`UserRepository`, `detectAnomaly`); `reviewed`
+      // майдонини ҳеч ким ёзмагани учун аввалги сўров доим 0 берарди.
       case 'Risk review':
         return db
             .collection('risk_events')
-            .where('reviewed', isEqualTo: false)
+            .where('status', isEqualTo: 'open')
+            .limit(200)
             .snapshots()
             .map((s) => s.docs.length);
       case 'Молия':

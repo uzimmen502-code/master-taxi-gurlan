@@ -326,8 +326,6 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   }
 
   Future<String?> _adminPhoneForCf() async {
-    if (!widget.embedded) return null;
-
     String? raw;
     try {
       final auth = context.read<AdminAuthService>();
@@ -348,75 +346,72 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     return digits.length >= 9 ? digits : null;
   }
 
+  // Статус ҲАР ДОИМ сервер орқали (`adminSetOrderStatus[Batch]`): ўтиш
+  // текшируви ва рад этишда захира/ҳамён қайтариш фақат CF'да. Аввал
+  // Monitoring Center'дан очилган (`embedded: false`) доска
+  // `OrdersRepository` орқали тўғридан-тўғри ёзарди — шу текширувлар
+  // четлаб ўтиларди.
   Future<bool> _setStatus(String orderId, String status) async {
-    if (widget.embedded) {
-      final adminPhone = await _adminPhoneForCf();
-      if (adminPhone == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.red,
-              content: Text('Админ телефони аниқланмади — қайта киринг'),
-            ),
-          );
-        }
-        return false;
+    final adminPhone = await _adminPhoneForCf();
+    if (adminPhone == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Админ телефони аниқланмади — қайта киринг'),
+          ),
+        );
       }
-      final err = await AdminOrdersService().setOrderStatus(
-        adminPhone: adminPhone,
-        orderId: orderId,
-        status: status,
-      );
-      if (err != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(err),
-            ),
-          );
-        }
-        return false;
-      }
-      return true;
+      return false;
     }
-    await context.read<OrdersRepository>().setOrderStatus(orderId, status);
+    final err = await AdminOrdersService().setOrderStatus(
+      adminPhone: adminPhone,
+      orderId: orderId,
+      status: status,
+    );
+    if (err != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(err),
+          ),
+        );
+      }
+      return false;
+    }
     return true;
   }
 
   Future<bool> _setStatusBatch(List<String> orderIds, String status) async {
-    if (widget.embedded) {
-      final adminPhone = await _adminPhoneForCf();
-      if (adminPhone == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Colors.red,
-              content: Text('Админ телефони аниқланмади — қайта киринг'),
-            ),
-          );
-        }
-        return false;
+    final adminPhone = await _adminPhoneForCf();
+    if (adminPhone == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Админ телефони аниқланмади — қайта киринг'),
+          ),
+        );
       }
-      final err = await AdminOrdersService().setOrderStatusBatch(
-        adminPhone: adminPhone,
-        orderIds: orderIds,
-        status: status,
-      );
-      if (err != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.red,
-              content: Text(err),
-            ),
-          );
-        }
-        return false;
-      }
-      return true;
+      return false;
     }
-    await context.read<OrdersRepository>().setOrderStatusBatch(orderIds, status);
+    final err = await AdminOrdersService().setOrderStatusBatch(
+      adminPhone: adminPhone,
+      orderIds: orderIds,
+      status: status,
+    );
+    if (err != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(err),
+          ),
+        );
+      }
+      return false;
+    }
     return true;
   }
 

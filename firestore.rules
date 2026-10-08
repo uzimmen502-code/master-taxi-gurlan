@@ -1760,7 +1760,10 @@ service cloud.firestore {
     // ══════════════════════════════════════
     match /config/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      // `module_defaults` — фақат `adminSaveModuleConfig` (сервер: ўзгарган
+      // катаклар, конфликт текшируви, `admin_audit`; эга, 2026-10-08).
+      // Клиентдан тўғридан-тўғри ёзиш аудитни четлаб ўтарди.
+      allow write: if isAdmin() && docId != 'module_defaults';
     }
 
     // ══════════════════════════════════════
@@ -1786,14 +1789,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // МФЙ ва туман модул override'и — фақат `adminSaveModuleConfig` (аудит
+    // билан, эга 2026-10-08); клиент ёзуви ёпиқ.
     match /service_area_modules/{areaId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /geo_district_modules/{districtId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     // ══════════════════════════════════════

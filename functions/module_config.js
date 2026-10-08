@@ -27,6 +27,11 @@ const ROLES = ['admin', 'superadmin', 'dispatcher'];
 const MODULE_ID_RE = /^[a-z][a-z0-9_]{1,39}$/;
 const TARGET_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 const MAX_CHANGES = 60;
+const AUDIT_KIND = 'module_config_changed';
+// «Журнал»: `admin_audit` kam yoziladi — `at` bo'yicha oxirgi N tasi
+// o'qilib, `kind` xotirada filtrlanadi (kompozit indeks kerak bo'lmasin).
+const AUDIT_SCAN_LIMIT = 500;
+const AUDIT_MAX_ENTRIES = 100;
 
 /** Dart `ModuleStatus.fromWire` bilan bir xil (noma'lum → hidden). */
 function normalizeStatus(raw) {
@@ -142,14 +147,20 @@ function attachModuleConfig(exportsObj, deps) {
     return {};
   }
 
-  exportsObj.adminSaveModuleConfig = functions.https.onCall(async (data, context) => {
-    const started = Date.now();
+  /** Telefon token + `users/{uid}.role` — `ROLES`dan biri bo'lishi shart. */
+  async function requireAdmin(context) {
     if (!context || !context.auth) throw fail('unauthenticated', 'AUTH_REQUIRED');
     const uid = canonicalUid(callerPhone(context));
     if (!uid || uid.length < 12) throw fail('unauthenticated', 'PHONE_TOKEN_REQUIRED');
     const userSnap = await db.collection('users').doc(uid).get();
     const role = String((userSnap.data() || {}).role || 'user').trim().toLowerCase();
     if (!ROLES.includes(role)) throw fail('permission-denied', 'ADMIN_REQUIRED');
+    return { uid, role };
+  }
+
+  exportsObj.adminSaveModuleConfig = functions.https.onCall(async (data, context) => {
+    const started = Date.now();
+    const { uid, role } = await requireAdmin(context);
 
     const req = parseRequest(data);
     if (req.error) {
@@ -199,7 +210,7 @@ function attachModuleConfig(exportsObj, deps) {
 
         const auditRef = db.collection('admin_audit').doc();
         t.create(auditRef, {
-          kind: 'module_config_changed',
+          kind: AUDIT_KIND,
           actor: uid,
           actorRole: role,
           scope: req.scope,
@@ -225,6 +236,37 @@ function attachModuleConfig(exportsObj, deps) {
       source: req.source, duration: Date.now() - started,
     });
     return { ok: true, ...result };
+  });
+
+  /**
+   * Admin «Журнал»: modul sozlamasi o'zgarishlari, yangisi birinchi.
+   * `admin_audit` klientga yopiq (rules) — boshqa turdagi yozuvlar (PIN
+   * va h.k.) qaytmaydi.
+   */
+  exportsObj.adminListModuleConfigAudit = functions.https.onCall(async (data, context) => {
+    await requireAdmin(context);
+    const raw = Number(data && data.limit);
+    const limit = Number.isInteger(raw) && raw > 0 ? Math.min(raw, AUDIT_MAX_ENTRIES) : 50;
+    const snap = await db.collection('admin_audit')
+      .orderBy('at', 'desc').limit(AUDIT_SCAN_LIMIT).get();
+    const entries = [];
+    for (const d of snap.docs) {
+      const a = d.data() || {};
+      if (a.kind !== AUDIT_KIND) continue;
+      entries.push({
+        id: d.id,
+        actor: a.actor || '',
+        actorRole: a.actorRole || '',
+        scope: a.scope || '',
+        targetId: a.targetId || '',
+        changes: Array.isArray(a.changes) ? a.changes : [],
+        enforce: a.enforce || null,
+        source: a.source || '',
+        at: a.at && typeof a.at.toMillis === 'function' ? a.at.toMillis() : null,
+      });
+      if (entries.length >= limit) break;
+    }
+    return { ok: true, entries };
   });
 }
 

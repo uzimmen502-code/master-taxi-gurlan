@@ -249,6 +249,30 @@ async function main() {
   await check('V hech bir xato so\'rov hech narsa yozmagan', async () =>
     assert.strictEqual(await auditCount(), 0));
 
+  // ── «Журнал» (adminListModuleConfigAudit) ─────────────────────────────
+  await reset();
+  const list = (data, who = ADMIN) => api.adminListModuleConfigAudit.run(data || {}, ctxOf(who));
+  await check('J1 oddiy user → ADMIN_REQUIRED', async () =>
+    assert.strictEqual(await codeOf(list({}, USER)), 'ADMIN_REQUIRED'));
+  await check('J2 faqat modul yozuvlari, yangisi birinchi; boshqa turlar (PIN) qaytmaydi', async () => {
+    await db.collection('admin_audit').add({
+      kind: 'admin_pin_set', actor: ADMIN, target: USER, at: admin.firestore.Timestamp.fromMillis(1000),
+    });
+    await save(one);
+    await save({ scope: 'global', changes: [{ moduleId: 'marshrut', from: 'hidden', to: 'enabled' }] });
+    const r = await list({});
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.entries.length, 2);
+    assert.deepStrictEqual(r.entries.map((e) => e.changes[0].moduleId), ['marshrut', 'local_taxi']);
+    assert.ok(r.entries.every((e) => e.actor === ADMIN && e.scope === 'global'));
+    assert.ok(r.entries[0].at >= r.entries[1].at);
+    assert.ok(!JSON.stringify(r).includes('admin_pin_set'));
+  });
+  await check('J3 limit hurmat qilinadi', async () => {
+    const r = await list({ limit: 1 });
+    assert.strictEqual(r.entries.length, 1);
+  });
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed`);
   process.exit(passed === results.length ? 0 : 1);

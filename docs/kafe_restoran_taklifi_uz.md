@@ -36,7 +36,11 @@
 - **Техник режа (§11–§13):** 1-босқич — ресторан entity + меню, `orders`
   `type: 'restaurant'`, 2 % ledger орқали, етказиш тарифи, курьер олиш
   (pull), ички тест (`internal`) → `public`. Карта тўлови (Click Split) —
-  3-босқич. **Код ҳали ёзилмаган.**
+  3-босқич.
+- **Ҳолат (2026-10-08, кечки — §11.10):** сервер занжири ёзилди ва emulator'да
+  end-to-end исботланди (`75c5713`): buyurtma → qabul (2 %) → kuryer → yetkazish
+  → yakun, 25/25 + rules 13/13 + tariff 22/22. **Deploy қилинмаган.** Flutter
+  экранлари, админ бўлими, курьерларга push — кейинги қадам.
 
 ---
 
@@ -552,6 +556,31 @@ idempotency, push, модул ҳолатлари, админ панел — қа
 4. Hosting (админ бўлими + веб илова) — deploy олдидан ҳамкор сессиялардан жонли SHA сўралади (навбат).
 5. Илова build — эга.
 6. Конфиг: `module_config/restaurants_all` (`internal` + тестерлар) → синов → `public`; `config/module_defaults.restaurants = enabled`; `food = hidden` (§13).
+
+### 11.10 Ҳолат — 2026-10-08 (кечки), commit `75c5713`
+
+D-REST-14 бўйича аввал занжир: сервер қисми ёзилди ва **emulator'да тўлиқ
+занжир исботланди**. Ҳеч нарса deploy қилинмаган.
+
+| Қисм | Файл | Ҳолат |
+|---|---|---|
+| Буюртма занжири (16 callable + 1 жадвал) | `functions/restaurant_orders.js` (`attachRestaurantOrders`) | ✅ ёзилди |
+| Етказиш тарифи + 2 % формула | `functions/restaurant_delivery_tariff.js` | ✅ |
+| Эски йўллар гарди (`courierSubmitPayment`, `customerCancelOrder`, `adminSetOrderStatus`, `courierCreateRoute`, `courierListReadyOrders`, `onOrderCreate/Update`) | `functions/index.js` (8 кичик hunk) | ✅ |
+| Rules: `restaurants` (+`members`, `private`, `menu_*`), `orders` а'зо ўқиши (get/list ажратилган), `order_events`, `private/secrets`, `restaurant_customer_stats`, `restaurant_courier_prefs` | `firestore.rules` | ✅ ёзилди, **deploy йўқ** |
+| Индекслар: `orders(type, courierId, restaurantStatus)`, `orders(type, restaurantStatus, acceptDeadlineAt)`, `orders(restaurantId, createdAt)` | `firestore.indexes.json` | ✅ файлда, **deploy йўқ** (жонли vs файл diff, `--force` йўқ) |
+| Тестлар | `restaurant_orders_cf` **25/25** · `restaurant_rules` **13/13** · `restaurant_delivery_tariff_pure` **22/22** · регрессия `courier_orders_cf` 18/18, `orders_courier_rules` 20/20 | ✅ ишга туширилди |
+| Flutter: мижоз (бош экран бўлими, рўйхат, ресторан саҳифаси, сават, checkout, кузатиш), ресторан панели, курьер рўйхати/олиш/код/якун | `lib/features/restaurants/` | ⏳ кейинги қадам (§12) |
+| Админ: «Кафе-ресторанлар» бўлими (аризалар, буюртмалар, тариф, stage/testers) | `lib/features/admin_web/` | ⏳ |
+| Яқин курьерларга push (`provider_presence` geohash) | `restaurant_orders.js` | ⏳ (ҳозир фақат ресторан а'золари ва мижозга push) |
+| Конфиг: `module_config/restaurants_all` (`internal` + testerIds), `settings/restaurant_delivery` (base/perKm/…), `settings/app.restaurantAutoApprove`, `kKnownModuleIds` + `restaurants` | — | ⏳ эга/админ (deploy'дан кейин) |
+| §13 «Таом» модулини ўчириш | — | ⏳ D-REST-14: занжир клиентда ҳам исботлангач |
+
+Implementation'да аниқлашган қарорлар (PROPOSED, эга бошқача деса ўзгаради):
+`delivery: { mode: ava_courier / own_courier / none, pickup: bool, ownFee{} }`
+(§5.2 даги enum ўрнига); қабул муддати 5 дақ; 3 таймаут → 30 дақ пауза;
+pickup код 4 рақам, 5 уриниш; 2-strike → 30 кун фақат олдиндан тўлов;
+`restaurant_courier_prefs/{uid}` (accountId эмас, телефон калити).
 
 ---
 

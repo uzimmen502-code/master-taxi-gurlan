@@ -14,6 +14,8 @@
  *   - kuryer o'zi mijoz bo'lgan buyurtma: `COURIER_OWN_ORDER`, marshrutga
  *     ham olinmaydi; yig'ib olish vazifasi ham
  *   - suspended kuryer qo'lidagini tugatadi
+ *   - `courierListReadyOrders`: faqat ishlaydigan kuryer, faqat id/MFY/
+ *     koordinata (telefon, ism, manzil, savat — yo'q), o'z buyurtmasi yo'q
  *   - ikki parallel submit → bitta to'lov, bitta yechim, bitta jurnal,
  *     qaytim BIR marta; qayta urinish saqlangan natijani oladi
  *   - sverka: Σdr == Σcr, aktiv == passiv, ledger == bonusBalance
@@ -187,6 +189,50 @@ async function main() {
     }, A), 'COURIER_OWN_ORDER');
     assert.strictEqual(await bonusOf(A), 0);
     assert.strictEqual((await db.collection('collection_tasks').doc('t1').get()).data().status, 'collecting');
+  });
+
+  // ── `ready` ro'yxati (MFY ekrani) — faqat marshrut maydonlari ─────────
+  // Qoida capability kuryerga `orders` ro'yxatini bermaydi va maydonlarni
+  // kesa olmaydi (`functions/test/orders_courier_rules.test.js`).
+  await reset();
+  const listReady = (phone) => call('courierListReadyOrders', {}, phone);
+  await check('courierListReadyOrders: autentifikatsiyasiz — unauthenticated', async () => {
+    await assert.rejects(fns.courierListReadyOrders.run({}, {}), (e) => e.code === 'unauthenticated');
+  });
+  await check('courierListReadyOrders: capability\'siz va suspended — rad (yangi ish yo\'q)', async () => {
+    await expectDenied(listReady(STRANGER));
+    await expectDenied(listReady(S));
+  });
+  await check('courierListReadyOrders: faqat `ready`, o\'z buyurtmasi yo\'q, telefon/ism/manzil/savat YO\'Q', async () => {
+    const at = (ms) => admin.firestore.Timestamp.fromMillis(ms);
+    const pii = { userName: 'Mijoz', address: 'Navoiy 1', items: [{ name: 'Non', count: 2 }], total: 10000 };
+    await db.collection('orders').doc('lr1').set({
+      ...pii, userPhone: CUSTOMER, phone: CUSTOMER, status: 'ready', mfy: 'Navoiy', lat: 41.84, lng: 60.39,
+      createdAt: at(1000),
+    });
+    await db.collection('orders').doc('lr2').set({
+      ...pii, userPhone: CUSTOMER, status: 'ready', mfy: 'Yangiobod', lat: 41.85, lng: 60.4, createdAt: at(2000),
+    });
+    await db.collection('orders').doc('lrNoGeo').set({ ...pii, userPhone: CUSTOMER, status: 'ready' });
+    await db.collection('orders').doc('lrOwn').set({ ...pii, userPhone: A, status: 'ready', mfy: 'Navoiy' });
+    await db.collection('orders').doc('lrOwn9').set({ ...pii, userPhone: '', phone: A.slice(3), status: 'ready' });
+    await db.collection('orders').doc('lrBusy').set({ ...pii, userPhone: CUSTOMER, status: 'in_delivery', courierId: B });
+    const r = await listReady(A);
+    assert.deepStrictEqual(r.orders.map((o) => o.id), ['lr2', 'lr1', 'lrNoGeo'], 'yangisi birinchi, sanasizi oxirida');
+    for (const o of r.orders) {
+      assert.deepStrictEqual(Object.keys(o).sort(), ['createdAtMs', 'id', 'lat', 'lng', 'mfy'], `ortiqcha maydon: ${o.id}`);
+    }
+    assert.deepStrictEqual(r.orders[1], { id: 'lr1', mfy: 'Navoiy', lat: 41.84, lng: 60.39, createdAtMs: 1000 });
+    assert.deepStrictEqual(r.orders[2], { id: 'lrNoGeo', mfy: null, lat: null, lng: null, createdAtMs: null });
+    assert.strictEqual(r.truncated, false);
+  });
+  await check('courierListReadyOrders: ro\'yxatdagi buyurtmadan courierCreateRoute marshrut quradi', async () => {
+    const { orders } = await listReady(B);
+    const ids = orders.map((o) => o.id);
+    assert.ok(ids.includes('lrOwn'), 'A ning buyurtmasi B ga ko\'rinadi');
+    const r = await call('courierCreateRoute', { courierPhone: B, orderedOrderIds: ids }, B);
+    assert.strictEqual(r.count, ids.length, 'ko\'ringan hammasi qabul qilindi');
+    assert.deepStrictEqual((await listReady(A)).orders, [], 'olingandan keyin ro\'yxat bo\'sh');
   });
 
   // ── parallel submit / idempotentlik ──────────────────────────────────

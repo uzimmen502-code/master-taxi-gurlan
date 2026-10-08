@@ -4410,6 +4410,59 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
   }
 });
 
+/** Битта жавобдаги `ready` буюртмалар чегараси (техник ҳимоя, бизнес қоида эмас). */
+const COURIER_READY_ORDERS_LIMIT = 500;
+
+/**
+ * Курьер маршрут қуриш экрани (`courier_mfy_selection_screen.dart`) учун
+ * `ready` буюртмалар — ФАҚАТ маршрутга керакли майдонлар.
+ *
+ * Нега callable: `orders` қоидаси курьерга рўйхат бермайди (`isStaff()`да
+ * `courier` йўқ — D-SERVICE-4 / D-CLEAN-1), қоида эса майдонларни кеса
+ * олмайди: рўйхат очилса, ҳар бир курьер ҲАММА `ready` буюртманинг
+ * телефони, исми, манзили ва саватини оларди (40-қоида). Бу ерда олишдан
+ * олдин фақат `id`, МФЙ ва координата (Google Directions тартиблаши учун)
+ * қайтади; тўлиқ маълумот — буюртма курьер маршрутига тушгандан кейин
+ * (`orders` get қоидаси, `isActiveRouteCourierOfOrder`).
+ *
+ * Ҳуқуқ ва танлов `courierCreateRoute` билан бир хил: 'new' режим
+ * (ишлайдиган capability), `status == 'ready'`, курьернинг ўз буюртмаси
+ * эмас — экранда кўринган буюртмани сервер рад этмасин.
+ */
+exports.courierListReadyOrders = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const caller = callerPhone(context);
+  if (!/^\d{9,}$/.test(caller)) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone required');
+  }
+  const courierId = await resolveAuthorizedCourierUid(caller);
+
+  const snap = await db.collection('orders')
+    .where('status', '==', 'ready')
+    .limit(COURIER_READY_ORDERS_LIMIT)
+    .get();
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const orders = [];
+  snap.forEach((doc) => {
+    const od = doc.data() || {};
+    if (courierAuth.isOwnOrder(od, courierId)) return;
+    const created = od.createdAt && typeof od.createdAt.toMillis === 'function'
+      ? od.createdAt.toMillis()
+      : null;
+    orders.push({
+      id: doc.id,
+      mfy: typeof od.mfy === 'string' ? od.mfy : null,
+      lat: num(od.lat),
+      lng: num(od.lng),
+      createdAtMs: created,
+    });
+  });
+  orders.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+  return { orders, truncated: snap.size >= COURIER_READY_ORDERS_LIMIT };
+});
+
 /**
  * Хавфсизлик тўри: курьерда фаол маршрут йўқ, лекин ўзига бириктирилган
  * `in_delivery` + тўланмаган буюртма(лар) бўлса — улардан автоматик фаол

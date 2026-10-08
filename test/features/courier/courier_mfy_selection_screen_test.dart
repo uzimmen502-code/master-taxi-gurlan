@@ -1,0 +1,129 @@
+import 'package:ava_gurlan/features/courier/screens/courier_mfy_selection_screen.dart';
+import 'package:ava_gurlan/models/order_model.dart';
+import 'package:ava_gurlan/services/courier_route_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// МФЙ экрани `ready` буюртмаларни `courierListReadyOrders` callable'дан
+/// олади: `orders` қоидаси capability курьерга тўғридан-тўғри рўйхат
+/// бермайди (functions/test/orders_courier_rules.test.js).
+class _FakeRouteService implements CourierRouteService {
+  _FakeRouteService(this.responses);
+
+  /// Ҳар чақириқда навбатдаги жавоб (рўйхат ёки хато).
+  final List<Object> responses;
+  int listCalls = 0;
+
+  @override
+  Future<List<OrderModel>> listReadyOrders() async {
+    final r = responses[listCalls < responses.length
+        ? listCalls
+        : responses.length - 1];
+    listCalls += 1;
+    if (r is List<OrderModel>) return r;
+    throw r;
+  }
+
+  @override
+  Future<({String? routeId, int count, String? error})> createRoute({
+    required String courierPhone,
+    required List<String> orderedOrderIds,
+  }) async =>
+      (routeId: null, count: 0, error: 'not used');
+
+  @override
+  Future<({String? routeId, int count, bool revived})> recoverOrphanRoute({
+    required String courierPhone,
+  }) async =>
+      (routeId: null, count: 0, revived: false);
+}
+
+OrderModel _stop(String id, String? mfy) =>
+    CourierRouteService.readyStopFromMap({
+      'id': id,
+      'mfy': mfy,
+      'lat': 41.84,
+      'lng': 60.39,
+      'createdAtMs': 1000,
+    });
+
+Future<void> _pump(WidgetTester tester, _FakeRouteService service) async {
+  await tester.pumpWidget(MaterialApp(
+    home: CourierMfySelectionScreen(routeService: service),
+  ));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  test('readyStopFromMap: faqat marshrut maydonlari, PII bo\'sh', () {
+    final o = CourierRouteService.readyStopFromMap({
+      'id': 'o1',
+      'mfy': 'Navoiy',
+      'lat': 41.84,
+      'lng': 60,
+      'createdAtMs': 1700000000000,
+    });
+    expect(o.id, 'o1');
+    expect(o.mfy, 'Navoiy');
+    expect(o.lat, 41.84);
+    expect(o.lng, 60.0);
+    expect(o.createdAt, DateTime.fromMillisecondsSinceEpoch(1700000000000));
+    expect(o.status, 'ready');
+    expect(o.userPhone, isEmpty);
+    expect(o.userName, isEmpty);
+    expect(o.address, isEmpty);
+    expect(o.items, isEmpty);
+
+    final bare = CourierRouteService.readyStopFromMap({'id': 'o2'});
+    expect(bare.mfy, isNull);
+    expect(bare.hasCoordinates, isFalse);
+    expect(bare.createdAt, isNull);
+  });
+
+  testWidgets('callable ro\'yxati MFY bo\'yicha guruhlanadi', (tester) async {
+    final service = _FakeRouteService([
+      [_stop('a', 'Navoiy'), _stop('b', 'Navoiy'), _stop('c', null)],
+    ]);
+    await _pump(tester, service);
+
+    expect(service.listCalls, 1);
+    expect(find.text('Navoiy — 2 та'), findsOneWidget);
+    expect(find.text('МФЙ аниқланмаган — 1 та'), findsOneWidget);
+
+    await tester.tap(find.text('Navoiy — 2 та'));
+    await tester.pump();
+    expect(find.text('Маршрут яратиш (2 та буюртма)'), findsOneWidget);
+  });
+
+  testWidgets('bo\'sh ro\'yxat — pull-to-refresh qayta oladi', (tester) async {
+    final service = _FakeRouteService([
+      <OrderModel>[],
+      [_stop('a', 'Yangiobod')],
+    ]);
+    await _pump(tester, service);
+    expect(find.text('Фаол буюртма йўқ'), findsOneWidget);
+
+    await tester.fling(
+        find.text('Фаол буюртма йўқ'), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    expect(service.listCalls, 2);
+    expect(find.text('Yangiobod — 1 та'), findsOneWidget);
+  });
+
+  testWidgets('xato ko\'rsatiladi va qayta urinish mumkin', (tester) async {
+    final service = _FakeRouteService([
+      Exception('permission-denied'),
+      [_stop('a', 'Navoiy')],
+    ]);
+    await _pump(tester, service);
+    expect(find.textContaining('Хато:'), findsOneWidget);
+
+    await tester.fling(
+        find.textContaining('Хато:'), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    expect(service.listCalls, 2);
+    expect(find.text('Navoiy — 1 та'), findsOneWidget);
+  });
+}

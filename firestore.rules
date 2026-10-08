@@ -1381,8 +1381,43 @@ service cloud.firestore {
     // ══════════════════════════════════════
     // ORDERS — нон/овқат буюртмалар
     // ══════════════════════════════════════
+    // Курьер ЎЗ ФАОЛ маршрутидаги буюртмани ўқийди (`courier_controller.dart`
+    // → `getByIds(route.orderIds)`). `courier` — `isStaff()`да эмас
+    // (D-SERVICE-4 / D-CLEAN-1), шунинг учун 2026-10-06 дан бери capability
+    // курьер ўз маршрутини ҳам оча олмасди.
+    //
+    // Ишонч манбаи — сервер ёзган майдонлар: `courierId` ва `deliveryRouteId`
+    // ни фақат `courierCreateRoute` / `courierRecoverOrphanRoute` ёзади
+    // (клиент `update`и фақат staff'га), маршрутнинг `courierId`ни курьер
+    // ўзгартира олмайди (`delivery_routes` қоидаси). Маршрут тугагач
+    // (`completed`) ўқиш ёпилади — мижоз телефони/манзили курьерда абадий
+    // очиқ қолмасин (40-қоида).
+    //
+    // `ready` РЎЙХАТИ бу ердан ОЧИЛМАЙДИ: қоида майдонларни кеса олмайди,
+    // курьерга эса олишдан олдин фақат МФЙ ва координата керак —
+    // `courierListReadyOrders` callable.
+    //
+    // Тест: functions/test/orders_courier_rules.test.js
+    function isActiveRouteCourierOfOrder() {
+      let me = userDocIdFromPhoneToken();
+      let routeId = resource.data.get('deliveryRouteId', '');
+      let routePath = /databases/$(database)/documents/delivery_routes/$(routeId);
+      return me != ''
+          && routeId is string && routeId != ''
+          && phoneDocIdsMatch(me, string(resource.data.get('courierId', '')))
+          && exists(routePath)
+          && get(routePath).data.get('status', '') in ['ready', 'active']
+          && phoneDocIdsMatch(me, string(get(routePath).data.get('courierId', '')));
+    }
+
     match /orders/{orderId} {
-      allow read: if isAuth() && (
+      allow get: if isAuth() && (
+          isStaff()
+          || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
+          || isActiveRouteCourierOfOrder()
+      );
+      // `list` — курьер йўли ЙЎҚ (юқорига қаранг).
+      allow list: if isAuth() && (
           isStaff()
           || phoneDocIdsMatch(phoneFromToken(), phoneDigits(resource.data.userPhone))
       );

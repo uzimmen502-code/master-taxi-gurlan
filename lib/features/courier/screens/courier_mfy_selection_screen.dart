@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/order_model.dart';
-import '../../../repositories/orders_repository.dart';
 import '../../../services/courier_delivery_route_optimizer.dart';
 import '../../../services/courier_route_service.dart';
 import '../../../services/location_service.dart';
@@ -26,10 +25,15 @@ class _MfyGroup {
 }
 
 /// Kuryer marshrut qurishdan oldin faol (`ready`) buyurtmalardan MFY tanlash.
+///
+/// Рўйхат — `courierListReadyOrders` callable (фақат id/МФЙ/координата).
+/// Аввал `orders where status == 'ready'` оқими эди: `courier` `isStaff()`дан
+/// чиқарилгач (D-SERVICE-4 / D-CLEAN-1) қоида уни capability курьерга рад
+/// этади, очиш эса ҳар бир курьерга бутун буюртма ҳужжатини берарди.
 class CourierMfySelectionScreen extends StatefulWidget {
-  const CourierMfySelectionScreen({super.key, this.ordersRepo});
+  const CourierMfySelectionScreen({super.key, this.routeService});
 
-  final OrdersRepository? ordersRepo;
+  final CourierRouteService? routeService;
 
   @override
   State<CourierMfySelectionScreen> createState() =>
@@ -39,11 +43,43 @@ class CourierMfySelectionScreen extends StatefulWidget {
 class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
   static const Color _btn = AppColors.primaryDark;
 
-  late final OrdersRepository _ordersRepo =
-      widget.ordersRepo ?? OrdersRepository();
   final CourierDeliveryRouteOptimizer _optimizer =
       CourierDeliveryRouteOptimizer();
-  final CourierRouteService _routeService = CourierRouteService();
+  late final CourierRouteService _routeService =
+      widget.routeService ?? CourierRouteService();
+  late Future<List<OrderModel>> _readyOrders = _routeService.listReadyOrders();
+
+  /// Рўйхатни қайта олиш: pull-to-refresh ва маршрут яратилмаганда
+  /// (буюртмани бошқа курьер олиб улгурган бўлиши мумкин).
+  Future<void> _reload() async {
+    final next = _routeService.listReadyOrders();
+    setState(() {
+      _readyOrders = next;
+    });
+    try {
+      await next;
+    } catch (_) {
+      // Хато FutureBuilder'да кўрсатилади.
+    }
+  }
+
+  /// Бўш ёки хато ҳолатда ҳам pull-to-refresh ишласин.
+  Widget _refreshable(Widget child) {
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: constraints.maxHeight,
+              child: Center(child: child),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   final Set<String> _selectedMfyKeys = {};
   bool _optimizing = false;
@@ -231,6 +267,7 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        await _reload();
         return;
       }
 
@@ -272,16 +309,20 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
         foregroundColor: AppColors.onPrimary,
         elevation: 0,
       ),
-      body: StreamBuilder<List<OrderModel>>(
-        stream: _ordersRepo.watchReadyOrders(),
+      body: FutureBuilder<List<OrderModel>>(
+        future: _readyOrders,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          // Қайта олишда эски рўйхат/хато кўриниб туради (FutureBuilder
+          // уни сақлайди) — спиннер фақат биринчи юкланишда.
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData &&
+              !snapshot.hasError) {
             return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
+            return _refreshable(
+              Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   'Хато: ${snapshot.error}',
@@ -294,8 +335,8 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
 
           final orders = snapshot.data ?? const [];
           if (orders.isEmpty) {
-            return Center(
-              child: Text(
+            return _refreshable(
+              Text(
                 'Фаол буюртма йўқ',
                 style: TextStyle(
                   fontSize: 16,
@@ -314,67 +355,73 @@ class _CourierMfySelectionScreenState extends State<CourierMfySelectionScreen> {
               Column(
                 children: [
                   Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: groups.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final group = groups[index];
-                        final isSelected = _selectedMfyKeys.contains(group.key);
-                        return Material(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          child: InkWell(
+                    child: RefreshIndicator(
+                      onRefresh: _reload,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(12),
+                        itemCount: groups.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final group = groups[index];
+                          final isSelected =
+                              _selectedMfyKeys.contains(group.key);
+                          return Material(
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            onTap: _optimizing
-                                ? null
-                                : () {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _selectedMfyKeys.remove(group.key);
-                                      } else {
-                                        _selectedMfyKeys.add(group.key);
-                                      }
-                                    });
-                                  },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${group.label} — ${group.orders.length} та',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _optimizing
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        if (isSelected) {
+                                          _selectedMfyKeys.remove(group.key);
+                                        } else {
+                                          _selectedMfyKeys.add(group.key);
+                                        }
+                                      });
+                                    },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${group.label} — ${group.orders.length} та',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  Checkbox(
-                                    value: isSelected,
-                                    activeColor: AppColors.primary,
-                                    onChanged: _optimizing
-                                        ? null
-                                        : (_) {
-                                            setState(() {
-                                              if (isSelected) {
-                                                _selectedMfyKeys
-                                                    .remove(group.key);
-                                              } else {
-                                                _selectedMfyKeys.add(group.key);
-                                              }
-                                            });
-                                          },
-                                  ),
-                                ],
+                                    Checkbox(
+                                      value: isSelected,
+                                      activeColor: AppColors.primary,
+                                      onChanged: _optimizing
+                                          ? null
+                                          : (_) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedMfyKeys
+                                                      .remove(group.key);
+                                                } else {
+                                                  _selectedMfyKeys
+                                                      .add(group.key);
+                                                }
+                                              });
+                                            },
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
                   SafeArea(

@@ -22,6 +22,7 @@
     "test:payout-rules": "node test/payout_requests_rules.test.js",
     "test:couriers-rules": "node test/couriers_rules.test.js",
     "test:routes-rules": "node test/delivery_routes_rules.test.js",
+    "test:orders-courier-rules": "node test/orders_courier_rules.test.js",
     "test:notifications-rules": "node test/notifications_rules.test.js",
     "test:birthdate-rules": "node test/birthdate_requests_rules.test.js",
     "test:device-bindings-rules": "node test/device_bindings_rules.test.js",

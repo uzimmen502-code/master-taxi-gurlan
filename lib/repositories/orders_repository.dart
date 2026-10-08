@@ -141,7 +141,9 @@ class OrdersRepository {
         .map((s) => s.docs.map(OrderModel.fromDoc).toList());
   }
 
-  /// Kuryer marshrut qurish: faqat `ready` statusdagi barcha buyurtmalar.
+  /// Админ курьер доскаси: `ready` статусдаги барча буюртмалар (тўлиқ ҳужжат).
+  /// Фақат staff учун — `orders` қоидаси курьерга бу рўйхатни бермайди;
+  /// курьер иловаси `CourierRouteService.listReadyOrders`ни ишлатади.
   Stream<List<OrderModel>> watchReadyOrders() {
     return _col
         .where('status', isEqualTo: 'ready')

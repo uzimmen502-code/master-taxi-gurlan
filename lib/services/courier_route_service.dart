@@ -1,11 +1,49 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../models/order_model.dart';
+
 /// Kuryer o'zi MFY tanlab `delivery_routes` yaratadi (Cloud Function).
 class CourierRouteService {
   CourierRouteService({FirebaseFunctions? functions})
       : _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFunctions _functions;
+
+  /// Маршрут қуриш экрани учун `ready` буюртмалар (`courierListReadyOrders`).
+  ///
+  /// `orders` қоидаси курьерга рўйхат бермайди: қоида майдонларни кеса
+  /// олмайди, сервер эса олишдан олдин ФАҚАТ `id`, МФЙ ва координатани
+  /// қайтаради — мижоз телефони, исми, манзили ва савати курьерга буюртма
+  /// маршрутига тушгандан кейин очилади (40-қоида). Шунинг учун қайтган
+  /// [OrderModel]ларнинг бошқа майдонлари бўш.
+  Future<List<OrderModel>> listReadyOrders() async {
+    final result =
+        await _functions.httpsCallable('courierListReadyOrders').call();
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final raw = (data['orders'] as List?) ?? const [];
+    return [
+      for (final m in raw.whereType<Map>())
+        readyStopFromMap(Map<String, dynamic>.from(m)),
+    ];
+  }
+
+  /// `courierListReadyOrders` элементи → [OrderModel] (фақат маршрут майдонлари).
+  static OrderModel readyStopFromMap(Map<String, dynamic> m) {
+    final createdMs = (m['createdAtMs'] as num?)?.toInt();
+    return OrderModel(
+      id: (m['id'] ?? '') as String,
+      type: '',
+      total: 0,
+      status: 'ready',
+      items: const [],
+      mfy: m['mfy'] as String?,
+      lat: (m['lat'] as num?)?.toDouble(),
+      lng: (m['lng'] as num?)?.toDouble(),
+      createdAt: createdMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(createdMs),
+    );
+  }
 
   Future<({String? routeId, int count, String? error})> createRoute({
     required String courierPhone,

@@ -32,6 +32,7 @@
     "test:presence-rules": "node test/provider_presence_rules.test.js",
     "test:courier-push": "node test/courier_push.test.js",
     "test:self-approval": "node test/self_approval_rules.test.js",
+    "test:driver-work-rules": "node test/driver_work_patch_rules.test.js",
     "test:caps-rules": "node test/provider_capabilities_rules.test.js",
     "test:taxi-billing": "node test/taxi_billing_pure.test.js",
     "test:taxi-billing-rules": "node test/taxi_billing_rules.test.js",

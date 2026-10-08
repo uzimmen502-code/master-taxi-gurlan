@@ -425,46 +425,46 @@ service cloud.firestore {
           && taxiTypeDeclared(driverId, taxiType);
     }
 
-    function driverWorkPatchOnly(driverId) {
-      return approvedDriverForTaxi(driverId, resource.data.taxiType)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly([
-                'isAvailable', 'todayFrom', 'todayTo', 'seatsLeft', 'seats',
-                'stops', 'startTime', 'taxiType',
-                'updatedAt', 'isOnline', 'isBusy', 'lat', 'lng',
-                'actualOnlineAt', 'queueEligibleAt', 'plannedStartAt',
-                'todayTrips', 'todayRejects', 'todayTimeouts'
-              ]);
+    // HAYDOVCHI ISH HOLATI — BEGONA YOZUV (2026-10-08 topilma).
+    //
+    // Avval `driverWorkPatchOnly` / `marshrutDriverRegisterPatch` /
+    // `scheduleLifecyclePatchOnly` / `queueGuestDispatchPatchOnly` faqat
+    // MAQSAD haydovchining capability'sini va maydon NOMLARINI tekshirardi —
+    // kim yozayotganini emas. Istalgan klient (hatto kirmagan) istalgan
+    // haydovchini offline qilar, GPS'ini siljitar, o'rinlarini 0 qilar,
+    // marshrut haydovchining telefoni/raqamini almashtirar edi.
+    //
+    // Haydovchining O'Z yozuvlari `isOwner(...)` shoxchasidan o'tadi (ilova
+    // ≥1.0.10 telefon custom-token bilan kiradi). Begona yozuvdan faqat
+    // marshrut YO'LOVCHISI oqimi qoldi — u haydovchiga tegishli hujjatni
+    // klientdan yozadi (`rides_repository.dart`):
+    //   P1 offer timeout     → todayTimeouts +1     (`_applyDispatchPolicy`)
+    //   P2/P3 bekor (accepted) → isBusy:false, o'rin +1 (`cancelMarshrutByPassenger`,
+    //                          `_cancelMarshrutTripInTransaction`)
+    // Shuning uchun begona yozuv: telefon sessiyasi SHART va aynan shu
+    // shakl/qiymat. Qoldiq (kirgan begona isBusy:false / +1 qila oladi)
+    // yo'lovchi oqimi CF'ga ko'chgandan keyin yopiladi — `isOwner` ga.
+    // Test: functions/test/driver_work_patch_rules.test.js
+    function phoneSession() {
+      return isAuth() && phoneFromToken() != '';
     }
 
-    // Marshrut haydovchi ro'yxatdan o'tish (Phone Auth yo'q; driverId = telefon).
-    function marshrutDriverRegisterPatch(driverId) {
-      return approvedDriverForTaxi(driverId, 'marshrut')
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly([
-                'name', 'phone', 'car', 'plate', 'taxiType',
-                'seats', 'stops', 'isOnline', 'isAvailable', 'seatsLeft',
-                'startTime', 'plannedStartAt', 'todayTrips', 'todayRejects',
-                'todayTimeouts', 'todayFrom', 'todayTo', 'updatedAt'
-              ]);
+    function driverPassengerDispatchPatch(driverId) {
+      let d = request.resource.data;
+      let keys = d.diff(resource.data).affectedKeys();
+      return phoneSession()
+          && approvedDriverForTaxi(driverId, resource.data.taxiType)
+          && keys.hasOnly(['isBusy', 'todayTimeouts', 'updatedAt'])
+          && (!('isBusy' in keys) || d.isBusy == false)
+          && (!('todayTimeouts' in keys)
+              || d.todayTimeouts == resource.data.get('todayTimeouts', 0) + 1);
     }
 
-    function marshrutDriverProfileGuestWriteOk(userId, profileId) {
-      let allowedKeys = [
-        'carModel', 'plate', 'seats', 'stops', 'startTime',
-        'driverName', 'driverPhone', 'updatedAt',
-        'isActive', 'approvedFromApplication'
-      ];
-      return profileId == 'marshrut'
-          && approvedDriverForTaxi(userId, 'marshrut')
-          && (
-            !resource.exists
-              ? request.resource.data.keys().hasAll(['carModel', 'plate', 'seats', 'stops'])
-                  && request.resource.data.keys().hasOnly(allowedKeys)
-              : request.resource.data.diff(resource.data).affectedKeys()
-                  .hasOnly(allowedKeys)
-          );
-    }
+    // `marshrutDriverRegisterPatch()` va `marshrutDriverProfileGuestWriteOk()`
+    // OLIB TASHLANDI (2026-10-08): ikkalasida ham auth yo'q edi. Ilovada
+    // ularga tayanadigan begona yozuv YO'Q — ro'yxatdan o'tishni haydovchi
+    // o'zi qiladi (`isOwner`). `driverProfiles` dagisi baribir hech qachon
+    // ishlamasdi: `resource.exists` qoidalarda xato beradi.
 
     // 13.6.4 (0b) — `driverApprovalPatchOnly()` ОЛИБ ТАШЛАНДИ.
     //
@@ -511,14 +511,30 @@ service cloud.firestore {
           .hasAny(['approved', 'approvalStatus', 'approvedAt', 'approvedBy']);
     }
 
-    function scheduleLifecyclePatchOnly() {
-      return approvedDriverForTaxi(resource.data.driverId, resource.data.taxiType)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly([
-                'isActive', 'seatsLeft', 'updatedAt', 'direction',
-                'lat', 'lng', 'actualOnlineAt', 'queueEligibleAt',
-                'plannedStartAt', 'todayTrips', 'todayRejects', 'todayTimeouts'
-              ]);
+    // Begona (yo'lovchi) jadval yozuvi — `driverPassengerDispatchPatch`
+    // izohiga qarang. O'rin faqat +1 (bekor qilingan safar qaytaradi),
+    // klient `seats` gacha clamp qiladi; buzilgan ma'lumotda
+    // (seatsLeft > seats) clamp `seats` ga tushiradi.
+    function scheduleSeatReturnOk() {
+      let d = request.resource.data;
+      let prevLeft = resource.data.get('seatsLeft', 0);
+      let cap = resource.data.get('seats', 0);
+      return d.seatsLeft is int
+          && (
+            (d.seatsLeft == prevLeft + 1 && (cap <= 0 || d.seatsLeft <= cap))
+            || (cap > 0 && prevLeft > cap && d.seatsLeft == cap)
+          );
+    }
+
+    function schedulePassengerDispatchPatch() {
+      let d = request.resource.data;
+      let keys = d.diff(resource.data).affectedKeys();
+      return phoneSession()
+          && approvedDriverForTaxi(resource.data.driverId, resource.data.taxiType)
+          && keys.hasOnly(['seatsLeft', 'todayTimeouts', 'updatedAt'])
+          && (!('seatsLeft' in keys) || scheduleSeatReturnOk())
+          && (!('todayTimeouts' in keys)
+              || d.todayTimeouts == resource.data.get('todayTimeouts', 0) + 1);
     }
 
     function marshrutDispatchEventCreateOk() {
@@ -731,11 +747,13 @@ service cloud.firestore {
           );
     }
 
-    // Marshrut dispatch ҳозир client transaction'лар билан queue'ни sync қилади.
-    // Phone Auth тўлиқ жорий қилинмагунча фақат dispatch/queue lifecycle
-    // майдонларини чекланган patch сифатида рухсат қиламиз.
-    function queueGuestDispatchPatchOnly() {
-      return !isAuth()
+    // Marshrut dispatch ҳозир client transaction'лар билан queue'ни sync қилади
+    // (йўловчи: timeout ҳисоби, бекор қилинганда ўрин). Аввал бу ерда
+    // `!isAuth()` эди — яъни фақат КИРМАГАН клиентга рухсат; энди телефон
+    // сессияси шарт (`driverPassengerDispatchPatch` изоҳи, 2026-10-08).
+    function queueGuestDispatchPatchOnly(driverId) {
+      return phoneSession()
+          && approvedDriverForTaxi(driverId, resource.data.get('taxiType', ''))
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly([
                 'seatsLeft', 'isActive', 'updatedAt',
@@ -880,8 +898,7 @@ service cloud.firestore {
       //
       // Тест: functions/test/marshrut_misc_rules.test.js
       allow read: if isOwner(userId) || isAdmin();
-      allow create, update: if isOwner(userId) || isAdmin()
-          || marshrutDriverProfileGuestWriteOk(userId, profileId);
+      allow create, update: if isOwner(userId) || isAdmin();
       allow delete: if false;
     }
 
@@ -1079,13 +1096,14 @@ service cloud.firestore {
       // ишга чиқиш/онлайн ҳолати майдонларини ўзгартиришга рухсат.
       //
       // `driverApprovalPatchOnly()` ОЛИБ ТАШЛАНДИ — 429-қатордаги
-      // изоҳга қаранг. Қолган иккита ёрдамчи `approvedDriverForTaxi()`
-      // ни талаб қилади, яъни ҳужжат АЛЛАҚАЧОН тасдиқланган бўлиши
-      // керак — улар ҳуқуқ бермайди, фақат иш ҳолатини ўзгартиради.
+      // изоҳга қаранг. `driverWorkPatchOnly()` ва
+      // `marshrutDriverRegisterPatch()` ҳам (2026-10-08): уларда auth йўқ
+      // эди — ҳар ким исталган ҳайдовчини offline қилар, телефонини
+      // алмаштирарди. Бегона ёзувдан фақат йўловчи dispatch шакли қолди —
+      // `driverPassengerDispatchPatch()` изоҳига қаранг.
       allow update: if isAdmin()
           || (isOwner(driverId) && driverApprovalFieldsUntouched())
-          || driverWorkPatchOnly(driverId)
-          || marshrutDriverRegisterPatch(driverId);
+          || driverPassengerDispatchPatch(driverId);
 
       // Ўчириш — йўқ
       allow delete: if false;
@@ -1187,11 +1205,16 @@ service cloud.firestore {
           || ('releasedAt' in prev && prev.releasedAt is timestamp
               && prev.releasedAt + duration.value(3, 'm') > request.time);
 
+      // Haydovchi ≠ yo'lovchi (2026-10-08): avval haydovchi O'Z buyurtmasini
+      // qabul qilib, `completeLocalTrip` orqali yakunlay olardi — hamyon
+      // ko'chmaydi (CF tekshiradi), lekin yo'lovchi bekor-blokini
+      // (`resetLocalTaxiCancelBlock`) va safar statistikasini soxtalashtirardi.
       let isBroadcastAccept = prev.status == 'searching'
           && searchOpen
           && d.status == 'accepted'
           && uid == d.acceptedDriverId
           && uid == d.driverId
+          && !phoneDocIdsMatch(uid, phoneDigits(prev.get('userPhone', '')))
           && approvedDriverForTaxi(uid, prev.taxiType)
           && affectedKeys.hasOnly(localTripDriverAcceptFields());
 
@@ -1375,7 +1398,9 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasAll(['driverId', 'taxiType', 'date', 'seats', 'isActive'])
           && (isOwner(request.resource.data.driverId) || isAdmin())
           && taxiCanPublish(request.resource.data.driverId, request.resource.data.taxiType);
-      allow update: if isAdmin() || isOwner(resource.data.driverId) || scheduleLifecyclePatchOnly();
+      // Begona yozuv — faqat yo'lovchi dispatch shakli (2026-10-08;
+      // avval `scheduleLifecyclePatchOnly()` auth'siz jadvalni o'chirardi).
+      allow update: if isAdmin() || isOwner(resource.data.driverId) || schedulePassengerDispatchPatch();
       allow delete: if false;
     }
 
@@ -1928,12 +1953,12 @@ service cloud.firestore {
             && request.resource.data.driverId == driverId
             && taxiCanPublish(driverId, request.resource.data.taxiType)
           );
+      // Oxirgi shoxcha OLIB TASHLANDI (2026-10-08): `driverId` o'zgarmasa
+      // va capability bo'lsa — auth'siz HAR QANDAY maydon (driverPhone ham,
+      // yo'lovchi aynan shu raqamga qo'ng'iroq qiladi). Begona yozuv endi
+      // faqat dispatch maydonlari va telefon sessiyasi bilan.
       allow update: if isOwner(driverId) || isAdmin()
-          || queueGuestDispatchPatchOnly()
-          || (
-            request.resource.data.driverId == driverId
-            && approvedDriverForTaxi(driverId, request.resource.data.taxiType)
-          );
+          || queueGuestDispatchPatchOnly(driverId);
       allow delete: if false;
     }
 

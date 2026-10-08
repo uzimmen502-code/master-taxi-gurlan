@@ -169,16 +169,11 @@ service cloud.firestore {
               ]);
     }
 
-    // ⚠️ Still weak — proper fix requires Phone Auth on mobile client.
-    // Until then: only allow if request comes with auth (anonymous or phone).
-    function usersWebLooseDriverPromotion() {
-      return isAuth()
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['role', 'updatedAt'])
-          && request.resource.data.role == 'driver'
-          && (!('role' in resource.data)
-              || resource.data.role in ['user', '']);
-    }
+    // `usersWebLooseDriverPromotion` ОЛИБ ТАШЛАНДИ (ҳамён аудити 2026-10-07,
+    // K-6): исталган сессия (аноним ҳам) ИСТАЛГАН `users` ҳужжатига
+    // `role: 'driver'` ёза оларди, `creditChange` эса шу ролга ишонарди.
+    // Клиент бу ёзувни 2026-06-14 (`a6a0ac3`) дан бери ишлатмайди —
+    // ҳайдовчи ролини сервер (Admin SDK) тасдиқда беради.
 
   // Haydovchi o'zi yo'lovchi rejimiga qaytishi (admin tasdiqlashsiz).
     function usersLeaveDriverDemotion() {
@@ -782,8 +777,7 @@ service cloud.firestore {
       allow update: if (
           walletFieldsUntouched()
           && (
-            usersWebLooseDriverPromotion()
-            || usersLeaveDriverDemotion()
+            usersLeaveDriverDemotion()
             // `usersCourierRolePromotion`/`usersLeaveCourierDemotion` ОЛИБ
             // ТАШЛАНДИ (D-SERVICE-4, D-CLEAN-1): курьерлик — `role` эмас,
             // `provider_capabilities.courier`. Ўзига `role: 'courier'`

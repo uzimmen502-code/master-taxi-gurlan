@@ -1,0 +1,121 @@
+/**
+ * `users/{id}.role` — ўзига `driver` ролини ёзиш (ҳамён аудити 2026-10-07, K-6).
+ *
+ * `usersWebLooseDriverPromotion()` исталган аутентификацияланган (аноним
+ * ҳам) сессияга ИСТАЛГАН `users` ҳужжатида `role: 'driver'` ёзишга рухсат
+ * берарди. `creditChange` шу ролга ишонгани учун бу ҳар кимга чексиз кредит
+ * эди. Клиент бу ёзувни 2026-06-14 (`a6a0ac3`) дан бери ишлатмайди —
+ * ҳайдовчи ролини сервер (Admin SDK) тасдиқда беради.
+ *
+ * Тест тешикни ҳам, ҚОНУНИЙ оқимларни ҳам қулфлайди: эга профилини
+ * ўзгартириши, ҳайдовчининг ўзи `user`га қайтиши, админ роль бериши.
+ *
+ *   firebase emulators:exec --only firestore --project demo-rules-test \
+ *     "node functions/test/users_role_rules.test.js"
+ */
+'use strict';
+const path = require('path');
+const fs = require('fs');
+const {
+  initializeTestEnvironment,
+  assertSucceeds,
+  assertFails,
+} = require('@firebase/rules-unit-testing');
+
+const RULES_PATH = path.join(__dirname, '..', '..', 'firestore.rules');
+const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
+const [HOST, PORT] = EMULATOR_HOST.split(':');
+
+const ADMIN = '998901112233';
+const ATTACKER = '998902223344';
+const VICTIM = '998906667788';
+const DRIVER = '998903334455';
+
+async function main() {
+  const testEnv = await initializeTestEnvironment({
+    projectId: 'rules-test-users-role',
+    firestore: {
+      rules: fs.readFileSync(RULES_PATH, 'utf8'),
+      host: HOST,
+      port: Number(PORT),
+    },
+  });
+
+  const results = [];
+  async function check(name, fn) {
+    try {
+      await fn();
+      results.push(true);
+      console.log(`PASS - ${name}`);
+    } catch (e) {
+      results.push(false);
+      console.log(`FAIL - ${name} :: ${e.message}`);
+    }
+  }
+
+  async function seed() {
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await db.doc(`users/${ADMIN}`).set({ phone: ADMIN, role: 'admin' });
+      await db.doc(`users/${ATTACKER}`).set({ phone: ATTACKER, role: 'user', bonusBalance: 0 });
+      await db.doc(`users/${VICTIM}`).set({ phone: VICTIM, role: 'user', bonusBalance: 5000 });
+      await db.doc(`users/${DRIVER}`).set({ phone: DRIVER, role: 'driver' });
+    });
+  }
+  const phoneCtx = (p) => testEnv.authenticatedContext(`uid_${p}`, { phone_number: `+${p}` }).firestore();
+  const anonCtx = () => testEnv.authenticatedContext('anon_1', {
+    firebase: { sign_in_provider: 'anonymous' },
+  }).firestore();
+  const now = new Date();
+
+  // ─── Тешик ──────────────────────────────────────────────────────────
+  await seed();
+  await check('R1 o\'z hujjatiga role:\'driver\' yozish — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ role: 'driver', updatedAt: now }));
+  });
+  await seed();
+  await check('R2 anonim sessiya begona hujjatga role:\'driver\' — RAD', async () => {
+    await assertFails(anonCtx().doc(`users/${VICTIM}`)
+        .update({ role: 'driver', updatedAt: now }));
+  });
+  await seed();
+  await check('R3 telefonli foydalanuvchi begona hujjatga role:\'driver\' — RAD', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${VICTIM}`)
+        .update({ role: 'driver' }));
+  });
+
+  // ─── Қонуний оқимлар (regression) ───────────────────────────────────
+  await seed();
+  await check('R4 egasi o\'z ismini o\'zgartiradi — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ name: 'Ali', updatedAt: now }));
+  });
+  await seed();
+  await check('R5 haydovchi o\'zi yo\'lovchiga qaytadi (driver → user) — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(DRIVER).doc(`users/${DRIVER}`)
+        .update({ role: 'user', updatedAt: now }));
+  });
+  await seed();
+  await check('R6 admin foydalanuvchiga role:\'driver\' beradi — ruxsat', async () => {
+    await assertSucceeds(phoneCtx(ADMIN).doc(`users/${VICTIM}`)
+        .update({ role: 'driver', updatedAt: now }));
+  });
+  await seed();
+  await check('R7 egasi bonusBalance\'ga tega olmaydi (o\'zgarmagan himoya)', async () => {
+    await assertFails(phoneCtx(ATTACKER).doc(`users/${ATTACKER}`)
+        .update({ bonusBalance: 1000000 }));
+  });
+
+  await testEnv.cleanup();
+  const passed = results.filter(Boolean).length;
+  const failed = results.length - passed;
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error('FATAL', e);
+  process.exit(1);
+});

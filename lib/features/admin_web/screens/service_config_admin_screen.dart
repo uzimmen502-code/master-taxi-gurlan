@@ -38,7 +38,7 @@ const Map<String, String> _moduleLabels = {
   'courier': 'Kuryer',
   'food': 'Ovqat',
   'jobs': 'ИШ ЭЪЛОН',
-  'cheap_products_home': 'Arzon bozor',
+  'cheap_products_home': 'Aholi bozori',
   'bread': 'Non',
   'carpet_wash': 'Gilam yuvish',
   'circles': 'Qarindoshlar',

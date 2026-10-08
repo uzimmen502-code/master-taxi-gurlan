@@ -164,6 +164,9 @@ class _AdminOrderNewsListScreenState extends State<AdminOrderNewsListScreen> {
       ('in_delivery', 'Йўлда'),
       ('delivered', 'Етказилди'),
       ('rejected', 'Рад'),
+      // Мижоз бекор қилгани — CF `cancelled` хабарини ҳам ёзади, аввал
+      // филтрда йўқ эди.
+      ('cancelled', 'Бекор'),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),

@@ -753,7 +753,7 @@ class _HomeViewState extends State<_HomeView> {
                             StreamBuilder<List<HomeTickerAd>>(
                               stream: context
                                   .read<HomeTickerRepository>()
-                                  .watchForModule('home_search', 'user'),
+                                  .watchForModuleCurrentRole('home_search'),
                               builder: (context, snap) {
                                 final ads = snap.data ?? const <HomeTickerAd>[];
                                 if (ads.isEmpty) {

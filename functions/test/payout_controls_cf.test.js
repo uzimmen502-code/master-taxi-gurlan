@@ -67,6 +67,29 @@ const req = (amount) => fns.requestPayout.run(
     assert.strictEqual(r.ok, true);
   });
 
+  // ─── O-5: checkWithdrawalLimit ──────────────────────────────────────
+  const OTHER = '998901000002';
+  const FIN = '998905000001';
+  const limit = (data, ctx) => fns.checkWithdrawalLimit.run(data, ctx);
+  const codeOf = async (p) => { try { await p; return 'ok'; } catch (e) { return e.code; } };
+  await reset(null);
+  await db.collection('users').doc(FIN).set({ role: 'finance', phone: FIN });
+  await check('C1 autentifikatsiyasiz — unauthenticated', async () => {
+    assert.strictEqual(await codeOf(limit({ userId: USER, amount: 1000 }, {})), 'unauthenticated');
+  });
+  await check('C2 begona foydalanuvchi uchun — permission-denied', async () => {
+    assert.strictEqual(await codeOf(limit({ userId: USER, amount: 1000 }, ctxOf(OTHER))), 'permission-denied');
+  });
+  await check('C3 o\'zi uchun — ruxsat, anomaliya sozlamalari qaytarilmaydi', async () => {
+    const r = await limit({ userId: USER, amount: 1000 }, ctxOf(USER));
+    assert.strictEqual(r.allowed, true);
+    assert.strictEqual(r.settings, undefined);
+  });
+  await check('C4 finance boshqa foydalanuvchi uchun — ruxsat', async () => {
+    const r = await limit({ userId: USER, amount: 1000 }, ctxOf(FIN));
+    assert.strictEqual(r.allowed, true);
+  });
+
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;
   console.log(`\n${passed} passed, ${failed} failed`);

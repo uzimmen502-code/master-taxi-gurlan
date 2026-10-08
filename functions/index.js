@@ -5427,7 +5427,18 @@ async function sumRecentWithdrawals(userId, oneHourAgo) {
 
 /** Callable: бир марта / 1 соатлик чиқим лимитини текшириш. */
 exports.checkWithdrawalLimit = functions.https.onCall(async (data, context) => {
+  // Hamyon auditi O-5: avval auth UMUMAN yo'q edi — istalgan odam istalgan
+  // foydalanuvchining so'nggi soatdagi yechimlarini (summani ikkiga bo'lib
+  // qidirib) va anomaliya chegaralarini bilardi. Endi faqat o'zi uchun yoki
+  // finance/superadmin. Klient bu CF'ni hech qachon chaqirmagan.
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
   const userId = userUid(String(data.userId || data.userPhone || ''));
+  const caller = canonicalUid(callerPhone(context));
+  if (!caller || caller !== canonicalUid(userId)) {
+    await requireCallerRoles(context, ['finance', 'superadmin'], 'Faqat o\'z hisobingiz uchun');
+  }
   const amount = parseInt(String(data.amount ?? 0), 10);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new functions.https.HttpsError('invalid-argument', 'amount must be positive');
@@ -5451,7 +5462,8 @@ exports.checkWithdrawalLimit = functions.https.onCall(async (data, context) => {
     );
   }
 
-  return { allowed: true, settings };
+  // Anomaliya chegaralari javobda qaytarilmaydi (ichki sozlama).
+  return { allowed: true };
 });
 
 /** wallet_ledger яратилганда катта сумма — risk_events + Telegram. */

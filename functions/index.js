@@ -32,6 +32,8 @@ const courierPush = createCourierPush({ db, canonicalUid });
 const capabilitiesModel = require('./capabilities_model');
 // Kuryer avtorizatsiyasi: 'new' / 'finish' rejimlari + buyurtma egaligi.
 const { MODES: COURIER_AUTH_MODES, makeCourierAuth } = require('./courier_auth');
+// Xarid narxi faqat katalogdan (K-5): yig'ib olish va kuryer to'lovidagi mahsulot.
+const { makeProcurementCatalog } = require('./procurement_catalog');
 // AVA дўкони улгуржи поғоналари (эга қарори 2026-10-06) — ягона қоида.
 const platformPricing = require('./platform_pricing');
 // Taxi billing — 2% = farePerSeat × 4 × 2% (D-TAXI-6…23). Pul faqat
@@ -2581,6 +2583,7 @@ function assertCourierPhone(courierPhone) {
 const courierAuth = makeCourierAuth({
   db, caps: capabilitiesModel, canonicalUid, HttpsError: functions.https.HttpsError,
 });
+const procurementCatalog = makeProcurementCatalog({ db, HttpsError: functions.https.HttpsError });
 
 /**
  * Kuryer huquqi — FAQAT capability (D-12…D-16, D-CLEAN-1), ikki rejim
@@ -4675,6 +4678,21 @@ async function courierSubmitPaymentTx(t, {
     throw new functions.https.HttpsError('invalid-argument', 'lines required');
   }
 
+  // K-5: «mahsulot» qatori — mahsulot KATALOGDA (faol) bo'lishi va narx
+  // katalog narxidan YUQORI bo'lmasligi shart: oshirilgan narx qaytim
+  // sifatida mijoz hamyoniga pul yaratardi. Pastroq narx (kelishuv) mumkin —
+  // u qiymatni kamaytiradi. Nom, birlik, tavsiya narxi — katalogdan.
+  // O'qish — tranzaksiyada, yozuvlardan oldin.
+  const productCodes = linesIn
+    .filter((r) => String((r || {}).kind || '').toLowerCase() === 'product')
+    .map((r) => String(r.productCode || '').trim());
+  if (productCodes.some((c) => !c)) {
+    throw new functions.https.HttpsError('invalid-argument', 'product productCode required');
+  }
+  const catalog = productCodes.length > 0
+    ? await procurementCatalog.load(productCodes, (r) => t.get(r))
+    : new Map();
+
   const normalized = [];
   for (let i = 0; i < linesIn.length; i += 1) {
     const row = linesIn[i] || {};
@@ -4688,12 +4706,23 @@ async function courierSubmitPaymentTx(t, {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new functions.https.HttpsError('invalid-argument', 'bad amount');
     }
+    let cat = null;
     if (kind === 'product') {
       if (!Number.isFinite(qty) || qty <= 0) {
         throw new functions.https.HttpsError('invalid-argument', 'bad product qty');
       }
       if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
         throw new functions.https.HttpsError('invalid-argument', 'bad product unitPrice');
+      }
+      cat = catalog.get(String(row.productCode).trim());
+      if (unitPrice > cat.price) {
+        console.warn(JSON.stringify({
+          action: 'courierSubmitPayment', orderId, result: 'denied', errorCode: 'PRICE_ABOVE_CATALOG',
+          code: cat.code, unitPrice, catalogPrice: cat.price,
+        }));
+        throw new functions.https.HttpsError('failed-precondition',
+          `Narx katalogdan yuqori: ${cat.code} ${unitPrice} > ${cat.price}`,
+          { reason: 'PRICE_ABOVE_CATALOG', code: cat.code, catalogPrice: cat.price });
       }
       const expectedAmount = Math.round(qty * unitPrice);
       if (Math.abs(amount - expectedAmount) > 1) {
@@ -4705,12 +4734,12 @@ async function courierSubmitPaymentTx(t, {
     }
     normalized.push({
       kind,
-      productCode: String(row.productCode || ''),
-      productLabel: String(row.productLabel || ''),
+      productCode: cat ? cat.code : String(row.productCode || ''),
+      productLabel: cat ? cat.label : String(row.productLabel || ''),
       qty: Number.isFinite(qty) ? qty : 1,
-      unit: String(row.unit || ''),
+      unit: cat ? cat.unit : String(row.unit || ''),
       unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
-      suggestedUnitPrice: parseInt(String(row.suggestedUnitPrice ?? unitPrice), 10) || 0,
+      suggestedUnitPrice: cat ? cat.price : (parseInt(String(row.suggestedUnitPrice ?? unitPrice), 10) || 0),
       amount,
       createdByCourierId: courierId,
       createdAt: admin.firestore.Timestamp.now(),
@@ -8453,42 +8482,40 @@ exports.adminCreateCollectionTask = functions.https.onCall(async (data, context)
 
     const courierId = await resolveAuthorizedCourierUid(courierPhone);
 
-    const normalizedItems = [];
-    let totalValue = 0;
+    // K-5 (ega qarori 2026-10-08): narx, nom va birlik — KATALOGDAN, shu
+    // paytda qotadi (yakunlashda shu narx ishlatiladi). Klient narxi — faqat log.
     for (let i = 0; i < itemsIn.length; i += 1) {
       const row = itemsIn[i] || {};
-      const code = String(row.code || '').trim();
-      const label = String(row.label || '').trim();
-      const unit = String(row.unit || '').trim();
-      const qty = Number(row.qty);
-      const unitPrice = parseInt(String(row.unitPrice ?? 0), 10);
-      if (!code || !label) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: code and label required`,
-        );
+      if (!String(row.code || '').trim()) {
+        throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
       }
+      const qty = Number(row.qty);
       if (!Number.isFinite(qty) || qty <= 0) {
         throw new functions.https.HttpsError(
           'invalid-argument',
           `items[${i}]: qty must be positive`,
         );
       }
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: unitPrice must be >= 0`,
-        );
-      }
-      const lineTotal = Math.round(qty * unitPrice);
+    }
+    const catalog = await procurementCatalog.load(itemsIn.map((r) => (r || {}).code));
+    const normalizedItems = [];
+    let totalValue = 0;
+    for (let i = 0; i < itemsIn.length; i += 1) {
+      const row = itemsIn[i] || {};
+      const c = catalog.get(String(row.code).trim());
+      const qty = Number(row.qty);
+      procurementCatalog.logMismatch('adminCreateCollectionTask', submissionId, c.code, row.unitPrice, c.price);
+      const lineTotal = Math.round(qty * c.price);
       totalValue += lineTotal;
       normalizedItems.push({
-        code,
-        label,
-        unit,
+        code: c.code,
+        label: c.label,
+        unit: c.unit,
         qty,
-        unitPrice,
+        unitPrice: c.price,
         lineTotal,
+        priceSource: 'catalog',
+        catalogUpdatedAt: c.updatedAt,
       });
     }
 
@@ -8707,20 +8734,22 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
       throw new functions.https.HttpsError('failed-precondition', 'arrived first');
     }
 
+    // K-5 (ega qarori 2026-10-08): narx VAZIFA YARATILGANDA qotgan —
+    // `task.items` (server yozgan, `adminCreateCollectionTask` katalogdan).
+    // Kuryer faqat kod va miqdorni beradi; vazifada yo'q mahsulot — rad.
+    const snapshotByCode = new Map();
+    for (const it of (Array.isArray(task.items) ? task.items : [])) {
+      const code = String((it || {}).code || '').trim();
+      if (code && !snapshotByCode.has(code)) snapshotByCode.set(code, it);
+    }
     const normalizedItems = [];
     let totalValue = 0;
     for (let i = 0; i < itemsIn.length; i += 1) {
       const row = itemsIn[i] || {};
       const code = String(row.code || '').trim();
-      const label = String(row.label || '').trim();
-      const unit = String(row.unit || '').trim();
       const qty = Number(row.qty);
-      const unitPrice = parseInt(String(row.unitPrice ?? 0), 10);
-      if (!code || !label) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: code and label required`,
-        );
+      if (!code) {
+        throw new functions.https.HttpsError('invalid-argument', `items[${i}]: code required`);
       }
       if (!Number.isFinite(qty) || qty <= 0) {
         throw new functions.https.HttpsError(
@@ -8728,12 +8757,19 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
           `items[${i}]: qty must be positive`,
         );
       }
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          `items[${i}]: unitPrice must be >= 0`,
-        );
+      const snap = snapshotByCode.get(code);
+      if (!snap) {
+        throw new functions.https.HttpsError('failed-precondition', `Vazifada yo'q mahsulot: ${code}`,
+          { reason: 'ITEM_NOT_IN_TASK', code });
       }
+      const unitPrice = parseInt(String(snap.unitPrice ?? 0), 10);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        throw new functions.https.HttpsError('failed-precondition', `Vazifa narxi noto'g'ri: ${code}`,
+          { reason: 'TASK_PRICE_INVALID', code });
+      }
+      procurementCatalog.logMismatch('courierFinalizeCollection', taskId, code, row.unitPrice, unitPrice);
+      const label = String(snap.label || code);
+      const unit = String(snap.unit || '');
       const lineTotal = Math.round(qty * unitPrice);
       totalValue += lineTotal;
       normalizedItems.push({ code, label, unit, qty, unitPrice, lineTotal });

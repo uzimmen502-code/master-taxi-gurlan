@@ -42,7 +42,8 @@
     "test:relay-escrow": "firebase emulators:exec --only firestore --project demo-relay-escrow \"node test/relay_escrow_cf.test.js\"",
     "test:courier-auth": "firebase emulators:exec --only firestore --project demo-courier-auth \"node test/courier_auth.test.js\"",
     "test:courier-cf": "firebase emulators:exec --only firestore --project demo-courier-cf \"node test/courier_callables_cf.test.js\"",
-    "test:courier-orders": "firebase emulators:exec --only firestore --project demo-courier-orders \"node test/courier_orders_cf.test.js\""
+    "test:courier-orders": "firebase emulators:exec --only firestore --project demo-courier-orders \"node test/courier_orders_cf.test.js\"",
+    "test:collection-pricing": "firebase emulators:exec --only firestore --project demo-collection-pricing \"node test/collection_pricing_cf.test.js\""
   },
   "engines": {
     "node": "20"

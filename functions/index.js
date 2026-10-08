@@ -6608,6 +6608,18 @@ exports.changeDevicePhone = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Telefon noto\'g\'ri');
   }
 
+  // Ҳисобни эгаллаш тешиги ёпилди (админ аудити, 2026-10-08). Аввал фақат
+  // `context.auth` текширилар эди (аноним сессия ҳам ўтарди): ҳар ким ЎЗ
+  // қурилмасининг боғланишини БЕГОНА рақамга кўчириб, `device_aliases`ни
+  // устидан ёзар, кейин `checkDeviceBinding` → `createPhoneSession` ўша
+  // рақамга token берарди. Энди: (1) фақат телефон token'и бор чақирувчи,
+  // (2) фақат ЎЗ қурилмаси (боғланишдаги рақам = token рақами), (3) янги
+  // рақам бошқа қурилмага боғланмаган ва унда мавжуд ҳисоб (`users`) йўқ.
+  const tokenPhone = canonicalUid(callerPhone(context));
+  if (!tokenPhone || tokenPhone.length < 12) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone login required');
+  }
+
   const bindingRef = db.collection('device_bindings').doc(deviceFingerprintHash);
   const bindingSnap = await bindingRef.get();
 
@@ -6622,13 +6634,35 @@ exports.changeDevicePhone = functions.https.onCall(async (data, context) => {
       'Binding has no phone',
     );
   }
+  if (oldPhone !== tokenPhone) {
+    throw new functions.https.HttpsError('permission-denied', 'DEVICE_NOT_YOURS');
+  }
+  if (newPhone === oldPhone) {
+    return { ok: true, unchanged: true };
+  }
 
   const userQuery = await db.collection('users')
     .where('phone', '==', oldPhone)
     .limit(1)
     .get();
 
+  const newAliasRef = db.collection('device_aliases').doc(newPhone);
+  const newUser12Ref = db.collection('users').doc(newPhone);
+  const newUser9Ref = db.collection('users').doc(newPhone.slice(3));
+
   await db.runTransaction(async (t) => {
+    const [aliasSnap, u12, u9] = await Promise.all([
+      t.get(newAliasRef), t.get(newUser12Ref), t.get(newUser9Ref),
+    ]);
+    const aliasHash = aliasSnap.exists
+      ? String((aliasSnap.data() || {}).deviceFingerprintHash || '').toLowerCase()
+      : '';
+    if (aliasHash && aliasHash !== deviceFingerprintHash) {
+      throw new functions.https.HttpsError('failed-precondition', 'PHONE_BOUND_OTHER_DEVICE');
+    }
+    if (u12.exists || u9.exists) {
+      throw new functions.https.HttpsError('failed-precondition', 'PHONE_HAS_ACCOUNT');
+    }
     t.update(bindingRef, {
       phone: newPhone,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

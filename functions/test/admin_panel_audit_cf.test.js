@@ -487,6 +487,45 @@ async function main() {
     assert.strictEqual(d.status, 'active');
   });
 
+  // ── P. changeDevicePhone — hisobni egallash teshigi ─────────────────
+  await reset();
+  await Promise.all(['device_bindings', 'device_aliases'].map(wipe));
+  const H_ATT = 'a'.repeat(64);
+  const H_VIC = 'b'.repeat(64);
+  const ATTACKER = '998901000031';
+  const VICTIM = '998901000032';
+  const FRESH = '998901000033';
+  await db.collection('device_bindings').doc(H_ATT).set({ phone: ATTACKER });
+  await db.collection('device_aliases').doc(ATTACKER).set({ phone: ATTACKER, deviceFingerprintHash: H_ATT });
+  await db.collection('device_bindings').doc(H_VIC).set({ phone: VICTIM });
+  await db.collection('device_aliases').doc(VICTIM).set({ phone: VICTIM, deviceFingerprintHash: H_VIC });
+  await db.collection('users').doc(ATTACKER).set({ phone: ATTACKER, role: 'user' });
+  await db.collection('users').doc(VICTIM).set({ phone: VICTIM, role: 'user' });
+  const change = (hash, newPhone, ctx) => fns.changeDevicePhone.run({ deviceFingerprintHash: hash, newPhone }, ctx);
+  const aliasOf = async (p) => ((await db.collection('device_aliases').doc(p).get()).data() || {}).deviceFingerprintHash;
+  await check('P1 anonim sessiya — rad', async () => {
+    await rejectsWith(change(H_ATT, VICTIM, ANON), 'permission-denied');
+  });
+  await check('P2 o\'z qurilmasini boshqa odamning (bog\'langan) raqamiga ko\'chira olmaydi', async () => {
+    await rejectsWith(change(H_ATT, VICTIM, ctxOf(ATTACKER)), 'failed-precondition', 'PHONE_BOUND_OTHER_DEVICE');
+    assert.strictEqual(await aliasOf(VICTIM), H_VIC, 'jabrlanuvchi aliasi o\'zgarmadi');
+    assert.strictEqual((await db.collection('device_bindings').doc(H_ATT).get()).data().phone, ATTACKER);
+  });
+  await check('P3 boshqa odamning qurilmasini (hash) o\'zgartira olmaydi', async () => {
+    await rejectsWith(change(H_VIC, FRESH, ctxOf(ATTACKER)), 'permission-denied', 'DEVICE_NOT_YOURS');
+  });
+  await check('P4 bog\'lanmagan, lekin hisobi bor raqamga — rad', async () => {
+    await db.collection('users').doc('901000034').set({ phone: '998901000034' });
+    await rejectsWith(change(H_ATT, '998901000034', ctxOf(ATTACKER)), 'failed-precondition', 'PHONE_HAS_ACCOUNT');
+  });
+  await check('P5 qonuniy: o\'z qurilmasini bo\'sh raqamga ko\'chiradi', async () => {
+    const r = await change(H_ATT, FRESH, ctxOf(ATTACKER));
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual((await db.collection('device_bindings').doc(H_ATT).get()).data().phone, FRESH);
+    assert.strictEqual(await aliasOf(FRESH), H_ATT);
+    assert.strictEqual((await db.collection('device_aliases').doc(ATTACKER).get()).exists, false);
+  });
+
   // ── N. Gilam / sut — admin o'tishlari (custody) ─────────────────────
   await reset();
   await Promise.all(['carpet_wash_orders', 'agro_pickup_orders'].map(wipe));

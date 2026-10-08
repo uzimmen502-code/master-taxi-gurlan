@@ -2776,5 +2776,10 @@
   "logistics_err_custody_mismatch": "Посилка ҳолати мос келмади — админга мурожаат қилинг",
   "logistics_err_not_last_leg": "Бу сизнинг босқичингиз эмас — кейинги ижрочига топширинг",
   "logistics_err_delivery_code_format": "Код 6 та рақамдан иборат",
-  "logistics_err_self": "Ўз жўнатмангизни олиб бўлмайди"
+  "logistics_err_self": "Ўз жўнатмангизни олиб бўлмайди",
+  "profile_phone_change_not_yours": "Бу қурилма бошқа рақамга боғланган. Рақамни фақат ўз ҳисобингиздан ўзгартириш мумкин.",
+  "profile_phone_change_bound_other": "Бу рақам бошқа қурилмага боғланган. Бошқа рақам киритинг.",
+  "profile_phone_change_has_account": "Бу рақамда AVA ҳисоби бор. Бошқа рақам киритинг ёки ўша рақам билан киринг.",
+  "profile_phone_change_login_required": "Рақамни ўзгартириш учун аввал телефон рақамингиз билан киринг.",
+  "profile_phone_change_failed": "Рақамни ўзгартириб бўлмади. Қайта уриниб кўринг."
 }

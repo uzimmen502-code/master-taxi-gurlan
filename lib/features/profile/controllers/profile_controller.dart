@@ -769,9 +769,34 @@ class ProfileController extends ChangeNotifier {
       await prefs.setString('user_phone', canonicalPhoneId(newPhone));
       phone = canonicalPhoneId(newPhone);
       notifyListeners();
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('changeDevicePhone failed: ${e.code} ${e.message}');
+      _showError(phoneChangeErrorKey(e.code, e.message));
     } catch (e) {
-      _showError('Хатолик: $e');
+      debugPrint('changeDevicePhone failed: $e');
+      _showError('profile_phone_change_failed');
     }
+  }
+
+  /// `changeDevicePhone` CF хатоси → l10n калити (`assets/lang/*.json`).
+  ///
+  /// CF диагностик кодни `message`да қайтаради (`DEVICE_NOT_YOURS` ва ҳ.к.,
+  /// админ аудити 2026-10-08). Фойдаланувчига хом код ёки stack trace эмас,
+  /// тушунарли матн кўрсатилади (CLAUDE.md 25-банд).
+  @visibleForTesting
+  static String phoneChangeErrorKey(String code, String? message) {
+    switch (message) {
+      case 'DEVICE_NOT_YOURS':
+        return 'profile_phone_change_not_yours';
+      case 'PHONE_BOUND_OTHER_DEVICE':
+        return 'profile_phone_change_bound_other';
+      case 'PHONE_HAS_ACCOUNT':
+        return 'profile_phone_change_has_account';
+      case 'Phone login required':
+        return 'profile_phone_change_login_required';
+    }
+    if (code == 'unauthenticated') return 'profile_phone_change_login_required';
+    return 'profile_phone_change_failed';
   }
 
   void _showError(String message) {

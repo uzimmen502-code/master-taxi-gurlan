@@ -100,12 +100,19 @@ class _AdminShellState extends State<AdminShell> {
     });
   }
 
+  // Тартиб — ўзаро боғлиқ бўлимлар ёнма-ён (эга, 2026-10-08): буюртма ва
+  // етказиш · маиший хизмат ва йиғиш · такси ва транспорт · бозорлар ва
+  // эълонлар · AVAGram ва танишув · алоқа · фойдаланувчилар ва созламалар ·
+  // молия. Бўлим НОМИ саҳифа ва badge калити (`_buildSection`,
+  // `_badgeCountStream`) — ном ўзгарса ўша жойлар ҳам.
   static const _sections = [
     _AdminSection(
       label: 'Monitoring Center',
       icon: Icons.dashboard,
       description: 'KPI ва кенг таҳлил',
     ),
+
+    // ── Буюртма ва етказиш ──────────────────────────────────────────
     _AdminSection(
       label: 'Буюртмалар',
       icon: Icons.receipt_long,
@@ -116,14 +123,14 @@ class _AdminShellState extends State<AdminShell> {
       access: _SectionAccess.ops,
     ),
     _AdminSection(
-      label: 'Gilam yuvish',
-      icon: Icons.local_laundry_service_outlined,
-      description: 'Gilam yuvish buyurtmalari',
+      label: 'Буюртма хабар',
+      icon: Icons.sms_outlined,
+      description: 'Mijozga ketgan status xabarlari',
     ),
     _AdminSection(
-      label: 'Sut qabul',
-      icon: Icons.water_drop_outlined,
-      description: 'Sut qabul buyurtmalari',
+      label: 'Маҳсулoтлaр',
+      icon: Icons.inventory_2,
+      description: 'Нон, овқaт, нархлaр',
     ),
     _AdminSection(
       label: 'Курьер',
@@ -136,19 +143,74 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Курьерларни бошқариш',
     ),
     _AdminSection(
+      label: 'AVA Logistics',
+      icon: Icons.local_post_office_outlined,
+      description: 'Жўнатма тарифи (версияли) ва маршрутлар',
+    ),
+
+    // ── Маиший хизмат ва йиғиш ──────────────────────────────────────
+    _AdminSection(
+      label: 'Gilam yuvish',
+      icon: Icons.local_laundry_service_outlined,
+      description: 'Gilam yuvish buyurtmalari',
+    ),
+    _AdminSection(
+      label: 'Sut qabul',
+      icon: Icons.water_drop_outlined,
+      description: 'Sut qabul buyurtmalari',
+    ),
+    _AdminSection(
+      label: 'Харид нархлари',
+      icon: Icons.price_change_outlined,
+      description: 'Йиғиб олиш ва тўлов нархлари',
+      access: _SectionAccess.opsAndFinance,
+    ),
+    _AdminSection(
+      label: 'Омбор',
+      icon: Icons.warehouse_outlined,
+      description: 'Йиғилган маҳсулот қолдиқлари',
+      // `adminGetWarehouseStock` — `assertAdmin` (admin/superadmin/
+      // dispatcher), rules `warehouse_stock` — `isAdmin()`: finance/auditor
+      // учун бўлим доим хато берарди.
+      access: _SectionAccess.ops,
+    ),
+
+    // ── Такси ва транспорт ──────────────────────────────────────────
+    // «Ҳaйдовчи aризалари» ва «Код сўровлари» ЯШИРИЛДИ (эга қарори
+    // 2026-10-08, админ аудити D-2). Экранлар, CF ва маълумот жойида —
+    // керак бўлса шу қаторлар қайтарилса бўлим яна очилади.
+    //  • «Ҳaйдовчи aризалари»: илова `driver_requests`га янги ариза
+    //    ёзмайди (фақат эски маълумотдан машина/маршрутни тўлдиради);
+    //    тасдиқ/бекор `provider_capabilities`га таъсир қилмасди. Такси
+    //    ҳуқуқи — «Такси верификацияси».
+    //  • «Код сўровлари»: илова кириши — қурилма боғлаш
+    //    (`checkDeviceBinding`); бу «fake SMS» оқими ишлатилмайди, сервер
+    //    сўровларни ўзи тасдиқлайди, панелнинг тўғридан-тўғри ёзуви эса
+    //    rules'да рад этиларди.
+    _AdminSection(
       label: 'Такси верификацияси',
       icon: Icons.verified_user_outlined,
       description: 'Starter → verification_required → verified (D-TAXI-4)',
     ),
     _AdminSection(
-      label: 'ИШ ЭЪЛОН',
-      icon: Icons.work_history,
-      description: 'Иш, хизмат, эълон — модерация',
+      label: '🚕 Такси нархи',
+      icon: Icons.local_taxi,
+      description: 'Mahalliy taksi: boshlang\'ich, km, koeffitsient',
     ),
     _AdminSection(
-      label: 'Онлайн бозор',
-      icon: Icons.storefront_outlined,
-      description: 'Арзон маҳсулот эълонлари',
+      label: 'Маршрут',
+      icon: Icons.directions_bus,
+      description: 'Ҳайдовчилар ва сафарлар',
+    ),
+    _AdminSection(
+      label: 'Dispatch history',
+      icon: Icons.timeline,
+      description: 'Маршрут навбат тарихи',
+    ),
+    _AdminSection(
+      label: 'Shaharlararo',
+      icon: Icons.connecting_airports,
+      description: 'Intercity haydovchilar va bronlar',
     ),
     _AdminSection(
       label: 'EV зарядлаш',
@@ -156,14 +218,20 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Report qilingan zaryadlash nuqtalari moderatsiyasi',
     ),
     _AdminSection(
-      label: 'Кўчмас мулк',
-      icon: Icons.apartment_outlined,
-      description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
+      label: 'Мой каталоги',
+      icon: Icons.opacity,
+      description: 'Мой/фильтр · нарх · расм',
+      access: _SectionAccess.opsAndFinance,
     ),
+
+    // ── Бозорлар ва эълонлар ────────────────────────────────────────
+    // «Аҳоли бозор» (аввал «Онлайн бозор», тавсифи «Арзон маҳсулот») —
+    // иловадаги «Аҳоли бозори» (`cheap_product` эълонлари); эга қарори
+    // 2026-10-08: номи ўзгарди ва «Улгуржи бозор» тепасида.
     _AdminSection(
-      label: 'AVA Logistics',
-      icon: Icons.local_post_office_outlined,
-      description: 'Жўнатма тарифи (версияли) ва маршрутлар',
+      label: 'Аҳоли бозор',
+      icon: Icons.storefront_outlined,
+      description: 'Аҳоли эълонлари — модерация ва шикоятлар',
     ),
     // «AVA дўкони» алоҳида бўлими ОЛИБ ТАШЛАНДИ (2026-10-07): иловада AVA
     // дўкони тўлиқ Улгуржига ўтган (эга қарори 2026-10-06), энди админда
@@ -181,6 +249,23 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Хитой бозори маҳсулотлари модерацияси',
     ),
     _AdminSection(
+      label: 'ИШ ЭЪЛОН',
+      icon: Icons.work_history,
+      description: 'Иш, хизмат, эълон — модерация',
+    ),
+    _AdminSection(
+      label: 'Кўчмас мулк',
+      icon: Icons.apartment_outlined,
+      description: 'Объект эълонлари — тасдиқлаш, блоклаш, ўчириш',
+    ),
+    // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
+    // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза
+    // келмайди. Экраннинг ўзи ва CF/rules тегилмаган — эски
+    // `sell_submissions` ёзувлари жойида; керак бўлса шу қатор
+    // қайтарилса, панел яна очилади.
+
+    // ── AVAGram ва танишув ──────────────────────────────────────────
+    _AdminSection(
       label: 'AVAGram',
       icon: Icons.play_circle_outline,
       description: 'Видео клиплар модерацияси',
@@ -195,6 +280,13 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.favorite,
       description: 'Профил модерацияси ва шикоятлар',
     ),
+
+    // ── Алоқа ───────────────────────────────────────────────────────
+    _AdminSection(
+      label: 'Чат қўллaб-қуввaтлaш',
+      icon: Icons.support_agent,
+      description: 'Support чатлaри',
+    ),
     _AdminSection(
       label: 'Хабарлaр',
       icon: Icons.campaign,
@@ -206,87 +298,32 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Bosh ekran yuguruvchi matn',
     ),
     _AdminSection(
-      label: 'Ҳудудлар ва хизматлар',
-      icon: Icons.map_outlined,
-      description: 'MFY boʻyicha modul mavjudligi (config-driven)',
-    ),
-    _AdminSection(
       label: 'Splash soʻzlari',
       icon: Icons.branding_watermark_outlined,
       description: 'Ilova ochilish animatsiyasi matnlari',
     ),
+
+    // ── Фойдаланувчилар ва созламалар ───────────────────────────────
     _AdminSection(
-      label: 'Буюртма хабар',
-      icon: Icons.sms_outlined,
-      description: 'Mijozga ketgan status xabarlari',
+      label: 'Фойдаланувчилар',
+      icon: Icons.people_alt_outlined,
+      description: 'Телефон, туғилган кун, қурилмалар',
+      access: _SectionAccess.users,
     ),
-    // «Сотиш аризалари» ёрлиғи яширилди (1-босқич, 2026-09-24): СОТИНГ
-    // модулига фойдаланувчи томонидан кириш йўли ёпилди, янги ариза
-    // келмайди. Экраннинг ўзи ва CF/rules тегилмаган — эски
-    // `sell_submissions` ёзувлари жойида; керак бўлса шу қатор
-    // қайтарилса, панел яна очилади.
-    _AdminSection(
-      label: 'Маҳсулoтлaр',
-      icon: Icons.inventory_2,
-      description: 'Нон, овқaт, нархлaр',
-    ),
-    _AdminSection(
-      label: 'Мой каталоги',
-      icon: Icons.opacity,
-      description: 'Мой/фильтр · нарх · расм',
-      access: _SectionAccess.opsAndFinance,
-    ),
-    _AdminSection(
-      label: 'Харид нархлари',
-      icon: Icons.price_change_outlined,
-      description: 'Йиғиб олиш ва тўлов нархлари',
-      access: _SectionAccess.opsAndFinance,
-    ),
-    _AdminSection(
-      label: '🚕 Такси нархи',
-      icon: Icons.local_taxi,
-      description: 'Mahalliy taksi: boshlang\'ich, km, koeffitsient',
-    ),
-    _AdminSection(
-      label: 'Омбор',
-      icon: Icons.warehouse_outlined,
-      description: 'Йиғилган маҳсулот қолдиқлари',
-      // `adminGetWarehouseStock` — `assertAdmin` (admin/superadmin/
-      // dispatcher), rules `warehouse_stock` — `isAdmin()`: finance/auditor
-      // учун бўлим доим хато берарди.
-      access: _SectionAccess.ops,
-    ),
-    // «Ҳaйдовчи aризалари» ва «Код сўровлари» ЯШИРИЛДИ (эга қарори
-    // 2026-10-08, админ аудити D-2). Экранлар, CF ва маълумот жойида —
-    // керак бўлса шу қаторлар қайтарилса бўлим яна очилади.
-    //  • «Ҳaйдовчи aризалари»: илова `driver_requests`га янги ариза
-    //    ёзмайди (фақат эски маълумотдан машина/маршрутни тўлдиради);
-    //    тасдиқ/бекор `provider_capabilities`га таъсир қилмасди. Такси
-    //    ҳуқуқи — «Такси верификацияси».
-    //  • «Код сўровлари»: илова кириши — қурилма боғлаш
-    //    (`checkDeviceBinding`); бу «fake SMS» оқими ишлатилмайди, сервер
-    //    сўровларни ўзи тасдиқлайди, панелнинг тўғридан-тўғри ёзуви эса
-    //    rules'да рад этиларди.
     _AdminSection(
       label: 'Туғилган кун',
       icon: Icons.cake_outlined,
       description: 'Туғилган кун бонуси ва сўровлар',
     ),
     _AdminSection(
-      label: 'Маршрут',
-      icon: Icons.directions_bus,
-      description: 'Ҳайдовчилар ва сафарлар',
+      label: 'Birthday bonus',
+      icon: Icons.card_giftcard,
+      description: 'Йиллик туғилган кун бонуси',
     ),
     _AdminSection(
-      label: 'Shaharlararo',
-      icon: Icons.connecting_airports,
-      description: 'Intercity haydovchilar va bronlar',
-    ),
-    _AdminSection(
-      label: 'Фойдаланувчилар',
-      icon: Icons.people_alt_outlined,
-      description: 'Телефон, туғилган кун, қурилмалар',
-      access: _SectionAccess.users,
+      label: 'Ҳудудлар ва хизматлар',
+      icon: Icons.map_outlined,
+      description: 'MFY boʻyicha modul mavjudligi (config-driven)',
     ),
     _AdminSection(
       label: 'Risk review',
@@ -300,6 +337,8 @@ class _AdminShellState extends State<AdminShell> {
       description: 'Чеги ва чиқим лимитлари',
       access: _SectionAccess.superOnly,
     ),
+
+    // ── Молия ───────────────────────────────────────────────────────
     _AdminSection(
       label: 'Молия',
       icon: Icons.account_balance_wallet,
@@ -311,21 +350,6 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.account_balance,
       description: 'Settlement Ledger — float, settlement, журнал',
       access: _SectionAccess.finance,
-    ),
-    _AdminSection(
-      label: 'Birthday bonus',
-      icon: Icons.card_giftcard,
-      description: 'Йиллик туғилган кун бонуси',
-    ),
-    _AdminSection(
-      label: 'Dispatch history',
-      icon: Icons.timeline,
-      description: 'Маршрут навбат тарихи',
-    ),
-    _AdminSection(
-      label: 'Чат қўллaб-қуввaтлaш',
-      icon: Icons.support_agent,
-      description: 'Support чатлaри',
     ),
   ];
 
@@ -457,7 +481,7 @@ class _AdminShellState extends State<AdminShell> {
     if (section.label == 'ИШ ЭЪЛОН') {
       return const JobsModerationScreen();
     }
-    if (section.label == 'Онлайн бозор') {
+    if (section.label == 'Аҳоли бозор') {
       return const MarketModerationScreen();
     }
     if (section.label == 'Улгуржи бозор') {
@@ -933,7 +957,7 @@ class _Sidebar extends StatelessWidget {
                       t == 'ad' ||
                       t == 'announcement';
                 }).length);
-      case 'Онлайн бозор':
+      case 'Аҳоли бозор':
         return db
             .collection('ads')
             .where('type', isEqualTo: 'cheap_product')

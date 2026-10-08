@@ -61,6 +61,9 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   final _titleCtrl = TextEditingController();
   final _textCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
+
+  /// Ихтиёрий рақамли нарх (бутун сўм) — хабарноманинг нарх фильтри учун.
+  final _priceAmountCtrl = TextEditingController();
   final _roomsCtrl = TextEditingController();
   final _floorCtrl = TextEditingController();
   final _totalFloorsCtrl = TextEditingController();
@@ -99,6 +102,14 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
   /// қилинади. Сервер ҳам шуни текширади (`address_required`).
   bool get _addressOk => _addressCtrl.text.trim().length >= 5;
 
+  /// Рақамли нарх — бўш бўлса `null` (сервер майдонни ўчиради).
+  /// Фақат рақамлар: «3 000 000» ҳам ўқилади (пул — бутун сўм).
+  int? get _priceAmount {
+    final digits = _priceAmountCtrl.text.replaceAll(RegExp(r'\D'), '');
+    final n = int.tryParse(digits);
+    return n == null || n <= 0 ? null : n;
+  }
+
   bool get _canSubmit =>
       !_submitting &&
       _point != null &&
@@ -134,6 +145,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
       // Таҳрир — ҳаммаси ўз ҳолича.
       _tier = source.tier;
       _priceCtrl.text = source.priceText;
+      _priceAmountCtrl.text = source.priceAmount?.toString() ?? '';
       _roomsCtrl.text = source.rooms?.toString() ?? '';
       _floorCtrl.text = source.floor?.toString() ?? '';
       _areaCtrl.text = source.areaM2 == null ? '' : '${source.areaM2}';
@@ -275,6 +287,11 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     final detail = await _repo.fetchDetail(listingId);
     if (!mounted || detail == null) return;
     setState(() {
+      // Манзил 2026-10-08 дан ёпиқ ҳужжатда — эга учун шу ердан
+      // тўлдирилади (эски ёзувда очиқдагиси аллақачон қўйилган).
+      if (_addressCtrl.text.trim().isEmpty && detail.addressText.isNotEmpty) {
+        _addressCtrl.text = detail.addressText;
+      }
       _point = MapPickerResult(
         lat: detail.lat,
         lng: detail.lng,
@@ -291,6 +308,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
     _titleCtrl.dispose();
     _textCtrl.dispose();
     _priceCtrl.dispose();
+    _priceAmountCtrl.dispose();
     _roomsCtrl.dispose();
     _floorCtrl.dispose();
     _totalFloorsCtrl.dispose();
@@ -435,6 +453,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               lng: point.lng,
               contactMode: _contact,
               priceText: _priceCtrl.text,
+              priceAmount: _priceAmount,
               addressText: _addressCtrl.text,
               rooms: int.tryParse(_roomsCtrl.text.trim()),
               floor: int.tryParse(_floorCtrl.text.trim()),
@@ -451,6 +470,7 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
               lng: point.lng,
               contactMode: _contact,
               priceText: _priceCtrl.text,
+              priceAmount: _priceAmount,
               addressText: _addressCtrl.text,
               rooms: int.tryParse(_roomsCtrl.text.trim()),
               floor: int.tryParse(_floorCtrl.text.trim()),
@@ -599,6 +619,16 @@ class _AddRealtyListingScreenState extends State<AddRealtyListingScreen> {
                 maxLines: 5, maxLength: 2000),
             const SizedBox(height: 10),
             _field(_priceCtrl, 'realty_field_price', maxLength: 80),
+            const SizedBox(height: 10),
+            _field(
+              _priceAmountCtrl,
+              'realty_field_price_amount',
+              numeric: true,
+              maxLength: 13,
+              helper: context.tr(_deal == RealtyDeal.rent
+                  ? 'realty_field_price_amount_hint_rent'
+                  : 'realty_field_price_amount_hint_sale'),
+            ),
             const SizedBox(height: 10),
             Row(
               children: [

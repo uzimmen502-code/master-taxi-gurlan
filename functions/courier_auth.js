@@ -17,10 +17,16 @@
  * `delivery_routes`: create — admin, kuryer `courierId`ni o'zgartira
  * olmaydi), shuning uchun bu tekshiruvga ishonish mumkin.
  *
+ * Tranzaksiya ichida yakuniy tekshiruv — `assertOrderActionable`: buyurtma
+ * boshqa kuryerga biriktirilmagan (`COURIER_ASSIGNMENT_CONFLICT`) va
+ * kuryer o'zi mijoz emas (`COURIER_OWN_ORDER`, ega qarori 2026-10-08).
+ *
  * Nega kerak bo'ldi: `courierMarkPicked` / `courierMarkArrived` /
  * `courierSubmitPayment` hech qanday huquq va egalik tekshirmasdi —
  * ilovaga kirgan har kim o'z buyurtmasini «yetkazildi» qilib, ortiqcha
- * «naqd»ni qaytim sifatida o'z hamyoniga yoza olardi.
+ * «naqd»ni qaytim sifatida o'z hamyoniga yoza olardi. O'zini `trial`
+ * kuryer qilgan odam esa marshrut orqali ham shuni qila olardi — shuning
+ * uchun «kuryer ≠ mijoz».
  *
  * Kuryer ID'lari bazada 9 va 12 xonali shaklda uchraydi — ikkalasi ham
  * qaraladi, natija doim kanon (12 xonali).
@@ -120,8 +126,36 @@ function makeCourierAuth(deps) {
     throw new HttpsError('permission-denied', 'Not your customer');
   }
 
+  /** Kuryer shu buyurtmaning MIJOZImi (9/12 xonali shakllar ham). */
+  function isOwnOrder(od, courierPhone) {
+    const customer = canonicalUid(String((od && (od.userPhone || od.phone)) || ''));
+    return customer !== '' && customer === canonicalUid(courierPhone);
+  }
+
+  /**
+   * TRANZAKSIYA ICHIDA o'qilgan buyurtma bo'yicha yakuniy tekshiruv
+   * (`assertOrderOnActiveRoute`dan KEYIN):
+   *   - boshqa kuryerga biriktirilgan → `COURIER_ASSIGNMENT_CONFLICT`
+   *     (marshrut eskirgan yoki bitta buyurtma ikki marshrutda);
+   *   - kuryer shu buyurtmaning MIJOZI → `COURIER_OWN_ORDER` (ega qarori
+   *     2026-10-08): o'zini kuryer qilgan odam o'z buyurtmasidagi ortiqcha
+   *     «naqd»ni qaytim sifatida o'z hamyoniga yoza olmasin.
+   */
+  function assertOrderActionable(od, courierPhone, action, orderId) {
+    const me = canonicalUid(courierPhone);
+    const assigned = canonicalUid(String((od && od.courierId) || ''));
+    let errorCode = '';
+    if (assigned && assigned !== me) errorCode = 'COURIER_ASSIGNMENT_CONFLICT';
+    else if (isOwnOrder(od, courierPhone)) errorCode = 'COURIER_OWN_ORDER';
+    if (!errorCode) return;
+    console.warn(JSON.stringify({ action, orderId, result: 'denied', errorCode }));
+    throw new HttpsError('permission-denied',
+      errorCode === 'COURIER_OWN_ORDER' ? 'Own order' : 'Not your order', { reason: errorCode });
+  }
+
   return {
     capabilityStatus, resolve, activeRoutes, assertOrderOnActiveRoute, assertCustomerOnActiveRoute,
+    isOwnOrder, assertOrderActionable,
   };
 }
 

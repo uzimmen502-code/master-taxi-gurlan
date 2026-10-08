@@ -923,20 +923,26 @@ PIN'сиз ўтади.
 - *Regression:* `functions/test/courier_callables_cf.test.js` — ҲАҚИҚИЙ
   `index.js` callable'лари: тузатишдан олдинги коддан **4/8** (ҳужум ўтади),
   кейин **8/8**. Модул: `courier_auth.test.js` **12/12**.
-- ⚠️ *ҚОЛГАН ТЕШИК (2026-10-08 да аниқланди, ОЧИҚ):* бу fix курьер
-  БЎЛМАГАН одамни тўсади. Лекин ўзини ўзи `trial` курьер қилган одам
-  (`requestCapability`, ёки D-15.3 «Авто»да дарҳол `approved`) ўзининг
-  `ready` буюртмасини `courierCreateRoute` билан ўз маршрутига олиб,
-  «нақд 10 000 000» юбориши мумкин — қайтим яна ЎЗ ҳамёнига тушади.
-  Ёпиш: (1) курьер ўзи мижоз бўлган буюртмага тега олмасин (хавфсизлик,
-  PROPOSED); (2) қайтим (`changeCredit`) чегараси — ЭГА ҚАРОРИ керак.
-- ⚠️ *ПАРАЛЛЕЛ ИШ:* бошқа сессия худди шу 3 callable'ни
-  `fix/courier-order-authz`да (worktree `jovial-bardeen-2a4c6d`, COMMIT
-  ҚИЛИНМАГАН) бошқача тузатган: эгалик `od.courierId` бўйича + эгасиз
-  буюртмани атомар claim; энг муҳими — `courierSubmitPayment` битта
-  транзакцияда + `wallet_idempotency` (параллел submit икки марта
-  ечмайди/ёзмайди — бу ерда ЙЎҚ). Default деплойидан ОЛДИН иккаласи битта
-  версияга бирлаштирилиши шарт.
+- ✅ *ЎЗИНИ КУРЬЕР ҚИЛГАН ОДАМ (2026-10-08, эга «ҳа» деди):* «курьер ≠
+  мижоз» — `COURIER_OWN_ORDER`: ўз буюртмасини маршрутга ололмайди
+  (`courierCreateRoute`, `courierRecoverOrphanRoute`), олдим/етдим/тўлов
+  қилолмайди, ўз йиғиб олиш вазифасини якунлолмайди
+  (`courierFinalizeCollection`). ⏳ Қайтим (`changeCredit`) ЧЕГАРАСИ — эга
+  қарори кутилмоқда (тил бириктирган курьер+мижоз ҳали ҳам мумкин).
+- ✅ *ПАРАЛЛЕЛ ИШ БИРЛАШТИРИЛДИ (2026-10-08):* `fix/courier-order-authz`
+  (worktree `jovial-bardeen-2a4c6d`, commit қилинмаган) дан олинди:
+  `markPicked`/`markArrived`/`submitPayment` — битта транзакцияда;
+  `submitPayment` — `wallet_idempotency/courier_submit_{orderId}` +
+  `prepare/commitBonusInTx` (параллел submit бир марта ечади/ёзади, қайта
+  уриниш сақланган натижани олади); транзакцияда `COURIER_ASSIGNMENT_CONFLICT`.
+  Олинмади: «эгасиз буюртмани ҳар қандай ишлайдиган курьер claim қилади» —
+  маршрут шарти сақланди (иловада курьер фақат ўз маршрутидаги буюртмани
+  кўради). Тест: `functions/test/courier_orders_cf.test.js` — бирлаштиришдан
+  олдинги кодда **5/14**, кейин **14/14**; `courier_callables_cf` 8/8,
+  `courier_auth` 12/12. Ўша ветв энди эскирган — ўчириш эга қарори.
+- ⏳ *Очиқ (K-5):* `courierFinalizeCollection` да товар нархи (`unitPrice`)
+  клиентдан келади ва мижоз ҳамёнига шу бўйича ёзилади — нарх манбаи
+  каталогдан бўлиши керак; эга билан.
 - ⚠️ *Деплой тартиби:* бу default функциялар деплой қилингач, capability'си
   йўқ курьер буюртмани олиб/топшира олмайди. Шунинг учун АВВАЛ demand
   (accountId fix + `adminGrantCapability`) + hosting → админ ҳақиқий

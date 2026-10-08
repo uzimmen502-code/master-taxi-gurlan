@@ -2550,6 +2550,23 @@ async function loadOrderOrThrow(orderId) {
   return { ref: snap.ref, data: snap.data() || {}, id };
 }
 
+function orderRefOrThrow(orderId) {
+  const id = String(orderId || '').trim();
+  if (!id) {
+    throw new functions.https.HttpsError('invalid-argument', 'orderId required');
+  }
+  return db.collection('orders').doc(id);
+}
+
+/** Buyurtmani TRANZAKSIYA ichida o'qiydi (read → check → write bitta atomda, 22-qoida). */
+async function getOrderInTxOrThrow(t, ref) {
+  const snap = await t.get(ref);
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'order not found');
+  }
+  return snap.data() || {};
+}
+
 function paymentLinesTotal(lines) {
   let sum = 0;
   for (let i = 0; i < lines.length; i += 1) {
@@ -4195,33 +4212,38 @@ exports.courierMarkPicked = functions.https.onCall(async (data, context) => {
   if (callerPhone(context) !== courierId) {
     throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
   }
-  // Huquq ('finish' — to'xtatilgan kuryer ham qo'lidagini tugatadi) va
-  // buyurtma shu kuryerning faol marshrutida bo'lishi shart. Avval bu
-  // yerda hech qanday tekshiruv yo'q edi (`courier_auth.js`).
+  // 1) huquq ('finish' — to'xtatilgan kuryer ham qo'lidagini tugatadi);
+  // 2) buyurtma shu kuryerning FAOL marshrutida; 3) tranzaksiyada —
+  // boshqa kuryerga biriktirilmagan va kuryer o'zi mijoz emas
+  // (`courier_auth.js`). Avval bu yerda hech qanday tekshiruv yo'q edi.
   await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
-  const { ref, data: od } = await loadOrderOrThrow(orderId);
+  const ref = orderRefOrThrow(orderId);
   await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
-  const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
-  if (fs === 'cancelled' || fs === 'completed') {
-    throw new functions.https.HttpsError('failed-precondition', 'order closed');
-  }
-  await ref.update({
-    fulfillmentStatus: 'courier_picked',
-    status: 'in_delivery',
-    courierId,
-    pickedAt: admin.firestore.FieldValue.serverTimestamp(),
-    statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    inDeliveryAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  await ref.collection('payment_events').add({
-    action: 'courier_picked',
-    actorType: 'courier',
-    actorId: courierId,
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-    at: admin.firestore.FieldValue.serverTimestamp(),
+  await db.runTransaction(async (t) => {
+    const od = await getOrderInTxOrThrow(t, ref);
+    courierAuth.assertOrderActionable(od, courierId, 'courierMarkPicked', orderId);
+    const fs = od.fulfillmentStatus || legacyStatusFromFulfillment(od.status || 'new');
+    if (fs === 'cancelled' || fs === 'completed') {
+      throw new functions.https.HttpsError('failed-precondition', 'order closed');
+    }
+    t.update(ref, {
+      fulfillmentStatus: 'courier_picked',
+      status: 'in_delivery',
+      courierId,
+      pickedAt: admin.firestore.FieldValue.serverTimestamp(),
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      inDeliveryAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    t.set(ref.collection('payment_events').doc(), {
+      action: 'courier_picked',
+      actorType: 'courier',
+      actorId: courierId,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
   });
   return { ok: true };
 });
@@ -4267,6 +4289,8 @@ exports.courierCreateRoute = functions.https.onCall(async (data, context) => {
         if (!snap.exists) continue;
         const od = snap.data() || {};
         if (String(od.status || '') !== 'ready') continue;
+        // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan buyurtmani olmaydi.
+        if (courierAuth.isOwnOrder(od, courierId)) continue;
         validated.push(orderId);
       }
 
@@ -4364,6 +4388,7 @@ exports.courierRecoverOrphanRoute = functions.https.onCall(async (data, context)
       const cid = canonicalUid(String(od.courierId || od.courierPhone || ''));
       if (cid !== canonicalUid(courierId)) return;
       if (od.paymentStatus === 'paid') return;
+      if (courierAuth.isOwnOrder(od, courierId)) return;
       orphanIds.push(doc.id);
     });
 
@@ -4412,26 +4437,31 @@ exports.courierMarkArrived = functions.https.onCall(async (data, context) => {
   await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
   const lat = data.lat != null ? Number(data.lat) : null;
   const lng = data.lng != null ? Number(data.lng) : null;
-  const { ref, data: od } = await loadOrderOrThrow(orderId);
+  const ref = orderRefOrThrow(orderId);
   await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
-  const fs = od.fulfillmentStatus || '';
-  if (fs !== 'courier_picked' && od.status !== 'in_delivery') {
-    throw new functions.https.HttpsError('failed-precondition', 'pick first');
-  }
-  await ref.update({
-    fulfillmentStatus: 'arrived',
-    status: 'in_delivery',
-    courierId,
-    arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
-    statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-  await ref.collection('payment_events').add({
-    action: 'courier_arrived',
-    actorType: 'courier',
-    actorId: courierId,
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-    at: admin.firestore.FieldValue.serverTimestamp(),
+  const od = await db.runTransaction(async (t) => {
+    const cur = await getOrderInTxOrThrow(t, ref);
+    courierAuth.assertOrderActionable(cur, courierId, 'courierMarkArrived', orderId);
+    const fs = cur.fulfillmentStatus || '';
+    if (fs !== 'courier_picked' && cur.status !== 'in_delivery') {
+      throw new functions.https.HttpsError('failed-precondition', 'pick first');
+    }
+    t.update(ref, {
+      fulfillmentStatus: 'arrived',
+      status: 'in_delivery',
+      courierId,
+      arrivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    t.set(ref.collection('payment_events').doc(), {
+      action: 'courier_arrived',
+      actorType: 'courier',
+      actorId: courierId,
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return cur;
   });
 
   try {
@@ -4495,24 +4525,34 @@ exports.courierGetCustomerWalletBalance = functions.https.onCall(async (data, co
   }
 });
 
-exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+/**
+ * `courierSubmitPayment` — TRANZAKSIYA qismi (21, 22-qoida).
+ *
+ * Avval buyurtma tranzaksiyadan TASHQARIDA o'qilib, yozuv batch bilan
+ * qilinardi: ikki parallel chaqiruv (ikki marta bosish / retry) ikkalasi ham
+ * `arrived`ni ko'rib, hamyondan ikki marta yechar yoki qaytimni ikki marta
+ * yozar, `bonus:courier_submit_{orderId}` jurnali esa ustidan yozilib
+ * balanslardan ajralardi. Endi buyurtma, mijoz qoldig'i va jurnal shu
+ * tranzaksiyada o'qiladi; natija `wallet_idempotency`ga tushadi va takror
+ * chaqiruv (shu kuryerdan) o'sha natijani oladi. (Parallel
+ * `fix/courier-order-authz` ishidan ko'chirildi.)
+ *
+ * Huquq va marshrut tranzaksiyadan OLDIN tekshirilgan; bu yerda — o'qilgan
+ * buyurtma bo'yicha yakuniy tekshiruv (`courierAuth.assertOrderActionable`).
+ *
+ * `done: true` — tayyor javob (takror yoki oldindan to'langan); aks holda
+ * tranzaksiyadan keyingi qadamlar (courier_cash, kvitansiya) uchun qiymatlar.
+ */
+async function courierSubmitPaymentTx(t, {
+  ref, orderId, courierId, linesIn, lat, lng,
+}) {
+  const idemRef = db.collection('wallet_idempotency').doc(`courier_submit_${orderId}`);
+  const idemSnap = await t.get(idemRef);
+  const od = await getOrderInTxOrThrow(t, ref);
+  courierAuth.assertOrderActionable(od, courierId, 'courierSubmitPayment', orderId);
+  if (idemSnap.exists) {
+    return { done: true, result: { ...(idemSnap.data().result || { ok: true }), idempotent: true } };
   }
-  const orderId = String(data.orderId || '');
-  const courierId = assertCourierPhone(data.courierPhone);
-  if (callerPhone(context) !== courierId) {
-    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
-  }
-  // Huquq + egalik: avval tekshiruvsiz har kim ortiqcha «naqd»ni qaytim
-  // sifatida o'z hamyoniga yoza olardi (`courier_auth.js`).
-  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
-  const linesIn = Array.isArray(data.lines) ? data.lines : [];
-  const lat = data.lat != null ? Number(data.lat) : null;
-  const lng = data.lng != null ? Number(data.lng) : null;
-
-  const { ref, data: od } = await loadOrderOrThrow(orderId);
-  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
   const fs = od.fulfillmentStatus || '';
   if (fs !== 'arrived') {
     throw new functions.https.HttpsError('failed-precondition', 'arrived first');
@@ -4534,7 +4574,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     if (od.paymentStatus === 'paid' && String(od.fulfillmentStatus) === 'completed') {
       throw new functions.https.HttpsError('failed-precondition', 'already_paid');
     }
-    await ref.update({
+    t.update(ref, {
       paymentStatus: 'paid',
       paymentMethod: od.paymentMethod || 'wallet',
       paidAmount: orderTotal,
@@ -4550,7 +4590,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
       paidByCourierId: courierId,
       paidAt: od.paidAt || admin.firestore.FieldValue.serverTimestamp(),
     });
-    return {
+    const prepaidOut = {
       ok: true,
       orderId,
       orderTotal,
@@ -4558,6 +4598,12 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
       balanceApplied: Math.max(preApplied, orderTotal),
       changeCredit: 0,
     };
+    t.set(idemRef, {
+      type: 'courierSubmitPayment',
+      result: prepaidOut,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { done: true, result: prepaidOut };
   }
 
   if (od.paymentStatus === 'paid') {
@@ -4624,10 +4670,10 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   const uid9 = userUid(userPhone);
   const uid12 = canonicalUid(userPhone);
   let customerRef = db.collection('users').doc(uid12);
-  let userSnap = await customerRef.get();
+  let userSnap = await t.get(customerRef);
   if (!userSnap.exists && uid9 !== uid12) {
     customerRef = db.collection('users').doc(uid9);
-    userSnap = await customerRef.get();
+    userSnap = await t.get(customerRef);
   }
   if (!userSnap.exists) {
     throw new functions.https.HttpsError('not-found', 'customer user not found');
@@ -4637,8 +4683,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     .filter((l) => l.kind === 'wallet')
     .reduce((s, l) => s + (parseInt(String(l.amount || 0), 10) || 0), 0);
 
+  const prevBalance = parseInt(String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
   if (walletSum > 0) {
-    const prevBalance = parseInt(String(userSnap.data()?.bonusBalance ?? 0), 10) || 0;
     if (prevBalance < walletSum) {
       throw new functions.https.HttpsError(
         'failed-precondition',
@@ -4655,11 +4701,27 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     }
   }
 
+  // Ledger ko'zgusi — net = changeCredit - walletSum. READ fazasi (har qanday
+  // yozuvdan oldin). Jurnal allaqachon bor — pul shu buyurtma uchun
+  // harakatlangan: hech narsa yozmaymiz (journal va balans ajralmasin).
+  const bonusDelta = changeCredit - walletSum;
+  const bonusCtx = bonusDelta !== 0
+    ? await settlementLedger.prepareBonusInTx(t, db, customerRef.id, {
+      idempotencyKey: `courier_submit_${orderId}`,
+    })
+    : null;
+  if (bonusCtx && bonusCtx.jExists) {
+    console.error(JSON.stringify({
+      action: 'courierSubmitPayment', orderId, result: 'denied', errorCode: 'JOURNAL_EXISTS',
+    }));
+    throw new functions.https.HttpsError('failed-precondition', 'already_paid');
+  }
+
+  // Barcha o'qishlar tugadi — endi yozuvlar.
   const module = od.type === 'food' ? 'food' : 'bread';
-  const batch = db.batch();
   for (let i = 0; i < normalized.length; i += 1) {
     const lineRef = ref.collection('payment_lines').doc();
-    batch.set(lineRef, normalized[i]);
+    t.set(lineRef, normalized[i]);
   }
   const orderPatch = {
     paymentStatus: 'paid',
@@ -4684,8 +4746,8 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
   }
   orderPatch.balanceApplied = preApplied + walletSum;
   orderPatch.cashDue = 0;
-  batch.update(ref, orderPatch);
-  batch.set(ref.collection('payment_events').doc(), {
+  t.update(ref, orderPatch);
+  t.set(ref.collection('payment_events').doc(), {
     action: 'courier_submit_payment',
     actorType: 'courier',
     actorId: courierId,
@@ -4694,7 +4756,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     lng: Number.isFinite(lng) ? lng : null,
     at: admin.firestore.FieldValue.serverTimestamp(),
   });
-  batch.set(ref.collection('payment_events').doc(), {
+  t.set(ref.collection('payment_events').doc(), {
     action: 'courier_completed',
     actorType: 'courier',
     actorId: courierId,
@@ -4709,7 +4771,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     if (!Number.isFinite(amount) || amount <= 0) continue;
     const ledgerRef = customerRef.collection('wallet_ledger').doc();
     if (kind === 'product') {
-      batch.set(ledgerRef, {
+      t.set(ledgerRef, {
         type: 'order_payment_product',
         amount,
         module,
@@ -4729,7 +4791,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
         createdBy: 'courier_submit',
       });
     } else if (kind !== 'wallet') {
-      batch.set(ledgerRef, {
+      t.set(ledgerRef, {
         type: kind === 'card' ? 'order_payment_card' : 'order_payment_cash',
         amount: 0,
         module,
@@ -4746,12 +4808,12 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     }
   }
   if (walletSum > 0) {
-    batch.update(customerRef, {
+    t.update(customerRef, {
       bonusBalance: admin.firestore.FieldValue.increment(-walletSum),
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     const walletDebitRef = customerRef.collection('wallet_ledger').doc();
-    batch.set(walletDebitRef, {
+    t.set(walletDebitRef, {
       type: 'purchase_debit',
       amount: -walletSum,
       module,
@@ -4763,12 +4825,12 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     });
   }
   if (changeCredit > 0) {
-    batch.update(customerRef, {
+    t.update(customerRef, {
       bonusBalance: admin.firestore.FieldValue.increment(changeCredit),
       balanceUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     const ledgerRef = customerRef.collection('wallet_ledger').doc();
-    batch.set(ledgerRef, {
+    t.set(ledgerRef, {
       type: 'change_accrued',
       amount: changeCredit,
       module,
@@ -4780,14 +4842,10 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     });
   }
 
-  // Ledger ko'zgusi (batch, increment orqali atomar) — net = changeCredit - walletSum.
-  const bonusDelta = changeCredit - walletSum;
-  if (bonusDelta !== 0) {
-    settlementLedger.commitBonusInBatch(batch, db, {
-      uid: customerRef.id,
+  if (bonusCtx) {
+    settlementLedger.commitBonusInTx(t, bonusCtx, {
       delta: bonusDelta,
       kind: 'order_courier_submit',
-      idempotencyKey: `courier_submit_${orderId}`,
       refType: 'order',
       refId: orderId,
       meta: { module, orderTotal, walletSum, changeCredit },
@@ -4796,9 +4854,59 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     });
   }
 
-  await batch.commit();
+  const result = {
+    ok: true,
+    orderTotal,
+    totalSubmitted,
+    changeCredit,
+    walletDebited: walletSum,
+    newBalance: prevBalance - walletSum + changeCredit,
+  };
+  t.set(idemRef, {
+    type: 'courierSubmitPayment',
+    result,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return {
+    done: false,
+    result,
+    normalized,
+    orderTotal,
+    totalSubmitted,
+    changeCredit,
+    walletSum,
+    customerUid: customerRef.id,
+    module,
+  };
+}
 
-  const customerUid = customerRef.id;
+exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  }
+  const orderId = String(data.orderId || '');
+  const courierId = assertCourierPhone(data.courierPhone);
+  if (callerPhone(context) !== courierId) {
+    throw new functions.https.HttpsError('permission-denied', 'Phone mismatch');
+  }
+  // Huquq + egalik: avval tekshiruvsiz har kim ortiqcha «naqd»ni qaytim
+  // sifatida o'z hamyoniga yoza olardi (`courier_auth.js`).
+  await resolveAuthorizedCourierUid(data.courierPhone, COURIER_AUTH_MODES.finish);
+  const linesIn = Array.isArray(data.lines) ? data.lines : [];
+  const lat = data.lat != null ? Number(data.lat) : null;
+  const lng = data.lng != null ? Number(data.lng) : null;
+
+  const ref = orderRefOrThrow(orderId);
+  await courierAuth.assertOrderOnActiveRoute(courierId, orderId);
+  const tx = await db.runTransaction((t) => courierSubmitPaymentTx(t, {
+    ref, orderId, courierId, linesIn, lat, lng,
+  }));
+  if (tx.done) return tx.result;
+  const {
+    normalized, orderTotal, totalSubmitted, changeCredit, walletSum, customerUid, module,
+  } = tx;
+  const { newBalance } = tx.result;
+
   let cashSum = 0;
   let cardSum = 0;
   const productLines = [];
@@ -4847,12 +4955,6 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
       console.error('courierSubmitPayment courier_cash ledger:', e.message || e);
     }
   }
-
-  let newBalance = 0;
-  try {
-    const balSnap = await customerRef.get();
-    newBalance = parseInt(String(balSnap.data()?.bonusBalance ?? 0), 10) || 0;
-  } catch (_) {}
 
   const receiptLines = [];
   receiptLines.push(
@@ -4905,14 +5007,7 @@ exports.courierSubmitPayment = functions.https.onCall(async (data, context) => {
     console.error('courierSubmitPayment receipt push:', e.message || e);
   }
 
-  return {
-    ok: true,
-    orderTotal,
-    totalSubmitted,
-    changeCredit,
-    walletDebited: walletSum,
-    newBalance,
-  };
+  return tx.result;
 });
 
 exports.requestPayout = functions.https.onCall(async (data, context) => {
@@ -8535,6 +8630,14 @@ exports.courierFinalizeCollection = functions.https.onCall(async (data, context)
     }
     if (String(task.courierId || '') !== courierId) {
       throw new functions.https.HttpsError('permission-denied', 'Not your task');
+    }
+    // Ega qarori 2026-10-08: kuryer o'zi mijoz bo'lgan vazifani yakunlamaydi —
+    // yakun mijoz hamyoniga pul yozadi (qiymat kuryer kiritgan qatorlardan).
+    if (courierAuth.isOwnOrder({ userPhone: task.customerPhone || task.customerUid }, courierId)) {
+      console.warn(JSON.stringify({
+        action: 'courierFinalizeCollection', taskId, result: 'denied', errorCode: 'COURIER_OWN_ORDER',
+      }));
+      throw new functions.https.HttpsError('permission-denied', 'Own order', { reason: 'COURIER_OWN_ORDER' });
     }
     if (!['assigned', 'collecting'].includes(String(task.status || ''))) {
       throw new functions.https.HttpsError('failed-precondition', 'task not active');
